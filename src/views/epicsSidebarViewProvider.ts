@@ -290,10 +290,23 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       .row-main {
         display: flex;
         align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .row-left {
+        display: flex;
+        align-items: center;
         gap: 6px;
+        flex: 1;
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
+      }
+      .row-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
       }
       .item-key {
         flex-shrink: 0;
@@ -368,6 +381,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         border-color: transparent;
       }
       .item-summary {
+        flex: 1;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -375,6 +389,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       }
       .item-meta {
         flex-shrink: 0;
+        max-width: 180px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -508,25 +523,29 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
             .join(' ');
           return `<div class="${classes}" data-epic-key="${escapeHtml(epic.key)}" title="${escapeHtml(`${epic.key}: ${epic.summary}`)}">
             <div class="row-main">
-              <div class="item-key">${escapeHtml(epic.key)}</div>
-              ${renderIssueTypeBadge(epic.issueType)}
-              ${renderStatusBadge(epic.status)}
-              <div class="item-summary">${escapeHtml(epic.summary)}</div>
-              <div class="item-meta">${escapeHtml(
-                [epic.projectName ? `${epic.projectKey} • ${epic.projectName}` : epic.projectKey]
-                  .filter(Boolean)
-                  .join(' • ')
-              )}</div>
-            </div>
-            <div class="row-actions">
-              ${renderIconButton(`editEpic-${epic.key}`, 'Edit EPIC', 'edit').replace(
-                'id="editEpic-' + epic.key + '"',
-                `id="editEpic-${epic.key}" data-edit-epic-key="${escapeHtml(epic.key)}"`
-              )}
-              ${renderIconButton(`deleteEpic-${epic.key}`, 'Delete EPIC', 'delete').replace(
-                'id="deleteEpic-' + epic.key + '"',
-                `id="deleteEpic-${epic.key}" data-delete-epic-key="${escapeHtml(epic.key)}"`
-              )}
+              <div class="row-left">
+                <div class="item-key">${escapeHtml(epic.key)}</div>
+                ${renderIssueTypeBadge(epic.issueType)}
+                <div class="item-summary">${escapeHtml(epic.summary)}</div>
+                <div class="item-meta">${escapeHtml(
+                  [epic.projectName ? `${epic.projectKey} • ${epic.projectName}` : epic.projectKey]
+                    .filter(Boolean)
+                    .join(' • ')
+                )}</div>
+              </div>
+              <div class="row-right">
+                ${renderStatusBadge(epic.status)}
+                <div class="row-actions">
+                  ${renderIconButton(`editEpic-${epic.key}`, 'Edit EPIC', 'edit').replace(
+                    'id="editEpic-' + epic.key + '"',
+                    `id="editEpic-${epic.key}" data-edit-epic-key="${escapeHtml(epic.key)}"`
+                  )}
+                  ${renderIconButton(`deleteEpic-${epic.key}`, 'Delete EPIC', 'delete').replace(
+                    'id="deleteEpic-' + epic.key + '"',
+                    `id="deleteEpic-${epic.key}" data-delete-epic-key="${escapeHtml(epic.key)}"`
+                  )}
+                </div>
+              </div>
             </div>
           </div>`;
         })
