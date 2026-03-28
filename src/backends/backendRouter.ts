@@ -12,6 +12,7 @@ import type {
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
@@ -97,6 +98,14 @@ export class BackendRouter implements IssueTrackerService {
 
   public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
     return (await this.getService()).createIssue(input);
+  }
+
+  public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
+    return (await this.getService()).updateIssue(issueKey, input);
+  }
+
+  public async deleteIssue(issueKey: string): Promise<void> {
+    return (await this.getService()).deleteIssue(issueKey);
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

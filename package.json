@@ -51,18 +51,28 @@
         {
           "id": "ticketManager.myIssues",
           "name": "My Issues",
+          "type": "webview",
+          "contextualTitle": "Tickets",
+          "icon": "media/activitybar-ticket.svg"
+        },
+        {
+          "id": "ticketManager.epics",
+          "name": "EPICs",
+          "type": "webview",
           "contextualTitle": "Tickets",
           "icon": "media/activitybar-ticket.svg"
         },
         {
           "id": "ticketManager.boards",
           "name": "Boards",
+          "type": "webview",
           "contextualTitle": "Tickets",
           "icon": "media/activitybar-ticket.svg"
         },
         {
           "id": "ticketManager.issueDetails",
           "name": "Issue Details",
+          "type": "webview",
           "contextualTitle": "Tickets",
           "icon": "media/activitybar-ticket.svg"
         }
@@ -76,6 +86,10 @@
       {
         "view": "ticketManager.issueDetails",
         "contents": "Select an issue in **My Issues** or on a board to inspect its details and transitions."
+      },
+      {
+        "view": "ticketManager.epics",
+        "contents": "Browse and manage EPICs for the current project scope."
       },
       {
         "view": "ticketManager.boards",
@@ -251,6 +265,11 @@
         {
           "command": "ticketManager.refresh",
           "when": "view == ticketManager.myIssues",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ticketManager.refresh",
+          "when": "view == ticketManager.epics",
           "group": "navigation@1"
         },
         {

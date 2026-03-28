@@ -4,6 +4,7 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import type { Board, BoardDetails, IssueSummary } from '../types';
 import { applyBoardColumnPreferences } from './boardColumnLayout';
+import { renderIconButton } from './webviewToolbarIcons';
 
 interface BoardPanelSnapshot {
   boardId?: string;
@@ -413,30 +414,55 @@ export class BoardPanelManager implements vscode.Disposable {
         color-scheme: light dark;
       }
 
+      html, body {
+        height: 100%;
+      }
+
       body {
         margin: 0;
+        display: flex;
         font-family: var(--vscode-font-family);
         color: var(--vscode-editor-foreground);
         background: var(--vscode-editor-background);
       }
 
       .page {
+        box-sizing: border-box;
         display: flex;
-        flex-direction: column;
+        flex: 1;
+        width: 100%;
         min-height: 100vh;
+        padding: 8px;
+      }
+
+      .panel-shell {
+        box-sizing: border-box;
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 0;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-sideBar-background);
+        overflow: hidden;
       }
 
       .header {
-        position: sticky;
-        top: 0;
-        z-index: 1;
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         gap: 16px;
-        padding: 16px 20px;
+        padding: 16px;
         border-bottom: 1px solid var(--vscode-panel-border);
-        background: var(--vscode-editor-background);
+        flex-shrink: 0;
+      }
+
+      .header-main {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
       }
 
       .header h1 {
@@ -445,7 +471,7 @@ export class BoardPanelManager implements vscode.Disposable {
       }
 
       .header p {
-        margin: 4px 0 0;
+        margin: 0;
         color: var(--vscode-descriptionForeground);
       }
 
@@ -453,24 +479,44 @@ export class BoardPanelManager implements vscode.Disposable {
         display: flex;
         flex-shrink: 0;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
       }
 
-      .refresh-button {
-        border: 1px solid var(--vscode-button-border, transparent);
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
+      .icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
         border-radius: 6px;
-        padding: 6px 12px;
+        background: transparent;
+        color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
         cursor: pointer;
       }
 
-      .refresh-button:hover {
-        background: var(--vscode-button-hoverBackground);
+      .icon-button:hover {
+        border-color: var(--vscode-widget-border, transparent);
+        background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+      }
+
+      .icon-button svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
 
       .content {
-        padding: 16px 20px 20px;
+        display: flex;
+        flex: 1;
+        min-height: 0;
+        padding: 16px;
+        overflow: auto;
       }
 
       .board-grid {
@@ -478,7 +524,9 @@ export class BoardPanelManager implements vscode.Disposable {
         grid-auto-flow: column;
         grid-auto-columns: minmax(260px, 1fr);
         gap: 16px;
-        align-items: start;
+        align-items: stretch;
+        flex: 1;
+        min-height: 100%;
         overflow-x: auto;
         padding-bottom: 8px;
       }
@@ -486,7 +534,8 @@ export class BoardPanelManager implements vscode.Disposable {
       .column {
         display: flex;
         flex-direction: column;
-        max-height: calc(100vh - 120px);
+        min-height: 0;
+        height: 100%;
         border: 1px solid var(--vscode-panel-border);
         border-radius: 8px;
         background: var(--vscode-sideBar-background);
@@ -514,8 +563,10 @@ export class BoardPanelManager implements vscode.Disposable {
 
       .column-body {
         display: flex;
+        flex: 1;
         flex-direction: column;
         gap: 10px;
+        min-height: 0;
         padding: 12px;
         overflow-y: auto;
       }
@@ -605,18 +656,20 @@ export class BoardPanelManager implements vscode.Disposable {
   </head>
   <body>
     <div class="page">
-      <header class="header">
-        <div>
-          <h1>${headerTitle}</h1>
-          <p>${headerMeta}</p>
-        </div>
-        <div class="header-actions">
-          <button class="refresh-button" id="createIssueButton" type="button">New Issue</button>
-          <button class="refresh-button" id="columnsButton" type="button">Columns</button>
-          <button class="refresh-button" id="refreshButton" type="button">Refresh</button>
-        </div>
-      </header>
-      <main class="content">${body}</main>
+      <div class="panel-shell">
+        <header class="header">
+          <div class="header-main">
+            <h1>${headerTitle}</h1>
+            <p>${headerMeta}</p>
+          </div>
+          <div class="header-actions">
+            ${renderIconButton('createIssueButton', 'Create issue', 'add')}
+            ${renderIconButton('columnsButton', 'Configure columns', 'columns')}
+            ${renderIconButton('refreshButton', 'Refresh', 'refresh')}
+          </div>
+        </header>
+        <main class="content">${body}</main>
+      </div>
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();

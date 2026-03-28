@@ -21,6 +21,7 @@ import type {
   PagedIssues,
   Project,
   ToolDescriptor,
+  UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 
@@ -172,6 +173,7 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
     : isRecord(fields.issueType)
       ? fields.issueType
       : {};
+  const parent = isRecord(fields.parent) ? fields.parent : {};
   const assignee = isRecord(fields.assignee) ? fields.assignee : {};
   const priority = isRecord(fields.priority) ? fields.priority : {};
 
@@ -194,6 +196,7 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
     issueType: asString(issueType.name) ?? asString(fields.issuetype) ?? 'Issue',
     projectKey,
     projectName: asString(project.name),
+    parentKey: asString(parent.key),
     assignee: asString(assignee.displayName) ?? asString(assignee.name),
     priority: asString(priority.name) ?? asString(fields.priority),
     updated: asString(fields.updated) ?? asString(raw.updated),
@@ -666,7 +669,7 @@ export class JiraService implements IssueTrackerService {
       capabilities.getIssue,
       {
         issue_key: issueKey,
-        fields: 'summary,status,issuetype,assignee,priority,updated,project,description'
+        fields: 'summary,status,issuetype,assignee,priority,updated,project,description,parent'
       },
       config.timeoutMs
     );
@@ -711,6 +714,62 @@ export class JiraService implements IssueTrackerService {
     }
 
     return this.getIssue(issueKey);
+  }
+
+  public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
+    const { config, capabilities } = await this.ensureConnected();
+    if (!capabilities.updateIssue) {
+      throw new Error(
+        'The Jira MCP server does not expose issue updates. Expected an update issue capability.'
+      );
+    }
+
+    const fieldsPayload: Record<string, unknown> = {};
+    if (typeof input.summary === 'string') {
+      const summary = input.summary.trim();
+      if (summary.length === 0) {
+        throw new Error('Summary cannot be empty.');
+      }
+      fieldsPayload.summary = summary;
+    }
+    if (typeof input.description === 'string') {
+      fieldsPayload.description = input.description;
+    }
+
+    const additionalFields: Record<string, unknown> = {};
+    if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
+      additionalFields.epicKey = input.parentKey?.trim() || null;
+    }
+
+    await this.client.callTool(
+      capabilities.updateIssue,
+      {
+        issue_key: issueKey,
+        fields: JSON.stringify(fieldsPayload),
+        additional_fields:
+          Object.keys(additionalFields).length > 0 ? JSON.stringify(additionalFields) : undefined
+      },
+      config.timeoutMs
+    );
+
+    return this.getIssue(issueKey);
+  }
+
+  public async deleteIssue(issueKey: string): Promise<void> {
+    const { config, capabilities } = await this.ensureConnected();
+    if (!capabilities.deleteIssue) {
+      throw new Error(
+        'The Jira MCP server does not expose issue deletion. Expected a delete issue capability.'
+      );
+    }
+
+    await this.client.callTool(
+      capabilities.deleteIssue,
+      {
+        issue_key: issueKey
+      },
+      config.timeoutMs
+    );
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
