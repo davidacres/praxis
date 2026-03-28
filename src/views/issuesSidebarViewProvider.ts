@@ -280,20 +280,31 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0;
         min-height: 100%;
         padding: 0;
       }
+      /* Full-width strip: search only (like Agent Packs), above section blocks */
       .search-row {
         display: flex;
         width: 100%;
         flex-shrink: 0;
-        gap: 8px;
-        align-items: stretch;
         box-sizing: border-box;
         padding: 8px 0 10px;
-        margin: 0 0 4px;
+        margin: 0;
         border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+      }
+      .search-field {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        align-items: center;
+        gap: 4px;
+        box-sizing: border-box;
+        padding: 0 8px 0 10px;
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 4px;
+        background: var(--vscode-input-background);
       }
       .search-form {
         display: flex;
@@ -304,11 +315,13 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         flex: 1;
         width: 100%;
         box-sizing: border-box;
-        padding: 7px 10px;
-        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-        border-radius: 6px;
-        background: var(--vscode-input-background);
+        padding: 7px 4px 7px 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
         color: var(--vscode-input-foreground);
+        outline: none;
+        font-size: 13px;
       }
       .search-input::placeholder {
         color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
@@ -316,6 +329,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .filter-wrap {
         position: relative;
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
       }
       .icon-button {
         display: inline-flex;
@@ -402,6 +417,43 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: flex;
         flex-direction: column;
         gap: 8px;
+        flex: 1;
+        min-height: 0;
+      }
+      .block-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 0 6px;
+        user-select: none;
+      }
+      .block-header-chevron {
+        flex-shrink: 0;
+        font-size: 10px;
+        line-height: 1;
+        color: var(--vscode-descriptionForeground);
+      }
+      .block-header-label {
+        flex: 1;
+        min-width: 0;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
+      }
+      .block-header-count {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--vscode-badge-foreground);
+        background: var(--vscode-badge-background);
       }
       .group {
         display: flex;
@@ -689,7 +741,14 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       ? '<button class="text-button load-more" id="loadMoreButton" type="button">Load more</button>'
       : '';
 
+    const blockHeader = `<div class="block-header">
+      <span class="block-header-chevron" aria-hidden="true">▾</span>
+      <span class="block-header-label">My Issues</span>
+      <span class="block-header-count">${snapshot.issues.length}</span>
+    </div>`;
+
     return `<section class="section">
+      ${blockHeader}
       ${content}
       ${loadMore}
     </section>`;
@@ -697,8 +756,9 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
   private renderSearchRow(filters: IssueFilters): string {
     return `<div class="search-row">
+      <div class="search-field">
       <form class="search-form" id="searchForm">
-        <input class="search-input" id="searchInput" type="search" placeholder="Search issues" value="${escapeHtml(filters.searchText)}" />
+        <input class="search-input" id="searchInput" type="search" placeholder="Search issues..." value="${escapeHtml(filters.searchText)}" />
       </form>
       <div class="filter-wrap">
         ${renderIconButton('filterButton', 'Filter issues', 'filter')}
@@ -721,6 +781,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
           </div>
         </div>
+      </div>
       </div>
     </div>`;
   }
