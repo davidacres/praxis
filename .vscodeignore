@@ -1,0 +1,11 @@
+**/*.ts
+**/*.map
+**/.DS_Store
+src/**
+.vscode/**
+.vscode-test.*
+tsconfig.json
+!out/**
+!media/**
+!README.md
+!LICENSE

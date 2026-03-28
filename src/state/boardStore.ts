@@ -1,0 +1,87 @@
+import * as vscode from 'vscode';
+import type { JiraBoardFilters, PersistedBoardFilterState } from '../types';
+
+const BOARD_FILTERS_KEY = 'jiraMini.boards.filters';
+
+const DEFAULT_BOARD_FILTERS: JiraBoardFilters = {
+  projectKeys: [],
+  types: [],
+  searchText: ''
+};
+
+export class BoardStore implements vscode.Disposable {
+  private readonly onDidChangeEmitter = new vscode.EventEmitter<JiraBoardFilters>();
+
+  public readonly onDidChange = this.onDidChangeEmitter.event;
+
+  public constructor(private readonly context: vscode.ExtensionContext) {}
+
+  public getFilters(): JiraBoardFilters {
+    const storedFilters =
+      this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY) ?? {
+        ...DEFAULT_BOARD_FILTERS
+      };
+
+    return {
+      projectKeys: [...(storedFilters.projectKeys ?? [])],
+      types: [...(storedFilters.types ?? [])],
+      searchText: storedFilters.searchText ?? ''
+    };
+  }
+
+  public getLastSelectedBoardId(): string | undefined {
+    return this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY)?.lastSelectedBoardId;
+  }
+
+  public async setLastSelectedBoardId(boardId: string | undefined): Promise<void> {
+    const storedFilters =
+      this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY) ?? {
+        ...DEFAULT_BOARD_FILTERS
+      };
+
+    storedFilters.lastSelectedBoardId = boardId;
+    await this.context.workspaceState.update(BOARD_FILTERS_KEY, storedFilters);
+  }
+
+  public async updateFilters(patch: Partial<JiraBoardFilters>): Promise<JiraBoardFilters> {
+    const current = this.getFilters();
+    const next: JiraBoardFilters = {
+      ...current,
+      ...patch,
+      projectKeys: patch.projectKeys ? [...patch.projectKeys] : current.projectKeys,
+      types: patch.types ? [...patch.types] : current.types
+    };
+
+    await this.persist(next, this.getLastSelectedBoardId());
+    this.onDidChangeEmitter.fire(next);
+    return next;
+  }
+
+  public async clearFilters(): Promise<JiraBoardFilters> {
+    const next = {
+      ...DEFAULT_BOARD_FILTERS
+    };
+
+    await this.persist(next, this.getLastSelectedBoardId());
+    this.onDidChangeEmitter.fire(next);
+    return next;
+  }
+
+  private async persist(
+    filters: JiraBoardFilters,
+    lastSelectedBoardId: string | undefined
+  ): Promise<void> {
+    const persisted: PersistedBoardFilterState = {
+      projectKeys: filters.projectKeys,
+      types: filters.types,
+      searchText: filters.searchText,
+      lastSelectedBoardId
+    };
+
+    await this.context.workspaceState.update(BOARD_FILTERS_KEY, persisted);
+  }
+
+  public dispose(): void {
+    this.onDidChangeEmitter.dispose();
+  }
+}
