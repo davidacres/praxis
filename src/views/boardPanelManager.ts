@@ -195,6 +195,11 @@ export class BoardPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'createIssue') {
+      await vscode.commands.executeCommand('ticketManager.createIssue');
+      return;
+    }
+
     if (type === 'openColumnConfig') {
       await vscode.commands.executeCommand('ticketManager.configureBoardColumns');
       return;
@@ -606,6 +611,7 @@ export class BoardPanelManager implements vscode.Disposable {
           <p>${headerMeta}</p>
         </div>
         <div class="header-actions">
+          <button class="refresh-button" id="createIssueButton" type="button">New Issue</button>
           <button class="refresh-button" id="columnsButton" type="button">Columns</button>
           <button class="refresh-button" id="refreshButton" type="button">Refresh</button>
         </div>
@@ -614,6 +620,13 @@ export class BoardPanelManager implements vscode.Disposable {
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const createIssueButton = document.getElementById('createIssueButton');
+      if (createIssueButton) {
+        createIssueButton.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'createIssue' });
+        });
+      }
+
       const columnsButton = document.getElementById('columnsButton');
       if (columnsButton) {
         columnsButton.addEventListener('click', () => {

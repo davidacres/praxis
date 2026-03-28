@@ -12,6 +12,7 @@ const REQUIRED_TOOL_ALIASES: Record<
 };
 
 const OPTIONAL_TOOL_ALIASES: Partial<Record<keyof JiraCapabilities, string[]>> = {
+  createIssue: ['atlassian-jira_create_issue', 'jira_create_issue'],
   getAgileBoards: ['atlassian-jira_get_agile_boards', 'jira_get_agile_boards'],
   getBoardIssues: ['atlassian-jira_get_board_issues', 'jira_get_board_issues']
 };

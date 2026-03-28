@@ -5,6 +5,7 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateIssueInput,
   FilterMetadata,
   IssueDetails,
   IssueFilters,
@@ -92,6 +93,10 @@ export class BackendRouter implements IssueTrackerService {
 
   public async getIssue(issueKey: string): Promise<IssueDetails> {
     return (await this.getService()).getIssue(issueKey);
+  }
+
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    return (await this.getService()).createIssue(input);
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

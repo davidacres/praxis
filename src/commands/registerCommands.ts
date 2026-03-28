@@ -6,7 +6,10 @@ import { FilterStore } from '../state/filterStore';
 import type {
   AssigneeMode,
   BackendMode,
+  Board,
+  CreateIssueInput,
   GroupingMode,
+  Project,
   IssueSummary,
   WorkflowTransition
 } from '../types';
@@ -157,6 +160,174 @@ function toTransitionQuickPickItems(
   }));
 }
 
+const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
+  jira: ['Epic', 'Story', 'Task', 'Bug'],
+  demo: ['Feature', 'Story', 'Task', 'Bug'],
+  file: ['Feature', 'Story', 'Task', 'Bug']
+};
+
+function isParentItemType(issueType: string | undefined): boolean {
+  const normalized = issueType?.trim().toLowerCase();
+  return normalized === 'feature' || normalized === 'epic';
+}
+
+function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {
+  if (arg instanceof BoardNode) {
+    return arg.board;
+  }
+
+  return deps.boardPanelManager.getActiveBoard();
+}
+
+async function pickCreateProject(
+  projects: Project[],
+  defaultProjectKey?: string
+): Promise<Project | undefined> {
+  const defaultProject = defaultProjectKey
+    ? projects.find(project => project.key === defaultProjectKey)
+    : undefined;
+  if (defaultProject) {
+    return defaultProject;
+  }
+
+  if (projects.length === 1) {
+    return projects[0];
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    projects.map(project => ({
+      label: project.key,
+      description: project.name,
+      project
+    })),
+    {
+      title: 'Project'
+    }
+  );
+  return picked?.project;
+}
+
+async function getKnownIssueTypes(
+  deps: CommandDependencies,
+  projectKey: string
+): Promise<string[]> {
+  const filters = deps.filterStore.getFilters();
+  const currentIssueTypes = deps.issuesProvider
+    .getCurrentIssues()
+    .filter(issue => issue.projectKey === projectKey)
+    .map(issue => issue.issueType);
+
+  let metadataIssueTypes: string[] = [];
+  try {
+    const metadata = await deps.backendService.getFilterMetadata({
+      ...filters,
+      projectKeys: [projectKey],
+      statuses: [],
+      issueTypes: [],
+      searchText: '',
+      parentKey: undefined
+    });
+    metadataIssueTypes = metadata.issueTypes;
+  } catch {
+    metadataIssueTypes = [];
+  }
+
+  return unique([
+    ...metadataIssueTypes,
+    ...currentIssueTypes,
+    ...DEFAULT_CREATABLE_TYPES[deps.backendService.mode]
+  ]);
+}
+
+async function promptForCreateIssueInput(
+  deps: CommandDependencies,
+  arg?: unknown
+): Promise<CreateIssueInput | undefined> {
+  const board = resolveCreateBoard(deps, arg);
+  const selectedIssue = resolveIssue(deps.detailsProvider, arg);
+  const filters = deps.filterStore.getFilters();
+  const projects = await deps.backendService.getProjects();
+  if (projects.length === 0) {
+    await vscode.window.showWarningMessage('No projects are available.');
+    return undefined;
+  }
+
+  const project = await pickCreateProject(
+    projects,
+    board?.projectKey ??
+      selectedIssue?.projectKey ??
+      (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined)
+  );
+  if (!project) {
+    return undefined;
+  }
+
+  const knownIssueTypes = await getKnownIssueTypes(deps, project.key);
+  if (knownIssueTypes.length === 0) {
+    await vscode.window.showWarningMessage(
+      `No issue types are available for ${project.key}.`
+    );
+    return undefined;
+  }
+
+  const pickedType = await vscode.window.showQuickPick(
+    knownIssueTypes.map(issueType => ({
+      label: issueType
+    })),
+    {
+      title: 'Issue Type'
+    }
+  );
+  if (!pickedType) {
+    return undefined;
+  }
+
+  const summary = await vscode.window.showInputBox({
+    title: 'Issue Summary',
+    prompt: `Enter a short summary for the new ${pickedType.label.toLowerCase()}.`,
+    ignoreFocusOut: true,
+    validateInput: value => (value.trim().length === 0 ? 'Summary is required.' : undefined)
+  });
+  if (summary === undefined) {
+    return undefined;
+  }
+
+  const description = await vscode.window.showInputBox({
+    title: 'Description',
+    prompt: 'Optional description for the new issue.',
+    ignoreFocusOut: true
+  });
+  if (description === undefined) {
+    return undefined;
+  }
+
+  const defaultParentKey =
+    filters.parentKey ||
+    (selectedIssue &&
+    selectedIssue.projectKey === project.key &&
+    isParentItemType(selectedIssue.issueType)
+      ? selectedIssue.key
+      : undefined);
+  const parentKey = await vscode.window.showInputBox({
+    title: 'Parent Item Key',
+    prompt: 'Optional parent item key. Leave blank for a top-level item.',
+    value: isParentItemType(pickedType.label) ? '' : defaultParentKey ?? '',
+    ignoreFocusOut: true
+  });
+  if (parentKey === undefined) {
+    return undefined;
+  }
+
+  return {
+    projectKey: project.key,
+    issueType: pickedType.label,
+    summary: summary.trim(),
+    description: description.trim() || undefined,
+    parentKey: parentKey.trim() || undefined,
+    boardId: board?.projectKey === project.key ? board.id : undefined
+  };
+}
+
 export function registerCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('ticketManager.refresh', async () => {
@@ -300,6 +471,38 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
       await deps.boardStore.setLastSelectedBoardId(board.id);
       await deps.boardPanelManager.openBoard(board);
+    }),
+    vscode.commands.registerCommand('ticketManager.createIssue', async (arg?: unknown) => {
+      try {
+        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
+          return;
+        }
+
+        const draft = await promptForCreateIssueInput(deps, arg);
+        if (!draft) {
+          return;
+        }
+
+        const createdIssue = await deps.backendService.createIssue(draft);
+        await refreshViews(deps);
+        const refreshedIssue = deps.issuesProvider.getIssueByKey(createdIssue.key) ?? createdIssue;
+        await deps.filterStore.setLastSelectedIssueKey(createdIssue.key);
+        await deps.detailsProvider.setIssue(refreshedIssue);
+        deps.boardPanelManager.setSelectedIssueKey(createdIssue.key);
+        await deps.revealIssueDetailsTree();
+        await vscode.window.showInformationMessage(
+          draft.parentKey
+            ? `Created ${createdIssue.key} under ${draft.parentKey}.`
+            : `Created ${createdIssue.key}.`
+        );
+      } catch (error) {
+        deps.output.appendLine(
+          `[create-issue] ${error instanceof Error ? error.stack ?? error.message : error}`
+        );
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     }),
     vscode.commands.registerCommand('ticketManager.setBoardProjects', async () => {
       const filters = deps.boardStore.getFilters();

@@ -12,6 +12,7 @@ import type {
   BoardFilters,
   ConnectionCheck,
   ConnectionConfig,
+  CreateIssueInput,
   FilterMetadata,
   JiraCapabilities,
   IssueDetails,
@@ -201,6 +202,22 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
     description: extractDescription(fields.description),
     raw
   };
+}
+
+function extractCreatedIssueKey(raw: unknown): string | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  if (typeof raw.key === 'string') {
+    return raw.key;
+  }
+
+  if (isRecord(raw.issue) && typeof raw.issue.key === 'string') {
+    return raw.issue.key;
+  }
+
+  return undefined;
 }
 
 function extractProjects(value: unknown): Project[] {
@@ -429,7 +446,13 @@ export class JiraService implements IssueTrackerService {
     }
 
     try {
-      await this.ensureConnected(connection);
+      await this.client.connect(connection);
+      this.cachedProjects = undefined;
+      this.parentFieldMode = 'parent';
+      this.connectionSignature = JSON.stringify(connection);
+      const tools = await this.client.listTools(connection.timeoutMs);
+      this.toolCount = tools.length;
+      this.capabilities = this.requireCapabilities(tools);
       const projects = await this.getProjects(false);
       return {
         status: projects.length === 0 ? 'warning' : 'ok',
@@ -654,6 +677,40 @@ export class JiraService implements IssueTrackerService {
     }
 
     return issue;
+  }
+
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    const { config, capabilities } = await this.ensureConnected();
+    if (!capabilities.createIssue) {
+      throw new Error(
+        'The Jira MCP server does not expose issue creation. Expected a create issue capability.'
+      );
+    }
+
+    const additionalFields =
+      input.parentKey?.trim().length
+        ? JSON.stringify({
+            epicKey: input.parentKey.trim()
+          })
+        : undefined;
+    const response = await this.client.callTool(
+      capabilities.createIssue,
+      {
+        project_key: input.projectKey,
+        summary: input.summary,
+        issue_type: input.issueType,
+        description: input.description,
+        additional_fields: additionalFields
+      },
+      config.timeoutMs
+    );
+
+    const issueKey = normalizeIssue(response.value)?.key ?? extractCreatedIssueKey(response.value);
+    if (!issueKey) {
+      throw new Error('The Jira MCP server did not return the created issue key.');
+    }
+
+    return this.getIssue(issueKey);
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

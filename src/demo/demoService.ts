@@ -5,6 +5,7 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateIssueInput,
   FilterMetadata,
   IssueDetails,
   IssueFilters,
@@ -157,6 +158,7 @@ function createSeedIssues(): DemoIssue[] {
 
 /** Demo workflow columns — shown even when no issues are in a status. */
 const DEMO_BOARD_STATUS_ORDER = ['To Do', 'In Progress', 'Blocked', 'Done'] as const;
+const DEMO_CURRENT_USER = 'Alex Agent';
 
 function createSeedBoards(): DemoBoard[] {
   return [
@@ -439,6 +441,38 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    const project = (await this.getProjects()).find(candidate => candidate.key === input.projectKey);
+    if (!project) {
+      throw new Error(`Project ${input.projectKey} is not available in demo mode.`);
+    }
+
+    const now = new Date().toISOString();
+    const createdIssue: DemoIssue = {
+      id: `demo-${this.issues.length + 1}`,
+      key: this.getNextIssueKey(input.projectKey),
+      summary: input.summary.trim(),
+      status: DEMO_BOARD_STATUS_ORDER[0],
+      issueType: input.issueType.trim(),
+      projectKey: project.key,
+      projectName: project.name,
+      assigneeKind: 'me',
+      assigneeDisplayName: DEMO_CURRENT_USER,
+      priority: 'Medium',
+      updated: now,
+      description: input.description?.trim() ?? '',
+      parent: input.parentKey?.trim() || undefined
+    };
+
+    this.issues.unshift(createdIssue);
+    this.attachIssueToBoard(createdIssue.key, createdIssue.projectKey, input.boardId);
+
+    return {
+      ...toIssueSummary(createdIssue),
+      transitions: transitionSet(createdIssue.status)
+    };
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     return transitionSet(this.findIssue(issueKey).status);
   }
@@ -501,5 +535,40 @@ export class DemoService implements IssueTrackerService {
       throw new Error(`Issue ${issueKey} was not found in demo mode.`);
     }
     return issue;
+  }
+
+  private getNextIssueKey(projectKey: string): string {
+    const nextNumber =
+      this.issues
+        .map(issue => {
+          const match = issue.key.match(new RegExp(`^${projectKey}-(\\d+)$`));
+          const numericPart = match?.[1];
+          return numericPart ? Number.parseInt(numericPart, 10) : undefined;
+        })
+        .reduce<number>(
+          (max, value) => (typeof value === 'number' && value > max ? value : max),
+          0
+        ) + 1;
+
+    return `${projectKey}-${nextNumber}`;
+  }
+
+  private attachIssueToBoard(issueKey: string, projectKey: string, preferredBoardId?: string): void {
+    const preferredBoard = preferredBoardId
+      ? this.boards.find(board => board.id === preferredBoardId)
+      : undefined;
+    if (preferredBoard) {
+      preferredBoard.issueKeys.push(issueKey);
+      return;
+    }
+
+    const targetBoard =
+      this.boards.find(
+        board =>
+          board.projectKey === projectKey && !board.name.toLowerCase().includes('overview')
+      ) ?? this.boards.find(board => board.projectKey === projectKey);
+    if (targetBoard) {
+      targetBoard.issueKeys.push(issueKey);
+    }
   }
 }

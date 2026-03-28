@@ -126,6 +126,12 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "ticketManager.createIssue",
+        "title": "Create Issue",
+        "category": "Ticket Manager",
+        "icon": "$(add)"
+      },
+      {
         "command": "ticketManager.configureBoardColumns",
         "title": "Configure Board Columns",
         "category": "Ticket Manager",
@@ -248,14 +254,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.setProjects",
+          "command": "ticketManager.createIssue",
           "when": "view == ticketManager.myIssues",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.setParentScope",
+          "command": "ticketManager.setProjects",
           "when": "view == ticketManager.myIssues",
           "group": "navigation@3"
+        },
+        {
+          "command": "ticketManager.setParentScope",
+          "when": "view == ticketManager.myIssues",
+          "group": "navigation@4"
         },
         {
           "command": "ticketManager.refresh",
@@ -263,19 +274,24 @@
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.setBoardProjects",
+          "command": "ticketManager.createIssue",
           "when": "view == ticketManager.boards",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.setBoardTypes",
+          "command": "ticketManager.setBoardProjects",
           "when": "view == ticketManager.boards",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.configureBoardColumns",
+          "command": "ticketManager.setBoardTypes",
           "when": "view == ticketManager.boards",
           "group": "navigation@4"
+        },
+        {
+          "command": "ticketManager.configureBoardColumns",
+          "when": "view == ticketManager.boards",
+          "group": "navigation@5"
         },
         {
           "command": "ticketManager.setBoardSearchText",
@@ -383,6 +399,11 @@
           "command": "ticketManager.configureBoardColumns",
           "when": "view == ticketManager.boards && viewItem == board",
           "group": "inline@2"
+        },
+        {
+          "command": "ticketManager.createIssue",
+          "when": "view == ticketManager.boards && viewItem == board",
+          "group": "inline@3"
         },
         {
           "command": "ticketManager.openIssueFullDetails",
