@@ -63,12 +63,6 @@ function buildIssueGroups(issues: IssueSummary[], grouping: GroupingMode): Issue
   }));
 }
 
-function getIssueMeta(issue: IssueSummary): string {
-  return [issue.status, issue.assignee ?? 'Unassigned']
-    .filter(Boolean)
-    .join(' • ');
-}
-
 function getIssueTypeToken(issueType: string | undefined): string {
   const normalized = issueType?.trim().toLowerCase();
   switch (normalized) {
@@ -114,6 +108,14 @@ function getStatusToken(status: string | undefined): string {
 function renderStatusBadge(status: string | undefined): string {
   const label = status?.trim() || 'Unknown';
   return `<span class="type-badge type-badge--${getStatusToken(label)}">${escapeHtml(label)}</span>`;
+}
+
+function renderAssignmentBadge(issue: IssueSummary): string {
+  const assigned = Boolean(issue.assignee?.trim());
+  const label = assigned ? 'Assigned' : 'Unassigned';
+  const token = assigned ? 'assigned' : 'unassigned';
+  const title = assigned ? `Assigned to ${issue.assignee}` : 'Unassigned';
+  return `<span class="type-badge type-badge--${token}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
 export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -434,10 +436,23 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .row-main {
         display: flex;
         align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .row-left {
+        display: flex;
+        align-items: center;
         gap: 6px;
+        flex: 1;
         min-width: 0;
         overflow: hidden;
         white-space: nowrap;
+      }
+      .row-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
       }
       .item-key {
         flex-shrink: 0;
@@ -511,30 +526,24 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
         border-color: transparent;
       }
+      .type-badge--assigned,
+      .type-badge--unassigned {
+        color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
+        background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
+        border-color: transparent;
+      }
       .item-summary {
+        flex: 1;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .item-meta {
-        flex-shrink: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--vscode-descriptionForeground);
-        font-size: 11px;
-      }
       .issue-row.selected .item-key {
         color: inherit;
       }
-      .issue-row.selected .item-meta {
-        color: inherit;
-        opacity: 0.8;
-      }
       .done .item-key,
-      .done .item-summary,
-      .done .item-meta {
+      .done .item-summary {
         text-decoration: line-through;
         text-decoration-thickness: 1px;
       }
@@ -674,11 +683,15 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
                 .join(' ');
               return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
                 <div class="row-main">
-                  <div class="item-key">${escapeHtml(issue.key)}</div>
-                  ${renderIssueTypeBadge(issue.issueType)}
-                  ${renderStatusBadge(issue.status)}
-                  <div class="item-summary">${escapeHtml(issue.summary)}</div>
-                  <div class="item-meta">${escapeHtml(getIssueMeta(issue))}</div>
+                  <div class="row-left">
+                    <div class="item-key">${escapeHtml(issue.key)}</div>
+                    ${renderIssueTypeBadge(issue.issueType)}
+                    ${renderAssignmentBadge(issue)}
+                    <div class="item-summary">${escapeHtml(issue.summary)}</div>
+                  </div>
+                  <div class="row-right">
+                    ${renderStatusBadge(issue.status)}
+                  </div>
                 </div>
               </div>`;
             })
