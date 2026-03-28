@@ -139,7 +139,15 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
       </div>`;
     }
 
-    this.view.title = `Boards (${snapshot.boards.length})`;
+    this.view.title = undefined;
+    const boardCount = snapshot.boards.length;
+    this.view.badge =
+      boardCount > 0
+        ? {
+            value: boardCount,
+            tooltip: boardCount === 1 ? '1 board' : `${boardCount} boards`
+          }
+        : undefined;
 
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">

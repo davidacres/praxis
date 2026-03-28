@@ -250,7 +250,12 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const searchRow = this.renderSearchRow(filters);
     const issuesSection = this.renderIssuesSection(snapshot, issueGroups, filters);
 
-    this.view.title = `My Issues (${snapshot.issues.length})`;
+    // Count goes on the view badge only. Setting title to "My Issues (n)" can render a second
+    // heading inside the sidebar and make the search row look nested under "My Issues".
+    this.view.title = undefined;
+    const n = snapshot.issues.length;
+    this.view.badge =
+      n > 0 ? { value: n, tooltip: n === 1 ? '1 issue' : `${n} issues` } : undefined;
 
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -285,8 +290,10 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         flex-shrink: 0;
         gap: 8px;
         align-items: stretch;
-        padding: 8px 0 0;
         box-sizing: border-box;
+        padding: 8px 0 10px;
+        margin: 0 0 4px;
+        border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
       }
       .search-form {
         display: flex;
