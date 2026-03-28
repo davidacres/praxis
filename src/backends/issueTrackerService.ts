@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import type {
   BackendMode,
+  Board,
+  BoardDetails,
+  BoardFilters,
+  ConnectionCheck,
   FilterMetadata,
-  JiraBoard,
-  JiraBoardDetails,
-  JiraBoardFilters,
-  JiraConnectionCheck,
-  JiraFilters,
-  JiraIssueDetails,
-  JiraIssueSummary,
-  JiraProject,
-  JiraTransition,
-  PagedIssues
+  IssueDetails,
+  IssueFilters,
+  IssueSummary,
+  PagedIssues,
+  Project,
+  WorkflowTransition
 } from '../types';
 
 export interface IssueTrackerService extends vscode.Disposable {
@@ -19,16 +19,16 @@ export interface IssueTrackerService extends vscode.Disposable {
 
   getDefaultPageSize(): number;
   reset(): Promise<void>;
-  checkConnection(): Promise<JiraConnectionCheck>;
-  getProjects(forceRefresh?: boolean): Promise<JiraProject[]>;
-  getIssues(filters: JiraFilters, startAt: number, pageSize: number): Promise<PagedIssues>;
-  getFilterMetadata(filters: JiraFilters): Promise<FilterMetadata>;
-  getEpics(filters: JiraFilters, searchText?: string): Promise<JiraIssueSummary[]>;
+  checkConnection(): Promise<ConnectionCheck>;
+  getProjects(forceRefresh?: boolean): Promise<Project[]>;
+  getIssues(filters: IssueFilters, startAt: number, pageSize: number): Promise<PagedIssues>;
+  getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata>;
+  getParentItems(filters: IssueFilters, searchText?: string): Promise<IssueSummary[]>;
   supportsBoards(): Promise<boolean>;
-  getBoards(filters: JiraBoardFilters): Promise<JiraBoard[]>;
-  getBoardDetails(board: JiraBoard): Promise<JiraBoardDetails>;
-  getIssue(issueKey: string): Promise<JiraIssueDetails>;
-  getTransitions(issueKey: string): Promise<JiraTransition[]>;
+  getBoards(filters: BoardFilters): Promise<Board[]>;
+  getBoardDetails(board: Board): Promise<BoardDetails>;
+  getIssue(issueKey: string): Promise<IssueDetails>;
+  getTransitions(issueKey: string): Promise<WorkflowTransition[]>;
   transitionIssue(issueKey: string, transitionId: string): Promise<void>;
-  getBrowseUrl(issue: JiraIssueSummary): Promise<string | undefined>;
+  getBrowseUrl(issue: IssueSummary): Promise<string | undefined>;
 }

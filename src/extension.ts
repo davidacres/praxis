@@ -2,11 +2,12 @@ import * as vscode from 'vscode';
 import { BackendRouter } from './backends/backendRouter';
 import type { IssueTrackerService } from './backends/issueTrackerService';
 import { registerCommands } from './commands/registerCommands';
-import { JiraConfigStore } from './config/jiraConfig';
+import { AppConfigStore } from './config/jiraConfig';
+import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
-import type { JiraIssueSummary } from './types';
+import type { BackendMode, IssueSummary } from './types';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardNode, BoardsTreeProvider } from './views/boardsTreeProvider';
@@ -14,7 +15,7 @@ import { DetailsViewProvider } from './views/detailsViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider } from './views/issuesTreeProvider';
 
-export interface JiraMiniExtensionApi {
+export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
   backendService: IssueTrackerService;
   filterStore: FilterStore;
@@ -24,7 +25,7 @@ export interface JiraMiniExtensionApi {
   detailsProvider: DetailsViewProvider;
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
-  configStore: JiraConfigStore;
+  configStore: AppConfigStore;
   outputChannel: vscode.OutputChannel;
 }
 
@@ -34,9 +35,9 @@ function logError(output: vscode.OutputChannel, error: unknown): void {
 
 export async function activate(
   context: vscode.ExtensionContext
-): Promise<JiraMiniExtensionApi> {
-  const outputChannel = vscode.window.createOutputChannel('Jira Mini');
-  const configStore = new JiraConfigStore();
+): Promise<TicketManagerExtensionApi> {
+  const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
+  const configStore = new AppConfigStore();
   const filterStore = new FilterStore(context);
   const boardStore = new BoardStore(context);
   const boardColumnStore = new BoardColumnStore(context);
@@ -79,15 +80,15 @@ export async function activate(
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
   });
 
-  const myIssuesView = vscode.window.createTreeView('jiraMini.myIssues', {
+  const myIssuesView = vscode.window.createTreeView('ticketManager.myIssues', {
     treeDataProvider: issuesProvider,
     showCollapseAll: true
   });
-  const boardsView = vscode.window.createTreeView('jiraMini.boards', {
+  const boardsView = vscode.window.createTreeView('ticketManager.boards', {
     treeDataProvider: boardsProvider,
     showCollapseAll: true
   });
-  const issueDetailsView = vscode.window.createTreeView('jiraMini.issueDetails', {
+  const issueDetailsView = vscode.window.createTreeView('ticketManager.issueDetails', {
     treeDataProvider: detailsProvider,
     showCollapseAll: true
   });
@@ -119,15 +120,156 @@ export async function activate(
     }
 
     try {
-      await vscode.commands.executeCommand('workbench.view.extension.jiraMini');
+      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
       await issueDetailsView.reveal(target, { expand: 2, focus: options.focus });
     } catch {
       // reveal can fail if the view is not ready
     }
   }
 
+  async function setModeContext(mode: BackendMode | undefined): Promise<void> {
+    await vscode.commands.executeCommand('setContext', 'ticketManager.mode', mode ?? 'unconfigured');
+  }
+
+  async function ensureFilePlanConfigured(interactive: boolean): Promise<boolean> {
+    const configuredUri = await configStore.getResolvedPlanFileUri();
+    if (configuredUri) {
+      try {
+        await vscode.workspace.fs.stat(configuredUri);
+        return true;
+      } catch {
+        // fall through to discovery/prompt
+      }
+    }
+
+    const planCandidates = await configStore.findWorkspacePlanCandidates();
+    if (planCandidates.length === 1) {
+      await configStore.setPlanFilePath(planCandidates[0].fsPath);
+      return true;
+    }
+
+    if (planCandidates.length > 1 && interactive) {
+      const picked = await vscode.window.showQuickPick(
+        planCandidates.map(candidate => ({
+          label: candidate.fsPath,
+          description: candidate.path,
+          uri: candidate
+        })),
+        {
+          title: 'Choose Plan File'
+        }
+      );
+      if (picked) {
+        await configStore.setPlanFilePath(picked.uri.fsPath);
+        return true;
+      }
+    }
+
+    if (!interactive) {
+      return false;
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      configuredUri
+        ? 'The configured plan file could not be found. Choose another file or create a new one.'
+        : 'File mode needs a plan file. Choose an existing file or create a new one.',
+      'Choose Existing',
+      'Create New'
+    );
+
+    if (action === 'Choose Existing') {
+      const picked = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        openLabel: 'Use Plan File',
+        filters: {
+          'Plan Files': ['jsonc', 'json']
+        },
+        defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri
+      });
+      if (picked?.[0]) {
+        await configStore.setPlanFilePath(picked[0].fsPath);
+        return true;
+      }
+      return false;
+    }
+
+    if (action === 'Create New') {
+      const saveUri = await vscode.window.showSaveDialog({
+        saveLabel: 'Create Plan File',
+        filters: {
+          'Plan Files': ['jsonc']
+        },
+        defaultUri: vscode.workspace.workspaceFolders?.[0]
+          ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ticket-plan.jsonc')
+          : undefined
+      });
+      if (saveUri) {
+        await vscode.workspace.fs.writeFile(
+          saveUri,
+          Buffer.from(createPlanTemplate(vscode.workspace.workspaceFolders?.[0]?.name), 'utf8')
+        );
+        await configStore.setPlanFilePath(saveUri.fsPath);
+        await vscode.window.showInformationMessage(`Created ${saveUri.fsPath}.`);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async function promptForBackendMode(): Promise<BackendMode | undefined> {
+    const picked = await vscode.window.showQuickPick<
+      { label: string; description: string; mode: BackendMode }
+    >(
+      [
+        {
+          label: 'Jira Connected',
+          description: 'Connect to Jira through the configured MCP server.',
+          mode: 'jira'
+        },
+        {
+          label: 'Demo',
+          description: 'Use built-in demo data.',
+          mode: 'demo'
+        },
+        {
+          label: 'File',
+          description: 'Use a plan file from the current workspace.',
+          mode: 'file'
+        }
+      ],
+      {
+        title: 'Choose Backend Mode',
+        ignoreFocusOut: true
+      }
+    );
+
+    return picked?.mode;
+  }
+
+  async function ensureStartupConfiguration(): Promise<void> {
+    if (context.extensionMode === vscode.ExtensionMode.Test) {
+      await setModeContext(configStore.getBackendMode());
+      return;
+    }
+
+    let mode = configStore.getBackendMode();
+    if (!mode) {
+      mode = await promptForBackendMode();
+      if (mode) {
+        await configStore.setBackendMode(mode);
+      }
+    }
+
+    await setModeContext(mode);
+
+    if (mode === 'file') {
+      await ensureFilePlanConfigured(true);
+    }
+  }
+
   async function selectIssue(
-    issue: JiraIssueSummary | undefined,
+    issue: IssueSummary | undefined,
     options?: { openFullPanel?: boolean }
   ): Promise<void> {
     await filterStore.setLastSelectedIssueKey(issue?.key);
@@ -148,6 +290,11 @@ export async function activate(
   }
 
   const refreshAndRestoreSelection = async (): Promise<void> => {
+    if (!configStore.getBackendMode()) {
+      await setModeContext(undefined);
+      return;
+    }
+
     await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
     const lastSelectedKey = filterStore.getLastSelectedIssueKey();
     if (lastSelectedKey) {
@@ -178,6 +325,7 @@ export async function activate(
       boardPanelManager,
       issueDetailPanelManager,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
+      ensureFilePlanConfigured,
       output: outputChannel
     }),
     filterStore.onDidChange(() => {
@@ -199,12 +347,19 @@ export async function activate(
       void boardsProvider.refresh().catch(error => logError(outputChannel, error));
     }),
     vscode.workspace.onDidChangeConfiguration(event => {
-      if (!event.affectsConfiguration('jiraMini')) {
+      if (!event.affectsConfiguration('ticketManager')) {
         return;
       }
 
       void (async () => {
         try {
+          await setModeContext(configStore.getBackendMode());
+          if (
+            context.extensionMode !== vscode.ExtensionMode.Test &&
+            configStore.getBackendMode() === 'file'
+          ) {
+            await ensureFilePlanConfigured(true);
+          }
           await filterStore.setLastSelectedIssueKey(undefined);
           await boardStore.setLastSelectedBoardId(undefined);
           await detailsProvider.setIssue(undefined);
@@ -254,6 +409,7 @@ export async function activate(
   );
 
   try {
+    await ensureStartupConfiguration();
     await refreshAndRestoreSelection();
   } catch (error) {
     logError(outputChannel, error);

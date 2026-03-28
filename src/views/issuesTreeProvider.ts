@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { FilterStore } from '../state/filterStore';
-import type { JiraFilters, JiraIssueSummary } from '../types';
+import type { IssueFilters, IssueSummary } from '../types';
 
 abstract class BaseNode {
   public constructor(
@@ -31,7 +31,7 @@ class MessageNode extends BaseNode {
 }
 
 export class IssueNode extends BaseNode {
-  public constructor(public readonly issue: JiraIssueSummary) {
+  public constructor(public readonly issue: IssueSummary) {
     super(`issue:${issue.key}`, 'issue');
   }
 }
@@ -55,7 +55,7 @@ function getStatusIcon(statusCategory?: string): vscode.ThemeIcon | undefined {
   }
 }
 
-function getIssueDescription(issue: JiraIssueSummary): string {
+function getIssueDescription(issue: IssueSummary): string {
   const parts = [issue.status];
   if (issue.summary) {
     parts.push(issue.summary);
@@ -65,7 +65,7 @@ function getIssueDescription(issue: JiraIssueSummary): string {
 
 export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<TreeNode | undefined>();
-  private issues: JiraIssueSummary[] = [];
+  private issues: IssueSummary[] = [];
   private hasMore = false;
   private status: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
   private errorMessage?: string;
@@ -113,7 +113,7 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       item.contextValue = element.contextValue;
       item.iconPath = new vscode.ThemeIcon('chevron-down');
       item.command = {
-        command: 'jiraMini.loadMore',
+        command: 'ticketManager.loadMore',
         title: 'Load More',
         arguments: [element]
       };
@@ -143,18 +143,18 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
     if (this.status === 'idle') {
       void this.refresh();
-      return [new MessageNode('loading', 'Loading Jira issues...', 'info')];
+      return [new MessageNode('loading', 'Loading issues...', 'info')];
     }
 
     if (this.status === 'loading' && this.issues.length === 0) {
-      return [new MessageNode('loading', 'Loading Jira issues...', 'info')];
+      return [new MessageNode('loading', 'Loading issues...', 'info')];
     }
 
     if (this.status === 'error') {
       return [
         new MessageNode(
           'error',
-          this.errorMessage ?? 'Unable to load Jira issues.',
+          this.errorMessage ?? 'Unable to load issues.',
           'error'
         )
       ];
@@ -193,11 +193,11 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     await this.loadPage(false);
   }
 
-  public getCurrentIssues(): JiraIssueSummary[] {
+  public getCurrentIssues(): IssueSummary[] {
     return [...this.issues];
   }
 
-  public getIssueByKey(issueKey: string): JiraIssueSummary | undefined {
+  public getIssueByKey(issueKey: string): IssueSummary | undefined {
     return this.issues.find(issue => issue.key === issueKey);
   }
 
@@ -273,11 +273,15 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   private buildEmptyNode(): MessageNode {
     const filters = this.filterStore.getFilters();
-    if (filters.epicKey) {
-      return new MessageNode('empty', `No issues found for epic ${filters.epicKey}.`, 'warning');
+    if (filters.parentKey) {
+      return new MessageNode(
+        'empty',
+        `No issues found for parent item ${filters.parentKey}.`,
+        'warning'
+      );
     }
 
-    return new MessageNode('empty', 'No issues match the current Jira filters.', 'warning');
+    return new MessageNode('empty', 'No issues match the current filters.', 'warning');
   }
 }
 

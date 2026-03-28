@@ -94,7 +94,7 @@ export class McpClientWrapper implements vscode.Disposable {
     await this.disconnect();
 
     const client = new Client(
-      { name: 'jira-mini', version: '0.0.1' },
+      { name: 'ticket-manager', version: '0.0.1' },
       {
         capabilities: {}
       }

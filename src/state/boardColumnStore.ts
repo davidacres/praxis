@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { BoardColumnPreferences } from '../types';
 
-const STORAGE_KEY = 'jiraMini.boardColumnPreferences';
+const STORAGE_KEY = 'ticketManager.boardColumnPreferences';
 
 type PersistedMap = Record<string, BoardColumnPreferences>;
 

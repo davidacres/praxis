@@ -1,6 +1,6 @@
-import type { BoardColumnPreferences, JiraBoardColumn, JiraBoardDetails, JiraIssueSummary } from '../types';
+import type { BoardColumn, BoardColumnPreferences, BoardDetails, IssueSummary } from '../types';
 
-function sortIssuesByUpdated(issues: JiraIssueSummary[]): JiraIssueSummary[] {
+function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
   return [...issues].sort((left, right) => {
     const leftUpdated = left.updated ?? '';
     const rightUpdated = right.updated ?? '';
@@ -8,8 +8,8 @@ function sortIssuesByUpdated(issues: JiraIssueSummary[]): JiraIssueSummary[] {
   });
 }
 
-function groupIssuesByStatus(issues: JiraIssueSummary[]): Map<string, JiraIssueSummary[]> {
-  const map = new Map<string, JiraIssueSummary[]>();
+function groupIssuesByStatus(issues: IssueSummary[]): Map<string, IssueSummary[]> {
+  const map = new Map<string, IssueSummary[]>();
   for (const issue of issues) {
     const status = issue.status?.trim() || 'Unknown';
     const list = map.get(status) ?? [];
@@ -22,7 +22,7 @@ function groupIssuesByStatus(issues: JiraIssueSummary[]): Map<string, JiraIssueS
 /**
  * Returns the default column order derived from the board payload (server sort).
  */
-export function getDefaultStatusColumnOrder(details: JiraBoardDetails): string[] {
+export function getDefaultStatusColumnOrder(details: BoardDetails): string[] {
   if (details.columnStatusOrder?.length) {
     return [...details.columnStatusOrder];
   }
@@ -45,7 +45,7 @@ export function getDefaultStatusColumnOrder(details: JiraBoardDetails): string[]
   return ordered;
 }
 
-function collectStatusCategories(details: JiraBoardDetails): Map<string, string | undefined> {
+function collectStatusCategories(details: BoardDetails): Map<string, string | undefined> {
   const categoryByStatus = new Map<string, string | undefined>();
   for (const col of details.columns) {
     if (!categoryByStatus.has(col.name)) {
@@ -66,16 +66,16 @@ function collectStatusCategories(details: JiraBoardDetails): Map<string, string 
  * is listed. Issues whose status is not in `orderedStatuses` roll into "Other statuses".
  */
 export function buildColumnsForOrderedStatuses(
-  details: JiraBoardDetails,
+  details: BoardDetails,
   orderedStatuses: string[]
-): JiraBoardDetails {
+): BoardDetails {
   if (!orderedStatuses.length) {
     return details;
   }
 
   const byStatus = groupIssuesByStatus(details.issues);
   const categoryByStatus = collectStatusCategories(details);
-  const columns: JiraBoardColumn[] = [];
+  const columns: BoardColumn[] = [];
 
   for (const statusName of orderedStatuses) {
     const issues = byStatus.get(statusName);
@@ -90,7 +90,7 @@ export function buildColumnsForOrderedStatuses(
     });
   }
 
-  const remaining: JiraIssueSummary[] = [];
+  const remaining: IssueSummary[] = [];
   for (const list of byStatus.values()) {
     remaining.push(...list);
   }
@@ -115,9 +115,9 @@ export function buildColumnsForOrderedStatuses(
  * emits a column for each listed status (empty when no issues match).
  */
 export function applyBoardColumnPreferences(
-  details: JiraBoardDetails,
+  details: BoardDetails,
   prefs: BoardColumnPreferences
-): JiraBoardDetails {
+): BoardDetails {
   const orderedStatuses = prefs.orderedStatuses.length
     ? prefs.orderedStatuses
     : getDefaultStatusColumnOrder(details);

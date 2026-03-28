@@ -1,9 +1,15 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import { JiraConfigStore } from '../config/jiraConfig';
+import { AppConfigStore } from '../config/jiraConfig';
 import { BoardStore } from '../state/boardStore';
 import { FilterStore } from '../state/filterStore';
-import type { BackendMode, AssigneeMode, GroupingMode, JiraIssueSummary, JiraTransition } from '../types';
+import type {
+  AssigneeMode,
+  BackendMode,
+  GroupingMode,
+  IssueSummary,
+  WorkflowTransition
+} from '../types';
 import { BoardColumnConfigPanel } from '../views/boardColumnConfigPanel';
 import { BoardPanelManager } from '../views/boardPanelManager';
 import { BoardNode, BoardsTreeProvider } from '../views/boardsTreeProvider';
@@ -13,7 +19,7 @@ import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTree
 
 interface CommandDependencies {
   context: vscode.ExtensionContext;
-  configStore: JiraConfigStore;
+  configStore: AppConfigStore;
   backendService: IssueTrackerService;
   filterStore: FilterStore;
   boardStore: BoardStore;
@@ -25,13 +31,14 @@ interface CommandDependencies {
   issueDetailPanelManager: IssueDetailPanelManager;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
+  ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
   output: vscode.OutputChannel;
 }
 
 function resolveIssue(
   detailsProvider: DetailsViewProvider,
   arg: unknown
-): JiraIssueSummary | undefined {
+): IssueSummary | undefined {
   if (arg instanceof IssueNode) {
     return arg.issue;
   }
@@ -83,6 +90,9 @@ async function setBackendMode(
   mode: BackendMode
 ): Promise<void> {
   await deps.configStore.setBackendMode(mode);
+  if (mode === 'file') {
+    await deps.ensureFilePlanConfigured(true);
+  }
   await deps.backendService.reset();
   await clearUiSelection(deps);
   await refreshViews(deps);
@@ -94,7 +104,7 @@ async function openIssueInBrowser(
 ): Promise<void> {
   const issue = resolveIssue(deps.detailsProvider, arg);
   if (!issue) {
-    void vscode.window.showInformationMessage('Select a Jira issue first.');
+    void vscode.window.showInformationMessage('Select an issue first.');
     return;
   }
 
@@ -138,8 +148,8 @@ function toQuickPickItems(
 }
 
 function toTransitionQuickPickItems(
-  transitions: JiraTransition[]
-): Array<vscode.QuickPickItem & { transition: JiraTransition }> {
+  transitions: WorkflowTransition[]
+): Array<vscode.QuickPickItem & { transition: WorkflowTransition }> {
   return transitions.map(transition => ({
     label: transition.name,
     description: transition.toStatus,
@@ -149,10 +159,10 @@ function toTransitionQuickPickItems(
 
 export function registerCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand('jiraMini.refresh', async () => {
+    vscode.commands.registerCommand('ticketManager.refresh', async () => {
       await refreshViews(deps);
     }),
-    vscode.commands.registerCommand('jiraMini.configureConnection', async () => {
+    vscode.commands.registerCommand('ticketManager.configureConnection', async () => {
       try {
         const result = await deps.configStore.configureConnection(deps.context);
         if (!result.saved) {
@@ -162,7 +172,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await deps.backendService.reset();
         await clearUiSelection(deps);
         await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Saved Jira connection: ${result.description}`);
+        await vscode.window.showInformationMessage(`Saved connection: ${result.description}`);
       } catch (error) {
         deps.output.appendLine(`[config] ${error instanceof Error ? error.stack ?? error.message : error}`);
         await vscode.window.showErrorMessage(
@@ -170,30 +180,42 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('jiraMini.checkConnection', async () => {
+    vscode.commands.registerCommand('ticketManager.checkConnection', async () => {
       const result = await deps.backendService.checkConnection();
       await showConnectionResult(result);
     }),
-    vscode.commands.registerCommand('jiraMini.setBackendMode', async () => {
+    vscode.commands.registerCommand('ticketManager.setBackendMode', async () => {
       const currentMode = deps.configStore.getBackendMode();
       const picked = await vscode.window.showQuickPick<
         { label: string; description: string; mode: BackendMode }
       >(
         [
           {
-            label: 'Jira MCP',
+            label: 'Jira Connected',
             description: 'Use the configured Jira MCP connection.',
             mode: 'jira'
           },
           {
-            label: 'Demo Mode',
+            label: 'Demo',
             description: 'Use built-in demo data with no backend required.',
             mode: 'demo'
+          },
+          {
+            label: 'File',
+            description: 'Use a workspace plan file for projects, boards, and issues.',
+            mode: 'file'
           }
         ],
         {
-          title: 'Jira Mini: Backend Mode',
-          placeHolder: currentMode === 'demo' ? 'Demo Mode' : 'Jira MCP'
+          title: 'Backend Mode',
+          placeHolder:
+            currentMode === 'demo'
+              ? 'Demo'
+              : currentMode === 'file'
+                ? 'File'
+                : currentMode === 'jira'
+                  ? 'Jira Connected'
+                  : undefined
         }
       );
 
@@ -204,11 +226,13 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       await setBackendMode(deps, picked.mode);
       await vscode.window.showInformationMessage(
         picked.mode === 'demo'
-          ? 'Jira Mini is now using demo mode.'
-          : 'Jira Mini is now using the Jira MCP backend.'
+          ? 'The app is now using demo mode.'
+          : picked.mode === 'file'
+            ? 'The app is now using file mode.'
+            : 'The app is now using Jira Connected mode.'
       );
     }),
-    vscode.commands.registerCommand('jiraMini.importWorkspaceMcpConfig', async () => {
+    vscode.commands.registerCommand('ticketManager.importWorkspaceMcpConfig', async () => {
       try {
         const result = await deps.configStore.importWorkspaceMcpConfig(deps.context);
         if (!result.saved) {
@@ -226,7 +250,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('jiraMini.importUserMcpConfig', async () => {
+    vscode.commands.registerCommand('ticketManager.importUserMcpConfig', async () => {
       try {
         const result = await deps.configStore.importUserMcpConfig(deps.context);
         if (!result.saved) {
@@ -244,7 +268,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('jiraMini.configureBoardColumns', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.configureBoardColumns', async (arg?: unknown) => {
       const board =
         resolveBoard(deps.boardsProvider, arg, deps.boardStore) ??
         deps.boardPanelManager.getActiveBoard();
@@ -267,22 +291,22 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('jiraMini.openBoard', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.openBoard', async (arg?: unknown) => {
       const board = resolveBoard(deps.boardsProvider, arg, deps.boardStore);
       if (!board) {
-        await vscode.window.showInformationMessage('Select a Jira board first.');
+        await vscode.window.showInformationMessage('Select a board first.');
         return;
       }
 
       await deps.boardStore.setLastSelectedBoardId(board.id);
       await deps.boardPanelManager.openBoard(board);
     }),
-    vscode.commands.registerCommand('jiraMini.setBoardProjects', async () => {
+    vscode.commands.registerCommand('ticketManager.setBoardProjects', async () => {
       const filters = deps.boardStore.getFilters();
       const projects = await deps.backendService.getProjects();
 
       if (projects.length === 0) {
-        await vscode.window.showWarningMessage('No Jira projects are accessible.');
+        await vscode.window.showWarningMessage('No projects are available.');
         return;
       }
 
@@ -293,7 +317,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           picked: filters.projectKeys.includes(project.key)
         })),
         {
-          title: 'Jira Mini: Board Projects',
+          title: 'Board Projects',
           canPickMany: true
         }
       );
@@ -306,7 +330,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         projectKeys: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setBoardTypes', async () => {
+    vscode.commands.registerCommand('ticketManager.setBoardTypes', async () => {
       const filters = deps.boardStore.getFilters();
       const picked = await vscode.window.showQuickPick(
         [
@@ -314,7 +338,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           { label: 'kanban', picked: filters.types.includes('kanban') }
         ],
         {
-          title: 'Jira Mini: Board Types',
+          title: 'Board Types',
           canPickMany: true
         }
       );
@@ -327,10 +351,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         types: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setBoardSearchText', async () => {
+    vscode.commands.registerCommand('ticketManager.setBoardSearchText', async () => {
       const filters = deps.boardStore.getFilters();
       const searchText = await vscode.window.showInputBox({
-        title: 'Jira Mini: Board Search',
+        title: 'Board Search',
         prompt: 'Filter boards by name, project, or location.',
         value: filters.searchText,
         ignoreFocusOut: true
@@ -344,15 +368,15 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         searchText
       });
     }),
-    vscode.commands.registerCommand('jiraMini.clearBoardFilters', async () => {
+    vscode.commands.registerCommand('ticketManager.clearBoardFilters', async () => {
       await deps.boardStore.clearFilters();
     }),
-    vscode.commands.registerCommand('jiraMini.setProjects', async () => {
+    vscode.commands.registerCommand('ticketManager.setProjects', async () => {
       const filters = deps.filterStore.getFilters();
       const projects = await deps.backendService.getProjects();
 
       if (projects.length === 0) {
-        await vscode.window.showWarningMessage('No Jira projects are accessible.');
+        await vscode.window.showWarningMessage('No projects are available.');
         return;
       }
 
@@ -363,7 +387,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           picked: filters.projectKeys.includes(project.key)
         })),
         {
-          title: 'Jira Mini: Projects',
+          title: 'Projects',
           canPickMany: true
         }
       );
@@ -374,10 +398,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
       await deps.filterStore.updateFilters({
         projectKeys: picked.map(item => item.label),
-        epicKey: undefined
+        parentKey: undefined
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setStatuses', async () => {
+    vscode.commands.registerCommand('ticketManager.setStatuses', async () => {
       const filters = deps.filterStore.getFilters();
       const metadata = await deps.backendService.getFilterMetadata(filters);
       const knownStatuses = unique([
@@ -387,14 +411,14 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       ]);
 
       if (knownStatuses.length === 0) {
-        await vscode.window.showInformationMessage('No Jira statuses are available for the current filters.');
+        await vscode.window.showInformationMessage('No statuses are available for the current filters.');
         return;
       }
 
       const picked = await vscode.window.showQuickPick(
         toQuickPickItems(knownStatuses, filters.statuses),
         {
-          title: 'Jira Mini: Status Filter',
+          title: 'Status Filter',
           canPickMany: true
         }
       );
@@ -407,7 +431,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         statuses: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setIssueTypes', async () => {
+    vscode.commands.registerCommand('ticketManager.setIssueTypes', async () => {
       const filters = deps.filterStore.getFilters();
       const metadata = await deps.backendService.getFilterMetadata(filters);
       const knownIssueTypes = unique([
@@ -418,7 +442,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
       if (knownIssueTypes.length === 0) {
         await vscode.window.showInformationMessage(
-          'No Jira issue types are available for the current filters.'
+          'No issue types are available for the current filters.'
         );
         return;
       }
@@ -426,7 +450,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       const picked = await vscode.window.showQuickPick(
         toQuickPickItems(knownIssueTypes, filters.issueTypes),
         {
-          title: 'Jira Mini: Issue Type Filter',
+          title: 'Issue Type Filter',
           canPickMany: true
         }
       );
@@ -439,11 +463,11 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         issueTypes: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setSearchText', async () => {
+    vscode.commands.registerCommand('ticketManager.setSearchText', async () => {
       const filters = deps.filterStore.getFilters();
       const searchText = await vscode.window.showInputBox({
-        title: 'Jira Mini: Search Text',
-        prompt: 'Search Jira issue text using JQL text search.',
+        title: 'Search Text',
+        prompt: 'Search issue text.',
         value: filters.searchText,
         ignoreFocusOut: true
       });
@@ -456,7 +480,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         searchText
       });
     }),
-    vscode.commands.registerCommand('jiraMini.toggleAssigneeMode', async () => {
+    vscode.commands.registerCommand('ticketManager.toggleAssigneeMode', async () => {
       const filters = deps.filterStore.getFilters();
       const picked = await vscode.window.showQuickPick<
         { label: string; description: string; value: AssigneeMode }
@@ -464,7 +488,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         [
           {
             label: 'Assigned to me',
-            description: 'Use currentUser() in the Jira query.',
+            description: 'Only include work assigned to the current user when supported.',
             value: 'me'
           },
           {
@@ -474,7 +498,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           }
         ],
         {
-          title: 'Jira Mini: Assignee Scope',
+          title: 'Assignee Scope',
           placeHolder: filters.assigneeMode === 'me' ? 'Assigned to me' : 'All accessible issues'
         }
       );
@@ -487,40 +511,40 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         assigneeMode: picked.value
       });
     }),
-    vscode.commands.registerCommand('jiraMini.setEpicScope', async () => {
+    vscode.commands.registerCommand('ticketManager.setParentScope', async () => {
       const filters = deps.filterStore.getFilters();
-      const epicSearchText = await vscode.window.showInputBox({
-        title: 'Jira Mini: Epic Search',
-        prompt: 'Optional text used to narrow the available epic list.',
+      const parentSearchText = await vscode.window.showInputBox({
+        title: 'Parent Item Search',
+        prompt: 'Optional text used to narrow the available parent item list.',
         ignoreFocusOut: true
       });
 
-      if (epicSearchText === undefined) {
+      if (parentSearchText === undefined) {
         return;
       }
 
-      const epics = await deps.backendService.getEpics(
+      const parentItems = await deps.backendService.getParentItems(
         {
           ...filters,
-          epicKey: undefined
+          parentKey: undefined
         },
-        epicSearchText
+        parentSearchText
       );
 
-      if (epics.length === 0) {
-        await vscode.window.showInformationMessage('No epics match the current Jira filters.');
+      if (parentItems.length === 0) {
+        await vscode.window.showInformationMessage('No parent items match the current filters.');
         return;
       }
 
       const picked = await vscode.window.showQuickPick(
-        epics.map(epic => ({
-          label: epic.key,
-          description: epic.summary,
-          detail: epic.projectKey,
-          picked: filters.epicKey === epic.key
+        parentItems.map(item => ({
+          label: item.key,
+          description: item.summary,
+          detail: item.projectKey,
+          picked: filters.parentKey === item.key
         })),
         {
-          title: 'Jira Mini: Epic Scope'
+          title: 'Parent Item Scope'
         }
       );
 
@@ -529,19 +553,19 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       }
 
       await deps.filterStore.updateFilters({
-        epicKey: picked.label
+        parentKey: picked.label
       });
     }),
-    vscode.commands.registerCommand('jiraMini.clearEpicScope', async () => {
+    vscode.commands.registerCommand('ticketManager.clearParentScope', async () => {
       await deps.filterStore.updateFilters({
-        epicKey: undefined
+        parentKey: undefined
       });
     }),
-    vscode.commands.registerCommand('jiraMini.clearFilters', async () => {
+    vscode.commands.registerCommand('ticketManager.clearFilters', async () => {
       await deps.filterStore.clearFilters();
       await deps.detailsProvider.setIssue(undefined);
     }),
-    vscode.commands.registerCommand('jiraMini.setGrouping', async () => {
+    vscode.commands.registerCommand('ticketManager.setGrouping', async () => {
       const picked = await vscode.window.showQuickPick<
         { label: string; description: string; value: GroupingMode }
       >(
@@ -553,7 +577,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           },
           {
             label: 'Status',
-            description: 'Group issues by Jira status.',
+            description: 'Group issues by status.',
             value: 'status'
           },
           {
@@ -563,7 +587,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           }
         ],
         {
-          title: 'Jira Mini: Grouping'
+          title: 'Grouping'
         }
       );
 
@@ -573,10 +597,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
       await deps.filterStore.setGrouping(picked.value);
     }),
-    vscode.commands.registerCommand('jiraMini.changeStatus', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.changeStatus', async (arg?: unknown) => {
       const issue = resolveIssue(deps.detailsProvider, arg);
       if (!issue) {
-        await vscode.window.showInformationMessage('Select a Jira issue first.');
+        await vscode.window.showInformationMessage('Select an issue first.');
         return;
       }
 
@@ -585,16 +609,16 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         if (transitions.length === 0) {
           const action = await vscode.window.showWarningMessage(
             `No transitions are available for ${issue.key}.`,
-            'Open in Jira'
+            'Open External Link'
           );
-          if (action === 'Open in Jira') {
+          if (action === 'Open External Link') {
             await openIssueInBrowser(deps, arg);
           }
           return;
         }
 
         const picked = await vscode.window.showQuickPick(toTransitionQuickPickItems(transitions), {
-          title: `Jira Mini: Change Status (${issue.key})`
+          title: `Change Status (${issue.key})`
         });
 
         if (!picked) {
@@ -612,20 +636,20 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         deps.output.appendLine(`[transition] ${error instanceof Error ? error.stack ?? error.message : error}`);
         const action = await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error),
-          'Open in Jira'
+          'Open External Link'
         );
-        if (action === 'Open in Jira') {
+        if (action === 'Open External Link') {
           await openIssueInBrowser(deps, arg);
         }
       }
     }),
-    vscode.commands.registerCommand('jiraMini.openIssueFullDetails', async (issueKey?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.openIssueFullDetails', async (issueKey?: unknown) => {
       const key =
         typeof issueKey === 'string' && issueKey.trim().length > 0
           ? issueKey.trim()
           : deps.detailsProvider.getActiveIssue()?.key;
       if (!key) {
-        await vscode.window.showInformationMessage('Select a Jira issue first.');
+        await vscode.window.showInformationMessage('Select an issue first.');
         return;
       }
 
@@ -645,20 +669,20 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('jiraMini.openInBrowser', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.openInBrowser', async (arg?: unknown) => {
       await openIssueInBrowser(deps, arg);
     }),
-    vscode.commands.registerCommand('jiraMini.copyKey', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.copyKey', async (arg?: unknown) => {
       const issue = resolveIssue(deps.detailsProvider, arg);
       if (!issue) {
-        await vscode.window.showInformationMessage('Select a Jira issue first.');
+        await vscode.window.showInformationMessage('Select an issue first.');
         return;
       }
 
       await vscode.env.clipboard.writeText(issue.key);
       await vscode.window.showInformationMessage(`Copied ${issue.key} to the clipboard.`);
     }),
-    vscode.commands.registerCommand('jiraMini.loadMore', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.loadMore', async (arg?: unknown) => {
       if (arg instanceof LoadMoreNode || arg === undefined) {
         await deps.issuesProvider.loadMore();
       }

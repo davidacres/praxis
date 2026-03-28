@@ -1,8 +1,7 @@
 export type ConnectionType = 'stdio' | 'http';
-export type BackendMode = 'jira' | 'demo';
+export type BackendMode = 'jira' | 'demo' | 'file';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type EpicQueryMode = 'parent' | 'parentEpic';
 
 export interface SecretConnectionValues {
   env: Record<string, string>;
@@ -44,13 +43,13 @@ export interface WorkspaceMcpCandidate {
   config: ConnectionConfig;
 }
 
-export interface JiraProject {
+export interface Project {
   id?: string;
   key: string;
   name: string;
 }
 
-export interface JiraBoard {
+export interface Board {
   id: string;
   name: string;
   type: string;
@@ -60,14 +59,14 @@ export interface JiraBoard {
   raw?: unknown;
 }
 
-export interface JiraTransition {
+export interface WorkflowTransition {
   id: string;
   name: string;
   toStatus?: string;
   raw?: unknown;
 }
 
-export interface JiraIssueSummary {
+export interface IssueSummary {
   id?: string;
   key: string;
   summary: string;
@@ -85,21 +84,21 @@ export interface JiraIssueSummary {
   raw?: unknown;
 }
 
-export interface JiraIssueDetails extends JiraIssueSummary {
-  transitions?: JiraTransition[];
+export interface IssueDetails extends IssueSummary {
+  transitions?: WorkflowTransition[];
 }
 
-export interface JiraFilters {
+export interface IssueFilters {
   projectKeys: string[];
   statuses: string[];
   issueTypes: string[];
   searchText: string;
   assigneeMode: AssigneeMode;
-  epicKey?: string;
+  parentKey?: string;
   grouping: GroupingMode;
 }
 
-export interface JiraBoardFilters {
+export interface BoardFilters {
   projectKeys: string[];
   types: string[];
   searchText: string;
@@ -111,7 +110,7 @@ export interface PersistedFilterState {
   issueTypes: string[];
   searchText: string;
   assigneeMode: AssigneeMode;
-  epicKey?: string;
+  parentKey?: string;
   lastSelectedIssueKey?: string;
 }
 
@@ -123,7 +122,7 @@ export interface PersistedBoardFilterState {
 }
 
 export interface PagedIssues {
-  issues: JiraIssueSummary[];
+  issues: IssueSummary[];
   total?: number;
   hasMore: boolean;
 }
@@ -143,7 +142,7 @@ export interface CapabilityResolution {
   missing: Array<keyof JiraCapabilities>;
 }
 
-export interface JiraConnectionCheck {
+export interface ConnectionCheck {
   status: 'ok' | 'warning' | 'error';
   message: string;
   toolCount: number;
@@ -156,21 +155,20 @@ export interface FilterMetadata {
   issueTypes: string[];
 }
 
-export interface JiraBoardColumn {
+export interface BoardColumn {
   id: string;
   name: string;
   statusCategory?: string;
-  issues: JiraIssueSummary[];
+  issues: IssueSummary[];
 }
 
-export interface JiraBoardDetails {
-  board: JiraBoard;
-  columns: JiraBoardColumn[];
-  issues: JiraIssueSummary[];
+export interface BoardDetails {
+  board: Board;
+  columns: BoardColumn[];
+  issues: IssueSummary[];
   /**
    * Optional canonical status column order for this board (e.g. workflow). When set, the board
-   * shows a column for each status even if no issues are in that status. Jira backends omit this
-   * until board/workflow metadata is available; demo mode supplies it.
+   * shows a column for each status even if no issues are in that status.
    */
   columnStatusOrder?: string[];
 }

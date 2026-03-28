@@ -15,13 +15,20 @@ import type {
   WorkspaceMcpCandidate
 } from '../types';
 
-const CONFIG_ROOT = 'jiraMini';
-const SECRET_ENV_KEY = 'jiraMini.secretEnv';
-const SECRET_HEADERS_KEY = 'jiraMini.secretHeaders';
-const SECRET_WORKSPACE_INPUTS_KEY = 'jiraMini.workspaceMcpInputs';
+const CONFIG_ROOT = 'ticketManager';
+const SECRET_ENV_KEY = 'ticketManager.secretEnv';
+const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
+const SECRET_WORKSPACE_INPUTS_KEY = 'ticketManager.workspaceMcpInputs';
 const WORKSPACE_SERVER_KEY = 'workspaceMcpServerName';
 const USER_SERVER_KEY = 'userMcpServerRef';
+const PLAN_FILE_KEY = 'planFilePath';
 const USER_MCP_PATHS_ENV = 'JIRA_MINI_USER_MCP_PATHS';
+const DEFAULT_PLAN_FILE_NAMES = [
+  'ticket-plan.jsonc',
+  'ticket-plan.json',
+  '.vscode/ticket-plan.jsonc',
+  '.vscode/ticket-plan.json'
+];
 
 interface WorkspaceInputDefinition {
   type?: string;
@@ -146,7 +153,7 @@ function buildServerRef(sourcePath: string, serverName: string): string {
   return `${sourcePath}::${serverName}`;
 }
 
-export class JiraConfigStore {
+export class AppConfigStore {
   public async getSecretValues(context: vscode.ExtensionContext): Promise<SecretConnectionValues> {
     const [storedEnv, storedHeaders] = await Promise.all([
       context.secrets.get(SECRET_ENV_KEY),
@@ -165,8 +172,12 @@ export class JiraConfigStore {
       .get<ConnectionType>('connectionType', 'stdio');
   }
 
-  public getBackendMode(): BackendMode {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<BackendMode>('backendMode', 'jira');
+  public getBackendMode(): BackendMode | undefined {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<BackendMode>('backendMode');
+  }
+
+  public getEffectiveBackendMode(): BackendMode {
+    return this.getBackendMode() ?? 'jira';
   }
 
   public async setBackendMode(mode: BackendMode): Promise<void> {
@@ -174,6 +185,41 @@ export class JiraConfigStore {
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('backendMode', mode, target);
+  }
+
+  public getPlanFilePath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>(PLAN_FILE_KEY, '').trim();
+  }
+
+  public async setPlanFilePath(planFilePath: string | undefined): Promise<void> {
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update(PLAN_FILE_KEY, planFilePath?.trim() ?? '', target);
+  }
+
+  public async getResolvedPlanFileUri(): Promise<vscode.Uri | undefined> {
+    const configuredPath = this.getPlanFilePath();
+    if (!configuredPath) {
+      return undefined;
+    }
+
+    return this.resolvePathToUri(configuredPath);
+  }
+
+  public async findWorkspacePlanCandidates(): Promise<vscode.Uri[]> {
+    const candidates: vscode.Uri[] = [];
+    for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
+      for (const fileName of DEFAULT_PLAN_FILE_NAMES) {
+        const candidate = vscode.Uri.joinPath(workspaceFolder.uri, fileName);
+        if (await this.pathExists(candidate)) {
+          candidates.push(candidate);
+        }
+      }
+    }
+    return candidates;
   }
 
   public getRequestTimeoutMs(): number {
@@ -330,7 +376,7 @@ export class JiraConfigStore {
               candidate
             })),
             {
-              title: 'Jira Mini: Use Workspace MCP Configuration'
+              title: 'Ticket Manager: Use Workspace MCP Configuration'
             }
           );
 
@@ -390,7 +436,7 @@ export class JiraConfigStore {
               candidate
             })),
             {
-              title: 'Jira Mini: Use User/Profile MCP Configuration'
+              title: 'Ticket Manager: Use User/Profile MCP Configuration'
             }
           );
 
@@ -441,8 +487,13 @@ export class JiraConfigStore {
   }
 
   public async describeConnection(context: vscode.ExtensionContext): Promise<string> {
-    if (this.getBackendMode() === 'demo') {
+    if (this.getEffectiveBackendMode() === 'demo') {
       return 'Demo mode';
+    }
+
+    if (this.getEffectiveBackendMode() === 'file') {
+      const planFile = await this.getResolvedPlanFileUri();
+      return planFile ? `File mode (${planFile.fsPath})` : 'File mode (plan not configured)';
     }
 
     const resolved = await this.getResolvedConnectionConfig(context);
@@ -531,7 +582,7 @@ export class JiraConfigStore {
         }
       ],
       {
-        title: 'Jira Mini: Connection Type',
+        title: 'Ticket Manager: Connection Type',
         placeHolder: existingType === 'stdio' ? 'Local Process' : 'Remote MCP Server'
       }
     );
@@ -550,7 +601,7 @@ export class JiraConfigStore {
 
     if (selectedType.value === 'stdio') {
       const command = await vscode.window.showInputBox({
-        title: 'Jira Mini: stdio command',
+        title: 'Ticket Manager: stdio command',
         prompt: 'Command used to start the Jira MCP server.',
         value: configuration.get<string>('stdioCommand', ''),
         ignoreFocusOut: true,
@@ -562,7 +613,7 @@ export class JiraConfigStore {
       }
 
       const argsInput = await vscode.window.showInputBox({
-        title: 'Jira Mini: stdio arguments',
+        title: 'Ticket Manager: stdio arguments',
         prompt: 'Arguments as a JSON array of strings.',
         value: formatJson(asStringArray(configuration.get<unknown>('stdioArgs', []))),
         ignoreFocusOut: true
@@ -573,7 +624,7 @@ export class JiraConfigStore {
       }
 
       const cwd = await vscode.window.showInputBox({
-        title: 'Jira Mini: stdio working directory',
+        title: 'Ticket Manager: stdio working directory',
         prompt: 'Optional working directory for the Jira MCP server process.',
         value: configuration.get<string>('stdioCwd', ''),
         ignoreFocusOut: true
@@ -584,7 +635,7 @@ export class JiraConfigStore {
       }
 
       const envInput = await vscode.window.showInputBox({
-        title: 'Jira Mini: environment variables',
+        title: 'Ticket Manager: environment variables',
         prompt: 'Optional environment variables as a JSON object.',
         value: formatJson(existingSecrets.env),
         ignoreFocusOut: true
@@ -620,7 +671,7 @@ export class JiraConfigStore {
     }
 
     const url = await vscode.window.showInputBox({
-      title: 'Jira Mini: HTTP URL',
+      title: 'Ticket Manager: HTTP URL',
       prompt: 'Base URL for the Jira MCP server.',
       value: configuration.get<string>('httpUrl', ''),
       ignoreFocusOut: true,
@@ -632,7 +683,7 @@ export class JiraConfigStore {
     }
 
     const headersInput = await vscode.window.showInputBox({
-      title: 'Jira Mini: HTTP headers',
+      title: 'Ticket Manager: HTTP headers',
       prompt: 'Optional HTTP headers as a JSON object.',
       value: formatJson(existingSecrets.headers),
       ignoreFocusOut: true
@@ -679,12 +730,12 @@ export class JiraConfigStore {
     if (!selectedCandidate) {
       if (selectedName) {
         throw new Error(
-          `Workspace MCP server "${selectedName}" is no longer available. Run "Jira Mini: Use Workspace MCP Configuration".`
+          `Workspace MCP server "${selectedName}" is no longer available. Run "Ticket Manager: Use Workspace MCP Configuration".`
         );
       }
 
       throw new Error(
-        'Multiple workspace MCP servers were found. Run "Jira Mini: Use Workspace MCP Configuration" to choose the Jira server.'
+        'Multiple workspace MCP servers were found. Run "Ticket Manager: Use Workspace MCP Configuration" to choose the Jira server.'
       );
     }
 
@@ -731,12 +782,12 @@ export class JiraConfigStore {
     if (!selectedCandidate) {
       if (selectedRef) {
         throw new Error(
-          'The selected user/profile MCP server is no longer available. Run "Jira Mini: Use User/Profile MCP Configuration".'
+          'The selected user/profile MCP server is no longer available. Run "Ticket Manager: Use User/Profile MCP Configuration".'
         );
       }
 
       throw new Error(
-        'Multiple user/profile MCP servers were found. Run "Jira Mini: Use User/Profile MCP Configuration" to choose the Jira server.'
+        'Multiple user/profile MCP servers were found. Run "Ticket Manager: Use User/Profile MCP Configuration" to choose the Jira server.'
       );
     }
 
@@ -1051,7 +1102,7 @@ export class JiraConfigStore {
     }
 
     const enteredValue = await vscode.window.showInputBox({
-      title: `Jira Mini: ${inputDefinition.description ?? inputId}`,
+      title: `Ticket Manager: ${inputDefinition.description ?? inputId}`,
       prompt: `Enter the MCP input value for "${inputId}".`,
       password: inputDefinition.password === true,
       ignoreFocusOut: true,
@@ -1072,5 +1123,27 @@ export class JiraConfigStore {
   ): Promise<Record<string, string>> {
     const raw = await context.secrets.get(SECRET_WORKSPACE_INPUTS_KEY);
     return raw ? parseJsonObject(raw, 'workspace MCP inputs') : {};
+  }
+
+  private async pathExists(uri: vscode.Uri): Promise<boolean> {
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private resolvePathToUri(filePath: string): vscode.Uri {
+    if (path.isAbsolute(filePath)) {
+      return vscode.Uri.file(path.normalize(filePath));
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+      return vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+    }
+
+    return vscode.Uri.file(path.normalize(filePath));
   }
 }

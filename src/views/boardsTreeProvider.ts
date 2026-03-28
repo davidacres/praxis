@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { BoardStore } from '../state/boardStore';
-import type { JiraBoard } from '../types';
+import type { Board } from '../types';
 
 abstract class BaseNode {
   public constructor(
@@ -21,14 +21,14 @@ class MessageNode extends BaseNode {
 }
 
 export class BoardNode extends BaseNode {
-  public constructor(public readonly board: JiraBoard) {
+  public constructor(public readonly board: Board) {
     super(`board:${board.id}`, 'board');
   }
 }
 
 type TreeNode = BoardNode | MessageNode;
 
-function getBoardDescription(board: JiraBoard): string {
+function getBoardDescription(board: Board): string {
   const parts = [board.type.toUpperCase()];
   if (board.projectKey) {
     parts.push(board.projectKey);
@@ -40,7 +40,7 @@ function getBoardDescription(board: JiraBoard): string {
 
 export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<TreeNode | undefined>();
-  private boards: JiraBoard[] = [];
+  private boards: Board[] = [];
   private status: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
   private errorMessage?: string;
   private requestGeneration = 0;
@@ -87,18 +87,18 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   public async getChildren(): Promise<TreeNode[]> {
     if (this.status === 'idle') {
       void this.refresh();
-      return [new MessageNode('loading', 'Loading Jira boards...', 'info')];
+      return [new MessageNode('loading', 'Loading boards...', 'info')];
     }
 
     if (this.status === 'loading' && this.boards.length === 0) {
-      return [new MessageNode('loading', 'Loading Jira boards...', 'info')];
+      return [new MessageNode('loading', 'Loading boards...', 'info')];
     }
 
     if (this.status === 'error') {
       return [
         new MessageNode(
           'error',
-          this.errorMessage ?? 'Unable to load Jira boards.',
+          this.errorMessage ?? 'Unable to load boards.',
           'error'
         )
       ];
@@ -141,11 +141,11 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     }
   }
 
-  public getCurrentBoards(): JiraBoard[] {
+  public getCurrentBoards(): Board[] {
     return [...this.boards];
   }
 
-  public getBoardById(boardId: string): JiraBoard | undefined {
+  public getBoardById(boardId: string): Board | undefined {
     return this.boards.find(board => board.id === boardId);
   }
 
@@ -167,6 +167,6 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       return new MessageNode('empty', 'No boards match the current board filters.', 'warning');
     }
 
-    return new MessageNode('empty', 'No Jira boards are available.', 'warning');
+    return new MessageNode('empty', 'No boards are available.', 'warning');
   }
 }
