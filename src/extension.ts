@@ -500,8 +500,8 @@ export async function activate(
     filterStore,
     issuesProvider,
     {
-      onSelectEpic: async issueKey => {
-        await selectIssueByKey(issueKey, { openFullPanel: true });
+      onSelectEpic: async (issueKey, openFullPanel) => {
+        await selectIssueByKey(issueKey, { openFullPanel });
       },
       onCreateEpic: async () => {
         await createEpic();
