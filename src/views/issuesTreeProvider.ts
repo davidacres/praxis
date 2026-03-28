@@ -3,6 +3,13 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { FilterStore } from '../state/filterStore';
 import type { IssueFilters, IssueSummary } from '../types';
 
+export interface IssuesProviderSnapshot {
+  issues: IssueSummary[];
+  hasMore: boolean;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  errorMessage?: string;
+}
+
 abstract class BaseNode {
   public constructor(
     public readonly id: string,
@@ -195,6 +202,15 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public getCurrentIssues(): IssueSummary[] {
     return [...this.issues];
+  }
+
+  public getSnapshot(): IssuesProviderSnapshot {
+    return {
+      issues: [...this.issues],
+      hasMore: this.hasMore,
+      status: this.status,
+      errorMessage: this.errorMessage
+    };
   }
 
   public getIssueByKey(issueKey: string): IssueSummary | undefined {

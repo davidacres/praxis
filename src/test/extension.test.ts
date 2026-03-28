@@ -355,6 +355,41 @@ suite('Ticket Manager Extension', () => {
     );
   });
 
+  test('updates connected issues, reassigns EPICs, and deletes created EPICs', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    const createdEpic = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Epic',
+      summary: 'Connected EPIC for edit flow'
+    });
+
+    const updatedIssue = await api.backendService.updateIssue('APP-101', {
+      summary: 'Connected issue updated from integration test',
+      description: 'Updated description from the integration test.',
+      parentKey: createdEpic.key
+    });
+    assert.strictEqual(updatedIssue.summary, 'Connected issue updated from integration test');
+    assert.strictEqual(updatedIssue.parentKey, createdEpic.key);
+
+    await api.refresh();
+    assert.strictEqual(
+      api.issuesProvider.getIssueByKey('APP-101')?.summary,
+      'Connected issue updated from integration test'
+    );
+
+    await api.backendService.deleteIssue(createdEpic.key);
+    await api.refresh();
+
+    await assert.rejects(
+      () => api.backendService.getIssue(createdEpic.key),
+      /was not found/i
+    );
+    const reassignedIssue = await api.backendService.getIssue('APP-101');
+    assert.strictEqual(reassignedIssue.parentKey, undefined);
+  });
+
   test('loads file-backed plan data and persists status changes', async () => {
     const api = await getApi();
     await configureFileScenario(api);
@@ -417,6 +452,50 @@ suite('Ticket Manager Extension', () => {
       assert.match(updatedText, new RegExp(`"key": "${createdIssue.key}"`));
       assert.match(updatedText, /"summary": "Persist a newly created plan item"/);
       assert.match(updatedText, /"parent": "APP-100"/);
+    }
+  });
+
+  test('updates and deletes file-backed issues while persisting EPIC assignment changes', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    const createdIssue = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Task',
+      summary: 'Temporary file-backed task',
+      description: 'Temporary description',
+      parentKey: 'APP-100'
+    });
+
+    const updatedIssue = await api.backendService.updateIssue(createdIssue.key, {
+      summary: 'Updated file-backed task',
+      description: 'Updated file-backed description',
+      parentKey: null
+    });
+    assert.strictEqual(updatedIssue.summary, 'Updated file-backed task');
+    assert.strictEqual(updatedIssue.parentKey, undefined);
+
+    await api.refresh();
+    assert.strictEqual(
+      api.issuesProvider.getIssueByKey(createdIssue.key)?.summary,
+      'Updated file-backed task'
+    );
+
+    await api.backendService.deleteIssue(createdIssue.key);
+    await api.refresh();
+
+    assert.strictEqual(api.issuesProvider.getIssueByKey(createdIssue.key), undefined);
+    await assert.rejects(
+      () => api.backendService.getIssue(createdIssue.key),
+      /was not found/i
+    );
+
+    if (PLAN_FILE_URI) {
+      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
+      assert.ok(
+        !updatedText.includes(`"key": "${createdIssue.key}"`),
+        'Deleted plan item should be removed from the plan file'
+      );
     }
   });
 

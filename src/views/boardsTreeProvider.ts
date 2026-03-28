@@ -3,6 +3,12 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { BoardStore } from '../state/boardStore';
 import type { Board } from '../types';
 
+export interface BoardsProviderSnapshot {
+  boards: Board[];
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  errorMessage?: string;
+}
+
 abstract class BaseNode {
   public constructor(
     public readonly id: string,
@@ -143,6 +149,14 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public getCurrentBoards(): Board[] {
     return [...this.boards];
+  }
+
+  public getSnapshot(): BoardsProviderSnapshot {
+    return {
+      boards: [...this.boards],
+      status: this.status,
+      errorMessage: this.errorMessage
+    };
   }
 
   public getBoardById(boardId: string): Board | undefined {

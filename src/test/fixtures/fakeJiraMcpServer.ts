@@ -222,6 +222,11 @@ function issueToJiraShape(issue: FakeIssue) {
         key: issue.projectKey,
         name: issue.projectName
       },
+      parent: issue.parent
+        ? {
+            key: issue.parent
+          }
+        : undefined,
       description: {
         type: 'doc',
         version: 1,
@@ -368,6 +373,21 @@ async function main(): Promise<void> {
     }
   }
 
+  function detachIssueFromBoards(issueKey: string): void {
+    for (const board of boards) {
+      board.issueKeys = board.issueKeys.filter(key => key !== issueKey);
+    }
+  }
+
+  function clearParentReferences(parentKey: string): void {
+    for (const issue of issues) {
+      if (issue.parent === parentKey) {
+        issue.parent = undefined;
+        issue.updated = new Date().toISOString();
+      }
+    }
+  }
+
   server.registerTool(
     'atlassian-jira_get_all_projects',
     {
@@ -481,6 +501,79 @@ async function main(): Promise<void> {
       attachIssueToBoard(createdIssue.key, createdIssue.projectKey);
 
       return jsonResult(issueToJiraShape(createdIssue));
+    }
+  );
+
+  server.registerTool(
+    'atlassian-jira_update_issue',
+    {
+      description: 'Update a fake Jira issue.',
+      inputSchema: {
+        issue_key: z.string(),
+        fields: z.string(),
+        additional_fields: z.string().optional()
+      }
+    },
+    async ({ issue_key, fields, additional_fields }) => {
+      const issue = issues.find(candidate => candidate.key === issue_key);
+      if (!issue) {
+        throw new Error(`Issue ${issue_key} was not found.`);
+      }
+
+      let parsedFields: Record<string, unknown> = {};
+      try {
+        parsedFields = fields ? (JSON.parse(fields) as Record<string, unknown>) : {};
+      } catch {
+        parsedFields = {};
+      }
+
+      if (typeof parsedFields.summary === 'string') {
+        issue.summary = parsedFields.summary;
+      }
+      if (typeof parsedFields.description === 'string') {
+        issue.description = parsedFields.description;
+      }
+
+      if (additional_fields) {
+        try {
+          const parsed = JSON.parse(additional_fields) as Record<string, unknown>;
+          if (typeof parsed.epicKey === 'string') {
+            issue.parent = parsed.epicKey;
+          } else if (parsed.epicKey === null) {
+            issue.parent = undefined;
+          }
+        } catch {
+          // Ignore malformed additional fields in the fake server.
+        }
+      }
+
+      issue.updated = new Date().toISOString();
+      return jsonResult(issueToJiraShape(issue));
+    }
+  );
+
+  server.registerTool(
+    'atlassian-jira_delete_issue',
+    {
+      description: 'Delete a fake Jira issue.',
+      inputSchema: {
+        issue_key: z.string()
+      }
+    },
+    async ({ issue_key }) => {
+      const issueIndex = issues.findIndex(candidate => candidate.key === issue_key);
+      if (issueIndex < 0) {
+        throw new Error(`Issue ${issue_key} was not found.`);
+      }
+
+      issues.splice(issueIndex, 1);
+      detachIssueFromBoards(issue_key);
+      clearParentReferences(issue_key);
+
+      return jsonResult({
+        ok: true,
+        issueKey: issue_key
+      });
     }
   );
 

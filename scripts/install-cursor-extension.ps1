@@ -40,7 +40,7 @@ $cursorCli = Get-CursorCliPath
 if (-not $SkipPackage) {
     Push-Location $projectRoot
     try {
-        & npx @vscode/vsce package
+        & npx @vscode/vsce package --allow-missing-repository
     }
     finally {
         Pop-Location

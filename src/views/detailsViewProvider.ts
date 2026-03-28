@@ -2,6 +2,14 @@ import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
 
+export interface DetailsProviderSnapshot {
+  loading: boolean;
+  errorMessage?: string;
+  selectedIssue?: IssueSummary;
+  detailedIssue?: IssueDetails;
+  transitions: WorkflowTransition[];
+}
+
 abstract class DetailsNode {
   public constructor(
     public readonly id: string,
@@ -375,6 +383,16 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
 
   public getActiveIssue(): IssueSummary | undefined {
     return this.detailedIssue ?? this.selectedIssue;
+  }
+
+  public getSnapshot(): DetailsProviderSnapshot {
+    return {
+      loading: this.loading,
+      errorMessage: this.errorMessage,
+      selectedIssue: this.selectedIssue,
+      detailedIssue: this.detailedIssue,
+      transitions: [...this.transitions]
+    };
   }
 
   public dispose(): void {

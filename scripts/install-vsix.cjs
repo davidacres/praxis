@@ -20,7 +20,7 @@ function main() {
   const vsixName = `${pkg.name}-${pkg.version}.vsix`;
   const vsixPath = join(projectRoot, vsixName);
 
-  run(commandFor('npx'), ['@vscode/vsce', 'package']);
+  run(commandFor('npx'), ['@vscode/vsce', 'package', '--allow-missing-repository']);
 
   if (!existsSync(vsixPath)) {
     throw new Error(`Expected VSIX was not created: ${vsixPath}`);

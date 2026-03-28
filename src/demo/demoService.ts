@@ -12,6 +12,7 @@ import type {
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
@@ -202,6 +203,7 @@ function toIssueSummary(issue: DemoIssue): IssueSummary {
     issueType: issue.issueType,
     projectKey: issue.projectKey,
     projectName: issue.projectName,
+    parentKey: issue.parent,
     assignee: issue.assigneeKind === 'none' ? undefined : issue.assigneeDisplayName,
     priority: issue.priority,
     updated: issue.updated,
@@ -379,7 +381,7 @@ export class DemoService implements IssueTrackerService {
     const query = searchText?.trim().toLowerCase();
     return sortIssuesByUpdated(
       this.issues
-        .filter(issue => issue.issueType === 'Feature')
+        .filter(issue => issue.issueType === 'Feature' || issue.issueType === 'Epic')
         .filter(issue => filters.projectKeys.length === 0 || filters.projectKeys.includes(issue.projectKey))
         .filter(issue => {
           if (!query) {
@@ -471,6 +473,47 @@ export class DemoService implements IssueTrackerService {
       ...toIssueSummary(createdIssue),
       transitions: transitionSet(createdIssue.status)
     };
+  }
+
+  public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
+    const issue = this.findIssue(issueKey);
+    if (typeof input.summary === 'string') {
+      const summary = input.summary.trim();
+      if (summary.length === 0) {
+        throw new Error('Summary cannot be empty.');
+      }
+      issue.summary = summary;
+    }
+    if (typeof input.description === 'string') {
+      issue.description = input.description;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
+      issue.parent = input.parentKey?.trim() || undefined;
+    }
+    issue.updated = new Date().toISOString();
+
+    return {
+      ...toIssueSummary(issue),
+      transitions: transitionSet(issue.status)
+    };
+  }
+
+  public async deleteIssue(issueKey: string): Promise<void> {
+    const issueIndex = this.issues.findIndex(candidate => candidate.key === issueKey);
+    if (issueIndex < 0) {
+      throw new Error(`Issue ${issueKey} was not found in demo mode.`);
+    }
+
+    this.issues.splice(issueIndex, 1);
+    for (const issue of this.issues) {
+      if (issue.parent === issueKey) {
+        issue.parent = undefined;
+        issue.updated = new Date().toISOString();
+      }
+    }
+    for (const board of this.boards) {
+      board.issueKeys = board.issueKeys.filter(key => key !== issueKey);
+    }
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

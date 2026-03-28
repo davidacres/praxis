@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { IssueDetails, WorkflowTransition } from '../types';
+import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
+import { renderIconButton } from './webviewToolbarIcons';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -23,11 +24,18 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function isParentIssueType(issueType: string | undefined): boolean {
+  const normalized = issueType?.trim().toLowerCase();
+  return normalized === 'epic' || normalized === 'feature';
+}
+
 export class IssueDetailPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private activeIssueKey?: string;
   private details?: IssueDetails;
   private transitions: WorkflowTransition[] = [];
+  private parentItems: IssueSummary[] = [];
+  private parentItemsError?: string;
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
@@ -54,6 +62,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.activeIssueKey = undefined;
     this.details = undefined;
     this.transitions = [];
+    this.parentItems = [];
+    this.parentItemsError = undefined;
     this.loading = false;
     this.errorMessage = undefined;
     this.requestGeneration += 1;
@@ -110,7 +120,26 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
-    if (type !== 'transition' || !this.activeIssueKey) {
+    if (!this.activeIssueKey) {
+      return;
+    }
+
+    if (type === 'assignParent') {
+      try {
+        const parentKey = Object.prototype.hasOwnProperty.call(message, 'parentKey')
+          ? asString(message.parentKey) ?? null
+          : null;
+        await this.backendService.updateIssue(this.activeIssueKey, { parentKey });
+        await this.onAfterTransition();
+        await this.refresh();
+      } catch (error) {
+        const text = error instanceof Error ? error.message : String(error);
+        void vscode.window.showErrorMessage(`EPIC update failed: ${text}`);
+      }
+      return;
+    }
+
+    if (type !== 'transition') {
       return;
     }
 
@@ -146,12 +175,36 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         this.backendService.getTransitions(issueKey)
       ]);
 
+      let parentItems: IssueSummary[] = [];
+      let parentItemsError: string | undefined;
+      if (!isParentIssueType(issue.issueType) && issue.projectKey) {
+        try {
+          parentItems = (await this.backendService.getParentItems(
+            {
+              projectKeys: [issue.projectKey],
+              statuses: [],
+              issueTypes: [],
+              searchText: '',
+              assigneeMode: 'all',
+              parentKey: undefined,
+              grouping: 'none'
+            },
+            undefined
+          )).filter(item => item.key !== issue.key);
+        } catch (error) {
+          parentItems = [];
+          parentItemsError = error instanceof Error ? error.message : String(error);
+        }
+      }
+
       if (generation !== this.requestGeneration) {
         return;
       }
 
       this.details = { ...issue, transitions };
       this.transitions = transitions;
+      this.parentItems = parentItems;
+      this.parentItemsError = parentItemsError;
       this.loading = false;
     } catch (error) {
       if (generation !== this.requestGeneration) {
@@ -162,6 +215,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.errorMessage = error instanceof Error ? error.message : String(error);
       this.details = undefined;
       this.transitions = [];
+      this.parentItems = [];
+      this.parentItemsError = undefined;
     } finally {
       if (generation === this.requestGeneration) {
         this.render();
@@ -187,7 +242,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return this.wrapPage(
         nonce,
         issueKey,
-        `<section class="empty-state"><h2>Loading ${issueKey}…</h2></section>`
+        `<section class="empty-state"><h2>Loading ${issueKey}…</h2></section>`,
+        `Loading ${issueKey}…`
       );
     }
 
@@ -195,7 +251,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return this.wrapPage(
         nonce,
         issueKey,
-        `<section class="empty-state error"><h2>Unable to load issue</h2><p>${escapeHtml(this.errorMessage)}</p></section>`
+        `<section class="empty-state error"><h2>Unable to load issue</h2><p>${escapeHtml(this.errorMessage)}</p></section>`,
+        issueKey || 'Issue'
       );
     }
 
@@ -203,7 +260,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return this.wrapPage(
         nonce,
         issueKey,
-        `<section class="empty-state"><h2>No issue data</h2></section>`
+        `<section class="empty-state"><h2>No issue data</h2></section>`,
+        issueKey || 'Issue'
       );
     }
 
@@ -211,6 +269,25 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     const description = d.description?.trim()
       ? `<section class="block"><h3>Description</h3><pre class="description-body">${escapeHtml(d.description)}</pre></section>`
       : '';
+    const epicAssignment =
+      !isParentIssueType(d.issueType)
+        ? `<section class="block">
+            <h3>EPIC</h3>
+            <div class="select-row">
+              <select id="parentSelect" class="parent-select">
+                <option value="">No EPIC</option>
+                ${this.parentItems
+                  .map(
+                    item => `<option value="${escapeHtml(item.key)}" ${item.key === d.parentKey ? 'selected' : ''}>
+                      ${escapeHtml(`${item.key} • ${item.summary}`)}
+                    </option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+            ${this.parentItemsError ? `<p class="muted error-text">${escapeHtml(this.parentItemsError)}</p>` : ''}
+          </section>`
+        : '';
 
     const transitions =
       this.transitions.length > 0
@@ -239,19 +316,22 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       .join('');
 
     const body = `
-      <section class="hero">
-        <h1>${escapeHtml(d.key)}</h1>
-        <p class="summary">${escapeHtml(d.summary)}</p>
-      </section>
       <table class="meta-table">${metaRows}</table>
+      ${epicAssignment}
       ${description}
       ${transitions}
     `;
 
-    return this.wrapPage(nonce, issueKey, body);
+    return this.wrapPage(nonce, issueKey, body, escapeHtml(d.key), escapeHtml(d.summary));
   }
 
-  private wrapPage(nonce: string, title: string, body: string): string {
+  private wrapPage(
+    nonce: string,
+    title: string,
+    body: string,
+    headerTitle: string = title,
+    headerSubtitle?: string
+  ): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -261,37 +341,101 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   <title>${title}</title>
   <style>
     :root { color-scheme: light dark; }
+    html, body {
+      height: 100%;
+    }
     body {
       margin: 0;
+      display: flex;
       font-family: var(--vscode-font-family);
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
     }
-    .page { padding: 20px 24px 32px; max-width: 880px; }
-    .toolbar {
+    .page {
+      box-sizing: border-box;
       display: flex;
-      justify-content: flex-end;
-      margin-bottom: 16px;
+      flex: 1;
+      width: 100%;
+      min-height: 100vh;
+      padding: 8px;
     }
-    .refresh-button {
-      border: 1px solid var(--vscode-button-border, transparent);
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-      border-radius: 6px;
-      padding: 6px 12px;
-      cursor: pointer;
+    .content-shell {
+      box-sizing: border-box;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      width: 100%;
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      background: var(--vscode-sideBar-background);
+      overflow: hidden;
     }
-    .refresh-button:hover { background: var(--vscode-button-hoverBackground); }
-    .hero h1 {
-      margin: 0 0 8px;
+    .content {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      gap: 20px;
+      min-height: 0;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+      flex-shrink: 0;
+    }
+    .panel-header-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .panel-header h1 {
+      margin: 0;
       font-size: 22px;
       color: var(--vscode-textLink-foreground);
     }
-    .summary { margin: 0 0 20px; font-size: 15px; line-height: 1.45; }
+    .panel-subtitle {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    .icon-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .icon-button:hover {
+      border-color: var(--vscode-widget-border, transparent);
+      background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
+    }
+    .icon-button svg {
+      width: 14px;
+      height: 14px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
     .meta-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
       font-size: 13px;
     }
     .meta-table th {
@@ -303,7 +447,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       vertical-align: top;
     }
     .meta-table td { padding: 6px 0; }
-    .block { margin-bottom: 20px; }
     .block h3 {
       margin: 0 0 8px;
       font-size: 11px;
@@ -323,6 +466,20 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       border-radius: 8px;
       background: var(--vscode-textBlockQuote-background, var(--vscode-sideBar-background));
     }
+    .select-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .parent-select {
+      min-width: 280px;
+      max-width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: var(--vscode-dropdown-background, var(--vscode-input-background));
+      color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+    }
     .transition-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .transition-btn {
       border: 1px solid var(--vscode-button-border, transparent);
@@ -336,17 +493,36 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     .transition-btn:hover {
       background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
     }
-    .empty-state { padding: 24px; }
+    .empty-state {
+      flex: 1;
+      padding: 24px;
+      border: 1px dashed var(--vscode-panel-border);
+      border-radius: 8px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .empty-state h2 {
+      margin-top: 0;
+      color: var(--vscode-editor-foreground);
+    }
     .empty-state.error { color: var(--vscode-errorForeground); }
     .muted { color: var(--vscode-descriptionForeground); font-size: 13px; }
+    .error-text { color: var(--vscode-errorForeground); }
   </style>
 </head>
 <body>
   <div class="page">
-    <div class="toolbar">
-      <button class="refresh-button" id="refreshBtn" type="button">Refresh</button>
+    <div class="content-shell">
+      <header class="panel-header">
+        <div class="panel-header-main">
+          <h1>${headerTitle}</h1>
+          ${headerSubtitle ? `<p class="panel-subtitle">${headerSubtitle}</p>` : ''}
+        </div>
+        ${renderIconButton('refreshBtn', 'Refresh', 'refresh')}
+      </header>
+      <main class="content">
+        ${body}
+      </main>
     </div>
-    ${body}
   </div>
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
@@ -358,6 +534,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-transition-id');
         if (id) vscodeApi.postMessage({ type: 'transition', transitionId: id });
+      });
+    }
+    const parentSelect = document.getElementById('parentSelect');
+    if (parentSelect) {
+      parentSelect.addEventListener('change', () => {
+        vscodeApi.postMessage({
+          type: 'assignParent',
+          parentKey: parentSelect.value || null
+        });
       });
     }
   </script>

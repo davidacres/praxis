@@ -17,6 +17,7 @@ import type {
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 
@@ -272,6 +273,7 @@ function normalizePlanItem(
     issueType: asString(raw.type) ?? asString(raw.issueType) ?? 'Issue',
     projectKey,
     projectName: asString(raw.projectName),
+    parentKey: asString(raw.parent),
     assignee: asString(raw.assignee),
     priority: asString(raw.priority),
     updated: asString(raw.updated),
@@ -590,6 +592,7 @@ export class FilePlanService implements IssueTrackerService {
       issueType: nextItem.type ?? 'Issue',
       projectKey: project.key,
       projectName: project.name,
+      parentKey: nextItem.parent,
       assignee: nextItem.assignee,
       priority: nextItem.priority,
       updated: now,
@@ -603,6 +606,7 @@ export class FilePlanService implements IssueTrackerService {
         issueType: nextItem.type ?? 'Issue',
         projectKey: project.key,
         projectName: project.name,
+        parentKey: nextItem.parent,
         assignee: nextItem.assignee,
         priority: nextItem.priority,
         updated: now,
@@ -610,6 +614,102 @@ export class FilePlanService implements IssueTrackerService {
         raw: nextItem
       })
     };
+  }
+
+  public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
+    const plan = await this.loadPlan();
+    const rawItems = Array.isArray(plan.document.items) ? plan.document.items : [];
+    const itemIndex = rawItems.findIndex(item => isRecord(item) && asString(item.key) === issueKey);
+    if (itemIndex < 0) {
+      throw new Error(`Issue ${issueKey} was not found in the plan file.`);
+    }
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = plan.text;
+    if (typeof input.summary === 'string') {
+      const summary = input.summary.trim();
+      if (summary.length === 0) {
+        throw new Error('Summary cannot be empty.');
+      }
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'summary'], summary, { formattingOptions })
+      );
+    }
+    if (typeof input.description === 'string') {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'description'], input.description.trim() || undefined, {
+          formattingOptions
+        })
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'parent'], input.parentKey?.trim() || undefined, {
+          formattingOptions
+        })
+      );
+    }
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ['items', itemIndex, 'updated'], new Date().toISOString(), {
+        formattingOptions
+      })
+    );
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+    return this.getIssue(issueKey);
+  }
+
+  public async deleteIssue(issueKey: string): Promise<void> {
+    const plan = await this.loadPlan();
+    const rawItems = Array.isArray(plan.document.items) ? plan.document.items : [];
+    const itemIndex = rawItems.findIndex(item => isRecord(item) && asString(item.key) === issueKey);
+    if (itemIndex < 0) {
+      throw new Error(`Issue ${issueKey} was not found in the plan file.`);
+    }
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = plan.text;
+
+    for (let index = 0; index < rawItems.length; index += 1) {
+      const item = rawItems[index];
+      if (!isRecord(item) || asString(item.parent) !== issueKey) {
+        continue;
+      }
+
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', index, 'parent'], undefined, { formattingOptions })
+      );
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', index, 'updated'], new Date().toISOString(), { formattingOptions })
+      );
+    }
+
+    const rawBoards = Array.isArray(plan.document.boards) ? plan.document.boards : [];
+    for (let index = 0; index < rawBoards.length; index += 1) {
+      const board = rawBoards[index];
+      if (!isRecord(board)) {
+        continue;
+      }
+
+      const nextIssueKeys = asStringArray(board.issueKeys).filter(key => key !== issueKey);
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['boards', index, 'issueKeys'], nextIssueKeys, { formattingOptions })
+      );
+    }
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ['items', itemIndex], undefined, { formattingOptions })
+    );
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
@@ -817,9 +917,7 @@ export class FilePlanService implements IssueTrackerService {
       return false;
     }
 
-    const rawIssue = isRecord(issue.raw) ? issue.raw : undefined;
-    const parent = rawIssue ? asString(rawIssue.parent) : undefined;
-    if (filters.parentKey && parent !== filters.parentKey) {
+    if (filters.parentKey && issue.parentKey !== filters.parentKey) {
       return false;
     }
 

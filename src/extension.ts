@@ -7,13 +7,17 @@ import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
-import type { BackendMode, IssueSummary } from './types';
+import type { BackendMode, Board, IssueSummary } from './types';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
-import { BoardNode, BoardsTreeProvider } from './views/boardsTreeProvider';
+import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
+import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
+import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
-import { IssueNode, IssuesTreeProvider } from './views/issuesTreeProvider';
+import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
+import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
+import { IssuesTreeProvider } from './views/issuesTreeProvider';
 
 export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
@@ -46,6 +50,10 @@ export async function activate(
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
   const detailsProvider = new DetailsViewProvider(backendService);
+  let issuesSidebarViewProvider: IssuesSidebarViewProvider;
+  let epicsSidebarViewProvider: EpicsSidebarViewProvider;
+  let boardsSidebarViewProvider: BoardsSidebarViewProvider;
+  let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
   const boardPanelManager = new BoardPanelManager(
     backendService,
@@ -61,6 +69,8 @@ export async function activate(
       } else {
         await detailsProvider.refresh();
       }
+      issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+      epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
       await issueDetailPanelManager.refreshIfShowing(
         detailsProvider.getActiveIssue()?.key ?? ''
       );
@@ -76,23 +86,11 @@ export async function activate(
     } else {
       await detailsProvider.refresh();
     }
+    issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+    epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
     await boardPanelManager.refresh();
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
   });
-
-  const myIssuesView = vscode.window.createTreeView('ticketManager.myIssues', {
-    treeDataProvider: issuesProvider,
-    showCollapseAll: true
-  });
-  const boardsView = vscode.window.createTreeView('ticketManager.boards', {
-    treeDataProvider: boardsProvider,
-    showCollapseAll: true
-  });
-  const issueDetailsView = vscode.window.createTreeView('ticketManager.issueDetails', {
-    treeDataProvider: detailsProvider,
-    showCollapseAll: true
-  });
-
   context.subscriptions.push(
     outputChannel,
     filterStore,
@@ -107,23 +105,21 @@ export async function activate(
     boardColumnConfigPanel,
     boardColumnStore.onDidChange(() => {
       boardPanelManager.refreshColumnLayout();
-    }),
-    myIssuesView,
-    boardsView,
-    issueDetailsView
+    })
   );
 
   async function revealIssueDetailsInSidebar(options: { focus: boolean }): Promise<void> {
-    const target = detailsProvider.getRevealTarget();
-    if (!target) {
+    if (!detailsProvider.getActiveIssue()) {
       return;
     }
 
     try {
       await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
-      await issueDetailsView.reveal(target, { expand: 2, focus: options.focus });
+      if (options.focus) {
+        await vscode.commands.executeCommand('ticketManager.issueDetails.focus');
+      }
     } catch {
-      // reveal can fail if the view is not ready
+      // focusing can fail if the view is not ready
     }
   }
 
@@ -275,6 +271,8 @@ export async function activate(
     await filterStore.setLastSelectedIssueKey(issue?.key);
     await detailsProvider.setIssue(issue);
     boardPanelManager.setSelectedIssueKey(issue?.key);
+    issuesSidebarViewProvider.setSelectedIssueKey(issue?.key);
+    epicsSidebarViewProvider.setSelectedIssueKey(issue?.key);
 
     if (!issue) {
       issueDetailPanelManager.clear();
@@ -289,9 +287,166 @@ export async function activate(
     }
   }
 
+  async function selectBoard(board: Board | undefined): Promise<void> {
+    if (!board) {
+      await boardStore.setLastSelectedBoardId(undefined);
+      boardsSidebarViewProvider.setSelectedBoardId(undefined);
+      boardPanelManager.clear();
+      return;
+    }
+
+    await boardStore.setLastSelectedBoardId(board.id);
+    boardsSidebarViewProvider.setSelectedBoardId(board.id);
+    await boardPanelManager.openBoard(board);
+  }
+
+  async function selectIssueByKey(
+    issueKey: string,
+    options?: { openFullPanel?: boolean }
+  ): Promise<void> {
+    const issue = issuesProvider.getIssueByKey(issueKey) ?? (await backendService.getIssue(issueKey));
+    await selectIssue(issue, options);
+  }
+
+  function getEpicIssueType(mode: BackendMode): string {
+    return mode === 'jira' ? 'Epic' : 'Feature';
+  }
+
+  async function pickProject(defaultProjectKey?: string) {
+    const projects = await backendService.getProjects();
+    if (projects.length === 0) {
+      await vscode.window.showWarningMessage('No projects are available.');
+      return undefined;
+    }
+
+    if (defaultProjectKey) {
+      const defaultProject = projects.find(project => project.key === defaultProjectKey);
+      if (defaultProject) {
+        return defaultProject;
+      }
+    }
+
+    if (projects.length === 1) {
+      return projects[0];
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      projects.map(project => ({
+        label: project.key,
+        description: project.name,
+        project
+      })),
+      {
+        title: 'Project'
+      }
+    );
+    return picked?.project;
+  }
+
+  async function createEpic(): Promise<void> {
+    const filters = filterStore.getFilters();
+    const defaultProjectKey =
+      filters.projectKeys.length === 1
+        ? filters.projectKeys[0]
+        : detailsProvider.getActiveIssue()?.projectKey;
+    const project = await pickProject(defaultProjectKey);
+    if (!project) {
+      return;
+    }
+
+    const summary = await vscode.window.showInputBox({
+      title: 'Create EPIC',
+      prompt: 'Enter a short summary for the new EPIC.',
+      ignoreFocusOut: true,
+      validateInput: value => (value.trim().length === 0 ? 'Summary is required.' : undefined)
+    });
+    if (summary === undefined) {
+      return;
+    }
+
+    const description = await vscode.window.showInputBox({
+      title: 'EPIC Description',
+      prompt: 'Optional description for the EPIC.',
+      ignoreFocusOut: true
+    });
+    if (description === undefined) {
+      return;
+    }
+
+    const created = await backendService.createIssue({
+      projectKey: project.key,
+      issueType: getEpicIssueType(backendService.mode),
+      summary: summary.trim(),
+      description: description.trim() || undefined
+    });
+
+    await refreshAndRestoreSelection();
+    await selectIssueByKey(created.key, { openFullPanel: true });
+  }
+
+  async function editEpic(issueKey: string): Promise<void> {
+    const issue = await backendService.getIssue(issueKey);
+    const summary = await vscode.window.showInputBox({
+      title: `Edit EPIC (${issue.key})`,
+      prompt: 'Update the EPIC summary.',
+      value: issue.summary,
+      ignoreFocusOut: true,
+      validateInput: value => (value.trim().length === 0 ? 'Summary is required.' : undefined)
+    });
+    if (summary === undefined) {
+      return;
+    }
+
+    const description = await vscode.window.showInputBox({
+      title: `EPIC Description (${issue.key})`,
+      prompt: 'Update the EPIC description.',
+      value: issue.description ?? '',
+      ignoreFocusOut: true
+    });
+    if (description === undefined) {
+      return;
+    }
+
+    await backendService.updateIssue(issueKey, {
+      summary: summary.trim(),
+      description
+    });
+    await refreshAndRestoreSelection();
+    await selectIssueByKey(issueKey, { openFullPanel: true });
+  }
+
+  async function deleteIssue(issueKey: string): Promise<void> {
+    const confirmed = await vscode.window.showWarningMessage(
+      `Delete ${issueKey}?`,
+      { modal: true },
+      'Delete'
+    );
+    if (confirmed !== 'Delete') {
+      return;
+    }
+
+    if (filterStore.getFilters().parentKey === issueKey) {
+      await filterStore.updateFilters({ parentKey: undefined });
+    }
+    if (filterStore.getLastSelectedIssueKey() === issueKey) {
+      await filterStore.setLastSelectedIssueKey(undefined);
+      await detailsProvider.setIssue(undefined);
+      boardPanelManager.setSelectedIssueKey(undefined);
+      issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+      epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+      issueDetailPanelManager.clear();
+    }
+
+    await backendService.deleteIssue(issueKey);
+    await refreshAndRestoreSelection();
+  }
+
   const refreshAndRestoreSelection = async (): Promise<void> => {
     if (!configStore.getBackendMode()) {
       await setModeContext(undefined);
+      issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+      epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+      boardsSidebarViewProvider.setSelectedBoardId(undefined);
       return;
     }
 
@@ -304,12 +459,63 @@ export async function activate(
         await revealIssueDetailsInSidebar({ focus: false });
       }
       boardPanelManager.setSelectedIssueKey(lastSelectedKey);
+      issuesSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
+      epicsSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
     } else {
       boardPanelManager.setSelectedIssueKey(undefined);
+      issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+      epicsSidebarViewProvider.setSelectedIssueKey(undefined);
     }
+
+    boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
 
     await boardPanelManager.refresh();
   };
+
+  issuesSidebarViewProvider = new IssuesSidebarViewProvider(
+    backendService,
+    filterStore,
+    issuesProvider,
+    {
+      onSelectIssue: async (issueKey, openFullPanel) => {
+        await selectIssueByKey(issueKey, { openFullPanel });
+      },
+      onSetSearchText: async searchText => {
+        await filterStore.updateFilters({ searchText });
+      },
+      onSetStatuses: async statuses => {
+        await filterStore.updateFilters({ statuses });
+      },
+      onLoadMore: async () => {
+        await issuesProvider.loadMore();
+      }
+    }
+  );
+  epicsSidebarViewProvider = new EpicsSidebarViewProvider(
+    backendService,
+    filterStore,
+    issuesProvider,
+    {
+      onSelectEpic: async issueKey => {
+        await selectIssueByKey(issueKey, { openFullPanel: true });
+      },
+      onCreateEpic: async () => {
+        await createEpic();
+      },
+      onEditEpic: async issueKey => {
+        await editEpic(issueKey);
+      },
+      onDeleteEpic: async issueKey => {
+        await deleteIssue(issueKey);
+      }
+    }
+  );
+  boardsSidebarViewProvider = new BoardsSidebarViewProvider(boardStore, boardsProvider, {
+    onSelectBoard: async boardId => {
+      await selectBoard(boardsProvider.getBoardById(boardId));
+    }
+  });
+  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(detailsProvider);
 
   context.subscriptions.push(
     ...registerCommands({
@@ -328,6 +534,14 @@ export async function activate(
       ensureFilePlanConfigured,
       output: outputChannel
     }),
+    vscode.window.registerWebviewViewProvider('ticketManager.myIssues', issuesSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.boards', boardsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.issueDetails', issueDetailsSidebarViewProvider),
+    issuesSidebarViewProvider,
+    epicsSidebarViewProvider,
+    boardsSidebarViewProvider,
+    issueDetailsSidebarViewProvider,
     filterStore.onDidChange(() => {
       void (async () => {
         try {
@@ -338,12 +552,15 @@ export async function activate(
             await detailsProvider.setIssue(refreshedIssue);
           }
           boardPanelManager.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+          issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+          epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
         } catch (error) {
           logError(outputChannel, error);
         }
       })();
     }),
     boardStore.onDidChange(() => {
+      boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
       void boardsProvider.refresh().catch(error => logError(outputChannel, error));
     }),
     vscode.workspace.onDidChangeConfiguration(event => {
@@ -363,6 +580,7 @@ export async function activate(
           await filterStore.setLastSelectedIssueKey(undefined);
           await boardStore.setLastSelectedBoardId(undefined);
           await detailsProvider.setIssue(undefined);
+          boardsSidebarViewProvider.setSelectedBoardId(undefined);
           boardPanelManager.clear();
           issueDetailPanelManager.clear();
           await backendService.reset();
@@ -371,40 +589,6 @@ export async function activate(
           logError(outputChannel, error);
         }
       })();
-    }),
-    myIssuesView.onDidChangeSelection(event => {
-      void (async () => {
-        const selectedIssueNode = event.selection.find(
-          (item): item is IssueNode => item instanceof IssueNode
-        );
-
-        if (selectedIssueNode) {
-          await selectIssue(selectedIssueNode.issue, { openFullPanel: true });
-          return;
-        }
-
-        if (event.selection.length === 0) {
-          await selectIssue(undefined);
-        }
-      })().catch(error => logError(outputChannel, error));
-    }),
-    boardsView.onDidChangeSelection(event => {
-      void (async () => {
-        const selectedBoardNode = event.selection.find(
-          (item): item is BoardNode => item instanceof BoardNode
-        );
-
-        if (selectedBoardNode) {
-          await boardStore.setLastSelectedBoardId(selectedBoardNode.board.id);
-          await boardPanelManager.openBoard(selectedBoardNode.board);
-          return;
-        }
-
-        if (event.selection.length === 0) {
-          await boardStore.setLastSelectedBoardId(undefined);
-          boardPanelManager.clear();
-        }
-      })().catch(error => logError(outputChannel, error));
     })
   );
 

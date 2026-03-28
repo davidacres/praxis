@@ -75,6 +75,7 @@ export interface IssueSummary {
   issueType: string;
   projectKey: string;
   projectName?: string;
+  parentKey?: string;
   assignee?: string;
   priority?: string;
   updated?: string;
@@ -95,6 +96,12 @@ export interface CreateIssueInput {
   description?: string;
   parentKey?: string;
   boardId?: string;
+}
+
+export interface UpdateIssueInput {
+  summary?: string;
+  description?: string;
+  parentKey?: string | null;
 }
 
 export interface IssueFilters {
@@ -143,6 +150,8 @@ export interface JiraCapabilities {
   getTransitions: string;
   transitionIssue: string;
   createIssue?: string;
+  updateIssue?: string;
+  deleteIssue?: string;
   getAgileBoards?: string;
   getBoardIssues?: string;
 }
