@@ -250,12 +250,9 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const searchRow = this.renderSearchRow(filters);
     const issuesSection = this.renderIssuesSection(snapshot, issueGroups, filters);
 
-    // Count goes on the view badge only. Setting title to "My Issues (n)" can render a second
-    // heading inside the sidebar and make the search row look nested under "My Issues".
     this.view.title = undefined;
-    const n = snapshot.issues.length;
-    this.view.badge =
-      n > 0 ? { value: n, tooltip: n === 1 ? '1 issue' : `${n} issues` } : undefined;
+    this.view.description = undefined;
+    this.view.badge = undefined;
 
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
@@ -280,19 +277,17 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: 0;
+        gap: 8px;
         min-height: 100%;
         padding: 0;
       }
-      /* Full-width strip: search only (like Agent Packs), above section blocks */
       .search-row {
         display: flex;
         width: 100%;
         flex-shrink: 0;
         box-sizing: border-box;
-        padding: 8px 0 10px;
+        padding: 8px 0 0;
         margin: 0;
-        border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
       }
       .search-field {
         display: flex;
@@ -424,7 +419,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 0 6px;
+        padding: 0;
         user-select: none;
       }
       .block-header-chevron {

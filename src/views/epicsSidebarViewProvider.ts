@@ -220,13 +220,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
     this.view.title = undefined;
     const epicCount = this.epics.length;
-    this.view.badge =
-      epicCount > 0
-        ? {
-            value: epicCount,
-            tooltip: epicCount === 1 ? '1 EPIC' : `${epicCount} EPICs`
-          }
-        : undefined;
+    this.view.description = String(epicCount);
+    this.view.badge = undefined;
 
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
