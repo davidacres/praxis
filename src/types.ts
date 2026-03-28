@@ -167,6 +167,17 @@ export interface JiraBoardDetails {
   board: JiraBoard;
   columns: JiraBoardColumn[];
   issues: JiraIssueSummary[];
+  /**
+   * Optional canonical status column order for this board (e.g. workflow). When set, the board
+   * shows a column for each status even if no issues are in that status. Jira backends omit this
+   * until board/workflow metadata is available; demo mode supplies it.
+   */
+  columnStatusOrder?: string[];
+}
+
+/** Per-board column layout. `orderedStatuses` empty = show every status column in default order. */
+export interface BoardColumnPreferences {
+  orderedStatuses: string[];
 }
 
 export interface ToolDescriptor {

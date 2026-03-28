@@ -218,6 +218,8 @@ suite('Jira Mini Extension', () => {
     assert.ok(commands.includes('jiraMini.setBoardProjects'));
     assert.ok(commands.includes('jiraMini.setBoardTypes'));
     assert.ok(commands.includes('jiraMini.setBoardSearchText'));
+    assert.ok(commands.includes('jiraMini.openIssueFullDetails'));
+    assert.ok(commands.includes('jiraMini.configureBoardColumns'));
   });
 
   test('loads my issues from the fake Jira MCP server', async () => {

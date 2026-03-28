@@ -9,6 +9,21 @@ abstract class DetailsNode {
   ) {}
 }
 
+export class IssueRootNode extends DetailsNode {
+  public constructor(
+    public readonly issueKey: string,
+    public readonly summary: string
+  ) {
+    super(`issue-root:${issueKey}`, 'issueRoot');
+  }
+}
+
+class IssueKeyNode extends DetailsNode {
+  public constructor(public readonly issueKey: string) {
+    super(`issue-key:${issueKey}`, 'issueKey');
+  }
+}
+
 class DetailsMessageNode extends DetailsNode {
   public constructor(
     id: string,
@@ -30,6 +45,12 @@ class DetailsFieldNode extends DetailsNode {
   }
 }
 
+class DescriptionBlockNode extends DetailsNode {
+  public constructor(public readonly preview: string) {
+    super('description-block', 'descriptionBlock');
+  }
+}
+
 class TransitionGroupNode extends DetailsNode {
   public constructor(public readonly transitions: JiraTransition[]) {
     super('transitions', 'transitions');
@@ -42,7 +63,14 @@ class TransitionNode extends DetailsNode {
   }
 }
 
-type Node = DetailsMessageNode | DetailsFieldNode | TransitionGroupNode | TransitionNode;
+type Node =
+  | IssueRootNode
+  | IssueKeyNode
+  | DetailsMessageNode
+  | DetailsFieldNode
+  | DescriptionBlockNode
+  | TransitionGroupNode
+  | TransitionNode;
 
 function toSnippet(value: string | undefined, maxLength = 140): string | undefined {
   if (!value) {
@@ -65,6 +93,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
   private detailedIssue?: JiraIssueDetails;
   private transitions: JiraTransition[] = [];
   private requestGeneration = 0;
+  private revealTarget?: IssueRootNode;
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -73,6 +102,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
   public getTreeItem(element: Node): vscode.TreeItem {
     if (element instanceof DetailsMessageNode) {
       const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+      item.id = element.id;
       item.contextValue = element.contextValue;
       item.iconPath =
         element.severity === 'error'
@@ -83,12 +113,54 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       return item;
     }
 
+    if (element instanceof IssueRootNode) {
+      const item = new vscode.TreeItem(
+        element.summary,
+        vscode.TreeItemCollapsibleState.Expanded
+      );
+      item.id = `issue-root:${element.issueKey}`;
+      item.description = element.issueKey;
+      item.tooltip = `${element.issueKey}\n${element.summary}`;
+      item.contextValue = element.contextValue;
+      item.iconPath = new vscode.ThemeIcon('list-tree');
+      return item;
+    }
+
+    if (element instanceof IssueKeyNode) {
+      const item = new vscode.TreeItem(element.issueKey, vscode.TreeItemCollapsibleState.None);
+      item.id = element.id;
+      item.contextValue = element.contextValue;
+      item.description = 'Open full details';
+      item.tooltip = `${element.issueKey}: open full issue details in an editor tab`;
+      item.iconPath = new vscode.ThemeIcon('link');
+      item.command = {
+        command: 'jiraMini.openIssueFullDetails',
+        title: 'Open full issue details',
+        arguments: [element.issueKey]
+      };
+      return item;
+    }
+
     if (element instanceof DetailsFieldNode) {
       const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+      item.id = element.id;
       item.contextValue = element.contextValue;
       item.description = element.value;
       item.tooltip = `${element.label}: ${element.value}`;
       item.iconPath = element.icon;
+      return item;
+    }
+
+    if (element instanceof DescriptionBlockNode) {
+      const item = new vscode.TreeItem(
+        'Description',
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.id = element.id;
+      item.contextValue = element.contextValue;
+      item.description = element.preview;
+      item.tooltip = 'Preview — expand for full text, or use the issue key link for the full tab';
+      item.iconPath = new vscode.ThemeIcon('comment');
       return item;
     }
 
@@ -97,6 +169,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
         `Transitions (${element.transitions.length})`,
         vscode.TreeItemCollapsibleState.Expanded
       );
+      item.id = element.id;
       item.contextValue = element.contextValue;
       item.iconPath = new vscode.ThemeIcon('list-tree');
       return item;
@@ -106,6 +179,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       element.transition.name,
       vscode.TreeItemCollapsibleState.None
     );
+    item.id = element.id;
     item.contextValue = element.contextValue;
     item.description = element.transition.toStatus;
     item.tooltip = element.transition.toStatus
@@ -118,6 +192,22 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
   public async getChildren(element?: Node): Promise<Node[]> {
     if (element instanceof TransitionGroupNode) {
       return element.transitions.map(transition => new TransitionNode(transition));
+    }
+
+    if (element instanceof DescriptionBlockNode) {
+      const full = this.detailedIssue?.description?.trim() ?? '';
+      return [
+        new DetailsFieldNode(
+          'description-full',
+          'Full text',
+          full.length > 0 ? full : '(empty)',
+          new vscode.ThemeIcon('symbol-string')
+        )
+      ];
+    }
+
+    if (element instanceof IssueRootNode) {
+      return this.buildIssueChildren();
     }
 
     if (!this.selectedIssue) {
@@ -136,8 +226,23 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       return [new DetailsMessageNode('missing', 'Issue details are unavailable.', 'warning')];
     }
 
+    if (!this.revealTarget) {
+      this.revealTarget = new IssueRootNode(
+        this.detailedIssue.key,
+        this.detailedIssue.summary
+      );
+    }
+
+    return [this.revealTarget];
+  }
+
+  private buildIssueChildren(): Node[] {
+    if (!this.detailedIssue) {
+      return [];
+    }
+
     const nodes: Node[] = [
-      new DetailsFieldNode('summary', 'Summary', this.detailedIssue.summary, new vscode.ThemeIcon('note')),
+      new IssueKeyNode(this.detailedIssue.key),
       new DetailsFieldNode(
         'project',
         'Project',
@@ -185,14 +290,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
 
     const descriptionSnippet = toSnippet(this.detailedIssue.description);
     if (descriptionSnippet) {
-      nodes.push(
-        new DetailsFieldNode(
-          'description',
-          'Description',
-          descriptionSnippet,
-          new vscode.ThemeIcon('comment')
-        )
-      );
+      nodes.push(new DescriptionBlockNode(descriptionSnippet));
     }
 
     if (this.transitions.length > 0) {
@@ -211,11 +309,16 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
     return nodes;
   }
 
+  public getRevealTarget(): IssueRootNode | undefined {
+    return this.revealTarget;
+  }
+
   public async setIssue(issue: JiraIssueSummary | undefined): Promise<void> {
     this.selectedIssue = issue;
     this.detailedIssue = undefined;
     this.transitions = [];
     this.errorMessage = undefined;
+    this.revealTarget = undefined;
 
     if (!issue) {
       this.onDidChangeTreeDataEmitter.fire(undefined);
@@ -233,6 +336,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
     const generation = ++this.requestGeneration;
     this.loading = true;
     this.errorMessage = undefined;
+    this.revealTarget = undefined;
     this.onDidChangeTreeDataEmitter.fire(undefined);
 
     try {
@@ -251,6 +355,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       };
       this.transitions = transitions;
       this.loading = false;
+      this.revealTarget = new IssueRootNode(this.selectedIssue.key, this.detailedIssue.summary);
     } catch (error) {
       if (generation !== this.requestGeneration) {
         return;
@@ -260,6 +365,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       this.errorMessage = error instanceof Error ? error.message : String(error);
       this.detailedIssue = undefined;
       this.transitions = [];
+      this.revealTarget = undefined;
     } finally {
       if (generation === this.requestGeneration) {
         this.onDidChangeTreeDataEmitter.fire(undefined);

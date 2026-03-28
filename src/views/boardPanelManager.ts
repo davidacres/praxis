@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
+import { findTransitionToTargetStatus } from '../board/boardTransitionResolver';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { BoardColumnStore } from '../state/boardColumnStore';
 import type { JiraBoard, JiraBoardDetails, JiraIssueSummary } from '../types';
+import { applyBoardColumnPreferences } from './boardColumnLayout';
 
 interface BoardPanelSnapshot {
   boardId?: string;
@@ -49,8 +52,18 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public constructor(
     private readonly backendService: IssueTrackerService,
-    private readonly onIssueSelected: (issue: JiraIssueSummary) => Promise<void>
+    private readonly onIssueSelected: (issue: JiraIssueSummary) => Promise<void>,
+    private readonly onAfterBoardTransition: (() => Promise<void>) | undefined,
+    private readonly boardColumnStore: BoardColumnStore
   ) {}
+
+  public getActiveBoard(): JiraBoard | undefined {
+    return this.activeBoard;
+  }
+
+  public refreshColumnLayout(): void {
+    this.render();
+  }
 
   public async openBoard(board: JiraBoard): Promise<void> {
     this.activeBoard = board;
@@ -120,11 +133,12 @@ export class BoardPanelManager implements vscode.Disposable {
   }
 
   public getSnapshot(): BoardPanelSnapshot {
+    const display = this.getDisplayBoardDetails();
     return {
       boardId: this.activeBoard?.id,
       boardName: this.activeBoard?.name,
       issueCount: this.boardDetails?.issues.length ?? 0,
-      columnNames: this.boardDetails?.columns.map(column => column.name) ?? [],
+      columnNames: display?.columns.map(column => column.name) ?? [],
       loading: this.loading,
       errorMessage: this.errorMessage,
       selectedIssueKey: this.selectedIssueKey
@@ -181,6 +195,32 @@ export class BoardPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'openColumnConfig') {
+      await vscode.commands.executeCommand('jiraMini.configureBoardColumns');
+      return;
+    }
+
+    if (type === 'openFullDetails') {
+      const issueKey = asString(message.issueKey);
+      if (!issueKey) {
+        return;
+      }
+
+      await vscode.commands.executeCommand('jiraMini.openIssueFullDetails', issueKey);
+      return;
+    }
+
+    if (type === 'moveIssue') {
+      const issueKey = asString(message.issueKey);
+      const targetStatus = asString(message.targetStatus);
+      if (!issueKey || !targetStatus) {
+        return;
+      }
+
+      await this.handleMoveIssue(issueKey, targetStatus);
+      return;
+    }
+
     if (type !== 'selectIssue') {
       return;
     }
@@ -206,6 +246,65 @@ export class BoardPanelManager implements vscode.Disposable {
     this.selectedIssueKey = selectedIssue.key;
     await this.onIssueSelected(selectedIssue);
     this.render();
+  }
+
+  private async handleMoveIssue(issueKey: string, targetStatus: string): Promise<void> {
+    if (!this.boardDetails) {
+      return;
+    }
+
+    const issue = this.boardDetails.issues.find(candidate => candidate.key === issueKey);
+    if (!issue) {
+      return;
+    }
+
+    const current = issue.status.trim().toLowerCase();
+    const target = targetStatus.trim().toLowerCase();
+    if (current === target) {
+      return;
+    }
+
+    if (targetStatus === 'Other statuses') {
+      void vscode.window.showInformationMessage(
+        'Use a workflow status column as the drop target. Issues here are only shown because their status is hidden from the board.'
+      );
+      return;
+    }
+
+    try {
+      const transitions = await this.backendService.getTransitions(issueKey);
+      const transition = findTransitionToTargetStatus(transitions, targetStatus);
+      if (!transition) {
+        const hint =
+          transitions.length > 0
+            ? ` Available transitions: ${transitions
+                .map(t => (t.toStatus ? `${t.name} → ${t.toStatus}` : t.name))
+                .join('; ')}`
+            : '';
+        void vscode.window.showWarningMessage(
+          `No workflow step moves ${issueKey} from "${issue.status}" to "${targetStatus}".${hint}`
+        );
+        return;
+      }
+
+      await this.backendService.transitionIssue(issueKey, transition.id);
+      await this.refresh();
+      await this.onAfterBoardTransition?.();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Could not move ${issueKey}: ${text}`);
+    }
+  }
+
+  private getDisplayBoardDetails(): JiraBoardDetails | undefined {
+    if (!this.boardDetails || !this.activeBoard) {
+      return this.boardDetails;
+    }
+
+    return applyBoardColumnPreferences(
+      this.boardDetails,
+      this.boardColumnStore.getPreferences(this.activeBoard.id)
+    );
   }
 
   private render(): void {
@@ -256,8 +355,9 @@ export class BoardPanelManager implements vscode.Disposable {
           </section>
         `;
       } else if (this.boardDetails) {
+        const display = this.getDisplayBoardDetails() ?? this.boardDetails;
         body =
-          this.boardDetails.columns.length === 0
+          display.columns.length === 0
             ? `
                 <section class="empty-state">
                   <h2>No issues on this board</h2>
@@ -266,23 +366,23 @@ export class BoardPanelManager implements vscode.Disposable {
               `
             : `
                 <section class="board-grid">
-                  ${this.boardDetails.columns
+                  ${display.columns
                     .map(
                       column => `
-                        <section class="column">
+                        <section class="column" data-column-status="${escapeHtml(column.name)}">
                           <header class="column-header">
                             <h2>${escapeHtml(column.name)}</h2>
                             <span>${column.issues.length}</span>
                           </header>
-                          <div class="column-body">
+                          <div class="column-body" data-drop-target="true">
                             ${column.issues
                               .map(
                                 issue => `
-                                  <button class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" data-issue-key="${escapeHtml(issue.key)}">
-                                    <span class="issue-key">${escapeHtml(issue.key)}</span>
+                                  <div class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" draggable="true" data-issue-key="${escapeHtml(issue.key)}">
+                                    <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
                                     <span class="issue-summary">${escapeHtml(issue.summary)}</span>
                                     <span class="issue-meta">${escapeHtml(formatIssueMeta(issue))}</span>
-                                  </button>
+                                  </div>
                                 `
                               )
                               .join('')}
@@ -342,6 +442,13 @@ export class BoardPanelManager implements vscode.Disposable {
       .header p {
         margin: 4px 0 0;
         color: var(--vscode-descriptionForeground);
+      }
+
+      .header-actions {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        gap: 8px;
       }
 
       .refresh-button {
@@ -419,7 +526,41 @@ export class BoardPanelManager implements vscode.Disposable {
         border-radius: 8px;
         background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
         color: inherit;
+        cursor: grab;
+        box-sizing: border-box;
+      }
+
+      .issue-card:active {
+        cursor: grabbing;
+      }
+
+      .issue-card.dragging {
+        opacity: 0.55;
+      }
+
+      .column-body.drag-over {
+        outline: 2px dashed var(--vscode-focusBorder);
+        outline-offset: -2px;
+        border-radius: 6px;
+        background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+      }
+
+      .issue-key-btn {
+        align-self: flex-start;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        font-weight: 600;
+        color: var(--vscode-textLink-foreground);
         cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .issue-key-btn:hover {
+        color: var(--vscode-textLink-activeForeground);
       }
 
       .issue-card:hover {
@@ -429,11 +570,6 @@ export class BoardPanelManager implements vscode.Disposable {
       .issue-card.selected {
         border-color: var(--vscode-focusBorder);
         box-shadow: inset 0 0 0 1px var(--vscode-focusBorder);
-      }
-
-      .issue-key {
-        font-weight: 600;
-        color: var(--vscode-textLink-foreground);
       }
 
       .issue-summary {
@@ -469,12 +605,22 @@ export class BoardPanelManager implements vscode.Disposable {
           <h1>${headerTitle}</h1>
           <p>${headerMeta}</p>
         </div>
-        <button class="refresh-button" id="refreshButton" type="button">Refresh</button>
+        <div class="header-actions">
+          <button class="refresh-button" id="columnsButton" type="button">Columns</button>
+          <button class="refresh-button" id="refreshButton" type="button">Refresh</button>
+        </div>
       </header>
       <main class="content">${body}</main>
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const columnsButton = document.getElementById('columnsButton');
+      if (columnsButton) {
+        columnsButton.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'openColumnConfig' });
+        });
+      }
+
       const refreshButton = document.getElementById('refreshButton');
       if (refreshButton) {
         refreshButton.addEventListener('click', () => {
@@ -482,11 +628,76 @@ export class BoardPanelManager implements vscode.Disposable {
         });
       }
 
+      for (const keyBtn of document.querySelectorAll('.issue-key-btn')) {
+        keyBtn.addEventListener('click', event => {
+          event.stopPropagation();
+          vscodeApi.postMessage({
+            type: 'openFullDetails',
+            issueKey: keyBtn.getAttribute('data-issue-key')
+          });
+        });
+      }
+
+      let ignoreNextCardClick = false;
       for (const issueCard of document.querySelectorAll('.issue-card')) {
-        issueCard.addEventListener('click', () => {
+        issueCard.addEventListener('dragstart', event => {
+          const key = issueCard.getAttribute('data-issue-key');
+          if (key && event.dataTransfer) {
+            event.dataTransfer.setData('text/plain', key);
+            event.dataTransfer.effectAllowed = 'move';
+          }
+          issueCard.classList.add('dragging');
+        });
+        issueCard.addEventListener('dragend', () => {
+          issueCard.classList.remove('dragging');
+          for (const zone of document.querySelectorAll('.column-body')) {
+            zone.classList.remove('drag-over');
+          }
+          ignoreNextCardClick = true;
+          setTimeout(() => {
+            ignoreNextCardClick = false;
+          }, 0);
+        });
+        issueCard.addEventListener('click', event => {
+          if (ignoreNextCardClick) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           vscodeApi.postMessage({
             type: 'selectIssue',
             issueKey: issueCard.getAttribute('data-issue-key')
+          });
+        });
+      }
+
+      for (const dropZone of document.querySelectorAll('.column-body')) {
+        dropZone.addEventListener('dragover', event => {
+          event.preventDefault();
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'move';
+          }
+          dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', event => {
+          if (!dropZone.contains(event.relatedTarget)) {
+            dropZone.classList.remove('drag-over');
+          }
+        });
+        dropZone.addEventListener('drop', event => {
+          event.preventDefault();
+          dropZone.classList.remove('drag-over');
+          const column = dropZone.closest('.column');
+          const targetStatus = column && column.getAttribute('data-column-status');
+          const issueKey =
+            (event.dataTransfer && event.dataTransfer.getData('text/plain')) || '';
+          if (!issueKey || !targetStatus) {
+            return;
+          }
+          vscodeApi.postMessage({
+            type: 'moveIssue',
+            issueKey,
+            targetStatus
           });
         });
       }

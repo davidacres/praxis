@@ -64,8 +64,7 @@
           "id": "jiraMini.issueDetails",
           "name": "Issue Details",
           "contextualTitle": "Jira",
-          "icon": "media/activitybar-jira.svg",
-          "visibility": "collapsed"
+          "icon": "media/activitybar-jira.svg"
         }
       ]
     },
@@ -125,6 +124,12 @@
         "title": "Open Board",
         "category": "Jira Mini",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "jiraMini.configureBoardColumns",
+        "title": "Configure Board Columns",
+        "category": "Jira Mini",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "jiraMini.setBoardProjects",
@@ -211,6 +216,12 @@
         "icon": "$(play-circle)"
       },
       {
+        "command": "jiraMini.openIssueFullDetails",
+        "title": "Open Full Issue Details",
+        "category": "Jira Mini",
+        "icon": "$(preview)"
+      },
+      {
         "command": "jiraMini.openInBrowser",
         "title": "Open in Jira",
         "category": "Jira Mini",
@@ -260,6 +271,11 @@
           "command": "jiraMini.setBoardTypes",
           "when": "view == jiraMini.boards",
           "group": "navigation@3"
+        },
+        {
+          "command": "jiraMini.configureBoardColumns",
+          "when": "view == jiraMini.boards",
+          "group": "navigation@4"
         },
         {
           "command": "jiraMini.setBoardSearchText",
@@ -330,6 +346,11 @@
           "command": "jiraMini.openInBrowser",
           "when": "view == jiraMini.issueDetails",
           "group": "navigation@2"
+        },
+        {
+          "command": "jiraMini.openIssueFullDetails",
+          "when": "view == jiraMini.issueDetails",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -356,6 +377,16 @@
         {
           "command": "jiraMini.openBoard",
           "when": "view == jiraMini.boards && viewItem == board",
+          "group": "inline@1"
+        },
+        {
+          "command": "jiraMini.configureBoardColumns",
+          "when": "view == jiraMini.boards && viewItem == board",
+          "group": "inline@2"
+        },
+        {
+          "command": "jiraMini.openIssueFullDetails",
+          "when": "view == jiraMini.issueDetails && viewItem == issueKey",
           "group": "inline@1"
         }
       ]

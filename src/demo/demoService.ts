@@ -155,6 +155,9 @@ function createSeedIssues(): DemoIssue[] {
   ];
 }
 
+/** Demo workflow columns — shown even when no issues are in a status. */
+const DEMO_BOARD_STATUS_ORDER = ['To Do', 'In Progress', 'Blocked', 'Done'] as const;
+
 function createSeedBoards(): DemoBoard[] {
   return [
     {
@@ -420,7 +423,8 @@ export class DemoService implements IssueTrackerService {
     return {
       board: toBoard(matchingBoard),
       issues,
-      columns: buildBoardColumns(issues)
+      columns: buildBoardColumns(issues),
+      columnStatusOrder: [...DEMO_BOARD_STATUS_ORDER]
     };
   }
 

@@ -4,9 +4,11 @@ import { JiraConfigStore } from '../config/jiraConfig';
 import { BoardStore } from '../state/boardStore';
 import { FilterStore } from '../state/filterStore';
 import type { BackendMode, AssigneeMode, GroupingMode, JiraIssueSummary, JiraTransition } from '../types';
+import { BoardColumnConfigPanel } from '../views/boardColumnConfigPanel';
 import { BoardPanelManager } from '../views/boardPanelManager';
 import { BoardNode, BoardsTreeProvider } from '../views/boardsTreeProvider';
 import { DetailsViewProvider } from '../views/detailsViewProvider';
+import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTreeProvider';
 
 interface CommandDependencies {
@@ -15,10 +17,14 @@ interface CommandDependencies {
   backendService: IssueTrackerService;
   filterStore: FilterStore;
   boardStore: BoardStore;
+  boardColumnConfigPanel: BoardColumnConfigPanel;
   issuesProvider: IssuesTreeProvider;
   boardsProvider: BoardsTreeProvider;
   detailsProvider: DetailsViewProvider;
   boardPanelManager: BoardPanelManager;
+  issueDetailPanelManager: IssueDetailPanelManager;
+  /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
+  revealIssueDetailsTree: () => Promise<void>;
   output: vscode.OutputChannel;
 }
 
@@ -59,6 +65,9 @@ async function refreshViews(deps: CommandDependencies): Promise<void> {
   }
 
   await deps.boardPanelManager.refresh();
+  await deps.issueDetailPanelManager.refreshIfShowing(
+    deps.detailsProvider.getActiveIssue()?.key ?? ''
+  );
 }
 
 async function clearUiSelection(deps: CommandDependencies): Promise<void> {
@@ -66,6 +75,7 @@ async function clearUiSelection(deps: CommandDependencies): Promise<void> {
   await deps.boardStore.setLastSelectedBoardId(undefined);
   await deps.detailsProvider.setIssue(undefined);
   deps.boardPanelManager.clear();
+  deps.issueDetailPanelManager.clear();
 }
 
 async function setBackendMode(
@@ -229,6 +239,29 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await vscode.window.showInformationMessage(`Using ${result.description}.`);
       } catch (error) {
         deps.output.appendLine(`[user-mcp] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
+    vscode.commands.registerCommand('jiraMini.configureBoardColumns', async (arg?: unknown) => {
+      const board =
+        resolveBoard(deps.boardsProvider, arg, deps.boardStore) ??
+        deps.boardPanelManager.getActiveBoard();
+      if (!board) {
+        await vscode.window.showInformationMessage(
+          'Select a board in the Boards list or open a board tab first.'
+        );
+        return;
+      }
+
+      try {
+        const details = await deps.backendService.getBoardDetails(board);
+        await deps.boardColumnConfigPanel.open(board, details);
+      } catch (error) {
+        deps.output.appendLine(
+          `[board-columns] ${error instanceof Error ? error.stack ?? error.message : error}`
+        );
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -584,6 +617,32 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         if (action === 'Open in Jira') {
           await openIssueInBrowser(deps, arg);
         }
+      }
+    }),
+    vscode.commands.registerCommand('jiraMini.openIssueFullDetails', async (issueKey?: unknown) => {
+      const key =
+        typeof issueKey === 'string' && issueKey.trim().length > 0
+          ? issueKey.trim()
+          : deps.detailsProvider.getActiveIssue()?.key;
+      if (!key) {
+        await vscode.window.showInformationMessage('Select a Jira issue first.');
+        return;
+      }
+
+      try {
+        const full = await deps.backendService.getIssue(key);
+        await deps.filterStore.setLastSelectedIssueKey(key);
+        await deps.detailsProvider.setIssue(full);
+        deps.boardPanelManager.setSelectedIssueKey(key);
+        await deps.revealIssueDetailsTree();
+        await deps.issueDetailPanelManager.open(key);
+      } catch (error) {
+        deps.output.appendLine(
+          `[issue-details] ${error instanceof Error ? error.stack ?? error.message : error}`
+        );
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
       }
     }),
     vscode.commands.registerCommand('jiraMini.openInBrowser', async (arg?: unknown) => {
