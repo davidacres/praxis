@@ -218,6 +218,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     const nonce = createNonce();
     const content = this.renderContent();
 
+    this.view.title = `EPICs (${this.epics.length})`;
+
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -239,30 +241,11 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       }
       .page {
         box-sizing: border-box;
-        min-height: 100%;
-        padding: 10px;
-      }
-      .section {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-      }
-      .section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
         gap: 8px;
-      }
-      .section-title {
-        margin: 0;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--vscode-descriptionForeground);
-      }
-      .section-count {
-        color: var(--vscode-descriptionForeground);
-        font-size: 11px;
+        min-height: 100%;
+        padding: 10px;
       }
       .item-list {
         display: flex;
@@ -458,25 +441,10 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   </head>
   <body>
     <div class="page">
-      <section class="section">
-        <div class="section-header">
-          <h2 class="section-title">EPICs</h2>
-          <div class="row-actions">
-            <span class="section-count">${this.epics.length}</span>
-            ${renderIconButton('createEpicButton', 'Create EPIC', 'add')}
-          </div>
-        </div>
-        ${content}
-      </section>
+      ${content}
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
-      const createEpicButton = document.getElementById('createEpicButton');
-      if (createEpicButton) {
-        createEpicButton.addEventListener('click', () => {
-          vscodeApi.postMessage({ type: 'createEpic' });
-        });
-      }
 
       for (const row of document.querySelectorAll('[data-epic-key]')) {
         row.addEventListener('click', () => {
