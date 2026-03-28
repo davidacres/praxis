@@ -111,10 +111,11 @@ function renderStatusBadge(status: string | undefined): string {
 }
 
 function renderAssignmentBadge(issue: IssueSummary): string {
-  const assigned = Boolean(issue.assignee?.trim());
-  const label = assigned ? 'Assigned' : 'Unassigned';
+  const assignee = issue.assignee?.trim();
+  const assigned = Boolean(assignee);
+  const label = assigned ? assignee! : 'Unassigned';
   const token = assigned ? 'assigned' : 'unassigned';
-  const title = assigned ? `Assigned to ${issue.assignee}` : 'Unassigned';
+  const title = assigned ? `Assigned to ${assignee}` : 'Unassigned';
   return `<span class="type-badge type-badge--${token}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
@@ -534,6 +535,10 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
         background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
         border-color: transparent;
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .item-summary {
         flex: 1;
@@ -662,10 +667,10 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
                   <div class="row-left">
                     <div class="item-key">${escapeHtml(issue.key)}</div>
                     ${renderIssueTypeBadge(issue.issueType)}
-                    ${renderAssignmentBadge(issue)}
                     <div class="item-summary">${escapeHtml(issue.summary)}</div>
                   </div>
                   <div class="row-right">
+                    ${renderAssignmentBadge(issue)}
                     ${renderStatusBadge(issue.status)}
                   </div>
                 </div>
