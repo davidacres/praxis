@@ -50,7 +50,7 @@
       "ticketManager": [
         {
           "id": "ticketManager.myIssues",
-          "name": "My Issues",
+          "name": "Issues",
           "type": "webview",
           "contextualTitle": "Tickets",
           "icon": "media/activitybar-ticket.svg"
