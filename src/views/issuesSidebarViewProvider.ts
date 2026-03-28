@@ -275,13 +275,15 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: flex;
         flex-direction: column;
         min-height: 100%;
-        padding: 10px;
+        padding: 0;
       }
       .search-row {
         display: flex;
         width: 100%;
         gap: 8px;
         align-items: stretch;
+        padding: 8px 0 0;
+        box-sizing: border-box;
       }
       .search-form {
         display: flex;
@@ -411,8 +413,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: block;
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 6px;
-        border-radius: 4px;
+        padding: 4px 0;
+        border-radius: 0;
         background: transparent;
         cursor: pointer;
       }
@@ -427,6 +429,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         align-items: center;
         gap: 12px;
         min-width: 0;
+        min-height: 28px;
       }
       .row-left {
         display: flex;
@@ -541,7 +544,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         text-decoration-thickness: 1px;
       }
       .message {
-        padding: 10px;
+        padding: 10px 0;
         border: 1px dashed var(--vscode-panel-border);
         border-radius: 8px;
         color: var(--vscode-descriptionForeground);

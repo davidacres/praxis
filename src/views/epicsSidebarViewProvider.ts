@@ -6,7 +6,7 @@ import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
 interface EpicsSidebarCallbacks {
-  onSelectEpic: (issueKey: string) => Promise<void>;
+  onSelectEpic: (issueKey: string, openFullPanel?: boolean) => Promise<void>;
   onCreateEpic: () => Promise<void>;
   onEditEpic: (issueKey: string) => Promise<void>;
   onDeleteEpic: (issueKey: string) => Promise<void>;
@@ -184,7 +184,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       case 'selectEpic': {
         const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
         if (issueKey) {
-          await this.callbacks.onSelectEpic(issueKey);
+          await this.callbacks.onSelectEpic(issueKey, Boolean(payload.openFullPanel));
         }
         return;
       }
@@ -245,7 +245,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         flex-direction: column;
         gap: 8px;
         min-height: 100%;
-        padding: 10px;
+        padding: 0;
       }
       .item-list {
         display: flex;
@@ -259,8 +259,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         align-items: center;
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 6px;
-        border-radius: 4px;
+        padding: 4px 0;
+        border-radius: 0;
         background: transparent;
         cursor: pointer;
       }
@@ -275,6 +275,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         align-items: center;
         gap: 12px;
         min-width: 0;
+        min-height: 28px;
       }
       .row-left {
         display: flex;
@@ -428,7 +429,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         stroke-linejoin: round;
       }
       .message {
-        padding: 10px;
+        padding: 10px 0;
         border: 1px dashed var(--vscode-panel-border);
         border-radius: 8px;
         color: var(--vscode-descriptionForeground);
@@ -449,6 +450,13 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       for (const row of document.querySelectorAll('[data-epic-key]')) {
         row.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'selectEpic', issueKey: row.getAttribute('data-epic-key') });
+        });
+        row.addEventListener('dblclick', () => {
+          vscodeApi.postMessage({
+            type: 'selectEpic',
+            issueKey: row.getAttribute('data-epic-key'),
+            openFullPanel: true
+          });
         });
       }
 

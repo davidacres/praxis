@@ -159,7 +159,7 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .page {
         box-sizing: border-box;
         min-height: 100%;
-        padding: 10px;
+        padding: 0;
       }
       .item-list {
         display: flex;
@@ -170,8 +170,8 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: block;
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 6px;
-        border-radius: 4px;
+        padding: 4px 0;
+        border-radius: 0;
         cursor: pointer;
       }
       .board-row:hover {
@@ -185,6 +185,7 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
         align-items: center;
         gap: 6px;
         min-width: 0;
+        min-height: 28px;
         overflow: hidden;
         white-space: nowrap;
       }
@@ -222,7 +223,7 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
         border-color: transparent;
       }
       .message {
-        padding: 10px;
+        padding: 10px 0;
         border: 1px dashed var(--vscode-panel-border);
         border-radius: 8px;
         color: var(--vscode-descriptionForeground);
