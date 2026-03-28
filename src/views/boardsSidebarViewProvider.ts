@@ -139,6 +139,8 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
       </div>`;
     }
 
+    this.view.title = `Boards (${snapshot.boards.length})`;
+
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>

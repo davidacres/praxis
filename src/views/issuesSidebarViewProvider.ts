@@ -249,6 +249,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const nonce = createNonce();
     const issuesSection = this.renderIssuesSection(snapshot, issueGroups, filters);
 
+    this.view.title = `My Issues (${snapshot.issues.length})`;
+
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -388,23 +390,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: flex;
         flex-direction: column;
         gap: 8px;
-      }
-      .section-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .section-title {
-        margin: 0;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--vscode-descriptionForeground);
-      }
-      .section-count {
-        color: var(--vscode-descriptionForeground);
-        font-size: 11px;
       }
       .group {
         display: flex;
@@ -717,10 +702,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             </div>
           </div>
         </div>
-      </div>
-      <div class="section-header">
-        <h2 class="section-title">My Issues</h2>
-        <span class="section-count">${snapshot.issues.length}</span>
       </div>
       ${content}
       ${loadMore}
