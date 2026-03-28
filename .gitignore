@@ -1,4 +1,37 @@
+# Dependencies
 node_modules/
+
+# TypeScript build output (extension entry: out/extension.js)
 out/
+dist/
+*.tsbuildinfo
+
+# Packaged extension
 *.vsix
+
+# VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Logs and debug
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment and secrets (keep *.example committed if you add templates)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
