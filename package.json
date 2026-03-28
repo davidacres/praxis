@@ -146,6 +146,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "ticketManager.createEpic",
+        "title": "Create EPIC",
+        "category": "Ticket Manager",
+        "icon": "$(add)"
+      },
+      {
         "command": "ticketManager.configureBoardColumns",
         "title": "Configure Board Columns",
         "category": "Ticket Manager",
@@ -271,6 +277,11 @@
           "command": "ticketManager.refresh",
           "when": "view == ticketManager.epics",
           "group": "navigation@1"
+        },
+        {
+          "command": "ticketManager.createEpic",
+          "when": "view == ticketManager.epics",
+          "group": "navigation@2"
         },
         {
           "command": "ticketManager.createIssue",

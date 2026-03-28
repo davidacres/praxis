@@ -344,6 +344,10 @@ export async function activate(
   }
 
   async function createEpic(): Promise<void> {
+    if (backendService.mode === 'file' && !(await ensureFilePlanConfigured(true))) {
+      return;
+    }
+
     const filters = filterStore.getFilters();
     const defaultProjectKey =
       filters.projectKeys.length === 1
@@ -518,6 +522,13 @@ export async function activate(
   issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(detailsProvider);
 
   context.subscriptions.push(
+    vscode.commands.registerCommand('ticketManager.createEpic', async () => {
+      try {
+        await createEpic();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
     ...registerCommands({
       context,
       configStore,
