@@ -273,18 +273,20 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         flex-direction: column;
         min-height: 100%;
         padding: 10px;
-        gap: 12px;
       }
       .search-row {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
+        width: 100%;
         gap: 8px;
-        align-items: start;
+        align-items: stretch;
       }
       .search-form {
         display: flex;
+        flex: 1;
+        min-width: 0;
       }
       .search-input {
+        flex: 1;
         width: 100%;
         box-sizing: border-box;
         padding: 7px 10px;
@@ -298,6 +300,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       }
       .filter-wrap {
         position: relative;
+        flex-shrink: 0;
       }
       .icon-button {
         display: inline-flex;
@@ -383,7 +386,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .section {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 8px;
       }
       .section-header {
         display: flex;
@@ -564,33 +567,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   </head>
   <body>
     <div class="page">
-      <div class="search-row">
-        <form class="search-form" id="searchForm">
-          <input class="search-input" id="searchInput" type="search" placeholder="Search issues" value="${escapeHtml(filters.searchText)}" />
-        </form>
-        <div class="filter-wrap">
-          ${renderIconButton('filterButton', 'Filter issues', 'filter')}
-          <div class="filter-menu" id="filterMenu">
-            <p class="filter-title">Status</p>
-            <div class="filter-options">
-              ${this.statusOptions.length > 0
-                ? this.statusOptions
-                    .map(
-                      status => `<label class="filter-option">
-                        <input type="checkbox" value="${escapeHtml(status)}" ${filters.statuses.includes(status) ? 'checked' : ''} />
-                        <span>${escapeHtml(status)}</span>
-                      </label>`
-                    )
-                    .join('')
-                : '<div class="message">No statuses available.</div>'}
-            </div>
-            <div class="filter-actions">
-              <button class="text-button" id="clearStatusesButton" type="button">Clear</button>
-              <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
-            </div>
-          </div>
-        </div>
-      </div>
       ${issuesSection}
     </div>
     <script nonce="${nonce}">
@@ -710,6 +686,33 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       : '';
 
     return `<section class="section">
+      <div class="search-row">
+        <form class="search-form" id="searchForm">
+          <input class="search-input" id="searchInput" type="search" placeholder="Search issues" value="${escapeHtml(filters.searchText)}" />
+        </form>
+        <div class="filter-wrap">
+          ${renderIconButton('filterButton', 'Filter issues', 'filter')}
+          <div class="filter-menu" id="filterMenu">
+            <p class="filter-title">Status</p>
+            <div class="filter-options">
+              ${this.statusOptions.length > 0
+                ? this.statusOptions
+                    .map(
+                      status => `<label class="filter-option">
+                        <input type="checkbox" value="${escapeHtml(status)}" ${filters.statuses.includes(status) ? 'checked' : ''} />
+                        <span>${escapeHtml(status)}</span>
+                      </label>`
+                    )
+                    .join('')
+                : '<div class="message">No statuses available.</div>'}
+            </div>
+            <div class="filter-actions">
+              <button class="text-button" id="clearStatusesButton" type="button">Clear</button>
+              <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="section-header">
         <h2 class="section-title">My Issues</h2>
         <span class="section-count">${snapshot.issues.length}</span>
