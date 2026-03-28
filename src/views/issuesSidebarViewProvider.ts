@@ -247,6 +247,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const snapshot = this.issuesProvider.getSnapshot();
     const issueGroups = buildIssueGroups(snapshot.issues, filters.grouping);
     const nonce = createNonce();
+    const searchRow = this.renderSearchRow(filters);
     const issuesSection = this.renderIssuesSection(snapshot, issueGroups, filters);
 
     this.view.title = `My Issues (${snapshot.issues.length})`;
@@ -274,12 +275,14 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
+        gap: 8px;
         min-height: 100%;
         padding: 0;
       }
       .search-row {
         display: flex;
         width: 100%;
+        flex-shrink: 0;
         gap: 8px;
         align-items: stretch;
         padding: 8px 0 0;
@@ -560,6 +563,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   </head>
   <body>
     <div class="page">
+      ${searchRow}
       ${issuesSection}
     </div>
     <script nonce="${nonce}">
@@ -679,35 +683,38 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       : '';
 
     return `<section class="section">
-      <div class="search-row">
-        <form class="search-form" id="searchForm">
-          <input class="search-input" id="searchInput" type="search" placeholder="Search issues" value="${escapeHtml(filters.searchText)}" />
-        </form>
-        <div class="filter-wrap">
-          ${renderIconButton('filterButton', 'Filter issues', 'filter')}
-          <div class="filter-menu" id="filterMenu">
-            <p class="filter-title">Status</p>
-            <div class="filter-options">
-              ${this.statusOptions.length > 0
-                ? this.statusOptions
-                    .map(
-                      status => `<label class="filter-option">
-                        <input type="checkbox" value="${escapeHtml(status)}" ${filters.statuses.includes(status) ? 'checked' : ''} />
-                        <span>${escapeHtml(status)}</span>
-                      </label>`
-                    )
-                    .join('')
-                : '<div class="message">No statuses available.</div>'}
-            </div>
-            <div class="filter-actions">
-              <button class="text-button" id="clearStatusesButton" type="button">Clear</button>
-              <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
-            </div>
-          </div>
-        </div>
-      </div>
       ${content}
       ${loadMore}
     </section>`;
+  }
+
+  private renderSearchRow(filters: IssueFilters): string {
+    return `<div class="search-row">
+      <form class="search-form" id="searchForm">
+        <input class="search-input" id="searchInput" type="search" placeholder="Search issues" value="${escapeHtml(filters.searchText)}" />
+      </form>
+      <div class="filter-wrap">
+        ${renderIconButton('filterButton', 'Filter issues', 'filter')}
+        <div class="filter-menu" id="filterMenu">
+          <p class="filter-title">Status</p>
+          <div class="filter-options">
+            ${this.statusOptions.length > 0
+              ? this.statusOptions
+                  .map(
+                    status => `<label class="filter-option">
+                      <input type="checkbox" value="${escapeHtml(status)}" ${filters.statuses.includes(status) ? 'checked' : ''} />
+                      <span>${escapeHtml(status)}</span>
+                    </label>`
+                  )
+                  .join('')
+              : '<div class="message">No statuses available.</div>'}
+          </div>
+          <div class="filter-actions">
+            <button class="text-button" id="clearStatusesButton" type="button">Clear</button>
+            <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
   }
 }
