@@ -258,6 +258,7 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.setBoardSearchText'));
     assert.ok(commands.includes('ticketManager.openIssueFullDetails'));
     assert.ok(commands.includes('ticketManager.configureBoardColumns'));
+    assert.ok(commands.includes('ticketManager.createIssue'));
   });
 
   test('loads my issues from the fake connected backend', async () => {
@@ -325,6 +326,35 @@ suite('Ticket Manager Extension', () => {
     assert.match(result.message, /demo mode active/i);
   });
 
+  test('creates issues through the connected backend and refreshes the sidebar', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    const createdIssue = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Story',
+      summary: 'Create issue from integration test',
+      parentKey: 'APP-100'
+    });
+    await api.refresh();
+
+    await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdIssue.key)));
+    const issue = api.issuesProvider.getIssueByKey(createdIssue.key);
+    assert.strictEqual(issue?.summary, 'Create issue from integration test');
+    assert.strictEqual(issue?.status, 'To Do');
+
+    const board = api.boardsProvider
+      .getCurrentBoards()
+      .find(candidate => candidate.name === 'Application Board');
+    assert.ok(board, 'Application Board should be available after create');
+
+    const boardDetails = await api.backendService.getBoardDetails(board!);
+    assert.ok(
+      boardDetails.issues.some(candidate => candidate.key === createdIssue.key),
+      'Newly created connected issue should appear on the project board'
+    );
+  });
+
   test('loads file-backed plan data and persists status changes', async () => {
     const api = await getApi();
     await configureFileScenario(api);
@@ -354,6 +384,42 @@ suite('Ticket Manager Extension', () => {
     }
   });
 
+  test('creates file-backed issues and persists them to the plan file', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    const board = api.boardsProvider.getCurrentBoards()[0];
+    assert.ok(board, 'File mode should expose a board for create tests');
+
+    const createdIssue = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Task',
+      summary: 'Persist a newly created plan item',
+      description: 'Created by the integration test.',
+      parentKey: 'APP-100',
+      boardId: board!.id
+    });
+    await api.refresh();
+
+    await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdIssue.key)));
+    const issue = api.issuesProvider.getIssueByKey(createdIssue.key);
+    assert.strictEqual(issue?.summary, 'Persist a newly created plan item');
+    assert.strictEqual(issue?.status, 'To Do');
+
+    const boardDetails = await api.backendService.getBoardDetails(board!);
+    assert.ok(
+      boardDetails.issues.some(candidate => candidate.key === createdIssue.key),
+      'Newly created file-backed issue should appear on the target board'
+    );
+
+    if (PLAN_FILE_URI) {
+      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
+      assert.match(updatedText, new RegExp(`"key": "${createdIssue.key}"`));
+      assert.match(updatedText, /"summary": "Persist a newly created plan item"/);
+      assert.match(updatedText, /"parent": "APP-100"/);
+    }
+  });
+
   test('loads boards and applies board filters', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');
@@ -365,6 +431,7 @@ suite('Ticket Manager Extension', () => {
     await api.boardStore.updateFilters({
       projectKeys: ['OPS']
     });
+    await api.boardsProvider.refresh();
     await waitFor(() => api.boardsProvider.getCurrentBoards().length === 1);
     assert.deepStrictEqual(
       api.boardsProvider.getCurrentBoards().map(board => board.name),
@@ -376,6 +443,7 @@ suite('Ticket Manager Extension', () => {
       types: ['scrum'],
       searchText: 'platform'
     });
+    await api.boardsProvider.refresh();
     await waitFor(
       () =>
         api.boardsProvider.getCurrentBoards().length === 1 &&

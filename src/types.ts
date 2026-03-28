@@ -88,6 +88,15 @@ export interface IssueDetails extends IssueSummary {
   transitions?: WorkflowTransition[];
 }
 
+export interface CreateIssueInput {
+  projectKey: string;
+  issueType: string;
+  summary: string;
+  description?: string;
+  parentKey?: string;
+  boardId?: string;
+}
+
 export interface IssueFilters {
   projectKeys: string[];
   statuses: string[];
@@ -133,6 +142,7 @@ export interface JiraCapabilities {
   getIssue: string;
   getTransitions: string;
   transitionIssue: string;
+  createIssue?: string;
   getAgileBoards?: string;
   getBoardIssues?: string;
 }

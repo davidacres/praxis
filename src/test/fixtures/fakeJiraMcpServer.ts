@@ -339,6 +339,35 @@ async function main(): Promise<void> {
   const issues = createIssues();
   const boards = createBoards();
 
+  function getProjectName(projectKey: string): string {
+    return boards.find(board => board.projectKey === projectKey)?.projectName ?? projectKey;
+  }
+
+  function getNextIssueKey(projectKey: string): string {
+    const nextNumber =
+      issues
+        .map(issue => {
+          const match = issue.key.match(new RegExp(`^${projectKey}-(\\d+)$`));
+          const numericPart = match?.[1];
+          return numericPart ? Number.parseInt(numericPart, 10) : undefined;
+        })
+        .reduce<number>(
+          (max, value) => (typeof value === 'number' && value > max ? value : max),
+          0
+        ) + 1;
+
+    return `${projectKey}-${nextNumber}`;
+  }
+
+  function attachIssueToBoard(issueKey: string, projectKey: string): void {
+    const targetBoard =
+      boards.find(board => board.projectKey === projectKey && !board.name.toLowerCase().includes('overview')) ??
+      boards.find(board => board.projectKey === projectKey);
+    if (targetBoard) {
+      targetBoard.issueKeys.push(issueKey);
+    }
+  }
+
   server.registerTool(
     'atlassian-jira_get_all_projects',
     {
@@ -397,6 +426,61 @@ async function main(): Promise<void> {
         total: matchingIssues.length,
         isLast: start_at + limit >= matchingIssues.length
       });
+    }
+  );
+
+  server.registerTool(
+    'atlassian-jira_create_issue',
+    {
+      description: 'Create a fake Jira issue.',
+      inputSchema: {
+        project_key: z.string(),
+        summary: z.string(),
+        issue_type: z.string(),
+        description: z.string().optional(),
+        additional_fields: z.string().optional()
+      }
+    },
+    async ({ project_key, summary, issue_type, description, additional_fields }) => {
+      if (scenario === 'no-projects') {
+        throw new Error(`Project ${project_key} was not found.`);
+      }
+
+      let parent: string | undefined;
+      if (additional_fields) {
+        try {
+          const parsed = JSON.parse(additional_fields) as Record<string, unknown>;
+          if (typeof parsed.epicKey === 'string') {
+            parent = parsed.epicKey;
+          } else if (typeof parsed.parent === 'string') {
+            parent = parsed.parent;
+          }
+        } catch {
+          parent = undefined;
+        }
+      }
+
+      const createdIssue: FakeIssue = {
+        id: String(issues.length + 1),
+        key: getNextIssueKey(project_key),
+        summary,
+        status: 'To Do',
+        issueType: issue_type,
+        projectKey: project_key,
+        projectName: getProjectName(project_key),
+        assigneeMode: 'me',
+        assigneeDisplayName: 'Alex Agent',
+        priority: 'Medium',
+        updated: new Date().toISOString(),
+        description: description ?? '',
+        parent,
+        transitions: transitionSet('To Do')
+      };
+
+      issues.unshift(createdIssue);
+      attachIssueToBoard(createdIssue.key, createdIssue.projectKey);
+
+      return jsonResult(issueToJiraShape(createdIssue));
     }
   );
 

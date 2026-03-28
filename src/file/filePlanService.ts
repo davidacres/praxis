@@ -10,6 +10,7 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateIssueInput,
   FilterMetadata,
   IssueDetails,
   IssueFilters,
@@ -523,6 +524,94 @@ export class FilePlanService implements IssueTrackerService {
     };
   }
 
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    const plan = await this.loadPlan();
+    const project = plan.projects.find(candidate => candidate.key === input.projectKey);
+    if (!project) {
+      throw new Error(`Project ${input.projectKey} was not found in the plan file.`);
+    }
+
+    const now = new Date().toISOString();
+    const nextKey = this.getNextIssueKey(plan, input.projectKey);
+    const nextStatus = plan.defaultStatusOrder[0] ?? DEFAULT_STATUSES[0].name;
+    const nextItem: PlanItemDefinition = {
+      key: nextKey,
+      summary: input.summary.trim(),
+      status: nextStatus,
+      type: input.issueType.trim(),
+      projectKey: project.key,
+      projectName: project.name,
+      assignee: plan.currentUser,
+      priority: 'Medium',
+      updated: now,
+      description: input.description?.trim() || undefined,
+      parent: input.parentKey?.trim() || undefined
+    };
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = plan.text;
+    if (Array.isArray(plan.document.items)) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', plan.document.items.length], nextItem, {
+          formattingOptions,
+          isArrayInsertion: true
+        })
+      );
+    } else {
+      nextText = applyEdits(nextText, modify(nextText, ['items'], [nextItem], { formattingOptions }));
+    }
+
+    const targetBoardId = this.resolveTargetBoardId(plan, project.key, input.boardId);
+    if (targetBoardId) {
+      const rawBoards = Array.isArray(plan.document.boards) ? plan.document.boards : [];
+      const boardIndex = rawBoards.findIndex(
+        board => isRecord(board) && asString(board.id) === targetBoardId
+      );
+      if (boardIndex >= 0) {
+        const rawBoard = rawBoards[boardIndex];
+        const nextIssueKeys = isRecord(rawBoard) ? asStringArray(rawBoard.issueKeys) : [];
+        nextText = applyEdits(
+          nextText,
+          modify(nextText, ['boards', boardIndex, 'issueKeys'], [...nextIssueKeys, nextKey], {
+            formattingOptions
+          })
+        );
+      }
+    }
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+
+    return {
+      key: nextKey,
+      summary: nextItem.summary,
+      status: nextStatus,
+      statusCategory: plan.statusCategoryByName.get(nextStatus) ?? statusCategoryName(nextStatus),
+      issueType: nextItem.type ?? 'Issue',
+      projectKey: project.key,
+      projectName: project.name,
+      assignee: nextItem.assignee,
+      priority: nextItem.priority,
+      updated: now,
+      description: nextItem.description,
+      raw: nextItem,
+      transitions: this.getTransitionsForIssue(plan, {
+        key: nextKey,
+        summary: nextItem.summary,
+        status: nextStatus,
+        statusCategory: plan.statusCategoryByName.get(nextStatus) ?? statusCategoryName(nextStatus),
+        issueType: nextItem.type ?? 'Issue',
+        projectKey: project.key,
+        projectName: project.name,
+        assignee: nextItem.assignee,
+        priority: nextItem.priority,
+        updated: now,
+        description: nextItem.description,
+        raw: nextItem
+      })
+    };
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     const plan = await this.loadPlan();
     const issue = plan.items.find(candidate => candidate.key === issueKey);
@@ -672,6 +761,34 @@ export class FilePlanService implements IssueTrackerService {
         name: `Move to ${status}`,
         toStatus: status
       }));
+  }
+
+  private getNextIssueKey(plan: LoadedPlan, projectKey: string): string {
+    const nextNumber =
+      plan.items
+        .map(issue => {
+          const match = issue.key.match(new RegExp(`^${projectKey}-(\\d+)$`));
+          const numericPart = match?.[1];
+          return numericPart ? Number.parseInt(numericPart, 10) : undefined;
+        })
+        .reduce<number>(
+          (max, value) => (typeof value === 'number' && value > max ? value : max),
+          0
+        ) + 1;
+
+    return `${projectKey}-${nextNumber}`;
+  }
+
+  private resolveTargetBoardId(
+    plan: LoadedPlan,
+    projectKey: string,
+    preferredBoardId?: string
+  ): string | undefined {
+    if (preferredBoardId && plan.boards.some(board => board.id === preferredBoardId)) {
+      return preferredBoardId;
+    }
+
+    return plan.boards.find(board => board.projectKey === projectKey)?.id;
   }
 
   private matchesIssueFilters(

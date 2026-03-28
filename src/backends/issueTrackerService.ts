@@ -5,6 +5,7 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateIssueInput,
   FilterMetadata,
   IssueDetails,
   IssueFilters,
@@ -28,6 +29,7 @@ export interface IssueTrackerService extends vscode.Disposable {
   getBoards(filters: BoardFilters): Promise<Board[]>;
   getBoardDetails(board: Board): Promise<BoardDetails>;
   getIssue(issueKey: string): Promise<IssueDetails>;
+  createIssue(input: CreateIssueInput): Promise<IssueDetails>;
   getTransitions(issueKey: string): Promise<WorkflowTransition[]>;
   transitionIssue(issueKey: string, transitionId: string): Promise<void>;
   getBrowseUrl(issue: IssueSummary): Promise<string | undefined>;
