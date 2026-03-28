@@ -1,27 +1,26 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import { JiraConfigStore } from '../config/jiraConfig';
-import { buildEpicsJql, buildIssuesJql } from './queryBuilder';
+import { AppConfigStore } from '../config/jiraConfig';
+import { buildIssuesJql, buildParentItemsJql, type ParentFieldMode } from './queryBuilder';
 import { McpClientWrapper } from '../mcp/clientFactory';
 import { resolveJiraCapabilities } from '../mcp/jiraCapabilityResolver';
 import type {
   BackendMode,
+  Board,
+  BoardColumn,
+  BoardDetails,
+  BoardFilters,
+  ConnectionCheck,
   ConnectionConfig,
-  EpicQueryMode,
   FilterMetadata,
-  JiraBoard,
-  JiraBoardColumn,
-  JiraBoardDetails,
-  JiraBoardFilters,
   JiraCapabilities,
-  JiraConnectionCheck,
-  JiraFilters,
-  JiraIssueDetails,
-  JiraIssueSummary,
-  JiraProject,
-  JiraTransition,
+  IssueDetails,
+  IssueFilters,
+  IssueSummary,
   PagedIssues,
-  ToolDescriptor
+  Project,
+  ToolDescriptor,
+  WorkflowTransition
 } from '../types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -92,7 +91,7 @@ function extractDescription(value: unknown): string | undefined {
   return joined.length > 0 ? joined : undefined;
 }
 
-function normalizeProject(raw: unknown): JiraProject | undefined {
+function normalizeProject(raw: unknown): Project | undefined {
   if (!isRecord(raw)) {
     return undefined;
   }
@@ -111,7 +110,7 @@ function normalizeProject(raw: unknown): JiraProject | undefined {
   };
 }
 
-function normalizeBoard(raw: unknown): JiraBoard | undefined {
+function normalizeBoard(raw: unknown): Board | undefined {
   if (!isRecord(raw)) {
     return undefined;
   }
@@ -136,7 +135,7 @@ function normalizeBoard(raw: unknown): JiraBoard | undefined {
   };
 }
 
-function normalizeTransition(raw: unknown): JiraTransition | undefined {
+function normalizeTransition(raw: unknown): WorkflowTransition | undefined {
   if (!isRecord(raw)) {
     return undefined;
   }
@@ -159,7 +158,7 @@ function normalizeTransition(raw: unknown): JiraTransition | undefined {
   };
 }
 
-function normalizeIssue(raw: unknown): JiraIssueSummary | undefined {
+function normalizeIssue(raw: unknown): IssueSummary | undefined {
   if (!isRecord(raw)) {
     return undefined;
   }
@@ -204,21 +203,21 @@ function normalizeIssue(raw: unknown): JiraIssueSummary | undefined {
   };
 }
 
-function extractProjects(value: unknown): JiraProject[] {
+function extractProjects(value: unknown): Project[] {
   if (Array.isArray(value)) {
-    return value.map(normalizeProject).filter((item): item is JiraProject => Boolean(item));
+    return value.map(normalizeProject).filter((item): item is Project => Boolean(item));
   }
 
   if (isRecord(value) && Array.isArray(value.projects)) {
     return value.projects
       .map(normalizeProject)
-      .filter((item): item is JiraProject => Boolean(item));
+      .filter((item): item is Project => Boolean(item));
   }
 
   return [];
 }
 
-function extractBoards(value: unknown): { boards: JiraBoard[]; total?: number; hasMore: boolean } {
+function extractBoards(value: unknown): { boards: Board[]; total?: number; hasMore: boolean } {
   const collection = Array.isArray(value)
     ? { boards: value, total: value.length, hasMore: false }
     : isRecord(value) && Array.isArray(value.values)
@@ -241,7 +240,7 @@ function extractBoards(value: unknown): { boards: JiraBoard[]; total?: number; h
 
   const boards = collection.boards
     .map(normalizeBoard)
-    .filter((item): item is JiraBoard => Boolean(item));
+    .filter((item): item is Board => Boolean(item));
   const hasMore =
     collection.hasMore ||
     (typeof collection.total === 'number' ? boards.length < collection.total : false);
@@ -253,7 +252,7 @@ function extractBoards(value: unknown): { boards: JiraBoard[]; total?: number; h
   };
 }
 
-function extractIssues(value: unknown): { issues: JiraIssueSummary[]; total?: number; hasMore: boolean } {
+function extractIssues(value: unknown): { issues: IssueSummary[]; total?: number; hasMore: boolean } {
   const collection = Array.isArray(value)
     ? { issues: value, total: value.length, hasMore: false }
     : isRecord(value) && Array.isArray(value.issues)
@@ -268,7 +267,7 @@ function extractIssues(value: unknown): { issues: JiraIssueSummary[]; total?: nu
 
   const issues = collection.issues
     .map(normalizeIssue)
-    .filter((item): item is JiraIssueSummary => Boolean(item));
+    .filter((item): item is IssueSummary => Boolean(item));
   const hasMore =
     collection.hasMore ||
     (typeof collection.total === 'number' ? issues.length < collection.total : false);
@@ -280,7 +279,7 @@ function extractIssues(value: unknown): { issues: JiraIssueSummary[]; total?: nu
   };
 }
 
-function extractTransitions(value: unknown): JiraTransition[] {
+function extractTransitions(value: unknown): WorkflowTransition[] {
   const list = Array.isArray(value)
     ? value
     : isRecord(value) && Array.isArray(value.transitions)
@@ -289,7 +288,7 @@ function extractTransitions(value: unknown): JiraTransition[] {
 
   return list
     .map(normalizeTransition)
-    .filter((item): item is JiraTransition => Boolean(item));
+    .filter((item): item is WorkflowTransition => Boolean(item));
 }
 
 function uniqueSorted(values: string[]): string[] {
@@ -298,7 +297,7 @@ function uniqueSorted(values: string[]): string[] {
   );
 }
 
-function boardMatchesFilters(board: JiraBoard, filters: JiraBoardFilters): boolean {
+function boardMatchesFilters(board: Board, filters: BoardFilters): boolean {
   if (filters.projectKeys.length > 0 && (!board.projectKey || !filters.projectKeys.includes(board.projectKey))) {
     return false;
   }
@@ -345,7 +344,7 @@ function commonStatusRank(statusName: string): number {
   }
 }
 
-function sortIssuesByUpdated(issues: JiraIssueSummary[]): JiraIssueSummary[] {
+function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
   return [...issues].sort((left, right) => {
     const leftUpdated = left.updated ?? '';
     const rightUpdated = right.updated ?? '';
@@ -353,8 +352,8 @@ function sortIssuesByUpdated(issues: JiraIssueSummary[]): JiraIssueSummary[] {
   });
 }
 
-function buildBoardColumns(issues: JiraIssueSummary[]): JiraBoardColumn[] {
-  const issuesByStatus = new Map<string, JiraIssueSummary[]>();
+function buildBoardColumns(issues: IssueSummary[]): BoardColumn[] {
+  const issuesByStatus = new Map<string, IssueSummary[]>();
   const statusCategories = new Map<string, string | undefined>();
 
   for (const issue of issues) {
@@ -393,15 +392,15 @@ function getErrorMessage(error: unknown): string {
 export class JiraService implements IssueTrackerService {
   public readonly mode: BackendMode = 'jira';
   private readonly client: McpClientWrapper;
-  private cachedProjects?: JiraProject[];
+  private cachedProjects?: Project[];
   private capabilities?: JiraCapabilities;
   private connectionSignature?: string;
-  private epicQueryMode: EpicQueryMode = 'parent';
+  private parentFieldMode: ParentFieldMode = 'parent';
   private toolCount = 0;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly configStore: JiraConfigStore,
+    private readonly configStore: AppConfigStore,
     private readonly output: vscode.OutputChannel
   ) {
     this.client = new McpClientWrapper(output);
@@ -415,11 +414,11 @@ export class JiraService implements IssueTrackerService {
     this.cachedProjects = undefined;
     this.capabilities = undefined;
     this.connectionSignature = undefined;
-    this.epicQueryMode = 'parent';
+    this.parentFieldMode = 'parent';
     await this.client.disconnect();
   }
 
-  public async checkConnection(): Promise<JiraConnectionCheck> {
+  public async checkConnection(): Promise<ConnectionCheck> {
     const connection = await this.configStore.getConnectionConfig(this.context);
     if (!connection) {
       return {
@@ -452,7 +451,7 @@ export class JiraService implements IssueTrackerService {
     }
   }
 
-  public async getProjects(forceRefresh = false): Promise<JiraProject[]> {
+  public async getProjects(forceRefresh = false): Promise<Project[]> {
     if (this.cachedProjects && !forceRefresh) {
       return this.cachedProjects;
     }
@@ -469,13 +468,15 @@ export class JiraService implements IssueTrackerService {
   }
 
   public async getIssues(
-    filters: JiraFilters,
+    filters: IssueFilters,
     startAt: number,
     pageSize: number
   ): Promise<PagedIssues> {
     const { config, capabilities } = await this.ensureConnected();
-    const attemptModes: EpicQueryMode[] =
-      filters.epicKey && this.epicQueryMode === 'parent' ? ['parent', 'parentEpic'] : [this.epicQueryMode];
+    const attemptModes: ParentFieldMode[] =
+      filters.parentKey && this.parentFieldMode === 'parent'
+        ? ['parent', 'parentEpic']
+        : [this.parentFieldMode];
 
     let lastError: unknown;
 
@@ -493,7 +494,7 @@ export class JiraService implements IssueTrackerService {
           config.timeoutMs
         );
 
-        this.epicQueryMode = mode;
+        this.parentFieldMode = mode;
         const issues = extractIssues(response.value);
         const hasMore =
           issues.hasMore ||
@@ -507,7 +508,7 @@ export class JiraService implements IssueTrackerService {
       } catch (error) {
         lastError = error;
         this.output.appendLine(
-          `[jira] Issue search failed using epic mode "${mode}": ${getErrorMessage(error)}`
+          `[jira] Issue search failed using parent field mode "${mode}": ${getErrorMessage(error)}`
         );
       }
     }
@@ -515,8 +516,8 @@ export class JiraService implements IssueTrackerService {
     throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  public async getFilterMetadata(filters: JiraFilters): Promise<FilterMetadata> {
-    const metadataFilters: JiraFilters = {
+  public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
+    const metadataFilters: IssueFilters = {
       ...filters,
       statuses: [],
       issueTypes: []
@@ -529,9 +530,12 @@ export class JiraService implements IssueTrackerService {
     };
   }
 
-  public async getEpics(filters: JiraFilters, searchText?: string): Promise<JiraIssueSummary[]> {
+  public async getParentItems(
+    filters: IssueFilters,
+    searchText?: string
+  ): Promise<IssueSummary[]> {
     const { config, capabilities } = await this.ensureConnected();
-    const jql = buildEpicsJql(filters.projectKeys, searchText);
+    const jql = buildParentItemsJql(filters.projectKeys, searchText);
     const response = await this.client.callTool(
       capabilities.searchIssues,
       {
@@ -555,11 +559,11 @@ export class JiraService implements IssueTrackerService {
     }
   }
 
-  public async getBoards(filters: JiraBoardFilters): Promise<JiraBoard[]> {
+  public async getBoards(filters: BoardFilters): Promise<Board[]> {
     const { config, capabilities } = await this.ensureConnected();
     const boardCapabilities = this.requireBoardCapabilities(capabilities);
     const pageSize = 50;
-    const boards: JiraBoard[] = [];
+    const boards: Board[] = [];
     const seenBoardIds = new Set<string>();
     let startAt = 0;
 
@@ -596,11 +600,11 @@ export class JiraService implements IssueTrackerService {
     return boards.sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  public async getBoardDetails(board: JiraBoard): Promise<JiraBoardDetails> {
+  public async getBoardDetails(board: Board): Promise<BoardDetails> {
     const { config, capabilities } = await this.ensureConnected();
     const boardCapabilities = this.requireBoardCapabilities(capabilities);
     const pageSize = 50;
-    const issues: JiraIssueSummary[] = [];
+    const issues: IssueSummary[] = [];
     let startAt = 0;
 
     while (true) {
@@ -633,7 +637,7 @@ export class JiraService implements IssueTrackerService {
     };
   }
 
-  public async getIssue(issueKey: string): Promise<JiraIssueDetails> {
+  public async getIssue(issueKey: string): Promise<IssueDetails> {
     const { config, capabilities } = await this.ensureConnected();
     const response = await this.client.callTool(
       capabilities.getIssue,
@@ -652,7 +656,7 @@ export class JiraService implements IssueTrackerService {
     return issue;
   }
 
-  public async getTransitions(issueKey: string): Promise<JiraTransition[]> {
+  public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     const { config, capabilities } = await this.ensureConnected();
     const response = await this.client.callTool(
       capabilities.getTransitions,
@@ -677,7 +681,7 @@ export class JiraService implements IssueTrackerService {
     );
   }
 
-  public async getBrowseUrl(issue: JiraIssueSummary): Promise<string | undefined> {
+  public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
     if (issue.browseUrl) {
       return issue.browseUrl;
     }
@@ -693,7 +697,9 @@ export class JiraService implements IssueTrackerService {
     const config =
       explicitConnection ?? (await this.configStore.getConnectionConfig(this.context));
     if (!config) {
-      throw new Error('No Jira MCP connection is configured. Run "Jira Mini: Configure Connection".');
+      throw new Error(
+        'No Jira MCP connection is configured. Run "Ticket Manager: Configure Connection".'
+      );
     }
 
     const signature = JSON.stringify(config);
@@ -701,7 +707,7 @@ export class JiraService implements IssueTrackerService {
       this.cachedProjects = undefined;
       this.capabilities = undefined;
       this.connectionSignature = signature;
-      this.epicQueryMode = 'parent';
+      this.parentFieldMode = 'parent';
     }
 
     await this.client.connect(config);

@@ -1,18 +1,21 @@
-# Jira Mini
+# Ticket Manager
 
-Jira Mini is a desktop VS Code extension that adds a focused Jira experience to the Activity Bar. It now routes all ticket interactions through an injectable backend service, so the UI can run against Jira MCP today and a built-in demo backend without any external service.
+Ticket Manager is a VS Code extension for working with issues and boards through a generic app surface. It supports three runtime modes:
+
+- `jira`: Jira Connected mode through a Jira MCP server
+- `demo`: built-in sample data with no external service
+- `file`: a workspace plan file containing features, stories, tasks, bugs, statuses, and boards
 
 ## Features
 
-- Activity Bar view container for Jira workflows
-- My Issues tree with filters for projects, statuses, issue types, text, and assignee scope
-- Boards tree with filters for projects, board types, and search text
-- Board editor tab that groups board issues into Jira-style status columns
-- Epic scoping with resilient Jira Cloud query fallbacks
-- Issue details view with transitions and browser/open-copy actions
-- Injectable backend service layer so the UI no longer depends directly on Jira
-- Demo mode with built-in sample projects, issues, boards, and transitions
-- Diagnostics for missing MCP configuration, missing capabilities, and empty access
+- Activity Bar container for issues, boards, and details
+- Issue list with filters for projects, statuses, item types, text, assignee scope, and parent item scope
+- Boards view with configurable filters and per-board column customization
+- Board editor tab with drag-and-drop status transitions
+- Issue details sidebar plus a full issue details tab
+- File mode with auto-discovery or creation of a `ticket-plan.jsonc` plan file
+- Injectable backend service layer so the UI can switch between connected, demo, and file-backed implementations
+- Diagnostics for missing configuration, missing capabilities, and empty access
 
 ## Development
 
@@ -29,35 +32,34 @@ Press `F5` in VS Code to launch the extension development host.
 npm test
 ```
 
-The integration suite launches the extension in an Extension Development Host and talks to a fake Jira MCP server over stdio. It verifies:
+The integration suite launches the extension in an Extension Development Host and verifies:
 
 - extension activation and command registration
-- project and issue loading
+- connected backend loading through the fake MCP server
+- demo mode loading
+- file mode loading and persisted status transitions
 - board loading, board filters, and board panel rendering
-- demo mode without any configured Jira backend
-- empty access diagnostics
-- epic scoping
+- parent item scoping
 - successful and rejected transitions
 - capability validation
 
-## Backend modes
+## Backend Modes
 
-Jira Mini supports two runtime modes:
+Ticket Manager starts by asking which mode to use when no mode is configured yet.
 
-- `jira`: use a Jira MCP backend
-- `demo`: use built-in demo data with no backend required
+Switch between modes with:
 
-Switch between them with:
+- `Ticket Manager: Set Backend Mode`
+- `ticketManager.backendMode`
 
-- `Jira Mini: Set Backend Mode`
-- `jiraMini.backendMode`
+### Jira Connected
 
-When Jira mode is active, configure either:
+When Jira Connected mode is active, configure either:
 
-- a local `stdio` server
-- a remote `http` MCP server
+- a local `stdio` Jira MCP server
+- a remote `http` Jira MCP server
 
-Jira Mini can also reuse Jira MCP servers from existing editor config in this order when no manual Jira Mini connection is configured:
+Ticket Manager can also reuse Jira MCP servers from existing editor config in this order when no manual connected configuration is set:
 
 - workspace `.vscode/mcp.json`
 - VS Code user config at `%APPDATA%\Code\User\mcp.json`
@@ -66,48 +68,71 @@ Jira Mini can also reuse Jira MCP servers from existing editor config in this or
 - VS Code Insiders profile configs under `%APPDATA%\Code - Insiders\User\profiles\*\mcp.json`
 - Cursor global config at `~/.cursor/mcp.json`
 
-Use one of these commands after launch:
+Useful commands:
 
-- `Jira Mini: Configure Connection`
-- `Jira Mini: Set Backend Mode`
-- `Jira Mini: Use Workspace MCP Configuration`
-- `Jira Mini: Use User/Profile MCP Configuration`
+- `Ticket Manager: Configure Connection`
+- `Ticket Manager: Use Workspace MCP Configuration`
+- `Ticket Manager: Use User/Profile MCP Configuration`
+- `Ticket Manager: Check Connection`
 
-If Jira Mini finds exactly one Jira-like server in the workspace or user/profile MCP config, it will usually pick it up automatically without extra setup.
+### File Mode
 
-### Boards
+File mode looks for a plan file in the workspace. It currently auto-discovers:
 
-Use the `Boards` view to browse accessible Jira boards, then select a board to open a board tab in the editor area. The board tab groups issues into status columns using the statuses currently present on that board and clicking an issue card syncs the `Issue Details` view.
+- `ticket-plan.jsonc`
+- `ticket-plan.json`
+- `.vscode/ticket-plan.jsonc`
+- `.vscode/ticket-plan.json`
+
+If no file exists, the extension can prompt you to:
+
+- choose an existing plan file
+- create a new starter `ticket-plan.jsonc`
+
+The starter plan models:
+
+- `Feature`
+- `Story`
+- `Task`
+- `Bug`
+
+along with workflow statuses, boards, parent-child relationships, and persisted status changes.
+
+## Boards
+
+Use the `Boards` view to browse available boards, then open a board in the editor area. The board tab groups issues into status columns, supports per-board column configuration, and keeps enabled columns visible even when they are empty.
 
 Board filters are available through:
 
-- `Jira Mini: Set Board Projects`
-- `Jira Mini: Set Board Types`
-- `Jira Mini: Set Board Search Text`
-- `Jira Mini: Clear Board Filters`
+- `Ticket Manager: Set Board Projects`
+- `Ticket Manager: Set Board Types`
+- `Ticket Manager: Set Board Search Text`
+- `Ticket Manager: Clear Board Filters`
 
-### Settings
+## Settings
 
-- `jiraMini.connectionType`
-- `jiraMini.backendMode`
-- `jiraMini.stdioCommand`
-- `jiraMini.stdioArgs`
-- `jiraMini.stdioCwd`
-- `jiraMini.httpUrl`
-- `jiraMini.requestTimeoutMs`
-- `jiraMini.defaultPageSize`
-- `jiraMini.workspaceMcpServerName`
-- `jiraMini.userMcpServerRef`
+- `ticketManager.connectionType`
+- `ticketManager.backendMode`
+- `ticketManager.planFilePath`
+- `ticketManager.stdioCommand`
+- `ticketManager.stdioArgs`
+- `ticketManager.stdioCwd`
+- `ticketManager.httpUrl`
+- `ticketManager.requestTimeoutMs`
+- `ticketManager.defaultPageSize`
+- `ticketManager.workspaceMcpServerName`
+- `ticketManager.userMcpServerRef`
 
 ## Windows Smoke Checklist
 
 1. Run `npm run compile`.
 2. Press `F5` to open the Extension Development Host.
-3. Run `Jira Mini: Set Backend Mode` and choose either `Demo Mode` or `Jira MCP`.
-4. Confirm the Activity Bar icon appears and opens the `Jira` container.
-5. If using Jira MCP, run `Jira Mini: Configure Connection` and then `Jira Mini: Check Jira Connection`.
-6. Verify `My Issues` loads, filters update the list, epic scoping narrows results, and `Change Status` refreshes the selected issue.
+3. Run `Ticket Manager: Set Backend Mode` and choose `Jira Connected`, `Demo`, or `File`.
+4. Confirm the Activity Bar icon appears and opens the `Tickets` container.
+5. If using Jira Connected mode, run `Ticket Manager: Configure Connection` and then `Ticket Manager: Check Connection`.
+6. Verify `My Issues` loads, filters update the list, parent item scoping narrows results, and `Change Status` refreshes the selected issue.
 7. Verify `Boards` loads, board filters work, selecting a board opens a tab, and selecting a board issue updates `Issue Details`.
+8. If using File mode, confirm a plan file is discovered or created and that changing a status updates the plan file on disk.
 
 ## Packaging
 

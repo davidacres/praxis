@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { JiraIssueDetails, JiraTransition } from '../types';
+import type { IssueDetails, WorkflowTransition } from '../types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -26,8 +26,8 @@ function createNonce(): string {
 export class IssueDetailPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private activeIssueKey?: string;
-  private details?: JiraIssueDetails;
-  private transitions: JiraTransition[] = [];
+  private details?: IssueDetails;
+  private transitions: WorkflowTransition[] = [];
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
@@ -73,7 +73,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'jiraMini.issueDetailPanel',
+      'ticketManager.issueDetailPanel',
       issueKey,
       vscode.ViewColumn.Beside,
       {

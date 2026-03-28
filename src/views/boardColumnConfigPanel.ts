@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { BoardColumnPreferences, JiraBoard, JiraBoardDetails } from '../types';
+import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import { getDefaultStatusColumnOrder } from './boardColumnLayout';
 
@@ -43,7 +43,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
 
   public constructor(private readonly columnStore: BoardColumnStore) {}
 
-  public async open(board: JiraBoard, details: JiraBoardDetails): Promise<void> {
+  public async open(board: Board, details: BoardDetails): Promise<void> {
     this.ensurePanel();
     const prefs = this.columnStore.getPreferences(board.id);
     const defaultOrder = getDefaultStatusColumnOrder(details);
@@ -74,7 +74,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'jiraMini.boardColumnConfig',
+      'ticketManager.boardColumnConfig',
       'Board columns',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }

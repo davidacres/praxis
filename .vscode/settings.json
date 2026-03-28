@@ -1,4 +1,5 @@
 {
-    "jiraMini.workspaceMcpServerName": "",
-    "jiraMini.backendMode": "jira"
+    "ticketManager.workspaceMcpServerName": "",
+    "ticketManager.backendMode": "jira",
+    "ticketManager.planFilePath": ""
 }

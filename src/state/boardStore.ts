@@ -1,22 +1,22 @@
 import * as vscode from 'vscode';
-import type { JiraBoardFilters, PersistedBoardFilterState } from '../types';
+import type { BoardFilters, PersistedBoardFilterState } from '../types';
 
-const BOARD_FILTERS_KEY = 'jiraMini.boards.filters';
+const BOARD_FILTERS_KEY = 'ticketManager.boards.filters';
 
-const DEFAULT_BOARD_FILTERS: JiraBoardFilters = {
+const DEFAULT_BOARD_FILTERS: BoardFilters = {
   projectKeys: [],
   types: [],
   searchText: ''
 };
 
 export class BoardStore implements vscode.Disposable {
-  private readonly onDidChangeEmitter = new vscode.EventEmitter<JiraBoardFilters>();
+  private readonly onDidChangeEmitter = new vscode.EventEmitter<BoardFilters>();
 
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
-  public getFilters(): JiraBoardFilters {
+  public getFilters(): BoardFilters {
     const storedFilters =
       this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY) ?? {
         ...DEFAULT_BOARD_FILTERS
@@ -43,9 +43,9 @@ export class BoardStore implements vscode.Disposable {
     await this.context.workspaceState.update(BOARD_FILTERS_KEY, storedFilters);
   }
 
-  public async updateFilters(patch: Partial<JiraBoardFilters>): Promise<JiraBoardFilters> {
+  public async updateFilters(patch: Partial<BoardFilters>): Promise<BoardFilters> {
     const current = this.getFilters();
-    const next: JiraBoardFilters = {
+    const next: BoardFilters = {
       ...current,
       ...patch,
       projectKeys: patch.projectKeys ? [...patch.projectKeys] : current.projectKeys,
@@ -57,7 +57,7 @@ export class BoardStore implements vscode.Disposable {
     return next;
   }
 
-  public async clearFilters(): Promise<JiraBoardFilters> {
+  public async clearFilters(): Promise<BoardFilters> {
     const next = {
       ...DEFAULT_BOARD_FILTERS
     };
@@ -68,7 +68,7 @@ export class BoardStore implements vscode.Disposable {
   }
 
   private async persist(
-    filters: JiraBoardFilters,
+    filters: BoardFilters,
     lastSelectedBoardId: string | undefined
   ): Promise<void> {
     const persisted: PersistedBoardFilterState = {

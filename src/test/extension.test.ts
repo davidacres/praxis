@@ -1,14 +1,18 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { JiraMiniExtensionApi } from '../extension';
+import type { TicketManagerExtensionApi } from '../extension';
+import { createPlanTemplate } from '../file/planTemplate';
 
-const EXTENSION_ID = 'local-dev.jira-mini';
+const EXTENSION_ID = 'local-dev.ticket-manager';
 const WORKSPACE_MCP_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'mcp.json')
   : undefined;
 const USER_MCP_OVERRIDE_URI = vscode.workspace.workspaceFolders?.[0]
-  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.jira-mini-test', 'user-mcp.json')
+  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.ticket-manager-test', 'user-mcp.json')
+  : undefined;
+const PLAN_FILE_URI = vscode.workspace.workspaceFolders?.[0]
+  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ticket-plan.jsonc')
   : undefined;
 
 async function waitFor(
@@ -27,8 +31,8 @@ async function waitFor(
   throw new Error('Timed out waiting for condition.');
 }
 
-async function getApi(): Promise<JiraMiniExtensionApi> {
-  const extension = vscode.extensions.getExtension<JiraMiniExtensionApi>(EXTENSION_ID);
+async function getApi(): Promise<TicketManagerExtensionApi> {
+  const extension = vscode.extensions.getExtension<TicketManagerExtensionApi>(EXTENSION_ID);
   assert.ok(extension, 'Extension should be available');
   const api = await extension.activate();
   return api;
@@ -81,6 +85,26 @@ async function clearUserMcpOverride(): Promise<void> {
   }
 }
 
+async function clearPlanFile(): Promise<void> {
+  if (!PLAN_FILE_URI) {
+    return;
+  }
+
+  try {
+    await vscode.workspace.fs.delete(PLAN_FILE_URI);
+  } catch {
+    // Ignore missing file.
+  }
+}
+
+async function writePlanFile(contents: string): Promise<void> {
+  if (!PLAN_FILE_URI) {
+    throw new Error('A workspace folder is required for file mode tests.');
+  }
+
+  await vscode.workspace.fs.writeFile(PLAN_FILE_URI, Buffer.from(contents, 'utf8'));
+}
+
 async function writeUserMcpOverride(contents: string): Promise<void> {
   if (!USER_MCP_OVERRIDE_URI) {
     throw new Error('A workspace folder is required for user MCP tests.');
@@ -92,10 +116,11 @@ async function writeUserMcpOverride(contents: string): Promise<void> {
   process.env.JIRA_MINI_USER_MCP_PATHS = USER_MCP_OVERRIDE_URI.fsPath;
 }
 
-async function resetConnectionState(api: JiraMiniExtensionApi): Promise<void> {
-  const config = vscode.workspace.getConfiguration('jiraMini');
+async function resetConnectionState(api: TicketManagerExtensionApi): Promise<void> {
+  const config = vscode.workspace.getConfiguration('ticketManager');
   await Promise.all([
     config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
+    config.update('planFilePath', '', vscode.ConfigurationTarget.Workspace),
     config.update('connectionType', 'stdio', vscode.ConfigurationTarget.Global),
     config.update('stdioCommand', '', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [], vscode.ConfigurationTarget.Global),
@@ -106,6 +131,7 @@ async function resetConnectionState(api: JiraMiniExtensionApi): Promise<void> {
   ]);
 
   await clearUserMcpOverride();
+  await clearPlanFile();
   await api.backendService.reset();
   await api.filterStore.clearFilters();
   await api.boardStore.clearFilters();
@@ -114,13 +140,13 @@ async function resetConnectionState(api: JiraMiniExtensionApi): Promise<void> {
 }
 
 async function configureScenario(
-  api: JiraMiniExtensionApi,
+  api: TicketManagerExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
 ): Promise<void> {
   await clearWorkspaceMcpFile();
   await clearUserMcpOverride();
   const serverPath = getServerPath();
-  const config = vscode.workspace.getConfiguration('jiraMini');
+  const config = vscode.workspace.getConfiguration('ticketManager');
 
   await Promise.all([
     config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
@@ -144,13 +170,13 @@ async function configureScenario(
 }
 
 async function configureWorkspaceMcpScenario(
-  api: JiraMiniExtensionApi,
+  api: TicketManagerExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
 ): Promise<void> {
   await resetConnectionState(api);
 
   await writeWorkspaceMcpFile(`{
-  // Jira Mini should automatically use this workspace MCP server.
+  // Ticket Manager should automatically use this workspace MCP server.
   "servers": {
     "jira": {
       "command": "node",
@@ -168,7 +194,7 @@ async function configureWorkspaceMcpScenario(
 }
 
 async function configureUserMcpScenario(
-  api: JiraMiniExtensionApi,
+  api: TicketManagerExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
 ): Promise<void> {
   await resetConnectionState(api);
@@ -186,15 +212,27 @@ async function configureUserMcpScenario(
   await api.refresh();
 }
 
-async function configureDemoScenario(api: JiraMiniExtensionApi): Promise<void> {
+async function configureDemoScenario(api: TicketManagerExtensionApi): Promise<void> {
   await resetConnectionState(api);
-  const config = vscode.workspace.getConfiguration('jiraMini');
+  const config = vscode.workspace.getConfiguration('ticketManager');
   await config.update('backendMode', 'demo', vscode.ConfigurationTarget.Workspace);
   await api.backendService.reset();
   await api.refresh();
 }
 
-suite('Jira Mini Extension', () => {
+async function configureFileScenario(api: TicketManagerExtensionApi): Promise<void> {
+  await resetConnectionState(api);
+  const config = vscode.workspace.getConfiguration('ticketManager');
+  await writePlanFile(createPlanTemplate(vscode.workspace.workspaceFolders?.[0]?.name));
+  await Promise.all([
+    config.update('backendMode', 'file', vscode.ConfigurationTarget.Workspace),
+    config.update('planFilePath', '', vscode.ConfigurationTarget.Workspace)
+  ]);
+  await api.backendService.reset();
+  await api.refresh();
+}
+
+suite('Ticket Manager Extension', () => {
   suiteTeardown(async () => {
     const api = await getApi();
     await clearWorkspaceMcpFile();
@@ -208,21 +246,21 @@ suite('Jira Mini Extension', () => {
 
     assert.ok(api.issuesProvider, 'Issues provider should be created');
     assert.ok(api.detailsProvider, 'Details provider should be created');
-    assert.ok(commands.includes('jiraMini.refresh'));
-    assert.ok(commands.includes('jiraMini.checkConnection'));
-    assert.ok(commands.includes('jiraMini.changeStatus'));
-    assert.ok(commands.includes('jiraMini.importWorkspaceMcpConfig'));
-    assert.ok(commands.includes('jiraMini.importUserMcpConfig'));
-    assert.ok(commands.includes('jiraMini.setBackendMode'));
-    assert.ok(commands.includes('jiraMini.openBoard'));
-    assert.ok(commands.includes('jiraMini.setBoardProjects'));
-    assert.ok(commands.includes('jiraMini.setBoardTypes'));
-    assert.ok(commands.includes('jiraMini.setBoardSearchText'));
-    assert.ok(commands.includes('jiraMini.openIssueFullDetails'));
-    assert.ok(commands.includes('jiraMini.configureBoardColumns'));
+    assert.ok(commands.includes('ticketManager.refresh'));
+    assert.ok(commands.includes('ticketManager.checkConnection'));
+    assert.ok(commands.includes('ticketManager.changeStatus'));
+    assert.ok(commands.includes('ticketManager.importWorkspaceMcpConfig'));
+    assert.ok(commands.includes('ticketManager.importUserMcpConfig'));
+    assert.ok(commands.includes('ticketManager.setBackendMode'));
+    assert.ok(commands.includes('ticketManager.openBoard'));
+    assert.ok(commands.includes('ticketManager.setBoardProjects'));
+    assert.ok(commands.includes('ticketManager.setBoardTypes'));
+    assert.ok(commands.includes('ticketManager.setBoardSearchText'));
+    assert.ok(commands.includes('ticketManager.openIssueFullDetails'));
+    assert.ok(commands.includes('ticketManager.configureBoardColumns'));
   });
 
-  test('loads my issues from the fake Jira MCP server', async () => {
+  test('loads my issues from the fake connected backend', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');
 
@@ -236,7 +274,7 @@ suite('Jira Mini Extension', () => {
     assert.ok(!keys.includes('APP-102'), 'Issues not assigned to currentUser() should be filtered out');
   });
 
-  test('reports a warning when no Jira projects are accessible', async () => {
+  test('reports a warning when no projects are accessible', async () => {
     const api = await getApi();
     await configureScenario(api, 'no-projects');
 
@@ -246,7 +284,7 @@ suite('Jira Mini Extension', () => {
     assert.deepStrictEqual(api.issuesProvider.getCurrentIssues(), []);
   });
 
-  test('automatically reuses workspace .vscode/mcp.json when manual Jira Mini config is empty', async () => {
+  test('automatically reuses workspace .vscode/mcp.json when manual config is empty', async () => {
     const api = await getApi();
     await configureWorkspaceMcpScenario(api, 'default');
 
@@ -270,7 +308,7 @@ suite('Jira Mini Extension', () => {
     assert.ok(keys.includes('APP-103'));
   });
 
-  test('loads demo data without any Jira connection when demo mode is enabled', async () => {
+  test('loads demo data without any connected backend when demo mode is enabled', async () => {
     const api = await getApi();
     await configureDemoScenario(api);
 
@@ -285,6 +323,35 @@ suite('Jira Mini Extension', () => {
     assert.ok(boardNames.includes('Application Board'));
     assert.strictEqual(result.status, 'ok');
     assert.match(result.message, /demo mode active/i);
+  });
+
+  test('loads file-backed plan data and persists status changes', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    await waitFor(() => api.issuesProvider.getCurrentIssues().length > 0);
+    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
+
+    const issueKeys = api.issuesProvider.getCurrentIssues().map(issue => issue.key);
+    const boardNames = api.boardsProvider.getCurrentBoards().map(board => board.name);
+    const transitions = await api.backendService.getTransitions('APP-101');
+    const moveToInProgress = transitions.find(transition => transition.toStatus === 'In Progress');
+    assert.ok(moveToInProgress, 'File mode should expose transitions derived from plan statuses');
+
+    assert.ok(issueKeys.includes('APP-100'));
+    assert.ok(issueKeys.includes('APP-103'));
+    assert.strictEqual(boardNames[0], `${vscode.workspace.workspaceFolders?.[0]?.name ?? 'Workspace Project'} Board`);
+
+    await api.backendService.transitionIssue('APP-101', moveToInProgress!.id);
+    await api.refresh();
+
+    const updatedIssue = api.issuesProvider.getIssueByKey('APP-101');
+    assert.strictEqual(updatedIssue?.status, 'In Progress');
+
+    if (PLAN_FILE_URI) {
+      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
+      assert.match(updatedText, /"status": "In Progress"/);
+    }
   });
 
   test('loads boards and applies board filters', async () => {
@@ -337,7 +404,7 @@ suite('Jira Mini Extension', () => {
     assert.strictEqual(api.boardPanelManager.getSnapshot().selectedIssueKey, 'APP-101');
   });
 
-  test('supports epic scoping and successful status transitions', async () => {
+  test('supports parent-item scoping and successful status transitions', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');
 
@@ -347,12 +414,12 @@ suite('Jira Mini Extension', () => {
     await api.refresh();
 
     await api.filterStore.updateFilters({
-      epicKey: 'APP-100'
+      parentKey: 'APP-100'
     });
     await api.refresh();
 
-    const epicKeys = api.issuesProvider.getCurrentIssues().map(issue => issue.key);
-    assert.deepStrictEqual(epicKeys.sort(), ['APP-101', 'APP-103']);
+    const childKeys = api.issuesProvider.getCurrentIssues().map(issue => issue.key);
+    assert.deepStrictEqual(childKeys.sort(), ['APP-101', 'APP-103']);
 
     await api.backendService.transitionIssue('APP-101', 'start-progress');
     await api.refresh();
@@ -371,13 +438,13 @@ suite('Jira Mini Extension', () => {
     );
   });
 
-  test('falls back to parentEpic when parent queries are rejected', async () => {
+  test('falls back to the alternate parent field when parent queries are rejected', async () => {
     const api = await getApi();
     await configureScenario(api, 'parent-unsupported');
 
     await api.filterStore.updateFilters({
       projectKeys: ['APP'],
-      epicKey: 'APP-100'
+      parentKey: 'APP-100'
     });
     await api.refresh();
 

@@ -1,27 +1,27 @@
 import * as vscode from 'vscode';
-import type { GroupingMode, JiraFilters, PersistedFilterState } from '../types';
+import type { GroupingMode, IssueFilters, PersistedFilterState } from '../types';
 
-const FILTERS_KEY = 'jiraMini.filters';
-const GROUPING_KEY = 'jiraMini.grouping';
+const FILTERS_KEY = 'ticketManager.filters';
+const GROUPING_KEY = 'ticketManager.grouping';
 
-const DEFAULT_FILTERS: JiraFilters = {
+const DEFAULT_FILTERS: IssueFilters = {
   projectKeys: [],
   statuses: [],
   issueTypes: [],
   searchText: '',
   assigneeMode: 'me',
-  epicKey: undefined,
+  parentKey: undefined,
   grouping: 'project'
 };
 
 export class FilterStore implements vscode.Disposable {
-  private readonly onDidChangeEmitter = new vscode.EventEmitter<JiraFilters>();
+  private readonly onDidChangeEmitter = new vscode.EventEmitter<IssueFilters>();
 
   public readonly onDidChange = this.onDidChangeEmitter.event;
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
-  public getFilters(): JiraFilters {
+  public getFilters(): IssueFilters {
     const storedFilters =
       this.context.workspaceState.get<PersistedFilterState>(FILTERS_KEY) ?? {
         ...DEFAULT_FILTERS
@@ -37,7 +37,7 @@ export class FilterStore implements vscode.Disposable {
       issueTypes: [...(storedFilters.issueTypes ?? [])],
       searchText: storedFilters.searchText ?? '',
       assigneeMode: storedFilters.assigneeMode ?? 'me',
-      epicKey: storedFilters.epicKey,
+      parentKey: storedFilters.parentKey,
       grouping
     };
   }
@@ -54,9 +54,9 @@ export class FilterStore implements vscode.Disposable {
     await this.context.workspaceState.update(FILTERS_KEY, filters);
   }
 
-  public async updateFilters(patch: Partial<JiraFilters>): Promise<JiraFilters> {
+  public async updateFilters(patch: Partial<IssueFilters>): Promise<IssueFilters> {
     const current = this.getFilters();
-    const next: JiraFilters = {
+    const next: IssueFilters = {
       ...current,
       ...patch,
       projectKeys: patch.projectKeys ? [...patch.projectKeys] : current.projectKeys,
@@ -69,7 +69,7 @@ export class FilterStore implements vscode.Disposable {
     return next;
   }
 
-  public async setGrouping(grouping: GroupingMode): Promise<JiraFilters> {
+  public async setGrouping(grouping: GroupingMode): Promise<IssueFilters> {
     const current = this.getFilters();
     const next = { ...current, grouping };
     await this.persist(next, this.getLastSelectedIssueKey());
@@ -77,7 +77,7 @@ export class FilterStore implements vscode.Disposable {
     return next;
   }
 
-  public async clearFilters(): Promise<JiraFilters> {
+  public async clearFilters(): Promise<IssueFilters> {
     const grouping = this.getFilters().grouping;
     const next = {
       ...DEFAULT_FILTERS,
@@ -89,14 +89,14 @@ export class FilterStore implements vscode.Disposable {
     return next;
   }
 
-  private async persist(filters: JiraFilters, lastSelectedIssueKey: string | undefined): Promise<void> {
+  private async persist(filters: IssueFilters, lastSelectedIssueKey: string | undefined): Promise<void> {
     const persisted: PersistedFilterState = {
       projectKeys: filters.projectKeys,
       statuses: filters.statuses,
       issueTypes: filters.issueTypes,
       searchText: filters.searchText,
       assigneeMode: filters.assigneeMode,
-      epicKey: filters.epicKey,
+      parentKey: filters.parentKey,
       lastSelectedIssueKey
     };
 

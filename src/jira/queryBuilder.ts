@@ -1,4 +1,6 @@
-import type { EpicQueryMode, JiraFilters } from '../types';
+import type { IssueFilters } from '../types';
+
+export type ParentFieldMode = 'parent' | 'parentEpic';
 
 function quoteJqlValue(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -16,7 +18,7 @@ function buildInClause(field: string, values: string[]): string | undefined {
   return `${field} in (${values.map(quoteJqlValue).join(', ')})`;
 }
 
-export function buildIssuesJql(filters: JiraFilters, epicQueryMode: EpicQueryMode): string {
+export function buildIssuesJql(filters: IssueFilters, parentFieldMode: ParentFieldMode): string {
   const clauses: string[] = [];
 
   const projectClause = buildInClause('project', filters.projectKeys);
@@ -42,16 +44,16 @@ export function buildIssuesJql(filters: JiraFilters, epicQueryMode: EpicQueryMod
     clauses.push(`text ~ ${quoteJqlValue(filters.searchText.trim())}`);
   }
 
-  if (filters.epicKey) {
-    const epicField = epicQueryMode === 'parent' ? 'parent' : 'parentEpic';
-    clauses.push(`${epicField} = ${quoteJqlValue(filters.epicKey)}`);
+  if (filters.parentKey) {
+    const parentField = parentFieldMode === 'parent' ? 'parent' : 'parentEpic';
+    clauses.push(`${parentField} = ${quoteJqlValue(filters.parentKey)}`);
   }
 
   const where = clauses.length > 0 ? clauses.join(' AND ') : 'order by updated DESC';
   return clauses.length > 0 ? `${where} ORDER BY updated DESC` : where;
 }
 
-export function buildEpicsJql(projectKeys: string[], searchText?: string): string {
+export function buildParentItemsJql(projectKeys: string[], searchText?: string): string {
   const clauses: string[] = ['issuetype = "Epic"'];
   const projectClause = buildInClause('project', projectKeys);
 

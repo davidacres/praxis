@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { JiraIssueDetails, JiraIssueSummary, JiraTransition } from '../types';
+import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
 
 abstract class DetailsNode {
   public constructor(
@@ -52,13 +52,13 @@ class DescriptionBlockNode extends DetailsNode {
 }
 
 class TransitionGroupNode extends DetailsNode {
-  public constructor(public readonly transitions: JiraTransition[]) {
+  public constructor(public readonly transitions: WorkflowTransition[]) {
     super('transitions', 'transitions');
   }
 }
 
 class TransitionNode extends DetailsNode {
-  public constructor(public readonly transition: JiraTransition) {
+  public constructor(public readonly transition: WorkflowTransition) {
     super(`transition:${transition.id}`, 'transition');
   }
 }
@@ -89,9 +89,9 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<Node | undefined>();
   private loading = false;
   private errorMessage?: string;
-  private selectedIssue?: JiraIssueSummary;
-  private detailedIssue?: JiraIssueDetails;
-  private transitions: JiraTransition[] = [];
+  private selectedIssue?: IssueSummary;
+  private detailedIssue?: IssueDetails;
+  private transitions: WorkflowTransition[] = [];
   private requestGeneration = 0;
   private revealTarget?: IssueRootNode;
 
@@ -134,7 +134,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       item.tooltip = `${element.issueKey}: open full issue details in an editor tab`;
       item.iconPath = new vscode.ThemeIcon('link');
       item.command = {
-        command: 'jiraMini.openIssueFullDetails',
+        command: 'ticketManager.openIssueFullDetails',
         title: 'Open full issue details',
         arguments: [element.issueKey]
       };
@@ -313,7 +313,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
     return this.revealTarget;
   }
 
-  public async setIssue(issue: JiraIssueSummary | undefined): Promise<void> {
+  public async setIssue(issue: IssueSummary | undefined): Promise<void> {
     this.selectedIssue = issue;
     this.detailedIssue = undefined;
     this.transitions = [];
@@ -373,7 +373,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
     }
   }
 
-  public getActiveIssue(): JiraIssueSummary | undefined {
+  public getActiveIssue(): IssueSummary | undefined {
     return this.detailedIssue ?? this.selectedIssue;
   }
 

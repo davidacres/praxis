@@ -1,20 +1,20 @@
 import type {
   BackendMode,
+  Board,
+  BoardColumn,
+  BoardDetails,
+  BoardFilters,
+  ConnectionCheck,
   FilterMetadata,
-  JiraBoard,
-  JiraBoardColumn,
-  JiraBoardDetails,
-  JiraBoardFilters,
-  JiraConnectionCheck,
-  JiraFilters,
-  JiraIssueDetails,
-  JiraIssueSummary,
-  JiraProject,
-  JiraTransition,
-  PagedIssues
+  IssueDetails,
+  IssueFilters,
+  IssueSummary,
+  PagedIssues,
+  Project,
+  WorkflowTransition
 } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import { JiraConfigStore } from '../config/jiraConfig';
+import { AppConfigStore } from '../config/jiraConfig';
 
 type DemoAssigneeKind = 'me' | 'other' | 'none';
 
@@ -57,7 +57,7 @@ function statusCategoryName(status: string): string {
   }
 }
 
-function transitionSet(status: string): JiraTransition[] {
+function transitionSet(status: string): WorkflowTransition[] {
   switch (status) {
     case 'To Do':
       return [
@@ -81,16 +81,16 @@ function createSeedIssues(): DemoIssue[] {
     {
       id: 'demo-1',
       key: 'APP-100',
-      summary: 'Core app epic',
+      summary: 'Core platform feature',
       status: 'In Progress',
-      issueType: 'Epic',
+      issueType: 'Feature',
       projectKey: 'APP',
       projectName: 'Application Platform',
       assigneeKind: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'High',
       updated: '2026-03-27T20:00:00.000Z',
-      description: 'Primary epic for the application platform work.'
+      description: 'Primary feature for the application platform work.'
     },
     {
       id: 'demo-2',
@@ -190,7 +190,7 @@ function createSeedBoards(): DemoBoard[] {
   ];
 }
 
-function toIssueSummary(issue: DemoIssue): JiraIssueSummary {
+function toIssueSummary(issue: DemoIssue): IssueSummary {
   return {
     id: issue.id,
     key: issue.key,
@@ -203,13 +203,13 @@ function toIssueSummary(issue: DemoIssue): JiraIssueSummary {
     assignee: issue.assigneeKind === 'none' ? undefined : issue.assigneeDisplayName,
     priority: issue.priority,
     updated: issue.updated,
-    browseUrl: `https://example.com/jira-mini-demo/${issue.key}`,
+    browseUrl: `https://example.com/ticket-manager-demo/${issue.key}`,
     description: issue.description,
     raw: issue
   };
 }
 
-function toBoard(board: DemoBoard): JiraBoard {
+function toBoard(board: DemoBoard): Board {
   return {
     id: board.id,
     name: board.name,
@@ -221,7 +221,7 @@ function toBoard(board: DemoBoard): JiraBoard {
   };
 }
 
-function sortIssuesByUpdated(issues: JiraIssueSummary[]): JiraIssueSummary[] {
+function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
   return [...issues].sort((left, right) => {
     const leftUpdated = left.updated ?? '';
     const rightUpdated = right.updated ?? '';
@@ -259,8 +259,8 @@ function commonStatusRank(statusName: string): number {
   }
 }
 
-function buildBoardColumns(issues: JiraIssueSummary[]): JiraBoardColumn[] {
-  const issuesByStatus = new Map<string, JiraIssueSummary[]>();
+function buildBoardColumns(issues: IssueSummary[]): BoardColumn[] {
+  const issuesByStatus = new Map<string, IssueSummary[]>();
   const statusCategories = new Map<string, string | undefined>();
 
   for (const issue of issues) {
@@ -304,7 +304,7 @@ export class DemoService implements IssueTrackerService {
   private issues: DemoIssue[] = createSeedIssues();
   private boards: DemoBoard[] = createSeedBoards();
 
-  public constructor(private readonly configStore: JiraConfigStore) {}
+  public constructor(private readonly configStore: AppConfigStore) {}
 
   public getDefaultPageSize(): number {
     return this.configStore.getDefaultPageSize();
@@ -315,7 +315,7 @@ export class DemoService implements IssueTrackerService {
     this.boards = createSeedBoards();
   }
 
-  public async checkConnection(): Promise<JiraConnectionCheck> {
+  public async checkConnection(): Promise<ConnectionCheck> {
     const projects = await this.getProjects();
     return {
       status: 'ok',
@@ -326,7 +326,7 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
-  public async getProjects(): Promise<JiraProject[]> {
+  public async getProjects(): Promise<Project[]> {
     return [
       {
         id: 'demo-project-app',
@@ -341,7 +341,7 @@ export class DemoService implements IssueTrackerService {
     ];
   }
 
-  public async getIssues(filters: JiraFilters, startAt: number, pageSize: number): Promise<PagedIssues> {
+  public async getIssues(filters: IssueFilters, startAt: number, pageSize: number): Promise<PagedIssues> {
     const matchingIssues = sortIssuesByUpdated(
       this.issues
         .filter(issue => this.matchesIssueFilters(issue, filters))
@@ -356,8 +356,8 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
-  public async getFilterMetadata(filters: JiraFilters): Promise<FilterMetadata> {
-    const metadataFilters: JiraFilters = {
+  public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
+    const metadataFilters: IssueFilters = {
       ...filters,
       statuses: [],
       issueTypes: []
@@ -370,11 +370,14 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
-  public async getEpics(filters: JiraFilters, searchText?: string): Promise<JiraIssueSummary[]> {
+  public async getParentItems(
+    filters: IssueFilters,
+    searchText?: string
+  ): Promise<IssueSummary[]> {
     const query = searchText?.trim().toLowerCase();
     return sortIssuesByUpdated(
       this.issues
-        .filter(issue => issue.issueType === 'Epic')
+        .filter(issue => issue.issueType === 'Feature')
         .filter(issue => filters.projectKeys.length === 0 || filters.projectKeys.includes(issue.projectKey))
         .filter(issue => {
           if (!query) {
@@ -391,7 +394,7 @@ export class DemoService implements IssueTrackerService {
     return true;
   }
 
-  public async getBoards(filters: JiraBoardFilters): Promise<JiraBoard[]> {
+  public async getBoards(filters: BoardFilters): Promise<Board[]> {
     const query = filters.searchText.trim().toLowerCase();
     return this.boards
       .filter(board => filters.projectKeys.length === 0 || filters.projectKeys.includes(board.projectKey))
@@ -408,7 +411,7 @@ export class DemoService implements IssueTrackerService {
       .sort((left, right) => left.name.localeCompare(right.name));
   }
 
-  public async getBoardDetails(board: JiraBoard): Promise<JiraBoardDetails> {
+  public async getBoardDetails(board: Board): Promise<BoardDetails> {
     const matchingBoard = this.boards.find(candidate => candidate.id === board.id);
     if (!matchingBoard) {
       throw new Error(`Demo board ${board.name} was not found.`);
@@ -428,7 +431,7 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
-  public async getIssue(issueKey: string): Promise<JiraIssueDetails> {
+  public async getIssue(issueKey: string): Promise<IssueDetails> {
     const issue = this.findIssue(issueKey);
     return {
       ...toIssueSummary(issue),
@@ -436,7 +439,7 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
-  public async getTransitions(issueKey: string): Promise<JiraTransition[]> {
+  public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     return transitionSet(this.findIssue(issueKey).status);
   }
 
@@ -457,13 +460,13 @@ export class DemoService implements IssueTrackerService {
     issue.updated = new Date().toISOString();
   }
 
-  public async getBrowseUrl(issue: JiraIssueSummary): Promise<string | undefined> {
+  public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
     return issue.browseUrl;
   }
 
   public dispose(): void {}
 
-  private matchesIssueFilters(issue: DemoIssue, filters: JiraFilters): boolean {
+  private matchesIssueFilters(issue: DemoIssue, filters: IssueFilters): boolean {
     if (filters.projectKeys.length > 0 && !filters.projectKeys.includes(issue.projectKey)) {
       return false;
     }
@@ -480,7 +483,7 @@ export class DemoService implements IssueTrackerService {
       return false;
     }
 
-    if (filters.epicKey && issue.parent !== filters.epicKey) {
+    if (filters.parentKey && issue.parent !== filters.parentKey) {
       return false;
     }
 

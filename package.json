@@ -1,9 +1,9 @@
 {
-  "name": "jira-mini",
-  "displayName": "Jira Mini",
+  "name": "ticket-manager",
+  "displayName": "Ticket Manager",
   "version": "0.0.1",
   "publisher": "local-dev",
-  "description": "A compact Jira sidebar for VS Code powered by MCP.",
+  "description": "A compact issue and board sidebar for VS Code with connected, demo, and file-backed modes.",
   "license": "MIT",
   "preview": true,
   "pricing": "Free",
@@ -17,9 +17,9 @@
     "Other"
   ],
   "keywords": [
-    "jira",
     "issues",
     "tickets",
+    "boards",
     "mcp",
     "activity-bar",
     "sidebar"
@@ -40,361 +40,361 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "jiraMini",
-          "title": "Jira",
-          "icon": "media/activitybar-jira.svg"
+          "id": "ticketManager",
+          "title": "Tickets",
+          "icon": "media/activitybar-ticket.svg"
         }
       ]
     },
     "views": {
-      "jiraMini": [
+      "ticketManager": [
         {
-          "id": "jiraMini.myIssues",
+          "id": "ticketManager.myIssues",
           "name": "My Issues",
-          "contextualTitle": "Jira",
-          "icon": "media/activitybar-jira.svg"
+          "contextualTitle": "Tickets",
+          "icon": "media/activitybar-ticket.svg"
         },
         {
-          "id": "jiraMini.boards",
+          "id": "ticketManager.boards",
           "name": "Boards",
-          "contextualTitle": "Jira",
-          "icon": "media/activitybar-jira.svg"
+          "contextualTitle": "Tickets",
+          "icon": "media/activitybar-ticket.svg"
         },
         {
-          "id": "jiraMini.issueDetails",
+          "id": "ticketManager.issueDetails",
           "name": "Issue Details",
-          "contextualTitle": "Jira",
-          "icon": "media/activitybar-jira.svg"
+          "contextualTitle": "Tickets",
+          "icon": "media/activitybar-ticket.svg"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "jiraMini.myIssues",
-        "contents": "Configure a Jira MCP connection or switch to demo mode for a backend-free walkthrough.\\n[Set Backend Mode](command:jiraMini.setBackendMode)\\n[Configure Connection](command:jiraMini.configureConnection)\\n[Use Workspace MCP Configuration](command:jiraMini.importWorkspaceMcpConfig)\\n[Use User/Profile MCP Configuration](command:jiraMini.importUserMcpConfig)\\n[Check Connection](command:jiraMini.checkConnection)"
+        "view": "ticketManager.myIssues",
+        "contents": "Choose a backend mode to start working with issues and boards.\\n[Set Backend Mode](command:ticketManager.setBackendMode)\\n[Configure Connection](command:ticketManager.configureConnection)\\n[Use Workspace MCP Configuration](command:ticketManager.importWorkspaceMcpConfig)\\n[Use User/Profile MCP Configuration](command:ticketManager.importUserMcpConfig)\\n[Check Connection](command:ticketManager.checkConnection)"
       },
       {
-        "view": "jiraMini.issueDetails",
+        "view": "ticketManager.issueDetails",
         "contents": "Select an issue in **My Issues** or on a board to inspect its details and transitions."
       },
       {
-        "view": "jiraMini.boards",
-        "contents": "Browse Jira boards and open a board tab.\\n[Set Board Search](command:jiraMini.setBoardSearchText)\\n[Set Board Projects](command:jiraMini.setBoardProjects)\\n[Set Board Types](command:jiraMini.setBoardTypes)"
+        "view": "ticketManager.boards",
+        "contents": "Browse boards and open a board tab.\\n[Set Board Search](command:ticketManager.setBoardSearchText)\\n[Set Board Projects](command:ticketManager.setBoardProjects)\\n[Set Board Types](command:ticketManager.setBoardTypes)"
       }
     ],
     "commands": [
       {
-        "command": "jiraMini.refresh",
+        "command": "ticketManager.refresh",
         "title": "Refresh",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(refresh)"
       },
       {
-        "command": "jiraMini.configureConnection",
+        "command": "ticketManager.configureConnection",
         "title": "Configure Connection",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(plug)"
       },
       {
-        "command": "jiraMini.checkConnection",
-        "title": "Check Jira Connection",
-        "category": "Jira Mini",
+        "command": "ticketManager.checkConnection",
+        "title": "Check Connection",
+        "category": "Ticket Manager",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "jiraMini.setBackendMode",
+        "command": "ticketManager.setBackendMode",
         "title": "Set Backend Mode",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(symbol-namespace)"
       },
       {
-        "command": "jiraMini.importWorkspaceMcpConfig",
+        "command": "ticketManager.importWorkspaceMcpConfig",
         "title": "Use Workspace MCP Configuration",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(folder-library)"
       },
       {
-        "command": "jiraMini.importUserMcpConfig",
+        "command": "ticketManager.importUserMcpConfig",
         "title": "Use User/Profile MCP Configuration",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(account)"
       },
       {
-        "command": "jiraMini.openBoard",
+        "command": "ticketManager.openBoard",
         "title": "Open Board",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "jiraMini.configureBoardColumns",
+        "command": "ticketManager.configureBoardColumns",
         "title": "Configure Board Columns",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "jiraMini.setBoardProjects",
+        "command": "ticketManager.setBoardProjects",
         "title": "Set Board Projects",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(repo)"
       },
       {
-        "command": "jiraMini.setBoardTypes",
+        "command": "ticketManager.setBoardTypes",
         "title": "Set Board Types",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(list-tree)"
       },
       {
-        "command": "jiraMini.setBoardSearchText",
+        "command": "ticketManager.setBoardSearchText",
         "title": "Set Board Search Text",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(search)"
       },
       {
-        "command": "jiraMini.clearBoardFilters",
+        "command": "ticketManager.clearBoardFilters",
         "title": "Clear Board Filters",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(clear-all)"
       },
       {
-        "command": "jiraMini.setProjects",
+        "command": "ticketManager.setProjects",
         "title": "Set Projects",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(repo)"
       },
       {
-        "command": "jiraMini.setStatuses",
+        "command": "ticketManager.setStatuses",
         "title": "Set Status Filter",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(list-selection)"
       },
       {
-        "command": "jiraMini.setIssueTypes",
+        "command": "ticketManager.setIssueTypes",
         "title": "Set Issue Type Filter",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(symbol-class)"
       },
       {
-        "command": "jiraMini.setSearchText",
+        "command": "ticketManager.setSearchText",
         "title": "Set Search Text",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(search)"
       },
       {
-        "command": "jiraMini.toggleAssigneeMode",
+        "command": "ticketManager.toggleAssigneeMode",
         "title": "Toggle Assignee Scope",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(account)"
       },
       {
-        "command": "jiraMini.setEpicScope",
-        "title": "Set Epic Scope",
-        "category": "Jira Mini",
+        "command": "ticketManager.setParentScope",
+        "title": "Set Parent Item Scope",
+        "category": "Ticket Manager",
         "icon": "$(milestone)"
       },
       {
-        "command": "jiraMini.clearEpicScope",
-        "title": "Clear Epic Scope",
-        "category": "Jira Mini",
+        "command": "ticketManager.clearParentScope",
+        "title": "Clear Parent Item Scope",
+        "category": "Ticket Manager",
         "icon": "$(close)"
       },
       {
-        "command": "jiraMini.clearFilters",
+        "command": "ticketManager.clearFilters",
         "title": "Clear Filters",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(clear-all)"
       },
       {
-        "command": "jiraMini.setGrouping",
+        "command": "ticketManager.setGrouping",
         "title": "Set Grouping",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(list-tree)"
       },
       {
-        "command": "jiraMini.changeStatus",
+        "command": "ticketManager.changeStatus",
         "title": "Change Status",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(play-circle)"
       },
       {
-        "command": "jiraMini.openIssueFullDetails",
+        "command": "ticketManager.openIssueFullDetails",
         "title": "Open Full Issue Details",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(preview)"
       },
       {
-        "command": "jiraMini.openInBrowser",
-        "title": "Open in Jira",
-        "category": "Jira Mini",
+        "command": "ticketManager.openInBrowser",
+        "title": "Open External Link",
+        "category": "Ticket Manager",
         "icon": "$(link-external)"
       },
       {
-        "command": "jiraMini.copyKey",
+        "command": "ticketManager.copyKey",
         "title": "Copy Issue Key",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(copy)"
       },
       {
-        "command": "jiraMini.loadMore",
+        "command": "ticketManager.loadMore",
         "title": "Load More",
-        "category": "Jira Mini",
+        "category": "Ticket Manager",
         "icon": "$(chevron-down)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "jiraMini.refresh",
-          "when": "view == jiraMini.myIssues",
+          "command": "ticketManager.refresh",
+          "when": "view == ticketManager.myIssues",
           "group": "navigation@1"
         },
         {
-          "command": "jiraMini.setProjects",
-          "when": "view == jiraMini.myIssues",
+          "command": "ticketManager.setProjects",
+          "when": "view == ticketManager.myIssues",
           "group": "navigation@2"
         },
         {
-          "command": "jiraMini.setEpicScope",
-          "when": "view == jiraMini.myIssues",
+          "command": "ticketManager.setParentScope",
+          "when": "view == ticketManager.myIssues",
           "group": "navigation@3"
         },
         {
-          "command": "jiraMini.refresh",
-          "when": "view == jiraMini.boards",
+          "command": "ticketManager.refresh",
+          "when": "view == ticketManager.boards",
           "group": "navigation@1"
         },
         {
-          "command": "jiraMini.setBoardProjects",
-          "when": "view == jiraMini.boards",
+          "command": "ticketManager.setBoardProjects",
+          "when": "view == ticketManager.boards",
           "group": "navigation@2"
         },
         {
-          "command": "jiraMini.setBoardTypes",
-          "when": "view == jiraMini.boards",
+          "command": "ticketManager.setBoardTypes",
+          "when": "view == ticketManager.boards",
           "group": "navigation@3"
         },
         {
-          "command": "jiraMini.configureBoardColumns",
-          "when": "view == jiraMini.boards",
+          "command": "ticketManager.configureBoardColumns",
+          "when": "view == ticketManager.boards",
           "group": "navigation@4"
         },
         {
-          "command": "jiraMini.setBoardSearchText",
-          "when": "view == jiraMini.boards"
+          "command": "ticketManager.setBoardSearchText",
+          "when": "view == ticketManager.boards"
         },
         {
-          "command": "jiraMini.clearBoardFilters",
-          "when": "view == jiraMini.boards"
+          "command": "ticketManager.clearBoardFilters",
+          "when": "view == ticketManager.boards"
         },
         {
-          "command": "jiraMini.setBackendMode",
-          "when": "view == jiraMini.boards"
+          "command": "ticketManager.setBackendMode",
+          "when": "view == ticketManager.boards"
         },
         {
-          "command": "jiraMini.configureConnection",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.configureConnection",
+          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
         },
         {
-          "command": "jiraMini.setBackendMode",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.setBackendMode",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.checkConnection",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.checkConnection",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.importWorkspaceMcpConfig",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.importWorkspaceMcpConfig",
+          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
         },
         {
-          "command": "jiraMini.importUserMcpConfig",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.importUserMcpConfig",
+          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
         },
         {
-          "command": "jiraMini.setStatuses",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.setStatuses",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.setIssueTypes",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.setIssueTypes",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.setSearchText",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.setSearchText",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.toggleAssigneeMode",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.toggleAssigneeMode",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.clearEpicScope",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.clearParentScope",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.clearFilters",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.clearFilters",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.setGrouping",
-          "when": "view == jiraMini.myIssues"
+          "command": "ticketManager.setGrouping",
+          "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "jiraMini.changeStatus",
-          "when": "view == jiraMini.issueDetails",
+          "command": "ticketManager.changeStatus",
+          "when": "view == ticketManager.issueDetails",
           "group": "navigation@1"
         },
         {
-          "command": "jiraMini.openInBrowser",
-          "when": "view == jiraMini.issueDetails",
+          "command": "ticketManager.openInBrowser",
+          "when": "view == ticketManager.issueDetails",
           "group": "navigation@2"
         },
         {
-          "command": "jiraMini.openIssueFullDetails",
-          "when": "view == jiraMini.issueDetails",
+          "command": "ticketManager.openIssueFullDetails",
+          "when": "view == ticketManager.issueDetails",
           "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "jiraMini.openInBrowser",
-          "when": "view == jiraMini.myIssues && viewItem == issue",
+          "command": "ticketManager.openInBrowser",
+          "when": "view == ticketManager.myIssues && viewItem == issue",
           "group": "inline@1"
         },
         {
-          "command": "jiraMini.changeStatus",
-          "when": "view == jiraMini.myIssues && viewItem == issue",
+          "command": "ticketManager.changeStatus",
+          "when": "view == ticketManager.myIssues && viewItem == issue",
           "group": "inline@2"
         },
         {
-          "command": "jiraMini.copyKey",
-          "when": "view == jiraMini.myIssues && viewItem == issue",
+          "command": "ticketManager.copyKey",
+          "when": "view == ticketManager.myIssues && viewItem == issue",
           "group": "secondary"
         },
         {
-          "command": "jiraMini.loadMore",
-          "when": "view == jiraMini.myIssues && viewItem == loadMore",
+          "command": "ticketManager.loadMore",
+          "when": "view == ticketManager.myIssues && viewItem == loadMore",
           "group": "inline@1"
         },
         {
-          "command": "jiraMini.openBoard",
-          "when": "view == jiraMini.boards && viewItem == board",
+          "command": "ticketManager.openBoard",
+          "when": "view == ticketManager.boards && viewItem == board",
           "group": "inline@1"
         },
         {
-          "command": "jiraMini.configureBoardColumns",
-          "when": "view == jiraMini.boards && viewItem == board",
+          "command": "ticketManager.configureBoardColumns",
+          "when": "view == ticketManager.boards && viewItem == board",
           "group": "inline@2"
         },
         {
-          "command": "jiraMini.openIssueFullDetails",
-          "when": "view == jiraMini.issueDetails && viewItem == issueKey",
+          "command": "ticketManager.openIssueFullDetails",
+          "when": "view == ticketManager.issueDetails && viewItem == issueKey",
           "group": "inline@1"
         }
       ]
     },
     "configuration": {
-      "title": "Jira Mini",
+      "title": "Ticket Manager",
       "properties": {
-        "jiraMini.connectionType": {
+        "ticketManager.connectionType": {
           "type": "string",
           "default": "stdio",
           "enum": [
@@ -405,28 +405,35 @@
             "Local Process (stdio)",
             "Remote MCP (HTTP)"
           ],
-          "description": "Select how Jira Mini connects to the Jira MCP server."
+          "description": "Select how the app connects to the Jira MCP server when Jira Connected mode is active."
         },
-        "jiraMini.backendMode": {
+        "ticketManager.backendMode": {
           "type": "string",
-          "default": "jira",
           "enum": [
             "jira",
-            "demo"
+            "demo",
+            "file"
           ],
           "enumItemLabels": [
-            "Jira MCP",
-            "Demo Mode"
+            "Jira Connected",
+            "Demo",
+            "File"
           ],
           "scope": "window",
-          "description": "Choose whether Jira Mini uses the configured Jira backend or built-in demo data."
+          "description": "Choose whether the app uses Jira Connected, Demo, or File mode."
         },
-        "jiraMini.stdioCommand": {
+        "ticketManager.planFilePath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Absolute or workspace-relative path to the plan file used in File mode."
+        },
+        "ticketManager.stdioCommand": {
           "type": "string",
           "default": "",
           "description": "Command used to start a local Jira MCP server."
         },
-        "jiraMini.stdioArgs": {
+        "ticketManager.stdioArgs": {
           "type": "array",
           "default": [],
           "items": {
@@ -434,41 +441,41 @@
           },
           "description": "Arguments passed to the local Jira MCP command."
         },
-        "jiraMini.stdioCwd": {
+        "ticketManager.stdioCwd": {
           "type": "string",
           "default": "",
           "description": "Optional working directory for the local Jira MCP command."
         },
-        "jiraMini.httpUrl": {
+        "ticketManager.httpUrl": {
           "type": "string",
           "default": "",
           "format": "uri",
           "description": "Base URL for a remote Jira MCP server that supports streamable HTTP."
         },
-        "jiraMini.requestTimeoutMs": {
+        "ticketManager.requestTimeoutMs": {
           "type": "number",
           "default": 30000,
           "minimum": 1000,
           "description": "Timeout, in milliseconds, for MCP requests."
         },
-        "jiraMini.defaultPageSize": {
+        "ticketManager.defaultPageSize": {
           "type": "number",
           "default": 25,
           "minimum": 5,
           "maximum": 100,
-          "description": "Number of Jira issues to request per page."
+          "description": "Number of issues to request per page."
         },
-        "jiraMini.workspaceMcpServerName": {
+        "ticketManager.workspaceMcpServerName": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional workspace MCP server name to use from .vscode/mcp.json when Jira Mini is not manually configured."
+          "description": "Optional workspace MCP server name to use from .vscode/mcp.json when Jira Connected mode is not manually configured."
         },
-        "jiraMini.userMcpServerRef": {
+        "ticketManager.userMcpServerRef": {
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "Optional user/profile MCP server reference to use when Jira Mini is not manually configured and no workspace MCP server is selected."
+          "description": "Optional user/profile MCP server reference to use when Jira Connected mode is not manually configured and no workspace MCP server is selected."
         }
       }
     }

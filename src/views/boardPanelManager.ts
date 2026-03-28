@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { findTransitionToTargetStatus } from '../board/boardTransitionResolver';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
-import type { JiraBoard, JiraBoardDetails, JiraIssueSummary } from '../types';
+import type { Board, BoardDetails, IssueSummary } from '../types';
 import { applyBoardColumnPreferences } from './boardColumnLayout';
 
 interface BoardPanelSnapshot {
@@ -36,15 +36,15 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function formatIssueMeta(issue: JiraIssueSummary): string {
+function formatIssueMeta(issue: IssueSummary): string {
   const parts = [issue.issueType, issue.assignee ?? 'Unassigned', issue.priority ?? 'Priority unknown'];
   return parts.join(' • ');
 }
 
 export class BoardPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
-  private activeBoard?: JiraBoard;
-  private boardDetails?: JiraBoardDetails;
+  private activeBoard?: Board;
+  private boardDetails?: BoardDetails;
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
@@ -52,12 +52,12 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public constructor(
     private readonly backendService: IssueTrackerService,
-    private readonly onIssueSelected: (issue: JiraIssueSummary) => Promise<void>,
+    private readonly onIssueSelected: (issue: IssueSummary) => Promise<void>,
     private readonly onAfterBoardTransition: (() => Promise<void>) | undefined,
     private readonly boardColumnStore: BoardColumnStore
   ) {}
 
-  public getActiveBoard(): JiraBoard | undefined {
+  public getActiveBoard(): Board | undefined {
     return this.activeBoard;
   }
 
@@ -65,7 +65,7 @@ export class BoardPanelManager implements vscode.Disposable {
     this.render();
   }
 
-  public async openBoard(board: JiraBoard): Promise<void> {
+  public async openBoard(board: Board): Promise<void> {
     this.activeBoard = board;
     this.ensurePanel();
     this.panel?.reveal(vscode.ViewColumn.Active, false);
@@ -156,7 +156,7 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'jiraMini.boardPanel',
+      'ticketManager.boardPanel',
       this.activeBoard ? `Board: ${this.activeBoard.name}` : 'Board',
       vscode.ViewColumn.Active,
       {
@@ -196,7 +196,7 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     if (type === 'openColumnConfig') {
-      await vscode.commands.executeCommand('jiraMini.configureBoardColumns');
+      await vscode.commands.executeCommand('ticketManager.configureBoardColumns');
       return;
     }
 
@@ -206,7 +206,7 @@ export class BoardPanelManager implements vscode.Disposable {
         return;
       }
 
-      await vscode.commands.executeCommand('jiraMini.openIssueFullDetails', issueKey);
+      await vscode.commands.executeCommand('ticketManager.openIssueFullDetails', issueKey);
       return;
     }
 
@@ -296,7 +296,7 @@ export class BoardPanelManager implements vscode.Disposable {
     }
   }
 
-  private getDisplayBoardDetails(): JiraBoardDetails | undefined {
+  private getDisplayBoardDetails(): BoardDetails | undefined {
     if (!this.boardDetails || !this.activeBoard) {
       return this.boardDetails;
     }
@@ -335,7 +335,7 @@ export class BoardPanelManager implements vscode.Disposable {
     let body = `
       <section class="empty-state">
         <h2>No board selected</h2>
-        <p>Select a board from the Jira Mini Boards view.</p>
+        <p>Select a board from the Boards view.</p>
       </section>
     `;
 
