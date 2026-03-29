@@ -15,10 +15,23 @@ function run(command, args) {
   });
 }
 
+function cliExists(name) {
+  try {
+    execFileSync(commandFor(name), ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   const projectRoot = join(__dirname, '..');
   const vsixName = `${pkg.name}-${pkg.version}.vsix`;
   const vsixPath = join(projectRoot, vsixName);
+
+  // Accept target from CLI arg: --target code|insiders|both (default: both)
+  const targetArg = process.argv.find(a => a.startsWith('--target='));
+  const target = targetArg ? targetArg.split('=')[1] : 'both';
 
   run(commandFor('npx'), ['@vscode/vsce', 'package', '--allow-missing-repository']);
 
@@ -26,11 +39,32 @@ function main() {
     throw new Error(`Expected VSIX was not created: ${vsixPath}`);
   }
 
-  try {
-    run(commandFor('code'), ['--install-extension', vsixPath]);
-  } catch (error) {
+  const targets = [];
+  if (target === 'code' || target === 'both') {
+    targets.push({ name: 'VS Code', cli: 'code' });
+  }
+  if (target === 'insiders' || target === 'both') {
+    targets.push({ name: 'VS Code Insiders', cli: 'code-insiders' });
+  }
+
+  let installed = 0;
+  for (const { name, cli } of targets) {
+    if (!cliExists(cli)) {
+      console.log(`⏭  ${name} CLI (${cli}) not found on PATH — skipping.`);
+      continue;
+    }
+    console.log(`📦 Installing ${vsixName} into ${name}…`);
+    try {
+      run(commandFor(cli), ['--install-extension', vsixPath]);
+      installed++;
+    } catch (error) {
+      console.error(`❌ Failed to install into ${name}: ${error.message}`);
+    }
+  }
+
+  if (installed === 0) {
     throw new Error(
-      `Failed to install ${vsixName}. Ensure the VS Code CLI is on PATH and try again.\n${error.message}`
+      'No VS Code installation found. Ensure "code" and/or "code-insiders" is on PATH.'
     );
   }
 }
