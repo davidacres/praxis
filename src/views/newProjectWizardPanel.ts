@@ -333,7 +333,6 @@ export class NewProjectWizardPanel implements vscode.Disposable {
 
   private getHtml(): string {
     const nonce = createNonce();
-    const stateJson = escapeHtml(JSON.stringify(this.wizardState));
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -341,9 +340,9 @@ export class NewProjectWizardPanel implements vscode.Disposable {
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';"/>
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';"/>
 <title>New Project Wizard</title>
-<style nonce="${nonce}">
+<style>
 /* ===== Reset & Base ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{font-size:13px;}
