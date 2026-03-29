@@ -837,7 +837,7 @@ select{cursor:pointer;}
   const vscodeApi = acquireVsCodeApi();
 
   /* ── State ── */
-  let state = JSON.parse(${JSON.stringify(JSON.stringify(this.wizardState))});
+  let state = ${JSON.stringify(this.wizardState)};
 
   const STEPS = [
     { label: 'Define Goal', icon: '🎯' },
