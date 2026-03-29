@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
 
 /* ------------------------------------------------------------------ */
-/*  Helper utilities (same pattern as other panels in this codebase)  */
+/*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
 function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function escapeHtml(value: string): string {
+function esc(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -26,7 +26,7 @@ function asString(value: unknown): string | undefined {
 }
 
 /* ------------------------------------------------------------------ */
-/*  State types                                                       */
+/*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
 interface WizardState {
@@ -76,13 +76,7 @@ interface AiReviewResult {
 function createInitialState(): WizardState {
   return {
     currentStep: 0,
-    project: {
-      name: '',
-      description: '',
-      category: '',
-      priority: 'Medium',
-      timeline: ''
-    },
+    project: { name: '', description: '', category: '', priority: 'Medium', timeline: '' },
     objectives: [{ title: '', description: '' }],
     successCriteria: [{ metric: '', target: '', method: '' }],
     technicalRequirements: [''],
@@ -95,131 +89,79 @@ function createInitialState(): WizardState {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Mock AI review generator                                          */
+/*  Mock AI                                                           */
 /* ------------------------------------------------------------------ */
 
-function generateMockAiReview(
-  reviewType: string,
-  state: WizardState
-): AiReviewResult {
+function generateMockAiReview(reviewType: string, state: WizardState): AiReviewResult {
+  const hasName = state.project.name.trim().length > 0;
+  const hasDesc = state.project.description.trim().length > 0;
+  const hasCat = state.project.category.length > 0;
+  const hasTimeline = state.project.timeline.length > 0;
+  const objCount = state.objectives.filter(o => o.title.trim()).length;
+  const critCount = state.successCriteria.filter(c => c.metric.trim()).length;
+  const techCount = state.technicalRequirements.filter(r => r.trim()).length;
+  const bizCount = state.businessRequirements.filter(r => r.trim()).length;
+  const roleCount = state.roles.length;
+  const memberCount = state.teamMembers.length;
+
   if (reviewType === 'requirements') {
-    const hasName = state.project.name.trim().length > 0;
-    const hasDescription = state.project.description.trim().length > 0;
-    const hasCategory = state.project.category.trim().length > 0;
-    const hasObjectives = state.objectives.some(o => o.title.trim().length > 0);
-    const hasCriteria = state.successCriteria.some(c => c.metric.trim().length > 0);
-    const hasTechReqs = state.technicalRequirements.some(r => r.trim().length > 0);
-    const hasBusinessReqs = state.businessRequirements.some(r => r.trim().length > 0);
-
-    const checks = [hasName, hasDescription, hasCategory, hasObjectives, hasCriteria, hasTechReqs, hasBusinessReqs];
-    const filled = checks.filter(Boolean).length;
-    const score = Math.round((filled / checks.length) * 100);
-
+    const filled = [hasName, hasDesc, hasCat, hasTimeline, objCount > 0, critCount > 0, techCount > 0, bizCount > 0];
+    const score = Math.round((filled.filter(Boolean).length / filled.length) * 100);
     const gaps: string[] = [];
+    const suggestions: string[] = [];
+    const questions: string[] = [];
     if (!hasName) { gaps.push('Project name is missing'); }
-    if (!hasDescription) { gaps.push('Project description is empty'); }
-    if (!hasCategory) { gaps.push('No project category selected'); }
-    if (!hasObjectives) { gaps.push('No objectives have been defined'); }
-    if (!hasCriteria) { gaps.push('Success criteria are not specified'); }
-    if (!hasTechReqs) { gaps.push('Technical requirements not listed'); }
-    if (!hasBusinessReqs) { gaps.push('Business requirements not listed'); }
-
-    const suggestions: string[] = [
-      'Add measurable KPIs to each objective for better tracking',
-      'Consider adding risk mitigation strategies to constraints',
-      'Define acceptance criteria for each requirement'
-    ];
-    if (!hasDescription) {
-      suggestions.unshift('Provide a 2-3 sentence project description summarizing the goals');
-    }
-
-    const questions: string[] = [
-      'Who are the primary stakeholders for this project?',
-      'Are there any external dependencies or third-party integrations?',
-      'What is the budget allocation for this project?',
-      'Have similar projects been attempted before?'
-    ];
-
-    return {
-      score,
-      gaps,
-      suggestions: suggestions.slice(0, 4),
-      questions: questions.slice(0, 4),
-      status: score >= 70 ? 'ready' : score >= 40 ? 'needs-attention' : 'critical'
-    };
+    if (!hasDesc) { gaps.push('Project description is empty'); }
+    if (!hasCat) { gaps.push('No category selected'); }
+    if (!hasTimeline) { gaps.push('Timeline not defined'); }
+    if (objCount === 0) { gaps.push('No objectives defined'); suggestions.push('Add at least 2-3 clear objectives'); }
+    if (critCount === 0) { gaps.push('No success criteria'); suggestions.push('Define measurable success criteria'); }
+    if (techCount === 0) { suggestions.push('Consider adding technical requirements'); }
+    if (bizCount === 0) { suggestions.push('Consider adding business requirements'); }
+    if (hasDesc && state.project.description.length < 50) { suggestions.push('Expand the project description for more clarity'); }
+    questions.push('Have stakeholders reviewed these requirements?');
+    questions.push('Are there regulatory or compliance constraints?');
+    return { score, gaps, suggestions, questions, status: score >= 70 ? 'ready' : score >= 40 ? 'needs-attention' : 'critical' };
   }
 
   if (reviewType === 'team') {
-    const roleCount = state.roles.length;
-    const memberCount = state.teamMembers.length;
-    const filledRoles = new Set(state.teamMembers.map(m => m.role));
-    const unfilledRoles = state.roles.filter(r => !filledRoles.has(r.title));
-    const totalNeeded = state.roles.reduce((sum, r) => sum + r.count, 0);
-    const score = totalNeeded > 0 ? Math.round((memberCount / totalNeeded) * 100) : (roleCount > 0 ? 50 : 0);
-
+    const score = roleCount === 0 ? 15 : memberCount >= roleCount ? 85 : 55;
     const gaps: string[] = [];
-    if (roleCount === 0) { gaps.push('No roles have been defined'); }
-    if (unfilledRoles.length > 0) {
-      gaps.push(`${unfilledRoles.length} role(s) still unfilled: ${unfilledRoles.map(r => r.title).join(', ')}`);
-    }
-    if (memberCount === 0) { gaps.push('No team members have been assigned'); }
-
+    const suggestions: string[] = [];
+    if (roleCount === 0) { gaps.push('No roles have been defined'); suggestions.push('Define roles based on your project category'); }
+    else if (memberCount < roleCount) { gaps.push(`${roleCount - memberCount} role(s) still need team members`); }
+    suggestions.push('Ensure clear ownership for each deliverable');
     return {
-      score: Math.min(score, 100),
-      gaps,
-      suggestions: [
-        'Consider adding a dedicated QA role for quality assurance',
-        'Ensure at least one senior team member per functional area',
-        'Plan for cross-training to reduce single points of failure'
-      ],
-      questions: [
-        'Is there a designated backup for each critical role?',
-        'Are team members available full-time or shared across projects?'
-      ],
+      score, gaps, suggestions,
+      questions: ['Is the team capacity sufficient for the timeline?', 'Do team members have backup coverage?'],
       status: score >= 70 ? 'ready' : score >= 40 ? 'needs-attention' : 'critical',
       riskLevel: score >= 70 ? 'low' : score >= 40 ? 'medium' : 'high'
     };
   }
 
-  /* final review */
-  const reqReview = state.aiReviews.requirements;
-  const teamReview = state.aiReviews.team;
-  const reqScore = reqReview?.score ?? 0;
-  const teamScore = teamReview?.score ?? 0;
-  const finalScore = Math.round((reqScore + teamScore) / 2);
-
-  const checklist: Array<{ label: string; status: 'pass' | 'fail' | 'warning' }> = [
-    { label: 'Goal Definition Complete', status: state.project.name ? 'pass' : 'fail' },
-    { label: 'Project Description Provided', status: state.project.description ? 'pass' : 'warning' },
-    { label: 'Category Selected', status: state.project.category ? 'pass' : 'fail' },
-    { label: 'Success Criteria Defined', status: state.successCriteria.some(c => c.metric.trim()) ? 'pass' : 'warning' },
-    { label: 'Objectives Documented', status: state.objectives.some(o => o.title.trim()) ? 'pass' : 'warning' },
-    { label: 'Team Roles Defined', status: state.roles.length > 0 ? 'pass' : 'fail' },
-    {
-      label: `Team Coverage (${state.teamMembers.length} of ${state.roles.reduce((s, r) => s + r.count, 0)} filled)`,
-      status: state.teamMembers.length >= state.roles.reduce((s, r) => s + r.count, 0) ? 'pass' : 'warning'
-    },
-    { label: 'Timeline Set', status: state.project.timeline ? 'pass' : 'warning' }
+  // final
+  const checks: Array<{ label: string; status: 'pass' | 'fail' | 'warning' }> = [
+    { label: 'Project name defined', status: hasName ? 'pass' : 'fail' },
+    { label: 'Description provided', status: hasDesc ? 'pass' : 'fail' },
+    { label: 'Category selected', status: hasCat ? 'pass' : 'warning' },
+    { label: 'Timeline set', status: hasTimeline ? 'pass' : 'warning' },
+    { label: 'Objectives defined', status: objCount > 0 ? 'pass' : 'fail' },
+    { label: 'Success criteria set', status: critCount > 0 ? 'pass' : 'warning' },
+    { label: 'Roles defined', status: roleCount > 0 ? 'pass' : 'fail' },
+    { label: 'Team members assigned', status: memberCount > 0 ? 'pass' : 'warning' },
   ];
-
+  const passCount = checks.filter(c => c.status === 'pass').length;
+  const score = Math.round((passCount / checks.length) * 100);
   return {
-    score: finalScore,
-    gaps: checklist.filter(c => c.status === 'fail').map(c => c.label + ' is incomplete'),
-    suggestions: [
-      'Address all warning items before launch for best results',
-      'Schedule a kick-off meeting within the first week'
-    ],
-    questions: [
-      'Has the project plan been reviewed by all stakeholders?'
-    ],
-    status: finalScore >= 70 ? 'ready' : finalScore >= 40 ? 'needs-attention' : 'critical',
-    checklist,
-    riskLevel: finalScore >= 70 ? 'low' : finalScore >= 40 ? 'medium' : 'high'
+    score, gaps: [], suggestions: [], questions: [],
+    status: score >= 70 ? 'ready' : score >= 40 ? 'needs-attention' : 'critical',
+    checklist: checks,
+    riskLevel: score >= 70 ? 'low' : score >= 40 ? 'medium' : 'high'
   };
 }
 
 /* ------------------------------------------------------------------ */
-/*  Panel class                                                       */
+/*  Panel                                                             */
 /* ------------------------------------------------------------------ */
 
 export class NewProjectWizardPanel implements vscode.Disposable {
@@ -239,1397 +181,865 @@ export class NewProjectWizardPanel implements vscode.Disposable {
   }
 
   private ensurePanel(): void {
-    if (this.panel) {
-      return;
-    }
-
+    if (this.panel) { return; }
     this.panel = vscode.window.createWebviewPanel(
       'ticketManager.newProjectWizard',
       'New Project',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
-
-    this.panel.onDidDispose(() => {
-      this.panel = undefined;
-    });
-
+    this.panel.onDidDispose(() => { this.panel = undefined; });
     this.panel.webview.onDidReceiveMessage(
-      message => {
-        void this.handleMessage(message);
-      },
-      undefined,
-      []
+      message => { void this.handleMessage(message); },
+      undefined, []
     );
   }
 
-  private render(): void {
-    if (!this.panel) {
-      return;
-    }
+  private rerender(): void {
+    if (!this.panel) { return; }
     this.panel.webview.html = this.getHtml();
   }
 
   private async handleMessage(message: unknown): Promise<void> {
-    if (!isRecord(message)) {
-      return;
-    }
-
+    if (!isRecord(message)) { return; }
     const type = asString(message.type);
 
     if (type === 'navigateStep') {
       const step = typeof message.step === 'number' ? message.step : 0;
-      this.wizardState.currentStep = step;
+      this.wizardState.currentStep = Math.max(0, Math.min(2, step));
+      this.rerender();
       return;
     }
 
-    if (type === 'updateState') {
-      /* State lives primarily in the webview JS; this is informational. */
+    if (type === 'updateField') {
+      this.applyFieldUpdate(message);
+      return;
+    }
+
+    if (type === 'addListItem') {
+      this.addListItem(asString(message.list) ?? '');
+      this.rerender();
+      return;
+    }
+
+    if (type === 'removeListItem') {
+      const idx = typeof message.index === 'number' ? message.index : -1;
+      this.removeListItem(asString(message.list) ?? '', idx);
+      this.rerender();
+      return;
+    }
+
+    if (type === 'suggestRoles') {
+      this.suggestRoles();
+      this.rerender();
+      return;
+    }
+
+    if (type === 'addMember') {
+      const name = asString(message.name) ?? '';
+      const email = asString(message.email) ?? '';
+      const role = asString(message.role) ?? '';
+      const avail = typeof message.availability === 'number' ? message.availability : 100;
+      if (name.trim()) {
+        this.wizardState.teamMembers.push({ name: name.trim(), email: email.trim(), role, availability: avail });
+        this.rerender();
+      }
+      return;
+    }
+
+    if (type === 'removeMember') {
+      const idx = typeof message.index === 'number' ? message.index : -1;
+      if (idx >= 0 && idx < this.wizardState.teamMembers.length) {
+        this.wizardState.teamMembers.splice(idx, 1);
+        this.rerender();
+      }
       return;
     }
 
     if (type === 'aiReview') {
       const reviewType = asString(message.reviewType) ?? 'requirements';
-      let state = this.wizardState;
-      if (isRecord(message.state)) {
-        try {
-          state = message.state as unknown as WizardState;
-        } catch {
-          /* keep existing state */
-        }
-      }
-      const result = generateMockAiReview(reviewType, state);
-
-      if (reviewType === 'requirements') {
-        this.wizardState.aiReviews.requirements = result;
-      } else if (reviewType === 'team') {
-        this.wizardState.aiReviews.team = result;
-      } else {
-        this.wizardState.aiReviews.final = result;
-      }
-
-      await this.panel?.webview.postMessage({
-        type: 'aiReviewResult',
-        reviewType,
-        result
-      });
+      const result = generateMockAiReview(reviewType, this.wizardState);
+      if (reviewType === 'requirements') { this.wizardState.aiReviews.requirements = result; }
+      else if (reviewType === 'team') { this.wizardState.aiReviews.team = result; }
+      else { this.wizardState.aiReviews.final = result; }
+      this.rerender();
       return;
     }
 
     if (type === 'saveDraft') {
-      void vscode.window.showInformationMessage('Project draft saved successfully.');
+      void vscode.window.showInformationMessage('Project draft saved.');
       return;
     }
 
     if (type === 'createProject') {
-      void vscode.window.showInformationMessage('Project created successfully! 🚀');
+      void vscode.window.showInformationMessage('Project created! 🚀');
       return;
     }
   }
 
-  /* ---------------------------------------------------------------- */
-  /*  HTML generation                                                 */
-  /* ---------------------------------------------------------------- */
+  private applyFieldUpdate(msg: Record<string, unknown>): void {
+    const field = asString(msg.field) ?? '';
+    const value = asString(msg.value) ?? '';
+    const s = this.wizardState;
+
+    // project fields
+    if (field === 'project.name') { s.project.name = value; }
+    else if (field === 'project.description') { s.project.description = value; }
+    else if (field === 'project.category') { s.project.category = value; }
+    else if (field === 'project.priority') { s.project.priority = value; }
+    else if (field === 'project.timeline') { s.project.timeline = value; }
+    // list item updates (e.g. "objectives.0.title")
+    else {
+      const parts = field.split('.');
+      if (parts.length === 3) {
+        const listName = parts[0];
+        const idx = parseInt(parts[1], 10);
+        const prop = parts[2];
+        const arr = (s as unknown as Record<string, unknown>)[listName];
+        if (Array.isArray(arr) && idx >= 0 && idx < arr.length) {
+          if (typeof arr[idx] === 'string') { arr[idx] = value; }
+          else if (isRecord(arr[idx])) { (arr[idx] as Record<string, unknown>)[prop] = value; }
+        }
+      } else if (parts.length === 4 && parts[0] === 'roles') {
+        // roles.0.skills or roles.0.count etc
+        const idx = parseInt(parts[1], 10);
+        const prop = parts[2];
+        if (idx >= 0 && idx < s.roles.length) {
+          if (prop === 'title') { s.roles[idx].title = value; }
+          else if (prop === 'description') { s.roles[idx].description = value; }
+          else if (prop === 'seniority') { s.roles[idx].seniority = value; }
+          else if (prop === 'count') { s.roles[idx].count = parseInt(value, 10) || 1; }
+          else if (prop === 'skills' && parts[3] === 'add') {
+            if (value.trim() && !s.roles[idx].skills.includes(value.trim())) {
+              s.roles[idx].skills.push(value.trim());
+            }
+          } else if (prop === 'skills' && parts[3] === 'remove') {
+            const si = parseInt(value, 10);
+            if (si >= 0) { s.roles[idx].skills.splice(si, 1); }
+          }
+        }
+      }
+    }
+    // Don't rerender on every keystroke for text fields
+  }
+
+  private addListItem(list: string): void {
+    const s = this.wizardState;
+    if (list === 'objectives') { s.objectives.push({ title: '', description: '' }); }
+    else if (list === 'successCriteria') { s.successCriteria.push({ metric: '', target: '', method: '' }); }
+    else if (list === 'technicalRequirements') { s.technicalRequirements.push(''); }
+    else if (list === 'businessRequirements') { s.businessRequirements.push(''); }
+    else if (list === 'constraints') { s.constraints.push(''); }
+    else if (list === 'roles') { s.roles.push({ title: '', description: '', skills: [], seniority: 'Mid', count: 1 }); }
+  }
+
+  private removeListItem(list: string, idx: number): void {
+    const s = this.wizardState;
+    const arr = (s as unknown as Record<string, unknown>)[list];
+    if (Array.isArray(arr) && idx >= 0 && idx < arr.length && arr.length > 0) {
+      arr.splice(idx, 1);
+    }
+  }
+
+  private suggestRoles(): void {
+    const cat = this.wizardState.project.category;
+    const suggestions: Record<string, Array<{ title: string; description: string; skills: string[]; seniority: string; count: number }>> = {
+      'Software': [
+        { title: 'Developer', description: 'Full-stack software developer', skills: ['TypeScript', 'React', 'Node.js'], seniority: 'Mid', count: 2 },
+        { title: 'QA Engineer', description: 'Quality assurance and testing', skills: ['Testing', 'Automation'], seniority: 'Mid', count: 1 },
+        { title: 'Designer', description: 'UI/UX designer', skills: ['Figma', 'UI Design'], seniority: 'Mid', count: 1 },
+        { title: 'Project Manager', description: 'Project coordination', skills: ['Agile', 'Scrum'], seniority: 'Senior', count: 1 }
+      ],
+      'Infrastructure': [
+        { title: 'DevOps Engineer', description: 'CI/CD and infrastructure', skills: ['Docker', 'Kubernetes', 'Terraform'], seniority: 'Senior', count: 2 },
+        { title: 'SRE', description: 'Site reliability', skills: ['Monitoring', 'Linux'], seniority: 'Mid', count: 1 }
+      ],
+      'Research': [
+        { title: 'Research Lead', description: 'Lead research initiatives', skills: ['Data Analysis', 'Research Methods'], seniority: 'Senior', count: 1 },
+        { title: 'Analyst', description: 'Data collection and analysis', skills: ['Statistics', 'Python'], seniority: 'Mid', count: 2 }
+      ]
+    };
+    const toAdd = suggestions[cat] ?? suggestions['Software'] ?? [];
+    for (const r of toAdd) {
+      if (!this.wizardState.roles.some(existing => existing.title === r.title)) {
+        this.wizardState.roles.push({ ...r });
+      }
+    }
+  }
+
+  /* ================================================================ */
+  /*  HTML — fully server-rendered (matching working panels)          */
+  /* ================================================================ */
 
   private getHtml(): string {
     const nonce = createNonce();
-    const stateJson = JSON.stringify(this.wizardState);
+    const s = this.wizardState;
+    const step = s.currentStep;
 
-    return /* html */ `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';"/>
-<title>New Project Wizard</title>
-<style>
-/* ===== Reset & Base ===== */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{font-size:13px;}
-body{
-  font-family:var(--vscode-font-family,system-ui,sans-serif);
-  color:var(--vscode-editor-foreground);
-  background:var(--vscode-editor-background);
-  line-height:1.5;
-  padding:0;
-}
-a{color:var(--vscode-textLink-foreground);text-decoration:none;}
-a:hover{text-decoration:underline;}
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Project</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 20px 40px;
+      font-family: var(--vscode-font-family, system-ui, sans-serif);
+      font-size: 13px;
+      color: var(--vscode-editor-foreground);
+      background: var(--vscode-editor-background);
+      line-height: 1.5;
+    }
+    .root { max-width: 860px; margin: 0 auto; }
 
-/* ===== Layout ===== */
-.wizard-root{
-  max-width:900px;
-  margin:0 auto;
-  padding:24px 20px 40px;
-}
+    /* Step indicator */
+    .steps { display: flex; align-items: center; justify-content: center; gap: 0; margin-bottom: 28px; }
+    .step-node { display: flex; flex-direction: column; align-items: center; gap: 4px; z-index: 1; }
+    .step-circle {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+      border: 2px solid var(--vscode-panel-border);
+      background: var(--vscode-editor-background);
+      color: var(--vscode-descriptionForeground);
+      transition: all .2s;
+    }
+    .step-circle.active {
+      border-color: var(--vscode-focusBorder);
+      background: var(--vscode-focusBorder);
+      color: var(--vscode-button-foreground, #fff);
+    }
+    .step-circle.done {
+      border-color: var(--vscode-testing-iconPassed, #4caf50);
+      background: var(--vscode-testing-iconPassed, #4caf50);
+      color: #fff;
+    }
+    .step-label { font-size: 11px; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+    .step-label.active { color: var(--vscode-editor-foreground); font-weight: 600; }
+    .step-connector { width: 80px; height: 2px; background: var(--vscode-panel-border); margin-bottom: 20px; }
+    .step-connector.done { background: var(--vscode-testing-iconPassed, #4caf50); }
 
-/* ===== Step Indicator ===== */
-.step-indicator{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:0;
-  margin-bottom:32px;
-  user-select:none;
-}
-.step-node{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  position:relative;
-  z-index:1;
-}
-.step-circle{
-  width:38px;height:38px;
-  border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:14px;
-  border:2px solid var(--vscode-panel-border);
-  background:var(--vscode-editor-background);
-  color:var(--vscode-descriptionForeground);
-  transition:all .25s ease;
-}
-.step-node.active .step-circle{
-  border-color:var(--vscode-focusBorder);
-  background:var(--vscode-focusBorder);
-  color:var(--vscode-button-foreground);
-}
-.step-node.completed .step-circle{
-  border-color:var(--vscode-testing-iconPassed);
-  background:var(--vscode-testing-iconPassed);
-  color:#fff;
-}
-.step-label{
-  margin-top:6px;
-  font-size:11px;
-  color:var(--vscode-descriptionForeground);
-  white-space:nowrap;
-}
-.step-node.active .step-label{
-  color:var(--vscode-editor-foreground);
-  font-weight:600;
-}
-.step-connector{
-  flex:1;
-  height:2px;
-  max-width:120px;
-  min-width:40px;
-  background:var(--vscode-panel-border);
-  margin:0 4px;
-  margin-bottom:22px;
-  transition:background .25s ease;
-}
-.step-connector.done{
-  background:var(--vscode-testing-iconPassed);
-}
+    /* Cards */
+    .card {
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+    .card-title {
+      font-size: 14px; font-weight: 600; margin-bottom: 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .icon { font-size: 16px; }
 
-/* ===== Cards ===== */
-.card{
-  border:1px solid var(--vscode-panel-border);
-  border-radius:8px;
-  padding:20px;
-  margin-bottom:16px;
-  background:var(--vscode-sideBar-background);
-  transition:border-color .2s;
-}
-.card:hover{border-color:var(--vscode-focusBorder);}
-.card-title{
-  font-size:15px;font-weight:600;
-  margin-bottom:12px;
-  display:flex;align-items:center;gap:8px;
-}
-.card-title .icon{font-size:18px;}
+    /* AI card */
+    .ai-card {
+      border: 1px solid var(--vscode-focusBorder);
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      background: color-mix(in srgb, var(--vscode-focusBorder) 6%, var(--vscode-editor-background));
+    }
 
-/* AI special card */
-.card.ai-card{
-  border-image:linear-gradient(135deg,
-    var(--vscode-focusBorder),
-    var(--vscode-progressBar-background),
-    var(--vscode-focusBorder)) 1;
-  position:relative;
-  overflow:hidden;
-}
-.card.ai-card::before{
-  content:'';
-  position:absolute;
-  inset:0;
-  background:linear-gradient(135deg,
-    color-mix(in srgb, var(--vscode-focusBorder) 6%, transparent),
-    transparent 60%);
-  pointer-events:none;
-}
+    /* Form */
+    .field { margin-bottom: 12px; }
+    .field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--vscode-editor-foreground); }
+    .field .hint { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px; }
+    input[type="text"], input[type="number"], input[type="email"], textarea, select {
+      width: 100%;
+      padding: 7px 10px;
+      font: inherit;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 4px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--vscode-focusBorder); }
+    textarea { resize: vertical; min-height: 60px; }
 
-/* ===== Form Controls ===== */
-label{
-  display:block;
-  font-size:12px;
-  font-weight:600;
-  margin-bottom:4px;
-  color:var(--vscode-editor-foreground);
-}
-.field{margin-bottom:14px;}
-input[type="text"],
-input[type="email"],
-input[type="number"],
-textarea,
-select{
-  width:100%;
-  padding:7px 10px;
-  font-size:13px;
-  font-family:inherit;
-  color:var(--vscode-editor-foreground);
-  background:var(--vscode-input-background);
-  border:1px solid var(--vscode-input-border,var(--vscode-panel-border));
-  border-radius:4px;
-  outline:none;
-  transition:border-color .15s;
-}
-input:focus,textarea:focus,select:focus{
-  border-color:var(--vscode-focusBorder);
-}
-textarea{resize:vertical;min-height:60px;}
-select{cursor:pointer;}
+    .row { display: flex; gap: 12px; }
+    .row .field { flex: 1; min-width: 0; }
 
-/* ===== Chips / Badges ===== */
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
-.chip{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:4px 12px;
-  border-radius:16px;
-  font-size:12px;
-  border:1px solid var(--vscode-panel-border);
-  background:var(--vscode-editor-background);
-  cursor:pointer;
-  transition:all .15s;
-  user-select:none;
-}
-.chip:hover{border-color:var(--vscode-focusBorder);}
-.chip.selected{
-  background:var(--vscode-focusBorder);
-  color:var(--vscode-button-foreground);
-  border-color:var(--vscode-focusBorder);
-}
-.chip .remove{
-  cursor:pointer;
-  font-size:14px;
-  line-height:1;
-  opacity:.7;
-  margin-left:2px;
-}
-.chip .remove:hover{opacity:1;}
+    /* Chips */
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      padding: 4px 14px;
+      border-radius: 14px;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--vscode-panel-border);
+      background: transparent;
+      color: var(--vscode-editor-foreground);
+      transition: all .15s;
+    }
+    .chip:hover { border-color: var(--vscode-focusBorder); }
+    .chip.selected {
+      background: var(--vscode-focusBorder);
+      color: var(--vscode-button-foreground, #fff);
+      border-color: var(--vscode-focusBorder);
+    }
 
-/* ===== Tags input ===== */
-.tags-wrap{
-  display:flex;flex-wrap:wrap;gap:4px;
-  padding:4px 6px;
-  min-height:34px;
-  background:var(--vscode-input-background);
-  border:1px solid var(--vscode-input-border,var(--vscode-panel-border));
-  border-radius:4px;
-  cursor:text;
-  transition:border-color .15s;
-}
-.tags-wrap:focus-within{border-color:var(--vscode-focusBorder);}
-.tags-wrap .tag{
-  display:inline-flex;align-items:center;gap:3px;
-  padding:2px 8px;
-  border-radius:12px;
-  font-size:11px;
-  background:var(--vscode-badge-background,var(--vscode-focusBorder));
-  color:var(--vscode-badge-foreground,#fff);
-}
-.tags-wrap .tag .tag-remove{
-  cursor:pointer;font-size:13px;line-height:1;opacity:.8;
-}
-.tags-wrap .tag .tag-remove:hover{opacity:1;}
-.tags-wrap input{
-  border:none;outline:none;
-  background:transparent;
-  color:var(--vscode-editor-foreground);
-  font-size:12px;
-  flex:1;min-width:80px;
-  padding:2px 4px;
-}
+    /* Buttons */
+    button {
+      padding: 7px 16px;
+      font: inherit;
+      font-size: 13px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid var(--vscode-button-border, transparent);
+    }
+    .btn-primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .btn-primary:hover { opacity: .9; }
+    .btn-secondary {
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+      border-color: var(--vscode-panel-border);
+    }
+    .btn-small { padding: 4px 10px; font-size: 12px; }
+    .btn-icon { background: transparent; border: none; cursor: pointer; color: var(--vscode-descriptionForeground); padding: 2px 5px; font-size: 15px; }
+    .btn-icon:hover { color: var(--vscode-testing-iconFailed, red); }
 
-/* ===== Buttons ===== */
-.btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:7px 16px;
-  border:none;border-radius:4px;
-  font-size:13px;font-family:inherit;
-  cursor:pointer;
-  transition:opacity .15s,filter .15s;
-  font-weight:500;
-}
-.btn:hover{filter:brightness(1.1);}
-.btn:active{filter:brightness(.95);}
-.btn:disabled{opacity:.45;cursor:not-allowed;filter:none;}
-.btn-primary{
-  background:var(--vscode-button-background);
-  color:var(--vscode-button-foreground);
-}
-.btn-secondary{
-  background:var(--vscode-button-secondaryBackground);
-  color:var(--vscode-button-secondaryForeground);
-}
-.btn-ghost{
-  background:transparent;
-  color:var(--vscode-textLink-foreground);
-  padding:4px 8px;
-}
-.btn-small{padding:4px 10px;font-size:12px;}
-.btn-icon{
-  background:transparent;
-  color:var(--vscode-editor-foreground);
-  border:1px solid var(--vscode-panel-border);
-  border-radius:4px;
-  padding:4px 10px;
-  font-size:12px;
-  cursor:pointer;
-  transition:border-color .15s,background .15s;
-}
-.btn-icon:hover{
-  border-color:var(--vscode-focusBorder);
-  background:color-mix(in srgb, var(--vscode-focusBorder) 10%, transparent);
-}
+    /* Dynamic list */
+    .list-item {
+      position: relative;
+      padding: 12px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+      background: var(--vscode-editor-background);
+    }
+    .list-item .remove-btn {
+      position: absolute; top: 6px; right: 8px;
+    }
 
-/* ===== Footer Nav ===== */
-.wizard-footer{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding-top:20px;
-  margin-top:8px;
-  border-top:1px solid var(--vscode-panel-border);
-}
+    /* Skill tags */
+    .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 10px; font-size: 11px;
+      background: var(--vscode-badge-background, var(--vscode-focusBorder));
+      color: var(--vscode-badge-foreground, #fff);
+    }
+    .tag .remove-tag { cursor: pointer; font-size: 13px; opacity: .8; }
+    .tag .remove-tag:hover { opacity: 1; }
 
-/* ===== Progress Ring ===== */
-.progress-ring-wrap{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  position:relative;
-}
-.progress-ring-wrap .ring-label{
-  position:absolute;
-  font-size:16px;
-  font-weight:700;
-}
-.progress-ring{transform:rotate(-90deg);}
-.progress-ring .track{
-  fill:none;
-  stroke:var(--vscode-panel-border);
-  stroke-width:6;
-}
-.progress-ring .fill{
-  fill:none;
-  stroke-width:6;
-  stroke-linecap:round;
-  transition:stroke-dashoffset .6s ease, stroke .3s;
-}
+    /* Member chips */
+    .member-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 16px; margin: 2px;
+      background: var(--vscode-badge-background, var(--vscode-focusBorder));
+      color: var(--vscode-badge-foreground, #fff);
+      font-size: 12px;
+    }
+    .member-chip .avatar {
+      width: 20px; height: 20px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      background: rgba(255,255,255,.2);
+    }
 
-/* ===== AI Review Lists ===== */
-.ai-list{list-style:none;padding:0;margin:8px 0;}
-.ai-list li{
-  padding:5px 0;
-  display:flex;
-  align-items:flex-start;
-  gap:8px;
-  font-size:12.5px;
-}
-.ai-list li .ai-icon{flex-shrink:0;font-size:14px;line-height:1.4;}
+    /* Progress ring */
+    .ring-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+    .ring-wrap svg { transform: rotate(-90deg); }
+    .ring-wrap .track { fill: none; stroke: var(--vscode-panel-border); stroke-width: 6; }
+    .ring-wrap .fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .5s; }
+    .ring-label { position: absolute; font-weight: 700; font-size: 16px; }
 
-.status-badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:4px 12px;
-  border-radius:12px;
-  font-size:12px;
-  font-weight:600;
-}
-.status-badge.ready{
-  background:color-mix(in srgb, var(--vscode-testing-iconPassed) 15%, transparent);
-  color:var(--vscode-testing-iconPassed);
-}
-.status-badge.needs-attention{
-  background:color-mix(in srgb, var(--vscode-editorWarning-foreground) 15%, transparent);
-  color:var(--vscode-editorWarning-foreground);
-}
-.status-badge.critical{
-  background:color-mix(in srgb, var(--vscode-testing-iconFailed) 15%, transparent);
-  color:var(--vscode-testing-iconFailed);
-}
+    /* Status badges */
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge-pass { background: color-mix(in srgb, var(--vscode-testing-iconPassed, #4caf50) 15%, transparent); color: var(--vscode-testing-iconPassed, #4caf50); }
+    .badge-warning { background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #ff9800) 15%, transparent); color: var(--vscode-editorWarning-foreground, #ff9800); }
+    .badge-fail { background: color-mix(in srgb, var(--vscode-testing-iconFailed, #f44336) 15%, transparent); color: var(--vscode-testing-iconFailed, #f44336); }
 
-/* ===== Checklist ===== */
-.checklist{list-style:none;padding:0;margin:8px 0;}
-.checklist li{
-  padding:6px 0;
-  display:flex;align-items:center;gap:8px;
-  font-size:12.5px;
-  border-bottom:1px solid color-mix(in srgb, var(--vscode-panel-border) 40%, transparent);
-}
-.checklist li:last-child{border-bottom:none;}
+    /* Checklist */
+    .checklist { list-style: none; padding: 0; }
+    .checklist li { padding: 6px 0; border-bottom: 1px solid var(--vscode-panel-border); display: flex; align-items: center; gap: 8px; }
+    .checklist li:last-child { border-bottom: none; }
 
-/* ===== Vacancy indicator ===== */
-.vacancy{
-  display:inline-flex;align-items:center;gap:4px;
-  font-size:11px;
-  color:var(--vscode-editorWarning-foreground);
-  font-weight:500;
-}
+    /* Summary grid */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .stat-card { padding: 14px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; text-align: center; }
+    .stat-card .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-card .stat-label { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px; }
 
-/* ===== Summary stat cards ===== */
-.stat-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:12px;
-  margin-bottom:16px;
-}
-.stat-card{
-  padding:16px;
-  border-radius:8px;
-  border:1px solid var(--vscode-panel-border);
-  background:var(--vscode-editor-background);
-  text-align:center;
-}
-.stat-card .stat-icon{font-size:24px;margin-bottom:4px;}
-.stat-card .stat-value{font-size:22px;font-weight:700;}
-.stat-card .stat-label{font-size:11px;color:var(--vscode-descriptionForeground);}
+    /* Footer */
+    .footer { display: flex; justify-content: space-between; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--vscode-panel-border); }
+    .footer-right { display: flex; gap: 8px; }
 
-/* ===== Dynamic list ===== */
-.dynamic-item{
-  position:relative;
-  padding:12px;
-  border:1px solid var(--vscode-panel-border);
-  border-radius:6px;
-  margin-bottom:8px;
-  background:var(--vscode-editor-background);
-}
-.dynamic-item .remove-item{
-  position:absolute;
-  top:8px;right:8px;
-  background:transparent;border:none;
-  color:var(--vscode-descriptionForeground);
-  cursor:pointer;font-size:16px;
-  line-height:1;padding:2px 4px;
-  border-radius:3px;
-  transition:color .15s, background .15s;
-}
-.dynamic-item .remove-item:hover{
-  color:var(--vscode-testing-iconFailed);
-  background:color-mix(in srgb, var(--vscode-testing-iconFailed) 12%, transparent);
-}
-
-/* ===== Inline row ===== */
-.row{display:flex;gap:12px;flex-wrap:wrap;}
-.row .field{flex:1;min-width:0;}
-.row-3 .field{flex:1 1 30%;}
-
-/* ===== Loading spinner ===== */
-.spinner{
-  display:inline-block;
-  width:20px;height:20px;
-  border:2px solid var(--vscode-panel-border);
-  border-top-color:var(--vscode-focusBorder);
-  border-radius:50%;
-  animation:spin .7s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg);}}
-
-.loading-overlay{
-  display:flex;align-items:center;gap:10px;
-  padding:16px;
-  font-size:13px;
-  color:var(--vscode-descriptionForeground);
-}
-
-/* ===== Collapsible sections ===== */
-.section-header{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  cursor:pointer;
-  user-select:none;
-  padding:4px 0;
-  margin-bottom:8px;
-}
-.section-header .toggle-icon{
-  transition:transform .2s;
-  font-size:12px;
-}
-.section-header.collapsed .toggle-icon{
-  transform:rotate(-90deg);
-}
-.section-body{
-  overflow:hidden;
-  transition:max-height .3s ease, opacity .25s ease;
-  max-height:3000px;
-  opacity:1;
-}
-.section-body.collapsed{
-  max-height:0;
-  opacity:0;
-  margin:0;
-  padding:0;
-}
-
-/* ===== Member chip ===== */
-.member-chip{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:4px 10px 4px 6px;
-  border-radius:16px;
-  background:var(--vscode-badge-background,var(--vscode-focusBorder));
-  color:var(--vscode-badge-foreground,#fff);
-  font-size:12px;
-  margin:2px;
-}
-.member-chip .avatar{
-  width:22px;height:22px;
-  border-radius:50%;
-  background:color-mix(in srgb, var(--vscode-editor-foreground) 20%, transparent);
-  display:flex;align-items:center;justify-content:center;
-  font-size:10px;font-weight:700;
-  color:var(--vscode-editor-foreground);
-}
-.member-chip .remove-member{
-  cursor:pointer;font-size:14px;line-height:1;opacity:.8;margin-left:2px;
-}
-.member-chip .remove-member:hover{opacity:1;}
-
-/* ===== Risk badge ===== */
-.risk-badge{
-  display:inline-flex;align-items:center;gap:4px;
-  padding:3px 10px;border-radius:10px;
-  font-size:11px;font-weight:600;text-transform:uppercase;
-}
-.risk-badge.low{background:color-mix(in srgb,var(--vscode-testing-iconPassed) 15%,transparent);color:var(--vscode-testing-iconPassed);}
-.risk-badge.medium{background:color-mix(in srgb,var(--vscode-editorWarning-foreground) 15%,transparent);color:var(--vscode-editorWarning-foreground);}
-.risk-badge.high{background:color-mix(in srgb,var(--vscode-testing-iconFailed) 15%,transparent);color:var(--vscode-testing-iconFailed);}
-
-/* ===== Misc ===== */
-.muted{color:var(--vscode-descriptionForeground);font-size:12px;}
-.mt-4{margin-top:4px;}
-.mt-8{margin-top:8px;}
-.mt-12{margin-top:12px;}
-.mt-16{margin-top:16px;}
-.mb-8{margin-bottom:8px;}
-.mb-12{margin-bottom:12px;}
-.mb-16{margin-bottom:16px;}
-.hidden{display:none!important;}
-.gap-8{gap:8px;}
-.flex-center{display:flex;align-items:center;}
-.text-center{text-align:center;}
-</style>
+    .muted { color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mb-4 { margin-bottom: 4px; }
+    .mb-12 { margin-bottom: 12px; }
+    .gap-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+  </style>
 </head>
 <body>
-<div class="wizard-root" id="wizardRoot">
-  <!-- Step indicator (rendered by JS) -->
-  <div id="stepIndicator" class="step-indicator"></div>
+<div class="root">
 
-  <!-- Step content (rendered by JS) -->
-  <div id="stepContent"></div>
+  ${this.renderStepIndicator(step)}
 
-  <!-- Footer -->
-  <div class="wizard-footer" id="wizardFooter"></div>
+  ${step === 0 ? this.renderStep0(s) : step === 1 ? this.renderStep1(s) : this.renderStep2(s)}
+
+  ${this.renderFooter(step)}
+
 </div>
-<div id="errorDisplay" style="display:none;padding:24px;color:red;font-family:monospace;white-space:pre-wrap;"></div>
 
 <script nonce="${nonce}">
-(function(){
-  try {
   const vscodeApi = acquireVsCodeApi();
 
-  /* ── State ── */
-  let state = ${stateJson};
-
-  const STEPS = [
-    { label: 'Define Goal', icon: '🎯' },
-    { label: 'Team & Roles', icon: '👥' },
-    { label: 'Review & Launch', icon: '🚀' }
-  ];
-
-  const CATEGORIES = ['Software','Infrastructure','Research','Marketing','Operations','Other'];
-  const PRIORITIES = ['High','Medium','Low'];
-  const TIMELINES = ['1 week','2 weeks','1 month','2 months','3 months','6 months','Custom'];
-  const SENIORITIES = ['Junior','Mid','Senior','Lead'];
-
-  const ROLE_SUGGESTIONS = {
-    'Software': [
-      { title:'Developer', description:'Full-stack software developer', skills:['TypeScript','React','Node.js'], seniority:'Mid', count:2 },
-      { title:'QA Engineer', description:'Quality assurance and testing', skills:['Testing','Automation','Selenium'], seniority:'Mid', count:1 },
-      { title:'Designer', description:'UI/UX designer', skills:['Figma','UI Design','User Research'], seniority:'Mid', count:1 },
-      { title:'Project Manager', description:'Project coordination and delivery', skills:['Agile','Scrum','Communication'], seniority:'Senior', count:1 }
-    ],
-    'Infrastructure': [
-      { title:'DevOps Engineer', description:'CI/CD and infrastructure automation', skills:['Docker','Kubernetes','Terraform'], seniority:'Senior', count:2 },
-      { title:'SRE', description:'Site reliability engineering', skills:['Monitoring','Linux','Python'], seniority:'Mid', count:1 }
-    ],
-    'Research': [
-      { title:'Research Lead', description:'Lead research initiatives', skills:['Data Analysis','Research Methods'], seniority:'Senior', count:1 },
-      { title:'Research Analyst', description:'Data collection and analysis', skills:['Statistics','Python','R'], seniority:'Mid', count:2 }
-    ],
-    'Marketing': [
-      { title:'Marketing Manager', description:'Strategy and campaign management', skills:['Strategy','Analytics','SEO'], seniority:'Senior', count:1 },
-      { title:'Content Creator', description:'Content production and copywriting', skills:['Writing','Social Media','Design'], seniority:'Mid', count:1 }
-    ],
-    'Operations': [
-      { title:'Operations Manager', description:'Process optimization and delivery', skills:['Process Design','Analytics','Leadership'], seniority:'Senior', count:1 },
-      { title:'Operations Analyst', description:'Data analysis and reporting', skills:['Excel','SQL','Reporting'], seniority:'Mid', count:1 }
-    ],
-    'Other': []
-  };
-
-  /* ── Helpers ── */
-  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-  function $(sel){ return document.querySelector(sel); }
-  function $$(sel){ return Array.from(document.querySelectorAll(sel)); }
-
-  function progressRingSvg(pct, size, strokeColor){
-    size = size || 80;
-    const r = (size - 12) / 2;
-    const circ = 2 * Math.PI * r;
-    const offset = circ - (pct / 100) * circ;
-    let color = strokeColor;
-    if (!color) {
-      if (pct >= 70) color = 'var(--vscode-testing-iconPassed)';
-      else if (pct >= 40) color = 'var(--vscode-editorWarning-foreground)';
-      else color = 'var(--vscode-testing-iconFailed)';
-    }
-    return '<div class="progress-ring-wrap" style="width:'+size+'px;height:'+size+'px;">'
-      + '<svg class="progress-ring" width="'+size+'" height="'+size+'">'
-      + '<circle class="track" cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'"/>'
-      + '<circle class="fill" cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'"'
-      + ' stroke="'+color+'"'
-      + ' stroke-dasharray="'+circ+'"'
-      + ' stroke-dashoffset="'+offset+'"/>'
-      + '</svg>'
-      + '<span class="ring-label">'+Math.round(pct)+'%</span>'
-      + '</div>';
+  function post(type, data) {
+    vscodeApi.postMessage(Object.assign({ type: type }, data || {}));
   }
 
-  function checkIcon(status){
-    if (status === 'pass') return '<span style="color:var(--vscode-testing-iconPassed)">✅</span>';
-    if (status === 'warning') return '<span style="color:var(--vscode-editorWarning-foreground)">⚠️</span>';
-    return '<span style="color:var(--vscode-testing-iconFailed)">❌</span>';
-  }
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const data = Object.assign({}, btn.dataset);
+    delete data.action;
 
-  /* ── Render step indicator ── */
-  function renderIndicator(){
-    let html = '';
-    STEPS.forEach(function(s, i){
-      if (i > 0){
-        const done = state.currentStep > i - 1;
-        html += '<div class="step-connector'+(done?' done':'')+'"></div>';
-      }
-      let cls = 'step-node';
-      if (i === state.currentStep) cls += ' active';
-      else if (i < state.currentStep) cls += ' completed';
-      const inner = i < state.currentStep ? '✓' : (i + 1);
-      html += '<div class="'+cls+'">'
-            + '<div class="step-circle">'+inner+'</div>'
-            + '<div class="step-label">'+s.icon+' '+esc(s.label)+'</div>'
-            + '</div>';
-    });
-    document.getElementById('stepIndicator').innerHTML = html;
-  }
-
-  /* ── Render footer ── */
-  function renderFooter(){
-    const step = state.currentStep;
-    let left = '';
-    let right = '';
-    if (step > 0){
-      left = '<button class="btn btn-secondary" id="btnBack">← Back</button>';
-    } else {
-      left = '<span></span>';
-    }
-    if (step < 2){
-      right = '<button class="btn btn-primary" id="btnNext">Next →</button>';
-    } else {
-      right = '<div style="display:flex;gap:8px;">'
-            + '<button class="btn btn-secondary" id="btnSaveDraft">Save as Draft</button>'
-            + '<button class="btn btn-primary" id="btnCreate">🚀 Create Project</button>'
-            + '</div>';
-    }
-    document.getElementById('wizardFooter').innerHTML = left + right;
-
-    var back = document.getElementById('btnBack');
-    if (back) back.addEventListener('click', function(){ state.currentStep--; renderAll(); });
-    var next = document.getElementById('btnNext');
-    if (next) next.addEventListener('click', function(){ state.currentStep++; renderAll(); });
-    var draft = document.getElementById('btnSaveDraft');
-    if (draft) draft.addEventListener('click', function(){
-      vscodeApi.postMessage({ type:'saveDraft', state: state });
-    });
-    var create = document.getElementById('btnCreate');
-    if (create) create.addEventListener('click', function(){
-      vscodeApi.postMessage({ type:'createProject', state: state });
-    });
-  }
-
-  /* ────────────────────────────────────────────────────────────────── */
-  /*  STEP 0 – Define Goal                                            */
-  /* ────────────────────────────────────────────────────────────────── */
-  function renderStep0(){
-    return renderSection0a()
-         + renderSection0b()
-         + renderSection0c()
-         + renderSection0d();
-  }
-
-  /* 0a – Project Overview */
-  function renderSection0a(){
-    const p = state.project;
-    let catOpts = '<option value="">Select category…</option>';
-    CATEGORIES.forEach(function(c){ catOpts += '<option value="'+esc(c)+'"'+(p.category===c?' selected':'')+'>'+esc(c)+'</option>'; });
-
-    let tlOpts = '<option value="">Select timeline…</option>';
-    TIMELINES.forEach(function(t){ tlOpts += '<option value="'+esc(t)+'"'+(p.timeline===t?' selected':'')+'>'+esc(t)+'</option>'; });
-
-    let priorityChips = '';
-    PRIORITIES.forEach(function(pr){
-      priorityChips += '<span class="chip'+(p.priority===pr?' selected':'')+'" data-priority="'+esc(pr)+'">'+esc(pr)+'</span>';
-    });
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">📋</span> Project Overview</div>'
-      + '<div class="field"><label>Project Name <span style="color:var(--vscode-testing-iconFailed)">*</span></label>'
-      + '<input type="text" id="projName" value="'+esc(p.name)+'" placeholder="Enter project name…"/></div>'
-      + '<div class="field"><label>Description</label>'
-      + '<textarea id="projDesc" rows="4" placeholder="Describe the project goals, scope, and expected outcomes…">'+esc(p.description)+'</textarea></div>'
-      + '<div class="row">'
-      + '<div class="field"><label>Category</label><select id="projCategory">'+catOpts+'</select></div>'
-      + '<div class="field"><label>Target Timeline</label><select id="projTimeline">'+tlOpts+'</select></div>'
-      + '</div>'
-      + '<div class="field"><label>Priority</label><div class="chips" id="priorityChips">'+priorityChips+'</div></div>'
-      + '</div>';
-  }
-
-  /* 0b – Objectives & Success Criteria */
-  function renderSection0b(){
-    let objItems = '';
-    state.objectives.forEach(function(o, i){
-      objItems += '<div class="dynamic-item">'
-        + '<button class="remove-item" data-action="removeObjective" data-index="'+i+'" title="Remove">✕</button>'
-        + '<div class="field"><label>Title</label><input type="text" data-field="objTitle" data-index="'+i+'" value="'+esc(o.title)+'" placeholder="Objective title…"/></div>'
-        + '<div class="field"><label>Description</label><textarea data-field="objDesc" data-index="'+i+'" rows="2" placeholder="Describe this objective…">'+esc(o.description)+'</textarea></div>'
-        + '</div>';
-    });
-
-    let critItems = '';
-    state.successCriteria.forEach(function(c, i){
-      critItems += '<div class="dynamic-item">'
-        + '<button class="remove-item" data-action="removeCriteria" data-index="'+i+'" title="Remove">✕</button>'
-        + '<div class="row row-3">'
-        + '<div class="field"><label>Metric</label><input type="text" data-field="critMetric" data-index="'+i+'" value="'+esc(c.metric)+'" placeholder="e.g. Response time"/></div>'
-        + '<div class="field"><label>Target</label><input type="text" data-field="critTarget" data-index="'+i+'" value="'+esc(c.target)+'" placeholder="e.g. < 200ms"/></div>'
-        + '<div class="field"><label>Measurement</label><input type="text" data-field="critMethod" data-index="'+i+'" value="'+esc(c.method)+'" placeholder="e.g. APM monitoring"/></div>'
-        + '</div></div>';
-    });
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">🎯</span> Objectives & Success Criteria</div>'
-      + '<div class="section-header" data-toggle="objectives"><span class="toggle-icon">▼</span> <strong>Objectives</strong></div>'
-      + '<div class="section-body" id="sec-objectives">'
-      + objItems
-      + '<button class="btn-icon" id="addObjective">➕ Add Objective</button>'
-      + '</div>'
-      + '<div class="section-header mt-16" data-toggle="criteria"><span class="toggle-icon">▼</span> <strong>Success Criteria</strong></div>'
-      + '<div class="section-body" id="sec-criteria">'
-      + critItems
-      + '<button class="btn-icon" id="addCriteria">➕ Add Criteria</button>'
-      + '</div>'
-      + '</div>';
-  }
-
-  /* 0c – Requirements */
-  function renderSection0c(){
-    function listHtml(arr, fieldPrefix, label){
-      let items = '';
-      arr.forEach(function(val, i){
-        items += '<div class="dynamic-item" style="padding:8px 12px;">'
-          + '<button class="remove-item" data-action="remove'+fieldPrefix+'" data-index="'+i+'" title="Remove" style="top:5px;right:5px;">✕</button>'
-          + '<input type="text" data-field="'+fieldPrefix+'" data-index="'+i+'" value="'+esc(val)+'" placeholder="Enter '+label.toLowerCase()+'…" style="padding-right:28px;"/>'
-          + '</div>';
-      });
-      return '<div class="section-header" data-toggle="'+fieldPrefix+'"><span class="toggle-icon">▼</span> <strong>'+esc(label)+'</strong></div>'
-        + '<div class="section-body" id="sec-'+fieldPrefix+'">'
-        + items
-        + '<button class="btn-icon" data-add="'+fieldPrefix+'">➕ Add</button>'
-        + '</div>';
-    }
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">📝</span> Requirements</div>'
-      + listHtml(state.technicalRequirements, 'techReq', 'Technical Requirements')
-      + '<div class="mt-12"></div>'
-      + listHtml(state.businessRequirements, 'bizReq', 'Business Requirements')
-      + '<div class="mt-12"></div>'
-      + listHtml(state.constraints, 'constraint', 'Constraints / Limitations')
-      + '</div>';
-  }
-
-  /* 0d – AI Review */
-  function renderSection0d(){
-    const rev = state.aiReviews.requirements;
-    let body = '';
-    if (rev === undefined) {
-      body = '<p class="muted">Click the button above to analyze your requirements with AI.</p>';
-    } else if (rev === '__loading__') {
-      body = '<div class="loading-overlay"><span class="spinner"></span> Analyzing requirements…</div>';
-    } else {
-      body = renderAiResult(rev, 'requirements');
-    }
-
-    return '<div class="card ai-card">'
-      + '<div class="card-title"><span class="icon">✨</span> AI Requirements Review</div>'
-      + '<div style="margin-bottom:12px;">'
-      + '<button class="btn btn-primary btn-small" id="btnAiReq" '+(rev === '__loading__' ? 'disabled' : '')+'>⚡ Analyze Requirements</button>'
-      + '</div>'
-      + '<div id="aiReqResult">'+body+'</div>'
-      + '</div>';
-  }
-
-  /* ────────────────────────────────────────────────────────────────── */
-  /*  STEP 1 – Team & Roles                                           */
-  /* ────────────────────────────────────────────────────────────────── */
-  function renderStep1(){
-    return renderSection1a() + renderSection1b() + renderSection1c();
-  }
-
-  /* 1a – Role Definition */
-  function renderSection1a(){
-    let roleCards = '';
-    state.roles.forEach(function(r, i){
-      let skillTags = '';
-      r.skills.forEach(function(sk, si){
-        skillTags += '<span class="tag">'+esc(sk)+' <span class="tag-remove" data-action="removeSkill" data-role="'+i+'" data-skill="'+si+'">✕</span></span>';
-      });
-
-      let senOpts = '';
-      SENIORITIES.forEach(function(s){ senOpts += '<option value="'+esc(s)+'"'+(r.seniority===s?' selected':'')+'>'+esc(s)+'</option>'; });
-
-      roleCards += '<div class="dynamic-item">'
-        + '<button class="remove-item" data-action="removeRole" data-index="'+i+'" title="Remove role">✕</button>'
-        + '<div class="row">'
-        + '<div class="field" style="flex:2;"><label>Role Title</label><input type="text" data-field="roleTitle" data-index="'+i+'" value="'+esc(r.title)+'" placeholder="e.g. Developer"/></div>'
-        + '<div class="field" style="flex:1;"><label>Seniority</label><select data-field="roleSeniority" data-index="'+i+'">'+senOpts+'</select></div>'
-        + '<div class="field" style="flex:0 0 80px;"><label>Count</label><input type="number" data-field="roleCount" data-index="'+i+'" value="'+r.count+'" min="1" max="50"/></div>'
-        + '</div>'
-        + '<div class="field"><label>Description</label><input type="text" data-field="roleDesc" data-index="'+i+'" value="'+esc(r.description)+'" placeholder="Brief role description…"/></div>'
-        + '<div class="field"><label>Required Skills</label>'
-        + '<div class="tags-wrap" data-tags-role="'+i+'">'
-        + skillTags
-        + '<input type="text" data-field="skillInput" data-index="'+i+'" placeholder="Type & press Enter…"/>'
-        + '</div></div>'
-        + '</div>';
-    });
-
-    const cat = state.project.category;
-    const hasSuggestions = cat && ROLE_SUGGESTIONS[cat] && ROLE_SUGGESTIONS[cat].length > 0 && state.roles.length === 0;
-
-    let suggestBtn = '';
-    if (hasSuggestions) {
-      suggestBtn = '<button class="btn btn-secondary btn-small mt-8" id="btnSuggestRoles">💡 Suggest roles for '+esc(cat)+' project</button>';
-    }
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">🛡️</span> Role Definition</div>'
-      + roleCards
-      + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
-      + '<button class="btn-icon" id="addRole">➕ Add Role</button>'
-      + suggestBtn
-      + '</div>'
-      + '</div>';
-  }
-
-  /* 1b – Team Assembly */
-  function renderSection1b(){
-    let cards = '';
-    if (state.roles.length === 0) {
-      cards = '<p class="muted">Define roles above first, then assign team members here.</p>';
-    } else {
-      state.roles.forEach(function(r, ri){
-        const members = state.teamMembers.filter(function(m){ return m.role === r.title; });
-        let memberChips = '';
-        members.forEach(function(m){
-          const initials = m.name.split(' ').map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2);
-          const mi = state.teamMembers.indexOf(m);
-          memberChips += '<span class="member-chip">'
-            + '<span class="avatar">'+esc(initials)+'</span>'
-            + esc(m.name)+' ('+m.availability+'%)'
-            + ' <span class="remove-member" data-action="removeMember" data-index="'+mi+'">✕</span>'
-            + '</span>';
-        });
-        const unfilled = r.count - members.length;
-        let vacancyHtml = '';
-        if (unfilled > 0) {
-          vacancyHtml = '<span class="vacancy mt-4">⚠️ '+unfilled+' position'+(unfilled>1?'s':'')+' unfilled</span>';
-        }
-
-        cards += '<div class="dynamic-item">'
-          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-          + '<div><strong>'+esc(r.title)+'</strong> <span class="muted">· '+esc(r.seniority)+' · Need '+r.count+'</span></div>'
-          + '</div>'
-          + '<div class="muted mb-8">'+esc(r.description)+'</div>'
-          + (memberChips ? '<div class="mb-8" style="display:flex;flex-wrap:wrap;gap:4px;">'+memberChips+'</div>' : '')
-          + vacancyHtml
-          + '<div class="assign-form hidden" id="assignForm-'+ri+'">'
-          + '<div class="row mt-8">'
-          + '<div class="field"><label>Name</label><input type="text" data-field="memberName" data-role-index="'+ri+'" placeholder="Full name"/></div>'
-          + '<div class="field"><label>Email</label><input type="email" data-field="memberEmail" data-role-index="'+ri+'" placeholder="email@example.com"/></div>'
-          + '<div class="field" style="flex:0 0 100px;"><label>Availability %</label><input type="number" data-field="memberAvail" data-role-index="'+ri+'" value="100" min="10" max="100"/></div>'
-          + '</div>'
-          + '<div class="mt-4" style="display:flex;gap:6px;">'
-          + '<button class="btn btn-primary btn-small" data-action="confirmMember" data-role-index="'+ri+'">Add</button>'
-          + '<button class="btn btn-secondary btn-small" data-action="cancelMember" data-role-index="'+ri+'">Cancel</button>'
-          + '</div></div>'
-          + '<button class="btn-icon btn-small mt-8" data-action="showAssign" data-role-index="'+ri+'">👤 Assign Member</button>'
-          + '</div>';
-      });
-    }
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">👥</span> Team Assembly</div>'
-      + cards
-      + '</div>';
-  }
-
-  /* 1c – AI Team Analysis */
-  function renderSection1c(){
-    const rev = state.aiReviews.team;
-    let body = '';
-    if (rev === undefined) {
-      body = '<p class="muted">Click the button above to analyze your team composition.</p>';
-    } else if (rev === '__loading__') {
-      body = '<div class="loading-overlay"><span class="spinner"></span> Analyzing team composition…</div>';
-    } else {
-      body = renderAiResult(rev, 'team');
-    }
-
-    return '<div class="card ai-card">'
-      + '<div class="card-title"><span class="icon">✨</span> AI Team Analysis</div>'
-      + '<div style="margin-bottom:12px;">'
-      + '<button class="btn btn-primary btn-small" id="btnAiTeam" '+(rev === '__loading__' ? 'disabled' : '')+'>⚡ Analyze Team Composition</button>'
-      + '</div>'
-      + '<div id="aiTeamResult">'+body+'</div>'
-      + '</div>';
-  }
-
-  /* ────────────────────────────────────────────────────────────────── */
-  /*  STEP 2 – Review & Launch                                        */
-  /* ────────────────────────────────────────────────────────────────── */
-  function renderStep2(){
-    return renderSection2a() + renderSection2b() + renderSection2c();
-  }
-
-  /* 2a – Summary */
-  function renderSection2a(){
-    const objCount = state.objectives.filter(function(o){return o.title.trim();}).length;
-    const reqCount = state.technicalRequirements.filter(function(r){return r.trim();}).length
-                   + state.businessRequirements.filter(function(r){return r.trim();}).length;
-    const memberCount = state.teamMembers.length;
-    const roleCount = state.roles.length;
-
-    let rolesBreakdown = '';
-    state.roles.forEach(function(r){
-      const filled = state.teamMembers.filter(function(m){return m.role === r.title;}).length;
-      rolesBreakdown += '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid color-mix(in srgb,var(--vscode-panel-border) 40%,transparent);font-size:12px;">'
-        + '<span>'+esc(r.title)+'</span>'
-        + '<span>'+filled+' / '+r.count+'</span>'
-        + '</div>';
-    });
-
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">📊</span> Project Summary</div>'
-      + '<div class="stat-grid">'
-      + '<div class="stat-card"><div class="stat-icon">📋</div><div class="stat-value">'+esc(state.project.name || '—')+'</div><div class="stat-label">Project Name</div></div>'
-      + '<div class="stat-card"><div class="stat-icon">🎯</div><div class="stat-value">'+objCount+'</div><div class="stat-label">Objectives</div></div>'
-      + '<div class="stat-card"><div class="stat-icon">📝</div><div class="stat-value">'+reqCount+'</div><div class="stat-label">Requirements</div></div>'
-      + '<div class="stat-card"><div class="stat-icon">👥</div><div class="stat-value">'+memberCount+'</div><div class="stat-label">Team Members ('+roleCount+' roles)</div></div>'
-      + '</div>'
-      + '<div class="row">'
-      + '<div class="field"><strong>Category:</strong> '+esc(state.project.category || '—')+'</div>'
-      + '<div class="field"><strong>Priority:</strong> '+esc(state.project.priority || '—')+'</div>'
-      + '<div class="field"><strong>Timeline:</strong> '+esc(state.project.timeline || '—')+'</div>'
-      + '</div>'
-      + (state.project.description ? '<div class="field mt-8"><strong>Description:</strong><div class="muted mt-4">'+esc(state.project.description)+'</div></div>' : '')
-      + (rolesBreakdown ? '<div class="mt-12"><strong>Team Breakdown:</strong><div class="mt-4">'+rolesBreakdown+'</div></div>' : '')
-      + '</div>';
-  }
-
-  /* 2b – AI Final Review */
-  function renderSection2b(){
-    const rev = state.aiReviews.final;
-    let body = '';
-    if (rev === undefined) {
-      body = '<p class="muted">Click the button to run a comprehensive final review.</p>';
-    } else if (rev === '__loading__') {
-      body = '<div class="loading-overlay"><span class="spinner"></span> Running final review…</div>';
-    } else {
-      /* Large progress ring + checklist */
-      let checklistHtml = '';
-      if (rev.checklist) {
-        checklistHtml = '<ul class="checklist">';
-        rev.checklist.forEach(function(c){
-          checklistHtml += '<li>'+checkIcon(c.status)+' '+esc(c.label)+'</li>';
-        });
-        checklistHtml += '</ul>';
-      }
-      let riskHtml = '';
-      if (rev.riskLevel) {
-        riskHtml = '<div class="mt-12"><strong>Risk Level:</strong> <span class="risk-badge '+rev.riskLevel+'">'+rev.riskLevel.toUpperCase()+'</span></div>';
-      }
-      body = '<div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">'
-        + '<div class="text-center">'
-        + progressRingSvg(rev.score, 100)
-        + '<div class="mt-8"><span class="status-badge '+rev.status+'">'+(rev.status === 'ready' ? '✅ Ready to Launch' : rev.status === 'needs-attention' ? '⚠️ Needs Attention' : '❌ Critical Issues')+'</span></div>'
-        + riskHtml
-        + '</div>'
-        + '<div style="flex:1;min-width:250px;">'
-        + '<strong>Launch Checklist</strong>'
-        + checklistHtml
-        + renderAiLists(rev)
-        + '</div></div>';
-    }
-
-    return '<div class="card ai-card">'
-      + '<div class="card-title"><span class="icon">✨</span> AI Final Review</div>'
-      + '<div style="margin-bottom:12px;">'
-      + '<button class="btn btn-primary btn-small" id="btnAiFinal" '+(rev === '__loading__' ? 'disabled' : '')+'>⚡ Run Final Review</button>'
-      + '</div>'
-      + '<div id="aiFinalResult">'+body+'</div>'
-      + '</div>';
-  }
-
-  /* 2c – Launch Controls (handled in footer) */
-  function renderSection2c(){
-    return '<div class="card">'
-      + '<div class="card-title"><span class="icon">🚀</span> Launch Controls</div>'
-      + '<p class="muted mb-12">When you\'re ready, save your project as a draft or create it immediately.</p>'
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-      + '<button class="btn btn-secondary" id="btnSaveDraft2">📄 Save as Draft</button>'
-      + '<button class="btn btn-primary" id="btnCreate2">🚀 Create Project</button>'
-      + '</div></div>';
-  }
-
-  /* ── Shared AI result renderer ── */
-  function renderAiResult(rev, type){
-    let html = '<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">'
-      + '<div class="text-center">'
-      + progressRingSvg(rev.score, 80)
-      + '<div class="mt-8"><span class="status-badge '+rev.status+'">'
-      + (rev.status==='ready'?'✅ Ready':'⚠️ Needs Attention')
-      + '</span></div></div>'
-      + '<div style="flex:1;min-width:220px;">'
-      + renderAiLists(rev)
-      + '</div></div>';
-    if (rev.riskLevel) {
-      html += '<div class="mt-12"><strong>Risk Level:</strong> <span class="risk-badge '+rev.riskLevel+'">'+rev.riskLevel.toUpperCase()+'</span></div>';
-    }
-    return html;
-  }
-
-  function renderAiLists(rev){
-    let html = '';
-    if (rev.gaps && rev.gaps.length) {
-      html += '<div class="mt-8"><strong>⚠️ Identified Gaps</strong><ul class="ai-list">';
-      rev.gaps.forEach(function(g){ html += '<li><span class="ai-icon">⚠️</span> '+esc(g)+'</li>'; });
-      html += '</ul></div>';
-    }
-    if (rev.suggestions && rev.suggestions.length) {
-      html += '<div class="mt-8"><strong>💡 Suggestions</strong><ul class="ai-list">';
-      rev.suggestions.forEach(function(s){ html += '<li><span class="ai-icon">💡</span> '+esc(s)+'</li>'; });
-      html += '</ul></div>';
-    }
-    if (rev.questions && rev.questions.length) {
-      html += '<div class="mt-8"><strong>❓ Questions to Consider</strong><ul class="ai-list">';
-      rev.questions.forEach(function(q, i){ html += '<li><span class="ai-icon">❓</span> '+(i+1)+'. '+esc(q)+'</li>'; });
-      html += '</ul></div>';
-    }
-    return html;
-  }
-
-  /* ────────────────────────────────────────────────────────────────── */
-  /*  Full render                                                     */
-  /* ────────────────────────────────────────────────────────────────── */
-  function renderAll(){
-    renderIndicator();
-    const el = document.getElementById('stepContent');
-    if (state.currentStep === 0) el.innerHTML = renderStep0();
-    else if (state.currentStep === 1) el.innerHTML = renderStep1();
-    else el.innerHTML = renderStep2();
-    renderFooter();
-    bindEvents();
-  }
-
-  /* ────────────────────────────────────────────────────────────────── */
-  /*  Event binding                                                   */
-  /* ────────────────────────────────────────────────────────────────── */
-  function bindEvents(){
-    /* ── Step 0 fields ── */
-    bindInput('#projName', function(v){ state.project.name = v; });
-    bindTextarea('#projDesc', function(v){ state.project.description = v; });
-    bindSelect('#projCategory', function(v){ state.project.category = v; });
-    bindSelect('#projTimeline', function(v){ state.project.timeline = v; });
-
-    /* Priority chips */
-    $$('[data-priority]').forEach(function(el){
-      el.addEventListener('click', function(){
-        state.project.priority = el.dataset.priority;
-        $$('[data-priority]').forEach(function(c){ c.classList.toggle('selected', c.dataset.priority === state.project.priority); });
-      });
-    });
-
-    /* Collapsible sections */
-    $$('.section-header[data-toggle]').forEach(function(hdr){
-      hdr.addEventListener('click', function(){
-        const id = 'sec-' + hdr.dataset.toggle;
-        const body = document.getElementById(id);
-        if (body){
-          const collapsed = !body.classList.contains('collapsed');
-          body.classList.toggle('collapsed', collapsed);
-          hdr.classList.toggle('collapsed', collapsed);
-        }
-      });
-    });
-
-    /* Objectives */
-    bindDynamic('objTitle', function(i, v){ state.objectives[i].title = v; });
-    bindDynamicTextarea('objDesc', function(i, v){ state.objectives[i].description = v; });
-    bindBtn('#addObjective', function(){ state.objectives.push({title:'',description:''}); renderAll(); });
-
-    $$('[data-action="removeObjective"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        state.objectives.splice(Number(b.dataset.index), 1);
-        if (state.objectives.length === 0) state.objectives.push({title:'',description:''});
-        renderAll();
-      });
-    });
-
-    /* Success criteria */
-    bindDynamic('critMetric', function(i, v){ state.successCriteria[i].metric = v; });
-    bindDynamic('critTarget', function(i, v){ state.successCriteria[i].target = v; });
-    bindDynamic('critMethod', function(i, v){ state.successCriteria[i].method = v; });
-    bindBtn('#addCriteria', function(){ state.successCriteria.push({metric:'',target:'',method:''}); renderAll(); });
-
-    $$('[data-action="removeCriteria"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        state.successCriteria.splice(Number(b.dataset.index), 1);
-        if (state.successCriteria.length === 0) state.successCriteria.push({metric:'',target:'',method:''});
-        renderAll();
-      });
-    });
-
-    /* Requirements lists */
-    function bindReqList(prefix, arr, setter){
-      $$('[data-field="'+prefix+'"]').forEach(function(el){
-        el.addEventListener('input', function(){ arr[Number(el.dataset.index)] = el.value; });
-      });
-      $$('[data-action="remove'+prefix+'"]').forEach(function(b){
-        b.addEventListener('click', function(){
-          arr.splice(Number(b.dataset.index), 1);
-          if (arr.length === 0) arr.push('');
-          renderAll();
-        });
-      });
-      $$('[data-add="'+prefix+'"]').forEach(function(b){
-        b.addEventListener('click', function(){ arr.push(''); renderAll(); });
-      });
-    }
-    bindReqList('techReq', state.technicalRequirements);
-    bindReqList('bizReq', state.businessRequirements);
-    bindReqList('constraint', state.constraints);
-
-    /* AI Requirements review */
-    bindBtn('#btnAiReq', function(){
-      state.aiReviews.requirements = '__loading__';
-      renderAll();
-      setTimeout(function(){
-        vscodeApi.postMessage({ type:'aiReview', reviewType:'requirements', state: state });
-      }, 100);
-    });
-
-    /* ── Step 1 fields ── */
-    /* Roles */
-    bindDynamic('roleTitle', function(i, v){ state.roles[i].title = v; });
-    bindDynamic('roleDesc', function(i, v){ state.roles[i].description = v; });
-    bindDynamicSelect('roleSeniority', function(i, v){ state.roles[i].seniority = v; });
-    $$('[data-field="roleCount"]').forEach(function(el){
-      el.addEventListener('input', function(){ state.roles[Number(el.dataset.index)].count = Math.max(1, Number(el.value) || 1); });
-    });
-    bindBtn('#addRole', function(){
-      state.roles.push({title:'',description:'',skills:[],seniority:'Mid',count:1});
-      renderAll();
-    });
-    $$('[data-action="removeRole"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        const idx = Number(b.dataset.index);
-        const roleTitle = state.roles[idx].title;
-        state.roles.splice(idx, 1);
-        state.teamMembers = state.teamMembers.filter(function(m){ return m.role !== roleTitle; });
-        renderAll();
-      });
-    });
-
-    /* Skill tag input */
-    $$('[data-field="skillInput"]').forEach(function(inp){
-      inp.addEventListener('keydown', function(e){
-        if (e.key === 'Enter' && inp.value.trim()){
-          e.preventDefault();
-          const ri = Number(inp.dataset.index);
-          state.roles[ri].skills.push(inp.value.trim());
-          inp.value = '';
-          renderAll();
-        }
-      });
-    });
-    $$('[data-action="removeSkill"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        const ri = Number(b.dataset.role);
-        const si = Number(b.dataset.skill);
-        state.roles[ri].skills.splice(si, 1);
-        renderAll();
-      });
-    });
-
-    /* Suggest roles */
-    bindBtn('#btnSuggestRoles', function(){
-      const cat = state.project.category || 'Other';
-      const suggestions = ROLE_SUGGESTIONS[cat] || [];
-      suggestions.forEach(function(s){
-        state.roles.push({ title:s.title, description:s.description, skills:s.skills.slice(), seniority:s.seniority, count:s.count });
-      });
-      renderAll();
-    });
-
-    /* Team member assignment */
-    $$('[data-action="showAssign"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        const form = document.getElementById('assignForm-'+b.dataset.roleIndex);
-        if (form) form.classList.remove('hidden');
-        b.classList.add('hidden');
-      });
-    });
-    $$('[data-action="cancelMember"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        const form = document.getElementById('assignForm-'+b.dataset.roleIndex);
-        if (form) form.classList.add('hidden');
-        const showBtn = document.querySelector('[data-action="showAssign"][data-role-index="'+b.dataset.roleIndex+'"]');
-        if (showBtn) showBtn.classList.remove('hidden');
-      });
-    });
-    $$('[data-action="confirmMember"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        const ri = Number(b.dataset.roleIndex);
-        const role = state.roles[ri];
-        const nameEl = document.querySelector('[data-field="memberName"][data-role-index="'+ri+'"]');
-        const emailEl = document.querySelector('[data-field="memberEmail"][data-role-index="'+ri+'"]');
-        const availEl = document.querySelector('[data-field="memberAvail"][data-role-index="'+ri+'"]');
-        const name = nameEl ? nameEl.value.trim() : '';
-        const email = emailEl ? emailEl.value.trim() : '';
-        const avail = availEl ? Number(availEl.value) || 100 : 100;
-        if (!name) return;
-        state.teamMembers.push({ name:name, email:email, role:role.title, availability:avail });
-        renderAll();
-      });
-    });
-    $$('[data-action="removeMember"]').forEach(function(b){
-      b.addEventListener('click', function(){
-        state.teamMembers.splice(Number(b.dataset.index), 1);
-        renderAll();
-      });
-    });
-
-    /* AI Team review */
-    bindBtn('#btnAiTeam', function(){
-      state.aiReviews.team = '__loading__';
-      renderAll();
-      setTimeout(function(){
-        vscodeApi.postMessage({ type:'aiReview', reviewType:'team', state: state });
-      }, 100);
-    });
-
-    /* ── Step 2 fields ── */
-    bindBtn('#btnAiFinal', function(){
-      state.aiReviews.final = '__loading__';
-      renderAll();
-      setTimeout(function(){
-        vscodeApi.postMessage({ type:'aiReview', reviewType:'final', state: state });
-      }, 100);
-    });
-
-    /* Launch controls (duplicated in step 2c) */
-    bindBtn('#btnSaveDraft2', function(){
-      vscodeApi.postMessage({ type:'saveDraft', state: state });
-    });
-    bindBtn('#btnCreate2', function(){
-      vscodeApi.postMessage({ type:'createProject', state: state });
-    });
-  }
-
-  /* ── Binding helpers ── */
-  function bindInput(sel, fn){
-    var el = $(sel);
-    if (el) el.addEventListener('input', function(){ fn(el.value); });
-  }
-  function bindTextarea(sel, fn){
-    var el = $(sel);
-    if (el) el.addEventListener('input', function(){ fn(el.value); });
-  }
-  function bindSelect(sel, fn){
-    var el = $(sel);
-    if (el) el.addEventListener('change', function(){ fn(el.value); });
-  }
-  function bindBtn(sel, fn){
-    var el = $(sel);
-    if (el) el.addEventListener('click', fn);
-  }
-  function bindDynamic(field, fn){
-    $$('[data-field="'+field+'"]').forEach(function(el){
-      el.addEventListener('input', function(){ fn(Number(el.dataset.index), el.value); });
-    });
-  }
-  function bindDynamicTextarea(field, fn){
-    $$('[data-field="'+field+'"]').forEach(function(el){
-      el.addEventListener('input', function(){ fn(Number(el.dataset.index), el.value); });
-    });
-  }
-  function bindDynamicSelect(field, fn){
-    $$('[data-field="'+field+'"]').forEach(function(el){
-      el.addEventListener('change', function(){ fn(Number(el.dataset.index), el.value); });
-    });
-  }
-
-  /* ── Messages from extension ── */
-  window.addEventListener('message', function(event){
-    const msg = event.data;
-    if (!msg || !msg.type) return;
-
-    if (msg.type === 'aiReviewResult'){
-      const rt = msg.reviewType;
-      if (rt === 'requirements') state.aiReviews.requirements = msg.result;
-      else if (rt === 'team') state.aiReviews.team = msg.result;
-      else state.aiReviews.final = msg.result;
-      renderAll();
-    }
-    if (msg.type === 'stateUpdate' && msg.state){
-      state = msg.state;
-      renderAll();
+    if (action === 'navigate') { post('navigateStep', { step: parseInt(data.step, 10) }); }
+    else if (action === 'addListItem') { post('addListItem', { list: data.list }); }
+    else if (action === 'removeListItem') { post('removeListItem', { list: data.list, index: parseInt(data.index, 10) }); }
+    else if (action === 'suggestRoles') { post('suggestRoles'); }
+    else if (action === 'removeMember') { post('removeMember', { index: parseInt(data.index, 10) }); }
+    else if (action === 'removeSkill') { post('updateField', { field: 'roles.' + data.role + '.skills.remove', value: data.skill }); post('navigateStep', { step: 1 }); }
+    else if (action === 'aiReview') { post('aiReview', { reviewType: data.reviewtype }); }
+    else if (action === 'saveDraft') { post('saveDraft'); }
+    else if (action === 'createProject') { post('createProject'); }
+    else if (action === 'selectPriority') {
+      post('updateField', { field: 'project.priority', value: data.priority });
+      post('navigateStep', { step: 0 });
     }
   });
 
-  /* ── Initial render ── */
-  renderAll();
-  } catch(e) {
-    var errEl = document.getElementById('errorDisplay');
-    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Wizard JS Error: ' + e.message + '\\n\\nStack: ' + e.stack; }
-    var root = document.getElementById('wizardRoot');
-    if (root) { root.style.display = 'none'; }
+  document.addEventListener('change', function(e) {
+    const el = e.target;
+    if (el.dataset && el.dataset.field) {
+      post('updateField', { field: el.dataset.field, value: el.value });
+    }
+  });
+
+  document.addEventListener('input', function(e) {
+    const el = e.target;
+    if (el.dataset && el.dataset.field) {
+      post('updateField', { field: el.dataset.field, value: el.value });
+    }
+  });
+
+  // Skill tag input on Enter
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.dataset && e.target.dataset.skillinput !== undefined) {
+      e.preventDefault();
+      var val = e.target.value.trim();
+      if (val) {
+        post('updateField', { field: 'roles.' + e.target.dataset.roleidx + '.skills.add', value: val });
+        post('navigateStep', { step: 1 });
+      }
+    }
+  });
+
+  // Add member form
+  var addMemberBtn = document.getElementById('addMemberBtn');
+  if (addMemberBtn) {
+    addMemberBtn.addEventListener('click', function() {
+      var name = document.getElementById('memberName');
+      var email = document.getElementById('memberEmail');
+      var role = document.getElementById('memberRole');
+      var avail = document.getElementById('memberAvail');
+      if (name && name.value.trim()) {
+        post('addMember', {
+          name: name.value,
+          email: email ? email.value : '',
+          role: role ? role.value : '',
+          availability: avail ? parseInt(avail.value, 10) || 100 : 100
+        });
+      }
+    });
   }
-})();
 </script>
 </body>
 </html>`;
+  }
+
+  /* ================================================================ */
+  /*  Server-side rendered sections                                   */
+  /* ================================================================ */
+
+  private renderStepIndicator(step: number): string {
+    const steps = [
+      { icon: '🎯', label: 'Define Goal' },
+      { icon: '👥', label: 'Team & Roles' },
+      { icon: '🚀', label: 'Review & Launch' }
+    ];
+
+    let html = '<div class="steps">';
+    for (let i = 0; i < steps.length; i++) {
+      if (i > 0) {
+        html += `<div class="step-connector${i <= step ? ' done' : ''}"></div>`;
+      }
+      const cls = i < step ? 'done' : i === step ? 'active' : '';
+      html += `<div class="step-node">
+        <div class="step-circle ${cls}" data-action="navigate" data-step="${i}" style="cursor:pointer">
+          ${i < step ? '✓' : steps[i].icon}
+        </div>
+        <div class="step-label ${cls}">${steps[i].label}</div>
+      </div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  private renderFooter(step: number): string {
+    return `<div class="footer">
+      <div>
+        ${step > 0 ? `<button class="btn-secondary" data-action="navigate" data-step="${step - 1}">← Back</button>` : '<span></span>'}
+      </div>
+      <div class="footer-right">
+        ${step < 2
+          ? `<button class="btn-primary" data-action="navigate" data-step="${step + 1}">Next →</button>`
+          : `<button class="btn-secondary" data-action="saveDraft">Save Draft</button>
+             <button class="btn-primary" data-action="createProject">🚀 Create Project</button>`
+        }
+      </div>
+    </div>`;
+  }
+
+  /* ---- Step 0: Define Goal ---- */
+
+  private renderStep0(s: WizardState): string {
+    const categories = ['Software', 'Infrastructure', 'Research', 'Marketing', 'Operations', 'Other'];
+    const timelines = ['1 week', '2 weeks', '1 month', '2 months', '3 months', '6 months', 'Custom'];
+    const priorities = ['High', 'Medium', 'Low'];
+
+    let catOpts = '<option value="">Select category…</option>';
+    for (const c of categories) { catOpts += `<option value="${esc(c)}"${s.project.category === c ? ' selected' : ''}>${esc(c)}</option>`; }
+
+    let tlOpts = '<option value="">Select timeline…</option>';
+    for (const t of timelines) { tlOpts += `<option value="${esc(t)}"${s.project.timeline === t ? ' selected' : ''}>${esc(t)}</option>`; }
+
+    let priorityChips = '';
+    for (const p of priorities) { priorityChips += `<span class="chip${s.project.priority === p ? ' selected' : ''}" data-action="selectPriority" data-priority="${esc(p)}">${esc(p)}</span>`; }
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> Project Overview</div>
+        <div class="field">
+          <label>Project Name <span style="color:var(--vscode-testing-iconFailed)">*</span></label>
+          <input type="text" data-field="project.name" value="${esc(s.project.name)}" placeholder="Enter project name…" />
+        </div>
+        <div class="field">
+          <label>Description</label>
+          <textarea data-field="project.description" rows="4" placeholder="Describe the project goals, scope, and expected outcomes…">${esc(s.project.description)}</textarea>
+        </div>
+        <div class="row">
+          <div class="field"><label>Category</label><select data-field="project.category">${catOpts}</select></div>
+          <div class="field"><label>Target Timeline</label><select data-field="project.timeline">${tlOpts}</select></div>
+        </div>
+        <div class="field"><label>Priority</label><div class="chips">${priorityChips}</div></div>
+      </div>
+
+      ${this.renderObjectives(s)}
+      ${this.renderRequirements(s)}
+      ${this.renderAiRequirementsReview(s)}
+    `;
+  }
+
+  private renderObjectives(s: WizardState): string {
+    let objHtml = '';
+    s.objectives.forEach((o, i) => {
+      objHtml += `<div class="list-item">
+        <button class="btn-icon remove-btn" data-action="removeListItem" data-list="objectives" data-index="${i}" title="Remove">✕</button>
+        <div class="field mb-4"><label>Objective ${i + 1}</label><input type="text" data-field="objectives.${i}.title" value="${esc(o.title)}" placeholder="Objective title…" /></div>
+        <div class="field"><textarea data-field="objectives.${i}.description" rows="2" placeholder="Description…">${esc(o.description)}</textarea></div>
+      </div>`;
+    });
+
+    let critHtml = '';
+    s.successCriteria.forEach((c, i) => {
+      critHtml += `<div class="list-item">
+        <button class="btn-icon remove-btn" data-action="removeListItem" data-list="successCriteria" data-index="${i}" title="Remove">✕</button>
+        <div class="row">
+          <div class="field"><label>Metric</label><input type="text" data-field="successCriteria.${i}.metric" value="${esc(c.metric)}" placeholder="e.g. Response time" /></div>
+          <div class="field"><label>Target</label><input type="text" data-field="successCriteria.${i}.target" value="${esc(c.target)}" placeholder="e.g. < 200ms" /></div>
+          <div class="field"><label>Method</label><input type="text" data-field="successCriteria.${i}.method" value="${esc(c.method)}" placeholder="e.g. Load test" /></div>
+        </div>
+      </div>`;
+    });
+
+    return `<div class="card">
+      <div class="card-title"><span class="icon">🎯</span> Objectives & Success Criteria</div>
+      <div class="mb-12">
+        <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-4">
+          <label style="font-weight:600;font-size:12px;">Objectives</label>
+          <button class="btn-secondary btn-small" data-action="addListItem" data-list="objectives">➕ Add Objective</button>
+        </div>
+        ${objHtml}
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-4">
+          <label style="font-weight:600;font-size:12px;">Success Criteria</label>
+          <button class="btn-secondary btn-small" data-action="addListItem" data-list="successCriteria">➕ Add Criteria</button>
+        </div>
+        ${critHtml}
+      </div>
+    </div>`;
+  }
+
+  private renderRequirements(s: WizardState): string {
+    const renderList = (label: string, listName: string, items: string[], placeholder: string) => {
+      let html = `<div class="mb-12">
+        <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-4">
+          <label style="font-weight:600;font-size:12px;">${label}</label>
+          <button class="btn-secondary btn-small" data-action="addListItem" data-list="${listName}">➕ Add</button>
+        </div>`;
+      items.forEach((item, i) => {
+        html += `<div class="gap-row">
+          <input type="text" data-field="${listName}.${i}" value="${esc(item)}" placeholder="${placeholder}" style="flex:1" />
+          <button class="btn-icon" data-action="removeListItem" data-list="${listName}" data-index="${i}">✕</button>
+        </div>`;
+      });
+      html += '</div>';
+      return html;
+    };
+
+    return `<div class="card">
+      <div class="card-title"><span class="icon">📝</span> Requirements</div>
+      ${renderList('Technical Requirements', 'technicalRequirements', s.technicalRequirements, 'e.g. Must support 10k concurrent users')}
+      ${renderList('Business Requirements', 'businessRequirements', s.businessRequirements, 'e.g. Reduce onboarding time by 50%')}
+      ${renderList('Constraints', 'constraints', s.constraints, 'e.g. Budget limited to $50k')}
+    </div>`;
+  }
+
+  private renderAiRequirementsReview(s: WizardState): string {
+    const review = s.aiReviews.requirements;
+    let body = `<button class="btn-primary" data-action="aiReview" data-reviewtype="requirements">✨ Analyze Requirements</button>`;
+    if (review) {
+      body = this.renderAiResult(review);
+    }
+    return `<div class="ai-card">
+      <div class="card-title"><span class="icon">✨</span> AI Requirements Review</div>
+      ${body}
+    </div>`;
+  }
+
+  /* ---- Step 1: Team & Roles ---- */
+
+  private renderStep1(s: WizardState): string {
+    return `
+      ${this.renderRoles(s)}
+      ${this.renderTeamAssembly(s)}
+      ${this.renderAiTeamReview(s)}
+    `;
+  }
+
+  private renderRoles(s: WizardState): string {
+    let rolesHtml = '';
+    s.roles.forEach((r, i) => {
+      let skillTags = '';
+      r.skills.forEach((sk, si) => {
+        skillTags += `<span class="tag">${esc(sk)} <span class="remove-tag" data-action="removeSkill" data-role="${i}" data-skill="${si}">✕</span></span>`;
+      });
+
+      let senOpts = '';
+      for (const sen of ['Junior', 'Mid', 'Senior', 'Lead']) {
+        senOpts += `<option value="${sen}"${r.seniority === sen ? ' selected' : ''}>${sen}</option>`;
+      }
+
+      rolesHtml += `<div class="list-item">
+        <button class="btn-icon remove-btn" data-action="removeListItem" data-list="roles" data-index="${i}" title="Remove">✕</button>
+        <div class="row mb-4">
+          <div class="field"><label>Role Title</label><input type="text" data-field="roles.${i}.title" value="${esc(r.title)}" placeholder="e.g. Developer" /></div>
+          <div class="field"><label>Seniority</label><select data-field="roles.${i}.seniority">${senOpts}</select></div>
+          <div class="field" style="max-width:80px"><label>Count</label><input type="number" data-field="roles.${i}.count" value="${r.count}" min="1" /></div>
+        </div>
+        <div class="field mb-4"><label>Description</label><input type="text" data-field="roles.${i}.description" value="${esc(r.description)}" placeholder="Role description…" /></div>
+        <div class="field">
+          <label>Skills</label>
+          <div class="tags mb-4">${skillTags}</div>
+          <input type="text" data-skillinput data-roleidx="${i}" placeholder="Type skill and press Enter…" style="max-width:250px" />
+        </div>
+      </div>`;
+    });
+
+    return `<div class="card">
+      <div class="card-title"><span class="icon">🛡️</span> Role Definition</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn-secondary btn-small" data-action="addListItem" data-list="roles">➕ Add Role</button>
+        <button class="btn-secondary btn-small" data-action="suggestRoles">💡 Suggest Roles</button>
+      </div>
+      ${s.roles.length === 0 ? '<p class="muted">No roles defined yet. Add roles manually or click "Suggest Roles" based on your project category.</p>' : rolesHtml}
+    </div>`;
+  }
+
+  private renderTeamAssembly(s: WizardState): string {
+    let membersHtml = '';
+    if (s.teamMembers.length > 0) {
+      s.teamMembers.forEach((m, i) => {
+        const initials = m.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        membersHtml += `<span class="member-chip">
+          <span class="avatar">${esc(initials)}</span>
+          ${esc(m.name)}${m.role ? ` · ${esc(m.role)}` : ''}${m.availability < 100 ? ` (${m.availability}%)` : ''}
+          <span class="btn-icon" data-action="removeMember" data-index="${i}" style="font-size:13px;padding:0 2px;color:inherit;">✕</span>
+        </span>`;
+      });
+    } else {
+      membersHtml = '<p class="muted">No team members assigned yet.</p>';
+    }
+
+    let roleOpts = '<option value="">Any role</option>';
+    for (const r of s.roles) { roleOpts += `<option value="${esc(r.title)}">${esc(r.title)}</option>`; }
+
+    return `<div class="card">
+      <div class="card-title"><span class="icon">👥</span> Team Assembly</div>
+      <div class="mb-12">${membersHtml}</div>
+      <div style="border:1px dashed var(--vscode-panel-border);border-radius:6px;padding:12px;">
+        <div style="font-weight:600;font-size:12px;margin-bottom:8px;">Add Team Member</div>
+        <div class="row mb-4">
+          <div class="field"><label>Name</label><input type="text" id="memberName" placeholder="Full name…" /></div>
+          <div class="field"><label>Email</label><input type="email" id="memberEmail" placeholder="Email…" /></div>
+        </div>
+        <div class="row mb-4">
+          <div class="field"><label>Role</label><select id="memberRole">${roleOpts}</select></div>
+          <div class="field" style="max-width:120px"><label>Availability %</label><input type="number" id="memberAvail" value="100" min="0" max="100" /></div>
+        </div>
+        <button class="btn-primary btn-small" id="addMemberBtn">➕ Add Member</button>
+      </div>
+    </div>`;
+  }
+
+  private renderAiTeamReview(s: WizardState): string {
+    const review = s.aiReviews.team;
+    let body = `<button class="btn-primary" data-action="aiReview" data-reviewtype="team">✨ Analyze Team Composition</button>`;
+    if (review) { body = this.renderAiResult(review); }
+    return `<div class="ai-card">
+      <div class="card-title"><span class="icon">✨</span> AI Team Analysis</div>
+      ${body}
+    </div>`;
+  }
+
+  /* ---- Step 2: Review & Launch ---- */
+
+  private renderStep2(s: WizardState): string {
+    const objCount = s.objectives.filter(o => o.title.trim()).length;
+    const reqCount = s.technicalRequirements.filter(r => r.trim()).length + s.businessRequirements.filter(r => r.trim()).length;
+    const memberCount = s.teamMembers.length;
+
+    let roleBreakdown = '';
+    if (s.roles.length > 0) {
+      roleBreakdown = '<table style="width:100%;font-size:12px;margin-top:8px;border-collapse:collapse;">';
+      roleBreakdown += '<tr style="border-bottom:1px solid var(--vscode-panel-border)"><th style="text-align:left;padding:4px 0">Role</th><th style="text-align:center">Needed</th><th style="text-align:center">Assigned</th></tr>';
+      for (const r of s.roles) {
+        const assigned = s.teamMembers.filter(m => m.role === r.title).length;
+        const color = assigned >= r.count ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-editorWarning-foreground)';
+        roleBreakdown += `<tr><td style="padding:4px 0">${esc(r.title)}</td><td style="text-align:center">${r.count}</td><td style="text-align:center;color:${color}">${assigned}</td></tr>`;
+      }
+      roleBreakdown += '</table>';
+    }
+
+    return `
+      <div class="card">
+        <div class="card-title"><span class="icon">📊</span> Project Summary</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value">${esc(s.project.name || '—')}</div>
+            <div class="stat-label">Project Name</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${objCount}</div>
+            <div class="stat-label">Objectives</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${reqCount}</div>
+            <div class="stat-label">Requirements</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${memberCount}</div>
+            <div class="stat-label">Team Members</div>
+          </div>
+        </div>
+        ${s.project.category ? `<p class="muted">Category: ${esc(s.project.category)} · Priority: ${esc(s.project.priority)} · Timeline: ${esc(s.project.timeline || 'Not set')}</p>` : ''}
+        ${roleBreakdown}
+      </div>
+
+      ${this.renderAiFinalReview(s)}
+    `;
+  }
+
+  private renderAiFinalReview(s: WizardState): string {
+    const review = s.aiReviews.final;
+    let body = `<button class="btn-primary" data-action="aiReview" data-reviewtype="final">✨ Run Final Review</button>`;
+    if (review) { body = this.renderAiResult(review); }
+    return `<div class="ai-card">
+      <div class="card-title"><span class="icon">✨</span> AI Final Review</div>
+      ${body}
+    </div>`;
+  }
+
+  /* ---- AI result rendering ---- */
+
+  private renderAiResult(review: AiReviewResult): string {
+    const size = 80;
+    const r = (size - 12) / 2;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (review.score / 100) * circ;
+    const color = review.score >= 70 ? 'var(--vscode-testing-iconPassed)' : review.score >= 40 ? 'var(--vscode-editorWarning-foreground)' : 'var(--vscode-testing-iconFailed)';
+    const statusBadge = review.status === 'ready' ? 'badge-pass' : review.status === 'needs-attention' ? 'badge-warning' : 'badge-fail';
+    const statusText = review.status === 'ready' ? 'Ready to Proceed' : review.status === 'needs-attention' ? 'Needs Attention' : 'Critical Issues';
+
+    let html = `<div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;">
+      <div class="ring-wrap" style="width:${size}px;height:${size}px;">
+        <svg width="${size}" height="${size}">
+          <circle class="track" cx="${size / 2}" cy="${size / 2}" r="${r}"/>
+          <circle class="fill" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke="${color}" stroke-dasharray="${circ}" stroke-dashoffset="${offset}"/>
+        </svg>
+        <span class="ring-label">${review.score}%</span>
+      </div>
+      <div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px;">Completeness Score</div>
+        <span class="badge ${statusBadge}">${statusText}</span>
+        ${review.riskLevel ? ` <span class="badge badge-${review.riskLevel === 'low' ? 'pass' : review.riskLevel === 'medium' ? 'warning' : 'fail'}">Risk: ${review.riskLevel}</span>` : ''}
+      </div>
+    </div>`;
+
+    if (review.checklist && review.checklist.length > 0) {
+      html += '<ul class="checklist">';
+      for (const item of review.checklist) {
+        const icon = item.status === 'pass' ? '✅' : item.status === 'warning' ? '⚠️' : '❌';
+        html += `<li>${icon} ${esc(item.label)}</li>`;
+      }
+      html += '</ul>';
+    }
+
+    if (review.gaps.length > 0) {
+      html += '<div class="mt-12"><strong>⚠️ Identified Gaps</strong><ul style="margin:4px 0 0 16px;">';
+      for (const g of review.gaps) { html += `<li>${esc(g)}</li>`; }
+      html += '</ul></div>';
+    }
+
+    if (review.suggestions.length > 0) {
+      html += '<div class="mt-8"><strong>💡 Suggestions</strong><ul style="margin:4px 0 0 16px;">';
+      for (const sg of review.suggestions) { html += `<li>${esc(sg)}</li>`; }
+      html += '</ul></div>';
+    }
+
+    if (review.questions.length > 0) {
+      html += '<div class="mt-8"><strong>❓ Questions to Consider</strong><ol style="margin:4px 0 0 16px;">';
+      for (const q of review.questions) { html += `<li>${esc(q)}</li>`; }
+      html += '</ol></div>';
+    }
+
+    return html;
   }
 }
