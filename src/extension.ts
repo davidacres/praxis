@@ -55,6 +55,14 @@ export async function activate(
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
+
+  // Set mode context early so when-clauses on views evaluate correctly
+  // before VS Code tries to resolve them.
+  await vscode.commands.executeCommand(
+    'setContext', 'ticketManager.mode',
+    configStore.getBackendMode() ?? 'unconfigured'
+  );
+
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
   const detailsProvider = new DetailsViewProvider(backendService);
