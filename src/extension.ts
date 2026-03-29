@@ -276,12 +276,7 @@ export async function activate(
       return;
     }
 
-    let mode = configStore.getBackendMode();
-    if (!mode) {
-      // Open the setup wizard panel instead of a simple QuickPick
-      mode = await setupWizardPanel.open() as BackendMode | undefined;
-    }
-
+    const mode = configStore.getBackendMode();
     await setModeContext(mode);
 
     if (mode === 'file') {
@@ -769,7 +764,8 @@ export async function activate(
       onLoadMore: async () => {
         await issuesProvider.loadMore();
       }
-    }
+    },
+    () => configStore.getBackendMode()
   );
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
