@@ -20,6 +20,7 @@ import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
+import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
@@ -52,6 +53,7 @@ export async function activate(
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
   const newProjectWizardPanel = new NewProjectWizardPanel();
   const setupWizardPanel = new SetupWizardPanel();
+  const setupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
@@ -764,8 +766,7 @@ export async function activate(
       onLoadMore: async () => {
         await issuesProvider.loadMore();
       }
-    },
-    () => configStore.getBackendMode()
+    }
   );
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
@@ -885,6 +886,8 @@ export async function activate(
     vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.boards', boardsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.issueDetails', issueDetailsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.setup', setupSidebarViewProvider),
+    setupSidebarViewProvider,
     issuesSidebarViewProvider,
     epicsSidebarViewProvider,
     boardsSidebarViewProvider,
