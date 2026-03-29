@@ -946,7 +946,9 @@ export async function activate(
 
   try {
     await ensureStartupConfiguration();
-    await refreshAndRestoreSelection();
+    if (configStore.getBackendMode()) {
+      await refreshAndRestoreSelection();
+    }
   } catch (error) {
     logError(outputChannel, error);
   }

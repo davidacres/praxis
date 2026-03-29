@@ -139,6 +139,10 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       undefined,
       this.disposables
     );
+    if (!this.getBackendMode()) {
+      this.render();
+      return;
+    }
     void this.refresh();
   }
 
@@ -149,6 +153,12 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
   public async refresh(): Promise<void> {
     if (!this.view) {
+      return;
+    }
+
+    // Don't fetch data if not configured — just render the setup view
+    if (!this.getBackendMode()) {
+      this.render();
       return;
     }
 
