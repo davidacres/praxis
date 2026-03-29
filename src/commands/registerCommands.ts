@@ -19,6 +19,7 @@ import { DetailsViewProvider } from '../views/detailsViewProvider';
 import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTreeProvider';
 import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
+import { SetupWizardPanel } from '../views/setupWizardPanel';
 import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
@@ -41,6 +42,7 @@ interface CommandDependencies {
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
   newProjectWizardPanel: NewProjectWizardPanel;
+  setupWizardPanel: SetupWizardPanel;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
   ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
@@ -288,7 +290,9 @@ function toTransitionQuickPickItems(
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   jira: ['Epic', 'Story', 'Task', 'Subtask', 'Bug'],
   demo: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug']
+  file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
+  github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
+  gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug']
 };
 
 function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {
@@ -1074,6 +1078,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         return;
       }
       deps.newProjectWizardPanel.open();
+    }),
+    vscode.commands.registerCommand('ticketManager.openSetup', () => {
+      void deps.setupWizardPanel.open();
     })
   ];
 }

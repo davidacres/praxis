@@ -16,6 +16,7 @@ import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
+import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
@@ -50,6 +51,7 @@ export async function activate(
   const boardColumnStore = new BoardColumnStore(context);
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
   const newProjectWizardPanel = new NewProjectWizardPanel();
+  const setupWizardPanel = new SetupWizardPanel();
   const backendService = new BackendRouter(context, configStore, outputChannel);
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
@@ -276,10 +278,8 @@ export async function activate(
 
     let mode = configStore.getBackendMode();
     if (!mode) {
-      mode = await promptForBackendMode();
-      if (mode) {
-        await configStore.setBackendMode(mode);
-      }
+      // Open the setup wizard panel instead of a simple QuickPick
+      mode = await setupWizardPanel.open() as BackendMode | undefined;
     }
 
     await setModeContext(mode);
@@ -875,6 +875,7 @@ export async function activate(
       boardStore,
       boardColumnConfigPanel,
       newProjectWizardPanel,
+      setupWizardPanel,
       issuesProvider,
       boardsProvider,
       detailsProvider,
