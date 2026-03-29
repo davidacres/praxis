@@ -54,31 +54,31 @@
           "id": "ticketManager.setup",
           "name": "Configure Project",
           "type": "webview",
-          "when": "ticketManager.mode == 'unconfigured'"
+          "when": "!ticketManager.configured"
         },
         {
           "id": "ticketManager.myIssues",
           "name": "My Issues",
           "type": "webview",
-          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
+          "when": "ticketManager.configured"
         },
         {
           "id": "ticketManager.epics",
           "name": "EPICs",
           "type": "webview",
-          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
+          "when": "ticketManager.configured"
         },
         {
           "id": "ticketManager.boards",
           "name": "Boards",
           "type": "webview",
-          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
+          "when": "ticketManager.configured"
         },
         {
           "id": "ticketManager.issueDetails",
           "name": "Issue Details",
           "type": "webview",
-          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
+          "when": "ticketManager.configured"
         }
       ]
     },

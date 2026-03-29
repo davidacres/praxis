@@ -58,9 +58,16 @@ export async function activate(
 
   // Set mode context early so when-clauses on views evaluate correctly
   // before VS Code tries to resolve them.
+  // !ticketManager.configured is true when the key is false OR doesn't exist,
+  // which means the setup view shows by default before activate() even runs.
+  const initialMode = configStore.getBackendMode();
   await vscode.commands.executeCommand(
     'setContext', 'ticketManager.mode',
-    configStore.getBackendMode() ?? 'unconfigured'
+    initialMode ?? 'unconfigured'
+  );
+  await vscode.commands.executeCommand(
+    'setContext', 'ticketManager.configured',
+    !!initialMode
   );
 
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
@@ -142,6 +149,7 @@ export async function activate(
 
   async function setModeContext(mode: BackendMode | undefined): Promise<void> {
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', mode ?? 'unconfigured');
+    await vscode.commands.executeCommand('setContext', 'ticketManager.configured', !!mode);
   }
 
   async function refreshSearchActionContexts(): Promise<void> {
