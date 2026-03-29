@@ -51,32 +51,34 @@
     "views": {
       "ticketManager": [
         {
+          "id": "ticketManager.setup",
+          "name": "Configure Project",
+          "type": "webview",
+          "when": "ticketManager.mode == 'unconfigured'"
+        },
+        {
           "id": "ticketManager.myIssues",
           "name": "My Issues",
           "type": "webview",
-          "contextualTitle": "Tickets",
-          "icon": "media/activitybar-ticket.svg"
+          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
         },
         {
           "id": "ticketManager.epics",
           "name": "EPICs",
           "type": "webview",
-          "contextualTitle": "Tickets",
-          "icon": "media/activitybar-ticket.svg"
+          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
         },
         {
           "id": "ticketManager.boards",
           "name": "Boards",
           "type": "webview",
-          "contextualTitle": "Tickets",
-          "icon": "media/activitybar-ticket.svg"
+          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
         },
         {
           "id": "ticketManager.issueDetails",
           "name": "Issue Details",
           "type": "webview",
-          "contextualTitle": "Tickets",
-          "icon": "media/activitybar-ticket.svg"
+          "when": "ticketManager.mode && ticketManager.mode != 'unconfigured'"
         }
       ]
     },
