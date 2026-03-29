@@ -122,6 +122,18 @@
         "icon": "$(symbol-namespace)"
       },
       {
+        "command": "ticketManager.importMarkdownFeaturePlan",
+        "title": "Import Plan from Markdown Features",
+        "category": "Ticket Manager",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "ticketManager.newProject",
+        "title": "New Project",
+        "category": "Ticket Manager",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "ticketManager.importWorkspaceMcpConfig",
         "title": "Use Workspace MCP Configuration",
         "category": "Ticket Manager",
@@ -630,9 +642,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "^3.3.1",
+    "markdown-it": "^14.1.1"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.5.0",
     "@types/vscode": "1.105.0",

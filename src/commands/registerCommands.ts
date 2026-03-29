@@ -18,6 +18,11 @@ import { BoardNode, BoardsTreeProvider } from '../views/boardsTreeProvider';
 import { DetailsViewProvider } from '../views/detailsViewProvider';
 import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTreeProvider';
+import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
+import {
+  generateTicketPlanFromMarkdownFeatures,
+  resolveSuggestedPlansFolderUri
+} from '../import/markdownFeaturePlanImporter';
 import {
   getParentRule,
   isAllowedParentType
@@ -35,6 +40,7 @@ interface CommandDependencies {
   detailsProvider: DetailsViewProvider;
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
+  newProjectWizardPanel: NewProjectWizardPanel;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
   ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
@@ -63,6 +69,122 @@ function resolveBoard(
 
   const selectedBoardId = boardStore.getLastSelectedBoardId();
   return selectedBoardId ? boardsProvider.getBoardById(selectedBoardId) : undefined;
+}
+
+async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<void> {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders?.length) {
+    await vscode.window.showErrorMessage('Open a workspace folder first, then run this command again.');
+    return;
+  }
+
+  const suggested = await resolveSuggestedPlansFolderUri();
+  const chosen = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    canSelectFiles: false,
+    canSelectFolders: true,
+    openLabel: 'Select plans root (folder that contains features/)',
+    defaultUri: suggested ?? folders[0].uri
+  });
+  if (!chosen?.[0]) {
+    return;
+  }
+
+  const projectKey = (
+    await vscode.window.showInputBox({
+      title: 'Project key',
+      prompt: 'Short key for imported issues (e.g. THI).',
+      value: 'THI',
+      validateInput: value => {
+        const v = value.trim();
+        return /^[A-Za-z][A-Za-z0-9_]{0,14}$/.test(v)
+          ? undefined
+          : 'Use letters, numbers, or underscore; 1–15 characters, start with a letter.';
+      }
+    })
+  )?.trim();
+  if (!projectKey) {
+    return;
+  }
+
+  const projectName = (
+    await vscode.window.showInputBox({
+      title: 'Project name',
+      prompt: 'Display name for the project in Ticket Manager.',
+      value: 'Example HIS Integration'
+    })
+  )?.trim();
+  if (!projectName) {
+    return;
+  }
+
+  const currentUser =
+    (
+      await vscode.window.showInputBox({
+        title: 'Default assignee',
+        prompt: 'Used as assignee on each imported feature and story.',
+        value: 'Alex Agent'
+      })
+    )?.trim() || 'Alex Agent';
+
+  let result: Awaited<ReturnType<typeof generateTicketPlanFromMarkdownFeatures>>;
+  try {
+    result = await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Importing markdown feature plan',
+        cancellable: false
+      },
+      async progress => {
+        return generateTicketPlanFromMarkdownFeatures(chosen[0], {
+          projectKey,
+          projectName,
+          currentUser,
+          onProgress: message => {
+            progress.report({ message });
+            deps.output.appendLine(`[import] ${message}`);
+          }
+        });
+      }
+    );
+  } catch (error) {
+    deps.output.appendLine(
+      `[import] ${error instanceof Error ? error.stack ?? error.message : String(error)}`
+    );
+    await vscode.window.showErrorMessage(
+      error instanceof Error ? error.message : String(error)
+    );
+    return;
+  }
+
+  const saveUri = await vscode.window.showSaveDialog({
+    saveLabel: 'Save imported plan',
+    filters: { 'Plan files': ['jsonc', 'json'] },
+    defaultUri: vscode.Uri.joinPath(folders[0].uri, 'ticket-plan.imported.jsonc')
+  });
+  if (!saveUri) {
+    return;
+  }
+
+  await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(result.jsonc));
+  await deps.configStore.setPlanFilePath(saveUri.fsPath);
+  deps.output.appendLine(
+    `[import] ${result.stats.featuresImported} features, ${result.stats.storiesImported} stories → ${saveUri.fsPath}`
+  );
+
+  const goFile = await vscode.window.showInformationMessage(
+    `Imported ${result.stats.featuresImported} features and ${result.stats.storiesImported} stories from markdown into ${saveUri.fsPath}.`,
+    'Switch to File mode'
+  );
+
+  if (goFile === 'Switch to File mode') {
+    await setBackendMode(deps, 'file');
+    await vscode.window.showInformationMessage('Backend mode is now File. The imported plan is active.');
+  } else {
+    await deps.backendService.reset();
+    await clearUiSelection(deps);
+    await refreshViews(deps);
+  }
 }
 
 async function refreshViews(deps: CommandDependencies): Promise<void> {
@@ -366,9 +488,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.setBackendMode', async () => {
       const currentMode = deps.configStore.getBackendMode();
-      const picked = await vscode.window.showQuickPick<
-        { label: string; description: string; mode: BackendMode }
-      >(
+      type ModePick =
+        | { label: string; description: string; mode: BackendMode }
+        | { label: string; description: string; mode: 'importMarkdownPlan' };
+      const picked = await vscode.window.showQuickPick<ModePick>(
         [
           {
             label: 'Jira Connected',
@@ -384,6 +507,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
             label: 'File',
             description: 'Use a workspace plan file for projects, boards, and issues.',
             mode: 'file'
+          },
+          {
+            label: 'Import plan from markdown features…',
+            description:
+              'Scan a folder like …/plans with features/feature-NN-*/feature.md and story-*.md; save a new ticket-plan file (read-only on source).',
+            mode: 'importMarkdownPlan'
           }
         ],
         {
@@ -403,6 +532,11 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         return;
       }
 
+      if (picked.mode === 'importMarkdownPlan') {
+        await runMarkdownFeaturePlanImport(deps);
+        return;
+      }
+
       await setBackendMode(deps, picked.mode);
       await vscode.window.showInformationMessage(
         picked.mode === 'demo'
@@ -411,6 +545,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
             ? 'The app is now using file mode.'
             : 'The app is now using Jira Connected mode.'
       );
+    }),
+    vscode.commands.registerCommand('ticketManager.importMarkdownFeaturePlan', async () => {
+      await runMarkdownFeaturePlanImport(deps);
     }),
     vscode.commands.registerCommand('ticketManager.importWorkspaceMcpConfig', async () => {
       try {
@@ -922,6 +1059,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       if (arg instanceof LoadMoreNode || arg === undefined) {
         await deps.issuesProvider.loadMore();
       }
+    }),
+    vscode.commands.registerCommand('ticketManager.newProject', () => {
+      deps.newProjectWizardPanel.open();
     })
   ];
 }

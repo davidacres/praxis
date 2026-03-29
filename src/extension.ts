@@ -15,6 +15,7 @@ import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
+import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
@@ -48,6 +49,7 @@ export async function activate(
   const boardStore = new BoardStore(context);
   const boardColumnStore = new BoardColumnStore(context);
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
+  const newProjectWizardPanel = new NewProjectWizardPanel();
   const backendService = new BackendRouter(context, configStore, outputChannel);
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
@@ -105,6 +107,7 @@ export async function activate(
     issueDetailPanelManager,
     boardColumnStore,
     boardColumnConfigPanel,
+    newProjectWizardPanel,
     boardColumnStore.onDidChange(() => {
       boardPanelManager.refreshColumnLayout();
     })
@@ -871,6 +874,7 @@ export async function activate(
       filterStore,
       boardStore,
       boardColumnConfigPanel,
+      newProjectWizardPanel,
       issuesProvider,
       boardsProvider,
       detailsProvider,
