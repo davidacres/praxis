@@ -81,7 +81,7 @@
     "viewsWelcome": [
       {
         "view": "ticketManager.myIssues",
-        "contents": "Choose a backend mode to start working with issues and boards.\\n[Set Backend Mode](command:ticketManager.setBackendMode)\\n[Configure Connection](command:ticketManager.configureConnection)\\n[Use Workspace MCP Configuration](command:ticketManager.importWorkspaceMcpConfig)\\n[Use User/Profile MCP Configuration](command:ticketManager.importUserMcpConfig)\\n[Check Connection](command:ticketManager.checkConnection)"
+        "contents": "Welcome to Ticket Manager!\\nConfigure a project to get started.\\n[$(gear) Configure Project](command:ticketManager.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
       },
       {
         "view": "ticketManager.issueDetails",
@@ -120,6 +120,12 @@
         "title": "Set Backend Mode",
         "category": "Ticket Manager",
         "icon": "$(symbol-namespace)"
+      },
+      {
+        "command": "ticketManager.openSetup",
+        "title": "Configure Project",
+        "category": "Ticket Manager",
+        "icon": "$(gear)"
       },
       {
         "command": "ticketManager.importMarkdownFeaturePlan",
@@ -561,12 +567,16 @@
           "enum": [
             "jira",
             "demo",
-            "file"
+            "file",
+            "github",
+            "gitlab"
           ],
           "enumItemLabels": [
             "Jira Connected",
             "Demo",
-            "File"
+            "Plan File",
+            "GitHub",
+            "GitLab"
           ],
           "scope": "window",
           "description": "Choose whether the app uses Jira Connected, Demo, or File mode."
@@ -607,6 +617,59 @@
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
           "tags": ["preview"]
+        },
+        "ticketManager.githubPat": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "GitHub Personal Access Token for authenticating with the GitHub API."
+        },
+        "ticketManager.githubUrl": {
+          "type": "string",
+          "default": "https://api.github.com",
+          "format": "uri",
+          "scope": "window",
+          "description": "GitHub API base URL. Use the default for github.com or set to your GitHub Enterprise Server URL (e.g. https://github.example.com/api/v3)."
+        },
+        "ticketManager.githubOwner": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "GitHub organisation or user that owns the repositories to manage."
+        },
+        "ticketManager.gitlabUrl": {
+          "type": "string",
+          "default": "",
+          "format": "uri",
+          "scope": "window",
+          "description": "GitLab instance URL (e.g. https://gitlab.com or https://gitlab.example.com)."
+        },
+        "ticketManager.gitlabConnectionType": {
+          "type": "string",
+          "default": "api",
+          "enum": ["api", "mcp"],
+          "enumItemLabels": ["API Key", "GitLab MCP Server"],
+          "scope": "window",
+          "description": "How to connect to GitLab: direct API key or through a GitLab MCP server."
+        },
+        "ticketManager.gitlabApiKey": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "GitLab Personal Access Token for direct API access."
+        },
+        "ticketManager.gitlabMcpCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Command to start the GitLab MCP server (when using MCP connection type)."
+        },
+        "ticketManager.gitlabMcpArgs": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "scope": "window",
+          "description": "Arguments for the GitLab MCP server command."
         },
         "ticketManager.requestTimeoutMs": {
           "type": "number",

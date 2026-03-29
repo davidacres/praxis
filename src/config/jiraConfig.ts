@@ -181,9 +181,7 @@ export class AppConfigStore {
   }
 
   public async setBackendMode(mode: BackendMode): Promise<void> {
-    const target = vscode.workspace.workspaceFolders?.length
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
+    const target = this.configTarget();
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('backendMode', mode, target);
   }
 
@@ -192,9 +190,7 @@ export class AppConfigStore {
   }
 
   public async setPlanFilePath(planFilePath: string | undefined): Promise<void> {
-    const target = vscode.workspace.workspaceFolders?.length
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
+    const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
       .update(PLAN_FILE_KEY, planFilePath?.trim() ?? '', target);
@@ -228,6 +224,80 @@ export class AppConfigStore {
 
   public getDefaultPageSize(): number {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<number>('defaultPageSize', 25);
+  }
+
+  // ── GitHub settings ──────────────────────────────────────────────
+
+  public getGitHubPat(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubPat', '');
+  }
+
+  public getGitHubUrl(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubUrl', 'https://api.github.com');
+  }
+
+  public getGitHubOwner(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubOwner', '');
+  }
+
+  public async setGitHubPat(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubPat', value, target);
+  }
+
+  public async setGitHubUrl(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubUrl', value, target);
+  }
+
+  public async setGitHubOwner(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubOwner', value, target);
+  }
+
+  // ── GitLab settings ──────────────────────────────────────────────
+
+  public getGitLabUrl(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabUrl', '');
+  }
+
+  public getGitLabConnectionType(): 'api' | 'mcp' {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<'api' | 'mcp'>('gitlabConnectionType', 'api');
+  }
+
+  public getGitLabApiKey(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabApiKey', '');
+  }
+
+  public getGitLabMcpCommand(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabMcpCommand', '');
+  }
+
+  public getGitLabMcpArgs(): string[] {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string[]>('gitlabMcpArgs', []);
+  }
+
+  public async setGitLabUrl(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabUrl', value, target);
+  }
+
+  public async setGitLabConnectionType(value: 'api' | 'mcp'): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabConnectionType', value, target);
+  }
+
+  public async setGitLabApiKey(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabApiKey', value, target);
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  private configTarget(): vscode.ConfigurationTarget {
+    return vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
   }
 
   public async getConnectionConfig(

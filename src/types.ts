@@ -1,5 +1,5 @@
 export type ConnectionType = 'stdio' | 'http';
-export type BackendMode = 'jira' | 'demo' | 'file';
+export type BackendMode = 'jira' | 'demo' | 'file' | 'github' | 'gitlab';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
 
@@ -100,6 +100,12 @@ export interface IssueSummary {
   selfUrl?: string;
   browseUrl?: string;
   description?: string;
+  /** Issue keys this ticket depends on (same plan); used for execution ordering and links. */
+  dependsOn?: string[];
+  /** Git branch name for this work item when known (e.g. from import or tooling). */
+  branch?: string;
+  /** When the work was completed (distinct from `updated`). */
+  completed?: string;
   raw?: unknown;
 }
 
@@ -244,6 +250,8 @@ export interface BoardColumnPreferences {
   issueFilterStatuses?: string[];
   /** Per-status column dot color; key is exact status name as on the board. */
   statusColors?: Record<string, string>;
+  /** Board panel layout: Kanban columns vs execution sequence flow. */
+  viewMode?: 'columns' | 'sequence';
 }
 
 export interface ToolDescriptor {
