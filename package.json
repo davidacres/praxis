@@ -533,6 +533,10 @@
         {
           "command": "ticketManager.searchBoardsActive",
           "when": "false"
+        },
+        {
+          "command": "ticketManager.newProject",
+          "when": "config.ticketManager.enableNewProject"
         }
       ]
     },
@@ -596,6 +600,13 @@
           "default": "",
           "format": "uri",
           "description": "Base URL for a remote Jira MCP server that supports streamable HTTP."
+        },
+        "ticketManager.enableNewProject": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
+          "tags": ["preview"]
         },
         "ticketManager.requestTimeoutMs": {
           "type": "number",
