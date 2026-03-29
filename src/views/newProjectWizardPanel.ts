@@ -229,8 +229,8 @@ export class NewProjectWizardPanel implements vscode.Disposable {
   public open(): void {
     this.wizardState = createInitialState();
     this.ensurePanel();
-    this.panel?.reveal(vscode.ViewColumn.Active, false);
-    this.render();
+    this.panel!.webview.html = this.getHtml();
+    this.panel!.reveal(vscode.ViewColumn.Active, false);
   }
 
   public dispose(): void {
@@ -333,6 +333,7 @@ export class NewProjectWizardPanel implements vscode.Disposable {
 
   private getHtml(): string {
     const nonce = createNonce();
+    const stateJson = JSON.stringify(this.wizardState);
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -831,13 +832,15 @@ select{cursor:pointer;}
   <!-- Footer -->
   <div class="wizard-footer" id="wizardFooter"></div>
 </div>
+<div id="errorDisplay" style="display:none;padding:24px;color:red;font-family:monospace;white-space:pre-wrap;"></div>
 
 <script nonce="${nonce}">
 (function(){
+  try {
   const vscodeApi = acquireVsCodeApi();
 
   /* ── State ── */
-  let state = ${JSON.stringify(this.wizardState)};
+  let state = ${stateJson};
 
   const STEPS = [
     { label: 'Define Goal', icon: '🎯' },
@@ -1618,6 +1621,12 @@ select{cursor:pointer;}
 
   /* ── Initial render ── */
   renderAll();
+  } catch(e) {
+    var errEl = document.getElementById('errorDisplay');
+    if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Wizard JS Error: ' + e.message + '\\n\\nStack: ' + e.stack; }
+    var root = document.getElementById('wizardRoot');
+    if (root) { root.style.display = 'none'; }
+  }
 })();
 </script>
 </body>
