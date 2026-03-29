@@ -8,7 +8,6 @@ import type {
   BackendMode,
   Board,
   CreateIssueInput,
-  GroupingMode,
   Project,
   IssueSummary,
   WorkflowTransition
@@ -19,6 +18,10 @@ import { BoardNode, BoardsTreeProvider } from '../views/boardsTreeProvider';
 import { DetailsViewProvider } from '../views/detailsViewProvider';
 import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTreeProvider';
+import {
+  getParentRule,
+  isAllowedParentType
+} from '../issues/issueHierarchy';
 
 interface CommandDependencies {
   context: vscode.ExtensionContext;
@@ -161,15 +164,10 @@ function toTransitionQuickPickItems(
 }
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jira: ['Epic', 'Story', 'Task', 'Bug'],
-  demo: ['Feature', 'Story', 'Task', 'Bug'],
-  file: ['Feature', 'Story', 'Task', 'Bug']
+  jira: ['Epic', 'Story', 'Task', 'Subtask', 'Bug'],
+  demo: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
+  file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug']
 };
-
-function isParentItemType(issueType: string | undefined): boolean {
-  const normalized = issueType?.trim().toLowerCase();
-  return normalized === 'feature' || normalized === 'epic';
-}
 
 function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {
   if (arg instanceof BoardNode) {
@@ -301,21 +299,32 @@ async function promptForCreateIssueInput(
     return undefined;
   }
 
+  const parentRule = getParentRule(pickedType.label, deps.backendService.mode);
   const defaultParentKey =
-    filters.parentKey ||
-    (selectedIssue &&
+    selectedIssue &&
     selectedIssue.projectKey === project.key &&
-    isParentItemType(selectedIssue.issueType)
+    isAllowedParentType(selectedIssue.issueType, pickedType.label, deps.backendService.mode)
       ? selectedIssue.key
-      : undefined);
-  const parentKey = await vscode.window.showInputBox({
-    title: 'Parent Item Key',
-    prompt: 'Optional parent item key. Leave blank for a top-level item.',
-    value: isParentItemType(pickedType.label) ? '' : defaultParentKey ?? '',
-    ignoreFocusOut: true
-  });
-  if (parentKey === undefined) {
-    return undefined;
+      : undefined;
+
+  let parentKey: string | undefined;
+  if (parentRule.canHaveParent) {
+    const pickedParentKey = await vscode.window.showInputBox({
+      title: `${parentRule.defaultLabel} Key`,
+      prompt: parentRule.requiresParent
+        ? `${parentRule.helperText} Enter the ${parentRule.defaultLabel.toLowerCase()} key.`
+        : `${parentRule.helperText} Leave blank for a top-level item.`,
+      value: defaultParentKey ?? '',
+      ignoreFocusOut: true,
+      validateInput: value =>
+        parentRule.requiresParent && value.trim().length === 0
+          ? `${parentRule.defaultLabel} is required.`
+          : undefined
+    });
+    if (pickedParentKey === undefined) {
+      return undefined;
+    }
+    parentKey = pickedParentKey.trim() || undefined;
   }
 
   return {
@@ -323,7 +332,7 @@ async function promptForCreateIssueInput(
     issueType: pickedType.label,
     summary: summary.trim(),
     description: description.trim() || undefined,
-    parentKey: parentKey.trim() || undefined,
+    parentKey,
     boardId: board?.projectKey === project.key ? board.id : undefined
   };
 }
@@ -498,6 +507,62 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       } catch (error) {
         deps.output.appendLine(
           `[create-issue] ${error instanceof Error ? error.stack ?? error.message : error}`
+        );
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.createBoard', async () => {
+      try {
+        if (deps.backendService.mode === 'jira') {
+          await vscode.window.showWarningMessage(
+            'Creating boards is not supported in Jira Connected mode.'
+          );
+          return;
+        }
+
+        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
+          return;
+        }
+
+        const projects = await deps.backendService.getProjects();
+        if (projects.length === 0) {
+          await vscode.window.showWarningMessage('No projects are available.');
+          return;
+        }
+
+        const picked = await vscode.window.showQuickPick(
+          projects.map(project => ({
+            label: project.key,
+            description: project.name,
+            project
+          })),
+          { title: 'Project for new board', ignoreFocusOut: true }
+        );
+        if (!picked) {
+          return;
+        }
+
+        const name = await vscode.window.showInputBox({
+          title: 'Board name',
+          prompt: 'Enter a name for the new board.',
+          ignoreFocusOut: true,
+          validateInput: value => (value.trim().length > 0 ? undefined : 'Board name is required.')
+        });
+        if (name === undefined) {
+          return;
+        }
+
+        await deps.backendService.createBoard({
+          name: name.trim(),
+          projectKey: picked.project.key
+        });
+        await refreshViews(deps);
+        await vscode.window.showInformationMessage(`Created board "${name.trim()}".`);
+      } catch (error) {
+        deps.output.appendLine(
+          `[create-board] ${error instanceof Error ? error.stack ?? error.message : error}`
         );
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
@@ -767,38 +832,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     vscode.commands.registerCommand('ticketManager.clearFilters', async () => {
       await deps.filterStore.clearFilters();
       await deps.detailsProvider.setIssue(undefined);
-    }),
-    vscode.commands.registerCommand('ticketManager.setGrouping', async () => {
-      const picked = await vscode.window.showQuickPick<
-        { label: string; description: string; value: GroupingMode }
-      >(
-        [
-          {
-            label: 'Project',
-            description: 'Group issues by project.',
-            value: 'project'
-          },
-          {
-            label: 'Status',
-            description: 'Group issues by status.',
-            value: 'status'
-          },
-          {
-            label: 'None',
-            description: 'Show a flat list.',
-            value: 'none'
-          }
-        ],
-        {
-          title: 'Grouping'
-        }
-      );
-
-      if (!picked) {
-        return;
-      }
-
-      await deps.filterStore.setGrouping(picked.value);
     }),
     vscode.commands.registerCommand('ticketManager.changeStatus', async (arg?: unknown) => {
       const issue = resolveIssue(deps.detailsProvider, arg);

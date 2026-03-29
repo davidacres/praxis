@@ -12,6 +12,7 @@ export function createPlanTemplate(workspaceName?: string): string {
   ],
   "workflow": {
     "statuses": [
+      { "name": "Backlog", "category": "todo" },
       { "name": "To Do", "category": "todo" },
       { "name": "In Progress", "category": "indeterminate" },
       { "name": "Blocked", "category": "indeterminate" },
@@ -27,7 +28,7 @@ export function createPlanTemplate(workspaceName?: string): string {
       "projectName": "${projectName}",
       "locationName": "Workspace Plan",
       "issueKeys": ["APP-100", "APP-101", "APP-102", "APP-103"],
-      "columnStatusOrder": ["To Do", "In Progress", "Blocked", "Done"]
+      "columnStatusOrder": ["Backlog", "To Do", "In Progress", "Blocked", "Done"]
     }
   ],
   "items": [
@@ -40,6 +41,7 @@ export function createPlanTemplate(workspaceName?: string): string {
       "projectName": "${projectName}",
       "assignee": "Alex Agent",
       "priority": "High",
+      "created": "2026-03-27T23:30:00.000Z",
       "updated": "2026-03-28T00:00:00.000Z",
       "description": "Top-level feature used to group the initial stories, tasks, and bugs."
     },
@@ -52,6 +54,7 @@ export function createPlanTemplate(workspaceName?: string): string {
       "projectName": "${projectName}",
       "assignee": "Alex Agent",
       "priority": "High",
+      "created": "2026-03-27T23:40:00.000Z",
       "updated": "2026-03-28T00:10:00.000Z",
       "description": "A child story under the main feature.",
       "parent": "APP-100"
@@ -65,6 +68,7 @@ export function createPlanTemplate(workspaceName?: string): string {
       "projectName": "${projectName}",
       "assignee": "Jordan Builder",
       "priority": "Medium",
+      "created": "2026-03-27T23:50:00.000Z",
       "updated": "2026-03-28T00:20:00.000Z",
       "description": "A concrete implementation task under the feature.",
       "parent": "APP-100"
@@ -78,6 +82,7 @@ export function createPlanTemplate(workspaceName?: string): string {
       "projectName": "${projectName}",
       "assignee": "Alex Agent",
       "priority": "Critical",
+      "created": "2026-03-28T00:05:00.000Z",
       "updated": "2026-03-28T00:30:00.000Z",
       "description": "A blocker that prevents the feature from finishing.",
       "parent": "APP-100"

@@ -135,6 +135,7 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
   await api.backendService.reset();
   await api.filterStore.clearFilters();
   await api.boardStore.clearFilters();
+  await api.boardColumnStore.clearAllPreferences();
   await api.detailsProvider.setIssue(undefined);
   api.boardPanelManager.dispose();
 }
@@ -164,6 +165,7 @@ async function configureScenario(
   await api.backendService.reset();
   await api.filterStore.clearFilters();
   await api.boardStore.clearFilters();
+  await api.boardColumnStore.clearAllPreferences();
   await api.detailsProvider.setIssue(undefined);
   api.boardPanelManager.dispose();
   await api.refresh();
@@ -259,6 +261,7 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.openIssueFullDetails'));
     assert.ok(commands.includes('ticketManager.configureBoardColumns'));
     assert.ok(commands.includes('ticketManager.createIssue'));
+    assert.ok(commands.includes('ticketManager.createBoard'));
   });
 
   test('loads my issues from the fake connected backend', async () => {
@@ -341,7 +344,7 @@ suite('Ticket Manager Extension', () => {
     await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdIssue.key)));
     const issue = api.issuesProvider.getIssueByKey(createdIssue.key);
     assert.strictEqual(issue?.summary, 'Create issue from integration test');
-    assert.strictEqual(issue?.status, 'To Do');
+    assert.strictEqual(issue?.status, 'Backlog');
 
     const board = api.boardsProvider
       .getCurrentBoards()
@@ -352,6 +355,53 @@ suite('Ticket Manager Extension', () => {
     assert.ok(
       boardDetails.issues.some(candidate => candidate.key === createdIssue.key),
       'Newly created connected issue should appear on the project board'
+    );
+  });
+
+  test('supports connected task and subtask parent rules with parent metadata', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    const createdTask = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Task',
+      summary: 'Connected task under epic',
+      parentKey: 'APP-100'
+    });
+    assert.strictEqual(createdTask.parentKey, 'APP-100');
+    assert.strictEqual(createdTask.parentIssue?.issueType, 'Epic');
+    assert.strictEqual(createdTask.parentIssue?.summary, 'Core app epic');
+
+    const createdSubtask = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Subtask',
+      summary: 'Connected subtask under story',
+      parentKey: 'APP-101'
+    });
+    assert.strictEqual(createdSubtask.parentKey, 'APP-101');
+    assert.strictEqual(createdSubtask.parentIssue?.issueType, 'Story');
+    assert.strictEqual(createdSubtask.parentIssue?.summary, 'Implement MCP adapter');
+    assert.ok(createdSubtask.parentIssue?.description);
+
+    await assert.rejects(
+      () =>
+        api.backendService.createIssue({
+          projectKey: 'APP',
+          issueType: 'Task',
+          summary: 'Invalid connected task parent',
+          parentKey: 'APP-101'
+        }),
+      /Epic/i
+    );
+    await assert.rejects(
+      () =>
+        api.backendService.createIssue({
+          projectKey: 'APP',
+          issueType: 'Subtask',
+          summary: 'Invalid connected subtask parent',
+          parentKey: 'APP-100'
+        }),
+      /Story/i
     );
   });
 
@@ -368,16 +418,20 @@ suite('Ticket Manager Extension', () => {
     const updatedIssue = await api.backendService.updateIssue('APP-101', {
       summary: 'Connected issue updated from integration test',
       description: 'Updated description from the integration test.',
-      parentKey: createdEpic.key
+      parentKey: createdEpic.key,
+      assignee: 'Jordan Builder',
+      priority: 'Medium',
+      issueType: 'Task'
     });
     assert.strictEqual(updatedIssue.summary, 'Connected issue updated from integration test');
     assert.strictEqual(updatedIssue.parentKey, createdEpic.key);
+    assert.strictEqual(updatedIssue.assignee, 'Jordan Builder');
+    assert.strictEqual(updatedIssue.priority, 'Medium');
+    assert.strictEqual(updatedIssue.issueType, 'Task');
+    assert.ok(updatedIssue.created, 'Connected issue details should include a created timestamp');
 
     await api.refresh();
-    assert.strictEqual(
-      api.issuesProvider.getIssueByKey('APP-101')?.summary,
-      'Connected issue updated from integration test'
-    );
+    assert.strictEqual(api.issuesProvider.getIssueByKey('APP-101'), undefined);
 
     await api.backendService.deleteIssue(createdEpic.key);
     await api.refresh();
@@ -388,6 +442,16 @@ suite('Ticket Manager Extension', () => {
     );
     const reassignedIssue = await api.backendService.getIssue('APP-101');
     assert.strictEqual(reassignedIssue.parentKey, undefined);
+  });
+
+  test('adds connected comments and exposes them in issue details', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    await api.backendService.addComment('APP-101', 'Connected comment from the integration test.');
+    const issue = await api.backendService.getIssue('APP-101');
+    assert.ok(issue.comments && issue.comments.length > 0);
+    assert.strictEqual(issue.comments?.[0]?.body, 'Connected comment from the integration test.');
   });
 
   test('loads file-backed plan data and persists status changes', async () => {
@@ -439,7 +503,7 @@ suite('Ticket Manager Extension', () => {
     await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdIssue.key)));
     const issue = api.issuesProvider.getIssueByKey(createdIssue.key);
     assert.strictEqual(issue?.summary, 'Persist a newly created plan item');
-    assert.strictEqual(issue?.status, 'To Do');
+    assert.strictEqual(issue?.status, 'Backlog');
 
     const boardDetails = await api.backendService.getBoardDetails(board!);
     assert.ok(
@@ -453,6 +517,53 @@ suite('Ticket Manager Extension', () => {
       assert.match(updatedText, /"summary": "Persist a newly created plan item"/);
       assert.match(updatedText, /"parent": "APP-100"/);
     }
+  });
+
+  test('supports file-backed task and subtask parent rules with parent metadata', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    const createdTask = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Task',
+      summary: 'File task under feature',
+      parentKey: 'APP-100'
+    });
+    assert.strictEqual(createdTask.parentKey, 'APP-100');
+    assert.strictEqual(createdTask.parentIssue?.issueType, 'Feature');
+    assert.strictEqual(createdTask.parentIssue?.summary, 'Define the primary feature');
+
+    const createdSubtask = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Subtask',
+      summary: 'File subtask under story',
+      parentKey: 'APP-101'
+    });
+    assert.strictEqual(createdSubtask.parentKey, 'APP-101');
+    assert.strictEqual(createdSubtask.parentIssue?.issueType, 'Story');
+    assert.strictEqual(createdSubtask.parentIssue?.summary, 'Write the first story');
+    assert.ok(createdSubtask.parentIssue?.description);
+
+    await assert.rejects(
+      () =>
+        api.backendService.createIssue({
+          projectKey: 'APP',
+          issueType: 'Task',
+          summary: 'Invalid file task parent',
+          parentKey: 'APP-101'
+        }),
+      /Epic|Feature/i
+    );
+    await assert.rejects(
+      () =>
+        api.backendService.createIssue({
+          projectKey: 'APP',
+          issueType: 'Subtask',
+          summary: 'Invalid file subtask parent',
+          parentKey: 'APP-100'
+        }),
+      /Story/i
+    );
   });
 
   test('updates and deletes file-backed issues while persisting EPIC assignment changes', async () => {
@@ -470,16 +581,20 @@ suite('Ticket Manager Extension', () => {
     const updatedIssue = await api.backendService.updateIssue(createdIssue.key, {
       summary: 'Updated file-backed task',
       description: 'Updated file-backed description',
-      parentKey: null
+      parentKey: null,
+      assignee: 'Taylor Planner',
+      priority: 'Low',
+      issueType: 'Bug'
     });
     assert.strictEqual(updatedIssue.summary, 'Updated file-backed task');
     assert.strictEqual(updatedIssue.parentKey, undefined);
+    assert.strictEqual(updatedIssue.assignee, 'Taylor Planner');
+    assert.strictEqual(updatedIssue.priority, 'Low');
+    assert.strictEqual(updatedIssue.issueType, 'Bug');
+    assert.ok(updatedIssue.created, 'File-backed issue details should include a created timestamp');
 
     await api.refresh();
-    assert.strictEqual(
-      api.issuesProvider.getIssueByKey(createdIssue.key)?.summary,
-      'Updated file-backed task'
-    );
+    assert.strictEqual(api.issuesProvider.getIssueByKey(createdIssue.key), undefined);
 
     await api.backendService.deleteIssue(createdIssue.key);
     await api.refresh();
@@ -496,6 +611,22 @@ suite('Ticket Manager Extension', () => {
         !updatedText.includes(`"key": "${createdIssue.key}"`),
         'Deleted plan item should be removed from the plan file'
       );
+    }
+  });
+
+  test('adds file-backed comments and persists them to the plan file', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    await api.backendService.addComment('APP-101', 'Plan comment from the integration test.');
+    const issue = await api.backendService.getIssue('APP-101');
+    assert.ok(issue.comments && issue.comments.length > 0);
+    assert.strictEqual(issue.comments?.[0]?.body, 'Plan comment from the integration test.');
+
+    if (PLAN_FILE_URI) {
+      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
+      assert.match(updatedText, /"comments": \[/);
+      assert.match(updatedText, /"body": "Plan comment from the integration test\."/);
     }
   });
 
@@ -542,13 +673,41 @@ suite('Ticket Manager Extension', () => {
     await waitFor(() => api.boardPanelManager.getSnapshot().issueCount > 0);
 
     const snapshot = api.boardPanelManager.getSnapshot();
-    assert.deepStrictEqual(snapshot.columnNames, ['To Do', 'In Progress', 'Blocked']);
+    assert.deepStrictEqual(snapshot.columnNames, ['Backlog', 'To Do', 'In Progress', 'Blocked']);
 
     await api.boardPanelManager.selectIssue('APP-101');
     await waitFor(() => api.detailsProvider.getActiveIssue()?.key === 'APP-101');
 
     assert.strictEqual(api.detailsProvider.getActiveIssue()?.key, 'APP-101');
     assert.strictEqual(api.boardPanelManager.getSnapshot().selectedIssueKey, 'APP-101');
+  });
+
+  test('applies saved board workflow overrides before column customization', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
+    const board = api.boardsProvider.getCurrentBoards().find(candidate => candidate.name === 'Application Board');
+    assert.ok(board, 'Application Board should be available');
+
+    await api.boardColumnStore.setPreferences(board!.id, {
+      workflowStatuses: ['Backlog', 'Ready for QA', 'Done'],
+      orderedStatuses: []
+    });
+
+    await api.boardPanelManager.openBoard(board!);
+    await waitFor(() => api.boardPanelManager.getSnapshot().issueCount > 0);
+    await waitFor(() =>
+      api.boardPanelManager.getSnapshot().columnNames.join('|') ===
+      ['Backlog', 'Ready for QA', 'Done', 'Other statuses'].join('|')
+    );
+
+    assert.deepStrictEqual(api.boardPanelManager.getSnapshot().columnNames, [
+      'Backlog',
+      'Ready for QA',
+      'Done',
+      'Other statuses'
+    ]);
   });
 
   test('supports parent-item scoping and successful status transitions', async () => {

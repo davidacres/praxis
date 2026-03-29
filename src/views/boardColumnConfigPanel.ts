@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
+import { defaultStatusDotHex, sanitizeStatusColors } from '../board/statusColors';
 import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
 import type { BoardColumnStore } from '../state/boardColumnStore';
+import { normalizeOptionalHexColor } from '../ui/hexColor';
 import { getDefaultStatusColumnOrder } from './boardColumnLayout';
 
 function escapeHtml(value: string): string {
@@ -20,17 +22,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function buildRowModels(
+function normalizeStatuses(statuses: string[]): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const status of statuses) {
+    const trimmed = status.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    unique.push(trimmed);
+  }
+  return unique;
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function buildWorkflowRows(
   prefs: BoardColumnPreferences,
-  defaultOrder: string[]
+  defaultWorkflow: string[]
+): string[] {
+  return prefs.workflowStatuses.length ? [...prefs.workflowStatuses] : [...defaultWorkflow];
+}
+
+function buildColumnRows(
+  prefs: BoardColumnPreferences,
+  workflowRows: string[]
 ): Array<{ status: string; checked: boolean }> {
   if (!prefs.orderedStatuses.length) {
-    return defaultOrder.map(status => ({ status, checked: true }));
+    return workflowRows.map(status => ({ status, checked: true }));
   }
 
   const seen = new Set(prefs.orderedStatuses);
-  const rows = prefs.orderedStatuses.map(status => ({ status, checked: true }));
-  for (const status of defaultOrder) {
+  const rows = prefs.orderedStatuses
+    .filter(status => workflowRows.includes(status))
+    .map(status => ({ status, checked: true }));
+  for (const status of workflowRows) {
     if (!seen.has(status)) {
       rows.push({ status, checked: false });
     }
@@ -46,19 +75,36 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   public async open(board: Board, details: BoardDetails): Promise<void> {
     this.ensurePanel();
     const prefs = this.columnStore.getPreferences(board.id);
-    const defaultOrder = getDefaultStatusColumnOrder(details);
-    const useCustom = prefs.orderedStatuses.length > 0;
-    const rowModels = buildRowModels(prefs, defaultOrder);
+    const defaultWorkflow = getDefaultStatusColumnOrder(details);
+    const workflowRows = buildWorkflowRows(prefs, defaultWorkflow);
+    const columnRows = buildColumnRows(prefs, workflowRows);
+
+    const defaultStatusHex: Record<string, string> = {};
+    const statusColorsState: Record<string, string> = {};
+    for (const s of workflowRows) {
+      const def = defaultStatusDotHex(s);
+      defaultStatusHex[s] = def;
+      statusColorsState[s] = prefs.statusColors?.[s] ?? def;
+    }
 
     const payload = {
       boardId: board.id,
       boardName: board.name,
-      defaultOrder,
-      useCustom,
-      rowModels
+      defaultWorkflow,
+      useCustomWorkflow: prefs.workflowStatuses.length > 0,
+      useCustomColumns: prefs.orderedStatuses.length > 0,
+      workflowRows,
+      columnRows,
+      projectPillColor: prefs.projectPillColor ?? '',
+      swimLaneGroupBy: prefs.swimLaneGroupBy ?? 'none',
+      issueFilterAssignee: prefs.issueFilterAssignee ?? '',
+      issueFilterEpicKey: prefs.issueFilterEpicKey ?? '',
+      issueFilterStatuses: prefs.issueFilterStatuses ?? [],
+      defaultStatusHex,
+      statusColorsState
     };
 
-    this.panel!.title = `Columns: ${board.name}`;
+    this.panel!.title = `Board Settings: ${board.name}`;
     this.panel!.webview.html = this.getHtml(payload);
     this.panel!.reveal(vscode.ViewColumn.Active, false);
   }
@@ -75,7 +121,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
 
     this.panel = vscode.window.createWebviewPanel(
       'ticketManager.boardColumnConfig',
-      'Board columns',
+      'Board settings',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
@@ -102,24 +148,100 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
 
     if (type === 'save') {
       const boardId = typeof message.boardId === 'string' ? message.boardId : '';
-      const useCustom = Boolean(message.useCustom);
-      const ordered = Array.isArray(message.orderedStatuses)
-        ? message.orderedStatuses.filter((s): s is string => typeof s === 'string')
+      const useCustomWorkflow = Boolean(message.useCustomWorkflow);
+      const useCustomColumns = Boolean(message.useCustomColumns);
+      const defaultWorkflow = Array.isArray(message.defaultWorkflow)
+        ? normalizeStatuses(message.defaultWorkflow.filter((s): s is string => typeof s === 'string'))
         : [];
+      const workflowStatuses = Array.isArray(message.workflowStatuses)
+        ? normalizeStatuses(message.workflowStatuses.filter((s): s is string => typeof s === 'string'))
+        : [];
+      const orderedStatuses = Array.isArray(message.orderedStatuses)
+        ? normalizeStatuses(message.orderedStatuses.filter((s): s is string => typeof s === 'string'))
+        : [];
+      const rawPill =
+        typeof message.projectPillColor === 'string' ? message.projectPillColor.trim() : '';
+      if (rawPill && !normalizeOptionalHexColor(rawPill)) {
+        void vscode.window.showWarningMessage(
+          'Project pill color must be a valid hex value (#rgb or #rrggbb) or empty.'
+        );
+        return;
+      }
+      const projectPillColor = normalizeOptionalHexColor(rawPill);
+
+      const swimLaneRaw = typeof message.swimLaneGroupBy === 'string' ? message.swimLaneGroupBy : 'none';
+      const swimLaneGroupBy =
+        swimLaneRaw === 'assignee' || swimLaneRaw === 'epic' ? swimLaneRaw : 'none';
+
+      const issueFilterAssignee =
+        typeof message.issueFilterAssignee === 'string' ? message.issueFilterAssignee.trim() : '';
+      const issueFilterEpicKey =
+        typeof message.issueFilterEpicKey === 'string' ? message.issueFilterEpicKey.trim() : '';
+      const issueFilterStatuses = Array.isArray(message.issueFilterStatuses)
+        ? normalizeStatuses(message.issueFilterStatuses.filter((s): s is string => typeof s === 'string'))
+        : [];
+
+      const sanitizedColors = sanitizeStatusColors(message.statusColors);
+      let statusColorsOut: Record<string, string> | undefined;
+      if (sanitizedColors) {
+        const trimmed: Record<string, string> = {};
+        for (const [status, hex] of Object.entries(sanitizedColors)) {
+          if (hex !== defaultStatusDotHex(status)) {
+            trimmed[status] = hex;
+          }
+        }
+        if (Object.keys(trimmed).length > 0) {
+          statusColorsOut = trimmed;
+        }
+      }
 
       if (!boardId) {
         return;
       }
 
-      if (!useCustom) {
-        await this.columnStore.clearPreferences(boardId);
-      } else {
-        await this.columnStore.setPreferences(boardId, { orderedStatuses: ordered });
+      const nextPrefs: BoardColumnPreferences = {
+        workflowStatuses:
+          useCustomWorkflow && !arraysEqual(workflowStatuses, defaultWorkflow) ? workflowStatuses : [],
+        orderedStatuses: useCustomColumns ? orderedStatuses : []
+      };
+      if (projectPillColor) {
+        nextPrefs.projectPillColor = projectPillColor;
+      }
+      if (swimLaneGroupBy !== 'none') {
+        nextPrefs.swimLaneGroupBy = swimLaneGroupBy;
+      }
+      if (issueFilterAssignee) {
+        nextPrefs.issueFilterAssignee = issueFilterAssignee;
+      }
+      if (issueFilterEpicKey) {
+        nextPrefs.issueFilterEpicKey = issueFilterEpicKey;
+      }
+      if (issueFilterStatuses.length > 0) {
+        nextPrefs.issueFilterStatuses = issueFilterStatuses;
+      }
+      if (statusColorsOut) {
+        nextPrefs.statusColors = statusColorsOut;
       }
 
-      void vscode.window.showInformationMessage(
-        useCustom ? 'Board column layout saved.' : 'Board columns reset to default (all statuses).'
-      );
+      const hasExtra =
+        Boolean(nextPrefs.projectPillColor) ||
+        (nextPrefs.swimLaneGroupBy && nextPrefs.swimLaneGroupBy !== 'none') ||
+        Boolean(nextPrefs.issueFilterAssignee) ||
+        Boolean(nextPrefs.issueFilterEpicKey) ||
+        (nextPrefs.issueFilterStatuses && nextPrefs.issueFilterStatuses.length > 0) ||
+        Boolean(nextPrefs.statusColors && Object.keys(nextPrefs.statusColors).length > 0);
+
+      if (
+        nextPrefs.workflowStatuses.length === 0 &&
+        nextPrefs.orderedStatuses.length === 0 &&
+        !hasExtra
+      ) {
+        await this.columnStore.clearPreferences(boardId);
+      } else {
+        await this.columnStore.setPreferences(boardId, nextPrefs);
+      }
+
+      void vscode.window.showInformationMessage('Board settings saved.');
       this.panel?.dispose();
       return;
     }
@@ -132,9 +254,18 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   private getHtml(payload: {
     boardId: string;
     boardName: string;
-    defaultOrder: string[];
-    useCustom: boolean;
-    rowModels: Array<{ status: string; checked: boolean }>;
+    defaultWorkflow: string[];
+    useCustomWorkflow: boolean;
+    useCustomColumns: boolean;
+    workflowRows: string[];
+    columnRows: Array<{ status: string; checked: boolean }>;
+    projectPillColor: string;
+    swimLaneGroupBy: string;
+    issueFilterAssignee: string;
+    issueFilterEpicKey: string;
+    issueFilterStatuses: string[];
+    defaultStatusHex: Record<string, string>;
+    statusColorsState: Record<string, string>;
   }): string {
     const nonce = createNonce();
     const json = JSON.stringify(payload);
@@ -145,7 +276,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Board columns</title>
+  <title>Board settings</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -154,15 +285,27 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       font-family: var(--vscode-font-family);
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
-      max-width: 560px;
+      max-width: 760px;
     }
     h1 { margin: 0 0 8px; font-size: 18px; }
-    p { margin: 0 0 16px; color: var(--vscode-descriptionForeground); font-size: 13px; line-height: 1.45; }
+    p {
+      margin: 0 0 16px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .section {
+      margin-top: 20px;
+    }
+    .section h2 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
     .mode {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       font-size: 13px;
     }
     .mode input { cursor: pointer; }
@@ -170,7 +313,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       border: 1px solid var(--vscode-panel-border);
       border-radius: 8px;
       overflow: hidden;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
       opacity: 1;
     }
     .list.disabled { opacity: 0.45; pointer-events: none; }
@@ -185,10 +328,49 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     }
     .row:last-child { border-bottom: none; }
     .row.dragging { opacity: 0.5; }
-    .row .drag-hint { color: var(--vscode-descriptionForeground); cursor: grab; user-select: none; }
+    .row .drag-hint {
+      color: var(--vscode-descriptionForeground);
+      cursor: grab;
+      user-select: none;
+    }
     .row input[type="checkbox"] { cursor: pointer; }
-    .row .name { flex: 1; font-size: 13px; }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row .name {
+      flex: 1;
+      font-size: 13px;
+      min-width: 0;
+    }
+    .row .name-input {
+      flex: 1;
+      box-sizing: border-box;
+      min-width: 0;
+      padding: 6px 8px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
+    .row .remove-btn {
+      border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-button-border, transparent));
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .sub-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
     button {
       border: 1px solid var(--vscode-button-border, transparent);
       background: var(--vscode-button-background);
@@ -203,33 +385,297 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
     }
     button:hover { filter: brightness(1.06); }
+    .helper {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .color-row input[type="color"] {
+      width: 40px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--vscode-input-background);
+    }
+    .color-row input[type="text"] {
+      box-sizing: border-box;
+      width: 120px;
+      padding: 6px 8px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
+    .field-label {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .field-input,
+    .field-select {
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 420px;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
+    .filter-status-row,
+    .status-color-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-color-row .status-name {
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+    }
+    .status-color-row input[type="color"] {
+      width: 40px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h1>${escapeHtml(payload.boardName)}</h1>
-  <p>Choose which status columns appear on this board and their order. When customization is off, every status is shown in the default workflow order.</p>
+  <p>Set this board's workflow statuses and the columns you want to see. The workflow order becomes the default board layout; column customization can then hide or reorder those statuses locally.</p>
 
-  <label class="mode">
-    <input type="checkbox" id="useCustom" ${payload.useCustom ? 'checked' : ''} />
-    <span>Customize columns</span>
-  </label>
+  <section class="section">
+    <h2>Board list</h2>
+    <p class="helper">Color for the project or location pill on this board&rsquo;s row in the Boards sidebar (hex, e.g. #22c55e). Leave blank to use the default theme pill.</p>
+    <div class="color-row">
+      <input type="color" id="projectPillColorPicker" value="${escapeHtml(
+        /^#[0-9a-fA-F]{6}$/.test(payload.projectPillColor) ? payload.projectPillColor : '#808080'
+      )}" title="Pick color" />
+      <input type="text" id="projectPillColorHex" placeholder="#aabbcc" value="${escapeHtml(
+        payload.projectPillColor
+      )}" spellcheck="false" />
+      <button type="button" class="secondary" id="clearProjectPillColorBtn">Clear</button>
+    </div>
+  </section>
 
-  <div id="list" class="list${payload.useCustom ? '' : ' disabled'}"></div>
+  <section class="section">
+    <h2>Swim lanes</h2>
+    <p class="helper">Group the board into horizontal bands. Each band shows the same status columns for a subset of tickets.</p>
+    <select id="swimLaneSelect" class="field-select">
+      <option value="none" ${payload.swimLaneGroupBy === 'none' ? 'selected' : ''}>None</option>
+      <option value="assignee" ${payload.swimLaneGroupBy === 'assignee' ? 'selected' : ''}>By assignee</option>
+      <option value="epic" ${payload.swimLaneGroupBy === 'epic' ? 'selected' : ''}>By epic (parent)</option>
+    </select>
+  </section>
+
+  <section class="section">
+    <h2>Board filters</h2>
+    <p class="helper">Narrow which tickets load into this board view. For statuses, leave every box checked to allow all workflow columns.</p>
+    <label class="field-label" for="issueFilterAssignee">Assignee contains</label>
+    <input type="text" id="issueFilterAssignee" class="field-input" value="${escapeHtml(
+      payload.issueFilterAssignee
+    )}" placeholder="Substring of assignee name" />
+    <label class="field-label" for="issueFilterEpicKey">Epic key or title contains</label>
+    <input type="text" id="issueFilterEpicKey" class="field-input" value="${escapeHtml(
+      payload.issueFilterEpicKey
+    )}" placeholder="e.g. APP-100 or summary text" />
+    <p class="helper" style="margin-top:12px;">Include tickets in these statuses</p>
+    <div id="filterStatusList" class="list"></div>
+  </section>
+
+  <section class="section">
+    <h2>Status colors</h2>
+    <p class="helper">Column header dot color per status. Values start from the built-in defaults; override any hex as needed.</p>
+    <div id="statusColorList" class="list"></div>
+  </section>
+
+  <section class="section">
+    <h2>Workflow</h2>
+    <p class="helper">Use the board's current statuses as the default. Turn customization on to add, remove, rename, or reorder workflow steps.</p>
+    <label class="mode">
+      <input type="checkbox" id="useCustomWorkflow" ${payload.useCustomWorkflow ? 'checked' : ''} />
+      <span>Customize workflow</span>
+    </label>
+    <div id="workflowList" class="list${payload.useCustomWorkflow ? '' : ' disabled'}"></div>
+    <div class="sub-actions">
+      <button type="button" class="secondary" id="addWorkflowStatusBtn">Add Status</button>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Columns</h2>
+    <p class="helper">Choose which workflow statuses show as board columns and their order. When customization is off, every workflow status is shown.</p>
+    <label class="mode">
+      <input type="checkbox" id="useCustomColumns" ${payload.useCustomColumns ? 'checked' : ''} />
+      <span>Customize columns</span>
+    </label>
+    <div id="columnList" class="list${payload.useCustomColumns ? '' : ' disabled'}"></div>
+  </section>
 
   <div class="actions">
     <button type="button" id="saveBtn">Save</button>
-    <button type="button" class="secondary" id="resetBtn">Reset to default</button>
+    <button type="button" class="secondary" id="resetBtn">Reset to current default</button>
     <button type="button" class="secondary" id="cancelBtn">Cancel</button>
   </div>
 
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
     const initial = ${json};
+    const workflowListEl = document.getElementById('workflowList');
+    const columnListEl = document.getElementById('columnList');
+    const statusColorListEl = document.getElementById('statusColorList');
+    const filterStatusListEl = document.getElementById('filterStatusList');
+    const useCustomWorkflowEl = document.getElementById('useCustomWorkflow');
+    const useCustomColumnsEl = document.getElementById('useCustomColumns');
+    const projectPillHexEl = document.getElementById('projectPillColorHex');
+    const projectPillPickerEl = document.getElementById('projectPillColorPicker');
 
-    const listEl = document.getElementById('list');
-    const useCustomEl = document.getElementById('useCustom');
+    let workflowRows = initial.workflowRows.slice();
+    let columnRows = initial.columnRows.map(row => ({ status: row.status, checked: row.checked }));
+    let statusColorsMap = { ...initial.statusColorsState };
+    let filterStatusChecked = {};
 
-    let rows = initial.rowModels.map(r => ({ status: r.status, checked: r.checked }));
+    function defaultStatusDotHexFallback(status) {
+      const n = String(status).trim().toLowerCase();
+      const map = {
+        backlog: '#2ea043',
+        'to do': '#1f6feb',
+        todo: '#1f6feb',
+        'in progress': '#d18616',
+        blocked: '#d1242f',
+        done: '#2ea043'
+      };
+      return map[n] || '#8b949e';
+    }
+
+    function initFilterChecksFromSaved(saved) {
+      const keys = normalizeStatuses(workflowRows);
+      const savedSet = new Set(saved || []);
+      filterStatusChecked = {};
+      for (const k of keys) {
+        filterStatusChecked[k] = !saved || saved.length === 0 ? true : savedSet.has(k);
+      }
+    }
+
+    function syncMapsFromWorkflow() {
+      const keys = normalizeStatuses(workflowRows);
+      const nextColors = {};
+      for (const k of keys) {
+        nextColors[k] =
+          statusColorsMap[k] ||
+          initial.defaultStatusHex[k] ||
+          defaultStatusDotHexFallback(k);
+      }
+      statusColorsMap = nextColors;
+      const prev = { ...filterStatusChecked };
+      const nextF = {};
+      for (const k of keys) {
+        nextF[k] = Object.prototype.hasOwnProperty.call(prev, k) ? prev[k] : true;
+      }
+      filterStatusChecked = nextF;
+    }
+
+    function renderFilterStatusList() {
+      filterStatusListEl.innerHTML = '';
+      const keys = normalizeStatuses(workflowRows);
+      for (const k of keys) {
+        const row = document.createElement('div');
+        row.className = 'row filter-status-row';
+        const id = 'fs-' + k.replace(/[^a-zA-Z0-9]+/g, '_');
+        row.innerHTML =
+          '<input type="checkbox" id="' +
+          id +
+          '" data-status="' +
+          escapeAttr(k) +
+          '" ' +
+          (filterStatusChecked[k] ? 'checked' : '') +
+          ' /><label for="' +
+          id +
+          '" class="name">' +
+          escapeHtml(k) +
+          '</label>';
+        filterStatusListEl.appendChild(row);
+      }
+      for (const cb of filterStatusListEl.querySelectorAll('input[type="checkbox"]')) {
+        cb.addEventListener('change', () => {
+          const st = cb.dataset.status;
+          if (st) {
+            filterStatusChecked[st] = cb.checked;
+          }
+        });
+      }
+    }
+
+    function renderStatusColorList() {
+      statusColorListEl.innerHTML = '';
+      const keys = normalizeStatuses(workflowRows);
+      for (const k of keys) {
+        const hex =
+          statusColorsMap[k] ||
+          initial.defaultStatusHex[k] ||
+          defaultStatusDotHexFallback(k);
+        const safeHex = /^#[0-9a-fA-F]{6}$/i.test(hex) ? hex : '#888888';
+        const row = document.createElement('div');
+        row.className = 'row status-color-row';
+        const id = 'sc-' + k.replace(/[^a-zA-Z0-9]+/g, '_');
+        row.innerHTML =
+          '<span class="status-name">' +
+          escapeHtml(k) +
+          '</span>' +
+          '<input type="color" class="sc-picker" data-status="' +
+          escapeAttr(k) +
+          '" value="' +
+          escapeAttr(safeHex) +
+          '" />' +
+          '<input type="text" class="name-input sc-hex" data-status="' +
+          escapeAttr(k) +
+          '" value="' +
+          escapeAttr(hex) +
+          '" />';
+        statusColorListEl.appendChild(row);
+      }
+      for (const p of statusColorListEl.querySelectorAll('.sc-picker')) {
+        p.addEventListener('input', () => {
+          const st = p.dataset.status;
+          if (st) {
+            statusColorsMap[st] = p.value;
+            const hexInput = statusColorListEl.querySelector('.sc-hex[data-status="' + escapeAttr(st) + '"]');
+            if (hexInput) {
+              hexInput.value = p.value;
+            }
+          }
+        });
+      }
+      for (const inp of statusColorListEl.querySelectorAll('.sc-hex')) {
+        inp.addEventListener('input', () => {
+          const st = inp.dataset.status;
+          const v = inp.value.trim();
+          if (st && /^#[0-9a-fA-F]{6}$/i.test(v)) {
+            statusColorsMap[st] = v;
+            const picker = statusColorListEl.querySelector('.sc-picker[data-status="' + escapeAttr(st) + '"]');
+            if (picker) {
+              picker.value = v;
+            }
+          }
+        });
+      }
+    }
 
     function escapeHtml(s) {
       return String(s)
@@ -243,27 +689,48 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       return String(s).replace(/"/g, '&quot;');
     }
 
-    function syncUseCustom() {
-      const on = useCustomEl.checked;
-      listEl.classList.toggle('disabled', !on);
+    function normalizeStatuses(values) {
+      const unique = [];
+      const seen = new Set();
+      for (const value of values) {
+        const trimmed = String(value || '').trim();
+        if (!trimmed || seen.has(trimmed)) {
+          continue;
+        }
+        seen.add(trimmed);
+        unique.push(trimmed);
+      }
+      return unique;
     }
 
-    function renderList() {
-      listEl.innerHTML = '';
-      for (let i = 0; i < rows.length; i++) {
+    function syncDisabledState() {
+      workflowListEl.classList.toggle('disabled', !useCustomWorkflowEl.checked);
+      columnListEl.classList.toggle('disabled', !useCustomColumnsEl.checked);
+    }
+
+    function reconcileColumns() {
+      const checkedByStatus = new Map(columnRows.map(row => [row.status, row.checked]));
+      columnRows = workflowRows.map(status => ({
+        status,
+        checked: checkedByStatus.has(status) ? Boolean(checkedByStatus.get(status)) : true
+      }));
+    }
+
+    function renderWorkflowList() {
+      workflowListEl.innerHTML = '';
+      for (let i = 0; i < workflowRows.length; i++) {
         const row = document.createElement('div');
         row.className = 'row';
         row.draggable = true;
         row.dataset.index = String(i);
-        const r = rows[i];
         row.innerHTML =
           '<span class="drag-hint" title="Drag to reorder">⠿</span>' +
-          '<input type="checkbox" class="vis" ' + (r.checked ? 'checked' : '') + ' data-status="' + escapeAttr(r.status) + '" />' +
-          '<span class="name">' + escapeHtml(r.status) + '</span>';
-        listEl.appendChild(row);
+          '<input type="text" class="name-input" value="' + escapeAttr(workflowRows[i]) + '" data-index="' + i + '" />' +
+          '<button type="button" class="remove-btn" data-index="' + i + '">Remove</button>';
+        workflowListEl.appendChild(row);
       }
 
-      for (const row of listEl.querySelectorAll('.row')) {
+      for (const row of workflowListEl.querySelectorAll('.row')) {
         row.addEventListener('dragstart', e => {
           row.classList.add('dragging');
           e.dataTransfer.setData('text/plain', row.dataset.index);
@@ -279,30 +746,144 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
           const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
           const to = parseInt(row.dataset.index, 10);
           if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-          const next = rows.slice();
+          const next = workflowRows.slice();
           const [moved] = next.splice(from, 1);
           next.splice(to, 0, moved);
-          rows = next;
-          renderList();
+          workflowRows = next;
+          reconcileColumns();
+          renderAll();
         });
       }
 
-      for (const cb of listEl.querySelectorAll('.vis')) {
-        cb.addEventListener('change', () => {
-          const status = cb.dataset.status;
-          const entry = rows.find(r => r.status === status);
-          if (entry) entry.checked = cb.checked;
+      for (const input of workflowListEl.querySelectorAll('.name-input')) {
+        input.addEventListener('input', () => {
+          const index = parseInt(input.dataset.index, 10);
+          if (Number.isNaN(index)) {
+            return;
+          }
+          workflowRows[index] = input.value;
+          reconcileColumns();
+          renderColumnList();
+        });
+      }
+
+      for (const button of workflowListEl.querySelectorAll('.remove-btn')) {
+        button.addEventListener('click', () => {
+          const index = parseInt(button.dataset.index, 10);
+          if (Number.isNaN(index)) {
+            return;
+          }
+          workflowRows.splice(index, 1);
+          reconcileColumns();
+          renderAll();
         });
       }
     }
 
-    useCustomEl.addEventListener('change', syncUseCustom);
+    function renderColumnList() {
+      columnListEl.innerHTML = '';
+      for (let i = 0; i < columnRows.length; i++) {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.draggable = true;
+        row.dataset.index = String(i);
+        const current = columnRows[i];
+        row.innerHTML =
+          '<span class="drag-hint" title="Drag to reorder">⠿</span>' +
+          '<input type="checkbox" class="vis" ' + (current.checked ? 'checked' : '') + ' data-status="' + escapeAttr(current.status) + '" />' +
+          '<span class="name">' + escapeHtml(current.status) + '</span>';
+        columnListEl.appendChild(row);
+      }
+
+      for (const row of columnListEl.querySelectorAll('.row')) {
+        row.addEventListener('dragstart', e => {
+          row.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', row.dataset.index);
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        row.addEventListener('dragend', () => row.classList.remove('dragging'));
+        row.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+        });
+        row.addEventListener('drop', e => {
+          e.preventDefault();
+          const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+          const to = parseInt(row.dataset.index, 10);
+          if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+          const next = columnRows.slice();
+          const [moved] = next.splice(from, 1);
+          next.splice(to, 0, moved);
+          columnRows = next;
+          renderColumnList();
+        });
+      }
+
+      for (const cb of columnListEl.querySelectorAll('.vis')) {
+        cb.addEventListener('change', () => {
+          const status = cb.dataset.status;
+          const entry = columnRows.find(row => row.status === status);
+          if (entry) {
+            entry.checked = cb.checked;
+          }
+        });
+      }
+    }
+
+    function renderAll() {
+      syncMapsFromWorkflow();
+      renderWorkflowList();
+      renderColumnList();
+      renderFilterStatusList();
+      renderStatusColorList();
+      syncDisabledState();
+    }
+
+    function syncPickerFromHex() {
+      const raw = String(projectPillHexEl.value || '').trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(raw)) {
+        projectPillPickerEl.value = raw;
+      }
+    }
+
+    projectPillHexEl.addEventListener('input', syncPickerFromHex);
+    projectPillPickerEl.addEventListener('input', () => {
+      projectPillHexEl.value = projectPillPickerEl.value;
+    });
+    document.getElementById('clearProjectPillColorBtn').addEventListener('click', () => {
+      projectPillHexEl.value = '';
+      projectPillPickerEl.value = '#808080';
+    });
+
+    useCustomWorkflowEl.addEventListener('change', syncDisabledState);
+    useCustomColumnsEl.addEventListener('change', syncDisabledState);
+
+    document.getElementById('addWorkflowStatusBtn').addEventListener('click', () => {
+      workflowRows.push('');
+      reconcileColumns();
+      renderAll();
+      const inputs = workflowListEl.querySelectorAll('.name-input');
+      const lastInput = inputs[inputs.length - 1];
+      lastInput?.focus();
+    });
 
     document.getElementById('resetBtn').addEventListener('click', () => {
-      useCustomEl.checked = false;
-      rows = initial.defaultOrder.map(s => ({ status: s, checked: true }));
-      syncUseCustom();
-      renderList();
+      useCustomWorkflowEl.checked = false;
+      useCustomColumnsEl.checked = false;
+      workflowRows = initial.defaultWorkflow.slice();
+      columnRows = workflowRows.map(status => ({ status, checked: true }));
+      projectPillHexEl.value = '';
+      projectPillPickerEl.value = '#808080';
+      document.getElementById('swimLaneSelect').value = 'none';
+      document.getElementById('issueFilterAssignee').value = '';
+      document.getElementById('issueFilterEpicKey').value = '';
+      statusColorsMap = {};
+      for (const s of workflowRows) {
+        statusColorsMap[s] =
+          initial.defaultStatusHex[s] || defaultStatusDotHexFallback(s);
+      }
+      initFilterChecksFromSaved([]);
+      renderAll();
     });
 
     document.getElementById('cancelBtn').addEventListener('click', () => {
@@ -310,30 +891,50 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     });
 
     document.getElementById('saveBtn').addEventListener('click', () => {
-      const useCustom = useCustomEl.checked;
-      let ordered = [];
-      if (useCustom) {
-        for (const row of listEl.querySelectorAll('.row')) {
-          const cb = row.querySelector('.vis');
-          if (cb && cb.checked) {
-            ordered.push(cb.dataset.status);
-          }
-        }
-        if (ordered.length === 0) {
-          alert('Select at least one status column, or turn off customization.');
-          return;
-        }
+      const workflowStatuses = normalizeStatuses(workflowRows);
+      if (useCustomWorkflowEl.checked && workflowStatuses.length === 0) {
+        alert('Add at least one workflow status, or turn off workflow customization.');
+        return;
       }
+
+      const orderedStatuses = columnRows
+        .filter(row => row.checked)
+        .map(row => row.status)
+        .filter(status => workflowStatuses.includes(status) || initial.defaultWorkflow.includes(status));
+      if (useCustomColumnsEl.checked && orderedStatuses.length === 0) {
+        alert('Select at least one status column, or turn off column customization.');
+        return;
+      }
+
+      const rawPill = String(projectPillHexEl.value || '').trim();
+      if (rawPill && !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawPill)) {
+        alert('Project pill color must be empty or a hex value like #2a5 or #22aa55.');
+        return;
+      }
+
+      const wfKeys = normalizeStatuses(workflowRows);
+      const allStatusesChecked = wfKeys.length === 0 || wfKeys.every(k => filterStatusChecked[k]);
+      const issueFilterStatusesPayload = allStatusesChecked ? [] : wfKeys.filter(k => filterStatusChecked[k]);
+
       vscodeApi.postMessage({
         type: 'save',
         boardId: initial.boardId,
-        useCustom,
-        orderedStatuses: useCustom ? ordered : []
+        defaultWorkflow: initial.defaultWorkflow,
+        useCustomWorkflow: useCustomWorkflowEl.checked,
+        useCustomColumns: useCustomColumnsEl.checked,
+        workflowStatuses: useCustomWorkflowEl.checked ? workflowStatuses : [],
+        orderedStatuses: useCustomColumnsEl.checked ? orderedStatuses : [],
+        projectPillColor: String(projectPillHexEl.value || '').trim(),
+        swimLaneGroupBy: document.getElementById('swimLaneSelect').value,
+        issueFilterAssignee: document.getElementById('issueFilterAssignee').value.trim(),
+        issueFilterEpicKey: document.getElementById('issueFilterEpicKey').value.trim(),
+        issueFilterStatuses: issueFilterStatusesPayload,
+        statusColors: statusColorsMap
       });
     });
 
-    renderList();
-    syncUseCustom();
+    initFilterChecksFromSaved(initial.issueFilterStatuses);
+    renderAll();
   </script>
 </body>
 </html>`;

@@ -7,7 +7,7 @@ import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
-import type { BackendMode, Board, IssueSummary } from './types';
+import type { BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -18,12 +18,14 @@ import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
+import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
   backendService: IssueTrackerService;
   filterStore: FilterStore;
   boardStore: BoardStore;
+  boardColumnStore: BoardColumnStore;
   issuesProvider: IssuesTreeProvider;
   boardsProvider: BoardsTreeProvider;
   detailsProvider: DetailsViewProvider;
@@ -125,6 +127,26 @@ export async function activate(
 
   async function setModeContext(mode: BackendMode | undefined): Promise<void> {
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', mode ?? 'unconfigured');
+  }
+
+  async function refreshSearchActionContexts(): Promise<void> {
+    await Promise.all([
+      vscode.commands.executeCommand(
+        'setContext',
+        'ticketManager.issuesSearchActive',
+        filterStore.getFilters().searchText.trim().length > 0
+      ),
+      vscode.commands.executeCommand(
+        'setContext',
+        'ticketManager.epicsSearchActive',
+        epicsSidebarViewProvider?.getSearchText().trim().length > 0
+      ),
+      vscode.commands.executeCommand(
+        'setContext',
+        'ticketManager.boardsSearchActive',
+        boardStore.getFilters().searchText.trim().length > 0
+      )
+    ]);
   }
 
   async function ensureFilePlanConfigured(interactive: boolean): Promise<boolean> {
@@ -308,8 +330,68 @@ export async function activate(
     await selectIssue(issue, options);
   }
 
+  async function searchIssues(): Promise<void> {
+    const filters = filterStore.getFilters();
+    const searchText = await vscode.window.showInputBox({
+      title: 'Search Issues',
+      prompt: 'Filter the My Issues list by issue text.',
+      value: filters.searchText,
+      ignoreFocusOut: true
+    });
+    if (searchText === undefined) {
+      return;
+    }
+    await filterStore.updateFilters({
+      searchText
+    });
+    await refreshSearchActionContexts();
+  }
+
+  async function searchEpics(): Promise<void> {
+    const searchText = await vscode.window.showInputBox({
+      title: 'Search EPICs',
+      prompt: 'Filter the EPICs list by issue text.',
+      value: epicsSidebarViewProvider.getSearchText(),
+      ignoreFocusOut: true
+    });
+    if (searchText === undefined) {
+      return;
+    }
+    await epicsSidebarViewProvider.setSearchText(searchText);
+    await refreshSearchActionContexts();
+  }
+
+  async function searchBoards(): Promise<void> {
+    const filters = boardStore.getFilters();
+    const searchText = await vscode.window.showInputBox({
+      title: 'Search Boards',
+      prompt: 'Filter the Boards list by board text.',
+      value: filters.searchText,
+      ignoreFocusOut: true
+    });
+    if (searchText === undefined) {
+      return;
+    }
+    await boardStore.updateFilters({
+      searchText
+    });
+    await refreshSearchActionContexts();
+  }
+
   function getEpicIssueType(mode: BackendMode): string {
     return mode === 'jira' ? 'Epic' : 'Feature';
+  }
+
+  async function reportActionError(error: unknown): Promise<void> {
+    logError(outputChannel, error);
+    await vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
+  }
+
+  async function resolveBoardById(boardId: string): Promise<Board | undefined> {
+    return (
+      boardsProvider.getBoardById(boardId) ??
+      (await backendService.getBoards(boardStore.getFilters())).find(candidate => candidate.id === boardId)
+    );
   }
 
   async function pickProject(defaultProjectKey?: string) {
@@ -388,62 +470,253 @@ export async function activate(
     await selectIssueByKey(created.key, { openFullPanel: true });
   }
 
+  async function editIssue(issueKey: string): Promise<void> {
+    try {
+      const issue = await backendService.getIssue(issueKey);
+      const label = issue.issueType?.trim() || 'Issue';
+      const summary = await vscode.window.showInputBox({
+        title: `Edit ${label} (${issue.key})`,
+        prompt: 'Update the summary.',
+        value: issue.summary,
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length === 0 ? 'Summary is required.' : undefined)
+      });
+      if (summary === undefined) {
+        return;
+      }
+
+      const description = await vscode.window.showInputBox({
+        title: `Description (${issue.key})`,
+        prompt: 'Update the description.',
+        value: issue.description ?? '',
+        ignoreFocusOut: true
+      });
+      if (description === undefined) {
+        return;
+      }
+
+      const parentRule = getParentRule(issue.issueType, backendService.mode);
+      let parentKey: string | null = null;
+      if (parentRule.canHaveParent) {
+        const currentParentDescription = issue.parentIssue
+          ? `${issue.parentIssue.key} ${issue.parentIssue.summary ?? ''}`.trim()
+          : undefined;
+        const pickedParentKey = await vscode.window.showInputBox({
+          title: `${parentRule.defaultLabel} (${issue.key})`,
+          prompt: currentParentDescription
+            ? `Current ${issue.parentIssue?.issueType ?? parentRule.defaultLabel}: ${currentParentDescription}`
+            : parentRule.helperText,
+          value: issue.parentKey ?? '',
+          ignoreFocusOut: true,
+          validateInput: value =>
+            parentRule.requiresParent && value.trim().length === 0
+              ? `${parentRule.defaultLabel} is required.`
+              : undefined
+        });
+        if (pickedParentKey === undefined) {
+          return;
+        }
+        parentKey = pickedParentKey.trim() || null;
+      }
+
+      await updateIssueAndRefresh(
+        issueKey,
+        {
+          summary: summary.trim(),
+          description,
+          parentKey
+        },
+        undefined,
+        { openFullPanel: true }
+      );
+    } catch (error) {
+      await reportActionError(error);
+    }
+  }
+
   async function editEpic(issueKey: string): Promise<void> {
-    const issue = await backendService.getIssue(issueKey);
-    const summary = await vscode.window.showInputBox({
-      title: `Edit EPIC (${issue.key})`,
-      prompt: 'Update the EPIC summary.',
-      value: issue.summary,
-      ignoreFocusOut: true,
-      validateInput: value => (value.trim().length === 0 ? 'Summary is required.' : undefined)
-    });
-    if (summary === undefined) {
-      return;
-    }
-
-    const description = await vscode.window.showInputBox({
-      title: `EPIC Description (${issue.key})`,
-      prompt: 'Update the EPIC description.',
-      value: issue.description ?? '',
-      ignoreFocusOut: true
-    });
-    if (description === undefined) {
-      return;
-    }
-
-    await backendService.updateIssue(issueKey, {
-      summary: summary.trim(),
-      description
-    });
-    await refreshAndRestoreSelection();
-    await selectIssueByKey(issueKey, { openFullPanel: true });
+    await editIssue(issueKey);
   }
 
   async function deleteIssue(issueKey: string): Promise<void> {
-    const confirmed = await vscode.window.showWarningMessage(
-      `Delete ${issueKey}?`,
-      { modal: true },
-      'Delete'
-    );
-    if (confirmed !== 'Delete') {
-      return;
-    }
+    try {
+      const confirmed = await vscode.window.showWarningMessage(
+        `Delete ${issueKey}?`,
+        { modal: true },
+        'Delete'
+      );
+      if (confirmed !== 'Delete') {
+        return;
+      }
 
-    if (filterStore.getFilters().parentKey === issueKey) {
-      await filterStore.updateFilters({ parentKey: undefined });
-    }
-    if (filterStore.getLastSelectedIssueKey() === issueKey) {
-      await filterStore.setLastSelectedIssueKey(undefined);
-      await detailsProvider.setIssue(undefined);
-      boardPanelManager.setSelectedIssueKey(undefined);
-      issuesSidebarViewProvider.setSelectedIssueKey(undefined);
-      epicsSidebarViewProvider.setSelectedIssueKey(undefined);
-      issueDetailPanelManager.clear();
-    }
+      if (filterStore.getFilters().parentKey === issueKey) {
+        await filterStore.updateFilters({ parentKey: undefined });
+      }
+      if (filterStore.getLastSelectedIssueKey() === issueKey) {
+        await filterStore.setLastSelectedIssueKey(undefined);
+        await detailsProvider.setIssue(undefined);
+        boardPanelManager.setSelectedIssueKey(undefined);
+        issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+        epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+        issueDetailPanelManager.clear();
+      }
 
-    await backendService.deleteIssue(issueKey);
-    await refreshAndRestoreSelection();
+      await backendService.deleteIssue(issueKey);
+      await refreshAndRestoreSelection();
+    } catch (error) {
+      await reportActionError(error);
+    }
   }
+
+  async function editBoard(boardId: string): Promise<void> {
+    try {
+      const board = await resolveBoardById(boardId);
+      if (!board) {
+        await vscode.window.showInformationMessage('Select a board first.');
+        return;
+      }
+
+      const name = await vscode.window.showInputBox({
+        title: `Edit Board (${board.name})`,
+        prompt: 'Update the board name.',
+        value: board.name,
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length === 0 ? 'Board name is required.' : undefined)
+      });
+      if (name === undefined) {
+        return;
+      }
+
+      const updatedBoard = await backendService.updateBoard(boardId, {
+        name: name.trim()
+      });
+      await boardsProvider.refresh();
+
+      if (
+        boardStore.getLastSelectedBoardId() === boardId ||
+        boardPanelManager.getActiveBoard()?.id === boardId
+      ) {
+        await boardStore.setLastSelectedBoardId(boardId);
+        boardsSidebarViewProvider.setSelectedBoardId(boardId);
+        await boardPanelManager.openBoard(updatedBoard);
+      }
+    } catch (error) {
+      await reportActionError(error);
+    }
+  }
+
+  async function deleteBoard(boardId: string): Promise<void> {
+    try {
+      const board = await resolveBoardById(boardId);
+      if (!board) {
+        await vscode.window.showInformationMessage('Select a board first.');
+        return;
+      }
+
+      const confirmed = await vscode.window.showWarningMessage(
+        `Delete board ${board.name}?`,
+        { modal: true },
+        'Delete'
+      );
+      if (confirmed !== 'Delete') {
+        return;
+      }
+
+      await backendService.deleteBoard(boardId);
+      if (
+        boardStore.getLastSelectedBoardId() === boardId ||
+        boardPanelManager.getActiveBoard()?.id === boardId
+      ) {
+        await boardStore.setLastSelectedBoardId(undefined);
+        boardsSidebarViewProvider.setSelectedBoardId(undefined);
+        boardPanelManager.clear();
+      }
+
+      await boardsProvider.refresh();
+    } catch (error) {
+      await reportActionError(error);
+    }
+  }
+
+  async function updateIssueAndRefresh(
+    issueKey: string,
+    input: UpdateIssueInput,
+    transitionId?: string,
+    options?: { openFullPanel?: boolean }
+  ): Promise<void> {
+    const normalizedInput: UpdateIssueInput = {};
+    if (typeof input.summary === 'string') {
+      normalizedInput.summary = input.summary;
+    }
+    if (typeof input.description === 'string') {
+      normalizedInput.description = input.description;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
+      normalizedInput.parentKey = input.parentKey?.trim() || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'assignee')) {
+      normalizedInput.assignee = input.assignee?.trim() || null;
+    }
+    if (typeof input.priority === 'string') {
+      normalizedInput.priority = input.priority;
+    }
+    if (typeof input.issueType === 'string') {
+      normalizedInput.issueType = input.issueType;
+    }
+
+    await backendService.updateIssue(issueKey, normalizedInput);
+    if (transitionId) {
+      await backendService.transitionIssue(issueKey, transitionId);
+    }
+    await syncIssueAfterMutation(issueKey, options);
+  }
+
+  async function addCommentAndRefresh(issueKey: string, body: string): Promise<void> {
+    await backendService.addComment(issueKey, body);
+    await syncIssueAfterMutation(issueKey);
+  }
+
+  async function transitionIssueAndRefresh(issueKey: string, transitionId: string): Promise<void> {
+    await backendService.transitionIssue(issueKey, transitionId);
+    await syncIssueAfterMutation(issueKey);
+  }
+
+  async function syncIssueAfterMutation(
+    issueKey: string,
+    options?: { openFullPanel?: boolean }
+  ): Promise<void> {
+    await Promise.all([issuesProvider.refresh(), boardsProvider.refresh(), epicsSidebarViewProvider.refresh()]);
+
+    const refreshedIssue =
+      issuesProvider.getIssueByKey(issueKey) ?? (await backendService.getIssue(issueKey));
+    await filterStore.setLastSelectedIssueKey(issueKey);
+    await detailsProvider.setIssue(refreshedIssue);
+    boardPanelManager.setSelectedIssueKey(issueKey);
+    issuesSidebarViewProvider.setSelectedIssueKey(issueKey);
+    epicsSidebarViewProvider.setSelectedIssueKey(issueKey);
+    await boardPanelManager.refresh();
+    await issueDetailPanelManager.refreshIfShowing(issueKey);
+
+    if (options?.openFullPanel) {
+      await issueDetailPanelManager.open(issueKey);
+      await revealIssueDetailsInSidebar({ focus: false });
+    }
+  }
+
+  boardPanelManager.setCardActions({
+    assignToMe: async issueKey => {
+      const label = await backendService.getSelfAssigneeLabel();
+      if (!label) {
+        void vscode.window.showWarningMessage(
+          'Could not resolve the current user for assignment. For Jira, use Edit to set an assignee manually.'
+        );
+        return;
+      }
+      await updateIssueAndRefresh(issueKey, { assignee: label });
+    },
+    editIssue,
+    deleteIssue
+  });
 
   const refreshAndRestoreSelection = async (): Promise<void> => {
     if (!configStore.getBackendMode()) {
@@ -484,11 +757,11 @@ export async function activate(
       onSelectIssue: async (issueKey, openFullPanel) => {
         await selectIssueByKey(issueKey, { openFullPanel });
       },
-      onSetSearchText: async searchText => {
-        await filterStore.updateFilters({ searchText });
+      onEditIssue: async issueKey => {
+        await editIssue(issueKey);
       },
-      onSetStatuses: async statuses => {
-        await filterStore.updateFilters({ statuses });
+      onDeleteIssue: async issueKey => {
+        await deleteIssue(issueKey);
       },
       onLoadMore: async () => {
         await issuesProvider.loadMore();
@@ -514,17 +787,79 @@ export async function activate(
       }
     }
   );
-  boardsSidebarViewProvider = new BoardsSidebarViewProvider(boardStore, boardsProvider, {
-    onSelectBoard: async boardId => {
-      await selectBoard(boardsProvider.getBoardById(boardId));
+  boardsSidebarViewProvider = new BoardsSidebarViewProvider(
+    boardStore,
+    boardsProvider,
+    boardColumnStore,
+    () => backendService.mode,
+    {
+      onSelectBoard: async boardId => {
+        await selectBoard(boardsProvider.getBoardById(boardId));
+      },
+      onEditBoard: async boardId => {
+        await editBoard(boardId);
+      },
+      onDeleteBoard: async boardId => {
+        await deleteBoard(boardId);
+      }
+    }
+  );
+  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(backendService, detailsProvider, {
+    onSaveIssueEdits: async (issueKey, input, transitionId) => {
+      await updateIssueAndRefresh(issueKey, input, transitionId);
+    },
+    onAddComment: async (issueKey, body) => {
+      await addCommentAndRefresh(issueKey, body);
     }
   });
-  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(detailsProvider);
+  await refreshSearchActionContexts();
 
   context.subscriptions.push(
     vscode.commands.registerCommand('ticketManager.createEpic', async () => {
       try {
         await createEpic();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchIssues', async () => {
+      try {
+        await searchIssues();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchIssuesActive', async () => {
+      try {
+        await searchIssues();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchEpics', async () => {
+      try {
+        await searchEpics();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchEpicsActive', async () => {
+      try {
+        await searchEpics();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchBoards', async () => {
+      try {
+        await searchBoards();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.searchBoardsActive', async () => {
+      try {
+        await searchBoards();
       } catch (error) {
         logError(outputChannel, error);
       }
@@ -554,6 +889,7 @@ export async function activate(
     boardsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
     filterStore.onDidChange(() => {
+      void refreshSearchActionContexts().catch(error => logError(outputChannel, error));
       void (async () => {
         try {
           const activeIssue = detailsProvider.getActiveIssue();
@@ -571,36 +907,40 @@ export async function activate(
       })();
     }),
     boardStore.onDidChange(() => {
+      void refreshSearchActionContexts().catch(error => logError(outputChannel, error));
       boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
       void boardsProvider.refresh().catch(error => logError(outputChannel, error));
     }),
-    vscode.workspace.onDidChangeConfiguration(event => {
-      if (!event.affectsConfiguration('ticketManager')) {
-        return;
-      }
+    ...(context.extensionMode !== vscode.ExtensionMode.Test
+      ? [
+          vscode.workspace.onDidChangeConfiguration(event => {
+            if (!event.affectsConfiguration('ticketManager')) {
+              return;
+            }
 
-      void (async () => {
-        try {
-          await setModeContext(configStore.getBackendMode());
-          if (
-            context.extensionMode !== vscode.ExtensionMode.Test &&
-            configStore.getBackendMode() === 'file'
-          ) {
-            await ensureFilePlanConfigured(true);
-          }
-          await filterStore.setLastSelectedIssueKey(undefined);
-          await boardStore.setLastSelectedBoardId(undefined);
-          await detailsProvider.setIssue(undefined);
-          boardsSidebarViewProvider.setSelectedBoardId(undefined);
-          boardPanelManager.clear();
-          issueDetailPanelManager.clear();
-          await backendService.reset();
-          await refreshAndRestoreSelection();
-        } catch (error) {
-          logError(outputChannel, error);
-        }
-      })();
-    })
+            void (async () => {
+              try {
+                await setModeContext(configStore.getBackendMode());
+                if (configStore.getBackendMode() === 'file') {
+                  await ensureFilePlanConfigured(true);
+                }
+                await filterStore.setLastSelectedIssueKey(undefined);
+                await boardStore.setLastSelectedBoardId(undefined);
+                await detailsProvider.setIssue(undefined);
+                boardsSidebarViewProvider.setSelectedBoardId(undefined);
+                await epicsSidebarViewProvider.setSearchText('');
+                await refreshSearchActionContexts();
+                boardPanelManager.clear();
+                issueDetailPanelManager.clear();
+                await backendService.reset();
+                await refreshAndRestoreSelection();
+              } catch (error) {
+                logError(outputChannel, error);
+              }
+            })();
+          })
+        ]
+      : [])
   );
 
   try {
@@ -615,6 +955,7 @@ export async function activate(
     backendService,
     filterStore,
     boardStore,
+    boardColumnStore,
     issuesProvider,
     boardsProvider,
     detailsProvider,

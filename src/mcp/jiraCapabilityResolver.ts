@@ -15,6 +15,7 @@ const OPTIONAL_TOOL_ALIASES: Partial<Record<keyof JiraCapabilities, string[]>> =
   createIssue: ['atlassian-jira_create_issue', 'jira_create_issue'],
   updateIssue: ['atlassian-jira_update_issue', 'jira_update_issue'],
   deleteIssue: ['atlassian-jira_delete_issue', 'jira_delete_issue'],
+  addComment: ['atlassian-jira_add_comment', 'jira_add_comment'],
   getAgileBoards: ['atlassian-jira_get_agile_boards', 'jira_get_agile_boards'],
   getBoardIssues: ['atlassian-jira_get_board_issues', 'jira_get_board_issues']
 };

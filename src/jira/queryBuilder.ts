@@ -53,8 +53,16 @@ export function buildIssuesJql(filters: IssueFilters, parentFieldMode: ParentFie
   return clauses.length > 0 ? `${where} ORDER BY updated DESC` : where;
 }
 
-export function buildParentItemsJql(projectKeys: string[], searchText?: string): string {
-  const clauses: string[] = ['issuetype = "Epic"'];
+export function buildParentItemsJql(
+  projectKeys: string[],
+  searchText?: string,
+  issueTypes: string[] = ['Epic']
+): string {
+  const clauses: string[] = [];
+  const issueTypeClause = buildInClause('issuetype', issueTypes);
+  if (issueTypeClause) {
+    clauses.push(issueTypeClause);
+  }
   const projectClause = buildInClause('project', projectKeys);
 
   if (projectClause) {

@@ -66,6 +66,22 @@ export interface WorkflowTransition {
   raw?: unknown;
 }
 
+export interface IssueComment {
+  id?: string;
+  author?: string;
+  body: string;
+  created?: string;
+  updated?: string;
+  raw?: unknown;
+}
+
+export interface ParentIssueReference {
+  key: string;
+  summary?: string;
+  issueType?: string;
+  description?: string;
+}
+
 export interface IssueSummary {
   id?: string;
   key: string;
@@ -76,8 +92,10 @@ export interface IssueSummary {
   projectKey: string;
   projectName?: string;
   parentKey?: string;
+  parentIssue?: ParentIssueReference;
   assignee?: string;
   priority?: string;
+  created?: string;
   updated?: string;
   selfUrl?: string;
   browseUrl?: string;
@@ -87,6 +105,7 @@ export interface IssueSummary {
 
 export interface IssueDetails extends IssueSummary {
   transitions?: WorkflowTransition[];
+  comments?: IssueComment[];
 }
 
 export interface CreateIssueInput {
@@ -102,6 +121,22 @@ export interface UpdateIssueInput {
   summary?: string;
   description?: string;
   parentKey?: string | null;
+  assignee?: string | null;
+  priority?: string;
+  issueType?: string;
+}
+
+export interface ParentItemQueryOptions {
+  childIssueType?: string;
+}
+
+export interface UpdateBoardInput {
+  name?: string;
+}
+
+export interface CreateBoardInput {
+  name: string;
+  projectKey: string;
 }
 
 export interface IssueFilters {
@@ -152,6 +187,7 @@ export interface JiraCapabilities {
   createIssue?: string;
   updateIssue?: string;
   deleteIssue?: string;
+  addComment?: string;
   getAgileBoards?: string;
   getBoardIssues?: string;
 }
@@ -194,7 +230,20 @@ export interface BoardDetails {
 
 /** Per-board column layout. `orderedStatuses` empty = show every status column in default order. */
 export interface BoardColumnPreferences {
+  workflowStatuses: string[];
   orderedStatuses: string[];
+  /** Optional hex color (e.g. #aabbcc) for the project/location pill on the board list row. */
+  projectPillColor?: string;
+  /** When set to assignee or epic, the board panel renders horizontal swim lanes. */
+  swimLaneGroupBy?: 'none' | 'assignee' | 'epic';
+  /** Case-insensitive substring filter on assignee display name. */
+  issueFilterAssignee?: string;
+  /** Case-insensitive match on parent epic key or parent summary. */
+  issueFilterEpicKey?: string;
+  /** When non-empty, only issues whose status is in this list are shown. */
+  issueFilterStatuses?: string[];
+  /** Per-status column dot color; key is exact status name as on the board. */
+  statusColors?: Record<string, string>;
 }
 
 export interface ToolDescriptor {

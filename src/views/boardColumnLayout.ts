@@ -1,5 +1,7 @@
 import type { BoardColumn, BoardColumnPreferences, BoardDetails, IssueSummary } from '../types';
 
+const DEFAULT_BOARD_STATUS_PREFIX = ['Backlog'] as const;
+
 function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
   return [...issues].sort((left, right) => {
     const leftUpdated = left.updated ?? '';
@@ -19,16 +21,48 @@ function groupIssuesByStatus(issues: IssueSummary[]): Map<string, IssueSummary[]
   return map;
 }
 
+function normalizeOrderedStatuses(statuses: string[]): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const status of statuses) {
+    const trimmed = status.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    unique.push(trimmed);
+  }
+  return unique;
+}
+
 /**
  * Returns the default column order derived from the board payload (server sort).
  */
-export function getDefaultStatusColumnOrder(details: BoardDetails): string[] {
+export function getDefaultStatusColumnOrder(
+  details: BoardDetails,
+  workflowOverride?: string[]
+): string[] {
+  if (workflowOverride?.length) {
+    return normalizeOrderedStatuses(workflowOverride);
+  }
+
   if (details.columnStatusOrder?.length) {
-    return [...details.columnStatusOrder];
+    const ordered = normalizeOrderedStatuses([...details.columnStatusOrder]);
+    for (let index = DEFAULT_BOARD_STATUS_PREFIX.length - 1; index >= 0; index -= 1) {
+      const statusName = DEFAULT_BOARD_STATUS_PREFIX[index];
+      if (!ordered.includes(statusName)) {
+        ordered.unshift(statusName);
+      }
+    }
+    return ordered;
   }
 
   const ordered: string[] = [];
   const seen = new Set<string>();
+  for (const statusName of DEFAULT_BOARD_STATUS_PREFIX) {
+    seen.add(statusName);
+    ordered.push(statusName);
+  }
   for (const col of details.columns) {
     if (!seen.has(col.name)) {
       seen.add(col.name);
@@ -118,9 +152,18 @@ export function applyBoardColumnPreferences(
   details: BoardDetails,
   prefs: BoardColumnPreferences
 ): BoardDetails {
-  const orderedStatuses = prefs.orderedStatuses.length
-    ? prefs.orderedStatuses
+  const workflowStatuses = prefs.workflowStatuses.length
+    ? normalizeOrderedStatuses(prefs.workflowStatuses)
     : getDefaultStatusColumnOrder(details);
+  const orderedStatuses = prefs.orderedStatuses.length
+    ? normalizeOrderedStatuses(prefs.orderedStatuses)
+    : workflowStatuses;
 
-  return buildColumnsForOrderedStatuses(details, orderedStatuses);
+  return buildColumnsForOrderedStatuses(
+    {
+      ...details,
+      columnStatusOrder: workflowStatuses
+    },
+    orderedStatuses
+  );
 }

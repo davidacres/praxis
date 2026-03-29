@@ -5,20 +5,39 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueComment,
   IssueDetails,
   IssueFilters,
+  ParentIssueReference,
+  ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { AppConfigStore } from '../config/jiraConfig';
+import {
+  buildParentValidationMessage,
+  getParentRule,
+  isAllowedParentType,
+  normalizeIssueTypeLabel
+} from '../issues/issueHierarchy';
 
 type DemoAssigneeKind = 'me' | 'other' | 'none';
+
+interface DemoComment {
+  id: string;
+  author: string;
+  body: string;
+  created: string;
+  updated: string;
+}
 
 interface DemoIssue {
   id: string;
@@ -31,9 +50,11 @@ interface DemoIssue {
   assigneeKind: DemoAssigneeKind;
   assigneeDisplayName?: string;
   priority: string;
+  created: string;
   updated: string;
   description: string;
   parent?: string;
+  comments: DemoComment[];
   failTransition?: boolean;
 }
 
@@ -54,6 +75,7 @@ function statusCategoryName(status: string): string {
     case 'In Progress':
     case 'Blocked':
       return 'indeterminate';
+    case 'Backlog':
     default:
       return 'todo';
   }
@@ -61,8 +83,14 @@ function statusCategoryName(status: string): string {
 
 function transitionSet(status: string): WorkflowTransition[] {
   switch (status) {
+    case 'Backlog':
+      return [
+        { id: 'ready-for-work', name: 'Ready for Work', toStatus: 'To Do' },
+        { id: 'start-progress', name: 'Start Progress', toStatus: 'In Progress' }
+      ];
     case 'To Do':
       return [
+        { id: 'send-backlog', name: 'Move to Backlog', toStatus: 'Backlog' },
         { id: 'start-progress', name: 'Start Progress', toStatus: 'In Progress' },
         { id: 'mark-done', name: 'Done', toStatus: 'Done' }
       ];
@@ -91,8 +119,18 @@ function createSeedIssues(): DemoIssue[] {
       assigneeKind: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'High',
+      created: '2026-03-27T19:30:00.000Z',
       updated: '2026-03-27T20:00:00.000Z',
-      description: 'Primary feature for the application platform work.'
+      description: 'Primary feature for the application platform work.',
+      comments: [
+        {
+          id: 'demo-comment-1',
+          author: 'Alex Agent',
+          body: 'Kickoff is complete and the feature is actively moving.',
+          created: '2026-03-27T20:05:00.000Z',
+          updated: '2026-03-27T20:05:00.000Z'
+        }
+      ]
     },
     {
       id: 'demo-2',
@@ -105,9 +143,11 @@ function createSeedIssues(): DemoIssue[] {
       assigneeKind: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'High',
+      created: '2026-03-27T19:40:00.000Z',
       updated: '2026-03-27T20:10:00.000Z',
       description: 'Add the service abstraction so the UI can swap providers.',
-      parent: 'APP-100'
+      parent: 'APP-100',
+      comments: []
     },
     {
       id: 'demo-3',
@@ -120,9 +160,11 @@ function createSeedIssues(): DemoIssue[] {
       assigneeKind: 'other',
       assigneeDisplayName: 'Jordan Builder',
       priority: 'Medium',
+      created: '2026-03-27T19:50:00.000Z',
       updated: '2026-03-27T20:20:00.000Z',
       description: 'Make demo mode work without a backend service.',
-      parent: 'APP-100'
+      parent: 'APP-100',
+      comments: []
     },
     {
       id: 'demo-4',
@@ -135,9 +177,11 @@ function createSeedIssues(): DemoIssue[] {
       assigneeKind: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'Low',
+      created: '2026-03-27T20:05:00.000Z',
       updated: '2026-03-27T20:30:00.000Z',
       description: 'This demo issue rejects one transition to mimic workflow restrictions.',
       parent: 'APP-100',
+      comments: [],
       failTransition: true
     },
     {
@@ -151,14 +195,16 @@ function createSeedIssues(): DemoIssue[] {
       assigneeKind: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'Critical',
+      created: '2026-03-27T20:45:00.000Z',
       updated: '2026-03-27T21:00:00.000Z',
-      description: 'Investigate the latest customer-facing incident.'
+      description: 'Investigate the latest customer-facing incident.',
+      comments: []
     }
   ];
 }
 
 /** Demo workflow columns — shown even when no issues are in a status. */
-const DEMO_BOARD_STATUS_ORDER = ['To Do', 'In Progress', 'Blocked', 'Done'] as const;
+const DEMO_BOARD_STATUS_ORDER = ['Backlog', 'To Do', 'In Progress', 'Blocked', 'Done'] as const;
 const DEMO_CURRENT_USER = 'Alex Agent';
 
 function createSeedBoards(): DemoBoard[] {
@@ -193,7 +239,8 @@ function createSeedBoards(): DemoBoard[] {
   ];
 }
 
-function toIssueSummary(issue: DemoIssue): IssueSummary {
+function toIssueSummary(issue: DemoIssue, issuesByKey?: Map<string, DemoIssue>): IssueSummary {
+  const parent = issue.parent && issuesByKey?.get(issue.parent);
   return {
     id: issue.id,
     key: issue.key,
@@ -204,12 +251,40 @@ function toIssueSummary(issue: DemoIssue): IssueSummary {
     projectKey: issue.projectKey,
     projectName: issue.projectName,
     parentKey: issue.parent,
+    parentIssue: parent ? toParentIssueReference(parent) : undefined,
     assignee: issue.assigneeKind === 'none' ? undefined : issue.assigneeDisplayName,
     priority: issue.priority,
+    created: issue.created,
     updated: issue.updated,
     browseUrl: `https://example.com/ticket-manager-demo/${issue.key}`,
     description: issue.description,
     raw: issue
+  };
+}
+
+function toParentIssueReference(issue: DemoIssue | undefined): ParentIssueReference | undefined {
+  if (!issue) {
+    return undefined;
+  }
+
+  return {
+    key: issue.key,
+    summary: issue.summary,
+    issueType: issue.issueType,
+    description: issue.description
+  };
+}
+
+function toIssueComments(issue: DemoIssue): IssueComment[] {
+  return [...issue.comments].sort((left, right) => right.created.localeCompare(left.created));
+}
+
+function toIssueDetails(issue: DemoIssue, parentIssue?: DemoIssue): IssueDetails {
+  return {
+    ...toIssueSummary(issue),
+    parentIssue: toParentIssueReference(parentIssue),
+    transitions: transitionSet(issue.status),
+    comments: toIssueComments(issue)
   };
 }
 
@@ -248,16 +323,18 @@ function statusCategoryRank(statusCategory?: string): number {
 
 function commonStatusRank(statusName: string): number {
   switch (statusName.toLowerCase()) {
-    case 'to do':
+    case 'backlog':
       return 0;
-    case 'selected for development':
+    case 'to do':
       return 1;
-    case 'in progress':
+    case 'selected for development':
       return 2;
-    case 'blocked':
+    case 'in progress':
       return 3;
-    case 'done':
+    case 'blocked':
       return 4;
+    case 'done':
+      return 5;
     default:
       return Number.MAX_SAFE_INTEGER;
   }
@@ -346,10 +423,11 @@ export class DemoService implements IssueTrackerService {
   }
 
   public async getIssues(filters: IssueFilters, startAt: number, pageSize: number): Promise<PagedIssues> {
+    const issuesByKey = new Map(this.issues.map(item => [item.key, item]));
     const matchingIssues = sortIssuesByUpdated(
       this.issues
         .filter(issue => this.matchesIssueFilters(issue, filters))
-        .map(toIssueSummary)
+        .map(issue => toIssueSummary(issue, issuesByKey))
     );
     const pagedIssues = matchingIssues.slice(startAt, startAt + pageSize);
 
@@ -376,12 +454,23 @@ export class DemoService implements IssueTrackerService {
 
   public async getParentItems(
     filters: IssueFilters,
-    searchText?: string
+    searchText?: string,
+    options?: ParentItemQueryOptions
   ): Promise<IssueSummary[]> {
+    const allowedParentTypes = options?.childIssueType
+      ? getParentRule(options.childIssueType, this.mode).allowedParentTypes
+      : ['Feature', 'Epic'];
+    if (allowedParentTypes.length === 0) {
+      return [];
+    }
+
     const query = searchText?.trim().toLowerCase();
+    const issuesByKey = new Map(this.issues.map(item => [item.key, item]));
     return sortIssuesByUpdated(
       this.issues
-        .filter(issue => issue.issueType === 'Feature' || issue.issueType === 'Epic')
+        .filter(issue =>
+          allowedParentTypes.some(parentType => parentType.toLowerCase() === issue.issueType.toLowerCase())
+        )
         .filter(issue => filters.projectKeys.length === 0 || filters.projectKeys.includes(issue.projectKey))
         .filter(issue => {
           if (!query) {
@@ -390,7 +479,7 @@ export class DemoService implements IssueTrackerService {
           const haystack = `${issue.key} ${issue.summary} ${issue.description}`.toLowerCase();
           return haystack.includes(query);
         })
-        .map(toIssueSummary)
+        .map(issue => toIssueSummary(issue, issuesByKey))
     );
   }
 
@@ -421,10 +510,11 @@ export class DemoService implements IssueTrackerService {
       throw new Error(`Demo board ${board.name} was not found.`);
     }
 
+    const issuesByKey = new Map(this.issues.map(item => [item.key, item]));
     const issues = sortIssuesByUpdated(
       this.issues
         .filter(issue => matchingBoard.issueKeys.includes(issue.key))
-        .map(toIssueSummary)
+        .map(issue => toIssueSummary(issue, issuesByKey))
     );
 
     return {
@@ -435,12 +525,63 @@ export class DemoService implements IssueTrackerService {
     };
   }
 
+  public async createBoard(input: CreateBoardInput): Promise<Board> {
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error('Board name cannot be empty.');
+    }
+
+    const project = (await this.getProjects()).find(candidate => candidate.key === input.projectKey);
+    if (!project) {
+      throw new Error(`Project ${input.projectKey} is not available in demo mode.`);
+    }
+
+    const board: DemoBoard = {
+      id: `demo-board-${this.boards.length + 1}-${Date.now()}`,
+      name,
+      type: 'scrum',
+      projectKey: project.key,
+      projectName: project.name,
+      locationName: project.name,
+      issueKeys: []
+    };
+
+    this.boards.push(board);
+    return toBoard(board);
+  }
+
+  public async updateBoard(boardId: string, input: UpdateBoardInput): Promise<Board> {
+    const board = this.boards.find(candidate => candidate.id === boardId);
+    if (!board) {
+      throw new Error(`Demo board ${boardId} was not found.`);
+    }
+
+    if (typeof input.name === 'string') {
+      const name = input.name.trim();
+      if (name.length === 0) {
+        throw new Error('Board name cannot be empty.');
+      }
+      board.name = name;
+    }
+
+    return toBoard(board);
+  }
+
+  public async deleteBoard(boardId: string): Promise<void> {
+    const boardIndex = this.boards.findIndex(candidate => candidate.id === boardId);
+    if (boardIndex < 0) {
+      throw new Error(`Demo board ${boardId} was not found.`);
+    }
+
+    this.boards.splice(boardIndex, 1);
+  }
+
   public async getIssue(issueKey: string): Promise<IssueDetails> {
     const issue = this.findIssue(issueKey);
-    return {
-      ...toIssueSummary(issue),
-      transitions: transitionSet(issue.status)
-    };
+    const parentIssue = issue.parent
+      ? this.issues.find(candidate => candidate.key === issue.parent)
+      : undefined;
+    return toIssueDetails(issue, parentIssue);
   }
 
   public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
@@ -448,6 +589,9 @@ export class DemoService implements IssueTrackerService {
     if (!project) {
       throw new Error(`Project ${input.projectKey} is not available in demo mode.`);
     }
+
+    const parentKey = input.parentKey?.trim() || undefined;
+    this.validateParentSelection(project.key, input.issueType, parentKey);
 
     const now = new Date().toISOString();
     const createdIssue: DemoIssue = {
@@ -461,22 +605,33 @@ export class DemoService implements IssueTrackerService {
       assigneeKind: 'me',
       assigneeDisplayName: DEMO_CURRENT_USER,
       priority: 'Medium',
+      created: now,
       updated: now,
       description: input.description?.trim() ?? '',
-      parent: input.parentKey?.trim() || undefined
+      parent: parentKey,
+      comments: []
     };
 
     this.issues.unshift(createdIssue);
     this.attachIssueToBoard(createdIssue.key, createdIssue.projectKey, input.boardId);
 
-    return {
-      ...toIssueSummary(createdIssue),
-      transitions: transitionSet(createdIssue.status)
-    };
+    const parentIssue = createdIssue.parent
+      ? this.issues.find(candidate => candidate.key === createdIssue.parent)
+      : undefined;
+    return toIssueDetails(createdIssue, parentIssue);
   }
 
   public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
     const issue = this.findIssue(issueKey);
+    const nextIssueType =
+      typeof input.issueType === 'string' && input.issueType.trim().length > 0
+        ? input.issueType.trim()
+        : issue.issueType;
+    const nextParentKey = Object.prototype.hasOwnProperty.call(input, 'parentKey')
+      ? input.parentKey?.trim() || undefined
+      : issue.parent;
+    this.validateParentSelection(issue.projectKey, nextIssueType, nextParentKey, issue.key);
+
     if (typeof input.summary === 'string') {
       const summary = input.summary.trim();
       if (summary.length === 0) {
@@ -488,14 +643,38 @@ export class DemoService implements IssueTrackerService {
       issue.description = input.description;
     }
     if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
-      issue.parent = input.parentKey?.trim() || undefined;
+      issue.parent = nextParentKey;
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'assignee')) {
+      const assignee = input.assignee?.trim();
+      if (assignee) {
+        issue.assigneeKind = assignee === DEMO_CURRENT_USER ? 'me' : 'other';
+        issue.assigneeDisplayName = assignee;
+      } else {
+        issue.assigneeKind = 'none';
+        issue.assigneeDisplayName = undefined;
+      }
+    }
+    if (typeof input.priority === 'string') {
+      const priority = input.priority.trim();
+      if (priority.length === 0) {
+        throw new Error('Priority cannot be empty.');
+      }
+      issue.priority = priority;
+    }
+    if (typeof input.issueType === 'string') {
+      const issueType = input.issueType.trim();
+      if (issueType.length === 0) {
+        throw new Error('Issue type cannot be empty.');
+      }
+      issue.issueType = issueType;
     }
     issue.updated = new Date().toISOString();
 
-    return {
-      ...toIssueSummary(issue),
-      transitions: transitionSet(issue.status)
-    };
+    const parentIssue = issue.parent
+      ? this.issues.find(candidate => candidate.key === issue.parent)
+      : undefined;
+    return toIssueDetails(issue, parentIssue);
   }
 
   public async deleteIssue(issueKey: string): Promise<void> {
@@ -514,6 +693,24 @@ export class DemoService implements IssueTrackerService {
     for (const board of this.boards) {
       board.issueKeys = board.issueKeys.filter(key => key !== issueKey);
     }
+  }
+
+  public async addComment(issueKey: string, body: string): Promise<void> {
+    const issue = this.findIssue(issueKey);
+    const commentBody = body.trim();
+    if (commentBody.length === 0) {
+      throw new Error('Comment cannot be empty.');
+    }
+
+    const now = new Date().toISOString();
+    issue.comments.unshift({
+      id: `demo-comment-${issue.key}-${issue.comments.length + 1}`,
+      author: DEMO_CURRENT_USER,
+      body: commentBody,
+      created: now,
+      updated: now
+    });
+    issue.updated = now;
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
@@ -539,6 +736,10 @@ export class DemoService implements IssueTrackerService {
 
   public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
     return issue.browseUrl;
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    return DEMO_CURRENT_USER;
   }
 
   public dispose(): void {}
@@ -578,6 +779,41 @@ export class DemoService implements IssueTrackerService {
       throw new Error(`Issue ${issueKey} was not found in demo mode.`);
     }
     return issue;
+  }
+
+  private validateParentSelection(
+    projectKey: string,
+    issueType: string,
+    parentKey: string | undefined,
+    currentIssueKey?: string
+  ): void {
+    const rule = getParentRule(issueType, this.mode);
+    const issueLabel = normalizeIssueTypeLabel(issueType);
+    if (!rule.canHaveParent) {
+      if (parentKey) {
+        throw new Error(`${issueLabel} items cannot have a parent.`);
+      }
+      return;
+    }
+
+    if (!parentKey) {
+      if (rule.requiresParent) {
+        throw new Error(`${rule.defaultLabel} is required for ${issueLabel} items.`);
+      }
+      return;
+    }
+
+    if (parentKey === currentIssueKey) {
+      throw new Error('An item cannot be its own parent.');
+    }
+
+    const parentIssue = this.findIssue(parentKey);
+    if (parentIssue.projectKey !== projectKey) {
+      throw new Error(`${rule.defaultLabel} ${parentKey} must be in the same project.`);
+    }
+    if (!isAllowedParentType(parentIssue.issueType, issueType, this.mode)) {
+      throw new Error(buildParentValidationMessage(issueType, this.mode, parentIssue.issueType));
+    }
   }
 
   private getNextIssueKey(projectKey: string): string {
