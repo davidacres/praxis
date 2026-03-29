@@ -12,18 +12,31 @@ import type {
   BoardFilters,
   ConnectionCheck,
   ConnectionConfig,
+  CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
   JiraCapabilities,
+  IssueComment,
   IssueDetails,
   IssueFilters,
+  ParentIssueReference,
+  ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
   ToolDescriptor,
+  UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
 } from '../types';
+import {
+  buildParentValidationMessage,
+  getParentRule,
+  isAllowedParentType,
+  isParentIssueType,
+  isSubtaskIssueType,
+  normalizeIssueTypeLabel
+} from '../issues/issueHierarchy';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -160,6 +173,52 @@ function normalizeTransition(raw: unknown): WorkflowTransition | undefined {
   };
 }
 
+function normalizeComment(raw: unknown): IssueComment | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const author = isRecord(raw.author) ? raw.author : {};
+  const body = extractDescription(raw.body) ?? asString(raw.body);
+  if (!body?.trim()) {
+    return undefined;
+  }
+
+  return {
+    id: asString(raw.id),
+    author: asString(author.displayName) ?? asString(author.name),
+    body: body.trim(),
+    created: asString(raw.created),
+    updated: asString(raw.updated),
+    raw
+  };
+}
+
+function normalizeParentIssue(raw: unknown): ParentIssueReference | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const key = asString(raw.key);
+  if (!key) {
+    return undefined;
+  }
+
+  const fields = isRecord(raw.fields) ? raw.fields : raw;
+  const issueType = isRecord(fields.issuetype)
+    ? asString(fields.issuetype.name)
+    : isRecord(fields.issueType)
+      ? asString(fields.issueType.name)
+      : asString(fields.issuetype) ?? asString(fields.issueType);
+
+  return {
+    key,
+    summary: asString(fields.summary),
+    issueType,
+    description: extractDescription(fields.description)
+  };
+}
+
 function normalizeIssue(raw: unknown): IssueSummary | undefined {
   if (!isRecord(raw)) {
     return undefined;
@@ -197,8 +256,10 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
     projectKey,
     projectName: asString(project.name),
     parentKey: asString(parent.key),
+    parentIssue: normalizeParentIssue(parent),
     assignee: asString(assignee.displayName) ?? asString(assignee.name),
     priority: asString(priority.name) ?? asString(fields.priority),
+    created: asString(fields.created) ?? asString(raw.created),
     updated: asString(fields.updated) ?? asString(raw.updated),
     selfUrl: asString(raw.self),
     browseUrl: deriveBrowseUrl(asString(raw.self), key),
@@ -311,6 +372,25 @@ function extractTransitions(value: unknown): WorkflowTransition[] {
     .filter((item): item is WorkflowTransition => Boolean(item));
 }
 
+function extractComments(value: unknown): IssueComment[] {
+  const fields = isRecord(value) && isRecord(value.fields) ? value.fields : undefined;
+  const fieldComment = fields && isRecord(fields.comment) ? fields.comment : undefined;
+  const list = Array.isArray(value)
+    ? value
+    : fieldComment && Array.isArray(fieldComment.comments)
+      ? fieldComment.comments
+      : isRecord(value) && Array.isArray(value.comments)
+        ? value.comments
+        : [];
+
+  return list
+    .map(normalizeComment)
+    .filter((item): item is IssueComment => Boolean(item))
+    .sort((left, right) =>
+      (right.created ?? right.updated ?? '').localeCompare(left.created ?? left.updated ?? '')
+    );
+}
+
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(value => value.trim().length > 0))].sort((a, b) =>
     a.localeCompare(b)
@@ -349,16 +429,18 @@ function statusCategoryRank(statusCategory?: string): number {
 
 function commonStatusRank(statusName: string): number {
   switch (statusName.toLowerCase()) {
-    case 'to do':
+    case 'backlog':
       return 0;
-    case 'selected for development':
+    case 'to do':
       return 1;
-    case 'in progress':
+    case 'selected for development':
       return 2;
-    case 'blocked':
+    case 'in progress':
       return 3;
-    case 'done':
+    case 'blocked':
       return 4;
+    case 'done':
+      return 5;
     default:
       return Number.MAX_SAFE_INTEGER;
   }
@@ -558,10 +640,18 @@ export class JiraService implements IssueTrackerService {
 
   public async getParentItems(
     filters: IssueFilters,
-    searchText?: string
+    searchText?: string,
+    options?: ParentItemQueryOptions
   ): Promise<IssueSummary[]> {
     const { config, capabilities } = await this.ensureConnected();
-    const jql = buildParentItemsJql(filters.projectKeys, searchText);
+    const allowedParentTypes = options?.childIssueType
+      ? getParentRule(options.childIssueType, this.mode).allowedParentTypes
+      : ['Epic'];
+    if (allowedParentTypes.length === 0) {
+      return [];
+    }
+
+    const jql = buildParentItemsJql(filters.projectKeys, searchText, allowedParentTypes);
     const response = await this.client.callTool(
       capabilities.searchIssues,
       {
@@ -663,13 +753,26 @@ export class JiraService implements IssueTrackerService {
     };
   }
 
+  public async updateBoard(_boardId: string, _input: UpdateBoardInput): Promise<Board> {
+    throw new Error('Boards cannot be edited in Jira Connected mode.');
+  }
+
+  public async createBoard(_input: CreateBoardInput): Promise<Board> {
+    throw new Error('Creating boards is not supported in Jira Connected mode.');
+  }
+
+  public async deleteBoard(_boardId: string): Promise<void> {
+    throw new Error('Boards cannot be deleted in Jira Connected mode.');
+  }
+
   public async getIssue(issueKey: string): Promise<IssueDetails> {
     const { config, capabilities } = await this.ensureConnected();
     const response = await this.client.callTool(
       capabilities.getIssue,
       {
         issue_key: issueKey,
-        fields: 'summary,status,issuetype,assignee,priority,updated,project,description,parent'
+        fields: 'summary,status,issuetype,assignee,priority,created,updated,project,description,parent,comment',
+        comment_limit: 50
       },
       config.timeoutMs
     );
@@ -679,7 +782,10 @@ export class JiraService implements IssueTrackerService {
       throw new Error(`Unable to load details for ${issueKey}.`);
     }
 
-    return issue;
+    return {
+      ...issue,
+      comments: extractComments(response.value)
+    };
   }
 
   public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
@@ -690,18 +796,31 @@ export class JiraService implements IssueTrackerService {
       );
     }
 
+    const issueType = input.issueType.trim();
+    if (issueType.length === 0) {
+      throw new Error('Issue type cannot be empty.');
+    }
+
+    const parentKey = input.parentKey?.trim() || undefined;
+    await this.validateParentSelection(input.projectKey, issueType, parentKey);
+    const additionalFieldsPayload: Record<string, unknown> = {};
+    if (parentKey) {
+      if (isSubtaskIssueType(issueType)) {
+        additionalFieldsPayload.parent = parentKey;
+      } else {
+        additionalFieldsPayload.epicKey = parentKey;
+      }
+    }
     const additionalFields =
-      input.parentKey?.trim().length
-        ? JSON.stringify({
-            epicKey: input.parentKey.trim()
-          })
+      Object.keys(additionalFieldsPayload).length > 0
+        ? JSON.stringify(additionalFieldsPayload)
         : undefined;
     const response = await this.client.callTool(
       capabilities.createIssue,
       {
         project_key: input.projectKey,
         summary: input.summary,
-        issue_type: input.issueType,
+        issue_type: issueType,
         description: input.description,
         additional_fields: additionalFields
       },
@@ -724,6 +843,15 @@ export class JiraService implements IssueTrackerService {
       );
     }
 
+    const currentIssue = await this.getIssue(issueKey);
+    const nextIssueType =
+      typeof input.issueType === 'string' && input.issueType.trim().length > 0
+        ? input.issueType.trim()
+        : currentIssue.issueType;
+    const hasParentPatch = Object.prototype.hasOwnProperty.call(input, 'parentKey');
+    const nextParentKey = hasParentPatch ? input.parentKey?.trim() || undefined : currentIssue.parentKey;
+    await this.validateParentSelection(currentIssue.projectKey, nextIssueType, nextParentKey, issueKey);
+
     const fieldsPayload: Record<string, unknown> = {};
     if (typeof input.summary === 'string') {
       const summary = input.summary.trim();
@@ -735,10 +863,36 @@ export class JiraService implements IssueTrackerService {
     if (typeof input.description === 'string') {
       fieldsPayload.description = input.description;
     }
+    if (Object.prototype.hasOwnProperty.call(input, 'assignee')) {
+      fieldsPayload.assignee = input.assignee?.trim() || null;
+    }
 
     const additionalFields: Record<string, unknown> = {};
-    if (Object.prototype.hasOwnProperty.call(input, 'parentKey')) {
-      additionalFields.epicKey = input.parentKey?.trim() || null;
+    if (hasParentPatch || typeof input.issueType === 'string') {
+      if (isParentIssueType(nextIssueType)) {
+        additionalFields.parent = null;
+        additionalFields.epicKey = null;
+      } else if (isSubtaskIssueType(nextIssueType)) {
+        additionalFields.parent = nextParentKey ?? null;
+        additionalFields.epicKey = null;
+      } else {
+        additionalFields.parent = null;
+        additionalFields.epicKey = nextParentKey ?? null;
+      }
+    }
+    if (typeof input.priority === 'string') {
+      const priority = input.priority.trim();
+      if (priority.length === 0) {
+        throw new Error('Priority cannot be empty.');
+      }
+      additionalFields.priority = { name: priority };
+    }
+    if (typeof input.issueType === 'string') {
+      const issueType = input.issueType.trim();
+      if (issueType.length === 0) {
+        throw new Error('Issue type cannot be empty.');
+      }
+      additionalFields.issuetype = { name: issueType };
     }
 
     await this.client.callTool(
@@ -767,6 +921,29 @@ export class JiraService implements IssueTrackerService {
       capabilities.deleteIssue,
       {
         issue_key: issueKey
+      },
+      config.timeoutMs
+    );
+  }
+
+  public async addComment(issueKey: string, body: string): Promise<void> {
+    const { config, capabilities } = await this.ensureConnected();
+    if (!capabilities.addComment) {
+      throw new Error(
+        'The Jira MCP server does not expose comment creation. Expected an add comment capability.'
+      );
+    }
+
+    const commentBody = body.trim();
+    if (commentBody.length === 0) {
+      throw new Error('Comment cannot be empty.');
+    }
+
+    await this.client.callTool(
+      capabilities.addComment,
+      {
+        issue_key: issueKey,
+        body: commentBody
       },
       config.timeoutMs
     );
@@ -804,6 +981,10 @@ export class JiraService implements IssueTrackerService {
 
     const details = await this.getIssue(issue.key);
     return details.browseUrl;
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    return undefined;
   }
 
   private async ensureConnected(explicitConnection?: ConnectionConfig): Promise<{
@@ -865,6 +1046,41 @@ export class JiraService implements IssueTrackerService {
       getAgileBoards: capabilities.getAgileBoards,
       getBoardIssues: capabilities.getBoardIssues
     };
+  }
+
+  private async validateParentSelection(
+    projectKey: string,
+    issueType: string,
+    parentKey: string | undefined,
+    currentIssueKey?: string
+  ): Promise<void> {
+    const rule = getParentRule(issueType, this.mode);
+    const issueLabel = normalizeIssueTypeLabel(issueType);
+    if (!rule.canHaveParent) {
+      if (parentKey) {
+        throw new Error(`${issueLabel} items cannot have a parent.`);
+      }
+      return;
+    }
+
+    if (!parentKey) {
+      if (rule.requiresParent) {
+        throw new Error(`${rule.defaultLabel} is required for ${issueLabel} items.`);
+      }
+      return;
+    }
+
+    if (parentKey === currentIssueKey) {
+      throw new Error('An item cannot be its own parent.');
+    }
+
+    const parentIssue = await this.getIssue(parentKey);
+    if (parentIssue.projectKey !== projectKey) {
+      throw new Error(`${rule.defaultLabel} ${parentKey} must be in the same project.`);
+    }
+    if (!isAllowedParentType(parentIssue.issueType, issueType, this.mode)) {
+      throw new Error(buildParentValidationMessage(issueType, this.mode, parentIssue.issueType));
+    }
   }
 
   public dispose(): void {

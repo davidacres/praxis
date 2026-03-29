@@ -5,13 +5,16 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
   IssueDetails,
   IssueFilters,
+  ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
 } from '../types';
@@ -75,9 +78,10 @@ export class BackendRouter implements IssueTrackerService {
 
   public async getParentItems(
     filters: IssueFilters,
-    searchText?: string
+    searchText?: string,
+    options?: ParentItemQueryOptions
   ): Promise<IssueSummary[]> {
-    return (await this.getService()).getParentItems(filters, searchText);
+    return (await this.getService()).getParentItems(filters, searchText, options);
   }
 
   public async supportsBoards(): Promise<boolean> {
@@ -90,6 +94,18 @@ export class BackendRouter implements IssueTrackerService {
 
   public async getBoardDetails(board: Board): Promise<BoardDetails> {
     return (await this.getService()).getBoardDetails(board);
+  }
+
+  public async createBoard(input: CreateBoardInput): Promise<Board> {
+    return (await this.getService()).createBoard(input);
+  }
+
+  public async updateBoard(boardId: string, input: UpdateBoardInput): Promise<Board> {
+    return (await this.getService()).updateBoard(boardId, input);
+  }
+
+  public async deleteBoard(boardId: string): Promise<void> {
+    return (await this.getService()).deleteBoard(boardId);
   }
 
   public async getIssue(issueKey: string): Promise<IssueDetails> {
@@ -108,6 +124,10 @@ export class BackendRouter implements IssueTrackerService {
     return (await this.getService()).deleteIssue(issueKey);
   }
 
+  public async addComment(issueKey: string, body: string): Promise<void> {
+    return (await this.getService()).addComment(issueKey, body);
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     return (await this.getService()).getTransitions(issueKey);
   }
@@ -118,6 +138,10 @@ export class BackendRouter implements IssueTrackerService {
 
   public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
     return (await this.getService()).getBrowseUrl(issue);
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    return (await this.getService()).getSelfAssigneeLabel();
   }
 
   public dispose(): void {

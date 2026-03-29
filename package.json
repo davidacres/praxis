@@ -50,7 +50,7 @@
       "ticketManager": [
         {
           "id": "ticketManager.myIssues",
-          "name": "Issues",
+          "name": "My Issues",
           "type": "webview",
           "contextualTitle": "Tickets",
           "icon": "media/activitybar-ticket.svg"
@@ -146,14 +146,65 @@
         "icon": "$(add)"
       },
       {
+        "command": "ticketManager.createBoard",
+        "title": "Create Board",
+        "category": "Ticket Manager",
+        "icon": "$(new-folder)"
+      },
+      {
         "command": "ticketManager.createEpic",
         "title": "Create EPIC",
         "category": "Ticket Manager",
         "icon": "$(add)"
       },
       {
+        "command": "ticketManager.searchIssues",
+        "title": "Search Issues",
+        "category": "Ticket Manager",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ticketManager.searchIssuesActive",
+        "title": "Search Issues",
+        "category": "Ticket Manager",
+        "icon": {
+          "light": "media/search-active-light.svg",
+          "dark": "media/search-active-dark.svg"
+        }
+      },
+      {
+        "command": "ticketManager.searchEpics",
+        "title": "Search EPICs",
+        "category": "Ticket Manager",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ticketManager.searchEpicsActive",
+        "title": "Search EPICs",
+        "category": "Ticket Manager",
+        "icon": {
+          "light": "media/search-active-light.svg",
+          "dark": "media/search-active-dark.svg"
+        }
+      },
+      {
+        "command": "ticketManager.searchBoards",
+        "title": "Search Boards",
+        "category": "Ticket Manager",
+        "icon": "$(search)"
+      },
+      {
+        "command": "ticketManager.searchBoardsActive",
+        "title": "Search Boards",
+        "category": "Ticket Manager",
+        "icon": {
+          "light": "media/search-active-light.svg",
+          "dark": "media/search-active-dark.svg"
+        }
+      },
+      {
         "command": "ticketManager.configureBoardColumns",
-        "title": "Configure Board Columns",
+        "title": "Configure Board Settings",
         "category": "Ticket Manager",
         "icon": "$(settings-gear)"
       },
@@ -230,12 +281,6 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "ticketManager.setGrouping",
-        "title": "Set Grouping",
-        "category": "Ticket Manager",
-        "icon": "$(list-tree)"
-      },
-      {
         "command": "ticketManager.changeStatus",
         "title": "Change Status",
         "category": "Ticket Manager",
@@ -284,19 +329,39 @@
           "group": "navigation@2"
         },
         {
+          "command": "ticketManager.searchEpics",
+          "when": "view == ticketManager.epics && !ticketManager.epicsSearchActive",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ticketManager.searchEpicsActive",
+          "when": "view == ticketManager.epics && ticketManager.epicsSearchActive",
+          "group": "navigation@3"
+        },
+        {
           "command": "ticketManager.createIssue",
           "when": "view == ticketManager.myIssues",
           "group": "navigation@2"
         },
         {
+          "command": "ticketManager.searchIssues",
+          "when": "view == ticketManager.myIssues && !ticketManager.issuesSearchActive",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ticketManager.searchIssuesActive",
+          "when": "view == ticketManager.myIssues && ticketManager.issuesSearchActive",
+          "group": "navigation@3"
+        },
+        {
           "command": "ticketManager.setProjects",
           "when": "view == ticketManager.myIssues",
-          "group": "navigation@3"
+          "group": "navigation@4"
         },
         {
           "command": "ticketManager.setParentScope",
           "when": "view == ticketManager.myIssues",
-          "group": "navigation@4"
+          "group": "navigation@5"
         },
         {
           "command": "ticketManager.refresh",
@@ -304,28 +369,39 @@
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.createIssue",
+          "command": "ticketManager.createBoard",
           "when": "view == ticketManager.boards",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.setBoardProjects",
+          "command": "ticketManager.createIssue",
           "when": "view == ticketManager.boards",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.setBoardTypes",
-          "when": "view == ticketManager.boards",
+          "command": "ticketManager.searchBoards",
+          "when": "view == ticketManager.boards && !ticketManager.boardsSearchActive",
           "group": "navigation@4"
         },
         {
-          "command": "ticketManager.configureBoardColumns",
+          "command": "ticketManager.searchBoardsActive",
+          "when": "view == ticketManager.boards && ticketManager.boardsSearchActive",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ticketManager.setBoardProjects",
           "when": "view == ticketManager.boards",
           "group": "navigation@5"
         },
         {
-          "command": "ticketManager.setBoardSearchText",
-          "when": "view == ticketManager.boards"
+          "command": "ticketManager.setBoardTypes",
+          "when": "view == ticketManager.boards",
+          "group": "navigation@6"
+        },
+        {
+          "command": "ticketManager.configureBoardColumns",
+          "when": "view == ticketManager.boards",
+          "group": "navigation@7"
         },
         {
           "command": "ticketManager.clearBoardFilters",
@@ -364,10 +440,6 @@
           "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "ticketManager.setSearchText",
-          "when": "view == ticketManager.myIssues"
-        },
-        {
           "command": "ticketManager.toggleAssigneeMode",
           "when": "view == ticketManager.myIssues"
         },
@@ -377,10 +449,6 @@
         },
         {
           "command": "ticketManager.clearFilters",
-          "when": "view == ticketManager.myIssues"
-        },
-        {
-          "command": "ticketManager.setGrouping",
           "when": "view == ticketManager.myIssues"
         },
         {
@@ -439,6 +507,20 @@
           "command": "ticketManager.openIssueFullDetails",
           "when": "view == ticketManager.issueDetails && viewItem == issueKey",
           "group": "inline@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ticketManager.searchIssuesActive",
+          "when": "false"
+        },
+        {
+          "command": "ticketManager.searchEpicsActive",
+          "when": "false"
+        },
+        {
+          "command": "ticketManager.searchBoardsActive",
+          "when": "false"
         }
       ]
     },
@@ -527,6 +609,21 @@
           "default": "",
           "scope": "application",
           "description": "Optional user/profile MCP server reference to use when Jira Connected mode is not manually configured and no workspace MCP server is selected."
+        },
+        "ticketManager.jiraBoardListIconColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Accent color for the small backend icon to the left of each board name in the Boards list when **Jira Connected** mode is active. Use hex (e.g. `#3b82f6`). Leave empty for the built-in default."
+        },
+        "ticketManager.demoBoardListIconColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Accent color for the small backend icon beside board names when **Demo** mode is active. Use hex (e.g. `#a855f7`). Leave empty for the built-in default."
+        },
+        "ticketManager.fileBoardListIconColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Accent color for the small backend icon beside board names when **File** mode is active. Use hex (e.g. `#22c55e`). Leave empty for the built-in default."
         }
       }
     }

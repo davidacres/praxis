@@ -41,6 +41,9 @@ function getIssueTypeToken(issueType: string | undefined): string {
       return 'feature';
     case 'story':
       return 'story';
+    case 'subtask':
+    case 'sub-task':
+      return 'task';
     case 'task':
       return 'task';
     case 'bug':
@@ -67,6 +70,7 @@ function getStatusToken(status: string | undefined): string {
       return 'progress';
     case 'blocked':
       return 'blocked';
+    case 'backlog':
     case 'to do':
       return 'todo';
     default:
@@ -82,6 +86,7 @@ function renderStatusBadge(status: string | undefined): string {
 export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private selectedIssueKey?: string;
+  private searchText = '';
   private epics: IssueSummary[] = [];
   private errorMessage?: string;
   private requestGeneration = 0;
@@ -123,6 +128,15 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     this.render();
   }
 
+  public async setSearchText(searchText: string): Promise<void> {
+    this.searchText = searchText.trim();
+    await this.refresh();
+  }
+
+  public getSearchText(): string {
+    return this.searchText;
+  }
+
   public async refresh(): Promise<void> {
     if (!this.view) {
       return;
@@ -141,7 +155,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           assigneeMode: 'all',
           parentKey: undefined
         },
-        undefined
+        this.searchText || undefined
       );
 
       if (generation !== this.requestGeneration) {
@@ -262,8 +276,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         align-items: center;
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 0;
-        border-radius: 0;
+        padding: 4px 6px;
+        border-radius: 2px;
         background: transparent;
         cursor: pointer;
       }
@@ -487,7 +501,9 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     }
 
     if (this.epics.length === 0) {
-      return '<div class="message">No EPICs are available for the current project scope.</div>';
+      return this.searchText
+        ? `<div class="message">No EPICs match "${escapeHtml(this.searchText)}".</div>`
+        : '<div class="message">No EPICs are available for the current project scope.</div>';
     }
 
     return `<div class="item-list">

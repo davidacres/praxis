@@ -11,7 +11,7 @@ const DEFAULT_FILTERS: IssueFilters = {
   searchText: '',
   assigneeMode: 'me',
   parentKey: undefined,
-  grouping: 'project'
+  grouping: 'none'
 };
 
 export class FilterStore implements vscode.Disposable {
@@ -26,10 +26,11 @@ export class FilterStore implements vscode.Disposable {
       this.context.workspaceState.get<PersistedFilterState>(FILTERS_KEY) ?? {
         ...DEFAULT_FILTERS
       };
-    const grouping = this.context.globalState.get<GroupingMode>(
-      GROUPING_KEY,
-      DEFAULT_FILTERS.grouping
-    );
+    const storedGrouping = this.context.globalState.get<GroupingMode>(GROUPING_KEY);
+    const grouping =
+      storedGrouping === 'project'
+        ? 'none'
+        : storedGrouping ?? DEFAULT_FILTERS.grouping;
 
     return {
       projectKeys: [...(storedFilters.projectKeys ?? [])],

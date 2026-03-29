@@ -10,6 +10,14 @@ interface FakeTransition {
   toStatus: string;
 }
 
+interface FakeComment {
+  id: string;
+  author: string;
+  body: string;
+  created: string;
+  updated: string;
+}
+
 interface FakeIssue {
   id: string;
   key: string;
@@ -21,9 +29,11 @@ interface FakeIssue {
   assigneeMode: 'me' | 'other' | 'none';
   assigneeDisplayName?: string;
   priority: string;
+  created: string;
   updated: string;
   description: string;
   parent?: string;
+  comments: FakeComment[];
   transitions: FakeTransition[];
   failTransition?: boolean;
 }
@@ -62,8 +72,14 @@ function statusCategoryName(status: string): string {
 
 function transitionSet(status: string): FakeTransition[] {
   switch (status) {
+    case 'Backlog':
+      return [
+        { id: 'ready-for-work', name: 'Ready for Work', toStatus: 'To Do' },
+        { id: 'start-progress', name: 'Start Progress', toStatus: 'In Progress' }
+      ];
     case 'To Do':
       return [
+        { id: 'send-backlog', name: 'Move to Backlog', toStatus: 'Backlog' },
         { id: 'start-progress', name: 'Start Progress', toStatus: 'In Progress' },
         { id: 'mark-done', name: 'Done', toStatus: 'Done' }
       ];
@@ -92,8 +108,18 @@ function createIssues(): FakeIssue[] {
       assigneeMode: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'High',
+      created: '2026-03-27T19:30:00.000Z',
       updated: '2026-03-27T20:00:00.000Z',
       description: 'Primary epic for the application platform work.',
+      comments: [
+        {
+          id: 'jira-comment-1',
+          author: 'Alex Agent',
+          body: 'EPIC kickoff is complete and active work has started.',
+          created: '2026-03-27T20:06:00.000Z',
+          updated: '2026-03-27T20:06:00.000Z'
+        }
+      ],
       transitions: transitionSet('In Progress')
     },
     {
@@ -107,9 +133,11 @@ function createIssues(): FakeIssue[] {
       assigneeMode: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'High',
+      created: '2026-03-27T19:40:00.000Z',
       updated: '2026-03-27T20:10:00.000Z',
       description: 'Build the reusable MCP client adapter.',
       parent: 'APP-100',
+      comments: [],
       transitions: transitionSet('To Do')
     },
     {
@@ -123,9 +151,11 @@ function createIssues(): FakeIssue[] {
       assigneeMode: 'other',
       assigneeDisplayName: 'Jordan Builder',
       priority: 'Medium',
+      created: '2026-03-27T19:50:00.000Z',
       updated: '2026-03-27T20:20:00.000Z',
       description: 'Render grouped issues in the sidebar.',
       parent: 'APP-100',
+      comments: [],
       transitions: transitionSet('In Progress')
     },
     {
@@ -139,9 +169,11 @@ function createIssues(): FakeIssue[] {
       assigneeMode: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'Low',
+      created: '2026-03-27T20:05:00.000Z',
       updated: '2026-03-27T20:30:00.000Z',
       description: 'This issue simulates a workflow that requires extra fields.',
       parent: 'APP-100',
+      comments: [],
       transitions: transitionSet('Blocked'),
       failTransition: true
     },
@@ -156,8 +188,10 @@ function createIssues(): FakeIssue[] {
       assigneeMode: 'me',
       assigneeDisplayName: 'Alex Agent',
       priority: 'Critical',
+      created: '2026-03-27T20:45:00.000Z',
       updated: '2026-03-27T21:00:00.000Z',
       description: 'Investigate the latest customer-facing incident.',
+      comments: [],
       transitions: transitionSet('To Do')
     }
   ];
@@ -192,7 +226,10 @@ function createBoards(): FakeBoard[] {
   ];
 }
 
-function issueToJiraShape(issue: FakeIssue) {
+function issueToJiraShape(issue: FakeIssue, allIssues: FakeIssue[] = []) {
+  const parentIssue = issue.parent
+    ? allIssues.find(candidate => candidate.key === issue.parent)
+    : undefined;
   return {
     id: issue.id,
     key: issue.key,
@@ -217,6 +254,7 @@ function issueToJiraShape(issue: FakeIssue) {
       priority: {
         name: issue.priority
       },
+      created: issue.created,
       updated: issue.updated,
       project: {
         key: issue.projectKey,
@@ -224,7 +262,30 @@ function issueToJiraShape(issue: FakeIssue) {
       },
       parent: issue.parent
         ? {
-            key: issue.parent
+            key: issue.parent,
+            fields: {
+              summary: parentIssue?.summary,
+              issuetype: {
+                name: parentIssue?.issueType
+              },
+              description: parentIssue
+                ? {
+                    type: 'doc',
+                    version: 1,
+                    content: [
+                      {
+                        type: 'paragraph',
+                        content: [
+                          {
+                            type: 'text',
+                            text: parentIssue.description
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                : undefined
+            }
           }
         : undefined,
       description: {
@@ -241,6 +302,31 @@ function issueToJiraShape(issue: FakeIssue) {
             ]
           }
         ]
+      },
+      comment: {
+        comments: issue.comments.map(comment => ({
+          id: comment.id,
+          author: {
+            displayName: comment.author
+          },
+          body: {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: comment.body
+                  }
+                ]
+              }
+            ]
+          },
+          created: comment.created,
+          updated: comment.updated
+        }))
       }
     }
   };
@@ -388,6 +474,64 @@ async function main(): Promise<void> {
     }
   }
 
+  function normalizeIssueTypeName(value: string | undefined): string {
+    return (value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '');
+  }
+
+  function isParentIssueTypeName(value: string | undefined): boolean {
+    const normalized = normalizeIssueTypeName(value);
+    return normalized === 'epic' || normalized === 'feature';
+  }
+
+  function isSubtaskIssueTypeName(value: string | undefined): boolean {
+    return normalizeIssueTypeName(value) === 'subtask';
+  }
+
+  function validateParentSelection(
+    projectKey: string,
+    issueType: string,
+    parentKey: string | undefined,
+    currentIssueKey?: string
+  ): void {
+    if (isParentIssueTypeName(issueType)) {
+      if (parentKey) {
+        throw new Error(`${issueType} items cannot have a parent.`);
+      }
+      return;
+    }
+
+    if (!parentKey) {
+      if (isSubtaskIssueTypeName(issueType)) {
+        throw new Error('Story is required for Subtask items.');
+      }
+      return;
+    }
+
+    if (parentKey === currentIssueKey) {
+      throw new Error('An item cannot be its own parent.');
+    }
+
+    const parentIssue = issues.find(candidate => candidate.key === parentKey);
+    if (!parentIssue) {
+      throw new Error(`Parent ${parentKey} was not found.`);
+    }
+    if (parentIssue.projectKey !== projectKey) {
+      throw new Error(`Parent ${parentKey} must be in the same project.`);
+    }
+    if (isSubtaskIssueTypeName(issueType)) {
+      if (normalizeIssueTypeName(parentIssue.issueType) !== 'story') {
+        throw new Error(`Subtask items must belong to a Story. "${parentIssue.issueType}" is not allowed.`);
+      }
+      return;
+    }
+    if (normalizeIssueTypeName(parentIssue.issueType) !== 'epic') {
+      throw new Error(`${issueType} items can only belong to Epic. "${parentIssue.issueType}" is not allowed.`);
+    }
+  }
+
   server.registerTool(
     'atlassian-jira_get_all_projects',
     {
@@ -439,7 +583,9 @@ async function main(): Promise<void> {
       const matchingIssues = issues
         .filter(issue => matchesQuery(issue, jql, scenario))
         .sort((a, b) => b.updated.localeCompare(a.updated));
-      const pagedIssues = matchingIssues.slice(start_at, start_at + limit).map(issueToJiraShape);
+      const pagedIssues = matchingIssues
+        .slice(start_at, start_at + limit)
+        .map(issue => issueToJiraShape(issue, issues));
 
       return jsonResult({
         issues: pagedIssues,
@@ -480,27 +626,31 @@ async function main(): Promise<void> {
         }
       }
 
+      validateParentSelection(project_key, issue_type, parent);
+
       const createdIssue: FakeIssue = {
         id: String(issues.length + 1),
         key: getNextIssueKey(project_key),
         summary,
-        status: 'To Do',
+        status: 'Backlog',
         issueType: issue_type,
         projectKey: project_key,
         projectName: getProjectName(project_key),
         assigneeMode: 'me',
         assigneeDisplayName: 'Alex Agent',
         priority: 'Medium',
+        created: new Date().toISOString(),
         updated: new Date().toISOString(),
         description: description ?? '',
         parent,
-        transitions: transitionSet('To Do')
+        comments: [],
+        transitions: transitionSet('Backlog')
       };
 
       issues.unshift(createdIssue);
       attachIssueToBoard(createdIssue.key, createdIssue.projectKey);
 
-      return jsonResult(issueToJiraShape(createdIssue));
+      return jsonResult(issueToJiraShape(createdIssue, issues));
     }
   );
 
@@ -533,22 +683,47 @@ async function main(): Promise<void> {
       if (typeof parsedFields.description === 'string') {
         issue.description = parsedFields.description;
       }
+      if (typeof parsedFields.assignee === 'string') {
+        const assignee = parsedFields.assignee.trim();
+        issue.assigneeMode = assignee === 'Alex Agent' ? 'me' : 'other';
+        issue.assigneeDisplayName = assignee;
+      } else if (parsedFields.assignee === null) {
+        issue.assigneeMode = 'none';
+        issue.assigneeDisplayName = undefined;
+      }
 
       if (additional_fields) {
         try {
           const parsed = JSON.parse(additional_fields) as Record<string, unknown>;
-          if (typeof parsed.epicKey === 'string') {
+          if (typeof parsed.parent === 'string') {
+            issue.parent = parsed.parent;
+          } else if (typeof parsed.epicKey === 'string') {
             issue.parent = parsed.epicKey;
-          } else if (parsed.epicKey === null) {
+          } else if (parsed.parent === null || parsed.epicKey === null) {
             issue.parent = undefined;
+          }
+          if (
+            typeof parsed.priority === 'object' &&
+            parsed.priority !== null &&
+            typeof (parsed.priority as { name?: unknown }).name === 'string'
+          ) {
+            issue.priority = (parsed.priority as { name: string }).name;
+          }
+          if (
+            typeof parsed.issuetype === 'object' &&
+            parsed.issuetype !== null &&
+            typeof (parsed.issuetype as { name?: unknown }).name === 'string'
+          ) {
+            issue.issueType = (parsed.issuetype as { name: string }).name;
           }
         } catch {
           // Ignore malformed additional fields in the fake server.
         }
       }
 
+      validateParentSelection(issue.projectKey, issue.issueType, issue.parent, issue.key);
       issue.updated = new Date().toISOString();
-      return jsonResult(issueToJiraShape(issue));
+      return jsonResult(issueToJiraShape(issue, issues));
     }
   );
 
@@ -645,7 +820,9 @@ async function main(): Promise<void> {
         .filter(issue => board.issueKeys.includes(issue.key))
         .filter(issue => matchesQuery(issue, jql, scenario))
         .sort((a, b) => b.updated.localeCompare(a.updated));
-      const pagedIssues = matchingIssues.slice(start_at, start_at + limit).map(issueToJiraShape);
+      const pagedIssues = matchingIssues
+        .slice(start_at, start_at + limit)
+        .map(issue => issueToJiraShape(issue, issues));
 
       return jsonResult({
         issues: pagedIssues,
@@ -661,7 +838,8 @@ async function main(): Promise<void> {
       description: 'Get a fake Jira issue by key.',
       inputSchema: {
         issue_key: z.string(),
-        fields: z.string().optional()
+        fields: z.string().optional(),
+        comment_limit: z.number().optional()
       }
     },
     async ({ issue_key }) => {
@@ -670,7 +848,44 @@ async function main(): Promise<void> {
         throw new Error(`Issue ${issue_key} was not found.`);
       }
 
-      return jsonResult(issueToJiraShape(issue));
+      return jsonResult(issueToJiraShape(issue, issues));
+    }
+  );
+
+  server.registerTool(
+    'atlassian-jira_add_comment',
+    {
+      description: 'Add a fake Jira comment to an issue.',
+      inputSchema: {
+        issue_key: z.string(),
+        body: z.string()
+      }
+    },
+    async ({ issue_key, body }) => {
+      const issue = issues.find(candidate => candidate.key === issue_key);
+      if (!issue) {
+        throw new Error(`Issue ${issue_key} was not found.`);
+      }
+
+      const commentBody = body.trim();
+      if (commentBody.length === 0) {
+        throw new Error('Comment cannot be empty.');
+      }
+
+      const now = new Date().toISOString();
+      issue.comments.unshift({
+        id: `${issue.key}-comment-${issue.comments.length + 1}`,
+        author: 'Alex Agent',
+        body: commentBody,
+        created: now,
+        updated: now
+      });
+      issue.updated = now;
+
+      return jsonResult({
+        ok: true,
+        issueKey: issue.key
+      });
     }
   );
 

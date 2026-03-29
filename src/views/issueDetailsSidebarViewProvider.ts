@@ -1,5 +1,29 @@
 import * as vscode from 'vscode';
+import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { UpdateIssueInput } from '../types';
+import {
+  formatParentReference,
+  getParentRule,
+  getResolvedParentLabel
+} from '../issues/issueHierarchy';
 import { DetailsViewProvider } from './detailsViewProvider';
+
+interface IssueDetailsSidebarCallbacks {
+  onSaveIssueEdits: (
+    issueKey: string,
+    input: UpdateIssueInput,
+    transitionId?: string
+  ) => Promise<void>;
+  onAddComment: (issueKey: string, body: string) => Promise<void>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -23,6 +47,9 @@ function pillToken(label: string | undefined): string {
       return 'feature';
     case 'story':
       return 'story';
+    case 'subtask':
+    case 'sub-task':
+      return 'task';
     case 'task':
       return 'task';
     case 'bug':
@@ -35,6 +62,7 @@ function pillToken(label: string | undefined): string {
       return 'progress';
     case 'blocked':
       return 'blocked';
+    case 'backlog':
     case 'to do':
       return 'todo';
     default:
@@ -50,11 +78,46 @@ function renderPill(label: string | undefined): string {
   return `<span class="pill pill--${pillToken(value)}">${escapeHtml(value)}</span>`;
 }
 
+function formatDate(value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return '—';
+  }
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    return trimmed;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(parsed);
+}
+
+function renderSelectOptions(current: string | undefined, defaults: string[]): string {
+  const values = [current?.trim(), ...defaults]
+    .filter((value): value is string => Boolean(value && value.trim().length > 0))
+    .filter((value, index, array) => array.findIndex(candidate => candidate === value) === index);
+
+  return values
+    .map(
+      value =>
+        `<option value="${escapeHtml(value)}" ${value === (current?.trim() || '') ? 'selected' : ''}>${escapeHtml(value)}</option>`
+    )
+    .join('');
+}
+
 export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private readonly disposables: vscode.Disposable[] = [];
+  private viewDisposables: vscode.Disposable[] = [];
 
-  public constructor(private readonly detailsProvider: DetailsViewProvider) {
+  public constructor(
+    private readonly backendService: IssueTrackerService,
+    private readonly detailsProvider: DetailsViewProvider,
+    private readonly callbacks: IssueDetailsSidebarCallbacks
+  ) {
     this.disposables.push(
       this.detailsProvider.onDidChangeTreeData(() => {
         this.render();
@@ -64,16 +127,99 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
+    for (const disposable of this.viewDisposables) {
+      disposable.dispose();
+    }
+    this.viewDisposables = [];
+
     webviewView.webview.options = {
-      enableScripts: false
+      enableScripts: true
     };
+    this.viewDisposables.push(
+      webviewView.webview.onDidReceiveMessage(message => {
+        void this.handleMessage(message);
+      })
+    );
     this.render();
   }
 
   public dispose(): void {
     this.view = undefined;
+    for (const disposable of this.viewDisposables) {
+      disposable.dispose();
+    }
     for (const disposable of this.disposables) {
       disposable.dispose();
+    }
+  }
+
+  private async handleMessage(message: unknown): Promise<void> {
+    if (!this.view || !isRecord(message)) {
+      return;
+    }
+
+    const type = asString(message.type);
+    if (!type) {
+      return;
+    }
+
+    if (type === 'saveIssueEdits') {
+      const issueKey = asString(message.issueKey);
+      const summary = asString(message.summary);
+      if (!issueKey || summary === undefined) {
+        return;
+      }
+
+      const description = asString(message.description) ?? '';
+      const parentKey = asString(message.parentKey) ?? '';
+      const assignee = asString(message.assignee) ?? '';
+      const priority = asString(message.priority);
+      const issueType = asString(message.issueType);
+      const transitionId = asString(message.transitionId) ?? undefined;
+
+      try {
+        await this.callbacks.onSaveIssueEdits(issueKey, {
+          summary,
+          description,
+          parentKey: parentKey.trim() || null,
+          assignee: assignee.trim() || null,
+          priority,
+          issueType
+        }, transitionId);
+        await this.view.webview.postMessage({
+          type: 'saveIssueEditsResult',
+          ok: true
+        });
+      } catch (error) {
+        await this.view.webview.postMessage({
+          type: 'saveIssueEditsResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    if (type === 'addIssueComment') {
+      const issueKey = asString(message.issueKey);
+      const body = asString(message.body);
+      if (!issueKey || body === undefined) {
+        return;
+      }
+
+      try {
+        await this.callbacks.onAddComment(issueKey, body);
+        await this.view.webview.postMessage({
+          type: 'addIssueCommentResult',
+          ok: true
+        });
+      } catch (error) {
+        await this.view.webview.postMessage({
+          type: 'addIssueCommentResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
   }
 
@@ -96,51 +242,177 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       content = '<div class="message">Issue details are unavailable.</div>';
     } else {
       const issue = snapshot.detailedIssue;
-      const rows = [
+      const parentRule = getParentRule(issue.issueType, this.backendService.mode);
+      const resolvedParentLabel = getResolvedParentLabel(
+        issue.issueType,
+        this.backendService.mode,
+        issue.parentIssue
+      );
+      const parentReference = formatParentReference(issue.parentIssue);
+      const readonlyRows = [
         ['Project', issue.projectName ? `${issue.projectKey} • ${issue.projectName}` : issue.projectKey || '—'],
-        ['Assignee', issue.assignee ?? 'Unassigned'],
-        ['Priority', issue.priority ?? '—'],
-        ['Updated', issue.updated ?? '—']
+        ['Created', formatDate(issue.created)],
+        ['Updated', formatDate(issue.updated)]
       ]
         .map(
           ([label, value]) => `<div class="detail-row">
             <div class="detail-label">${escapeHtml(label)}</div>
-            <div class="detail-value">${escapeHtml(value)}</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
           </div>`
         )
         .join('');
 
-      const description = issue.description?.trim()
-        ? `<div class="detail-row" title="${escapeHtml(issue.description)}">
-            <div class="detail-label">Description</div>
-            <div class="detail-value">${escapeHtml(issue.description.replace(/\s+/g, ' ').trim())}</div>
-          </div>`
-        : '';
+      const statusOptions = `<option value="" selected>${escapeHtml(issue.status)}</option>${snapshot.transitions
+        .map(
+          transition =>
+            `<option value="${escapeHtml(transition.id)}">${escapeHtml(
+              transition.toStatus ?? transition.name
+            )}</option>`
+        )
+        .join('')}`;
+      const issueTypeOptions = renderSelectOptions(issue.issueType, [
+        'Epic',
+        'Feature',
+        'Story',
+        'Task',
+        'Subtask',
+        'Bug',
+        'Issue'
+      ]);
+      const priorityOptions = renderSelectOptions(issue.priority, [
+        'Critical',
+        'Highest',
+        'High',
+        'Medium',
+        'Low',
+        'Lowest'
+      ]);
 
-      const transitions = snapshot.transitions.length
-        ? `<div class="detail-row">
-            <div class="detail-label">Transitions</div>
-            <div class="detail-pill-list">${snapshot.transitions
-              .map(transition => renderPill(transition.toStatus ?? transition.name))
-              .join('')}</div>
-          </div>`
-        : `<div class="detail-row">
-            <div class="detail-label">Transitions</div>
-            <div class="detail-value">No transitions available</div>
+      const comments = (issue.comments ?? [])
+        .map(comment => {
+          const formattedDate = formatDate(comment.created ?? comment.updated);
+          const metaParts = [comment.author, formattedDate !== '—' ? formattedDate : undefined].filter(
+            (value): value is string => Boolean(value)
+          );
+          return `<div class="comment-item">
+            <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
+            <div class="comment-body">${escapeHtml(comment.body)}</div>
           </div>`;
+        })
+        .join('');
 
       content = `<div class="item-list">
         <div class="issue-header" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
           <div class="header-main">
             <div class="item-key">${escapeHtml(issue.key)}</div>
-            ${renderPill(issue.issueType)}
-            ${renderPill(issue.status)}
-            <div class="item-summary">${escapeHtml(issue.summary)}</div>
           </div>
         </div>
-        ${rows}
-        ${description}
-        ${transitions}
+        <form class="card edit-form" id="issueEditForm" data-issue-key="${escapeHtml(issue.key)}">
+          <div class="section-title">Details</div>
+          ${readonlyRows}
+          <label class="field-group" for="summaryInput">
+            <span class="field-label">Summary</span>
+            <input
+              id="summaryInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(issue.summary)}"
+              placeholder="Issue summary"
+            />
+          </label>
+          <label class="field-group" for="statusSelect">
+            <span class="field-label">Status</span>
+            <select id="statusSelect" class="field-select" ${
+              snapshot.transitions.length === 0 ? 'disabled' : ''
+            }>
+              ${statusOptions}
+            </select>
+          </label>
+          <label class="field-group" for="issueTypeSelect">
+            <span class="field-label">Ticket Type</span>
+            <select id="issueTypeSelect" class="field-select">
+              ${issueTypeOptions}
+            </select>
+          </label>
+          <label class="field-group" for="assigneeInput">
+            <span class="field-label">Assignee</span>
+            <input
+              id="assigneeInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(issue.assignee ?? '')}"
+              placeholder="Enter an assignee or leave blank"
+            />
+          </label>
+          <label class="field-group" for="prioritySelect">
+            <span class="field-label">Priority</span>
+            <select id="prioritySelect" class="field-select">
+              ${priorityOptions}
+            </select>
+          </label>
+          <div
+            class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
+            id="parentFieldGroup"
+            data-mode="${escapeHtml(this.backendService.mode)}"
+            data-initial-parent-key="${escapeHtml(issue.parentKey ?? '')}"
+            data-current-parent-type="${escapeHtml(issue.parentIssue?.issueType ?? '')}"
+            data-current-parent-summary="${escapeHtml(issue.parentIssue?.summary ?? '')}"
+            data-current-parent-description="${escapeHtml(issue.parentIssue?.description ?? '')}"
+          >
+            <span class="field-label" id="parentFieldLabel">${escapeHtml(resolvedParentLabel)}</span>
+            <input
+              id="parentInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(issue.parentKey ?? '')}"
+              placeholder="${escapeHtml(parentRule.placeholder)}"
+            />
+            <div class="field-help" id="parentFieldHint">${escapeHtml(parentRule.helperText)}</div>
+            <div class="parent-preview" id="parentPreview">
+              <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
+                parentReference || parentRule.emptyText
+              )}</div>
+              <div class="parent-preview-description${issue.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${escapeHtml(
+                issue.parentIssue?.description ?? ''
+              )}</div>
+            </div>
+          </div>
+          <label class="field-group" for="descriptionInput">
+            <span class="field-label">Description</span>
+            <textarea
+              id="descriptionInput"
+              class="field-textarea"
+              placeholder="Add a description"
+            >${escapeHtml(issue.description ?? '')}</textarea>
+          </label>
+          <div class="form-actions">
+            <button class="primary-button" id="saveButton" type="submit">Save</button>
+            <button class="secondary-button" id="resetButton" type="button">Reset</button>
+            <span class="form-status" id="formStatus" aria-live="polite"></span>
+          </div>
+        </form>
+        <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
+          <div class="section-title">Comments</div>
+          <div class="comment-list">
+            ${
+              comments.length > 0
+                ? comments
+                : '<div class="comment-empty">No comments yet.</div>'
+            }
+          </div>
+          <label class="field-group" for="commentInput">
+            <span class="field-label">Add Comment</span>
+            <textarea
+              id="commentInput"
+              class="field-textarea comment-textarea"
+              placeholder="Write a comment"
+            ></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="primary-button" id="addCommentButton" type="submit">Add Comment</button>
+            <span class="form-status" id="commentStatus" aria-live="polite"></span>
+          </div>
+        </form>
       </div>`;
     }
 
@@ -167,27 +439,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       .item-list {
         display: flex;
         flex-direction: column;
-        gap: 0;
+        gap: 10px;
       }
-      .issue-header,
-      .detail-row {
+      .issue-header {
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 6px;
-        border-radius: 4px;
+        padding: 6px;
+        border-radius: 6px;
       }
-      .issue-header:hover,
-      .detail-row:hover {
-        background: var(--vscode-list-hoverBackground);
-      }
-      .header-main,
-      .detail-row {
+      .header-main {
         display: flex;
         align-items: center;
         gap: 6px;
+        flex-wrap: wrap;
         min-width: 0;
-        overflow: hidden;
-        white-space: nowrap;
       }
       .item-key {
         flex-shrink: 0;
@@ -195,17 +460,160 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         font-weight: 600;
         color: var(--vscode-textLink-foreground);
       }
-      .item-summary,
+      .card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-editor-background, var(--vscode-sideBar-background));
+      }
+      .section-title {
+        margin: 0;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--vscode-descriptionForeground);
+      }
+      .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .field-label {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .field-help {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .parent-group.is-hidden,
+      .is-hidden {
+        display: none;
+      }
+      .parent-preview {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 9px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 6px;
+        background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+      }
+      .parent-preview-summary {
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .parent-preview-description {
+        font-size: 11px;
+        line-height: 1.4;
+        color: var(--vscode-descriptionForeground);
+      }
+      .field-input,
+      .field-textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 9px;
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 6px;
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+      }
+      .field-textarea {
+        min-height: 92px;
+        resize: vertical;
+        font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+        line-height: 1.45;
+      }
+      .comment-textarea {
+        min-height: 76px;
+      }
+      .field-select {
+        width: 100%;
+        box-sizing: border-box;
+        min-height: 32px;
+        padding: 7px 9px;
+        border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+        border-radius: 6px;
+        background: var(--vscode-dropdown-background, var(--vscode-input-background));
+        color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+      }
+      .inline-action-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .form-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .primary-button,
+      .secondary-button {
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .primary-button {
+        border: 1px solid var(--vscode-button-border, transparent);
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+      }
+      .primary-button:hover:not(:disabled) {
+        background: var(--vscode-button-hoverBackground);
+      }
+      .secondary-button {
+        border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-button-border, transparent));
+        background: var(--vscode-button-secondaryBackground, transparent);
+        color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+      }
+      .secondary-button:hover:not(:disabled) {
+        background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
+      }
+      .primary-button:disabled,
+      .secondary-button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .form-status {
+        min-height: 16px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .form-status.error {
+        color: var(--vscode-errorForeground);
+      }
+      .form-status.success {
+        color: var(--vscode-testing-iconPassed, var(--vscode-textLink-foreground));
+      }
+      .detail-row {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 8px;
+        align-items: start;
+        min-width: 0;
+      }
+      .detail-row--stacked {
+        align-items: start;
+      }
+      .detail-label {
+        min-width: 0;
+        color: var(--vscode-descriptionForeground);
+      }
       .detail-value {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .detail-label {
-        flex-shrink: 0;
-        width: 78px;
-        color: var(--vscode-descriptionForeground);
+      .detail-value--wrap {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
       }
       .pill {
         display: inline-flex;
@@ -270,10 +678,35 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       }
       .detail-pill-list {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 4px;
         min-width: 0;
-        overflow: hidden;
+      }
+      .comment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .comment-item,
+      .comment-empty {
+        padding: 8px 10px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+      }
+      .comment-meta {
+        margin-bottom: 4px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .comment-body {
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.45;
+      }
+      .comment-empty {
+        color: var(--vscode-descriptionForeground);
       }
       .message {
         padding: 10px;
@@ -291,6 +724,390 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     <div class="page">
       ${content}
     </div>
+    <script nonce="${nonce}">
+      const vscodeApi = acquireVsCodeApi();
+      function setStatusMessage(target, text, kind) {
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        target.textContent = text || '';
+        target.className = kind ? 'form-status ' + kind : 'form-status';
+      }
+
+      const editForm = document.getElementById('issueEditForm');
+      let handleSaveIssueEditsResult = undefined;
+      if (editForm instanceof HTMLFormElement) {
+        const summaryInput = document.getElementById('summaryInput');
+        const statusSelect = document.getElementById('statusSelect');
+        const issueTypeSelect = document.getElementById('issueTypeSelect');
+        const assigneeInput = document.getElementById('assigneeInput');
+        const prioritySelect = document.getElementById('prioritySelect');
+        const descriptionInput = document.getElementById('descriptionInput');
+        const parentFieldGroup = document.getElementById('parentFieldGroup');
+        const parentFieldLabel = document.getElementById('parentFieldLabel');
+        const parentInput = document.getElementById('parentInput');
+        const parentFieldHint = document.getElementById('parentFieldHint');
+        const parentPreviewSummary = document.getElementById('parentPreviewSummary');
+        const parentPreviewDescription = document.getElementById('parentPreviewDescription');
+        const saveButton = document.getElementById('saveButton');
+        const resetButton = document.getElementById('resetButton');
+        const formStatus = document.getElementById('formStatus');
+
+        let saving = false;
+        let statusOverride = undefined;
+        let initialState = readCurrentState();
+
+        function normalizeIssueType(value) {
+          return (value || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+        }
+
+        function getParentUi(issueType) {
+          const normalized = normalizeIssueType(issueType);
+          const mode = parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.mode : 'jira';
+          if (normalized === 'epic' || normalized === 'feature') {
+            return {
+              canHaveParent: false,
+              requiresParent: false,
+              label: 'Parent',
+              helper: (issueType || 'Issue') + ' items cannot have a parent.',
+              emptyText: (issueType || 'Issue') + ' items do not use a parent.',
+              placeholder: ''
+            };
+          }
+          if (normalized === 'subtask') {
+            return {
+              canHaveParent: true,
+              requiresParent: true,
+              label: 'Story',
+              helper: 'Subtasks can only belong to a story.',
+              emptyText: 'No story selected.',
+              placeholder: 'Enter a story key'
+            };
+          }
+          return {
+            canHaveParent: true,
+            requiresParent: false,
+            label: 'Epic',
+            helper:
+              mode === 'jira'
+                ? 'This item can only belong to an Epic.'
+                : 'This item can only belong to an Epic/Feature.',
+            emptyText: 'No epic selected.',
+            placeholder: 'Leave blank to clear the epic'
+          };
+        }
+
+        function updateParentField() {
+          const issueType = issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : '';
+          const parentUi = getParentUi(issueType);
+          const currentParentKey = parentInput instanceof HTMLInputElement ? parentInput.value.trim() : '';
+          const initialParentKey =
+            parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.initialParentKey || '' : '';
+          const currentParentType =
+            parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.currentParentType || '' : '';
+          const currentParentSummary =
+            parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.currentParentSummary || '' : '';
+          const currentParentDescription =
+            parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.currentParentDescription || '' : '';
+
+          if (parentFieldGroup instanceof HTMLElement) {
+            parentFieldGroup.classList.toggle('is-hidden', !parentUi.canHaveParent);
+          }
+          if (parentFieldLabel instanceof HTMLElement) {
+            parentFieldLabel.textContent =
+              currentParentKey && currentParentKey === initialParentKey && currentParentType
+                ? currentParentType
+                : parentUi.label;
+          }
+          if (parentFieldHint instanceof HTMLElement) {
+            parentFieldHint.textContent = parentUi.helper;
+          }
+          if (parentInput instanceof HTMLInputElement) {
+            parentInput.placeholder = parentUi.placeholder;
+          }
+          if (parentPreviewSummary instanceof HTMLElement) {
+            if (!parentUi.canHaveParent) {
+              parentPreviewSummary.textContent = parentUi.emptyText;
+            } else if (currentParentKey && currentParentKey === initialParentKey && currentParentSummary) {
+              parentPreviewSummary.textContent = (initialParentKey + ' ' + currentParentSummary).trim();
+            } else if (currentParentKey) {
+              parentPreviewSummary.textContent = 'Save to load ' + parentUi.label.toLowerCase() + ' details.';
+            } else {
+              parentPreviewSummary.textContent = parentUi.emptyText;
+            }
+          }
+          if (parentPreviewDescription instanceof HTMLElement) {
+            const showDescription =
+              Boolean(parentUi.canHaveParent) &&
+              Boolean(currentParentKey) &&
+              currentParentKey === initialParentKey &&
+              Boolean(currentParentDescription);
+            parentPreviewDescription.textContent = showDescription ? currentParentDescription : '';
+            parentPreviewDescription.classList.toggle('is-hidden', !showDescription);
+          }
+        }
+
+        function readCurrentState() {
+          const parentUi = getParentUi(
+            issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : ''
+          );
+          return {
+            summary: summaryInput instanceof HTMLInputElement ? summaryInput.value : '',
+            transitionId: statusSelect instanceof HTMLSelectElement ? statusSelect.value : '',
+            issueType: issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '',
+            assignee: assigneeInput instanceof HTMLInputElement ? assigneeInput.value : '',
+            priority: prioritySelect instanceof HTMLSelectElement ? prioritySelect.value : '',
+            description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
+            parentKey:
+              parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
+          };
+        }
+
+        function isDirty() {
+          const currentState = readCurrentState();
+          return (
+            currentState.summary !== initialState.summary ||
+            currentState.transitionId !== initialState.transitionId ||
+            currentState.issueType !== initialState.issueType ||
+            currentState.assignee !== initialState.assignee ||
+            currentState.priority !== initialState.priority ||
+            currentState.description !== initialState.description ||
+            currentState.parentKey !== initialState.parentKey
+          );
+        }
+
+        function getValidationError() {
+          const summary = summaryInput instanceof HTMLInputElement ? summaryInput.value.trim() : '';
+          if (summary.length === 0) {
+            return 'Summary is required.';
+          }
+          const issueType = issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : '';
+          if (issueType.length === 0) {
+            return 'Ticket type is required.';
+          }
+          const priority = prioritySelect instanceof HTMLSelectElement ? prioritySelect.value.trim() : '';
+          if (priority.length === 0) {
+            return 'Priority is required.';
+          }
+          const parentUi = getParentUi(issueType);
+          const parentKey = parentInput instanceof HTMLInputElement ? parentInput.value.trim() : '';
+          if (parentUi.canHaveParent && parentUi.requiresParent && parentKey.length === 0) {
+            return parentUi.label + ' is required.';
+          }
+          return '';
+        }
+
+        function renderStatus() {
+          if (statusOverride) {
+            setStatusMessage(formStatus, statusOverride.text, statusOverride.kind);
+            return;
+          }
+          if (saving) {
+            setStatusMessage(formStatus, 'Saving...', '');
+            return;
+          }
+
+          const validationError = getValidationError();
+          if (validationError) {
+            setStatusMessage(formStatus, validationError, 'error');
+          } else if (isDirty()) {
+            setStatusMessage(formStatus, 'Unsaved changes', '');
+          } else {
+            setStatusMessage(formStatus, '', '');
+          }
+        }
+
+        function refreshActions() {
+          const dirty = isDirty();
+          const validationError = getValidationError();
+          if (saveButton instanceof HTMLButtonElement) {
+            saveButton.disabled = saving || !dirty || Boolean(validationError);
+          }
+          if (resetButton instanceof HTMLButtonElement) {
+            resetButton.disabled = saving || !dirty;
+          }
+          renderStatus();
+        }
+
+        function clearStatusOverride() {
+          statusOverride = undefined;
+        }
+
+        function onFormInput() {
+          clearStatusOverride();
+          updateParentField();
+          refreshActions();
+        }
+
+        summaryInput?.addEventListener('input', onFormInput);
+        statusSelect?.addEventListener('change', onFormInput);
+        issueTypeSelect?.addEventListener('change', onFormInput);
+        assigneeInput?.addEventListener('input', onFormInput);
+        prioritySelect?.addEventListener('change', onFormInput);
+        descriptionInput?.addEventListener('input', onFormInput);
+        parentInput?.addEventListener('input', onFormInput);
+
+        editForm.addEventListener('submit', event => {
+          event.preventDefault();
+          if (saving) {
+            return;
+          }
+
+          clearStatusOverride();
+          const validationError = getValidationError();
+          if (validationError) {
+            refreshActions();
+            return;
+          }
+
+          saving = true;
+          refreshActions();
+          const currentState = readCurrentState();
+          vscodeApi.postMessage({
+            type: 'saveIssueEdits',
+            issueKey: editForm.dataset.issueKey,
+            summary: currentState.summary,
+            transitionId: currentState.transitionId,
+            issueType: currentState.issueType,
+            assignee: currentState.assignee,
+            priority: currentState.priority,
+            description: currentState.description,
+            parentKey: currentState.parentKey
+          });
+        });
+
+        resetButton?.addEventListener('click', () => {
+          if (summaryInput instanceof HTMLInputElement) {
+            summaryInput.value = initialState.summary;
+          }
+          if (statusSelect instanceof HTMLSelectElement) {
+            statusSelect.value = initialState.transitionId;
+          }
+          if (issueTypeSelect instanceof HTMLSelectElement) {
+            issueTypeSelect.value = initialState.issueType;
+          }
+          if (assigneeInput instanceof HTMLInputElement) {
+            assigneeInput.value = initialState.assignee;
+          }
+          if (prioritySelect instanceof HTMLSelectElement) {
+            prioritySelect.value = initialState.priority;
+          }
+          if (descriptionInput instanceof HTMLTextAreaElement) {
+            descriptionInput.value = initialState.description;
+          }
+          if (parentInput instanceof HTMLInputElement) {
+            parentInput.value = initialState.parentKey;
+          }
+          clearStatusOverride();
+          updateParentField();
+          refreshActions();
+        });
+
+        handleSaveIssueEditsResult = message => {
+          saving = false;
+          if (message.ok) {
+            initialState = readCurrentState();
+            if (statusSelect instanceof HTMLSelectElement) {
+              statusSelect.value = '';
+            }
+            initialState.transitionId = '';
+            statusOverride = { text: 'Saved.', kind: 'success' };
+          } else {
+            statusOverride = {
+              text: typeof message.error === 'string' ? message.error : 'Unable to save changes.',
+              kind: 'error'
+            };
+          }
+          refreshActions();
+        };
+
+        updateParentField();
+        refreshActions();
+      }
+
+      const commentForm = document.getElementById('commentForm');
+      let handleAddIssueCommentResult = undefined;
+      if (commentForm instanceof HTMLFormElement) {
+        const commentInput = document.getElementById('commentInput');
+        const addCommentButton = document.getElementById('addCommentButton');
+        const commentStatus = document.getElementById('commentStatus');
+        let commentSaving = false;
+        let commentOverride = undefined;
+
+        function refreshCommentActions() {
+          const body =
+            commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
+          if (addCommentButton instanceof HTMLButtonElement) {
+            addCommentButton.disabled = commentSaving || body.length === 0;
+          }
+
+          if (commentOverride) {
+            setStatusMessage(commentStatus, commentOverride.text, commentOverride.kind);
+          } else if (commentSaving) {
+            setStatusMessage(commentStatus, 'Adding comment...', '');
+          } else {
+            setStatusMessage(commentStatus, '', '');
+          }
+        }
+
+        commentInput?.addEventListener('input', () => {
+          commentOverride = undefined;
+          refreshCommentActions();
+        });
+
+        commentForm.addEventListener('submit', event => {
+          event.preventDefault();
+          const body =
+            commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
+          if (commentSaving || body.length === 0) {
+            return;
+          }
+
+          commentSaving = true;
+          commentOverride = undefined;
+          refreshCommentActions();
+          vscodeApi.postMessage({
+            type: 'addIssueComment',
+            issueKey: commentForm.dataset.issueKey,
+            body
+          });
+        });
+
+        handleAddIssueCommentResult = message => {
+          commentSaving = false;
+          if (message.ok) {
+            if (commentInput instanceof HTMLTextAreaElement) {
+              commentInput.value = '';
+            }
+            commentOverride = { text: 'Comment added.', kind: 'success' };
+          } else {
+            commentOverride = {
+              text: typeof message.error === 'string' ? message.error : 'Unable to add comment.',
+              kind: 'error'
+            };
+          }
+          refreshCommentActions();
+        };
+
+        refreshCommentActions();
+      }
+
+      window.addEventListener('message', event => {
+        const message = event.data;
+        if (!message || typeof message.type !== 'string') {
+          return;
+        }
+
+        if (message.type === 'saveIssueEditsResult' && handleSaveIssueEditsResult) {
+          handleSaveIssueEditsResult(message);
+          return;
+        }
+        if (message.type === 'addIssueCommentResult' && handleAddIssueCommentResult) {
+          handleAddIssueCommentResult(message);
+        }
+      });
+    </script>
   </body>
 </html>`;
   }

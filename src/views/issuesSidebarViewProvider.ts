@@ -1,20 +1,17 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { FilterStore } from '../state/filterStore';
-import type { GroupingMode, IssueFilters, IssueSummary } from '../types';
+import type { IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
 interface IssuesSidebarCallbacks {
   onSelectIssue: (issueKey: string, openFullPanel?: boolean) => Promise<void>;
-  onSetSearchText: (searchText: string) => Promise<void>;
-  onSetStatuses: (statuses: string[]) => Promise<void>;
+  onEditIssue: (issueKey: string) => Promise<void>;
+  onDeleteIssue: (issueKey: string) => Promise<void>;
+  onSetSearchText?: (searchText: string) => Promise<void>;
+  onSetStatuses?: (statuses: string[]) => Promise<void>;
   onLoadMore: () => Promise<void>;
-}
-
-interface IssueGroup {
-  label?: string;
-  issues: IssueSummary[];
 }
 
 function escapeHtml(value: string): string {
@@ -43,26 +40,6 @@ function isDoneIssue(issue: IssueSummary): boolean {
   );
 }
 
-function buildIssueGroups(issues: IssueSummary[], grouping: GroupingMode): IssueGroup[] {
-  if (grouping === 'none') {
-    return [{ issues }];
-  }
-
-  const labels =
-    grouping === 'status'
-      ? unique(issues.map(issue => issue.status))
-      : unique(issues.map(issue => issue.projectKey || 'Unknown project'));
-
-  return labels.map(label => ({
-    label,
-    issues: issues.filter(issue =>
-      grouping === 'status'
-        ? issue.status === label
-        : (issue.projectKey || 'Unknown project') === label
-    )
-  }));
-}
-
 function getIssueTypeToken(issueType: string | undefined): string {
   const normalized = issueType?.trim().toLowerCase();
   switch (normalized) {
@@ -72,6 +49,9 @@ function getIssueTypeToken(issueType: string | undefined): string {
       return 'feature';
     case 'story':
       return 'story';
+    case 'subtask':
+    case 'sub-task':
+      return 'task';
     case 'task':
       return 'task';
     case 'bug':
@@ -98,6 +78,7 @@ function getStatusToken(status: string | undefined): string {
       return 'progress';
     case 'blocked':
       return 'blocked';
+    case 'backlog':
     case 'to do':
       return 'todo';
     default:
@@ -220,14 +201,28 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       }
       case 'setSearchText': {
         const searchText = typeof payload.searchText === 'string' ? payload.searchText : '';
-        await this.callbacks.onSetSearchText(searchText);
+        await this.callbacks.onSetSearchText?.(searchText);
         return;
       }
       case 'setStatuses': {
         const statuses = Array.isArray(payload.statuses)
           ? payload.statuses.filter((status): status is string => typeof status === 'string')
           : [];
-        await this.callbacks.onSetStatuses(statuses);
+        await this.callbacks.onSetStatuses?.(statuses);
+        return;
+      }
+      case 'editIssue': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onEditIssue(issueKey);
+        }
+        return;
+      }
+      case 'deleteIssue': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onDeleteIssue(issueKey);
+        }
         return;
       }
       case 'loadMore':
@@ -245,13 +240,11 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
     const filters = this.filterStore.getFilters();
     const snapshot = this.issuesProvider.getSnapshot();
-    const issueGroups = buildIssueGroups(snapshot.issues, filters.grouping);
     const nonce = createNonce();
-    const searchRow = this.renderSearchRow(filters);
-    const issuesSection = this.renderIssuesSection(snapshot, issueGroups, filters);
+    const issuesSection = this.renderIssuesSection(snapshot, filters);
 
     this.view.title = undefined;
-    this.view.description = undefined;
+    this.view.description = String(snapshot.issues.length);
     this.view.badge = undefined;
 
     this.view.webview.html = `<!DOCTYPE html>
@@ -450,17 +443,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         color: var(--vscode-badge-foreground);
         background: var(--vscode-badge-background);
       }
-      .group {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .group-title {
-        margin: 4px 0 0;
-        color: var(--vscode-descriptionForeground);
-        font-size: 12px;
-        font-weight: 600;
-      }
       .item-list {
         display: flex;
         flex-direction: column;
@@ -470,8 +452,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         display: block;
         width: 100%;
         box-sizing: border-box;
-        padding: 4px 0;
-        border-radius: 0;
+        padding: 4px 6px;
+        border-radius: 2px;
         background: transparent;
         cursor: pointer;
       }
@@ -595,6 +577,15 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .issue-row.selected .item-key {
         color: inherit;
       }
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .row-actions .icon-button {
+        width: 24px;
+        height: 24px;
+      }
       .done .item-key,
       .done .item-summary {
         text-decoration: line-through;
@@ -617,7 +608,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   </head>
   <body>
     <div class="page">
-      ${searchRow}
       ${issuesSection}
     </div>
     <script nonce="${nonce}">
@@ -677,6 +667,20 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
           vscodeApi.postMessage({ type: 'selectIssue', issueKey: row.getAttribute('data-issue-key'), openFullPanel: true });
         });
       }
+
+      for (const button of document.querySelectorAll('[data-edit-issue-key]')) {
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          vscodeApi.postMessage({ type: 'editIssue', issueKey: button.getAttribute('data-edit-issue-key') });
+        });
+      }
+
+      for (const button of document.querySelectorAll('[data-delete-issue-key]')) {
+        button.addEventListener('click', event => {
+          event.stopPropagation();
+          vscodeApi.postMessage({ type: 'deleteIssue', issueKey: button.getAttribute('data-delete-issue-key') });
+        });
+      }
     </script>
   </body>
 </html>`;
@@ -684,7 +688,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
   private renderIssuesSection(
     snapshot: ReturnType<IssuesTreeProvider['getSnapshot']>,
-    groups: IssueGroup[],
     filters: IssueFilters
   ): string {
     let content = '';
@@ -697,53 +700,49 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         ? `<div class="message">No issues found for EPIC ${escapeHtml(filters.parentKey)}.</div>`
         : '<div class="message">No issues match the current filters.</div>';
     } else {
-      content = groups
-        .map(group => {
-          const items = group.issues
-            .map(issue => {
-              const classes = [
-                'issue-row',
-                this.selectedIssueKey === issue.key ? 'selected' : '',
-                isDoneIssue(issue) ? 'done' : ''
-              ]
-                .filter(Boolean)
-                .join(' ');
-              return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
-                <div class="row-main">
-                  <div class="row-left">
-                    <div class="item-key">${escapeHtml(issue.key)}</div>
-                    ${renderIssueTypeBadge(issue.issueType)}
-                    <div class="item-summary">${escapeHtml(issue.summary)}</div>
-                  </div>
-                  <div class="row-right">
-                    ${renderAssignmentBadge(issue)}
-                    ${renderStatusBadge(issue.status)}
-                  </div>
+      const items = snapshot.issues
+        .map(issue => {
+          const classes = [
+            'issue-row',
+            this.selectedIssueKey === issue.key ? 'selected' : '',
+            isDoneIssue(issue) ? 'done' : ''
+          ]
+            .filter(Boolean)
+            .join(' ');
+          return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
+            <div class="row-main">
+              <div class="row-left">
+                <div class="item-key">${escapeHtml(issue.key)}</div>
+                ${renderIssueTypeBadge(issue.issueType)}
+                <div class="item-summary">${escapeHtml(issue.summary)}</div>
+              </div>
+              <div class="row-right">
+                ${renderAssignmentBadge(issue)}
+                ${renderStatusBadge(issue.status)}
+                <div class="row-actions">
+                  ${renderIconButton(`editIssue-${issue.key}`, 'Edit issue', 'edit').replace(
+                    'id="editIssue-' + issue.key + '"',
+                    `id="editIssue-${issue.key}" data-edit-issue-key="${escapeHtml(issue.key)}"`
+                  )}
+                  ${renderIconButton(`deleteIssue-${issue.key}`, 'Delete issue', 'delete').replace(
+                    'id="deleteIssue-' + issue.key + '"',
+                    `id="deleteIssue-${issue.key}" data-delete-issue-key="${escapeHtml(issue.key)}"`
+                  )}
                 </div>
-              </div>`;
-            })
-            .join('');
-
-          return `<div class="group">
-            ${group.label ? `<div class="group-title">${escapeHtml(group.label)}</div>` : ''}
-            <div class="item-list">${items}</div>
+              </div>
+            </div>
           </div>`;
         })
         .join('');
+
+      content = `<div class="item-list">${items}</div>`;
     }
 
     const loadMore = snapshot.hasMore
       ? '<button class="text-button load-more" id="loadMoreButton" type="button">Load more</button>'
       : '';
 
-    const blockHeader = `<div class="block-header">
-      <span class="block-header-chevron" aria-hidden="true">▾</span>
-      <span class="block-header-label">My Issues</span>
-      <span class="block-header-count">${snapshot.issues.length}</span>
-    </div>`;
-
     return `<section class="section">
-      ${blockHeader}
       ${content}
       ${loadMore}
     </section>`;

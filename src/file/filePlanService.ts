@@ -10,16 +10,27 @@ import type {
   BoardDetails,
   BoardFilters,
   ConnectionCheck,
+  CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueComment,
   IssueDetails,
   IssueFilters,
+  ParentIssueReference,
+  ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
+  UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
 } from '../types';
+import {
+  buildParentValidationMessage,
+  getParentRule,
+  isAllowedParentType,
+  normalizeIssueTypeLabel
+} from '../issues/issueHierarchy';
 
 interface PlanStatus {
   name: string;
@@ -30,6 +41,14 @@ interface PlanTransition {
   id: string;
   name: string;
   toStatus: string;
+}
+
+interface PlanCommentDefinition {
+  id?: string;
+  author?: string;
+  body: string;
+  created?: string;
+  updated?: string;
 }
 
 interface PlanBoardDefinition {
@@ -54,9 +73,11 @@ interface PlanItemDefinition {
   projectName?: string;
   assignee?: string;
   priority?: string;
+  created?: string;
   updated?: string;
   description?: string;
   parent?: string;
+  comments?: PlanCommentDefinition[];
   browseUrl?: string;
 }
 
@@ -87,6 +108,7 @@ interface LoadedPlan {
 }
 
 const DEFAULT_STATUSES: PlanStatus[] = [
+  { name: 'Backlog', category: 'todo' },
   { name: 'To Do', category: 'todo' },
   { name: 'In Progress', category: 'indeterminate' },
   { name: 'Blocked', category: 'indeterminate' },
@@ -145,16 +167,18 @@ function statusCategoryRank(statusCategory?: string): number {
 
 function commonStatusRank(statusName: string): number {
   switch (statusName.toLowerCase()) {
-    case 'to do':
+    case 'backlog':
       return 0;
-    case 'selected for development':
+    case 'to do':
       return 1;
-    case 'in progress':
+    case 'selected for development':
       return 2;
-    case 'blocked':
+    case 'in progress':
       return 3;
-    case 'done':
+    case 'blocked':
       return 4;
+    case 'done':
+      return 5;
     default:
       return Number.MAX_SAFE_INTEGER;
   }
@@ -276,9 +300,82 @@ function normalizePlanItem(
     parentKey: asString(raw.parent),
     assignee: asString(raw.assignee),
     priority: asString(raw.priority),
-    updated: asString(raw.updated),
+    created: asString(raw.created) ?? asString(raw.updated),
+    updated: asString(raw.updated) ?? asString(raw.created),
     browseUrl: asString(raw.browseUrl),
     description: asString(raw.description),
+    raw
+  };
+}
+
+function toParentIssueReference(issue: IssueSummary | undefined): ParentIssueReference | undefined {
+  if (!issue) {
+    return undefined;
+  }
+
+  return {
+    key: issue.key,
+    summary: issue.summary,
+    issueType: issue.issueType,
+    description: issue.description
+  };
+}
+
+function validatePlanParentSelection(
+  plan: LoadedPlan,
+  projectKey: string,
+  issueType: string,
+  parentKey: string | undefined,
+  currentIssueKey?: string
+): void {
+  const rule = getParentRule(issueType, 'file');
+  const issueLabel = normalizeIssueTypeLabel(issueType);
+  if (!rule.canHaveParent) {
+    if (parentKey) {
+      throw new Error(`${issueLabel} items cannot have a parent.`);
+    }
+    return;
+  }
+
+  if (!parentKey) {
+    if (rule.requiresParent) {
+      throw new Error(`${rule.defaultLabel} is required for ${issueLabel} items.`);
+    }
+    return;
+  }
+
+  if (parentKey === currentIssueKey) {
+    throw new Error('An item cannot be its own parent.');
+  }
+
+  const parentIssue = plan.items.find(item => item.key === parentKey);
+  if (!parentIssue) {
+    throw new Error(`${rule.defaultLabel} ${parentKey} was not found.`);
+  }
+  if (parentIssue.projectKey !== projectKey) {
+    throw new Error(`${rule.defaultLabel} ${parentKey} must be in the same project.`);
+  }
+  if (!isAllowedParentType(parentIssue.issueType, issueType, 'file')) {
+    throw new Error(buildParentValidationMessage(issueType, 'file', parentIssue.issueType));
+  }
+}
+
+function normalizePlanComment(raw: unknown): IssueComment | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const body = asString(raw.body)?.trim();
+  if (!body) {
+    return undefined;
+  }
+
+  return {
+    id: asString(raw.id),
+    author: asString(raw.author),
+    body,
+    created: asString(raw.created),
+    updated: asString(raw.updated),
     raw
   };
 }
@@ -426,19 +523,24 @@ export class FilePlanService implements IssueTrackerService {
 
   public async getParentItems(
     filters: IssueFilters,
-    searchText?: string
+    searchText?: string,
+    options?: ParentItemQueryOptions
   ): Promise<IssueSummary[]> {
     const plan = await this.loadPlan();
-    const parentKeys = new Set(
-      plan.document.items
-        ?.map(item => (isRecord(item) ? asString(item.parent) : undefined))
-        .filter((value): value is string => Boolean(value)) ?? []
-    );
+    const allowedParentTypes = options?.childIssueType
+      ? getParentRule(options.childIssueType, this.mode).allowedParentTypes
+      : ['Feature', 'Epic'];
+    if (allowedParentTypes.length === 0) {
+      return [];
+    }
+
     const query = searchText?.trim().toLowerCase();
 
     return sortIssuesByUpdated(
       plan.items
-        .filter(item => parentKeys.has(item.key) || item.issueType === 'Feature' || item.issueType === 'Epic')
+        .filter(item =>
+          allowedParentTypes.some(parentType => parentType.toLowerCase() === item.issueType.toLowerCase())
+        )
         .filter(item => filters.projectKeys.length === 0 || filters.projectKeys.includes(item.projectKey))
         .filter(item => {
           if (!query) {
@@ -488,6 +590,7 @@ export class FilePlanService implements IssueTrackerService {
       throw new Error(`Board ${board.name} was not found in the plan file.`);
     }
 
+    const itemsByKey = new Map(plan.items.map(item => [item.key, item]));
     const issues = sortIssuesByUpdated(
       plan.items.filter(issue => {
         if (boardDefinition.issueKeys && boardDefinition.issueKeys.length > 0) {
@@ -500,7 +603,13 @@ export class FilePlanService implements IssueTrackerService {
 
         return true;
       })
-    );
+    ).map(issue => {
+      const parent = issue.parentKey ? itemsByKey.get(issue.parentKey) : undefined;
+      return {
+        ...issue,
+        parentIssue: parent ? toParentIssueReference(parent) : undefined
+      };
+    });
 
     return {
       board: toBoard(boardDefinition),
@@ -513,6 +622,104 @@ export class FilePlanService implements IssueTrackerService {
     };
   }
 
+  public async createBoard(input: CreateBoardInput): Promise<Board> {
+    const plan = await this.loadPlan();
+    const project = plan.projects.find(candidate => candidate.key === input.projectKey);
+    if (!project) {
+      throw new Error(`Project ${input.projectKey} was not found in the plan file.`);
+    }
+
+    const name = input.name.trim();
+    if (!name) {
+      throw new Error('Board name cannot be empty.');
+    }
+
+    const id = `board-${project.key.toLowerCase()}-${Date.now()}`;
+    const newBoard: PlanBoardDefinition = {
+      id,
+      name,
+      type: 'plan',
+      projectKey: project.key,
+      projectName: project.name,
+      locationName: project.name,
+      issueKeys: [],
+      columnStatusOrder: [...plan.defaultStatusOrder]
+    };
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = plan.text;
+    if (Array.isArray(plan.document.boards)) {
+      const len = plan.document.boards.length;
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['boards', len], newBoard, { formattingOptions, isArrayInsertion: true })
+      );
+    } else {
+      nextText = applyEdits(nextText, modify(nextText, ['boards'], [newBoard], { formattingOptions }));
+    }
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+    const refreshed = await this.loadPlan();
+    const created = refreshed.boards.find(candidate => candidate.id === id);
+    if (!created) {
+      throw new Error('Board was not found in the plan file after creation.');
+    }
+
+    return toBoard(created);
+  }
+
+  public async updateBoard(boardId: string, input: UpdateBoardInput): Promise<Board> {
+    const plan = await this.loadPlan();
+    const rawBoards = Array.isArray(plan.document.boards) ? plan.document.boards : [];
+    const boardIndex = rawBoards.findIndex(board => isRecord(board) && asString(board.id) === boardId);
+    if (boardIndex < 0) {
+      throw new Error(
+        'Only explicit boards from the plan file can be edited. Add a boards section to the plan file first.'
+      );
+    }
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = plan.text;
+    if (typeof input.name === 'string') {
+      const name = input.name.trim();
+      if (name.length === 0) {
+        throw new Error('Board name cannot be empty.');
+      }
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['boards', boardIndex, 'name'], name, { formattingOptions })
+      );
+    }
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+    const refreshedPlan = await this.loadPlan();
+    const refreshedBoard = refreshedPlan.boards.find(candidate => candidate.id === boardId);
+    if (!refreshedBoard) {
+      throw new Error(`Board ${boardId} was not found in the plan file after update.`);
+    }
+
+    return toBoard(refreshedBoard);
+  }
+
+  public async deleteBoard(boardId: string): Promise<void> {
+    const plan = await this.loadPlan();
+    const rawBoards = Array.isArray(plan.document.boards) ? plan.document.boards : [];
+    const boardIndex = rawBoards.findIndex(board => isRecord(board) && asString(board.id) === boardId);
+    if (boardIndex < 0) {
+      throw new Error(
+        'Only explicit boards from the plan file can be deleted. Add a boards section to the plan file first.'
+      );
+    }
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    const nextText = applyEdits(
+      plan.text,
+      modify(plan.text, ['boards', boardIndex], undefined, { formattingOptions })
+    );
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+  }
+
   public async getIssue(issueKey: string): Promise<IssueDetails> {
     const plan = await this.loadPlan();
     const issue = plan.items.find(candidate => candidate.key === issueKey);
@@ -520,9 +727,24 @@ export class FilePlanService implements IssueTrackerService {
       throw new Error(`Issue ${issueKey} was not found in the plan file.`);
     }
 
+    const parentIssue = issue.parentKey
+      ? plan.items.find(candidate => candidate.key === issue.parentKey)
+      : undefined;
+
+    const comments = isRecord(issue.raw) && Array.isArray(issue.raw.comments)
+      ? issue.raw.comments
+          .map(comment => normalizePlanComment(comment))
+          .filter((comment): comment is IssueComment => Boolean(comment))
+          .sort((left, right) =>
+            (right.created ?? right.updated ?? '').localeCompare(left.created ?? left.updated ?? '')
+          )
+      : [];
+
     return {
       ...issue,
-      transitions: this.getTransitionsForIssue(plan, issue)
+      parentIssue: toParentIssueReference(parentIssue),
+      transitions: this.getTransitionsForIssue(plan, issue),
+      comments
     };
   }
 
@@ -536,6 +758,8 @@ export class FilePlanService implements IssueTrackerService {
     const now = new Date().toISOString();
     const nextKey = this.getNextIssueKey(plan, input.projectKey);
     const nextStatus = plan.defaultStatusOrder[0] ?? DEFAULT_STATUSES[0].name;
+    const parentKey = input.parentKey?.trim() || undefined;
+    validatePlanParentSelection(plan, project.key, input.issueType, parentKey);
     const nextItem: PlanItemDefinition = {
       key: nextKey,
       summary: input.summary.trim(),
@@ -545,9 +769,11 @@ export class FilePlanService implements IssueTrackerService {
       projectName: project.name,
       assignee: plan.currentUser,
       priority: 'Medium',
+      created: now,
       updated: now,
       description: input.description?.trim() || undefined,
-      parent: input.parentKey?.trim() || undefined
+      parent: parentKey,
+      comments: []
     };
 
     const formattingOptions = { insertSpaces: true, tabSize: 2 };
@@ -583,37 +809,7 @@ export class FilePlanService implements IssueTrackerService {
     }
 
     await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
-
-    return {
-      key: nextKey,
-      summary: nextItem.summary,
-      status: nextStatus,
-      statusCategory: plan.statusCategoryByName.get(nextStatus) ?? statusCategoryName(nextStatus),
-      issueType: nextItem.type ?? 'Issue',
-      projectKey: project.key,
-      projectName: project.name,
-      parentKey: nextItem.parent,
-      assignee: nextItem.assignee,
-      priority: nextItem.priority,
-      updated: now,
-      description: nextItem.description,
-      raw: nextItem,
-      transitions: this.getTransitionsForIssue(plan, {
-        key: nextKey,
-        summary: nextItem.summary,
-        status: nextStatus,
-        statusCategory: plan.statusCategoryByName.get(nextStatus) ?? statusCategoryName(nextStatus),
-        issueType: nextItem.type ?? 'Issue',
-        projectKey: project.key,
-        projectName: project.name,
-        parentKey: nextItem.parent,
-        assignee: nextItem.assignee,
-        priority: nextItem.priority,
-        updated: now,
-        description: nextItem.description,
-        raw: nextItem
-      })
-    };
+    return this.getIssue(nextKey);
   }
 
   public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
@@ -623,6 +819,20 @@ export class FilePlanService implements IssueTrackerService {
     if (itemIndex < 0) {
       throw new Error(`Issue ${issueKey} was not found in the plan file.`);
     }
+
+    const currentIssue = plan.items.find(item => item.key === issueKey);
+    if (!currentIssue) {
+      throw new Error(`Issue ${issueKey} was not found in the plan file.`);
+    }
+
+    const nextIssueType =
+      typeof input.issueType === 'string' && input.issueType.trim().length > 0
+        ? input.issueType.trim()
+        : currentIssue.issueType;
+    const nextParentKey = Object.prototype.hasOwnProperty.call(input, 'parentKey')
+      ? input.parentKey?.trim() || undefined
+      : currentIssue.parentKey;
+    validatePlanParentSelection(plan, currentIssue.projectKey, nextIssueType, nextParentKey, issueKey);
 
     const formattingOptions = { insertSpaces: true, tabSize: 2 };
     let nextText = plan.text;
@@ -650,6 +860,34 @@ export class FilePlanService implements IssueTrackerService {
         modify(nextText, ['items', itemIndex, 'parent'], input.parentKey?.trim() || undefined, {
           formattingOptions
         })
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, 'assignee')) {
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'assignee'], input.assignee?.trim() || undefined, {
+          formattingOptions
+        })
+      );
+    }
+    if (typeof input.priority === 'string') {
+      const priority = input.priority.trim();
+      if (priority.length === 0) {
+        throw new Error('Priority cannot be empty.');
+      }
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'priority'], priority, { formattingOptions })
+      );
+    }
+    if (typeof input.issueType === 'string') {
+      const issueType = input.issueType.trim();
+      if (issueType.length === 0) {
+        throw new Error('Issue type cannot be empty.');
+      }
+      nextText = applyEdits(
+        nextText,
+        modify(nextText, ['items', itemIndex, 'type'], issueType, { formattingOptions })
       );
     }
     nextText = applyEdits(
@@ -712,6 +950,48 @@ export class FilePlanService implements IssueTrackerService {
     await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
   }
 
+  public async addComment(issueKey: string, body: string): Promise<void> {
+    const commentBody = body.trim();
+    if (commentBody.length === 0) {
+      throw new Error('Comment cannot be empty.');
+    }
+
+    const plan = await this.loadPlan();
+    const rawItems = Array.isArray(plan.document.items) ? plan.document.items : [];
+    const itemIndex = rawItems.findIndex(item => isRecord(item) && asString(item.key) === issueKey);
+    if (itemIndex < 0) {
+      throw new Error(`Issue ${issueKey} was not found in the plan file.`);
+    }
+
+    const issueRecord: Record<string, unknown> = isRecord(rawItems[itemIndex]) ? rawItems[itemIndex] : {};
+    const existingComments = Array.isArray(issueRecord.comments) ? issueRecord.comments : [];
+    const now = new Date().toISOString();
+    const nextComment: PlanCommentDefinition = {
+      id: `${issueKey}-comment-${existingComments.length + 1}`,
+      author: plan.currentUser,
+      body: commentBody,
+      created: now,
+      updated: now
+    };
+
+    const formattingOptions = { insertSpaces: true, tabSize: 2 };
+    let nextText = applyEdits(
+      plan.text,
+      modify(plan.text, ['items', itemIndex, 'comments'], [...existingComments, nextComment], {
+        formattingOptions
+      })
+    );
+
+    nextText = applyEdits(
+      nextText,
+      modify(nextText, ['items', itemIndex, 'updated'], now, {
+        formattingOptions
+      })
+    );
+
+    await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     const plan = await this.loadPlan();
     const issue = plan.items.find(candidate => candidate.key === issueKey);
@@ -756,6 +1036,12 @@ export class FilePlanService implements IssueTrackerService {
 
   public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
     return issue.browseUrl;
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    const plan = await this.loadPlan();
+    const label = plan.currentUser?.trim();
+    return label || undefined;
   }
 
   public dispose(): void {}
