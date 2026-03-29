@@ -34,8 +34,8 @@
     "watch": "tsc -watch -p ./",
     "test": "vscode-test --label integration",
     "install:vsix": "node ./scripts/install-vsix.cjs",
-    "install:code": "node ./scripts/install-vsix.cjs --target=code",
-    "install:insiders": "node ./scripts/install-vsix.cjs --target=insiders",
+    "install:code": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode.ps1",
+    "install:insiders": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode-insiders.ps1",
     "install:cursor": "powershell -ExecutionPolicy Bypass -File ./scripts/install-cursor-extension.ps1"
   },
   "contributes": {
