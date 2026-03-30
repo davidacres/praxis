@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { AiSessionManager } from '../ai/aiSessionManager';
 import { FilterStore } from '../state/filterStore';
 import type { IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
@@ -111,6 +112,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     private readonly backendService: IssueTrackerService,
     private readonly filterStore: FilterStore,
     private readonly issuesProvider: IssuesTreeProvider,
+    private readonly aiSessionManager: AiSessionManager,
     private readonly callbacks: IssuesSidebarCallbacks
   ) {
     this.disposables.push(
@@ -562,6 +564,13 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .type-badge--ai {
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.16);
+        border-color: rgba(251, 191, 36, 0.28);
+        font-size: 11px;
+        padding: 0 4px;
+      }
       .item-summary {
         flex: 1;
         min-width: 0;
@@ -603,6 +612,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   </head>
   <body>
     <div class="page">
+      ${this.renderSearchRow(filters)}
       ${issuesSection}
     </div>
     <script nonce="${nonce}">
@@ -704,11 +714,16 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
           ]
             .filter(Boolean)
             .join(' ');
+          const aiSession = this.aiSessionManager.getSession(issue.key);
+          const aiBadge = aiSession
+            ? `<span class="type-badge type-badge--ai" title="AI: ${escapeHtml(aiSession.provider)} (${escapeHtml(aiSession.status)})">🤖</span>`
+            : '';
           return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
             <div class="row-main">
               <div class="row-left">
                 <div class="item-key">${escapeHtml(issue.key)}</div>
                 ${renderIssueTypeBadge(issue.issueType)}
+                ${aiBadge}
                 <div class="item-summary">${escapeHtml(issue.summary)}</div>
               </div>
               <div class="row-right">

@@ -2,6 +2,14 @@ export type ConnectionType = 'stdio' | 'http';
 export type BackendMode = 'jira' | 'demo' | 'file' | 'github' | 'gitlab';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
+export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
+
+export interface AiAssignment {
+  provider: AiProvider;
+  sessionId: string;
+  assignedAt: string; // ISO timestamp
+  status: 'active' | 'completed' | 'failed';
+}
 
 export interface SecretConnectionValues {
   env: Record<string, string>;
@@ -106,6 +114,8 @@ export interface IssueSummary {
   branch?: string;
   /** When the work was completed (distinct from `updated`). */
   completed?: string;
+  /** AI agent assignment tracking for this issue. */
+  aiAssignment?: AiAssignment;
   raw?: unknown;
 }
 

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { AiSessionManager } from './ai/aiSessionManager';
 import { BackendRouter } from './backends/backendRouter';
 import type { IssueTrackerService } from './backends/issueTrackerService';
 import { registerCommands } from './commands/registerCommands';
@@ -7,7 +8,7 @@ import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
-import type { BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
+import type { AiProvider, BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -35,6 +36,7 @@ export interface TicketManagerExtensionApi {
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
   configStore: AppConfigStore;
+  aiSessionManager: AiSessionManager;
   outputChannel: vscode.OutputChannel;
 }
 
@@ -47,6 +49,7 @@ export async function activate(
 ): Promise<TicketManagerExtensionApi> {
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
+  const aiSessionManager = new AiSessionManager(context.workspaceState);
   const filterStore = new FilterStore(context);
   const boardStore = new BoardStore(context);
   const boardColumnStore = new BoardColumnStore(context);
@@ -769,6 +772,7 @@ export async function activate(
     backendService,
     filterStore,
     issuesProvider,
+    aiSessionManager,
     {
       onSelectIssue: async (issueKey, openFullPanel) => {
         await selectIssueByKey(issueKey, { openFullPanel });
@@ -820,7 +824,7 @@ export async function activate(
       }
     }
   );
-  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(backendService, detailsProvider, {
+  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(backendService, detailsProvider, aiSessionManager, {
     onSaveIssueEdits: async (issueKey, input, transitionId) => {
       await updateIssueAndRefresh(issueKey, input, transitionId);
     },
@@ -876,6 +880,87 @@ export async function activate(
     vscode.commands.registerCommand('ticketManager.searchBoardsActive', async () => {
       try {
         await searchBoards();
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.assignToAi', async () => {
+      try {
+        const issue = detailsProvider.getActiveIssue();
+        if (!issue) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+
+        const existing = aiSessionManager.getSession(issue.key);
+        if (existing) {
+          const overwrite = await vscode.window.showWarningMessage(
+            `${issue.key} is already assigned to ${existing.provider} (${existing.status}). Replace?`,
+            'Replace',
+            'Cancel'
+          );
+          if (overwrite !== 'Replace') {
+            return;
+          }
+        }
+
+        const providers = configStore.getConfiguredAiProviders();
+        if (providers.length === 0) {
+          await vscode.window.showWarningMessage(
+            'No AI providers are configured. Add API keys or CLI paths in Settings → Ticket Manager → AI.'
+          );
+          return;
+        }
+
+        const providerLabels: Record<AiProvider, string> = {
+          'openai': 'OpenAI',
+          'claude': 'Claude (Anthropic)',
+          'cursor-cli': 'Cursor CLI',
+          'copilot-cli': 'Copilot CLI'
+        };
+
+        const picked = await vscode.window.showQuickPick(
+          providers.map(provider => ({
+            label: providerLabels[provider],
+            description: provider,
+            provider
+          })),
+          { title: `Assign ${issue.key} to AI Agent` }
+        );
+        if (!picked) {
+          return;
+        }
+
+        const assignment = aiSessionManager.createSession(issue.key, picked.provider);
+        issue.aiAssignment = assignment;
+        await detailsProvider.setIssue(issue);
+        issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
+        await vscode.window.showInformationMessage(
+          `${issue.key} assigned to ${providerLabels[picked.provider]} (session: ${assignment.sessionId.slice(0, 8)})`
+        );
+      } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.unassignAi', async () => {
+      try {
+        const issue = detailsProvider.getActiveIssue();
+        if (!issue) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+
+        const session = aiSessionManager.getSession(issue.key);
+        if (!session) {
+          await vscode.window.showInformationMessage(`${issue.key} has no AI assignment.`);
+          return;
+        }
+
+        aiSessionManager.removeSession(issue.key);
+        issue.aiAssignment = undefined;
+        await detailsProvider.setIssue(issue);
+        issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
+        await vscode.window.showInformationMessage(`AI assignment removed from ${issue.key}.`);
       } catch (error) {
         logError(outputChannel, error);
       }
@@ -984,6 +1069,7 @@ export async function activate(
     boardPanelManager,
     issueDetailPanelManager,
     configStore,
+    aiSessionManager,
     outputChannel
   };
 }
