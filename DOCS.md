@@ -282,7 +282,7 @@ Browse and manage boards from the active backend.
   - Refresh, Create Board, Create Issue, Search Boards
   - Set Board Projects, Set Board Types, Configure Board Settings
   - Clear Board Filters, Set Backend Mode
-- **Inline actions per board:** Open Board, Configure Columns, Create Issue
+- **Inline actions per board:** Edit Board, Delete Board
 - Click a board to open it in an **editor tab** with column-based layout
 
 ### EPICs
@@ -457,8 +457,8 @@ Filter the board contents using the toolbar:
 
 ### Editing and Deleting Boards
 
-- **Edit:** Available through the board context menu.
-- **Delete:** Available through the board context menu. Removes the board and its column configuration.
+- **Edit:** Available through inline action buttons on each board in the Boards sidebar.
+- **Delete:** Available through inline action buttons on each board in the Boards sidebar. Removes the board and its column configuration.
 
 ---
 
