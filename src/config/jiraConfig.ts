@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parse as parseJsonc } from 'jsonc-parser';
 import type {
+  AiProvider,
   BackendMode,
   ConfigureConnectionResult,
   ConnectionConfig,
@@ -290,6 +291,45 @@ export class AppConfigStore {
   public async setGitLabApiKey(value: string): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabApiKey', value, target);
+  }
+
+  // ── AI settings ─────────────────────────────────────────────────
+
+  public getAiOpenaiApiKey(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiApiKey', '');
+  }
+
+  public getAiClaudeApiKey(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeApiKey', '');
+  }
+
+  public getAiCursorCliPath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.cursorCliPath', '');
+  }
+
+  public getAiCopilotCliPath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotCliPath', '');
+  }
+
+  public getAiDefaultProvider(): AiProvider | 'none' {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
+  }
+
+  public getConfiguredAiProviders(): AiProvider[] {
+    const providers: AiProvider[] = [];
+    if (this.getAiOpenaiApiKey().trim().length > 0) {
+      providers.push('openai');
+    }
+    if (this.getAiClaudeApiKey().trim().length > 0) {
+      providers.push('claude');
+    }
+    if (this.getAiCursorCliPath().trim().length > 0) {
+      providers.push('cursor-cli');
+    }
+    if (this.getAiCopilotCliPath().trim().length > 0) {
+      providers.push('copilot-cli');
+    }
+    return providers;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

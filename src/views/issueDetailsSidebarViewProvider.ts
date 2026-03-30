@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { AiSessionManager } from '../ai/aiSessionManager';
 import type { UpdateIssueInput } from '../types';
 import {
   formatParentReference,
@@ -7,6 +8,7 @@ import {
   getResolvedParentLabel
 } from '../issues/issueHierarchy';
 import { DetailsViewProvider } from './detailsViewProvider';
+import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
 
 interface IssueDetailsSidebarCallbacks {
   onSaveIssueEdits: (
@@ -116,6 +118,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly detailsProvider: DetailsViewProvider,
+    private readonly aiSessionManager: AiSessionManager,
     private readonly callbacks: IssueDetailsSidebarCallbacks
   ) {
     this.disposables.push(
@@ -221,6 +224,14 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
     }
+
+    if (type === 'unassignAi') {
+      const issueKey = asString(message.issueKey);
+      if (!issueKey) {
+        return;
+      }
+      await vscode.commands.executeCommand('ticketManager.unassignAi');
+    }
   }
 
   private render(): void {
@@ -296,7 +307,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           );
           return `<div class="comment-item">
             <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
-            <div class="comment-body">${escapeHtml(comment.body)}</div>
+            <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
           </div>`;
         })
         .join('');
@@ -372,7 +383,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
                 parentReference || parentRule.emptyText
               )}</div>
-              <div class="parent-preview-description${issue.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${escapeHtml(
+              <div class="parent-preview-description markdown-body${issue.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${markdownToHtmlSafe(
                 issue.parentIssue?.description ?? ''
               )}</div>
             </div>
@@ -391,6 +402,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
+        ${this.renderAiAssignmentSection(issue.key)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Comments</div>
           <div class="comment-list">
@@ -701,10 +713,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         color: var(--vscode-descriptionForeground);
       }
       .comment-body {
-        white-space: pre-wrap;
         word-break: break-word;
         line-height: 1.45;
       }
+      ${MARKDOWN_BODY_CSS}
       .comment-empty {
         color: var(--vscode-descriptionForeground);
       }
@@ -1093,6 +1105,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         refreshCommentActions();
       }
 
+      const unassignAiButton = document.getElementById('unassignAiButton');
+      if (unassignAiButton) {
+        unassignAiButton.addEventListener('click', () => {
+          const issueKey = unassignAiButton.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'unassignAi', issueKey });
+          }
+        });
+      }
+
       window.addEventListener('message', event => {
         const message = event.data;
         if (!message || typeof message.type !== 'string') {
@@ -1110,5 +1132,57 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </script>
   </body>
 </html>`;
+  }
+
+  private renderAiAssignmentSection(issueKey: string): string {
+    const session = this.aiSessionManager.getSession(issueKey);
+
+    const providerLabels: Record<string, string> = {
+      'openai': 'OpenAI',
+      'claude': 'Claude',
+      'cursor-cli': 'Cursor CLI',
+      'copilot-cli': 'Copilot CLI'
+    };
+
+    const statusTokenMap: Record<string, string> = {
+      active: 'progress',
+      completed: 'done',
+      failed: 'blocked'
+    };
+
+    if (!session) {
+      return `<div class="card">
+        <div class="section-title">AI Assignment</div>
+        <div class="comment-empty">No AI agent assigned.</div>
+      </div>`;
+    }
+
+    const providerLabel = providerLabels[session.provider] ?? session.provider;
+    const statusToken = statusTokenMap[session.status] ?? 'status';
+    const shortSession = escapeHtml(session.sessionId.slice(0, 8));
+    const assignedDate = formatDate(session.assignedAt);
+
+    return `<div class="card">
+      <div class="section-title">AI Assignment</div>
+      <div class="detail-row">
+        <div class="detail-label">🤖 Agent</div>
+        <div class="detail-value">${escapeHtml(providerLabel)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Session</div>
+        <div class="detail-value" title="${escapeHtml(session.sessionId)}">${shortSession}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Status</div>
+        <div class="detail-value"><span class="pill pill--${statusToken}">${escapeHtml(session.status)}</span></div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Assigned</div>
+        <div class="detail-value">${escapeHtml(assignedDate)}</div>
+      </div>
+      <div class="form-actions">
+        <button class="secondary-button" id="unassignAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Unassign AI</button>
+      </div>
+    </div>`;
   }
 }

@@ -7,6 +7,7 @@ import {
   getResolvedParentLabel
 } from '../issues/issueHierarchy';
 import { renderIconButton } from './webviewToolbarIcons';
+import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -420,7 +421,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         );
         return `<div class="comment-item">
           <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
-          <div class="comment-body">${escapeHtml(comment.body)}</div>
+          <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
         </div>`;
       })
       .join('');
@@ -490,7 +491,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
                 parentReference || parentRule.emptyText
               )}</div>
-              <div class="parent-preview-description${d.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${escapeHtml(
+              <div class="parent-preview-description markdown-body${d.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${markdownToHtmlSafe(
                 d.parentIssue?.description ?? ''
               )}</div>
             </div>
@@ -899,10 +900,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       color: var(--vscode-descriptionForeground);
     }
     .comment-body {
-      white-space: pre-wrap;
       word-break: break-word;
       line-height: 1.5;
     }
+    ${MARKDOWN_BODY_CSS}
     .comment-empty {
       color: var(--vscode-descriptionForeground);
     }

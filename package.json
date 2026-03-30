@@ -57,8 +57,8 @@
           "when": "!ticketManager.configured"
         },
         {
-          "id": "ticketManager.myIssues",
-          "name": "My Issues",
+          "id": "ticketManager.boards",
+          "name": "Boards",
           "type": "webview",
           "when": "ticketManager.configured"
         },
@@ -69,8 +69,8 @@
           "when": "ticketManager.configured"
         },
         {
-          "id": "ticketManager.boards",
-          "name": "Boards",
+          "id": "ticketManager.myIssues",
+          "name": "My Issues",
           "type": "webview",
           "when": "ticketManager.configured"
         },
@@ -331,6 +331,18 @@
         "title": "Load More",
         "category": "Ticket Manager",
         "icon": "$(chevron-down)"
+      },
+      {
+        "command": "ticketManager.assignToAi",
+        "title": "Assign to AI Agent",
+        "category": "Ticket Manager",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "ticketManager.unassignAi",
+        "title": "Unassign AI Agent",
+        "category": "Ticket Manager",
+        "icon": "$(close)"
       }
     ],
     "menus": {
@@ -487,6 +499,16 @@
           "command": "ticketManager.openIssueFullDetails",
           "when": "view == ticketManager.issueDetails",
           "group": "navigation@3"
+        },
+        {
+          "command": "ticketManager.assignToAi",
+          "when": "view == ticketManager.issueDetails",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ticketManager.unassignAi",
+          "when": "view == ticketManager.issueDetails",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
@@ -714,6 +736,45 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Accent color for the small backend icon beside board names when **File** mode is active. Use hex (e.g. `#22c55e`). Leave empty for the built-in default."
+        },
+        "ticketManager.ai.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API key for AI agent assignment."
+        },
+        "ticketManager.ai.claudeApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Claude/Anthropic API key for AI agent assignment."
+        },
+        "ticketManager.ai.cursorCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Cursor CLI executable for AI agent assignment."
+        },
+        "ticketManager.ai.copilotCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Copilot CLI executable for AI agent assignment."
+        },
+        "ticketManager.ai.defaultProvider": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "openai",
+            "claude",
+            "cursor-cli",
+            "copilot-cli",
+            "none"
+          ],
+          "enumDescriptions": [
+            "Use OpenAI as the default AI provider.",
+            "Use Claude/Anthropic as the default AI provider.",
+            "Use Cursor CLI as the default AI provider.",
+            "Use Copilot CLI as the default AI provider.",
+            "No default AI provider."
+          ],
+          "description": "Default AI provider to use when assigning tickets to an AI agent."
         }
       }
     }
