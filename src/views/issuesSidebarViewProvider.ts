@@ -652,7 +652,12 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       const clearStatusesButton = document.getElementById('clearStatusesButton');
       if (clearStatusesButton) {
         clearStatusesButton.addEventListener('click', () => {
+          document.querySelectorAll('.filter-option input:checked').forEach(cb => cb.checked = false);
           vscodeApi.postMessage({ type: 'setStatuses', statuses: [] });
+          if (searchInput) {
+            searchInput.value = '';
+            vscodeApi.postMessage({ type: 'setSearchText', searchText: '' });
+          }
           if (filterMenu) filterMenu.classList.remove('open');
         });
       }
