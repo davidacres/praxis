@@ -783,6 +783,13 @@ export async function activate(
       onDeleteIssue: async issueKey => {
         await deleteIssue(issueKey);
       },
+      onSetSearchText: async (searchText) => {
+        await filterStore.updateFilters({ searchText });
+        await refreshSearchActionContexts();
+      },
+      onSetStatuses: async (statuses) => {
+        await filterStore.updateFilters({ statuses });
+      },
       onLoadMore: async () => {
         await issuesProvider.loadMore();
       }
