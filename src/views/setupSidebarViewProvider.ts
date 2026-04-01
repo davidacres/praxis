@@ -266,6 +266,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private renderStepZero(): string {
     const modes: Array<{ mode: string; emoji: string; title: string; desc: string }> = [
       { mode: 'file', emoji: '🗂️', title: 'Plan File', desc: 'Manage tickets from a local JSON plan file' },
+      { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
       { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Connect to GitHub repositories and issues' },
       { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Connect to a GitLab instance for issues and boards' },
       { mode: 'jira', emoji: '🔗', title: 'Jira', desc: 'Connect to Jira via MCP server' },
@@ -299,6 +300,9 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       case 'file':
         fields = this.renderFileFields();
         break;
+      case 'livefolder':
+        fields = this.renderLiveFolderFields();
+        break;
       case 'github':
         fields = this.renderGitHubFields();
         break;
@@ -331,6 +335,26 @@ ${fields}
   <label>Plan File Path</label>
   <input type="text" data-field="planFilePath" value="${value}" />
   <button class="btn-browse" data-action="browse">Browse\u2026</button>
+</div>`;
+  }
+
+  private renderLiveFolderFields(): string {
+    const folderPath = escapeHtml(this.setupFields.liveFolderPath ?? '');
+    const projectKey = escapeHtml(this.setupFields.liveFolderProjectKey ?? '');
+    const projectName = escapeHtml(this.setupFields.liveFolderProjectName ?? '');
+    return `<div class="form-group">
+  <label>Plans Folder Path</label>
+  <input type="text" data-field="liveFolderPath" value="${folderPath}" placeholder="e.g. C:\\project\\plans" />
+  <button class="btn-browse" data-action="browse">Browse\u2026</button>
+  <div class="help-text">Folder containing features/feature-NN-*/feature.md</div>
+</div>
+<div class="form-group">
+  <label>Project Key</label>
+  <input type="text" data-field="liveFolderProjectKey" value="${projectKey}" placeholder="e.g. EXAMPLE" />
+</div>
+<div class="form-group">
+  <label>Project Name</label>
+  <input type="text" data-field="liveFolderProjectName" value="${projectName}" placeholder="e.g. ExampleHIS Integration" />
 </div>`;
   }
 
@@ -480,19 +504,32 @@ ${connFields}`;
         return;
       }
       case 'browse': {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          filters: { 'JSON files': ['json', 'jsonc'], 'All files': ['*'] },
-          title: 'Select Plan File'
-        });
-        if (uris?.[0]) {
-          const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-          this.setupFields.planFilePath = wsFolder
-            ? vscode.workspace.asRelativePath(uris[0], false)
-            : uris[0].fsPath;
-          this.render();
+        if (this.setupMode === 'livefolder') {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            title: 'Select Plans Folder'
+          });
+          if (uris?.[0]) {
+            this.setupFields.liveFolderPath = uris[0].fsPath;
+            this.render();
+          }
+        } else {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            filters: { 'JSON files': ['json', 'jsonc'], 'All files': ['*'] },
+            title: 'Select Plan File'
+          });
+          if (uris?.[0]) {
+            const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
+            this.setupFields.planFilePath = wsFolder
+              ? vscode.workspace.asRelativePath(uris[0], false)
+              : uris[0].fsPath;
+            this.render();
+          }
         }
         return;
       }
@@ -518,6 +555,17 @@ ${connFields}`;
       case 'file':
         if (this.setupFields.planFilePath) {
           await config.update('planFilePath', this.setupFields.planFilePath, target);
+        }
+        break;
+      case 'livefolder':
+        if (this.setupFields.liveFolderPath) {
+          await config.update('liveFolderPath', this.setupFields.liveFolderPath, target);
+        }
+        if (this.setupFields.liveFolderProjectKey) {
+          await config.update('liveFolderProjectKey', this.setupFields.liveFolderProjectKey, target);
+        }
+        if (this.setupFields.liveFolderProjectName) {
+          await config.update('liveFolderProjectName', this.setupFields.liveFolderProjectName, target);
         }
         break;
       case 'github':

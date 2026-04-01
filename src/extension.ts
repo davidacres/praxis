@@ -280,6 +280,11 @@ export async function activate(
           label: 'File',
           description: 'Use a plan file from the current workspace.',
           mode: 'file'
+        },
+        {
+          label: 'Live Folder',
+          description: 'Two-way sync with a markdown plans folder.',
+          mode: 'livefolder'
         }
       ],
       {

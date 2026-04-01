@@ -292,7 +292,8 @@ const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   demo: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug']
+  gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
+  livefolder: []
 };
 
 function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {

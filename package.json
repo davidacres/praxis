@@ -595,17 +595,19 @@
             "demo",
             "file",
             "github",
-            "gitlab"
+            "gitlab",
+            "livefolder"
           ],
           "enumItemLabels": [
             "Jira Connected",
             "Demo",
             "Plan File",
             "GitHub",
-            "GitLab"
+            "GitLab",
+            "Live Folder"
           ],
           "scope": "window",
-          "description": "Choose whether the app uses Jira Connected, Demo, or File mode."
+          "description": "Choose whether the app uses Jira Connected, Demo, File, or Live Folder mode."
         },
         "ticketManager.planFilePath": {
           "type": "string",
@@ -737,7 +739,27 @@
           "default": "",
           "markdownDescription": "Accent color for the small backend icon beside board names when **File** mode is active. Use hex (e.g. `#22c55e`). Leave empty for the built-in default."
         },
-        "ticketManager.ai.openaiApiKey": {
+        "ticketManager.liveFolderPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path to a `plans` folder containing `features/feature-NN-*/feature.md` and `story-*.md` files. Used when **Live Folder** mode is active."
+        },
+        "ticketManager.liveFolderProjectKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Project key for issues derived from the live folder (e.g. `EXAMPLE`). Used when **Live Folder** mode is active."
+        },
+        "ticketManager.liveFolderProjectName": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Human-readable project name for the live folder (e.g. `ExampleHIS Integration`). Used when **Live Folder** mode is active."
+        },
+        "ticketManager.liveFolderBoardListIconColor": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Accent color for the small backend icon beside board names when **Live Folder** mode is active. Use hex (e.g. `#f59e0b`). Leave empty for the built-in default."
+        },
+        "ticketManager.ai.openaiApiKey":{
           "type": "string",
           "default": "",
           "description": "OpenAI API key for AI agent assignment."

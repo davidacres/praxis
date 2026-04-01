@@ -293,6 +293,35 @@ export class AppConfigStore {
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabApiKey', value, target);
   }
 
+  // ── Live Folder settings ──────────────────────────────────────────
+
+  public getLiveFolderPath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderPath', '').trim();
+  }
+
+  public getLiveFolderProjectKey(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderProjectKey', '').trim();
+  }
+
+  public getLiveFolderProjectName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderProjectName', '').trim();
+  }
+
+  public async setLiveFolderPath(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('liveFolderPath', value, target);
+  }
+
+  public async setLiveFolderProjectKey(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('liveFolderProjectKey', value, target);
+  }
+
+  public async setLiveFolderProjectName(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('liveFolderProjectName', value, target);
+  }
+
   // ── AI settings ─────────────────────────────────────────────────
 
   public getAiOpenaiApiKey(): string {
@@ -604,6 +633,11 @@ export class AppConfigStore {
     if (this.getEffectiveBackendMode() === 'file') {
       const planFile = await this.getResolvedPlanFileUri();
       return planFile ? `File mode (${planFile.fsPath})` : 'File mode (plan not configured)';
+    }
+
+    if (this.getEffectiveBackendMode() === 'livefolder') {
+      const folderPath = this.getLiveFolderPath();
+      return folderPath ? `Live Folder (${folderPath})` : 'Live Folder (not configured)';
     }
 
     const resolved = await this.getResolvedConnectionConfig(context);

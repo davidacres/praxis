@@ -38,6 +38,10 @@ interface SetupState {
   selectedMode: SetupBackendMode | undefined;
   // Plan File
   planFilePath: string;
+  // Live Folder
+  liveFolderPath: string;
+  liveFolderProjectKey: string;
+  liveFolderProjectName: string;
   // GitHub
   githubUrl: string;
   githubPat: string;
@@ -61,6 +65,9 @@ function createInitialState(): SetupState {
     step: 0,
     selectedMode: undefined,
     planFilePath: '',
+    liveFolderPath: '',
+    liveFolderProjectKey: '',
+    liveFolderProjectName: '',
     githubUrl: 'https://api.github.com',
     githubPat: '',
     githubOwner: '',
@@ -90,6 +97,7 @@ interface ModeOption {
 
 const MODE_OPTIONS: ModeOption[] = [
   { mode: 'file', icon: '🗂️', title: 'Plan File', description: 'Manage tickets from a local JSON plan file' },
+  { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
   { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Connect to GitHub repositories and issues' },
   { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Connect to a GitLab instance for issues and boards' },
   { mode: 'jira', icon: '🔗', title: 'Jira', description: 'Connect to Jira via MCP server' },
@@ -189,14 +197,27 @@ export class SetupWizardPanel {
       }
 
       case 'browse': {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectMany: false,
-          filters: { 'JSON files': ['json'], 'All files': ['*'] },
-          openLabel: 'Select Plan File',
-        });
-        if (uris && uris.length > 0) {
-          this.state.planFilePath = uris[0].fsPath;
-          this.rerender();
+        if (this.state.selectedMode === 'livefolder') {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            canSelectFolders: true,
+            canSelectFiles: false,
+            openLabel: 'Select Plans Folder',
+          });
+          if (uris && uris.length > 0) {
+            this.state.liveFolderPath = uris[0].fsPath;
+            this.rerender();
+          }
+        } else {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'JSON files': ['json'], 'All files': ['*'] },
+            openLabel: 'Select Plan File',
+          });
+          if (uris && uris.length > 0) {
+            this.state.planFilePath = uris[0].fsPath;
+            this.rerender();
+          }
         }
         break;
       }
@@ -226,6 +247,12 @@ export class SetupWizardPanel {
     switch (this.state.selectedMode) {
       case 'file':
         await config.update('planFilePath', this.state.planFilePath, target);
+        break;
+
+      case 'livefolder':
+        await config.update('liveFolderPath', this.state.liveFolderPath, target);
+        await config.update('liveFolderProjectKey', this.state.liveFolderProjectKey, target);
+        await config.update('liveFolderProjectName', this.state.liveFolderProjectName, target);
         break;
 
       case 'github':
@@ -337,6 +364,9 @@ export class SetupWizardPanel {
       case 'file':
         formHtml = this.renderFileForm();
         break;
+      case 'livefolder':
+        formHtml = this.renderLiveFolderForm();
+        break;
       case 'github':
         formHtml = this.renderGithubForm();
         break;
@@ -376,6 +406,37 @@ export class SetupWizardPanel {
                  placeholder="/path/to/plan.json" />
           <button class="btn btn-secondary" data-action="browse">Browse…</button>
         </div>
+      </div>`;
+  }
+
+  /* -- Live Folder form -------------------------------------------- */
+
+  private renderLiveFolderForm(): string {
+    return `
+      <p class="form-help">Point to a plans folder containing features/feature-NN-*/feature.md and story-*.md files.</p>
+      <div class="field-group">
+        <label class="field-label">Plans Folder Path</label>
+        <div class="input-row">
+          <input type="text" class="field-input input-flex"
+                 data-field="liveFolderPath"
+                 value="${esc(this.state.liveFolderPath)}"
+                 placeholder="C:\\project\\plans" />
+          <button class="btn btn-secondary" data-action="browse">Browse…</button>
+        </div>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Project Key</label>
+        <input type="text" class="field-input"
+               data-field="liveFolderProjectKey"
+               value="${esc(this.state.liveFolderProjectKey)}"
+               placeholder="e.g. EXAMPLE" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Project Name</label>
+        <input type="text" class="field-input"
+               data-field="liveFolderProjectName"
+               value="${esc(this.state.liveFolderProjectName)}"
+               placeholder="e.g. ExampleHIS Integration" />
       </div>`;
   }
 
