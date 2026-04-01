@@ -1,5 +1,5 @@
 export type ConnectionType = 'stdio' | 'http';
-export type BackendMode = 'jira' | 'demo' | 'file' | 'github' | 'gitlab';
+export type BackendMode = 'jira' | 'demo' | 'file' | 'github' | 'gitlab' | 'livefolder';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
 export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
