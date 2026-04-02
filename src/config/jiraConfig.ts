@@ -344,29 +344,22 @@ export class AppConfigStore {
   /** Returns registered AI agents that have both a name and an API key configured. */
   public getConfiguredAiAgents(): AiAgentRegistration[] {
     const agents: AiAgentRegistration[] = [];
+    const openaiKey = this.getAiOpenaiApiKey().trim();
     const openaiName = this.getAiOpenaiAgentName().trim();
-    if (openaiName && this.getAiOpenaiApiKey().trim()) {
-      agents.push({ name: openaiName, provider: 'openai' });
+    if (openaiName && openaiKey) {
+      agents.push({ name: openaiName, provider: 'openai', apiKey: openaiKey });
     }
+    const claudeKey = this.getAiClaudeApiKey().trim();
     const claudeName = this.getAiClaudeAgentName().trim();
-    if (claudeName && this.getAiClaudeApiKey().trim()) {
-      agents.push({ name: claudeName, provider: 'claude' });
+    if (claudeName && claudeKey) {
+      agents.push({ name: claudeName, provider: 'claude', apiKey: claudeKey });
     }
     return agents;
   }
 
-  /** Returns agent names for providers that have an API key configured (name falls back to provider label). */
+  /** Returns display names for all AI providers that have an API key configured. */
   public getAiAgentNames(): string[] {
-    const names: string[] = [];
-    const openaiName = this.getAiOpenaiAgentName().trim();
-    if (this.getAiOpenaiApiKey().trim()) {
-      names.push(openaiName || 'OpenAI');
-    }
-    const claudeName = this.getAiClaudeAgentName().trim();
-    if (this.getAiClaudeApiKey().trim()) {
-      names.push(claudeName || 'Claude');
-    }
-    return names;
+    return this.getConfiguredAiAgents().map(a => a.name);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

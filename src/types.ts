@@ -14,6 +14,7 @@ export interface AiAssignment {
 export interface AiAgentRegistration {
   name: string;
   provider: AiProvider;
+  apiKey: string;
 }
 
 export interface SecretConnectionValues {

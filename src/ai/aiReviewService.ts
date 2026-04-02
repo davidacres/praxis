@@ -32,9 +32,9 @@ function buildTicketContext(issue: IssueDetails): string {
     parts.push('\n**Description:** *(none)*');
   }
   if (issue.comments && issue.comments.length > 0) {
-    const shown = issue.comments.slice(0, 5);
-    parts.push(`\n**Comments (${issue.comments.length} total, showing ${shown.length}):**`);
-    for (const comment of shown) {
+    const limit = Math.min(5, issue.comments.length);
+    parts.push(`\n**Comments (${issue.comments.length} total, showing ${limit}):**`);
+    for (const comment of issue.comments.slice(0, limit)) {
       const author = comment.author ?? 'Unknown';
       const body = comment.body.length > 300 ? `${comment.body.slice(0, 300)}…` : comment.body;
       parts.push(`- **${author}:** ${body}`);
@@ -43,8 +43,26 @@ function buildTicketContext(issue: IssueDetails): string {
   return parts.join('\n');
 }
 
-function isErrorShape(value: unknown): value is { error?: { message?: string } } {
-  return typeof value === 'object' && value !== null;
+async function extractApiError(response: Response, providerLabel: string): Promise<string> {
+  const text = await response.text();
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'error' in parsed &&
+      typeof (parsed as { error: unknown }).error === 'object' &&
+      (parsed as { error: unknown }).error !== null
+    ) {
+      const msg = ((parsed as { error: Record<string, unknown> }).error).message;
+      if (typeof msg === 'string' && msg.trim()) {
+        return msg;
+      }
+    }
+  } catch {
+    // fall through to default
+  }
+  return `${providerLabel} API error (${response.status})`;
 }
 
 export async function reviewTicketWithOpenAi(
@@ -72,17 +90,7 @@ export async function reviewTicketWithOpenAi(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    let errorMessage = `OpenAI API error (${response.status})`;
-    try {
-      const parsed: unknown = JSON.parse(errorText);
-      if (isErrorShape(parsed) && typeof parsed.error?.message === 'string') {
-        errorMessage = parsed.error.message;
-      }
-    } catch {
-      // use default message
-    }
-    throw new Error(errorMessage);
+    throw new Error(await extractApiError(response, 'OpenAI'));
   }
 
   const data = await response.json() as {
@@ -122,20 +130,7 @@ export async function reviewTicketWithClaude(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    let errorMessage = `Claude API error (${response.status})`;
-    try {
-      const parsed: unknown = JSON.parse(errorText);
-      if (isErrorShape(parsed) && typeof (parsed as Record<string, unknown>).error === 'object') {
-        const err = (parsed as { error: Record<string, unknown> }).error;
-        if (typeof err.message === 'string') {
-          errorMessage = err.message;
-        }
-      }
-    } catch {
-      // use default message
-    }
-    throw new Error(errorMessage);
+    throw new Error(await extractApiError(response, 'Claude'));
   }
 
   const data = await response.json() as {
