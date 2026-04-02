@@ -711,7 +711,7 @@ export async function activate(
         { title: `Review ${issueKey} with AI` }
       );
       if (!picked) {
-        throw new Error('No AI agent selected.');
+        return; // user cancelled
       }
       chosen = picked.agent;
     }
@@ -720,9 +720,9 @@ export async function activate(
 
     let reviewText: string;
     if (chosen.provider === 'openai') {
-      reviewText = await reviewTicketWithOpenAi(issue, configStore.getAiOpenaiApiKey(), chosen.name);
+      reviewText = await reviewTicketWithOpenAi(issue, chosen.apiKey, chosen.name);
     } else if (chosen.provider === 'claude') {
-      reviewText = await reviewTicketWithClaude(issue, configStore.getAiClaudeApiKey(), chosen.name);
+      reviewText = await reviewTicketWithClaude(issue, chosen.apiKey, chosen.name);
     } else {
       throw new Error(`AI review is not supported for provider: ${chosen.provider}`);
     }
@@ -975,7 +975,8 @@ export async function activate(
 
         // Build quick-pick items: registered agents first, then unconfigured providers
         const agentProviders = new Set(registeredAgents.map(a => a.provider));
-        const quickPickItems = [
+        type AiPickItem = vscode.QuickPickItem & { provider: AiProvider; agentName?: string };
+        const quickPickItems: AiPickItem[] = [
           ...registeredAgents.map(agent => ({
             label: agent.name,
             description: providerLabels[agent.provider] ?? agent.provider,
@@ -987,8 +988,7 @@ export async function activate(
             .map(provider => ({
               label: providerLabels[provider],
               description: provider,
-              provider,
-              agentName: undefined as string | undefined
+              provider
             }))
         ];
 

@@ -241,7 +241,6 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         return;
       }
       try {
-        await this.view?.webview.postMessage({ type: 'aiReviewStarted' });
         await this.callbacks.onRequestAiReview(issueKey);
         await this.view?.webview.postMessage({ type: 'aiReviewResult', ok: true });
       } catch (error) {
@@ -273,6 +272,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       content = '<div class="message">Issue details are unavailable.</div>';
     } else {
       const issue = snapshot.detailedIssue;
+      const agentNames = this.getAiAgentNames();
       const parentRule = getParentRule(issue.issueType, this.backendService.mode);
       const resolvedParentLabel = getResolvedParentLabel(
         issue.issueType,
@@ -376,7 +376,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               placeholder="Enter an assignee or leave blank"
             />
             <datalist id="aiAgentList">
-              ${this.getAiAgentNames().map(name => `<option value="${escapeHtml(name)}">`).join('')}
+              ${agentNames.map(name => `<option value="${escapeHtml(name)}">`).join('')}
             </datalist>
           </label>
           <label class="field-group" for="prioritySelect">
@@ -426,7 +426,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
-        ${this.renderAiAssignmentSection(issue.key)}
+        ${this.renderAiAssignmentSection(issue.key, agentNames)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Comments</div>
           <div class="comment-list">
@@ -1169,14 +1169,6 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           handleAddIssueCommentResult(message);
           return;
         }
-        if (message.type === 'aiReviewStarted') {
-          if (reviewWithAiButton) { reviewWithAiButton.disabled = true; }
-          if (aiReviewStatus) {
-            aiReviewStatus.textContent = 'Reviewing with AI…';
-            aiReviewStatus.className = 'form-status';
-          }
-          return;
-        }
         if (message.type === 'aiReviewResult') {
           if (reviewWithAiButton) { reviewWithAiButton.disabled = false; }
           if (aiReviewStatus) {
@@ -1195,9 +1187,8 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
 </html>`;
   }
 
-  private renderAiAssignmentSection(issueKey: string): string {
+  private renderAiAssignmentSection(issueKey: string, agentNames: string[]): string {
     const session = this.aiSessionManager.getSession(issueKey);
-    const agentNames = this.getAiAgentNames();
     const hasAiProviders = agentNames.length > 0;
 
     const providerLabels: Record<string, string> = {
