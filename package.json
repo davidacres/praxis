@@ -343,6 +343,12 @@
         "title": "Unassign AI Agent",
         "category": "Ticket Manager",
         "icon": "$(close)"
+      },
+      {
+        "command": "ticketManager.reviewWithAi",
+        "title": "Review Ticket with AI",
+        "category": "Ticket Manager",
+        "icon": "$(comment-discussion)"
       }
     ],
     "menus": {
@@ -775,6 +781,16 @@
             "No default AI provider."
           ],
           "description": "Default AI provider to use when assigning tickets to an AI agent."
+        },
+        "ticketManager.ai.openaiAgentName": {
+          "type": "string",
+          "default": "",
+          "description": "Display name for the OpenAI agent (e.g. 'GPT-4 Reviewer'). When set, this name appears as an assignee option and is used when assigning tickets to the OpenAI agent."
+        },
+        "ticketManager.ai.claudeAgentName": {
+          "type": "string",
+          "default": "",
+          "description": "Display name for the Claude agent (e.g. 'Claude AI'). When set, this name appears as an assignee option and is used when assigning tickets to the Claude agent."
         }
       }
     }

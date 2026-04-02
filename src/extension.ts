@@ -9,6 +9,7 @@ import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
 import type { AiProvider, BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
+import { reviewTicketWithOpenAi, reviewTicketWithClaude } from './ai/aiReviewService';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -695,6 +696,41 @@ export async function activate(
     await syncIssueAfterMutation(issueKey);
   }
 
+  async function reviewIssueWithAi(issueKey: string): Promise<void> {
+    const agents = configStore.getConfiguredAiAgents();
+    if (agents.length === 0) {
+      throw new Error(
+        'No AI agents are configured with a name and API key. Set ticketManager.ai.openaiAgentName / ticketManager.ai.claudeAgentName and the corresponding API key in Settings.'
+      );
+    }
+
+    let chosen = agents[0];
+    if (agents.length > 1) {
+      const picked = await vscode.window.showQuickPick(
+        agents.map(agent => ({ label: agent.name, description: agent.provider, agent })),
+        { title: `Review ${issueKey} with AI` }
+      );
+      if (!picked) {
+        throw new Error('No AI agent selected.');
+      }
+      chosen = picked.agent;
+    }
+
+    const issue = await backendService.getIssue(issueKey);
+
+    let reviewText: string;
+    if (chosen.provider === 'openai') {
+      reviewText = await reviewTicketWithOpenAi(issue, configStore.getAiOpenaiApiKey(), chosen.name);
+    } else if (chosen.provider === 'claude') {
+      reviewText = await reviewTicketWithClaude(issue, configStore.getAiClaudeApiKey(), chosen.name);
+    } else {
+      throw new Error(`AI review is not supported for provider: ${chosen.provider}`);
+    }
+
+    await backendService.addComment(issueKey, reviewText);
+    await syncIssueAfterMutation(issueKey);
+  }
+
   async function transitionIssueAndRefresh(issueKey: string, transitionId: string): Promise<void> {
     await backendService.transitionIssue(issueKey, transitionId);
     await syncIssueAfterMutation(issueKey);
@@ -831,14 +867,23 @@ export async function activate(
       }
     }
   );
-  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(backendService, detailsProvider, aiSessionManager, {
-    onSaveIssueEdits: async (issueKey, input, transitionId) => {
-      await updateIssueAndRefresh(issueKey, input, transitionId);
-    },
-    onAddComment: async (issueKey, body) => {
-      await addCommentAndRefresh(issueKey, body);
+  issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(
+    backendService,
+    detailsProvider,
+    aiSessionManager,
+    () => configStore.getAiAgentNames(),
+    {
+      onSaveIssueEdits: async (issueKey, input, transitionId) => {
+        await updateIssueAndRefresh(issueKey, input, transitionId);
+      },
+      onAddComment: async (issueKey, body) => {
+        await addCommentAndRefresh(issueKey, body);
+      },
+      onRequestAiReview: async (issueKey) => {
+        await reviewIssueWithAi(issueKey);
+      }
     }
-  });
+  );
   await refreshSearchActionContexts();
 
   context.subscriptions.push(
@@ -902,7 +947,7 @@ export async function activate(
         const existing = aiSessionManager.getSession(issue.key);
         if (existing) {
           const overwrite = await vscode.window.showWarningMessage(
-            `${issue.key} is already assigned to ${existing.provider} (${existing.status}). Replace?`,
+            `${issue.key} is already assigned to an AI agent (${existing.status}). Replace?`,
             'Replace',
             'Cancel'
           );
@@ -911,10 +956,12 @@ export async function activate(
           }
         }
 
+        // Prefer registered agents (with names); fall back to raw provider list
+        const registeredAgents = configStore.getConfiguredAiAgents();
         const providers = configStore.getConfiguredAiProviders();
         if (providers.length === 0) {
           await vscode.window.showWarningMessage(
-            'No AI providers are configured. Add API keys or CLI paths in Settings → Ticket Manager → AI.'
+            'No AI providers are configured. Add API keys in Settings → Ticket Manager → AI.'
           );
           return;
         }
@@ -926,24 +973,46 @@ export async function activate(
           'copilot-cli': 'Copilot CLI'
         };
 
-        const picked = await vscode.window.showQuickPick(
-          providers.map(provider => ({
-            label: providerLabels[provider],
-            description: provider,
-            provider
+        // Build quick-pick items: registered agents first, then unconfigured providers
+        const agentProviders = new Set(registeredAgents.map(a => a.provider));
+        const quickPickItems = [
+          ...registeredAgents.map(agent => ({
+            label: agent.name,
+            description: providerLabels[agent.provider] ?? agent.provider,
+            provider: agent.provider,
+            agentName: agent.name
           })),
-          { title: `Assign ${issue.key} to AI Agent` }
-        );
+          ...providers
+            .filter(p => !agentProviders.has(p))
+            .map(provider => ({
+              label: providerLabels[provider],
+              description: provider,
+              provider,
+              agentName: undefined as string | undefined
+            }))
+        ];
+
+        const picked = await vscode.window.showQuickPick(quickPickItems, {
+          title: `Assign ${issue.key} to AI Agent`
+        });
         if (!picked) {
           return;
         }
 
         const assignment = aiSessionManager.createSession(issue.key, picked.provider);
         issue.aiAssignment = assignment;
-        await detailsProvider.setIssue(issue);
-        issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
+
+        // If the agent has a registered name, also update the assignee field on the ticket
+        if (picked.agentName) {
+          await updateIssueAndRefresh(issue.key, { assignee: picked.agentName });
+        } else {
+          await detailsProvider.setIssue(issue);
+          issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
+        }
+
+        const displayName = picked.agentName ?? (providerLabels[picked.provider] ?? picked.provider);
         await vscode.window.showInformationMessage(
-          `${issue.key} assigned to ${providerLabels[picked.provider]} (session: ${assignment.sessionId.slice(0, 8)})`
+          `${issue.key} assigned to ${displayName} (session: ${assignment.sessionId.slice(0, 8)})`
         );
       } catch (error) {
         logError(outputChannel, error);
@@ -969,6 +1038,32 @@ export async function activate(
         issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
         await vscode.window.showInformationMessage(`AI assignment removed from ${issue.key}.`);
       } catch (error) {
+        logError(outputChannel, error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.reviewWithAi', async () => {
+      try {
+        const issue = detailsProvider.getActiveIssue();
+        if (!issue) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: `Reviewing ${issue.key} with AI…`,
+            cancellable: false
+          },
+          async () => {
+            await reviewIssueWithAi(issue.key);
+          }
+        );
+        await vscode.window.showInformationMessage(`AI review posted as a comment on ${issue.key}.`);
+      } catch (error) {
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
         logError(outputChannel, error);
       }
     }),

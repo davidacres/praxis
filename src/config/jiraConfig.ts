@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parse as parseJsonc } from 'jsonc-parser';
 import type {
+  AiAgentRegistration,
   AiProvider,
   BackendMode,
   ConfigureConnectionResult,
@@ -315,6 +316,14 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
   }
 
+  public getAiOpenaiAgentName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiAgentName', '');
+  }
+
+  public getAiClaudeAgentName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeAgentName', '');
+  }
+
   public getConfiguredAiProviders(): AiProvider[] {
     const providers: AiProvider[] = [];
     if (this.getAiOpenaiApiKey().trim().length > 0) {
@@ -330,6 +339,34 @@ export class AppConfigStore {
       providers.push('copilot-cli');
     }
     return providers;
+  }
+
+  /** Returns registered AI agents that have both a name and an API key configured. */
+  public getConfiguredAiAgents(): AiAgentRegistration[] {
+    const agents: AiAgentRegistration[] = [];
+    const openaiName = this.getAiOpenaiAgentName().trim();
+    if (openaiName && this.getAiOpenaiApiKey().trim()) {
+      agents.push({ name: openaiName, provider: 'openai' });
+    }
+    const claudeName = this.getAiClaudeAgentName().trim();
+    if (claudeName && this.getAiClaudeApiKey().trim()) {
+      agents.push({ name: claudeName, provider: 'claude' });
+    }
+    return agents;
+  }
+
+  /** Returns agent names for providers that have an API key configured (name falls back to provider label). */
+  public getAiAgentNames(): string[] {
+    const names: string[] = [];
+    const openaiName = this.getAiOpenaiAgentName().trim();
+    if (this.getAiOpenaiApiKey().trim()) {
+      names.push(openaiName || 'OpenAI');
+    }
+    const claudeName = this.getAiClaudeAgentName().trim();
+    if (this.getAiClaudeApiKey().trim()) {
+      names.push(claudeName || 'Claude');
+    }
+    return names;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
