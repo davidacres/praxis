@@ -66,12 +66,14 @@ function logError(output: vscode.OutputChannel, error: unknown): void {
 }
 
 function extractCopilotRequest(body: string): string | undefined {
-  const mentionPattern = /(?:^|[^\w])@copilot\b/i;
-  if (!mentionPattern.test(body)) {
+  const mentionMatch = body.match(/(?:^|\s)@copilot\b[:,]?\s*/i);
+  if (!mentionMatch) {
     return undefined;
   }
 
-  const cleaned = body.replace(/@copilot\b[:,]?\s*/gi, '').replace(/\s+/g, ' ').trim();
+  const cleaned = `${body.slice(0, mentionMatch.index)}${body.slice((mentionMatch.index ?? 0) + mentionMatch[0].length)}`
+    .replace(/\s+/g, ' ')
+    .trim();
   return cleaned || 'Please help with this ticket.';
 }
 
