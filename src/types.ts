@@ -11,6 +11,12 @@ export interface AiAssignment {
   status: 'active' | 'completed' | 'failed';
 }
 
+export interface AiAgentRegistration {
+  name: string;
+  provider: AiProvider;
+  apiKey: string;
+}
+
 export interface SecretConnectionValues {
   env: Record<string, string>;
   headers: Record<string, string>;

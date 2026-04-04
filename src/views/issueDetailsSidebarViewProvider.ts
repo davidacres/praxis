@@ -17,6 +17,7 @@ interface IssueDetailsSidebarCallbacks {
     transitionId?: string
   ) => Promise<void>;
   onAddComment: (issueKey: string, body: string) => Promise<void>;
+  onRequestAiReview: (issueKey: string) => Promise<void>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -119,6 +120,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     private readonly backendService: IssueTrackerService,
     private readonly detailsProvider: DetailsViewProvider,
     private readonly aiSessionManager: AiSessionManager,
+    private readonly getAiAgentNames: () => string[],
     private readonly callbacks: IssueDetailsSidebarCallbacks
   ) {
     this.disposables.push(
@@ -232,6 +234,23 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       }
       await vscode.commands.executeCommand('ticketManager.unassignAi');
     }
+
+    if (type === 'requestAiReview') {
+      const issueKey = asString(message.issueKey);
+      if (!issueKey) {
+        return;
+      }
+      try {
+        await this.callbacks.onRequestAiReview(issueKey);
+        await this.view?.webview.postMessage({ type: 'aiReviewResult', ok: true });
+      } catch (error) {
+        await this.view?.webview.postMessage({
+          type: 'aiReviewResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
   }
 
   private render(): void {
@@ -253,6 +272,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       content = '<div class="message">Issue details are unavailable.</div>';
     } else {
       const issue = snapshot.detailedIssue;
+      const agentNames = this.getAiAgentNames();
       const parentRule = getParentRule(issue.issueType, this.backendService.mode);
       const resolvedParentLabel = getResolvedParentLabel(
         issue.issueType,
@@ -351,9 +371,13 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               id="assigneeInput"
               class="field-input"
               type="text"
+              list="aiAgentList"
               value="${escapeHtml(issue.assignee ?? '')}"
               placeholder="Enter an assignee or leave blank"
             />
+            <datalist id="aiAgentList">
+              ${agentNames.map(name => `<option value="${escapeHtml(name)}">`).join('')}
+            </datalist>
           </label>
           <label class="field-group" for="prioritySelect">
             <span class="field-label">Priority</span>
@@ -402,7 +426,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
-        ${this.renderAiAssignmentSection(issue.key)}
+        ${this.renderAiAssignmentSection(issue.key, agentNames)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Comments</div>
           <div class="comment-list">
@@ -1115,6 +1139,22 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
 
+      const reviewWithAiButton = document.getElementById('reviewWithAiButton');
+      const aiReviewStatus = document.getElementById('aiReviewStatus');
+      if (reviewWithAiButton) {
+        reviewWithAiButton.addEventListener('click', () => {
+          const issueKey = reviewWithAiButton.getAttribute('data-issue-key');
+          if (issueKey) {
+            reviewWithAiButton.disabled = true;
+            if (aiReviewStatus) {
+              aiReviewStatus.textContent = 'Sending to AI for review…';
+              aiReviewStatus.className = 'form-status';
+            }
+            vscodeApi.postMessage({ type: 'requestAiReview', issueKey });
+          }
+        });
+      }
+
       window.addEventListener('message', event => {
         const message = event.data;
         if (!message || typeof message.type !== 'string') {
@@ -1127,6 +1167,19 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         }
         if (message.type === 'addIssueCommentResult' && handleAddIssueCommentResult) {
           handleAddIssueCommentResult(message);
+          return;
+        }
+        if (message.type === 'aiReviewResult') {
+          if (reviewWithAiButton) { reviewWithAiButton.disabled = false; }
+          if (aiReviewStatus) {
+            if (message.ok) {
+              aiReviewStatus.textContent = 'Review added as a comment.';
+              aiReviewStatus.className = 'form-status success';
+            } else {
+              aiReviewStatus.textContent = typeof message.error === 'string' ? message.error : 'AI review failed.';
+              aiReviewStatus.className = 'form-status error';
+            }
+          }
         }
       });
     </script>
@@ -1134,8 +1187,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
 </html>`;
   }
 
-  private renderAiAssignmentSection(issueKey: string): string {
+  private renderAiAssignmentSection(issueKey: string, agentNames: string[]): string {
     const session = this.aiSessionManager.getSession(issueKey);
+    const hasAiProviders = agentNames.length > 0;
 
     const providerLabels: Record<string, string> = {
       'openai': 'OpenAI',
@@ -1150,10 +1204,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       failed: 'blocked'
     };
 
+    const reviewButton = hasAiProviders
+      ? `<button class="secondary-button" id="reviewWithAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Review with AI</button>`
+      : '';
+
     if (!session) {
       return `<div class="card">
         <div class="section-title">AI Assignment</div>
         <div class="comment-empty">No AI agent assigned.</div>
+        ${hasAiProviders ? `<div class="form-actions">${reviewButton}</div>` : ''}
+        <span class="form-status" id="aiReviewStatus" aria-live="polite"></span>
       </div>`;
     }
 
@@ -1165,7 +1225,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     return `<div class="card">
       <div class="section-title">AI Assignment</div>
       <div class="detail-row">
-        <div class="detail-label">🤖 Agent</div>
+        <div class="detail-label">Agent</div>
         <div class="detail-value">${escapeHtml(providerLabel)}</div>
       </div>
       <div class="detail-row">
@@ -1182,7 +1242,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       </div>
       <div class="form-actions">
         <button class="secondary-button" id="unassignAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Unassign AI</button>
+        ${reviewButton}
       </div>
+      <span class="form-status" id="aiReviewStatus" aria-live="polite"></span>
     </div>`;
   }
 }
