@@ -66,11 +66,12 @@ function logError(output: vscode.OutputChannel, error: unknown): void {
 }
 
 function extractCopilotRequest(body: string): string | undefined {
-  if (!/\B@copilot\b/i.test(body)) {
+  const mentionPattern = /(^|[^\w])@copilot\b/i;
+  if (!mentionPattern.test(body)) {
     return undefined;
   }
 
-  const cleaned = body.replace(/\B@copilot\b[:,]?\s*/gi, '').trim();
+  const cleaned = body.replace(/(^|[^\w])@copilot\b[:,]?\s*/gi, '$1').trim();
   return cleaned || 'Please help with this ticket.';
 }
 
