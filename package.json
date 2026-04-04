@@ -650,7 +650,9 @@
           "default": false,
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
-          "tags": ["preview"]
+          "tags": [
+            "preview"
+          ]
         },
         "ticketManager.githubPat": {
           "type": "string",
@@ -681,8 +683,14 @@
         "ticketManager.gitlabConnectionType": {
           "type": "string",
           "default": "api",
-          "enum": ["api", "mcp"],
-          "enumItemLabels": ["API Key", "GitLab MCP Server"],
+          "enum": [
+            "api",
+            "mcp"
+          ],
+          "enumItemLabels": [
+            "API Key",
+            "GitLab MCP Server"
+          ],
           "scope": "window",
           "description": "How to connect to GitLab: direct API key or through a GitLab MCP server."
         },
@@ -701,7 +709,9 @@
         "ticketManager.gitlabMcpArgs": {
           "type": "array",
           "default": [],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "scope": "window",
           "description": "Arguments for the GitLab MCP server command."
         },
@@ -765,7 +775,7 @@
           "default": "",
           "markdownDescription": "Accent color for the small backend icon beside board names when **Live Folder** mode is active. Use hex (e.g. `#f59e0b`). Leave empty for the built-in default."
         },
-        "ticketManager.ai.openaiApiKey":{
+        "ticketManager.ai.openaiApiKey": {
           "type": "string",
           "default": "",
           "description": "OpenAI API key for AI agent assignment."
@@ -783,7 +793,7 @@
         "ticketManager.ai.copilotCliPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Copilot CLI executable for AI agent assignment."
+          "description": "Path to the Copilot CLI executable used by the Copilot SDK for AI reviews and in-app @copilot comment replies."
         },
         "ticketManager.ai.defaultProvider": {
           "type": "string",
@@ -818,6 +828,7 @@
     }
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.2.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "jsonc-parser": "^3.3.1",
     "markdown-it": "^14.1.1"

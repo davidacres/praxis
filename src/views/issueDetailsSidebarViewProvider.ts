@@ -441,7 +441,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <textarea
               id="commentInput"
               class="field-textarea comment-textarea"
-              placeholder="Write a comment"
+               placeholder="Write a comment (mention @copilot for a reply)"
             ></textarea>
           </label>
           <div class="form-actions">
@@ -1195,7 +1195,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       'openai': 'OpenAI',
       'claude': 'Claude',
       'cursor-cli': 'Cursor CLI',
-      'copilot-cli': 'Copilot CLI'
+      'copilot-cli': 'Copilot'
     };
 
     const statusTokenMap: Record<string, string> = {

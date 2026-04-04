@@ -9,7 +9,12 @@ import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
 import type { AiProvider, BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
-import { reviewTicketWithOpenAi, reviewTicketWithClaude } from './ai/aiReviewService';
+import {
+  respondToCopilotComment,
+  reviewTicketWithClaude,
+  reviewTicketWithCopilot,
+  reviewTicketWithOpenAi
+} from './ai/aiReviewService';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -41,8 +46,36 @@ export interface TicketManagerExtensionApi {
   outputChannel: vscode.OutputChannel;
 }
 
+const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
+  'openai': 'OpenAI',
+  'claude': 'Claude (Anthropic)',
+  'cursor-cli': 'Cursor CLI',
+  'copilot-cli': 'Copilot'
+};
+
+interface AiOptionPick {
+  provider: AiProvider;
+  label: string;
+  description: string;
+  agentName?: string;
+  credential?: string;
+}
+
 function logError(output: vscode.OutputChannel, error: unknown): void {
   output.appendLine(error instanceof Error ? error.stack ?? error.message : String(error));
+}
+
+function extractCopilotRequest(body: string): string | undefined {
+  const mentionMatch = body.match(/(?:^|\s)@copilot\b[:,]?\s*/i);
+  if (!mentionMatch) {
+    return undefined;
+  }
+
+  const start = mentionMatch.index!;
+  const cleaned = `${body.slice(0, start)}${body.slice(start + mentionMatch[0].length)}`
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'Please help with this ticket.';
 }
 
 export async function activate(
@@ -59,6 +92,7 @@ export async function activate(
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
+  const workingDirectory = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
   // Set mode context early so when-clauses on views evaluate correctly
   // before VS Code tries to resolve them.
@@ -698,36 +732,99 @@ export async function activate(
 
   async function addCommentAndRefresh(issueKey: string, body: string): Promise<void> {
     await backendService.addComment(issueKey, body);
+    const copilotRequest = extractCopilotRequest(body);
+    if (copilotRequest) {
+      const cliPath = configStore.getAiCopilotCliPath().trim();
+      if (!cliPath) {
+        void vscode.window.showWarningMessage(
+          'Comment added, but no Copilot CLI path is configured for @copilot replies.'
+        );
+      } else {
+        try {
+          const issue = await backendService.getIssue(issueKey);
+          const response = await respondToCopilotComment(
+            issue,
+            cliPath,
+            copilotRequest,
+            workingDirectory
+          );
+          await backendService.addComment(issueKey, response);
+        } catch (error) {
+          logError(outputChannel, error);
+          void vscode.window.showWarningMessage(
+            `Comment added, but @copilot could not respond: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    }
     await syncIssueAfterMutation(issueKey);
   }
 
+  function getConfiguredAiOptions(): AiOptionPick[] {
+    const registeredAgents = configStore.getConfiguredAiAgents();
+    const providers = configStore.getConfiguredAiProviders();
+    const configuredProviders = new Set(registeredAgents.map(agent => agent.provider));
+
+    return [
+      ...registeredAgents.map(agent => ({
+        provider: agent.provider,
+        label: agent.name,
+        description: AI_PROVIDER_LABELS[agent.provider] ?? agent.provider,
+        agentName: agent.name,
+        credential: agent.apiKey
+      })),
+      ...providers
+        .filter(provider => !configuredProviders.has(provider))
+        .map(provider => ({
+          provider,
+          label: AI_PROVIDER_LABELS[provider] ?? provider,
+          description: provider
+        }))
+    ];
+  }
+
   async function reviewIssueWithAi(issueKey: string): Promise<void> {
-    const agents = configStore.getConfiguredAiAgents();
-    if (agents.length === 0) {
+    const options = getConfiguredAiOptions();
+    if (options.length === 0) {
       throw new Error(
-        'No AI agents are configured with a name and API key. Set ticketManager.ai.openaiAgentName / ticketManager.ai.claudeAgentName and the corresponding API key in Settings.'
+        'No AI providers are configured. Add an OpenAI key, Claude key, or Copilot CLI path in Settings.'
       );
     }
 
-    let chosen = agents[0];
-    if (agents.length > 1) {
+    let chosen = options[0];
+    if (options.length > 1) {
       const picked = await vscode.window.showQuickPick(
-        agents.map(agent => ({ label: agent.name, description: agent.provider, agent })),
+        options.map(option => ({
+          label: option.label,
+          description: option.description,
+          option
+        })),
         { title: `Review ${issueKey} with AI` }
       );
       if (!picked) {
         return; // user cancelled
       }
-      chosen = picked.agent;
+      chosen = picked.option;
     }
 
     const issue = await backendService.getIssue(issueKey);
 
     let reviewText: string;
     if (chosen.provider === 'openai') {
-      reviewText = await reviewTicketWithOpenAi(issue, chosen.apiKey, chosen.name);
+      const apiKey = chosen.credential ?? configStore.getAiOpenaiApiKey().trim();
+      const agentName = chosen.agentName ?? AI_PROVIDER_LABELS.openai;
+      reviewText = await reviewTicketWithOpenAi(issue, apiKey, agentName);
     } else if (chosen.provider === 'claude') {
-      reviewText = await reviewTicketWithClaude(issue, chosen.apiKey, chosen.name);
+      const apiKey = chosen.credential ?? configStore.getAiClaudeApiKey().trim();
+      const agentName = chosen.agentName ?? AI_PROVIDER_LABELS.claude;
+      reviewText = await reviewTicketWithClaude(issue, apiKey, agentName);
+    } else if (chosen.provider === 'copilot-cli') {
+      reviewText = await reviewTicketWithCopilot(
+        issue,
+        configStore.getAiCopilotCliPath(),
+        chosen.agentName ?? AI_PROVIDER_LABELS['copilot-cli'],
+        workingDirectory
+      );
     } else {
       throw new Error(`AI review is not supported for provider: ${chosen.provider}`);
     }
@@ -962,40 +1059,18 @@ export async function activate(
         }
 
         // Prefer registered agents (with names); fall back to raw provider list
-        const registeredAgents = configStore.getConfiguredAiAgents();
-        const providers = configStore.getConfiguredAiProviders();
-        if (providers.length === 0) {
+        const quickPickItems = getConfiguredAiOptions().map(option => ({
+          label: option.label,
+          description: option.description,
+          provider: option.provider,
+          agentName: option.agentName
+        }));
+        if (quickPickItems.length === 0) {
           await vscode.window.showWarningMessage(
             'No AI providers are configured. Add API keys in Settings → Ticket Manager → AI.'
           );
           return;
         }
-
-        const providerLabels: Record<AiProvider, string> = {
-          'openai': 'OpenAI',
-          'claude': 'Claude (Anthropic)',
-          'cursor-cli': 'Cursor CLI',
-          'copilot-cli': 'Copilot CLI'
-        };
-
-        // Build quick-pick items: registered agents first, then unconfigured providers
-        const agentProviders = new Set(registeredAgents.map(a => a.provider));
-        type AiPickItem = vscode.QuickPickItem & { provider: AiProvider; agentName?: string };
-        const quickPickItems: AiPickItem[] = [
-          ...registeredAgents.map(agent => ({
-            label: agent.name,
-            description: providerLabels[agent.provider] ?? agent.provider,
-            provider: agent.provider,
-            agentName: agent.name
-          })),
-          ...providers
-            .filter(p => !agentProviders.has(p))
-            .map(provider => ({
-              label: providerLabels[provider],
-              description: provider,
-              provider
-            }))
-        ];
 
         const picked = await vscode.window.showQuickPick(quickPickItems, {
           title: `Assign ${issue.key} to AI Agent`
@@ -1015,7 +1090,7 @@ export async function activate(
           issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
         }
 
-        const displayName = picked.agentName ?? (providerLabels[picked.provider] ?? picked.provider);
+        const displayName = picked.agentName ?? (AI_PROVIDER_LABELS[picked.provider] ?? picked.provider);
         await vscode.window.showInformationMessage(
           `${issue.key} assigned to ${displayName} (session: ${assignment.sessionId.slice(0, 8)})`
         );

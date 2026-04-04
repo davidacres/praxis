@@ -345,7 +345,7 @@ Configure AI providers via settings:
 | `ticketManager.ai.openaiApiKey` | string | `""` | OpenAI API key |
 | `ticketManager.ai.claudeApiKey` | string | `""` | Claude/Anthropic API key |
 | `ticketManager.ai.cursorCliPath` | string | `""` | Path to the Cursor CLI executable |
-| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable |
+| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable used by the Copilot SDK |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider (`openai`, `claude`, `cursor-cli`, `copilot-cli`, `none`) |
 
 ### How to Assign
@@ -354,6 +354,13 @@ Configure AI providers via settings:
 2. In the **Issue Details** toolbar, click the 🤖 **Assign to AI Agent** button (or run `Ticket Manager: Assign to AI Agent` from the Command Palette).
 3. If no default provider is set, pick from the available providers.
 4. The assignment is created with a unique session ID and an `active` status.
+
+### Copilot Reviews and Comment Replies
+
+- Configure `ticketManager.ai.copilotCliPath` with a working `copilot` CLI installation.
+- The **Review with AI** action can now use Copilot in addition to OpenAI and Claude.
+- When you add a comment from this extension and include `@copilot`, the extension posts your comment first, then adds a Copilot reply as a follow-up comment.
+- `@copilot` replies are only triggered for comments submitted through this extension UI. Existing Jira comments and comments added outside the extension are not watched yet.
 
 ### Session Tracking
 
@@ -613,7 +620,7 @@ All settings are under the `ticketManager` namespace.
 | `ticketManager.ai.openaiApiKey` | string | `""` | OpenAI API key for AI agent assignment |
 | `ticketManager.ai.claudeApiKey` | string | `""` | Claude/Anthropic API key for AI agent assignment |
 | `ticketManager.ai.cursorCliPath` | string | `""` | Path to the Cursor CLI executable |
-| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable |
+| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable used by the Copilot SDK |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider: `openai`, `claude`, `cursor-cli`, `copilot-cli`, `none` |
 
 ---
@@ -636,7 +643,7 @@ You can bind any Ticket Manager command to a custom shortcut via **File → Pref
 |------|------------|
 | **GitHub backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitHub mode will not load issues or boards. |
 | **GitLab backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitLab mode will not load issues or boards. |
-| **AI agent assignment** | Session management is local only (VS Code workspace state). It does not integrate with external AI APIs yet — assignment tracking is for visibility, not for dispatching work to AI providers. |
+| **AI agent assignment** | AI session tracking is still local to VS Code workspace state. Copilot reviews and in-app `@copilot` replies are supported, but external ticket comments are not monitored yet. |
 | **New Project wizard** | Preview feature, disabled by default. AI review uses mock data in the current implementation. |
 | **File mode** | Issues are stored in a single JSONC file. Very large plan files may affect performance. |
 | **Board drag-and-drop** | Transitions are subject to the backend's workflow rules. Some transitions may be rejected if the backend enforces constraints. |
