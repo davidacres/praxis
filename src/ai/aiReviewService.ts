@@ -9,8 +9,21 @@ Analyze the ticket and provide concise, actionable feedback on:
 
 Be constructive and specific. Format your response in markdown. If the ticket is well-defined, say so briefly.`;
 
-function buildTicketContext(issue: IssueDetails): string {
+const COPILOT_COMMENT_SYSTEM_PROMPT = `You are GitHub Copilot replying inside a ticket discussion.
+Respond directly to the user's request using the ticket details and recent comments as context.
+Be concise, practical, and collaborative.
+Do not claim to have taken actions you did not take.
+Format the response in markdown suitable for posting as a ticket comment.`;
+
+const COPILOT_REPLY_COMMENT_LIMIT = 8;
+
+function buildTicketContext(
+  issue: IssueDetails,
+  options?: { recentCommentLimit?: number; newestComments?: boolean }
+): string {
   const parts: string[] = [];
+  const recentCommentLimit = options?.recentCommentLimit ?? 5;
+  const newestComments = options?.newestComments ?? false;
   parts.push(`**Ticket:** ${issue.key}`);
   parts.push(`**Type:** ${issue.issueType}`);
   parts.push(`**Summary:** ${issue.summary}`);
@@ -32,9 +45,10 @@ function buildTicketContext(issue: IssueDetails): string {
     parts.push('\n**Description:** *(none)*');
   }
   if (issue.comments && issue.comments.length > 0) {
-    const limit = Math.min(5, issue.comments.length);
-    parts.push(`\n**Comments (${issue.comments.length} total, showing ${limit}):**`);
-    for (const comment of issue.comments.slice(0, limit)) {
+    const limit = Math.min(recentCommentLimit, issue.comments.length);
+    const visibleComments = newestComments ? issue.comments.slice(-limit) : issue.comments.slice(0, limit);
+    parts.push(`\n**${newestComments ? 'Recent comments' : 'Comments'} (${issue.comments.length} total, showing ${limit}):**`);
+    for (const comment of visibleComments) {
       const author = comment.author ?? 'Unknown';
       const body = comment.body.length > 300 ? `${comment.body.slice(0, 300)}…` : comment.body;
       parts.push(`- **${author}:** ${body}`);
@@ -63,6 +77,55 @@ async function extractApiError(response: Response, providerLabel: string): Promi
     // fall through to default
   }
   return `${providerLabel} API error (${response.status})`;
+}
+
+async function runCopilotPrompt(
+  prompt: string,
+  options: {
+    cliPath: string;
+    systemPrompt: string;
+    workingDirectory?: string;
+  }
+): Promise<string> {
+  const cliPath = options.cliPath.trim();
+  if (!cliPath) {
+    throw new Error('Copilot CLI path is not configured.');
+  }
+
+  const sdk = await import('@github/copilot-sdk');
+  const client = new sdk.CopilotClient({ cliPath });
+  let session:
+    | {
+        disconnect(): Promise<void>;
+        sendAndWait(args: { prompt: string }): Promise<{ data?: { content?: string } } | undefined>;
+      }
+    | undefined;
+  try {
+    await client.start();
+    session = await client.createSession({
+      clientName: 'ticket-manager-extension',
+      availableTools: [],
+      infiniteSessions: { enabled: false },
+      onPermissionRequest: sdk.approveAll,
+      systemMessage: {
+        content: options.systemPrompt
+      },
+      workingDirectory: options.workingDirectory
+    });
+
+    const response = await session.sendAndWait({ prompt });
+    const content = response?.data?.content?.trim();
+    if (!content) {
+      throw new Error('Copilot returned an empty response.');
+    }
+
+    return content;
+  } finally {
+    if (session) {
+      await session.disconnect();
+    }
+    await client.stop();
+  }
 }
 
 export async function reviewTicketWithOpenAi(
@@ -143,4 +206,45 @@ export async function reviewTicketWithClaude(
   }
 
   return `## AI Review by ${agentName}\n\n${text}`;
+}
+
+export async function reviewTicketWithCopilot(
+  issue: IssueDetails,
+  cliPath: string,
+  agentName: string,
+  workingDirectory?: string
+): Promise<string> {
+  const ticketContext = buildTicketContext(issue);
+  const content = await runCopilotPrompt(
+    `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: REVIEW_SYSTEM_PROMPT,
+      workingDirectory
+    }
+  );
+
+  return `## AI Review by ${agentName}\n\n${content}`;
+}
+
+export async function respondToCopilotComment(
+  issue: IssueDetails,
+  cliPath: string,
+  request: string,
+  workingDirectory?: string
+): Promise<string> {
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
+  const content = await runCopilotPrompt(
+    `Reply to the latest @copilot mention in this ticket.\n\nUser request:\n${request}\n\nTicket context:\n${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: COPILOT_COMMENT_SYSTEM_PROMPT,
+      workingDirectory
+    }
+  );
+
+  return `## @copilot reply\n\n${content}`;
 }
