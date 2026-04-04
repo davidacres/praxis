@@ -15,6 +15,8 @@ Be concise, practical, and collaborative.
 Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
+const COPILOT_REPLY_COMMENT_LIMIT = 8;
+
 function buildTicketContext(
   issue: IssueDetails,
   options?: { recentCommentLimit?: number; newestComments?: boolean }
@@ -231,7 +233,10 @@ export async function respondToCopilotComment(
   request: string,
   workingDirectory?: string
 ): Promise<string> {
-  const ticketContext = buildTicketContext(issue, { recentCommentLimit: 8, newestComments: true });
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
   const content = await runCopilotPrompt(
     `Reply to the latest @copilot mention in this ticket.\n\nUser request:\n${request}\n\nTicket context:\n${ticketContext}`,
     {

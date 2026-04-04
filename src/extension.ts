@@ -66,7 +66,7 @@ function logError(output: vscode.OutputChannel, error: unknown): void {
 }
 
 function extractCopilotRequest(body: string): string | undefined {
-  const mentionPattern = /(^|[^\w])@copilot\b/i;
+  const mentionPattern = /(?:^|[^\w])@copilot\b/i;
   if (!mentionPattern.test(body)) {
     return undefined;
   }
