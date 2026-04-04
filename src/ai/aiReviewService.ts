@@ -15,9 +15,13 @@ Be concise, practical, and collaborative.
 Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
-function buildTicketContext(issue: IssueDetails, options?: { recentCommentLimit?: number }): string {
+function buildTicketContext(
+  issue: IssueDetails,
+  options?: { recentCommentLimit?: number; newestComments?: boolean }
+): string {
   const parts: string[] = [];
   const recentCommentLimit = options?.recentCommentLimit ?? 5;
+  const newestComments = options?.newestComments ?? false;
   parts.push(`**Ticket:** ${issue.key}`);
   parts.push(`**Type:** ${issue.issueType}`);
   parts.push(`**Summary:** ${issue.summary}`);
@@ -40,8 +44,9 @@ function buildTicketContext(issue: IssueDetails, options?: { recentCommentLimit?
   }
   if (issue.comments && issue.comments.length > 0) {
     const limit = Math.min(recentCommentLimit, issue.comments.length);
-    parts.push(`\n**Recent comments (${issue.comments.length} total, showing ${limit}):**`);
-    for (const comment of issue.comments.slice(-limit)) {
+    const visibleComments = newestComments ? issue.comments.slice(-limit) : issue.comments.slice(0, limit);
+    parts.push(`\n**${newestComments ? 'Recent comments' : 'Comments'} (${issue.comments.length} total, showing ${limit}):**`);
+    for (const comment of visibleComments) {
       const author = comment.author ?? 'Unknown';
       const body = comment.body.length > 300 ? `${comment.body.slice(0, 300)}…` : comment.body;
       parts.push(`- **${author}:** ${body}`);
@@ -226,7 +231,7 @@ export async function respondToCopilotComment(
   request: string,
   workingDirectory?: string
 ): Promise<string> {
-  const ticketContext = buildTicketContext(issue, { recentCommentLimit: 8 });
+  const ticketContext = buildTicketContext(issue, { recentCommentLimit: 8, newestComments: true });
   const content = await runCopilotPrompt(
     `Reply to the latest @copilot mention in this ticket.\n\nUser request:\n${request}\n\nTicket context:\n${ticketContext}`,
     {
