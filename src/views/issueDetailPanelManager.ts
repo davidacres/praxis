@@ -531,7 +531,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             <textarea
               id="commentInput"
               class="field-textarea comment-textarea"
-              placeholder="Write a comment"
+               placeholder="Write a comment (mention @copilot for a reply)"
             ></textarea>
           </label>
           <div class="form-actions">
