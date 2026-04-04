@@ -71,7 +71,7 @@ function extractCopilotRequest(body: string): string | undefined {
     return undefined;
   }
 
-  const cleaned = body.replace(/(^|[^\w])@copilot\b[:,]?\s*/gi, '$1').trim();
+  const cleaned = body.replace(/@copilot\b[:,]?\s*/gi, '').replace(/\s+/g, ' ').trim();
   return cleaned || 'Please help with this ticket.';
 }
 
