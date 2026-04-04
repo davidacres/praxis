@@ -71,7 +71,8 @@ function extractCopilotRequest(body: string): string | undefined {
     return undefined;
   }
 
-  const cleaned = `${body.slice(0, mentionMatch.index)}${body.slice((mentionMatch.index ?? 0) + mentionMatch[0].length)}`
+  const start = mentionMatch.index!;
+  const cleaned = `${body.slice(0, start)}${body.slice(start + mentionMatch[0].length)}`
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || 'Please help with this ticket.';
