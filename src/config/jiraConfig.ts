@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parse as parseJsonc } from 'jsonc-parser';
 import type {
+  AiAgentRegistration,
   AiProvider,
   BackendMode,
   ConfigureConnectionResult,
@@ -344,6 +345,14 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
   }
 
+  public getAiOpenaiAgentName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiAgentName', '');
+  }
+
+  public getAiClaudeAgentName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeAgentName', '');
+  }
+
   public getConfiguredAiProviders(): AiProvider[] {
     const providers: AiProvider[] = [];
     if (this.getAiOpenaiApiKey().trim().length > 0) {
@@ -359,6 +368,27 @@ export class AppConfigStore {
       providers.push('copilot-cli');
     }
     return providers;
+  }
+
+  /** Returns registered AI agents that have both a name and an API key configured. */
+  public getConfiguredAiAgents(): AiAgentRegistration[] {
+    const agents: AiAgentRegistration[] = [];
+    const openaiKey = this.getAiOpenaiApiKey().trim();
+    const openaiName = this.getAiOpenaiAgentName().trim();
+    if (openaiName && openaiKey) {
+      agents.push({ name: openaiName, provider: 'openai', apiKey: openaiKey });
+    }
+    const claudeKey = this.getAiClaudeApiKey().trim();
+    const claudeName = this.getAiClaudeAgentName().trim();
+    if (claudeName && claudeKey) {
+      agents.push({ name: claudeName, provider: 'claude', apiKey: claudeKey });
+    }
+    return agents;
+  }
+
+  /** Returns display names for all AI providers that have an API key configured. */
+  public getAiAgentNames(): string[] {
+    return this.getConfiguredAiAgents().map(a => a.name);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
