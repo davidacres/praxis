@@ -77,6 +77,8 @@ export class LiveFolderService implements IssueTrackerService {
   private projectKey = '';
   private projectName = '';
   private plansRootUri?: vscode.Uri;
+  /** The resolved directory containing feature-NN-* folders (may differ from plansRootUri). */
+  private featuresRootUri?: vscode.Uri;
   private loaded = false;
   private watcher?: vscode.FileSystemWatcher;
   private debounceTimer?: ReturnType<typeof setTimeout>;
@@ -420,6 +422,7 @@ export class LiveFolderService implements IssueTrackerService {
     }
 
     const parsed = await parsePlanFolder(this.plansRootUri);
+    this.featuresRootUri = parsed.featuresRootUri;
     this.issues = this.buildIssueModel(parsed);
   }
 
@@ -534,11 +537,11 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   private setupWatcher(): void {
-    if (this.watcher || !this.plansRootUri) {
+    if (this.watcher || !this.featuresRootUri) {
       return;
     }
 
-    const pattern = new vscode.RelativePattern(this.plansRootUri, 'features/**/*.md');
+    const pattern = new vscode.RelativePattern(this.featuresRootUri, '*/**/*.md');
     this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
     const handleChange = (uri: vscode.Uri) => {
