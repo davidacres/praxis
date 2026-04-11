@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { AiSessionManager } from '../ai/aiSessionManager';
 import { FilterStore } from '../state/filterStore';
 import type { IssueFilters, IssueSummary } from '../types';
 
@@ -82,7 +83,8 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public constructor(
     private readonly backendService: IssueTrackerService,
-    private readonly filterStore: FilterStore
+    private readonly filterStore: FilterStore,
+    private readonly aiSessionManager?: AiSessionManager
   ) {}
 
   public getTreeItem(element: TreeNode): vscode.TreeItem {
@@ -131,10 +133,15 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     item.id = element.id;
     item.contextValue = element.contextValue;
     item.description = getIssueDescription(element.issue);
+    const agentRecord = this.aiSessionManager?.getAgentSession(element.issue.key);
+    if (agentRecord && agentRecord.state !== 'completed' && agentRecord.state !== 'failed' && agentRecord.state !== 'aborted') {
+      item.description = `🤖 ${item.description}`;
+    }
     item.tooltip = [
       `${element.issue.key}: ${element.issue.summary}`,
       `${element.issue.projectKey || 'Unknown project'} • ${element.issue.issueType}`,
       element.issue.assignee ? `Assignee: ${element.issue.assignee}` : undefined,
+      agentRecord ? `Copilot Agent: ${agentRecord.state}` : undefined,
       element.issue.updated ? `Updated: ${element.issue.updated}` : undefined
     ]
       .filter((line): line is string => Boolean(line))

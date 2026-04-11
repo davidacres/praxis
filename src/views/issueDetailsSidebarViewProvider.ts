@@ -235,6 +235,27 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       await vscode.commands.executeCommand('ticketManager.unassignAi');
     }
 
+    if (type === 'viewAgentSession') {
+      const issueKey = asString(message.issueKey);
+      if (issueKey) {
+        await vscode.commands.executeCommand('ticketManager.viewAgentSession');
+      }
+    }
+
+    if (type === 'abortAgentSession') {
+      const issueKey = asString(message.issueKey);
+      if (issueKey) {
+        await vscode.commands.executeCommand('ticketManager.abortAgentSession');
+      }
+    }
+
+    if (type === 'delegateToCopilot') {
+      const issueKey = asString(message.issueKey);
+      if (issueKey) {
+        await vscode.commands.executeCommand('ticketManager.delegateToCopilot');
+      }
+    }
+
     if (type === 'requestAiReview') {
       const issueKey = asString(message.issueKey);
       if (!issueKey) {
@@ -427,6 +448,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           </div>
         </form>
         ${this.renderAiAssignmentSection(issue.key, agentNames)}
+        ${this.renderCopilotAgentSection(issue.key)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Comments</div>
           <div class="comment-list">
@@ -1139,6 +1161,36 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
 
+      const viewAgentBtn = document.getElementById('viewAgentSessionButton');
+      if (viewAgentBtn) {
+        viewAgentBtn.addEventListener('click', () => {
+          const issueKey = viewAgentBtn.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'viewAgentSession', issueKey });
+          }
+        });
+      }
+
+      const abortAgentBtn = document.getElementById('abortAgentSessionButton');
+      if (abortAgentBtn) {
+        abortAgentBtn.addEventListener('click', () => {
+          const issueKey = abortAgentBtn.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'abortAgentSession', issueKey });
+          }
+        });
+      }
+
+      const delegateBtn = document.getElementById('delegateToCopilotButton');
+      if (delegateBtn) {
+        delegateBtn.addEventListener('click', () => {
+          const issueKey = delegateBtn.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'delegateToCopilot', issueKey });
+          }
+        });
+      }
+
       const reviewWithAiButton = document.getElementById('reviewWithAiButton');
       const aiReviewStatus = document.getElementById('aiReviewStatus');
       if (reviewWithAiButton) {
@@ -1245,6 +1297,64 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         ${reviewButton}
       </div>
       <span class="form-status" id="aiReviewStatus" aria-live="polite"></span>
+    </div>`;
+  }
+
+  private renderCopilotAgentSection(issueKey: string): string {
+    const record = this.aiSessionManager.getAgentSession(issueKey);
+
+    const stateTokenMap: Record<string, { token: string; label: string }> = {
+      'not_started': { token: 'status', label: 'Not Started' },
+      'planning': { token: 'progress', label: 'Planning' },
+      'awaiting_approval': { token: 'blocked', label: 'Awaiting Approval' },
+      'executing': { token: 'progress', label: 'Executing' },
+      'awaiting_input': { token: 'blocked', label: 'Awaiting Input' },
+      'completed': { token: 'done', label: 'Completed' },
+      'failed': { token: 'blocked', label: 'Failed' },
+      'aborted': { token: 'status', label: 'Aborted' }
+    };
+
+    if (!record) {
+      return `<div class="card">
+        <div class="section-title">Copilot Agent</div>
+        <div class="comment-empty">No Copilot agent session.</div>
+        <div class="form-actions">
+          <button class="secondary-button" id="delegateToCopilotButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Delegate to Copilot</button>
+        </div>
+      </div>`;
+    }
+
+    const info = stateTokenMap[record.state] ?? { token: 'status', label: record.state };
+    const shortSession = escapeHtml(record.sessionId.slice(0, 8));
+    const startDate = record.startedAt ? formatDate(record.startedAt) : '—';
+    const isTerminal = record.state === 'completed' || record.state === 'failed' || record.state === 'aborted';
+
+    return `<div class="card">
+      <div class="section-title">Copilot Agent</div>
+      <div class="detail-row">
+        <div class="detail-label">Goal</div>
+        <div class="detail-value" title="${escapeHtml(record.taskDefinition.goal)}">${escapeHtml(record.taskDefinition.goal.length > 60 ? record.taskDefinition.goal.slice(0, 60) + '…' : record.taskDefinition.goal)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Session</div>
+        <div class="detail-value" title="${escapeHtml(record.sessionId)}">${shortSession}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Status</div>
+        <div class="detail-value"><span class="pill pill--${info.token}">${escapeHtml(info.label)}</span></div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Steps</div>
+        <div class="detail-value">${record.stepCount}/${record.taskDefinition.maxSteps ?? 50}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Started</div>
+        <div class="detail-value">${escapeHtml(startDate)}</div>
+      </div>
+      <div class="form-actions">
+        <button class="secondary-button" id="viewAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">View Session</button>
+        ${!isTerminal ? `<button class="secondary-button" id="abortAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Abort</button>` : ''}
+      </div>
     </div>`;
   }
 }
