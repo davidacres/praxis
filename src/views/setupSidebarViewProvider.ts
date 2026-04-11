@@ -542,7 +542,11 @@ ${connFields}`;
         return;
       }
       case 'save':
-        await this.saveSetupConfiguration();
+        try {
+          await this.saveSetupConfiguration();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Failed to save configuration: ${error instanceof Error ? error.message : String(error)}`);
+        }
         return;
     }
   }
@@ -626,6 +630,8 @@ ${connFields}`;
         break;
       }
     }
+
+    void vscode.window.showInformationMessage(`${this.setupMode === 'livefolder' ? 'Live Folder' : this.setupMode === 'file' ? 'File' : this.setupMode.toUpperCase()} configuration saved.`);
 
     // Reset state and re-render to show mode selection
     this.setupStep = 0;
