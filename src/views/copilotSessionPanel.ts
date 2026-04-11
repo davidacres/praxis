@@ -333,11 +333,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const sendBtn = document.getElementById('send-input');
     const textarea = document.getElementById('user-response');
 
-    const stateLabels = ${JSON.stringify(STATE_LABELS)};
-    const eventIcons = ${JSON.stringify(EVENT_ICONS)};
-    const maxSteps = ${task.maxSteps ?? 50};
+    const stateLabels = ${JSON.stringify(STATE_LABELS).replace(/</g, '\\u003c')};
+    const eventIcons = ${JSON.stringify(EVENT_ICONS).replace(/</g, '\\u003c')};
+    const maxSteps = ${Number(task.maxSteps ?? 50)};
 
-    let knownEventCount = ${record.events.length};
+    let knownEventCount = ${Number(record.events.length)};
 
     function formatTime(ts) {
       try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
