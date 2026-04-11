@@ -19,6 +19,7 @@ import { DetailsViewProvider } from '../views/detailsViewProvider';
 import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTreeProvider';
 import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
+import { SetupSidebarViewProvider } from '../views/setupSidebarViewProvider';
 import { SetupWizardPanel } from '../views/setupWizardPanel';
 import {
   generateTicketPlanFromMarkdownFeatures,
@@ -43,6 +44,7 @@ interface CommandDependencies {
   issueDetailPanelManager: IssueDetailPanelManager;
   newProjectWizardPanel: NewProjectWizardPanel;
   setupWizardPanel: SetupWizardPanel;
+  setupSidebarViewProvider: SetupSidebarViewProvider;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
   ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
@@ -492,64 +494,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       await showConnectionResult(result);
     }),
     vscode.commands.registerCommand('ticketManager.setBackendMode', async () => {
-      const currentMode = deps.configStore.getBackendMode();
-      type ModePick =
-        | { label: string; description: string; mode: BackendMode }
-        | { label: string; description: string; mode: 'importMarkdownPlan' };
-      const picked = await vscode.window.showQuickPick<ModePick>(
-        [
-          {
-            label: 'Jira Connected',
-            description: 'Use the configured Jira MCP connection.',
-            mode: 'jira'
-          },
-          {
-            label: 'Demo',
-            description: 'Use built-in demo data with no backend required.',
-            mode: 'demo'
-          },
-          {
-            label: 'File',
-            description: 'Use a workspace plan file for projects, boards, and issues.',
-            mode: 'file'
-          },
-          {
-            label: 'Import plan from markdown features…',
-            description:
-              'Scan a folder like …/plans with features/feature-NN-*/feature.md and story-*.md; save a new ticket-plan file (read-only on source).',
-            mode: 'importMarkdownPlan'
-          }
-        ],
-        {
-          title: 'Backend Mode',
-          placeHolder:
-            currentMode === 'demo'
-              ? 'Demo'
-              : currentMode === 'file'
-                ? 'File'
-                : currentMode === 'jira'
-                  ? 'Jira Connected'
-                  : undefined
-        }
-      );
-
-      if (!picked) {
-        return;
-      }
-
-      if (picked.mode === 'importMarkdownPlan') {
-        await runMarkdownFeaturePlanImport(deps);
-        return;
-      }
-
-      await setBackendMode(deps, picked.mode);
-      await vscode.window.showInformationMessage(
-        picked.mode === 'demo'
-          ? 'The app is now using demo mode.'
-          : picked.mode === 'file'
-            ? 'The app is now using file mode.'
-            : 'The app is now using Jira Connected mode.'
-      );
+      // Reset configured context so the setup sidebar becomes visible
+      await vscode.commands.executeCommand('setContext', 'ticketManager.configured', false);
+      await vscode.commands.executeCommand('setContext', 'ticketManager.mode', 'unconfigured');
+      deps.setupSidebarViewProvider.resetToModeSelection();
+      // Reveal the setup view in the sidebar
+      await vscode.commands.executeCommand('ticketManager.setup.focus');
     }),
     vscode.commands.registerCommand('ticketManager.importMarkdownFeaturePlan', async () => {
       await runMarkdownFeaturePlanImport(deps);

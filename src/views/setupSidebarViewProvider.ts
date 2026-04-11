@@ -37,6 +37,14 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     this.render();
   }
 
+  /** Reset the setup sidebar back to the mode-selection screen and re-render. */
+  public resetToModeSelection(): void {
+    this.setupStep = 0;
+    this.setupMode = undefined;
+    this.setupFields = {};
+    this.render();
+  }
+
   public dispose(): void {
     this.view = undefined;
     for (const d of this.disposables) {
