@@ -557,74 +557,84 @@ ${connFields}`;
     }
 
     const config = vscode.workspace.getConfiguration('ticketManager');
-    const target = vscode.workspace.workspaceFolders?.length
+    let target = vscode.workspace.workspaceFolders?.length
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
 
-    await config.update('backendMode', this.setupMode, target);
+    const updateSetting = async (key: string, value: unknown): Promise<void> => {
+      try {
+        await config.update(key, value, target);
+      } catch {
+        // Workspace write failed — fall back to Global
+        target = vscode.ConfigurationTarget.Global;
+        await config.update(key, value, target);
+      }
+    };
+
+    await updateSetting('backendMode', this.setupMode);
 
     switch (this.setupMode) {
       case 'file':
         if (this.setupFields.planFilePath) {
-          await config.update('planFilePath', this.setupFields.planFilePath, target);
+          await updateSetting('planFilePath', this.setupFields.planFilePath);
         }
         break;
       case 'livefolder':
         if (this.setupFields.liveFolderPath) {
-          await config.update('liveFolderPath', this.setupFields.liveFolderPath, target);
+          await updateSetting('liveFolderPath', this.setupFields.liveFolderPath);
         }
         if (this.setupFields.liveFolderProjectKey) {
-          await config.update('liveFolderProjectKey', this.setupFields.liveFolderProjectKey, target);
+          await updateSetting('liveFolderProjectKey', this.setupFields.liveFolderProjectKey);
         }
         if (this.setupFields.liveFolderProjectName) {
-          await config.update('liveFolderProjectName', this.setupFields.liveFolderProjectName, target);
+          await updateSetting('liveFolderProjectName', this.setupFields.liveFolderProjectName);
         }
         break;
       case 'github':
         if (this.setupFields.githubUrl) {
-          await config.update('githubUrl', this.setupFields.githubUrl, target);
+          await updateSetting('githubUrl', this.setupFields.githubUrl);
         }
         if (this.setupFields.githubPat) {
-          await config.update('githubPat', this.setupFields.githubPat, target);
+          await updateSetting('githubPat', this.setupFields.githubPat);
         }
         if (this.setupFields.githubOwner) {
-          await config.update('githubOwner', this.setupFields.githubOwner, target);
+          await updateSetting('githubOwner', this.setupFields.githubOwner);
         }
         break;
       case 'gitlab': {
         if (this.setupFields.gitlabUrl) {
-          await config.update('gitlabUrl', this.setupFields.gitlabUrl, target);
+          await updateSetting('gitlabUrl', this.setupFields.gitlabUrl);
         }
         const glConn = this.setupFields.gitlabConnectionType || 'api';
-        await config.update('gitlabConnectionType', glConn, target);
+        await updateSetting('gitlabConnectionType', glConn);
         if (glConn === 'api' && this.setupFields.gitlabApiKey) {
-          await config.update('gitlabApiKey', this.setupFields.gitlabApiKey, target);
+          await updateSetting('gitlabApiKey', this.setupFields.gitlabApiKey);
         } else if (glConn === 'mcp') {
           if (this.setupFields.gitlabMcpCommand) {
-            await config.update('gitlabMcpCommand', this.setupFields.gitlabMcpCommand, target);
+            await updateSetting('gitlabMcpCommand', this.setupFields.gitlabMcpCommand);
           }
           if (this.setupFields.gitlabMcpArgs) {
-            await config.update('gitlabMcpArgs', this.setupFields.gitlabMcpArgs.split(' ').filter(Boolean), target);
+            await updateSetting('gitlabMcpArgs', this.setupFields.gitlabMcpArgs.split(' ').filter(Boolean));
           }
         }
         break;
       }
       case 'jira': {
         const conn = this.setupFields.jiraConnectionType || 'stdio';
-        await config.update('connectionType', conn, target);
+        await updateSetting('connectionType', conn);
         if (conn === 'stdio') {
           if (this.setupFields.jiraStdioCommand) {
-            await config.update('stdioCommand', this.setupFields.jiraStdioCommand, target);
+            await updateSetting('stdioCommand', this.setupFields.jiraStdioCommand);
           }
           if (this.setupFields.jiraStdioArgs) {
-            await config.update('stdioArgs', this.setupFields.jiraStdioArgs.split(' ').filter(Boolean), target);
+            await updateSetting('stdioArgs', this.setupFields.jiraStdioArgs.split(' ').filter(Boolean));
           }
           if (this.setupFields.jiraCwd) {
-            await config.update('stdioCwd', this.setupFields.jiraCwd, target);
+            await updateSetting('stdioCwd', this.setupFields.jiraCwd);
           }
         } else {
           if (this.setupFields.jiraHttpUrl) {
-            await config.update('httpUrl', this.setupFields.jiraHttpUrl, target);
+            await updateSetting('httpUrl', this.setupFields.jiraHttpUrl);
           }
         }
         break;
