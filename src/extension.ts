@@ -112,7 +112,7 @@ export async function activate(
     !!initialMode
   );
 
-  const issuesProvider = new IssuesTreeProvider(backendService, filterStore);
+  const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
   const detailsProvider = new DetailsViewProvider(backendService);
   let issuesSidebarViewProvider: IssuesSidebarViewProvider;
