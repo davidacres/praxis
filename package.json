@@ -132,6 +132,24 @@
         "icon": "$(gear)"
       },
       {
+        "command": "ticketManager.delegateToCopilot",
+        "title": "Delegate to Copilot Agent",
+        "category": "Ticket Manager",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "ticketManager.viewAgentSession",
+        "title": "View Agent Session",
+        "category": "Ticket Manager",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "ticketManager.abortAgentSession",
+        "title": "Abort Agent Session",
+        "category": "Ticket Manager",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "ticketManager.importMarkdownFeaturePlan",
         "title": "Import Plan from Markdown Features",
         "category": "Ticket Manager",

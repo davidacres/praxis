@@ -28,6 +28,8 @@ import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarView
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
+import { CopilotAgentService } from './ai/copilotAgentService';
+import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
 import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
@@ -84,6 +86,8 @@ export async function activate(
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
+  const copilotAgentService = new CopilotAgentService(aiSessionManager, outputChannel);
+  const copilotSessionPanelManager = new CopilotSessionPanelManager(aiSessionManager, copilotAgentService);
   const filterStore = new FilterStore(context);
   const boardStore = new BoardStore(context);
   const boardColumnStore = new BoardColumnStore(context);
@@ -1164,7 +1168,10 @@ export async function activate(
       issueDetailPanelManager,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
       ensureFilePlanConfigured,
-      output: outputChannel
+      output: outputChannel,
+      copilotAgentService,
+      copilotSessionPanelManager,
+      aiSessionManager
     }),
     vscode.window.registerWebviewViewProvider('ticketManager.myIssues', issuesSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
@@ -1176,6 +1183,9 @@ export async function activate(
     epicsSidebarViewProvider,
     boardsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
+    copilotAgentService,
+    copilotSessionPanelManager,
+    aiSessionManager,
     filterStore.onDidChange(() => {
       void refreshSearchActionContexts().catch(error => logError(outputChannel, error));
       void (async () => {

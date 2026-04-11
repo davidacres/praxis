@@ -29,6 +29,9 @@ import {
   getParentRule,
   isAllowedParentType
 } from '../issues/issueHierarchy';
+import type { CopilotAgentService } from '../ai/copilotAgentService';
+import type { CopilotSessionPanelManager } from '../views/copilotSessionPanel';
+import type { AiSessionManager } from '../ai/aiSessionManager';
 
 interface CommandDependencies {
   context: vscode.ExtensionContext;
@@ -49,6 +52,9 @@ interface CommandDependencies {
   revealIssueDetailsTree: () => Promise<void>;
   ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
   output: vscode.OutputChannel;
+  copilotAgentService?: CopilotAgentService;
+  copilotSessionPanelManager?: CopilotSessionPanelManager;
+  aiSessionManager?: AiSessionManager;
 }
 
 function resolveIssue(
@@ -1032,6 +1038,125 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.openSetup', () => {
       void deps.setupWizardPanel.open();
+    }),
+
+    // ── Copilot Agent Delegation Commands ──────────────────────
+
+    vscode.commands.registerCommand('ticketManager.delegateToCopilot', async (arg?: unknown) => {
+      if (!deps.copilotAgentService || !deps.copilotSessionPanelManager || !deps.aiSessionManager) {
+        vscode.window.showWarningMessage('Copilot Agent delegation is not configured.');
+        return;
+      }
+
+      const issue = resolveIssue(deps.detailsProvider, arg);
+      if (!issue) {
+        vscode.window.showWarningMessage('Select an issue first.');
+        return;
+      }
+
+      // Check for existing active session
+      const existing = deps.aiSessionManager.getAgentSession(issue.key);
+      if (existing && !['completed', 'failed', 'aborted'].includes(existing.state)) {
+        const pick = await vscode.window.showQuickPick(
+          ['View existing session', 'Abort and start new'],
+          { title: `${issue.key} already has an active agent session` }
+        );
+        if (!pick) {
+          return;
+        }
+        if (pick === 'View existing session') {
+          deps.copilotSessionPanelManager.open(issue.key);
+          return;
+        }
+        await deps.copilotAgentService.abortTask(issue.key);
+      }
+
+      // Gather task definition via Quick Input
+      const goal = await vscode.window.showInputBox({
+        title: 'Goal',
+        prompt: 'What should the agent accomplish?',
+        value: `${issue.summary}${issue.description ? '\n' + issue.description.slice(0, 200) : ''}`,
+        ignoreFocusOut: true
+      });
+      if (!goal) {
+        return;
+      }
+
+      const scope = await vscode.window.showInputBox({
+        title: 'Scope',
+        prompt: 'What files/areas should the agent focus on?',
+        value: 'This issue and related files',
+        ignoreFocusOut: true
+      });
+      if (scope === undefined) {
+        return;
+      }
+
+      const definitionOfDone = await vscode.window.showInputBox({
+        title: 'Definition of Done',
+        prompt: 'When is this task considered complete?',
+        value: 'All acceptance criteria met, code compiles, tests pass',
+        ignoreFocusOut: true
+      });
+      if (definitionOfDone === undefined) {
+        return;
+      }
+
+      const cliPath = deps.configStore.getAiCopilotCliPath().trim();
+      if (!cliPath) {
+        vscode.window.showErrorMessage(
+          'Copilot CLI path is not configured. Set ticketManager.ai.copilotCliPath in Settings.'
+        );
+        return;
+      }
+
+      try {
+        const details = await deps.backendService.getIssue(issue.key);
+        const taskDef = {
+          goal,
+          scope: scope || 'This issue and related files',
+          definitionOfDone: definitionOfDone || 'Task complete'
+        };
+
+        const workingDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        await deps.copilotAgentService.startTask(details, taskDef, {
+          cliPath,
+          workingDirectory: workingDir
+        });
+
+        deps.copilotSessionPanelManager.open(issue.key);
+        vscode.window.showInformationMessage(`Copilot agent started for ${issue.key}`);
+      } catch (error) {
+        deps.output.appendLine(`[delegateToCopilot] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        vscode.window.showErrorMessage(
+          `Failed to start agent: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
+
+    vscode.commands.registerCommand('ticketManager.viewAgentSession', (arg?: unknown) => {
+      if (!deps.copilotSessionPanelManager) {
+        return;
+      }
+      const issue = resolveIssue(deps.detailsProvider, arg);
+      if (!issue) {
+        vscode.window.showWarningMessage('Select an issue first.');
+        return;
+      }
+      deps.copilotSessionPanelManager.open(issue.key);
+    }),
+
+    vscode.commands.registerCommand('ticketManager.abortAgentSession', async (arg?: unknown) => {
+      if (!deps.copilotAgentService) {
+        return;
+      }
+      const issue = resolveIssue(deps.detailsProvider, arg);
+      if (!issue) {
+        vscode.window.showWarningMessage('Select an issue first.');
+        return;
+      }
+      await deps.copilotAgentService.abortTask(issue.key);
+      vscode.window.showInformationMessage(`Agent session aborted for ${issue.key}.`);
     })
   ];
 }
