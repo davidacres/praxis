@@ -109,73 +109,84 @@ export class CopilotAgentService implements vscode.Disposable {
 
     const systemPrompt = buildSystemPrompt(taskDefinition, issue);
 
-    const session = await client.createSession({
-      clientName: 'ticket-manager-agent',
-      infiniteSessions: { enabled: true },
-      systemMessage: { content: systemPrompt },
-      workingDirectory: options.workingDirectory,
-      onPermissionRequest: async (request: { kind: string; [key: string]: unknown }) => {
-        const task = this.activeTasks.get(issue.key);
-        if (!task) {
-          return { kind: 'denied-by-permission-request-hook' as const, message: 'Session not found' };
-        }
-
-        const description = request.kind
-          ? `Permission requested: ${request.kind}`
-          : 'Permission requested';
-
-        this.sessionManager.updateAgentState(issue.key, 'awaiting_approval');
-        this.appendEvent(issue.key, evt('permission_requested', description));
-
-        return new Promise((resolve) => {
-          task.pendingPermission = {
-            resolve: (decision) => {
-              task.pendingPermission = undefined;
-              this.sessionManager.updateAgentState(issue.key, 'executing');
-              this.appendEvent(issue.key, evt('permission_completed', `Permission: ${decision}`));
-              if (decision === 'deny') {
-                resolve({ kind: 'denied-by-permission-request-hook' as const, message: 'User denied permission' });
-              } else {
-                resolve({ kind: 'approved' as const });
-              }
-            }
-          };
-        });
-      },
-      onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
-        const task = this.activeTasks.get(issue.key);
-        if (!task) {
-          return { answer: 'Session not found', wasFreeform: true };
-        }
-
-        const question = request.question ?? 'Input requested';
-
-        this.sessionManager.updateAgentState(issue.key, 'awaiting_input');
-        this.appendEvent(issue.key, evt('user_input_requested', question));
-
-        return new Promise<{ answer: string; wasFreeform: boolean }>((resolve) => {
-          task.pendingInput = {
-            resolve: (response) => {
-              task.pendingInput = undefined;
-              this.sessionManager.updateAgentState(issue.key, 'executing');
-              this.appendEvent(issue.key, evt('user_input_completed', `User replied`));
-              resolve({ answer: response, wasFreeform: true });
-            }
-          };
-        });
-      }
-    });
-
-    // Create persisted record
-    this.sessionManager.createAgentSession(issue.key, session.sessionId, taskDefinition);
-
+    // Pre-register task stub so permission/input handlers can find it immediately
     const task: ActiveTask = {
       issueKey: issue.key,
       client,
-      session,
+      session: undefined!, // populated after createSession
       unsubscribes: []
     };
     this.activeTasks.set(issue.key, task);
+
+    let session: ActiveTask['session'];
+    try {
+      session = await client.createSession({
+        clientName: 'ticket-manager-agent',
+        infiniteSessions: { enabled: true },
+        systemMessage: { content: systemPrompt },
+        workingDirectory: options.workingDirectory,
+        onPermissionRequest: async (request: { kind: string; [key: string]: unknown }) => {
+          const t = this.activeTasks.get(issue.key);
+          if (!t) {
+            return { kind: 'denied-by-permission-request-hook' as const, message: 'Session not found' };
+          }
+
+          const description = request.kind
+            ? `Permission requested: ${request.kind}`
+            : 'Permission requested';
+
+          this.sessionManager.updateAgentState(issue.key, 'awaiting_approval');
+          this.appendEvent(issue.key, evt('permission_requested', description));
+
+          return new Promise((resolve) => {
+            t.pendingPermission = {
+              resolve: (decision) => {
+                t.pendingPermission = undefined;
+                this.sessionManager.updateAgentState(issue.key, 'executing');
+                this.appendEvent(issue.key, evt('permission_completed', `Permission: ${decision}`));
+                if (decision === 'deny') {
+                  resolve({ kind: 'denied-by-permission-request-hook' as const, message: 'User denied permission' });
+                } else {
+                  resolve({ kind: 'approved' as const });
+                }
+              }
+            };
+          });
+        },
+        onUserInputRequest: async (request: { question: string; choices?: string[]; allowFreeform?: boolean }) => {
+          const t = this.activeTasks.get(issue.key);
+          if (!t) {
+            return { answer: 'Session not found', wasFreeform: true };
+          }
+
+          const question = request.question ?? 'Input requested';
+
+          this.sessionManager.updateAgentState(issue.key, 'awaiting_input');
+          this.appendEvent(issue.key, evt('user_input_requested', question));
+
+          return new Promise<{ answer: string; wasFreeform: boolean }>((resolve) => {
+            t.pendingInput = {
+              resolve: (response) => {
+                t.pendingInput = undefined;
+                this.sessionManager.updateAgentState(issue.key, 'executing');
+                this.appendEvent(issue.key, evt('user_input_completed', `User replied`));
+                resolve({ answer: response, wasFreeform: true });
+              }
+            };
+          });
+        }
+      });
+    } catch (err) {
+      // Clean up client if session creation fails
+      this.activeTasks.delete(issue.key);
+      try { await client.stop(); } catch { /* best-effort */ }
+      throw err;
+    }
+
+    task.session = session;
+
+    // Create persisted record
+    this.sessionManager.createAgentSession(issue.key, session.sessionId, taskDefinition);
 
     // Subscribe to session events
     const unsubAll = session.on((event) => {
@@ -408,11 +419,22 @@ Issue: ${issue.key} — ${issue.summary}`;
       return;
     }
 
+    // Remove from map immediately to prevent concurrent cleanup
+    this.activeTasks.delete(issueKey);
+
     if (task.timeoutHandle) {
       clearTimeout(task.timeoutHandle);
     }
     for (const unsub of task.unsubscribes) {
       unsub();
+    }
+
+    // Resolve any pending permission/input promises so SDK handlers don't hang
+    if (task.pendingPermission) {
+      task.pendingPermission.resolve('deny');
+    }
+    if (task.pendingInput) {
+      task.pendingInput.resolve('Task ended');
     }
 
     try {
@@ -425,7 +447,5 @@ Issue: ${issue.key} — ${issue.summary}`;
     } catch {
       // Best-effort cleanup
     }
-
-    this.activeTasks.delete(issueKey);
   }
 }
