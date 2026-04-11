@@ -35,6 +35,8 @@ export interface ParsedStoryFile {
 export interface ParsedPlanFolder {
   features: ParsedFeatureFolder[];
   stories: ParsedStoryFile[];
+  /** The resolved directory that contains the `feature-NN-*` subdirectories. */
+  featuresRootUri: vscode.Uri;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -220,8 +222,72 @@ export function stableStoryKey(projectKey: string, featureId: number, storySeq: 
 // ── Main parser ─────────────────────────────────────────────────────
 
 /**
+ * Locate the directory that contains `feature-NN-*` sub-folders.
+ *
+ * Search order:
+ *  1. `<root>/features/`
+ *  2. `<root>/` itself
+ *  3. Any immediate subdirectory of `<root>` that contains `feature-NN-*` dirs
+ *
+ * Returns the resolved URI and its directory listing, or throws.
+ */
+async function resolveFeaturesRoot(
+  plansRoot: vscode.Uri
+): Promise<{ featuresUri: vscode.Uri; entries: [string, vscode.FileType][] }> {
+  const hasFeatureDirs = (entries: [string, vscode.FileType][]): boolean =>
+    entries.some(([name, type]) => type === vscode.FileType.Directory && FEATURE_DIR.test(name));
+
+  // 1. Try <root>/features
+  try {
+    const featuresUri = vscode.Uri.joinPath(plansRoot, 'features');
+    const entries = await vscode.workspace.fs.readDirectory(featuresUri);
+    if (hasFeatureDirs(entries)) {
+      return { featuresUri, entries };
+    }
+  } catch {
+    // Not found — continue searching
+  }
+
+  // 2. Try <root> itself
+  try {
+    const entries = await vscode.workspace.fs.readDirectory(plansRoot);
+    if (hasFeatureDirs(entries)) {
+      return { featuresUri: plansRoot, entries };
+    }
+
+    // 3. Try each immediate subdirectory of <root>
+    for (const [name, type] of entries) {
+      if (type !== vscode.FileType.Directory) {
+        continue;
+      }
+      try {
+        const subUri = vscode.Uri.joinPath(plansRoot, name);
+        const subEntries = await vscode.workspace.fs.readDirectory(subUri);
+        if (hasFeatureDirs(subEntries)) {
+          return { featuresUri: subUri, entries: subEntries };
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Root itself is unreadable
+  }
+
+  throw new Error(
+    `No feature-NN-* folders found under the selected path or its subdirectories. ` +
+    `Expected layout: features/feature-01-…/feature.md`
+  );
+}
+
+/**
  * Scans a `plans`-style root folder and returns parsed features and stories.
  * Does not modify the source tree — pure read operation.
+ *
+ * Automatically discovers the features directory by searching:
+ *  1. `<plansRoot>/features/`
+ *  2. `<plansRoot>/` itself
+ *  3. Any immediate subdirectory of `<plansRoot>`
  */
 export async function parsePlanFolder(
   plansRoot: vscode.Uri,
@@ -229,15 +295,7 @@ export async function parsePlanFolder(
 ): Promise<ParsedPlanFolder> {
   const progress = onProgress ?? (() => undefined);
 
-  const featuresUri = vscode.Uri.joinPath(plansRoot, 'features');
-  let featureEntries: [string, vscode.FileType][];
-  try {
-    featureEntries = await vscode.workspace.fs.readDirectory(featuresUri);
-  } catch {
-    throw new Error(
-      `No "features" folder found under the selected path. Expected layout: features/feature-01-…/feature.md`
-    );
-  }
+  const { featuresUri, entries: featureEntries } = await resolveFeaturesRoot(plansRoot);
 
   progress('Scanning feature folders…');
 
@@ -322,5 +380,5 @@ export async function parsePlanFolder(
     return a.filename.localeCompare(b.filename);
   });
 
-  return { features, stories };
+  return { features, stories, featuresRootUri: featuresUri };
 }
