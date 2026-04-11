@@ -627,9 +627,10 @@ ${connFields}`;
       }
     }
 
-    // Reset state
+    // Reset state and re-render to show mode selection
     this.setupStep = 0;
     this.setupMode = undefined;
     this.setupFields = {};
+    this.render();
   }
 }
