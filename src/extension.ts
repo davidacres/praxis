@@ -1156,6 +1156,7 @@ export async function activate(
       boardColumnConfigPanel,
       newProjectWizardPanel,
       setupWizardPanel,
+      setupSidebarViewProvider,
       issuesProvider,
       boardsProvider,
       detailsProvider,
