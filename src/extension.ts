@@ -8,7 +8,14 @@ import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore } from './state/filterStore';
-import type { AiProvider, BackendMode, Board, IssueSummary, UpdateIssueInput } from './types';
+import type {
+  AiProvider,
+  BackendMode,
+  Board,
+  IssueDetails,
+  IssueSummary,
+  UpdateIssueInput
+} from './types';
 import {
   respondToCopilotComment,
   reviewTicketWithClaude,
@@ -38,6 +45,7 @@ import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { CopilotAgentService } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
+import type { AgentTaskDefinition } from './ai/agentTypes';
 import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
@@ -99,6 +107,12 @@ export async function activate(
     copilotAgentService,
     async issueKey => {
       await abandonAiSession(issueKey);
+    },
+    async issueKey => {
+      await resumeCopilotSession(issueKey);
+    },
+    async issueKey => {
+      await startNewCopilotSession(issueKey);
     }
   );
   const filterStore = new FilterStore(context);
@@ -1014,6 +1028,135 @@ export async function activate(
     await updateIssueAndRefresh(issueKey, { assignee: label });
   }
 
+  async function promptForCopilotTaskDefinition(
+    issue: IssueDetails,
+    previous?: AgentTaskDefinition
+  ): Promise<AgentTaskDefinition | undefined> {
+    const goal = await vscode.window.showInputBox({
+      title: 'Goal',
+      prompt: 'What should the agent accomplish?',
+      value:
+        previous?.goal ??
+        `${issue.summary}${issue.description ? '\n' + issue.description.slice(0, 200) : ''}`,
+      ignoreFocusOut: true
+    });
+    if (!goal) {
+      return undefined;
+    }
+
+    const scope = await vscode.window.showInputBox({
+      title: 'Scope',
+      prompt: 'What files/areas should the agent focus on?',
+      value: previous?.scope ?? 'This issue and related files',
+      ignoreFocusOut: true
+    });
+    if (scope === undefined) {
+      return undefined;
+    }
+
+    const definitionOfDone = await vscode.window.showInputBox({
+      title: 'Definition of Done',
+      prompt: 'When is this task considered complete?',
+      value:
+        previous?.definitionOfDone ??
+        'All acceptance criteria met, code compiles, tests pass',
+      ignoreFocusOut: true
+    });
+    if (definitionOfDone === undefined) {
+      return undefined;
+    }
+
+    return {
+      goal,
+      scope: scope || 'This issue and related files',
+      definitionOfDone: definitionOfDone || 'Task complete',
+      maxSteps: previous?.maxSteps,
+      timeoutMs: previous?.timeoutMs,
+      nonGoals: previous?.nonGoals
+    };
+  }
+
+  async function startNewCopilotSession(issueKey: string): Promise<void> {
+    if (!isCopilotSdkConfigured()) {
+      void vscode.window.showErrorMessage(
+        'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
+      );
+      return;
+    }
+
+    try {
+      const existingRecord = aiSessionManager.getAgentSession(issueKey);
+      if (copilotAgentService.hasActiveTask(issueKey)) {
+        const replace = await vscode.window.showWarningMessage(
+          `${issueKey} already has a live Copilot session. Start a new one instead?`,
+          'Start New',
+          'Cancel'
+        );
+        if (replace !== 'Start New') {
+          return;
+        }
+        await copilotAgentService.abortTask(issueKey);
+      }
+
+      const issue = await backendService.getIssue(issueKey);
+      const taskDefinition = await promptForCopilotTaskDefinition(issue, existingRecord?.taskDefinition);
+      if (!taskDefinition) {
+        return;
+      }
+
+      await copilotAgentService.startTask(issue, taskDefinition, {
+        cliPath: configStore.getAiCopilotCliPath().trim(),
+        workingDirectory
+      });
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
+      await activeSessionsSidebarViewProvider?.refresh();
+      copilotSessionPanelManager.open(issueKey);
+      void vscode.window.showInformationMessage(`Copilot session started for ${issueKey}.`);
+    } catch (error) {
+      reportError(error, 'startNewCopilotSession');
+      void vscode.window.showErrorMessage(
+        `Failed to start a new Copilot session: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  async function resumeCopilotSession(issueKey: string): Promise<void> {
+    if (!isCopilotSdkConfigured()) {
+      void vscode.window.showErrorMessage(
+        'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
+      );
+      return;
+    }
+
+    const record = aiSessionManager.getAgentSession(issueKey);
+    if (!record) {
+      void vscode.window.showWarningMessage(`No resumable Copilot session was found for ${issueKey}.`);
+      return;
+    }
+
+    if (copilotAgentService.hasActiveTask(issueKey)) {
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
+      copilotSessionPanelManager.open(issueKey);
+      return;
+    }
+
+    try {
+      await copilotAgentService.resumeTask(issueKey, {
+        cliPath: configStore.getAiCopilotCliPath().trim(),
+        workingDirectory
+      });
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
+      await activeSessionsSidebarViewProvider?.refresh();
+      copilotSessionPanelManager.open(issueKey);
+      void vscode.window.showInformationMessage(`Copilot session resumed for ${issueKey}.`);
+    } catch (error) {
+      reportError(error, 'resumeCopilotSession');
+      void vscode.window.showErrorMessage(
+        `Failed to resume Copilot session: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   async function reviewIssueWithAi(issueKey: string): Promise<void> {
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
@@ -1242,10 +1385,20 @@ export async function activate(
   activeSessionsSidebarViewProvider = new ActiveSessionsSidebarViewProvider(
     backendService,
     aiSessionManager,
+    issueKey => copilotAgentService.hasActiveTask(issueKey),
     {
       onOpenSession: async issueKey => {
         activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
         copilotSessionPanelManager.open(issueKey);
+      },
+      onResumeSession: async issueKey => {
+        await resumeCopilotSession(issueKey);
+      },
+      onStartNewSession: async issueKey => {
+        await startNewCopilotSession(issueKey);
+      },
+      onAbandonSession: async issueKey => {
+        await abandonAiSession(issueKey);
       }
     }
   );

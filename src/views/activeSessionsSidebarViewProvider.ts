@@ -6,11 +6,15 @@ import type { AiAssignment, AiProvider } from '../types';
 
 interface ActiveSessionsSidebarCallbacks {
   onOpenSession: (issueKey: string) => Promise<void>;
+  onResumeSession: (issueKey: string) => Promise<void>;
+  onStartNewSession: (issueKey: string) => Promise<void>;
+  onAbandonSession: (issueKey: string) => Promise<void>;
 }
 
 interface ActiveSessionListItem {
   issueKey: string;
   summary: string;
+  provider?: AiProvider;
   providerLabel: string;
   stateLabel: string;
   stateToken: string;
@@ -18,6 +22,9 @@ interface ActiveSessionListItem {
   sessionId: string;
   assignedAt: string;
   hasLiveAgentSession: boolean;
+  hasStoredAgentSession: boolean;
+  canResumeSession: boolean;
+  canStartNewSession: boolean;
 }
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
@@ -120,6 +127,7 @@ export class ActiveSessionsSidebarViewProvider
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly aiSessionManager: AiSessionManager,
+    private readonly isLiveAgentSession: (issueKey: string) => boolean,
     private readonly callbacks: ActiveSessionsSidebarCallbacks
   ) {
     this.disposables.push(
@@ -170,6 +178,7 @@ export class ActiveSessionsSidebarViewProvider
         issueKeys.map(async issueKey => {
           const assignment = this.aiSessionManager.getSession(issueKey);
           const record = this.aiSessionManager.getAgentSession(issueKey);
+          const hasLiveAgentSession = this.isLiveAgentSession(issueKey);
           let summary = 'Issue details unavailable';
           let assigneeLabel = assignment?.label?.trim() || resolveProviderLabel(assignment, record);
           try {
@@ -181,16 +190,21 @@ export class ActiveSessionsSidebarViewProvider
           }
 
           const presentation = resolveSessionState(assignment, record);
+          const supportsCopilotSession = record?.sessionId != null || assignment?.provider === 'copilot-cli';
           return {
             issueKey,
             summary,
+            provider: assignment?.provider,
             providerLabel: resolveProviderLabel(assignment, record),
             stateLabel: presentation.label,
             stateToken: presentation.token,
             assigneeLabel,
             sessionId: assignment?.sessionId ?? record?.sessionId ?? issueKey,
             assignedAt: assignment?.assignedAt ?? record?.startedAt ?? '',
-            hasLiveAgentSession: Boolean(record && !isTerminalAgentState(record.state))
+            hasLiveAgentSession,
+            hasStoredAgentSession: Boolean(record),
+            canResumeSession: Boolean(record) && !hasLiveAgentSession,
+            canStartNewSession: supportsCopilotSession
           } satisfies ActiveSessionListItem;
         })
       );
@@ -247,6 +261,27 @@ export class ActiveSessionsSidebarViewProvider
       case 'refresh':
         await this.refresh();
         return;
+      case 'resumeSession': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onResumeSession(issueKey);
+        }
+        return;
+      }
+      case 'startNewSession': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onStartNewSession(issueKey);
+        }
+        return;
+      }
+      case 'abandonSession': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onAbandonSession(issueKey);
+        }
+        return;
+      }
       default:
         return;
     }
@@ -280,10 +315,14 @@ export class ActiveSessionsSidebarViewProvider
               .join(' ');
             const meta = [
               `Assignee: ${session.assigneeLabel}`,
-              session.hasLiveAgentSession ? 'Live agent activity' : 'Assignment only',
+              session.hasLiveAgentSession
+                ? 'Live agent activity'
+                : session.hasStoredAgentSession
+                  ? 'Stored session available'
+                  : 'Assignment only',
               formatDate(session.assignedAt)
             ].join(' • ');
-            return `<div class="${classes}" data-issue-key="${escapeHtml(session.issueKey)}" title="${escapeHtml(`${session.issueKey}: ${session.summary}`)}">
+            return `<div class="${classes}" data-issue-key="${escapeHtml(session.issueKey)}" data-can-resume="${session.canResumeSession ? 'true' : 'false'}" data-can-start-new="${session.canStartNewSession ? 'true' : 'false'}" title="${escapeHtml(`${session.issueKey}: ${session.summary}`)}">
               <div class="row-main">
                 <div class="row-left">
                   <div class="item-key">${escapeHtml(session.issueKey)}</div>
@@ -332,6 +371,8 @@ export class ActiveSessionsSidebarViewProvider
         padding: 10px 12px;
         border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
         cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
       }
       .session-row:hover {
         background: var(--vscode-list-hoverBackground);
@@ -397,12 +438,57 @@ export class ActiveSessionsSidebarViewProvider
       .pill--status {
         border-color: var(--vscode-panel-border);
       }
+      .session-context-menu {
+        position: fixed;
+        min-width: 190px;
+        display: flex;
+        flex-direction: column;
+        padding: 6px;
+        border-radius: 8px;
+        border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+        background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--vscode-sideBar-background)));
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+        z-index: 1000;
+      }
+      .session-context-menu[hidden] {
+        display: none;
+      }
+      .session-context-menu-item {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        border-radius: 6px;
+        padding: 7px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .session-context-menu-item:hover {
+        background: var(--vscode-list-hoverBackground);
+      }
     </style>
   </head>
   <body>
     <div class="page">${content}</div>
+    <div id="sessionContextMenu" class="session-context-menu" hidden role="menu" aria-label="Session actions">
+      <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="openSession">Open Session</button>
+      <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="resumeSession">Resume Session</button>
+      <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="startNewSession">Start New Session</button>
+      <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="abandonSession">Abandon Session</button>
+    </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const sessionContextMenu = document.getElementById('sessionContextMenu');
+      const resumeMenuItem = sessionContextMenu?.querySelector('[data-session-menu-action="resumeSession"]');
+      const startNewMenuItem = sessionContextMenu?.querySelector('[data-session-menu-action="startNewSession"]');
+
+      function hideSessionMenu() {
+        if (sessionContextMenu) {
+          sessionContextMenu.hidden = true;
+        }
+      }
+
       for (const row of document.querySelectorAll('.session-row')) {
         row.addEventListener('click', () => {
           const issueKey = row.getAttribute('data-issue-key');
@@ -415,6 +501,63 @@ export class ActiveSessionsSidebarViewProvider
           if (issueKey) {
             vscodeApi.postMessage({ type: 'openSession', issueKey });
           }
+        });
+      }
+
+      if (sessionContextMenu) {
+        sessionContextMenu.addEventListener('click', event => event.stopPropagation());
+        sessionContextMenu.addEventListener('contextmenu', event => event.preventDefault());
+        sessionContextMenu.addEventListener('click', event => {
+          const target = event.target instanceof Element
+            ? event.target.closest('[data-session-menu-action]')
+            : null;
+          if (!target) {
+            return;
+          }
+          const action = target.getAttribute('data-session-menu-action');
+          const issueKey = sessionContextMenu.dataset.issueKey;
+          hideSessionMenu();
+          if (action && issueKey) {
+            vscodeApi.postMessage({ type: action, issueKey });
+          }
+        });
+        document.addEventListener('click', hideSessionMenu);
+        document.addEventListener('contextmenu', event => {
+          const row = event.target instanceof Element ? event.target.closest('.session-row') : null;
+          if (!row) {
+            hideSessionMenu();
+            return;
+          }
+          event.preventDefault();
+          const issueKey = row.getAttribute('data-issue-key');
+          if (!issueKey) {
+            return;
+          }
+          const canResume = row.getAttribute('data-can-resume') === 'true';
+          const canStartNew = row.getAttribute('data-can-start-new') === 'true';
+          sessionContextMenu.dataset.issueKey = issueKey;
+          if (resumeMenuItem) {
+            resumeMenuItem.hidden = !canResume;
+          }
+          if (startNewMenuItem) {
+            startNewMenuItem.hidden = !canStartNew;
+          }
+          sessionContextMenu.style.left = event.clientX + 'px';
+          sessionContextMenu.style.top = event.clientY + 'px';
+          sessionContextMenu.hidden = false;
+          requestAnimationFrame(() => {
+            const bounds = sessionContextMenu.getBoundingClientRect();
+            let left = parseFloat(sessionContextMenu.style.left) || 0;
+            let top = parseFloat(sessionContextMenu.style.top) || 0;
+            if (left + bounds.width > window.innerWidth - 6) {
+              left = window.innerWidth - bounds.width - 6;
+            }
+            if (top + bounds.height > window.innerHeight - 6) {
+              top = window.innerHeight - bounds.height - 6;
+            }
+            sessionContextMenu.style.left = Math.max(6, left) + 'px';
+            sessionContextMenu.style.top = Math.max(6, top) + 'px';
+          });
         });
       }
     </script>

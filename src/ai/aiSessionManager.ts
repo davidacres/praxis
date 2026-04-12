@@ -133,6 +133,7 @@ export class AiSessionManager {
       this.updateSessionStatus(issueKey, 'failed');
     } else {
       this.updateSessionStatus(issueKey, 'active');
+      record.completedAt = undefined;
     }
     if (state === 'completed' || state === 'failed' || state === 'aborted') {
       record.completedAt = new Date().toISOString();
