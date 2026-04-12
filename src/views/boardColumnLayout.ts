@@ -159,11 +159,50 @@ export function applyBoardColumnPreferences(
     ? normalizeOrderedStatuses(prefs.orderedStatuses)
     : workflowStatuses;
 
-  return buildColumnsForOrderedStatuses(
+  let result = buildColumnsForOrderedStatuses(
     {
       ...details,
       columnStatusOrder: workflowStatuses
     },
     orderedStatuses
   );
+
+  if (prefs.issueOrder) {
+    result = applyIssueOrder(result, prefs.issueOrder);
+  }
+
+  return result;
+}
+
+function applyIssueOrder(
+  details: BoardDetails,
+  issueOrder: Record<string, string[]>
+): BoardDetails {
+  const columns = details.columns.map(column => {
+    const order = issueOrder[column.name];
+    if (!order?.length) {
+      return column;
+    }
+
+    const keyToIssue = new Map(column.issues.map(issue => [issue.key, issue]));
+    const ordered: IssueSummary[] = [];
+
+    for (const key of order) {
+      const issue = keyToIssue.get(key);
+      if (issue) {
+        ordered.push(issue);
+        keyToIssue.delete(key);
+      }
+    }
+
+    for (const issue of column.issues) {
+      if (keyToIssue.has(issue.key)) {
+        ordered.push(issue);
+      }
+    }
+
+    return { ...column, issues: ordered };
+  });
+
+  return { ...details, columns };
 }

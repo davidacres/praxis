@@ -2,7 +2,7 @@
 //
 //  NotStarted → Planning → AwaitingApproval → Executing ⇄ AwaitingInput
 //                                                 ↓
-//                                     Completed | Failed | Aborted
+//                                     Paused | Completed | Failed | Aborted
 
 export type AgentTaskState =
   | 'not_started'
@@ -10,6 +10,7 @@ export type AgentTaskState =
   | 'awaiting_approval'
   | 'executing'
   | 'awaiting_input'
+  | 'paused'
   | 'completed'
   | 'failed'
   | 'aborted';
@@ -20,9 +21,9 @@ export interface AgentTaskDefinition {
   scope: string;
   definitionOfDone: string;
   nonGoals?: string[];
-  /** Hard limit on tool invocations before the session is aborted. Default: 50. */
+  /** Hard limit on tool invocations before the session is stopped. Default: 200. */
   maxSteps?: number;
-  /** Hard timeout in ms for the entire task. Default: 600 000 (10 min). */
+  /** Hard timeout in ms for the entire task. Default: 1 800 000 (30 min). */
   timeoutMs?: number;
 }
 
@@ -38,6 +39,7 @@ export type AgentEventType =
   | 'session_start'
   | 'plan'
   | 'intent'
+  | 'reasoning'
   | 'message'
   | 'tool_start'
   | 'tool_complete'
@@ -60,6 +62,8 @@ export interface AgentSessionRecord {
   taskDefinition: AgentTaskDefinition;
   events: AgentEventSummary[];
   planText?: string;
+  reasoningText?: string;
+  responseText?: string;
   stepCount: number;
   startedAt: string;
   completedAt?: string;
@@ -67,6 +71,6 @@ export interface AgentSessionRecord {
 
 /** Default guardrail limits. */
 export const AGENT_DEFAULTS = {
-  maxSteps: 50,
-  timeoutMs: 10 * 60 * 1000 // 10 minutes
+  maxSteps: 500,
+  timeoutMs: 30 * 60 * 1000 // 30 minutes
 } as const;

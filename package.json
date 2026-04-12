@@ -373,6 +373,12 @@
         "icon": "$(chevron-down)"
       },
       {
+        "command": "ticketManager.assignToMe",
+        "title": "Assign to Me",
+        "category": "Ticket Manager",
+        "icon": "$(person)"
+      },
+      {
         "command": "ticketManager.assignToAi",
         "title": "Assign to AI Agent",
         "category": "Ticket Manager",
@@ -389,6 +395,12 @@
         "title": "Review Ticket with AI",
         "category": "Ticket Manager",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "ticketManager.localPeerReview",
+        "title": "Local Peer Review (LPR)",
+        "category": "Ticket Manager",
+        "icon": "$(checklist)"
       }
     ],
     "menus": {
@@ -850,7 +862,7 @@
         "ticketManager.ai.copilotCliPath": {
           "type": "string",
           "default": "",
-          "description": "Optional advanced override for the CLI executable used by the GitHub Copilot SDK. Usually not needed."
+          "description": "Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless you are debugging a local Copilot SDK installation."
         },
         "ticketManager.ai.defaultProvider": {
           "type": "string",
@@ -880,6 +892,16 @@
           "type": "string",
           "default": "",
           "description": "Display name for the Claude agent (e.g. 'Claude AI'). When set, this name appears as an assignee option and is used when assigning tickets to the Claude agent."
+        },
+        "ticketManager.ai.mentionName": {
+          "type": "string",
+          "default": "",
+          "description": "Custom @mention name for triggering AI responses in comments (e.g. 'daveai'). When set, both @copilot and @<name> will trigger an AI reply. Leave blank to only respond to @copilot."
+        },
+        "ticketManager.ai.verboseActivityFeed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show all event types (tool calls, permission requests, etc.) in the AI session activity feed. When disabled, only high-value events like messages, plans, and errors are shown."
         }
       }
     }

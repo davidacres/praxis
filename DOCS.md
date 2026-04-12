@@ -11,14 +11,15 @@
 2. [Getting Started](#2-getting-started)
 3. [Backend Modes](#3-backend-modes)
 4. [Sidebar Views](#4-sidebar-views)
-5. [AI Agent Assignment (NEW)](#5-ai-agent-assignment-new)
-6. [New Project Wizard (Preview)](#6-new-project-wizard-preview)
-7. [Board Management](#7-board-management)
-8. [Commands Reference](#8-commands-reference)
-9. [Settings Reference](#9-settings-reference)
-10. [Keyboard Shortcuts](#10-keyboard-shortcuts)
-11. [Development Guidelines](#11-development-guidelines)
-12. [Known Limitations](#12-known-limitations)
+5. [AI Agent Assignment](#5-ai-agent-assignment)
+6. [Local Peer Review (LPR)](#6-local-peer-review-lpr)
+7. [New Project Wizard (Preview)](#7-new-project-wizard-preview)
+8. [Board Management](#8-board-management)
+9. [Commands Reference](#9-commands-reference)
+10. [Settings Reference](#10-settings-reference)
+11. [Keyboard Shortcuts](#11-keyboard-shortcuts)
+12. [Development Guidelines](#12-development-guidelines)
+13. [Known Limitations](#13-known-limitations)
 
 ---
 
@@ -324,16 +325,18 @@ Displays full details for the currently selected issue.
 
 - **Header:** Issue key, summary, status, issue type, priority
 - **Description:** Rendered from Markdown to HTML
-- **Comments:** Listed with author and timestamp
+- **Comments:** Listed with author and timestamp; comment textarea placeholder shows configured @mention names
 - **Status transitions:** Change Status button with available transitions
 - **Parent reference:** Link to parent issue if applicable
+- **Quick-assign buttons:** "Assign to Me" and "Assign to AI" next to the assignee field
+- **Local Peer Review button:** Triggers an AI code review, security review, and summary in a dedicated panel
 - **AI Assignment card:** When an AI agent is assigned, shows provider, session ID, assignment time, and status
 - **External link:** Open in Browser button
 - **Toolbar actions:** Change Status, Open External Link, Open Full Details (editor tab), Assign to AI Agent, Unassign AI Agent
 
 ---
 
-## 5. AI Agent Assignment (NEW)
+## 5. AI Agent Assignment
 
 Track AI agent assignments for issues directly in the sidebar.
 
@@ -349,21 +352,37 @@ Configure AI providers via settings:
 | `ticketManager.ai.copilotEnabled` | boolean | `false` | Enable the GitHub Copilot SDK using the machine's existing Copilot authentication |
 | `ticketManager.ai.copilotCliPath` | string | `""` | Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless debugging a local Copilot installation |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider (`openai`, `claude`, `cursor-cli`, `copilot-cli`, `none`) |
+| `ticketManager.ai.openaiAgentName` | string | `""` | Display name for the OpenAI agent (e.g. "GPT-4 Reviewer") |
+| `ticketManager.ai.claudeAgentName` | string | `""` | Display name for the Claude agent (e.g. "Claude AI") |
+| `ticketManager.ai.mentionName` | string | `""` | Custom @mention name for AI replies in comments (e.g. "daveai") |
 
 ### How to Assign
 
-1. Select an issue in the **My Issues** list.
-2. In the **Issue Details** toolbar, click the 🤖 **Assign to AI Agent** button (or run `Ticket Manager: Assign to AI Agent` from the Command Palette).
-3. If no default provider is set, pick from the available providers.
-4. The assignment is created with a unique session ID and an `active` status.
+There are multiple ways to assign a ticket:
 
-### Copilot Reviews and Comment Replies
+1. **From the issue detail panel:** Click "Assign to Me" or "Assign to AI" below the assignee field.
+2. **From the board:** Right-click a card and select an assignment option.
+3. **From the sidebar toolbar:** Click the 🤖 **Assign to AI Agent** button.
+4. **From the Command Palette:** Run `Ticket Manager: Assign to AI Agent` or `Ticket Manager: Assign to Me`.
 
-- Enable `ticketManager.ai.copilotEnabled` or use **Ticket Manager: Configure AI** and choose **GitHub Copilot SDK**.
-- Leave `ticketManager.ai.copilotCliPath` empty in normal use. It is only a legacy compatibility override for debugging unusual local Copilot runtime setups.
-- The **Review with AI** action can now use Copilot in addition to OpenAI and Claude.
-- When you add a comment from this extension and include `@copilot`, the extension posts your comment first, then adds a Copilot reply as a follow-up comment.
-- `@copilot` replies are only triggered for comments submitted through this extension UI. Existing Jira comments and comments added outside the extension are not watched yet.
+If no default provider is set, you will be prompted to pick from the available providers.
+
+### Copilot Agent Sessions
+
+When using the GitHub Copilot SDK, you can start **autonomous agent sessions** where the AI actively works on the ticket:
+
+1. Assign the ticket to AI or use **Delegate to Copilot**.
+2. Define the task: goal, scope, and definition of done.
+3. If a **plan file** exists and contains the issue key, plan context is automatically included in the goal.
+4. The agent runs autonomously — planning, reading/writing files, running commands — with permission gates.
+5. Step limit warnings appear at 80% of the configured limit (default: 500 steps), with options to continue, remove the limit, or stop.
+
+### @Mention AI in Comments
+
+- When you add a comment containing `@copilot`, the extension posts your comment and then adds an AI reply as a follow-up.
+- **Custom mention name:** Set `ticketManager.ai.mentionName` to a custom name (e.g. `"daveai"`). Both `@copilot` and `@daveai` will trigger AI replies.
+- The comment textarea placeholder dynamically shows the configured mention names.
+- Mentions are only triggered for comments submitted through this extension UI.
 
 ### Session Tracking
 
@@ -392,7 +411,36 @@ For GitHub Copilot SDK sessions, Ticket Manager creates real persistent Copilot 
 
 ---
 
-## 6. New Project Wizard (Preview)
+## 6. Local Peer Review (LPR)
+
+Run an AI-powered peer review for any ticket directly in VS Code. The LPR opens a dedicated panel with three review sections.
+
+### How to Run
+
+1. **From the issue detail panel:** Click the **Local Peer Review** button in the form actions.
+2. **From the Command Palette:** Run `Ticket Manager: Local Peer Review (LPR)`.
+3. If multiple AI providers are configured, you will be prompted to select one.
+
+### Review Sections
+
+| Section | Description |
+|---------|-------------|
+| **Ticket Details** | Summary of the ticket: key, type, status, priority, assignee, and description |
+| **Code Review** | AI analysis of code quality, potential bugs, design patterns, test coverage, and performance |
+| **Security Review** | AI analysis of OWASP Top 10 vulnerabilities, auth issues, data exposure, input validation, and dependency risks |
+| **Summary & Verdict** | Overall assessment (Ready / Needs Changes / Needs Major Rework), key findings, and recommended next steps |
+
+### Supported Providers
+
+LPR works with all configured AI providers: OpenAI, Claude, and GitHub Copilot SDK.
+
+### Refreshing
+
+Click the refresh icon in the panel header to re-run the review with the latest ticket data.
+
+---
+
+## 7. New Project Wizard (Preview)
 
 A multi-step guided workflow for defining and launching a new project.
 
@@ -430,7 +478,7 @@ Each step can trigger an AI review that returns:
 
 ---
 
-## 7. Board Management
+## 8. Board Management
 
 ### Creating Boards
 
@@ -445,8 +493,10 @@ Click a board in the list (or use the inline **Open Board** button) to open it i
 - **Columns** mapped to workflow statuses
 - **Issue cards** with key, summary, type badge, and status
 - **Drag-and-drop** to move issues between columns (triggers status transitions)
+- **Intra-column card reordering** — drag tickets above or below other tickets within the same column to set visual priority order. A blue drop indicator line shows the insertion point. Order is persisted per board in workspace state and does not affect ticket details.
 - **Swim lanes** for optional grouping
 - **Selected issue highlighting**
+- **Card border colour** uses the board's focus colour (`--vscode-focusBorder`) for a consistent branded look
 
 ### Board Column Configuration
 
@@ -474,7 +524,7 @@ Filter the board contents using the toolbar:
 
 ---
 
-## 8. Commands Reference
+## 9. Commands Reference
 
 All commands are in the **Ticket Manager** category.
 
@@ -542,16 +592,19 @@ All commands are in the **Ticket Manager** category.
 | Create EPIC | `ticketManager.createEpic` | Create a new EPIC |
 | Search EPICs | `ticketManager.searchEpics` | Toggle EPIC search input |
 
-### AI Agent
+### AI Agent & Review
 
 | Command | ID | Description |
 |---------|----|-------------|
+| Assign to Me | `ticketManager.assignToMe` | Assign the selected issue to yourself |
 | Assign to AI Agent | `ticketManager.assignToAi` | Assign the selected issue to an AI agent |
 | Unassign AI Agent | `ticketManager.unassignAi` | Remove AI agent assignment |
+| Review Ticket with AI | `ticketManager.reviewWithAi` | Post an AI review as a comment on the ticket |
+| Local Peer Review (LPR) | `ticketManager.localPeerReview` | Open a full code review, security review, and summary panel |
 
 ---
 
-## 9. Settings Reference
+## 10. Settings Reference
 
 All settings are under the `ticketManager` namespace.
 
@@ -628,10 +681,13 @@ All settings are under the `ticketManager` namespace.
 | `ticketManager.ai.copilotEnabled` | boolean | `false` | Enable the GitHub Copilot SDK using existing machine auth |
 | `ticketManager.ai.copilotCliPath` | string | `""` | Legacy compatibility override for the runtime used by the GitHub Copilot SDK |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider: `openai`, `claude`, `cursor-cli`, `copilot-cli`, `none` |
+| `ticketManager.ai.openaiAgentName` | string | `""` | Display name for the OpenAI agent |
+| `ticketManager.ai.claudeAgentName` | string | `""` | Display name for the Claude agent |
+| `ticketManager.ai.mentionName` | string | `""` | Custom @mention name for AI replies in comments (e.g. `daveai`). Both `@copilot` and `@<name>` trigger replies |
 
 ---
 
-## 10. Keyboard Shortcuts
+## 11. Keyboard Shortcuts
 
 No custom keybindings are defined by the extension. All commands are accessible through:
 
@@ -643,7 +699,7 @@ You can bind any Ticket Manager command to a custom shortcut via **File → Pref
 
 ---
 
-## 11. Development Guidelines
+## 12. Development Guidelines
 
 ### Webview Panel Creation (CRITICAL)
 
@@ -683,16 +739,17 @@ All webview panels and sidebar views should use this CSP pattern:
 
 ---
 
-## 12. Known Limitations
+## 13. Known Limitations
 
 | Area | Limitation |
 |------|------------|
 | **GitHub backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitHub mode will not load issues or boards. |
 | **GitLab backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitLab mode will not load issues or boards. |
-| **AI agent assignment** | AI session tracking is still local to VS Code workspace state. Copilot reviews and in-app `@copilot` replies are supported, but external ticket comments are not monitored yet. Persistent Copilot sessions may also appear in Copilot history because the SDK creates real resumable sessions. |
+| **AI agent assignment** | AI session tracking is local to VS Code workspace state. `@copilot` and custom `@mention` replies are only triggered for comments submitted through this extension UI — external ticket comments are not monitored. Copilot agent sessions may appear in Copilot history because the SDK creates real resumable sessions. |
 | **New Project wizard** | Preview feature, disabled by default. AI review uses mock data in the current implementation. |
 | **File mode** | Issues are stored in a single JSONC file. Very large plan files may affect performance. |
-| **Board drag-and-drop** | Transitions are subject to the backend's workflow rules. Some transitions may be rejected if the backend enforces constraints. |
+| **Board drag-and-drop** | Cross-column transitions are subject to the backend's workflow rules and may be rejected. Intra-column card reordering is board-local only and not synced to the backend. |
+| **Local Peer Review** | LPR quality depends on the ticket description and the AI provider used. Code-level analysis is limited to what the AI can infer from the ticket context (no direct file access in LPR mode). |
 
 ---
 

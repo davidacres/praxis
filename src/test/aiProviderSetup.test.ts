@@ -13,6 +13,8 @@ suite('AI provider setup', () => {
 
     assert.ok(copilotOption);
     assert.strictEqual(copilotOption?.label, 'GitHub Copilot SDK');
+    assert.ok(copilotOption?.detail?.includes('existing GitHub Copilot authentication'));
+    assert.ok(!copilotOption?.detail?.toLowerCase().includes('cli path'));
     assert.strictEqual(AI_PROVIDER_LABELS['copilot-cli'], 'GitHub Copilot SDK');
   });
 

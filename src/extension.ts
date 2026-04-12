@@ -20,7 +20,8 @@ import {
   respondToCopilotComment,
   reviewTicketWithClaude,
   reviewTicketWithCopilot,
-  reviewTicketWithOpenAi
+  reviewTicketWithOpenAi,
+  runLocalPeerReview
 } from './ai/aiReviewService';
 import {
   AI_PROVIDER_LABELS,
@@ -35,6 +36,7 @@ import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
+import { LocalPeerReviewPanel } from './views/localPeerReviewPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
@@ -83,8 +85,13 @@ function logError(output: vscode.OutputChannel, error: unknown, scope?: string):
   output.appendLine(scope ? `[${scope}] ${message}` : message);
 }
 
-function extractCopilotRequest(body: string): string | undefined {
-  const mentionMatch = body.match(/(?:^|\s)@copilot\b[:,]?\s*/i);
+function extractCopilotRequest(body: string, extraMentionName?: string): string | undefined {
+  const names = ['copilot'];
+  if (extraMentionName) {
+    names.push(extraMentionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  }
+  const pattern = new RegExp(`(?:^|\\s)@(?:${names.join('|')})\\b[:,]?\\s*`, 'i');
+  const mentionMatch = body.match(pattern);
   if (!mentionMatch) {
     return undefined;
   }
@@ -149,6 +156,20 @@ export async function activate(
 
   function isCopilotSdkConfigured(): boolean {
     return configStore.getConfiguredAiProviders().includes('copilot-cli');
+  }
+
+  function buildCommentPlaceholder(): string {
+    const custom = configStore.getAiMentionName().trim();
+    if (custom) {
+      return `Write a comment (mention @copilot or @${custom} for a reply)`;
+    }
+    return 'Write a comment (mention @copilot for a reply)';
+  }
+
+  function updateCommentPlaceholders(): void {
+    const placeholder = buildCommentPlaceholder();
+    issueDetailPanelManager.setCommentPlaceholder(placeholder);
+    issueDetailsSidebarViewProvider?.setCommentPlaceholder(placeholder);
   }
 
   async function revealActiveSessionsView(): Promise<void> {
@@ -336,6 +357,33 @@ export async function activate(
     await boardPanelManager.refresh();
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
   });
+  updateCommentPlaceholders();
+
+  const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
+    const options = getConfiguredAiOptions();
+    if (options.length === 0) {
+      throw new Error('No AI providers configured. Run Ticket Manager: Configure AI.');
+    }
+    let chosen = options[0];
+    if (options.length > 1) {
+      const picked = await vscode.window.showQuickPick(
+        options.map(opt => ({ label: opt.label, description: opt.description, option: opt })),
+        { title: `Run Local Peer Review with` }
+      );
+      if (!picked) {
+        throw new Error('Review cancelled.');
+      }
+      chosen = picked.option;
+    }
+    return runLocalPeerReview(issue, {
+      provider: chosen.provider,
+      credential: chosen.credential,
+      agentName: chosen.agentName ?? chosen.label,
+      cliPath: getCopilotCliPathOverride(),
+      workingDirectory
+    });
+  });
+
   context.subscriptions.push(
     outputChannel,
     filterStore,
@@ -346,6 +394,7 @@ export async function activate(
     detailsProvider,
     boardPanelManager,
     issueDetailPanelManager,
+    localPeerReviewPanel,
     boardColumnStore,
     boardColumnConfigPanel,
     newProjectWizardPanel,
@@ -968,7 +1017,7 @@ export async function activate(
 
   async function addCommentAndRefresh(issueKey: string, body: string): Promise<void> {
     await backendService.addComment(issueKey, body);
-    const copilotRequest = extractCopilotRequest(body);
+    const copilotRequest = extractCopilotRequest(body, configStore.getAiMentionName());
     if (copilotRequest) {
       const cliPath = getCopilotCliPathOverride();
       if (!isCopilotSdkConfigured()) {
@@ -1210,16 +1259,44 @@ export async function activate(
     await updateIssueAndRefresh(issueKey, { assignee: label });
   }
 
+  async function loadPlanContext(issueKey: string): Promise<string | undefined> {
+    try {
+      const planUri = await configStore.getResolvedPlanFileUri();
+      if (!planUri) {
+        return undefined;
+      }
+      const bytes = await vscode.workspace.fs.readFile(planUri);
+      const text = Buffer.from(bytes).toString('utf8');
+      // Quick extraction: find the issue key in the plan text and grab surrounding context
+      const lines = text.split('\n');
+      const matchIndex = lines.findIndex(line => line.includes(`"${issueKey}"`));
+      if (matchIndex < 0) {
+        return undefined;
+      }
+      // Grab a window of lines around the match (the plan item block)
+      const start = Math.max(0, matchIndex - 2);
+      const end = Math.min(lines.length, matchIndex + 20);
+      return lines.slice(start, end).join('\n').trim();
+    } catch {
+      return undefined;
+    }
+  }
+
   async function promptForCopilotTaskDefinition(
     issue: IssueDetails,
     previous?: AgentTaskDefinition
   ): Promise<AgentTaskDefinition | undefined> {
+    const planContext = await loadPlanContext(issue.key);
+    const defaultGoal = previous?.goal ??
+      `${issue.summary}${issue.description ? '\\n' + issue.description.slice(0, 200) : ''}` +
+      (planContext ? `\\n\\nPlan context:\\n${planContext.slice(0, 300)}` : '');
+
     const goal = await vscode.window.showInputBox({
       title: 'Goal',
-      prompt: 'What should the agent accomplish?',
-      value:
-        previous?.goal ??
-        `${issue.summary}${issue.description ? '\n' + issue.description.slice(0, 200) : ''}`,
+      prompt: planContext
+        ? 'What should the agent accomplish? (plan context included)'
+        : 'What should the agent accomplish?',
+      value: defaultGoal,
       ignoreFocusOut: true
     });
     if (!goal) {
@@ -1568,6 +1645,7 @@ export async function activate(
       }
     }
   );
+  updateCommentPlaceholders();
   activeSessionsSidebarViewProvider = new ActiveSessionsSidebarViewProvider(
     backendService,
     aiSessionManager,
@@ -1656,19 +1734,31 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.assignToAi', async () => {
+    vscode.commands.registerCommand('ticketManager.assignToMe', async (arg?: unknown) => {
       try {
-        const issue = detailsProvider.getActiveIssue();
-        if (!issue) {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
           await vscode.window.showInformationMessage('Select an issue first.');
           return;
         }
-        const picked = await promptForAiAssignmentOption(issue.key);
+        await assignIssueToMe(issueKey);
+      } catch (error) {
+        reportError(error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.assignToAi', async (arg?: unknown) => {
+      try {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+        const picked = await promptForAiAssignmentOption(issueKey);
         if (!picked) {
           return;
         }
 
-        await assignIssueToAi(issue.key, picked);
+        await assignIssueToAi(issueKey, picked);
       } catch (error) {
         reportError(error);
       }
@@ -1709,6 +1799,22 @@ export async function activate(
           error instanceof Error ? error.message : String(error)
         );
         reportError(error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.localPeerReview', async (arg?: unknown) => {
+      try {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+        const issue = await backendService.getIssue(issueKey);
+        await localPeerReviewPanel.open(issue);
+      } catch (error) {
+        await vscode.window.showErrorMessage(
+          `LPR failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+        reportError(error, 'localPeerReview');
       }
     }),
     vscode.commands.registerCommand('ticketManager.openSettings', async () => {

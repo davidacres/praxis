@@ -361,6 +361,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeAgentName', '');
   }
 
+  public getAiMentionName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.mentionName', '');
+  }
+
   public getConfiguredAiProviders(): AiProvider[] {
     const providers: AiProvider[] = [];
     if (this.getAiOpenaiApiKey().trim().length > 0) {

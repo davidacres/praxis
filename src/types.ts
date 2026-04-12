@@ -278,6 +278,8 @@ export interface BoardColumnPreferences {
   statusColors?: Record<string, string>;
   /** Board panel layout: Kanban columns vs execution sequence flow. */
   viewMode?: 'columns' | 'sequence';
+  /** Per-column card order for visual priority; key is status name, value is ordered issue keys. */
+  issueOrder?: Record<string, string[]>;
 }
 
 export interface ToolDescriptor {

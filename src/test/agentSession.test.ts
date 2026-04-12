@@ -31,9 +31,9 @@ suite('Agent Types & Defaults', () => {
   test('All valid AgentTaskStates are string literals', () => {
     const validStates: AgentTaskState[] = [
       'not_started', 'planning', 'awaiting_approval',
-      'executing', 'awaiting_input', 'completed', 'failed', 'aborted'
+      'executing', 'awaiting_input', 'paused', 'completed', 'failed', 'aborted'
     ];
-    assert.strictEqual(validStates.length, 8);
+    assert.strictEqual(validStates.length, 9);
     validStates.forEach(s => assert.strictEqual(typeof s, 'string'));
   });
 });
@@ -125,6 +125,17 @@ suite('AiSessionManager — Agent Sessions', () => {
     assert.strictEqual(manager.getAgentSession('X')!.completedAt, undefined);
   });
 
+  test('updateAgentState keeps paused sessions active and not completed', () => {
+    manager.createSession('AI-PAUSE', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createAgentSession('AI-PAUSE', 's1', taskDef);
+
+    manager.updateAgentState('AI-PAUSE', 'paused');
+
+    assert.strictEqual(manager.getAgentSession('AI-PAUSE')!.state, 'paused');
+    assert.strictEqual(manager.getAgentSession('AI-PAUSE')!.completedAt, undefined);
+    assert.strictEqual(manager.getSession('AI-PAUSE')?.status, 'active');
+  });
+
   test('updateAgentState is no-op for unknown key', () => {
     // Should not throw
     manager.updateAgentState('UNKNOWN', 'failed');
@@ -157,6 +168,39 @@ suite('AiSessionManager — Agent Sessions', () => {
 
     manager.setAgentPlan('X', '1. Read code\n2. Fix bug\n3. Test');
     assert.strictEqual(manager.getAgentSession('X')!.planText, '1. Read code\n2. Fix bug\n3. Test');
+  });
+
+  test('updateAgentOutput stores reasoning and response text', () => {
+    manager.createAgentSession('X', 's1', taskDef);
+
+    manager.updateAgentOutput('X', {
+      reasoningText: 'Think through the failure mode.',
+      responseText: 'I will update the parser and add a test.'
+    });
+
+    const record = manager.getAgentSession('X')!;
+    assert.strictEqual(record.reasoningText, 'Think through the failure mode.');
+    assert.strictEqual(record.responseText, 'I will update the parser and add a test.');
+  });
+
+  test('updateAgentOutput fires change events', () => {
+    manager.createAgentSession('X', 's1', taskDef);
+
+    let reasoningText: string | undefined;
+    let responseText: string | undefined;
+    const disposable = manager.onDidChangeAgentSession(record => {
+      reasoningText = record.reasoningText;
+      responseText = record.responseText;
+    });
+
+    manager.updateAgentOutput('X', {
+      reasoningText: 'Check the live delta stream.',
+      responseText: 'Streaming output is now visible.'
+    });
+
+    assert.strictEqual(reasoningText, 'Check the live delta stream.');
+    assert.strictEqual(responseText, 'Streaming output is now visible.');
+    disposable.dispose();
   });
 
   test('removeAgentSession deletes the record', () => {

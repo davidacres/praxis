@@ -299,6 +299,18 @@ export class BoardPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'reorderIssue') {
+      const issueKey = asString(message.issueKey);
+      const status = asString(message.status);
+      const beforeKey = asString(message.beforeKey) ?? undefined;
+      if (!issueKey || !status) {
+        return;
+      }
+
+      await this.handleReorderIssue(issueKey, status, beforeKey);
+      return;
+    }
+
     if (type === 'moveIssue') {
       const issueKey = asString(message.issueKey);
       const targetStatus = asString(message.targetStatus);
@@ -383,6 +395,43 @@ export class BoardPanelManager implements vscode.Disposable {
       const text = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(`Could not move ${issueKey}: ${text}`);
     }
+  }
+
+  private async handleReorderIssue(
+    issueKey: string,
+    status: string,
+    beforeKey?: string
+  ): Promise<void> {
+    if (!this.activeBoard || !this.boardDetails) {
+      return;
+    }
+
+    const display = this.getDisplayBoardDetails();
+    if (!display) {
+      return;
+    }
+
+    const column = display.columns.find(col => col.name === status);
+    if (!column) {
+      return;
+    }
+
+    const currentKeys = column.issues.map(issue => issue.key);
+    const filtered = currentKeys.filter(key => key !== issueKey);
+
+    if (beforeKey) {
+      const insertIndex = filtered.indexOf(beforeKey);
+      if (insertIndex >= 0) {
+        filtered.splice(insertIndex, 0, issueKey);
+      } else {
+        filtered.push(issueKey);
+      }
+    } else {
+      filtered.push(issueKey);
+    }
+
+    await this.boardColumnStore.setIssueOrder(this.activeBoard.id, status, filtered);
+    this.render();
   }
 
   private getDisplayBoardDetails(): BoardDetails | undefined {
@@ -546,6 +595,7 @@ export class BoardPanelManager implements vscode.Disposable {
     <style>
       :root {
         color-scheme: light dark;
+        --vscode-focusBorder: #2563eb;
       }
 
       html, body {
@@ -816,7 +866,7 @@ export class BoardPanelManager implements vscode.Disposable {
         width: 100%;
         padding: 12px;
         text-align: left;
-        border: 1px solid var(--vscode-panel-border);
+        border: 1px solid var(--vscode-focusBorder);
         border-radius: 8px;
         background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
         color: inherit;
@@ -908,6 +958,14 @@ export class BoardPanelManager implements vscode.Disposable {
         outline-offset: -2px;
         border-radius: 6px;
         background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+      }
+
+      .drop-indicator {
+        height: 2px;
+        background: var(--vscode-focusBorder);
+        border-radius: 1px;
+        flex-shrink: 0;
+        pointer-events: none;
       }
 
       .issue-key-btn {
@@ -1081,6 +1139,31 @@ export class BoardPanelManager implements vscode.Disposable {
       }
 
       let ignoreNextCardClick = false;
+
+      let dropIndicator = null;
+      function getDropIndicator() {
+        if (!dropIndicator) {
+          dropIndicator = document.createElement('div');
+          dropIndicator.className = 'drop-indicator';
+        }
+        return dropIndicator;
+      }
+      function removeDropIndicator() {
+        if (dropIndicator && dropIndicator.parentNode) {
+          dropIndicator.parentNode.removeChild(dropIndicator);
+        }
+      }
+      function getInsertBeforeCard(columnBody, y) {
+        const cards = [...columnBody.querySelectorAll('.issue-card:not(.dragging)')];
+        for (const card of cards) {
+          const rect = card.getBoundingClientRect();
+          if (y < rect.top + rect.height / 2) {
+            return card;
+          }
+        }
+        return null;
+      }
+
       for (const issueCard of document.querySelectorAll('.issue-card')) {
         issueCard.addEventListener('dragstart', event => {
           const key = issueCard.getAttribute('data-issue-key');
@@ -1092,6 +1175,7 @@ export class BoardPanelManager implements vscode.Disposable {
         });
         issueCard.addEventListener('dragend', () => {
           issueCard.classList.remove('dragging');
+          removeDropIndicator();
           for (const zone of document.querySelectorAll('.column-body')) {
             zone.classList.remove('drag-over');
           }
@@ -1120,27 +1204,55 @@ export class BoardPanelManager implements vscode.Disposable {
             event.dataTransfer.dropEffect = 'move';
           }
           dropZone.classList.add('drag-over');
+          const indicator = getDropIndicator();
+          const beforeCard = getInsertBeforeCard(dropZone, event.clientY);
+          if (beforeCard) {
+            dropZone.insertBefore(indicator, beforeCard);
+          } else {
+            dropZone.appendChild(indicator);
+          }
         });
         dropZone.addEventListener('dragleave', event => {
           if (!dropZone.contains(event.relatedTarget)) {
             dropZone.classList.remove('drag-over');
+            removeDropIndicator();
           }
         });
         dropZone.addEventListener('drop', event => {
           event.preventDefault();
           dropZone.classList.remove('drag-over');
+
           const column = dropZone.closest('.column');
           const targetStatus = column && column.getAttribute('data-column-status');
           const issueKey =
             (event.dataTransfer && event.dataTransfer.getData('text/plain')) || '';
           if (!issueKey || !targetStatus) {
+            removeDropIndicator();
             return;
           }
-          vscodeApi.postMessage({
-            type: 'moveIssue',
-            issueKey,
-            targetStatus
-          });
+
+          const beforeCard = getInsertBeforeCard(dropZone, event.clientY);
+          const beforeKey = beforeCard ? beforeCard.getAttribute('data-issue-key') : null;
+          removeDropIndicator();
+
+          const draggedCard = document.querySelector('.issue-card.dragging');
+          const sourceColumn = draggedCard && draggedCard.closest('.column');
+          const sourceStatus = sourceColumn && sourceColumn.getAttribute('data-column-status');
+
+          if (sourceStatus === targetStatus) {
+            vscodeApi.postMessage({
+              type: 'reorderIssue',
+              issueKey,
+              status: targetStatus,
+              beforeKey
+            });
+          } else {
+            vscodeApi.postMessage({
+              type: 'moveIssue',
+              issueKey,
+              targetStatus
+            });
+          }
         });
       }
     </script>

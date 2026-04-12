@@ -44,9 +44,23 @@ export class BoardColumnStore implements vscode.Disposable {
     if (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) {
       next.statusColors = { ...prefs.statusColors };
     }
+    if (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0) {
+      next.issueOrder = { ...prefs.issueOrder };
+    }
     map[boardId] = next;
     await this.context.workspaceState.update(STORAGE_KEY, map);
     this.onDidChangeEmitter.fire();
+  }
+
+  public async setIssueOrder(
+    boardId: string,
+    status: string,
+    orderedKeys: string[]
+  ): Promise<void> {
+    const prefs = this.getPreferences(boardId);
+    const issueOrder = { ...(prefs.issueOrder ?? {}) };
+    issueOrder[status] = orderedKeys;
+    await this.setPreferences(boardId, { ...prefs, issueOrder });
   }
 
   public async clearPreferences(boardId: string): Promise<void> {
