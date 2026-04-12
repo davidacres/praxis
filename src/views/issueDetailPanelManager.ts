@@ -124,17 +124,36 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.transitions = [];
     this.parentItems = [];
     this.parentItemsError = undefined;
-    this.loading = true;
+    this.loading = false;
     this.errorMessage = undefined;
-    this.ensurePanel(issueKey);
-    this.panel?.reveal(vscode.ViewColumn.Beside, false);
-    await this.refresh();
+
+    // Dispose any existing panel first
+    if (this.panel) {
+      const old = this.panel;
+      this.resetPanelState();
+      old.dispose();
+    }
+
+    // Fetch data before creating panel
+    await this.fetchData(issueKey);
+
+    // Create panel and set html synchronously — VS Code Insiders requires
+    // webview.html to be set immediately after panel creation.
+    this.createPanelWithHtml(issueKey);
   }
 
   public async refreshIfShowing(issueKey: string): Promise<void> {
-    if (this.activeIssueKey === issueKey && this.panel) {
-      await this.refresh();
+    if (this.activeIssueKey !== issueKey || !this.panel) {
+      return;
     }
+
+    await this.fetchData(issueKey);
+
+    // Dispose and recreate to ensure html is set synchronously after creation
+    const old = this.panel;
+    this.resetPanelState();
+    old.dispose();
+    this.createPanelWithHtml(issueKey);
   }
 
   public clear(): void {
@@ -157,60 +176,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     panel?.dispose();
   }
 
-  private ensurePanel(issueKey: string): void {
-    if (this.panel) {
-      if (this.panelIssueKey === issueKey) {
-        return;
-      }
-      const existingPanel = this.panel;
-      this.resetPanelState();
-      existingPanel.dispose();
-    }
-
-    this.panel = vscode.window.createWebviewPanel(
-      'ticketManager.issueDetailPanel',
-      issueKey,
-      vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true
-      }
-    );
-    this.panelIssueKey = issueKey;
-
-    // Set initial loading HTML once — do not set webview.html again until data arrives
-    const nonce = createNonce();
-    this.panel.webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Loading ${escapeHtml(issueKey)}</title>
-  <style>
-    body { margin: 0; padding: 24px; font-family: var(--vscode-font-family); color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); }
-  </style>
-</head>
-<body><h2>Loading ${escapeHtml(issueKey)}...</h2></body>
-</html>`;
-
-    this.panel.onDidDispose(
-      () => {
-        this.resetPanelState();
-      },
-      undefined,
-      []
-    );
-
-    this.panel.webview.onDidReceiveMessage(
-      message => {
-        void this.handleMessage(message);
-      },
-      undefined,
-      []
-    );
-  }
-
   private async handleMessage(message: unknown): Promise<void> {
     if (!isRecord(message)) {
       return;
@@ -218,7 +183,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
     const type = asString(message.type);
     if (type === 'refresh') {
-      await this.refresh();
+      if (this.activeIssueKey) {
+        await this.refreshIfShowing(this.activeIssueKey);
+      }
       return;
     }
 
@@ -290,12 +257,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
   }
 
-  private async refresh(): Promise<void> {
-    if (!this.activeIssueKey) {
-      return;
-    }
-
-    const issueKey = this.activeIssueKey;
+  private async fetchData(issueKey: string): Promise<void> {
     const generation = ++this.requestGeneration;
     this.loading = true;
     this.errorMessage = undefined;
@@ -349,50 +311,33 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.transitions = [];
       this.parentItems = [];
       this.parentItemsError = undefined;
-    } finally {
-      if (generation === this.requestGeneration) {
-        this.renderFull();
-      }
     }
   }
 
-  private renderFull(): void {
-    if (!this.panel) {
-      return;
-    }
-
+  private createPanelWithHtml(issueKey: string): void {
     const nonce = createNonce();
-    const issueKey = this.activeIssueKey?.trim() || 'Issue';
+    const panel = vscode.window.createWebviewPanel(
+      'ticketManager.issueDetailPanel',
+      issueKey,
+      vscode.ViewColumn.Beside,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true
+      }
+    );
 
-    // DEBUG: minimal HTML to isolate rendering issue
-    this.panel.webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Debug: ${escapeHtml(issueKey)}</title>
-  <style>
-    body {
-      margin: 0; padding: 24px;
-      font-family: var(--vscode-font-family);
-      color: var(--vscode-editor-foreground);
-      background: var(--vscode-editor-background);
-    }
-    h1 { color: var(--vscode-textLink-foreground); }
-    .info { margin: 16px 0; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <h1>Issue Detail Debug - ${escapeHtml(issueKey)}</h1>
-  <div class="info">
-    <p><strong>Loading:</strong> ${this.loading}</p>
-    <p><strong>Has details:</strong> ${Boolean(this.details)}</p>
-    <p><strong>Error:</strong> ${escapeHtml(this.errorMessage ?? 'none')}</p>
-    <p><strong>Rendered at:</strong> ${new Date().toISOString()}</p>
-  </div>
-</body>
-</html>`;
+    panel.webview.html = this.getHtml(nonce);
+
+    this.panel = panel;
+    this.panelIssueKey = issueKey;
+
+    panel.onDidDispose(() => {
+      this.resetPanelState();
+    }, undefined, []);
+
+    panel.webview.onDidReceiveMessage(message => {
+      void this.handleMessage(message);
+    }, undefined, []);
   }
 
   private resetPanelState(): void {

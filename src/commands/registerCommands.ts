@@ -49,7 +49,6 @@ interface CommandDependencies {
   detailsProvider: DetailsViewProvider;
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
-  testDetailPanel: { open(issueKey: string): void };
   newProjectWizardPanel: NewProjectWizardPanel;
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
@@ -1174,8 +1173,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await deps.detailsProvider.setIssue(full);
         deps.boardPanelManager.setSelectedIssueKey(key);
         await deps.revealIssueDetailsTree();
-        deps.testDetailPanel.open(key);
-        // await deps.issueDetailPanelManager.open(key);
+        await deps.issueDetailPanelManager.open(key);
       } catch (error) {
         reportCommandError(deps, 'issue-details', error);
         await vscode.window.showErrorMessage(

@@ -17,7 +17,8 @@
 8. [Commands Reference](#8-commands-reference)
 9. [Settings Reference](#9-settings-reference)
 10. [Keyboard Shortcuts](#10-keyboard-shortcuts)
-11. [Known Limitations](#11-known-limitations)
+11. [Development Guidelines](#11-development-guidelines)
+12. [Known Limitations](#12-known-limitations)
 
 ---
 
@@ -345,7 +346,8 @@ Configure AI providers via settings:
 | `ticketManager.ai.openaiApiKey` | string | `""` | OpenAI API key |
 | `ticketManager.ai.claudeApiKey` | string | `""` | Claude/Anthropic API key |
 | `ticketManager.ai.cursorCliPath` | string | `""` | Path to the Cursor CLI executable |
-| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable used by the Copilot SDK |
+| `ticketManager.ai.copilotEnabled` | boolean | `false` | Enable the GitHub Copilot SDK using the machine's existing Copilot authentication |
+| `ticketManager.ai.copilotCliPath` | string | `""` | Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless debugging a local Copilot installation |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider (`openai`, `claude`, `cursor-cli`, `copilot-cli`, `none`) |
 
 ### How to Assign
@@ -357,7 +359,8 @@ Configure AI providers via settings:
 
 ### Copilot Reviews and Comment Replies
 
-- Configure `ticketManager.ai.copilotCliPath` with a working `copilot` CLI installation.
+- Enable `ticketManager.ai.copilotEnabled` or use **Ticket Manager: Configure AI** and choose **GitHub Copilot SDK**.
+- Leave `ticketManager.ai.copilotCliPath` empty in normal use. It is only a legacy compatibility override for debugging unusual local Copilot runtime setups.
 - The **Review with AI** action can now use Copilot in addition to OpenAI and Claude.
 - When you add a comment from this extension and include `@copilot`, the extension posts your comment first, then adds a Copilot reply as a follow-up comment.
 - `@copilot` replies are only triggered for comments submitted through this extension UI. Existing Jira comments and comments added outside the extension are not watched yet.
@@ -374,6 +377,8 @@ Each AI assignment records:
 | `status` | `active`, `completed`, or `failed` |
 
 Sessions are persisted in VS Code workspace state.
+
+For GitHub Copilot SDK sessions, Ticket Manager creates real persistent Copilot sessions so they can be resumed later. That means they may also appear in Copilot history. A standalone visible console window is not intended as part of normal operation.
 
 ### Visual Indicators
 
@@ -620,7 +625,8 @@ All settings are under the `ticketManager` namespace.
 | `ticketManager.ai.openaiApiKey` | string | `""` | OpenAI API key for AI agent assignment |
 | `ticketManager.ai.claudeApiKey` | string | `""` | Claude/Anthropic API key for AI agent assignment |
 | `ticketManager.ai.cursorCliPath` | string | `""` | Path to the Cursor CLI executable |
-| `ticketManager.ai.copilotCliPath` | string | `""` | Path to the Copilot CLI executable used by the Copilot SDK |
+| `ticketManager.ai.copilotEnabled` | boolean | `false` | Enable the GitHub Copilot SDK using existing machine auth |
+| `ticketManager.ai.copilotCliPath` | string | `""` | Legacy compatibility override for the runtime used by the GitHub Copilot SDK |
 | `ticketManager.ai.defaultProvider` | enum | `"none"` | Default AI provider: `openai`, `claude`, `cursor-cli`, `copilot-cli`, `none` |
 
 ---
@@ -637,13 +643,53 @@ You can bind any Ticket Manager command to a custom shortcut via **File → Pref
 
 ---
 
-## 11. Known Limitations
+## 11. Development Guidelines
+
+### Webview Panel Creation (CRITICAL)
+
+VS Code Insiders requires `panel.webview.html` to be set **synchronously** — in the same
+execution block — immediately after `createWebviewPanel()`. Any `await` between panel
+creation and the html assignment will cause the webview to render blank in VS Code Insiders
+(standard VS Code is more forgiving but the same pattern should always be followed).
+
+**Wrong — blank in Insiders:**
+```typescript
+const panel = vscode.window.createWebviewPanel(...);
+await fetchData();              // async gap breaks rendering
+panel.webview.html = getHtml(); // too late — blank forever
+```
+
+**Correct:**
+```typescript
+await fetchData();              // do all async work first
+const panel = vscode.window.createWebviewPanel(...);
+panel.webview.html = getHtml(); // set immediately after creation
+```
+
+**Refreshing panels:** To update a panel with new data, dispose the existing panel and
+create a new one rather than setting `webview.html` on an existing panel after async work.
+See `IssueDetailPanelManager.createPanelWithHtml()` and `refreshIfShowing()` for the
+reference implementation.
+
+### Content Security Policy
+
+All webview panels and sidebar views should use this CSP pattern:
+```html
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+```
+- Use `<style>` **without** a nonce attribute
+- Use `<script nonce="${nonce}">` for all script blocks
+
+---
+
+## 12. Known Limitations
 
 | Area | Limitation |
 |------|------------|
 | **GitHub backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitHub mode will not load issues or boards. |
 | **GitLab backend** | Configuration UI and settings are ready, but the backend service is not yet implemented. Selecting GitLab mode will not load issues or boards. |
-| **AI agent assignment** | AI session tracking is still local to VS Code workspace state. Copilot reviews and in-app `@copilot` replies are supported, but external ticket comments are not monitored yet. |
+| **AI agent assignment** | AI session tracking is still local to VS Code workspace state. Copilot reviews and in-app `@copilot` replies are supported, but external ticket comments are not monitored yet. Persistent Copilot sessions may also appear in Copilot history because the SDK creates real resumable sessions. |
 | **New Project wizard** | Preview feature, disabled by default. AI review uses mock data in the current implementation. |
 | **File mode** | Issues are stored in a single JSONC file. Very large plan files may affect performance. |
 | **Board drag-and-drop** | Transitions are subject to the backend's workflow rules. Some transitions may be rejected if the backend enforces constraints. |

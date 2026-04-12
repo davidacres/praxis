@@ -35,7 +35,6 @@ import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
-import { TestDetailPanel } from './views/testDetailPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
@@ -299,12 +298,10 @@ export async function activate(
   let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
   let activeSessionsSidebarViewProvider: ActiveSessionsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
-  const testDetailPanel = new TestDetailPanel();
-  context.subscriptions.push(testDetailPanel);
   const boardPanelManager = new BoardPanelManager(
     backendService,
     async issue => {
-      await selectIssue(issue, { openFullPanel: true });
+      await selectIssue(issue);
     },
     async () => {
       await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
@@ -600,8 +597,7 @@ export async function activate(
     }
 
     if (options?.openFullPanel) {
-      testDetailPanel.open(issue.key);
-      // await issueDetailPanelManager.open(issue.key);
+      await issueDetailPanelManager.open(issue.key);
       await revealIssueDetailsInSidebar({ focus: false });
     } else {
       await revealIssueDetailsInSidebar({ focus: true });
@@ -1425,7 +1421,6 @@ export async function activate(
     await issueDetailPanelManager.refreshIfShowing(issueKey);
 
     if (options?.openFullPanel) {
-      testDetailPanel.open(issueKey);
       await issueDetailPanelManager.open(issueKey);
       await revealIssueDetailsInSidebar({ focus: false });
     }
@@ -1752,7 +1747,6 @@ export async function activate(
       detailsProvider,
       boardPanelManager,
       issueDetailPanelManager,
-      testDetailPanel,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
       ensureFilePlanConfigured,
       output: outputChannel,
