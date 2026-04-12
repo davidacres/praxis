@@ -116,6 +116,15 @@ suite('AiSessionManager — Agent Sessions', () => {
     assert.ok(manager.getAgentSession('X')!.completedAt);
   });
 
+  test('updateAgentState clears completedAt when returning to an active state', () => {
+    manager.createAgentSession('X', 's1', taskDef);
+    manager.updateAgentState('X', 'completed');
+    assert.ok(manager.getAgentSession('X')!.completedAt);
+
+    manager.updateAgentState('X', 'executing');
+    assert.strictEqual(manager.getAgentSession('X')!.completedAt, undefined);
+  });
+
   test('updateAgentState is no-op for unknown key', () => {
     // Should not throw
     manager.updateAgentState('UNKNOWN', 'failed');

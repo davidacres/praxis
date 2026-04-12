@@ -111,7 +111,9 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
   public constructor(
     private readonly sessionManager: AiSessionManager,
     private readonly agentService: CopilotAgentService,
-    private readonly onAbandonSession: (issueKey: string) => Promise<void>
+    private readonly onAbandonSession: (issueKey: string) => Promise<void>,
+    private readonly onResumeSession: (issueKey: string) => Promise<void>,
+    private readonly onStartNewSession: (issueKey: string) => Promise<void>
   ) {
     this.disposables.push(
       this.sessionManager.onDidChangeSession(({ issueKey }) => {
@@ -133,6 +135,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
   public open(issueKey: string): void {
     const existing = this.panels.get(issueKey);
     if (existing) {
+      this.renderFull(existing, issueKey);
       existing.reveal(vscode.ViewColumn.Active);
       return;
     }
@@ -200,12 +203,21 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         await this.onAbandonSession(issueKey);
         break;
       }
+      case 'resumeSession': {
+        await this.onResumeSession(issueKey);
+        break;
+      }
+      case 'startNewSession': {
+        await this.onStartNewSession(issueKey);
+        break;
+      }
     }
   }
 
   private updatePanel(panel: vscode.WebviewPanel, issueKey: string): void {
     const assignment = this.sessionManager.getSession(issueKey);
     const record = this.sessionManager.getAgentSession(issueKey);
+    const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
     if (!assignment && !record) {
       this.renderFull(panel, issueKey);
       return;
@@ -221,7 +233,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       events: record.events,
       planText: record.planText,
       stepCount: record.stepCount,
-      hasAgentSession: true
+      hasAgentSession: hasLiveAgentSession
     });
   }
 
@@ -246,12 +258,14 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const assignmentLabel = resolveAssignmentLabel(assignment, record);
     const sessionId = assignment?.sessionId ?? record?.sessionId ?? issueKey;
     const startedAt = assignment?.assignedAt ?? record?.startedAt;
-    const hasLiveAgentSession = Boolean(record);
+    const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
+    const supportsCopilotSession = Boolean(record) || assignment?.provider === 'copilot-cli';
     const maxSteps = Number(task?.maxSteps ?? 50);
     const isTerminal = record ? this.isTerminal(record.state) : assignment?.status !== 'active';
     const activityFeed = record ? this.renderEvents(record.events) : '';
-    const liveSessionSection = hasLiveAgentSession
-      ? `<details class="card" open>
+    const liveSessionSection = record
+      ? `${hasLiveAgentSession ? '' : `<div class="card"><h3>Session paused</h3><div class="field">This session is not currently connected to a live agent stream. You can review the saved activity below or resume the session to continue in real time.</div></div>`}
+        <details class="card" open>
           <summary>Task Definition</summary>
           <div class="field"><strong>Goal:</strong> ${escapeHtml(task?.goal ?? '—')}</div>
           <div class="field"><strong>Scope:</strong> ${escapeHtml(task?.scope ?? '—')}</div>
@@ -259,15 +273,15 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
           ${task?.nonGoals?.length ? `<div class="field"><strong>Non-goals:</strong> ${task.nonGoals.map(goal => escapeHtml(goal)).join(', ')}</div>` : ''}
         </details>
 
-        <div id="plan-section" class="plan-section" style="${record?.planText ? '' : 'display:none'}">
+        <div id="plan-section" class="plan-section" style="${record.planText ? '' : 'display:none'}">
           <h3>Plan</h3>
-          <div id="plan-content" class="plan-content">${record?.planText ? escapeHtml(record.planText) : ''}</div>
+          <div id="plan-content" class="plan-content">${record.planText ? escapeHtml(record.planText) : ''}</div>
         </div>
 
         <h3>Activity Feed</h3>
         <div id="activity-feed">${activityFeed}</div>
 
-        <div id="input-area" class="input-area ${record?.state === 'awaiting_input' ? 'visible' : ''}">
+        <div id="input-area" class="input-area ${hasLiveAgentSession && record.state === 'awaiting_input' ? 'visible' : ''}">
           <h3>Agent input requested</h3>
           <textarea id="user-response" placeholder="Type your response..."></textarea>
           <div class="btn-row">
@@ -275,7 +289,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
           </div>
         </div>
 
-        <div id="permission-area" class="input-area ${record?.state === 'awaiting_approval' ? 'visible' : ''}">
+        <div id="permission-area" class="input-area ${hasLiveAgentSession && record.state === 'awaiting_approval' ? 'visible' : ''}">
           <h3>Permission Required</h3>
           <p id="permission-desc" class="supporting-text">The agent is requesting permission to proceed.</p>
           <div class="btn-row">
@@ -285,8 +299,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
           </div>
         </div>`
       : `<div class="card">
-          <h3>No live agent activity</h3>
-          <div class="field">This AI assignment does not currently have a running agent event stream. If you delegate the issue to Copilot, live planning and execution events will appear here.</div>
+          <h3>${supportsCopilotSession ? 'No live agent activity yet' : 'Assignment-only session'}</h3>
+          <div class="field">${supportsCopilotSession
+            ? 'This ticket is assigned to AI, but no live GitHub Copilot SDK session is currently attached. Start a new session to see real-time planning and execution details here.'
+            : `This ticket is assigned to ${escapeHtml(assignmentLabel)}, but live streaming session details are currently available only for GitHub Copilot SDK sessions.`}</div>
+          ${supportsCopilotSession ? `<div class="btn-row"><button id="empty-start-new-btn" class="btn btn-secondary">Start New Session</button></div>` : ''}
         </div>`;
 
     return `<!DOCTYPE html>
@@ -334,6 +351,13 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     .header-main {
       flex: 1;
       min-width: 0;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .header-title {
       font-size: 16px;
@@ -483,7 +507,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     </div>
     <span id="state-badge" class="state-badge">${statusInfo.icon} ${escapeHtml(statusInfo.label)}</span>
     <span id="step-counter" class="step-counter">${hasLiveAgentSession ? `Steps: ${record?.stepCount ?? 0}/${maxSteps}` : `Assigned: ${escapeHtml(formatDate(startedAt))}`}</span>
-    <button id="abort-btn" class="abort-btn" ${isTerminal ? 'disabled' : ''}>Abandon Session</button>
+    <div class="header-actions">
+      ${record && !hasLiveAgentSession ? '<button id="resume-btn" class="btn btn-secondary">Resume Session</button>' : ''}
+      ${supportsCopilotSession ? '<button id="start-new-btn" class="btn btn-secondary">Start New Session</button>' : ''}
+      <button id="abort-btn" class="abort-btn" ${isTerminal ? 'disabled' : ''}>Abandon Session</button>
+    </div>
   </div>
 
   <div class="card">
@@ -504,6 +532,9 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const statusLabelEl = document.getElementById('status-label');
     const stepCounterEl = document.getElementById('step-counter');
     const abortBtn = document.getElementById('abort-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    const startNewBtn = document.getElementById('start-new-btn');
+    const emptyStartNewBtn = document.getElementById('empty-start-new-btn');
     const inputArea = document.getElementById('input-area');
     const permArea = document.getElementById('permission-area');
     const sendBtn = document.getElementById('send-input');
@@ -586,6 +617,24 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     if (abortBtn) {
       abortBtn.addEventListener('click', () => {
         vscode.postMessage({ type: 'abort' });
+      });
+    }
+
+    if (resumeBtn) {
+      resumeBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'resumeSession' });
+      });
+    }
+
+    if (startNewBtn) {
+      startNewBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'startNewSession' });
+      });
+    }
+
+    if (emptyStartNewBtn) {
+      emptyStartNewBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'startNewSession' });
       });
     }
 
