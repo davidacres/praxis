@@ -35,6 +35,7 @@ import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
+import { TestDetailPanel } from './views/testDetailPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
@@ -42,10 +43,11 @@ import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
-import { CopilotAgentService } from './ai/copilotAgentService';
+import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
 import type { AgentTaskDefinition } from './ai/agentTypes';
+import { resolveCopilotCliOverride } from './ai/copilotSdkRuntime';
 import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
@@ -95,13 +97,20 @@ function extractCopilotRequest(body: string): string | undefined {
   return cleaned || 'Please help with this ticket.';
 }
 
+let deactivateHandler: (() => Promise<void>) | undefined;
+
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
-  const copilotAgentService = new CopilotAgentService(aiSessionManager, outputChannel);
+  const copilotAgentLogger: CopilotAgentLogger = {
+    appendLine(message: string): void {
+      outputChannel.appendLine(message);
+    }
+  };
+  const copilotAgentService = new CopilotAgentService(aiSessionManager, copilotAgentLogger);
   const copilotSessionPanelManager = new CopilotSessionPanelManager(
     aiSessionManager,
     copilotAgentService,
@@ -123,8 +132,16 @@ export async function activate(
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
-  const ticketManagerStatusBar = new TicketManagerStatusBar(configStore, backendService);
+  const ticketManagerStatusBar = new TicketManagerStatusBar(
+    configStore,
+    backendService,
+    aiSessionManager
+  );
   const workingDirectory = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  let suppressCloseWarning = false;
+  let lastCloseWarningSignature: string | undefined;
+  const permissionPromptSignatures = new Map<string, string>();
+  const permissionPromptInFlight = new Set<string>();
 
   function reportError(error: unknown, scope?: string): void {
     logError(outputChannel, error, scope);
@@ -133,6 +150,130 @@ export async function activate(
 
   function isCopilotSdkConfigured(): boolean {
     return configStore.getConfiguredAiProviders().includes('copilot-cli');
+  }
+
+  async function revealActiveSessionsView(): Promise<void> {
+    try {
+      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
+      await vscode.commands.executeCommand('ticketManager.activeSessions.focus');
+    } catch {
+      // View focus can fail while the workbench is closing or not ready yet.
+    }
+  }
+
+  function getLatestPermissionRequestSummary(issueKey: string): string | undefined {
+    const record = aiSessionManager.getAgentSession(issueKey);
+    if (!record) {
+      return undefined;
+    }
+
+    for (let index = record.events.length - 1; index >= 0; index -= 1) {
+      const event = record.events[index];
+      if (event.type === 'permission_requested') {
+        return event.summary;
+      }
+    }
+    return undefined;
+  }
+
+  function buildPermissionPromptSnapshot(issueKey: string): {
+    signature?: string;
+    detail?: string;
+  } {
+    const descriptions = copilotAgentService
+      .getPendingPermissionDescriptions(issueKey)
+      .filter(description => description.trim().length > 0);
+    if (descriptions.length > 0) {
+      const additionalCount = descriptions.length - 1;
+      return {
+        signature: descriptions.join('\n'),
+        detail:
+          additionalCount > 0
+            ? `${descriptions[0]}\n\n${additionalCount} more queued request${additionalCount === 1 ? '' : 's'} pending.`
+            : descriptions[0]
+      };
+    }
+
+    const fallback = getLatestPermissionRequestSummary(issueKey);
+    return fallback
+      ? {
+          signature: `fallback:${fallback}`,
+          detail: fallback
+        }
+      : {};
+  }
+
+  async function openAiSession(issueKey: string): Promise<void> {
+    activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
+    copilotSessionPanelManager.open(issueKey);
+  }
+
+  function clearPermissionPromptTracking(issueKey: string): void {
+    permissionPromptSignatures.delete(issueKey);
+    permissionPromptInFlight.delete(issueKey);
+  }
+
+  async function promptForPendingPermission(issueKey: string): Promise<void> {
+    const record = aiSessionManager.getAgentSession(issueKey);
+    if (!record || record.state !== 'awaiting_approval' || !copilotAgentService.hasActiveTask(issueKey)) {
+      clearPermissionPromptTracking(issueKey);
+      return;
+    }
+
+    const snapshot = buildPermissionPromptSnapshot(issueKey);
+    if (
+      !snapshot.signature ||
+      permissionPromptInFlight.has(issueKey) ||
+      permissionPromptSignatures.get(issueKey) === snapshot.signature
+    ) {
+      return;
+    }
+
+    permissionPromptSignatures.set(issueKey, snapshot.signature);
+    permissionPromptInFlight.add(issueKey);
+
+    try {
+      const selection = await vscode.window.showWarningMessage(
+        `${issueKey} is waiting for permission.`,
+        {
+          modal: true,
+          detail: snapshot.detail
+            ? `${snapshot.detail}\n\nChoose how Ticket Manager should respond.`
+            : 'The agent is requesting permission to proceed.'
+        },
+        'Approve Once',
+        'Approve for Task',
+        'Deny',
+        'Open Session'
+      );
+
+      if (selection === 'Approve Once') {
+        copilotAgentService.respondToPermission(issueKey, 'allow_once');
+      } else if (selection === 'Approve for Task') {
+        copilotAgentService.respondToPermission(issueKey, 'allow_always');
+      } else if (selection === 'Deny') {
+        copilotAgentService.respondToPermission(issueKey, 'deny');
+      } else if (selection === 'Open Session') {
+        await openAiSession(issueKey);
+      }
+    } finally {
+      permissionPromptInFlight.delete(issueKey);
+      const latestRecord = aiSessionManager.getAgentSession(issueKey);
+      if (latestRecord?.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(issueKey)) {
+        void promptForPendingPermission(issueKey);
+      }
+    }
+  }
+
+  function getCopilotCliPathOverride(options?: { showWarning?: boolean }): string | undefined {
+    const { cliPath, warning } = resolveCopilotCliOverride(configStore.getAiCopilotCliPath());
+    if (warning) {
+      outputChannel.appendLine(`[Copilot SDK] ${warning}`);
+      if (options?.showWarning) {
+        void vscode.window.showWarningMessage(warning);
+      }
+    }
+    return cliPath;
   }
 
   // Set mode context early so when-clauses on views evaluate correctly
@@ -158,10 +299,12 @@ export async function activate(
   let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
   let activeSessionsSidebarViewProvider: ActiveSessionsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
+  const testDetailPanel = new TestDetailPanel();
+  context.subscriptions.push(testDetailPanel);
   const boardPanelManager = new BoardPanelManager(
     backendService,
     async issue => {
-      await selectIssue(issue);
+      await selectIssue(issue, { openFullPanel: true });
     },
     async () => {
       await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
@@ -209,6 +352,48 @@ export async function activate(
     boardColumnStore,
     boardColumnConfigPanel,
     newProjectWizardPanel,
+    aiSessionManager.onDidChangeAgentSession(record => {
+      if (record.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(record.issueKey)) {
+        void promptForPendingPermission(record.issueKey);
+        return;
+      }
+
+      clearPermissionPromptTracking(record.issueKey);
+    }),
+    vscode.window.onDidChangeWindowState(windowState => {
+      if (windowState.focused) {
+        return;
+      }
+
+      const activeIssueKeys = copilotAgentService.getActiveTaskIssueKeys().sort();
+      if (activeIssueKeys.length === 0 || suppressCloseWarning) {
+        if (activeIssueKeys.length === 0) {
+          lastCloseWarningSignature = undefined;
+        }
+        return;
+      }
+
+      const signature = activeIssueKeys.join('|');
+      if (signature === lastCloseWarningSignature) {
+        return;
+      }
+      lastCloseWarningSignature = signature;
+
+      const sessionSummary = activeIssueKeys.length === 1
+        ? `${activeIssueKeys[0]} has an active AI session`
+        : `${activeIssueKeys.length} active AI sessions are running`;
+      void vscode.window.showWarningMessage(
+        `${sessionSummary}. Closing VS Code will pause them so you can resume later.`,
+        'Show Sessions',
+        'Do Not Warn Again'
+      ).then(selection => {
+        if (selection === 'Show Sessions') {
+          void revealActiveSessionsView();
+        } else if (selection === 'Do Not Warn Again') {
+          suppressCloseWarning = true;
+        }
+      });
+    }),
     boardColumnStore.onDidChange(() => {
       boardPanelManager.refreshColumnLayout();
     })
@@ -415,7 +600,8 @@ export async function activate(
     }
 
     if (options?.openFullPanel) {
-      await issueDetailPanelManager.open(issue.key);
+      testDetailPanel.open(issue.key);
+      // await issueDetailPanelManager.open(issue.key);
       await revealIssueDetailsInSidebar({ focus: false });
     } else {
       await revealIssueDetailsInSidebar({ focus: true });
@@ -788,7 +974,7 @@ export async function activate(
     await backendService.addComment(issueKey, body);
     const copilotRequest = extractCopilotRequest(body);
     if (copilotRequest) {
-      const cliPath = configStore.getAiCopilotCliPath().trim();
+      const cliPath = getCopilotCliPathOverride();
       if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
           'Comment added, but GitHub Copilot SDK is not configured for @copilot replies. Run Ticket Manager: Configure AI.'
@@ -1105,13 +1291,15 @@ export async function activate(
       }
 
       await copilotAgentService.startTask(issue, taskDefinition, {
-        cliPath: configStore.getAiCopilotCliPath().trim(),
+        cliPath: getCopilotCliPathOverride({ showWarning: true }),
         workingDirectory
       });
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       await activeSessionsSidebarViewProvider?.refresh();
       copilotSessionPanelManager.open(issueKey);
-      void vscode.window.showInformationMessage(`Copilot session started for ${issueKey}.`);
+      void vscode.window.showInformationMessage(
+        `Copilot session started for ${issueKey}. Closing VS Code will pause it so you can resume later.`
+      );
     } catch (error) {
       reportError(error, 'startNewCopilotSession');
       void vscode.window.showErrorMessage(
@@ -1142,13 +1330,15 @@ export async function activate(
 
     try {
       await copilotAgentService.resumeTask(issueKey, {
-        cliPath: configStore.getAiCopilotCliPath().trim(),
+        cliPath: getCopilotCliPathOverride({ showWarning: true }),
         workingDirectory
       });
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       await activeSessionsSidebarViewProvider?.refresh();
       copilotSessionPanelManager.open(issueKey);
-      void vscode.window.showInformationMessage(`Copilot session resumed for ${issueKey}.`);
+      void vscode.window.showInformationMessage(
+        `Copilot session resumed for ${issueKey}. Closing VS Code will pause it so you can resume later.`
+      );
     } catch (error) {
       reportError(error, 'resumeCopilotSession');
       void vscode.window.showErrorMessage(
@@ -1195,7 +1385,7 @@ export async function activate(
     } else if (chosen.provider === 'copilot-cli') {
       reviewText = await reviewTicketWithCopilot(
         issue,
-        configStore.getAiCopilotCliPath(),
+        getCopilotCliPathOverride(),
         chosen.agentName ?? AI_PROVIDER_LABELS['copilot-cli'],
         workingDirectory
       );
@@ -1235,6 +1425,7 @@ export async function activate(
     await issueDetailPanelManager.refreshIfShowing(issueKey);
 
     if (options?.openFullPanel) {
+      testDetailPanel.open(issueKey);
       await issueDetailPanelManager.open(issueKey);
       await revealIssueDetailsInSidebar({ focus: false });
     }
@@ -1561,6 +1752,7 @@ export async function activate(
       detailsProvider,
       boardPanelManager,
       issueDetailPanelManager,
+      testDetailPanel,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
       ensureFilePlanConfigured,
       output: outputChannel,
@@ -1676,6 +1868,12 @@ export async function activate(
     reportError(error);
   }
 
+  deactivateHandler = async () => {
+    await copilotAgentService.pauseAllTasks(
+      'Session paused because VS Code is closing. Reopen VS Code and resume to continue.'
+    );
+  };
+
   return {
     refresh: refreshAndRestoreSelection,
     backendService,
@@ -1694,5 +1892,7 @@ export async function activate(
 }
 
 export async function deactivate(): Promise<void> {
-  // Disposal is handled through VS Code subscriptions.
+  const handler = deactivateHandler;
+  deactivateHandler = undefined;
+  await handler?.();
 }

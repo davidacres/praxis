@@ -33,6 +33,7 @@ import {
   isAllowedParentType
 } from '../issues/issueHierarchy';
 import type { CopilotAgentService } from '../ai/copilotAgentService';
+import { resolveCopilotCliOverride } from '../ai/copilotSdkRuntime';
 import type { CopilotSessionPanelManager } from '../views/copilotSessionPanel';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 
@@ -48,6 +49,7 @@ interface CommandDependencies {
   detailsProvider: DetailsViewProvider;
   boardPanelManager: BoardPanelManager;
   issueDetailPanelManager: IssueDetailPanelManager;
+  testDetailPanel: { open(issueKey: string): void };
   newProjectWizardPanel: NewProjectWizardPanel;
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
@@ -309,6 +311,20 @@ function reportCommandError(
   }
 
   deps.output.appendLine(`[${scope}] ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+}
+
+function getCopilotCliPathOverride(
+  deps: Pick<CommandDependencies, 'configStore' | 'output'>,
+  options?: { showWarning?: boolean }
+): string | undefined {
+  const { cliPath, warning } = resolveCopilotCliOverride(deps.configStore.getAiCopilotCliPath());
+  if (warning) {
+    deps.output.appendLine(`[Copilot SDK] ${warning}`);
+    if (options?.showWarning) {
+      void vscode.window.showWarningMessage(warning);
+    }
+  }
+  return cliPath;
 }
 
 function unique(values: string[]): string[] {
@@ -1158,7 +1174,8 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await deps.detailsProvider.setIssue(full);
         deps.boardPanelManager.setSelectedIssueKey(key);
         await deps.revealIssueDetailsTree();
-        await deps.issueDetailPanelManager.open(key);
+        deps.testDetailPanel.open(key);
+        // await deps.issueDetailPanelManager.open(key);
       } catch (error) {
         reportCommandError(deps, 'issue-details', error);
         await vscode.window.showErrorMessage(
@@ -1265,7 +1282,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         return;
       }
 
-      const cliPath = deps.configStore.getAiCopilotCliPath().trim();
+      const cliPath = getCopilotCliPathOverride(deps, { showWarning: true });
       if (!deps.configStore.getConfiguredAiProviders().includes('copilot-cli')) {
         vscode.window.showErrorMessage(
           'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
