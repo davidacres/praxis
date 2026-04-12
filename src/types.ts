@@ -1,5 +1,12 @@
 export type ConnectionType = 'stdio' | 'http';
-export type BackendMode = 'jira' | 'demo' | 'file' | 'github' | 'gitlab' | 'livefolder';
+export type BackendMode =
+  | 'jira'
+  | 'demo'
+  | 'file'
+  | 'github'
+  | 'gitlab'
+  | 'livefolder'
+  | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
 export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
@@ -160,6 +167,8 @@ export interface UpdateBoardInput {
 export interface CreateBoardInput {
   name: string;
   projectKey: string;
+  projectName?: string;
+  liveFolderPath?: string;
 }
 
 export interface IssueFilters {

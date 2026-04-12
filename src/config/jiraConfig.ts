@@ -699,6 +699,10 @@ export class AppConfigStore {
       return folderPath ? `Live Folder (${folderPath})` : 'Live Folder (not configured)';
     }
 
+    if (this.getEffectiveBackendMode() === 'userworkspace') {
+      return 'User Workspace';
+    }
+
     const resolved = await this.getResolvedConnectionConfig(context);
     if (!resolved) {
       return 'Not configured';

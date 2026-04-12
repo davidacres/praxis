@@ -23,17 +23,22 @@ import { DemoService } from '../demo/demoService';
 import { FilePlanService } from '../file/filePlanService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService } from '../livefolder/liveFolderService';
+import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
+import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
 
 export class BackendRouter implements IssueTrackerService {
   private activeMode?: BackendMode;
   private activeService?: IssueTrackerService;
+  private readonly userWorkspaceStore: UserWorkspaceStore;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly configStore: AppConfigStore,
     private readonly output: vscode.OutputChannel
-  ) {}
+  ) {
+    this.userWorkspaceStore = new UserWorkspaceStore(context.globalState);
+  }
 
   public get mode(): BackendMode {
     return this.configStore.getEffectiveBackendMode();
@@ -162,9 +167,11 @@ export class BackendRouter implements IssueTrackerService {
         ? new DemoService(this.configStore)
         : configuredMode === 'file'
           ? new FilePlanService(this.configStore)
-        : configuredMode === 'livefolder'
-          ? new LiveFolderService(this.configStore)
-        : new JiraService(this.context, this.configStore, this.output);
+          : configuredMode === 'livefolder'
+            ? new LiveFolderService(this.configStore)
+            : configuredMode === 'userworkspace'
+              ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
+              : new JiraService(this.context, this.configStore, this.output);
     return this.activeService;
   }
 

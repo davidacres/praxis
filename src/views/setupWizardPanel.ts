@@ -110,6 +110,23 @@ const MODE_OPTIONS: ModeOption[] = [
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
 
+function getModeOptions(): ModeOption[] {
+  if (vscode.workspace.workspaceFolders?.length) {
+    return MODE_OPTIONS;
+  }
+  return [
+    MODE_OPTIONS[0],
+    MODE_OPTIONS[1],
+    {
+      mode: 'userworkspace',
+      icon: '🧰',
+      title: 'Create User Workspace',
+      description: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later'
+    },
+    ...MODE_OPTIONS.slice(2)
+  ];
+}
+
 /* ------------------------------------------------------------------ */
 /*  Panel                                                             */
 /* ------------------------------------------------------------------ */
@@ -262,9 +279,11 @@ export class SetupWizardPanel {
     const savedMode = this.state.selectedMode;
 
     const config = vscode.workspace.getConfiguration('ticketManager');
-    const target = vscode.workspace.workspaceFolders?.length
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
+    const target = this.state.selectedMode === 'userworkspace'
+      ? vscode.ConfigurationTarget.Global
+      : vscode.workspace.workspaceFolders?.length
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
 
     if (this.state.selectedMode === 'livefolder') {
       const { resolvedPath } = await this.resolveLiveFolderPath(this.state.liveFolderPath);
@@ -282,6 +301,9 @@ export class SetupWizardPanel {
         await config.update('liveFolderPath', this.state.liveFolderPath, target);
         await config.update('liveFolderProjectKey', this.state.liveFolderProjectKey, target);
         await config.update('liveFolderProjectName', this.state.liveFolderProjectName, target);
+        break;
+
+      case 'userworkspace':
         break;
 
       case 'github':
@@ -324,10 +346,12 @@ export class SetupWizardPanel {
       `${
         savedMode === 'livefolder'
           ? 'Live Folder'
+          : savedMode === 'userworkspace'
+            ? 'User Workspace'
           : savedMode === 'file'
             ? 'File'
             : savedMode.toUpperCase()
-      } configuration saved. ${describeAiConfigurationResult(aiResult)}`
+      } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
   }
 
@@ -392,7 +416,7 @@ export class SetupWizardPanel {
   /* ---------------------------------------------------------------- */
 
   private renderStep0(): string {
-    const cards = MODE_OPTIONS.map(opt => `
+    const cards = getModeOptions().map(opt => `
       <div class="mode-card" data-action="selectMode" data-mode="${esc(opt.mode)}">
         <span class="mode-icon">${opt.icon}</span>
         <span class="mode-title">${esc(opt.title)}</span>
@@ -422,6 +446,9 @@ export class SetupWizardPanel {
         break;
       case 'livefolder':
         formHtml = this.renderLiveFolderForm();
+        break;
+      case 'userworkspace':
+        formHtml = this.renderUserWorkspaceForm();
         break;
       case 'github':
         formHtml = this.renderGithubForm();
@@ -494,6 +521,11 @@ export class SetupWizardPanel {
                value="${esc(this.state.liveFolderProjectName)}"
                placeholder="e.g. ExampleHIS Integration" />
       </div>`;
+  }
+
+  private renderUserWorkspaceForm(): string {
+    return `
+      <p class="form-help">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
   }
 
   /* -- GitHub form ------------------------------------------------- */

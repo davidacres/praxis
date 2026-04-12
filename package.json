@@ -647,7 +647,8 @@
             "file",
             "github",
             "gitlab",
-            "livefolder"
+            "livefolder",
+            "userworkspace"
           ],
           "enumItemLabels": [
             "Jira Connected",
@@ -655,10 +656,11 @@
             "Plan File",
             "GitHub",
             "GitLab",
-            "Live Folder"
+            "Live Folder",
+            "User Workspace"
           ],
           "scope": "window",
-          "description": "Choose whether the app uses Jira Connected, Demo, File, or Live Folder mode."
+          "description": "Choose whether the app uses Jira Connected, Demo, File, Live Folder, or User Workspace mode."
         },
         "ticketManager.planFilePath": {
           "type": "string",

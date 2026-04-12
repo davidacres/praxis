@@ -235,7 +235,7 @@ export class BoardPanelManager implements vscode.Disposable {
           },
           {
             label: 'New board',
-            description: 'Create a board (Demo or File mode only)',
+            description: 'Create a board (Demo, File, or User Workspace mode)',
             value: 'board' as const
           }
         ],
