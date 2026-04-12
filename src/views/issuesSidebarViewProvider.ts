@@ -594,9 +594,9 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         border-color: rgba(239, 68, 68, 0.28);
       }
       .type-badge--issue {
-        color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
-        background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
-        border-color: transparent;
+        color: #a1a1aa;
+        background: rgba(161, 161, 170, 0.1);
+        border-color: rgba(161, 161, 170, 0.2);
       }
       .type-badge--todo {
         color: #c4b5fd;
@@ -619,15 +619,23 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         border-color: rgba(34, 197, 94, 0.28);
       }
       .type-badge--status {
-        color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
-        background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
-        border-color: transparent;
+        color: #a1a1aa;
+        background: rgba(161, 161, 170, 0.1);
+        border-color: rgba(161, 161, 170, 0.2);
       }
-      .type-badge--assigned,
+      .type-badge--assigned {
+        color: #93c5fd;
+        background: rgba(96, 165, 250, 0.1);
+        border-color: rgba(96, 165, 250, 0.2);
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .type-badge--unassigned {
-        color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
-        background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
-        border-color: transparent;
+        color: #a1a1aa;
+        background: rgba(161, 161, 170, 0.1);
+        border-color: rgba(161, 161, 170, 0.2);
         max-width: 140px;
         overflow: hidden;
         text-overflow: ellipsis;

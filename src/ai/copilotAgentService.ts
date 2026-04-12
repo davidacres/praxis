@@ -7,6 +7,7 @@ import type {
   AgentTaskDefinition
 } from './agentTypes';
 import { AGENT_DEFAULTS } from './agentTypes';
+import { resolveCopilotClientOptions } from './copilotSdkRuntime';
 
 interface ActiveTask {
   issueKey: string;
@@ -14,20 +15,43 @@ interface ActiveTask {
   session: {
     sessionId: string;
     send(options: { prompt: string }): Promise<unknown>;
+    sendAndWait(options: { prompt: string }, timeout?: number): Promise<{ data?: Record<string, unknown> } | undefined>;
     on(handler: (event: { type: string; data?: Record<string, unknown> }) => void): () => void;
     abort(): Promise<void>;
     disconnect(): Promise<void>;
   };
   unsubscribes: Array<() => void>;
   timeoutHandle?: ReturnType<typeof setTimeout>;
-  /** Resolvers for pending permission requests. */
-  pendingPermission?: {
-    resolve: (result: 'allow_once' | 'allow_always' | 'deny') => void;
-  };
+  /** Pending permission prompts awaiting a user response. */
+  pendingPermissions: Array<{
+    description: string;
+    kind: string;
+    detail?: string;
+    resolve: (
+      result: 'allow_once' | 'allow_always' | 'deny',
+      options?: {
+        silent?: boolean;
+      }
+    ) => void;
+  }>;
   /** Resolvers for pending user-input requests. */
   pendingInput?: {
-    resolve: (response: string) => void;
+    resolve: (
+      response: string,
+      options?: {
+        silent?: boolean;
+      }
+    ) => void;
   };
+  allowPermissionsForTask: boolean;
+  messageBuffers: Map<string, string>;
+  reasoningBuffers: Map<string, string>;
+  toolNames: Map<string, string>;
+  ending?: boolean;
+  stopPromise?: Promise<void>;
+  maxSteps: number;
+  stepLimitWarned?: boolean;
+  stepLimitPromptInFlight?: boolean;
 }
 
 const PLANNING_SYSTEM_PROMPT = `You are an autonomous Copilot-powered worker operating under strict contracts.
@@ -76,13 +100,90 @@ function evt(type: AgentEventType, summary: string, detail?: string): AgentEvent
   return { timestamp: now(), type, summary, detail };
 }
 
-export class CopilotAgentService implements vscode.Disposable {
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isSessionIdleTimeoutError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /waiting for session\.idle/i.test(message);
+}
+
+export interface PermissionInfo {
+  description: string;
+  kind: string;
+  detail?: string;
+}
+
+function formatPermissionDescription(request: { kind?: string; [key: string]: unknown }): PermissionInfo {
+  const kind = asString(request.kind) ?? 'unknown';
+  const fileName = asString(request.fileName);
+  const toolName = asString(request.toolName);
+  const command = asString(request.fullCommandText);
+  const url = asString(request.url);
+
+  switch (kind) {
+    case 'read':
+      return { kind, detail: fileName, description: fileName ? `Permission requested: read ${fileName}` : 'Permission requested: read' };
+    case 'write':
+      return { kind, detail: fileName, description: fileName ? `Permission requested: write ${fileName}` : 'Permission requested: write' };
+    case 'shell':
+      return { kind, detail: command, description: command ? `Permission requested: shell ${command}` : 'Permission requested: shell' };
+    case 'mcp':
+    case 'custom-tool':
+      return { kind, detail: toolName, description: toolName ? `Permission requested: ${kind} ${toolName}` : `Permission requested: ${kind}` };
+    case 'url':
+      return { kind, detail: url, description: url ? `Permission requested: fetch ${url}` : 'Permission requested: url' };
+    default:
+      return { kind, detail: undefined, description: `Permission requested: ${kind}` };
+  }
+}
+
+export interface CopilotAgentLogger {
+  appendLine(message: string): void;
+}
+
+export class CopilotAgentService {
   private activeTasks = new Map<string, ActiveTask>();
+  private activeTaskListeners = new Set<(issueKey: string) => void>();
 
   constructor(
     private readonly sessionManager: AiSessionManager,
-    private readonly output: vscode.OutputChannel
+    private readonly logger: CopilotAgentLogger
   ) {}
+
+  public onDidChangeActiveTask(listener: (issueKey: string) => void): () => void {
+    this.activeTaskListeners.add(listener);
+    return () => {
+      this.activeTaskListeners.delete(listener);
+    };
+  }
+
+  private buildClientOptions(cliPath: string | undefined): {
+    cliPath?: string;
+    env?: NodeJS.ProcessEnv;
+  } {
+    const resolved = resolveCopilotClientOptions(cliPath);
+    if (resolved.warning) {
+      this.logger.appendLine(`[Copilot SDK] ${resolved.warning}`);
+    }
+    return resolved.clientOptions;
+  }
+
+  private emitActiveTaskChange(issueKey: string): void {
+    for (const listener of this.activeTaskListeners) {
+      try {
+        listener(issueKey);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.appendLine(`[Agent] Active task listener failed for ${issueKey}: ${message}`);
+      }
+    }
+  }
+
+  private isTerminalState(state: string | undefined): boolean {
+    return state === 'completed' || state === 'failed' || state === 'aborted';
+  }
 
   /** Start a new Copilot agent task for an issue. */
   public async startTask(
@@ -96,12 +197,12 @@ export class CopilotAgentService implements vscode.Disposable {
     }
 
     const sdk = await import('@github/copilot-sdk');
-    const cliPath = options.cliPath?.trim();
-    const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
+    const client = new sdk.CopilotClient(this.buildClientOptions(options.cliPath));
     await client.start();
 
     const maxSteps = taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
+    const sendAndWaitTimeoutMs = timeoutMs + 5000;
 
     const systemPrompt = buildSystemPrompt(taskDefinition, issue);
 
@@ -110,9 +211,16 @@ export class CopilotAgentService implements vscode.Disposable {
       issueKey: issue.key,
       client,
       session: undefined!, // populated after createSession
-      unsubscribes: []
+      unsubscribes: [],
+      pendingPermissions: [],
+      messageBuffers: new Map<string, string>(),
+      reasoningBuffers: new Map<string, string>(),
+      allowPermissionsForTask: false,
+      toolNames: new Map<string, string>(),
+      maxSteps
     };
     this.activeTasks.set(issue.key, task);
+    this.emitActiveTaskChange(issue.key);
 
     let session: ActiveTask['session'];
     try {
@@ -120,6 +228,7 @@ export class CopilotAgentService implements vscode.Disposable {
       session = await client.createSession({
         clientName: 'ticket-manager-agent',
         infiniteSessions: { enabled: true },
+        streaming: true,
         systemMessage: { content: systemPrompt },
         workingDirectory: options.workingDirectory,
         ...hooks
@@ -127,6 +236,7 @@ export class CopilotAgentService implements vscode.Disposable {
     } catch (err) {
       // Clean up client if session creation fails
       this.activeTasks.delete(issue.key);
+      this.emitActiveTaskChange(issue.key);
       try { await client.stop(); } catch { /* best-effort */ }
       throw err;
     }
@@ -138,14 +248,13 @@ export class CopilotAgentService implements vscode.Disposable {
 
     // Subscribe to session events
     const unsubAll = session.on((event) => {
-      this.handleSessionEvent(issue.key, event, maxSteps);
+      this.handleSessionEvent(issue.key, event);
     });
     task.unsubscribes.push(unsubAll);
 
     // Timeout watchdog
     task.timeoutHandle = setTimeout(() => {
-      this.output.appendLine(`[Agent] Timeout reached for ${issue.key} (${timeoutMs}ms)`);
-      void this.abortTask(issue.key);
+      void this.failTaskForTimeout(issue.key, timeoutMs);
     }, timeoutMs);
 
     // Transition to planning and send initial prompt
@@ -155,15 +264,56 @@ export class CopilotAgentService implements vscode.Disposable {
     const initialPrompt = `Execute the task described in the system prompt. Start by producing a step-by-step plan, then execute it.
 
 Issue: ${issue.key} — ${issue.summary}`;
+    this.logger.appendLine(
+      `[Agent] Timers for ${issue.key}: task=${timeoutMs}ms final-wait=${sendAndWaitTimeoutMs}ms`
+    );
 
-    // Fire and don't await — the event stream will track progress
-    session.send({ prompt: initialPrompt }).catch((err: Error) => {
-      this.output.appendLine(`[Agent] Send error for ${issue.key}: ${err.message}`);
+    // Fire and don't await — the event stream will track progress while this
+    // provides a final success/failure backstop if the runtime exits quietly.
+    session.sendAndWait({ prompt: initialPrompt }, sendAndWaitTimeoutMs).then(finalMessage => {
+      const record = this.sessionManager.getAgentSession(issue.key);
+      if (!this.activeTasks.has(issue.key) || !record || this.isTerminalState(record.state)) {
+        return;
+      }
+
+      const finalContent = asString(finalMessage?.data?.content);
+      const finalReasoning = asString(finalMessage?.data?.reasoningText);
+      if (finalContent || finalReasoning) {
+        this.sessionManager.updateAgentOutput(
+          issue.key,
+          {
+            responseText: finalContent ?? record.responseText,
+            reasoningText: finalReasoning ?? record.reasoningText
+          },
+          { persist: false }
+        );
+      }
+
+      this.sessionManager.updateAgentState(issue.key, 'completed');
+      this.appendEvent(issue.key, evt('task_complete', 'Task complete'));
+      void this.cleanupTask(issue.key);
+    }).catch((err: Error) => {
+      const record = this.sessionManager.getAgentSession(issue.key);
+      if (!this.activeTasks.has(issue.key) || (record && this.isTerminalState(record.state))) {
+        return;
+      }
+      if (isSessionIdleTimeoutError(err)) {
+        this.logger.appendLine(
+          `[Agent] Final wait timed out for ${issue.key}; continuing to rely on live session events and task watchdog`
+        );
+        this.appendEvent(
+          issue.key,
+          evt('warning', 'Final wait timed out; task is still being tracked by live session events.')
+        );
+        return;
+      }
+      this.logger.appendLine(`[Agent] Task run failed for ${issue.key}: ${err.message}`);
       this.sessionManager.updateAgentState(issue.key, 'failed');
-      this.appendEvent(issue.key, evt('error', `Send failed: ${err.message}`));
+      this.appendEvent(issue.key, evt('error', `Task failed: ${err.message}`));
+      void this.cleanupTask(issue.key);
     });
 
-    this.output.appendLine(`[Agent] Started task for ${issue.key} (session ${session.sessionId})`);
+    this.logger.appendLine(`[Agent] Started task for ${issue.key} (session ${session.sessionId})`);
     return session.sessionId;
   }
 
@@ -173,7 +323,7 @@ Issue: ${issue.key} — ${issue.summary}`;
     options: { cliPath?: string; workingDirectory?: string }
   ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
-      this.output.appendLine(`[Agent] Session for ${issueKey} is already active.`);
+      this.logger.appendLine(`[Agent] Session for ${issueKey} is already active.`);
       return;
     }
 
@@ -183,8 +333,7 @@ Issue: ${issue.key} — ${issue.summary}`;
     }
 
     const sdk = await import('@github/copilot-sdk');
-    const cliPath = options.cliPath?.trim();
-    const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
+    const client = new sdk.CopilotClient(this.buildClientOptions(options.cliPath));
     await client.start();
 
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
@@ -192,7 +341,11 @@ Issue: ${issue.key} — ${issue.summary}`;
     const hooks = this.createInteractiveSessionHooks(issueKey);
     let session: ActiveTask['session'];
     try {
-      session = await client.resumeSession(record.sessionId, hooks);
+      session = await client.resumeSession(record.sessionId, {
+        ...hooks,
+        streaming: true,
+        workingDirectory: options.workingDirectory
+      });
     } catch (error) {
       try {
         await client.stop();
@@ -206,23 +359,29 @@ Issue: ${issue.key} — ${issue.summary}`;
       issueKey,
       client,
       session,
-      unsubscribes: []
+      unsubscribes: [],
+      pendingPermissions: [],
+      messageBuffers: new Map<string, string>(record.responseText ? [['history', record.responseText]] : []),
+      reasoningBuffers: new Map<string, string>(record.reasoningText ? [['history', record.reasoningText]] : []),
+      allowPermissionsForTask: false,
+      toolNames: new Map<string, string>(),
+      maxSteps
     };
     this.activeTasks.set(issueKey, task);
+    this.emitActiveTaskChange(issueKey);
 
     const unsub = session.on((event) => {
-      this.handleSessionEvent(issueKey, event, maxSteps);
+      this.handleSessionEvent(issueKey, event);
     });
     task.unsubscribes.push(unsub);
 
     task.timeoutHandle = setTimeout(() => {
-      this.output.appendLine(`[Agent] Timeout reached for ${issueKey} (${timeoutMs}ms)`);
-      void this.abortTask(issueKey);
+      void this.failTaskForTimeout(issueKey, timeoutMs);
     }, timeoutMs);
 
     this.sessionManager.updateAgentState(issueKey, 'executing');
     this.appendEvent(issueKey, evt('session_start', 'Session resumed'));
-    this.output.appendLine(`[Agent] Resumed session for ${issueKey}`);
+    this.logger.appendLine(`[Agent] Resumed session for ${issueKey}`);
   }
 
   /** Respond to a pending user-input request. */
@@ -240,29 +399,81 @@ Issue: ${issue.key} — ${issue.summary}`;
     decision: 'allow_once' | 'allow_always' | 'deny'
   ): void {
     const task = this.activeTasks.get(issueKey);
-    if (!task?.pendingPermission) {
+    if (!task || task.pendingPermissions.length === 0) {
       return;
     }
-    task.pendingPermission.resolve(decision);
+
+    if (decision === 'allow_always') {
+      task.allowPermissionsForTask = true;
+      const pending = task.pendingPermissions.splice(0);
+      for (const request of pending) {
+        request.resolve(decision);
+      }
+      this.appendEvent(
+        issueKey,
+        evt(
+          'permission_completed',
+          `Permission: ${decision} (${pending.length} queued request${pending.length === 1 ? '' : 's'})`
+        )
+      );
+      if (!task.pendingInput) {
+        this.sessionManager.updateAgentState(issueKey, 'executing');
+      }
+      return;
+    }
+
+    const pending = task.pendingPermissions.shift();
+    if (!pending) {
+      return;
+    }
+    pending.resolve(decision);
+    this.appendEvent(issueKey, evt('permission_completed', `Permission: ${decision}`));
+
+    if (task.pendingPermissions.length > 0) {
+      this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
+      this.appendEvent(
+        issueKey,
+        evt(
+          'info',
+          `${task.pendingPermissions.length} permission request${task.pendingPermissions.length === 1 ? '' : 's'} still pending`
+        )
+      );
+      return;
+    }
+
+    if (!task.pendingInput) {
+      this.sessionManager.updateAgentState(issueKey, 'executing');
+    }
+  }
+
+  public getPendingPermissionDescriptions(issueKey: string): string[] {
+    const task = this.activeTasks.get(issueKey);
+    if (!task || task.pendingPermissions.length === 0) {
+      return [];
+    }
+
+    return task.pendingPermissions.map(request => request.description);
+  }
+
+  public getPendingPermissions(issueKey: string): PermissionInfo[] {
+    const task = this.activeTasks.get(issueKey);
+    if (!task || task.pendingPermissions.length === 0) {
+      return [];
+    }
+    return task.pendingPermissions.map(request => ({
+      description: request.description,
+      kind: request.kind,
+      detail: request.detail
+    }));
   }
 
   /** Abort a running agent task. */
   public async abortTask(issueKey: string): Promise<void> {
-    const task = this.activeTasks.get(issueKey);
-    if (!task) {
-      return;
-    }
-
-    try {
-      await task.session.abort();
-    } catch {
-      // Best-effort abort
-    }
-
-    this.sessionManager.updateAgentState(issueKey, 'aborted');
-    this.appendEvent(issueKey, evt('aborted', 'Task aborted by user'));
-    await this.cleanupTask(issueKey);
-    this.output.appendLine(`[Agent] Aborted task for ${issueKey}`);
+    await this.stopTask(issueKey, {
+      terminalState: 'aborted',
+      event: evt('aborted', 'Task aborted by user'),
+      logLine: `[Agent] Aborted task for ${issueKey}`
+    });
   }
 
   /** Check if an issue has an active in-memory task. */
@@ -270,30 +481,227 @@ Issue: ${issue.key} — ${issue.summary}`;
     return this.activeTasks.has(issueKey);
   }
 
-  public dispose(): void {
-    for (const issueKey of [...this.activeTasks.keys()]) {
-      void this.cleanupTask(issueKey);
+  public getActiveTaskIssueKeys(): string[] {
+    return [...this.activeTasks.keys()];
+  }
+
+  public async pauseTask(issueKey: string, reason?: string): Promise<void> {
+    await this.stopTask(issueKey, {
+      terminalState: 'paused',
+      event: evt('info', reason ?? 'Session paused.'),
+      logLine: `[Agent] Paused task for ${issueKey}`,
+      abortSession: false
+    });
+  }
+
+  public async pauseAllTasks(reason?: string): Promise<void> {
+    const issueKeys = [...this.activeTasks.keys()];
+    for (const issueKey of issueKeys) {
+      await this.pauseTask(issueKey, reason ?? 'Session paused.');
     }
+  }
+
+  public dispose(): void {
+    void this.pauseAllTasks('Session paused because Ticket Manager was shut down.');
+  }
+
+  private async failTaskForTimeout(issueKey: string, timeoutMs: number): Promise<void> {
+    await this.stopTask(issueKey, {
+      terminalState: 'failed',
+      event: evt(
+        'error',
+        `Task stopped after timing out at ${Math.round(timeoutMs / 1000)}s. Start a new session to continue.`
+      ),
+      logLine: `[Agent] Timeout reached for ${issueKey} (${timeoutMs}ms)`
+    });
+  }
+
+  private async failTaskForStepLimit(issueKey: string, maxSteps: number): Promise<void> {
+    await this.stopTask(issueKey, {
+      terminalState: 'failed',
+      event: evt(
+        'error',
+        `Task stopped after reaching the tool step limit (${maxSteps}). Start a new session to continue.`
+      ),
+      logLine: `[Agent] Max steps (${maxSteps}) reached for ${issueKey}`
+    });
+  }
+
+  private async promptForStepLimitExtension(issueKey: string): Promise<void> {
+    const task = this.activeTasks.get(issueKey);
+    if (!task || task.ending || task.stepLimitPromptInFlight) {
+      return;
+    }
+    task.stepLimitPromptInFlight = true;
+
+    const stepIncrement = AGENT_DEFAULTS.maxSteps;
+    const choice = await vscode.window.showWarningMessage(
+      `${issueKey}: Step limit reached (${task.maxSteps}). The agent is paused.`,
+      `Continue (+${stepIncrement} steps)`,
+      'Continue (no limit)',
+      'Stop'
+    );
+
+    // Re-check task is still active after the async prompt
+    const current = this.activeTasks.get(issueKey);
+    if (!current || current !== task) {
+      return;
+    }
+    task.stepLimitPromptInFlight = false;
+
+    if (choice === `Continue (+${stepIncrement} steps)`) {
+      task.maxSteps += stepIncrement;
+      task.stepLimitWarned = false;
+      this.appendEvent(
+        issueKey,
+        evt('info', `Step limit extended to ${task.maxSteps}`)
+      );
+      this.logger.appendLine(`[Agent] Step limit extended to ${task.maxSteps} for ${issueKey}`);
+    } else if (choice === 'Continue (no limit)') {
+      task.maxSteps = Number.MAX_SAFE_INTEGER;
+      task.stepLimitWarned = false;
+      this.appendEvent(issueKey, evt('info', 'Step limit removed — agent will run until complete'));
+      this.logger.appendLine(`[Agent] Step limit removed for ${issueKey}`);
+    } else {
+      // "Stop" or dismissed
+      await this.failTaskForStepLimit(issueKey, task.maxSteps);
+    }
+  }
+
+  private async stopTask(
+    issueKey: string,
+    options: {
+      terminalState: 'aborted' | 'failed' | 'paused';
+      event: AgentEventSummary;
+      logLine: string;
+      abortSession?: boolean;
+    }
+  ): Promise<void> {
+    const task = this.activeTasks.get(issueKey);
+    if (!task) {
+      return;
+    }
+
+    if (task.stopPromise) {
+      await task.stopPromise;
+      return;
+    }
+
+    task.ending = true;
+    task.stopPromise = (async () => {
+      const record = this.sessionManager.getAgentSession(issueKey);
+      const shouldRecordOutcome = !record || !this.isTerminalState(record.state);
+
+      if (record && shouldRecordOutcome) {
+        this.sessionManager.updateAgentState(issueKey, options.terminalState);
+      }
+      if (shouldRecordOutcome) {
+        this.appendEvent(issueKey, options.event);
+      }
+
+      if (options.abortSession ?? true) {
+        try {
+          await task.session.abort();
+        } catch {
+          // Best-effort abort
+        }
+      }
+
+      await this.cleanupTask(issueKey);
+      this.logger.appendLine(options.logLine);
+    })();
+
+    await task.stopPromise;
   }
 
   // ── Event Handling ─────────────────────────────────────────────
 
   private handleSessionEvent(
     issueKey: string,
-    event: { type: string; data?: Record<string, unknown> },
-    maxSteps: number
+    event: { type: string; data?: Record<string, unknown> }
   ): void {
     const data = event.data ?? {};
+    const task = this.activeTasks.get(issueKey);
+    const maxSteps = task?.maxSteps ?? AGENT_DEFAULTS.maxSteps;
+    const currentRecord = this.sessionManager.getAgentSession(issueKey);
+    if (task?.ending || (currentRecord && this.isTerminalState(currentRecord.state))) {
+      return;
+    }
 
     switch (event.type) {
       case 'assistant.intent':
         this.appendEvent(issueKey, evt('intent', `Intent: ${data.content ?? ''}`));
         break;
 
+      case 'assistant.reasoning_delta': {
+        if (!task) {
+          break;
+        }
+        const reasoningId = asString(data.reasoningId) ?? 'reasoning';
+        const deltaContent = asString(data.deltaContent) ?? '';
+        if (!deltaContent) {
+          break;
+        }
+        const previous = task.reasoningBuffers.get(reasoningId) ?? '';
+        task.reasoningBuffers.set(reasoningId, previous + deltaContent);
+        this.syncLiveOutput(issueKey, task, { persist: false });
+        break;
+      }
+
+      case 'assistant.reasoning': {
+        if (!task) {
+          break;
+        }
+        const reasoningId = asString(data.reasoningId) ?? 'reasoning';
+        const content = asString(data.content) ?? '';
+        task.reasoningBuffers.set(reasoningId, content);
+        this.syncLiveOutput(issueKey, task);
+        if (content) {
+          const preview = content.length > 160 ? `${content.slice(0, 160)}…` : content;
+          this.appendEvent(issueKey, evt('reasoning', preview, content));
+        }
+        break;
+      }
+
+      case 'assistant.message_delta': {
+        if (!task) {
+          break;
+        }
+        const messageId = asString(data.messageId) ?? 'message';
+        const deltaContent = asString(data.deltaContent) ?? '';
+        if (!deltaContent) {
+          break;
+        }
+        const previous = task.messageBuffers.get(messageId) ?? '';
+        const next = previous + deltaContent;
+        task.messageBuffers.set(messageId, next);
+        this.syncLiveOutput(issueKey, task, { persist: false });
+
+        const record = this.sessionManager.getAgentSession(issueKey);
+        if (record?.state === 'planning' && next.length > 0) {
+          this.sessionManager.setAgentPlan(issueKey, next, { persist: false });
+        }
+        break;
+      }
+
       case 'assistant.message': {
-        const content = typeof data.content === 'string' ? data.content : '';
-        const preview = content.length > 200 ? `${content.slice(0, 200)}…` : content;
-        this.appendEvent(issueKey, evt('message', preview, content));
+        const content = asString(data.content) ?? '';
+        if (task) {
+          const messageId = asString(data.messageId) ?? `message-${task.messageBuffers.size + 1}`;
+          task.messageBuffers.set(messageId, content);
+          const reasoningText = asString(data.reasoningText);
+          if (reasoningText) {
+            task.reasoningBuffers.set(`message-reasoning-${messageId}`, reasoningText);
+          }
+          this.syncLiveOutput(issueKey, task);
+        }
+        const toolRequestCount = Array.isArray(data.toolRequests) ? data.toolRequests.length : 0;
+        const preview = content.length > 0
+          ? (content.length > 200 ? `${content.slice(0, 200)}…` : content)
+          : toolRequestCount > 0
+            ? `Assistant requested ${toolRequestCount} tool action${toolRequestCount === 1 ? '' : 's'}`
+            : 'Assistant produced an empty message';
+        this.appendEvent(issueKey, evt('message', preview, content || undefined));
 
         // Capture first message as plan if still in planning state
         const record = this.sessionManager.getAgentSession(issueKey);
@@ -305,34 +713,80 @@ Issue: ${issue.key} — ${issue.summary}`;
       }
 
       case 'session.plan_changed': {
-        const plan = typeof data.plan === 'string' ? data.plan : JSON.stringify(data);
+        const plan = asString(data.plan) ?? JSON.stringify(data);
         this.sessionManager.setAgentPlan(issueKey, plan);
         this.appendEvent(issueKey, evt('plan', 'Plan updated'));
         break;
       }
 
       case 'tool.execution_start': {
-        const name = typeof data.name === 'string' ? data.name : 'unknown';
+        const toolCallId = asString(data.toolCallId) ?? '';
+        const name = asString(data.toolName) ?? asString(data.mcpToolName) ?? 'unknown';
+        if (toolCallId) {
+          task?.toolNames.set(toolCallId, name);
+        }
         this.appendEvent(issueKey, evt('tool_start', `Running tool: ${name}`));
         break;
       }
 
       case 'tool.execution_complete': {
-        const name = typeof data.name === 'string' ? data.name : 'unknown';
-        this.appendEvent(issueKey, evt('tool_complete', `Tool completed: ${name}`), 1);
-
-        // Guardrail: max step count
-        const rec = this.sessionManager.getAgentSession(issueKey);
-        if (rec && rec.stepCount >= maxSteps) {
-          this.output.appendLine(`[Agent] Max steps (${maxSteps}) reached for ${issueKey}`);
-          void this.abortTask(issueKey);
+        const toolCallId = asString(data.toolCallId) ?? '';
+        const name = (toolCallId && task?.toolNames.get(toolCallId)) || 'unknown';
+        const success = data.success !== false;
+        const result = data.result;
+        const detailedContent = result && typeof result === 'object'
+          ? asString((result as Record<string, unknown>).detailedContent) ?? asString((result as Record<string, unknown>).content)
+          : undefined;
+        const error = data.error && typeof data.error === 'object'
+          ? asString((data.error as Record<string, unknown>).message)
+          : undefined;
+        this.appendEvent(
+          issueKey,
+          evt(
+            'tool_complete',
+            `Tool ${success ? 'completed' : 'failed'}: ${name}`,
+            error ?? detailedContent
+          ),
+          1
+        );
+        if (toolCallId) {
+          task?.toolNames.delete(toolCallId);
         }
+
+        // Guardrail: max step count — warn at 80%, prompt at limit
+        const rec = this.sessionManager.getAgentSession(issueKey);
+        if (rec && task) {
+          const warningThreshold = Math.floor(task.maxSteps * 0.8);
+          if (!task.stepLimitWarned && rec.stepCount >= warningThreshold) {
+            task.stepLimitWarned = true;
+            this.appendEvent(
+              issueKey,
+              evt('warning', `Approaching step limit: ${rec.stepCount}/${task.maxSteps} steps used`)
+            );
+          }
+          if (rec.stepCount >= task.maxSteps) {
+            void this.promptForStepLimitExtension(issueKey);
+          }
+        }
+        break;
+      }
+
+      case 'tool.execution_progress': {
+        const toolCallId = asString(data.toolCallId) ?? '';
+        const name = (toolCallId && task?.toolNames.get(toolCallId)) || 'unknown';
+        const progressMessage = asString(data.progressMessage) ?? 'Tool is still running';
+        this.appendEvent(issueKey, evt('info', `${name}: ${progressMessage}`));
         break;
       }
 
       case 'session.idle': {
         const record = this.sessionManager.getAgentSession(issueKey);
-        if (record && record.state === 'executing') {
+        if (
+          record &&
+          !this.isTerminalState(record.state) &&
+          (task?.pendingPermissions.length ?? 0) === 0 &&
+          !task?.pendingInput
+        ) {
           this.sessionManager.updateAgentState(issueKey, 'completed');
           this.appendEvent(issueKey, evt('idle', 'Session idle — task complete'));
           void this.cleanupTask(issueKey);
@@ -341,7 +795,7 @@ Issue: ${issue.key} — ${issue.summary}`;
       }
 
       case 'session.task_complete': {
-        const summary = typeof data.summary === 'string' ? data.summary : 'Task complete';
+        const summary = asString(data.summary) ?? 'Task complete';
         this.sessionManager.updateAgentState(issueKey, 'completed');
         this.appendEvent(issueKey, evt('task_complete', summary));
         void this.cleanupTask(issueKey);
@@ -349,7 +803,7 @@ Issue: ${issue.key} — ${issue.summary}`;
       }
 
       case 'session.error': {
-        const message = typeof data.message === 'string' ? data.message : 'Unknown error';
+        const message = asString(data.message) ?? 'Unknown error';
         this.sessionManager.updateAgentState(issueKey, 'failed');
         this.appendEvent(issueKey, evt('error', `Error: ${message}`));
         void this.cleanupTask(issueKey);
@@ -357,7 +811,7 @@ Issue: ${issue.key} — ${issue.summary}`;
       }
 
       case 'session.info': {
-        const msg = typeof data.message === 'string' ? data.message : '';
+        const msg = asString(data.message) ?? '';
         if (msg) {
           this.appendEvent(issueKey, evt('info', msg));
         }
@@ -365,13 +819,52 @@ Issue: ${issue.key} — ${issue.summary}`;
       }
 
       case 'session.warning': {
-        const msg = typeof data.message === 'string' ? data.message : '';
+        const msg = asString(data.message) ?? '';
         if (msg) {
           this.appendEvent(issueKey, evt('warning', `Warning: ${msg}`));
         }
         break;
       }
+
+      case 'session.shutdown': {
+        const record = this.sessionManager.getAgentSession(issueKey);
+        if (!record || this.isTerminalState(record.state)) {
+          break;
+        }
+
+        const shutdownType = asString(data.shutdownType) ?? 'routine';
+        const errorReason = asString(data.errorReason);
+        const summary = shutdownType === 'error'
+          ? `Session runtime stopped unexpectedly${errorReason ? `: ${errorReason}` : '.'}`
+          : 'Session runtime disconnected before task completion.';
+        this.sessionManager.updateAgentState(issueKey, 'failed');
+        this.appendEvent(issueKey, evt('error', summary, errorReason));
+        void this.cleanupTask(issueKey);
+        break;
+      }
     }
+  }
+
+  private syncLiveOutput(
+    issueKey: string,
+    task: ActiveTask,
+    options?: {
+      persist?: boolean;
+    }
+  ): void {
+    this.sessionManager.updateAgentOutput(
+      issueKey,
+      {
+        reasoningText: this.joinStreamingBuffers(task.reasoningBuffers),
+        responseText: this.joinStreamingBuffers(task.messageBuffers)
+      },
+      options
+    );
+  }
+
+  private joinStreamingBuffers(buffers: Map<string, string>): string | undefined {
+    const chunks = [...buffers.values()].filter(value => value.trim().length > 0);
+    return chunks.length ? chunks.join('\n\n') : undefined;
   }
 
   private createInteractiveSessionHooks(issueKey: string) {
@@ -380,37 +873,35 @@ Issue: ${issue.key} — ${issue.summary}`;
         const task = this.activeTasks.get(issueKey);
         if (!task) {
           return {
-            kind: 'denied-by-permission-request-hook' as const,
-            message: 'Session not found'
+            kind: 'denied-no-approval-rule-and-could-not-request-from-user' as const
           };
         }
 
-        const description = request.kind
-          ? `Permission requested: ${request.kind}`
-          : 'Permission requested';
+        const permInfo = formatPermissionDescription(request);
+        if (task.allowPermissionsForTask) {
+          this.appendEvent(issueKey, evt('permission_completed', `${permInfo.description} (auto-approved for task)`));
+          return { kind: 'approved' as const };
+        }
 
         this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
-        this.appendEvent(issueKey, evt('permission_requested', description));
+        this.appendEvent(issueKey, evt('permission_requested', permInfo.description));
 
         return new Promise<
-          | { kind: 'denied-by-permission-request-hook'; message: string }
+          | { kind: 'denied-interactively-by-user' }
           | { kind: 'approved' }
         >(resolve => {
-          task.pendingPermission = {
-            resolve: decision => {
-              task.pendingPermission = undefined;
-              this.sessionManager.updateAgentState(issueKey, 'executing');
-              this.appendEvent(issueKey, evt('permission_completed', `Permission: ${decision}`));
+          task.pendingPermissions.push({
+            description: permInfo.description,
+            kind: permInfo.kind,
+            detail: permInfo.detail,
+            resolve: (decision) => {
               if (decision === 'deny') {
-                resolve({
-                  kind: 'denied-by-permission-request-hook' as const,
-                  message: 'User denied permission'
-                });
+                resolve({ kind: 'denied-interactively-by-user' as const });
               } else {
                 resolve({ kind: 'approved' as const });
               }
             }
-          };
+          });
         });
       },
       onUserInputRequest: async (request: {
@@ -429,10 +920,14 @@ Issue: ${issue.key} — ${issue.summary}`;
 
         return new Promise<{ answer: string; wasFreeform: boolean }>(resolve => {
           task.pendingInput = {
-            resolve: response => {
+            resolve: (response, options) => {
               task.pendingInput = undefined;
-              this.sessionManager.updateAgentState(issueKey, 'executing');
-              this.appendEvent(issueKey, evt('user_input_completed', 'User replied'));
+              if (!options?.silent) {
+                this.appendEvent(issueKey, evt('user_input_completed', 'User replied'));
+              }
+              if (!options?.silent && task.pendingPermissions.length === 0) {
+                this.sessionManager.updateAgentState(issueKey, 'executing');
+              }
               resolve({ answer: response, wasFreeform: true });
             }
           };
@@ -447,7 +942,7 @@ Issue: ${issue.key} — ${issue.summary}`;
     incrementSteps?: number
   ): void {
     this.sessionManager.appendAgentEvents(issueKey, [event], incrementSteps);
-    this.output.appendLine(`[Agent:${issueKey}] ${event.type}: ${event.summary}`);
+    this.logger.appendLine(`[Agent:${issueKey}] ${event.type}: ${event.summary}`);
   }
 
   private async cleanupTask(issueKey: string): Promise<void> {
@@ -458,6 +953,7 @@ Issue: ${issue.key} — ${issue.summary}`;
 
     // Remove from map immediately to prevent concurrent cleanup
     this.activeTasks.delete(issueKey);
+    this.emitActiveTaskChange(issueKey);
 
     if (task.timeoutHandle) {
       clearTimeout(task.timeoutHandle);
@@ -467,11 +963,12 @@ Issue: ${issue.key} — ${issue.summary}`;
     }
 
     // Resolve any pending permission/input promises so SDK handlers don't hang
-    if (task.pendingPermission) {
-      task.pendingPermission.resolve('deny');
+    const pendingPermissions = task.pendingPermissions.splice(0);
+    for (const pendingPermission of pendingPermissions) {
+      pendingPermission.resolve('deny', { silent: true });
     }
     if (task.pendingInput) {
-      task.pendingInput.resolve('Task ended');
+      task.pendingInput.resolve('Task ended', { silent: true });
     }
 
     try {

@@ -1,4 +1,5 @@
 import type { IssueDetails } from '../types';
+import { resolveCopilotClientOptions } from './copilotSdkRuntime';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
 Analyze the ticket and provide concise, actionable feedback on:
@@ -8,6 +9,37 @@ Analyze the ticket and provide concise, actionable feedback on:
 4. Any ambiguities that should be resolved before work begins
 
 Be constructive and specific. Format your response in markdown. If the ticket is well-defined, say so briefly.`;
+
+const CODE_REVIEW_SYSTEM_PROMPT = `You are a senior software engineer performing a code review.
+Analyze the ticket requirements and any implementation context to provide feedback on:
+1. Code quality, maintainability, and readability
+2. Potential bugs, edge cases, or logic errors
+3. Design patterns and architectural concerns
+4. Test coverage gaps
+5. Performance considerations
+
+Be specific, reference code locations when possible, and rate severity (critical/major/minor/suggestion).
+Format your response in markdown with clear sections.`;
+
+const SECURITY_REVIEW_SYSTEM_PROMPT = `You are a security engineer performing a security review.
+Analyze the ticket and its implementation context for:
+1. OWASP Top 10 vulnerabilities (injection, XSS, CSRF, etc.)
+2. Authentication and authorization issues
+3. Data exposure or privacy risks
+4. Input validation gaps
+5. Dependency or supply chain concerns
+6. Secrets or credential handling
+
+Rate each finding by severity (critical/high/medium/low/info).
+Format your response in markdown with clear sections. If no security issues are found, state that clearly.`;
+
+const LPR_SUMMARY_SYSTEM_PROMPT = `You are a technical lead writing a concise peer review summary.
+Given a code review and security review, provide:
+1. Overall assessment (Ready / Needs Changes / Needs Major Rework)
+2. Key findings summary (3-5 bullet points)
+3. Recommended next steps
+
+Be concise and actionable. Format in markdown.`;
 
 const COPILOT_COMMENT_SYSTEM_PROMPT = `You are GitHub Copilot replying inside a ticket discussion.
 Respond directly to the user's request using the ticket details and recent comments as context.
@@ -88,8 +120,8 @@ async function runCopilotPrompt(
   }
 ): Promise<string> {
   const sdk = await import('@github/copilot-sdk');
-  const cliPath = options.cliPath?.trim();
-  const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
+  const { clientOptions } = resolveCopilotClientOptions(options.cliPath);
+  const client = new sdk.CopilotClient(clientOptions);
   let session:
     | {
         disconnect(): Promise<void>;
@@ -243,4 +275,104 @@ export async function respondToCopilotComment(
   );
 
   return `## @copilot reply\n\n${content}`;
+}
+
+// ── Local Peer Review (LPR) ──────────────────────────────────────
+
+export interface LprResult {
+  codeReview: string;
+  securityReview: string;
+  summary: string;
+}
+
+async function runLprSection(
+  issue: IssueDetails,
+  systemPrompt: string,
+  userPrompt: string,
+  options: { cliPath?: string; workingDirectory?: string; provider: string; credential?: string; agentName?: string }
+): Promise<string> {
+  const ticketContext = buildTicketContext(issue);
+
+  if (options.provider === 'copilot-cli') {
+    return runCopilotPrompt(`${userPrompt}\n\n${ticketContext}`, {
+      cliPath: options.cliPath,
+      systemPrompt,
+      workingDirectory: options.workingDirectory
+    });
+  }
+
+  if (options.provider === 'openai') {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${options.credential}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `${userPrompt}\n\n${ticketContext}` }
+        ],
+        max_tokens: 2048
+      })
+    });
+    if (!response.ok) {
+      throw new Error(await extractApiError(response, 'OpenAI'));
+    }
+    const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return data.choices?.[0]?.message?.content?.trim() ?? '';
+  }
+
+  if (options.provider === 'claude') {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': options.credential ?? '',
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: `${userPrompt}\n\n${ticketContext}` }]
+      })
+    });
+    if (!response.ok) {
+      throw new Error(await extractApiError(response, 'Claude'));
+    }
+    const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
+    return data.content?.find(b => b.type === 'text')?.text?.trim() ?? '';
+  }
+
+  throw new Error(`LPR is not supported for provider: ${options.provider}`);
+}
+
+export async function runLocalPeerReview(
+  issue: IssueDetails,
+  options: { cliPath?: string; workingDirectory?: string; provider: string; credential?: string; agentName?: string }
+): Promise<LprResult> {
+  const codeReview = await runLprSection(
+    issue,
+    CODE_REVIEW_SYSTEM_PROMPT,
+    'Perform a code review for this ticket:',
+    options
+  );
+
+  const securityReview = await runLprSection(
+    issue,
+    SECURITY_REVIEW_SYSTEM_PROMPT,
+    'Perform a security review for this ticket:',
+    options
+  );
+
+  const summary = await runLprSection(
+    issue,
+    LPR_SUMMARY_SYSTEM_PROMPT,
+    `Summarize the following peer review findings:\n\n## Code Review\n${codeReview}\n\n## Security Review\n${securityReview}`,
+    options
+  );
+
+  return { codeReview, securityReview, summary };
 }

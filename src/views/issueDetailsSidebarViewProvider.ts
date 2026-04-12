@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
+import { AGENT_DEFAULTS } from '../ai/agentTypes';
 import type { UpdateIssueInput } from '../types';
 import {
   formatParentReference,
@@ -115,6 +116,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
   private view?: vscode.WebviewView;
   private readonly disposables: vscode.Disposable[] = [];
   private viewDisposables: vscode.Disposable[] = [];
+  private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -138,6 +140,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         }
       })
     );
+  }
+
+  public setCommentPlaceholder(text: string): void {
+    this.commentPlaceholder = text;
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -474,7 +480,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <textarea
               id="commentInput"
               class="field-textarea comment-textarea"
-               placeholder="Write a comment (mention @copilot for a reply)"
+               placeholder="${escapeHtml(this.commentPlaceholder)}"
             ></textarea>
           </label>
           <div class="form-actions">
@@ -1378,6 +1384,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       'awaiting_approval': { token: 'blocked', label: 'Awaiting Approval' },
       'executing': { token: 'progress', label: 'Executing' },
       'awaiting_input': { token: 'blocked', label: 'Awaiting Input' },
+      'paused': { token: 'status', label: 'Paused' },
       'completed': { token: 'done', label: 'Completed' },
       'failed': { token: 'blocked', label: 'Failed' },
       'aborted': { token: 'status', label: 'Aborted' }
@@ -1414,7 +1421,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       </div>
       <div class="detail-row">
         <div class="detail-label">Steps</div>
-        <div class="detail-value">${record.stepCount}/${record.taskDefinition.maxSteps ?? 50}</div>
+        <div class="detail-value">${record.stepCount}/${record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps}</div>
       </div>
       <div class="detail-row">
         <div class="detail-label">Started</div>

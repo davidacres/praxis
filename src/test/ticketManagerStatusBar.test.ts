@@ -62,4 +62,31 @@ suite('TicketManagerStatusBar', () => {
     assert.ok(presentation.text.includes('Ticket Manager: File'));
     assert.ok(presentation.tooltipMarkdown.includes('Last error: Failed to refresh issue details\\.'));
   });
+
+  test('surfaces paused sessions and pending approvals as attention state', () => {
+    const presentation = buildTicketManagerStatusPresentation({
+      backendMode: 'jira',
+      connection: {
+        status: 'ok',
+        message: 'Connected.',
+        toolCount: 4,
+        projectCount: 2
+      },
+      aiProviders: ['copilot-cli'],
+      defaultProvider: 'copilot-cli',
+      activeSessionCount: 3,
+      approvalSessionCount: 1,
+      pausedSessionCount: 2,
+      lastError: undefined,
+      isChecking: false
+    });
+
+    assert.strictEqual(presentation.tone, 'warning');
+    assert.ok(presentation.text.includes('1 approval'));
+    assert.ok(presentation.text.includes('2 paused'));
+    assert.ok(presentation.tooltipMarkdown.includes('Active sessions: 3'));
+    assert.ok(presentation.tooltipMarkdown.includes('Approval required: 1'));
+    assert.ok(presentation.tooltipMarkdown.includes('Paused sessions: 2'));
+    assert.ok(presentation.tooltipMarkdown.includes('Open Active Sessions'));
+  });
 });

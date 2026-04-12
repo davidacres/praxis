@@ -49,7 +49,7 @@ export function buildAiProviderSetupOptions(): AiProviderSetupOption[] {
       provider: 'copilot-cli',
       label: AI_PROVIDER_LABELS['copilot-cli'],
       description: 'Use the GitHub Copilot SDK',
-      detail: 'Used for AI reviews, @copilot replies, and Copilot agent tasks. CLI path is optional advanced configuration.'
+      detail: 'Uses your existing GitHub Copilot authentication on this machine for reviews, @copilot replies, and agent tasks.'
     },
     {
       provider: 'none',
@@ -136,50 +136,6 @@ async function promptForPathValue(
   }
 
   return value.trim();
-}
-
-async function promptForCopilotSdkConfiguration(): Promise<
-  { mode: 'default' } | { mode: 'advanced'; cliPath: string } | undefined
-> {
-  const picked = await vscode.window.showQuickPick(
-    [
-      {
-        label: 'Use default GitHub Copilot SDK setup',
-        description: 'Recommended',
-        detail: 'Uses the SDK defaults and your existing Copilot authentication on this machine.',
-        value: 'default' as const
-      },
-      {
-        label: 'Advanced: specify CLI path override',
-        description: 'Optional',
-        detail: 'Only use this if the SDK cannot find the Copilot CLI automatically.',
-        value: 'advanced' as const
-      }
-    ],
-    {
-      title: 'Ticket Manager: GitHub Copilot SDK',
-      placeHolder: 'Choose how Ticket Manager should connect to GitHub Copilot.'
-    }
-  );
-
-  if (!picked) {
-    return undefined;
-  }
-
-  if (picked.value === 'default') {
-    return { mode: 'default' };
-  }
-
-  const cliPath = await promptForPathValue(
-    'ai.copilotCliPath',
-    'Ticket Manager: GitHub Copilot SDK CLI Path',
-    'Enter the optional CLI path override for the GitHub Copilot SDK.'
-  );
-  if (cliPath === undefined) {
-    return undefined;
-  }
-
-  return { mode: 'advanced', cliPath };
 }
 
 export async function promptToConfigureDefaultAiProvider(): Promise<AiConfigurationPromptResult> {
@@ -280,18 +236,9 @@ export async function promptToConfigureDefaultAiProvider(): Promise<AiConfigurat
     return { status: 'configured', provider };
   }
 
-  const copilotConfig = await promptForCopilotSdkConfiguration();
-  if (!copilotConfig) {
-    return { status: 'cancelled', provider };
-  }
-
   await Promise.all([
     configuration.update('ai.copilotEnabled', true, AI_SETTINGS_TARGET),
-    configuration.update(
-      'ai.copilotCliPath',
-      copilotConfig.mode === 'advanced' ? copilotConfig.cliPath : '',
-      AI_SETTINGS_TARGET
-    ),
+    configuration.update('ai.copilotCliPath', '', AI_SETTINGS_TARGET),
     configuration.update('ai.defaultProvider', provider, AI_SETTINGS_TARGET)
   ]);
   return { status: 'configured', provider };

@@ -113,10 +113,16 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private errorMessage?: string;
   private requestGeneration = 0;
 
+  private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
+
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly onAfterTransition: () => Promise<void>
   ) {}
+
+  public setCommentPlaceholder(text: string): void {
+    this.commentPlaceholder = text;
+  }
 
   public async open(issueKey: string): Promise<void> {
     this.activeIssueKey = issueKey;
@@ -190,6 +196,21 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
 
     if (!this.activeIssueKey) {
+      return;
+    }
+
+    if (type === 'assignToMe') {
+      await vscode.commands.executeCommand('ticketManager.assignToMe', this.activeIssueKey);
+      return;
+    }
+
+    if (type === 'assignToAi') {
+      await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+      return;
+    }
+
+    if (type === 'localPeerReview') {
+      await vscode.commands.executeCommand('ticketManager.localPeerReview', this.activeIssueKey);
       return;
     }
 
@@ -679,9 +700,26 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       border-color: rgba(34, 197, 94, 0.28);
     }
     .pill--neutral {
-      color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
-      background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
-      border-color: transparent;
+      color: #a1a1aa;
+      background: rgba(161, 161, 170, 0.1);
+      border-color: rgba(161, 161, 170, 0.2);
+    }
+    .assign-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .assign-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: transparent;
+      color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .assign-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
     }
     .comment-list {
       display: flex;
@@ -1084,6 +1122,17 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
       refreshCommentActions();
     })();
+
+    // --- Assign buttons ---
+    document.getElementById('assignToMeBtn')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'assignToMe' });
+    });
+    document.getElementById('assignToAiBtn')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'assignToAi' });
+    });
+    document.getElementById('lprButton')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'localPeerReview' });
+    });
   </script>
 </body>
 </html>`;
@@ -1183,6 +1232,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               value="${escapeHtml(d.assignee ?? '')}"
               placeholder="Enter an assignee or leave blank"
             />
+            <div class="assign-actions">
+              <button type="button" class="assign-btn" id="assignToMeBtn">Assign to Me</button>
+              <button type="button" class="assign-btn" id="assignToAiBtn">Assign to AI</button>
+            </div>
           </label>
           <label class="field-group" for="prioritySelect">
             <span class="field-label">Priority</span>
@@ -1233,6 +1286,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           <div class="form-actions">
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
+            <button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
@@ -1252,7 +1306,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             <textarea
               id="commentInput"
               class="field-textarea comment-textarea"
-               placeholder="Write a comment (mention @copilot for a reply)"
+               placeholder="${escapeHtml(this.commentPlaceholder)}"
             ></textarea>
           </label>
           <div class="form-actions">

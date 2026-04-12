@@ -25,6 +25,10 @@ interface ActiveSessionListItem {
   hasStoredAgentSession: boolean;
   canResumeSession: boolean;
   canStartNewSession: boolean;
+  requiresApproval: boolean;
+  isPaused: boolean;
+  attentionSummary?: string;
+  sortRank: number;
 }
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
@@ -92,6 +96,8 @@ function resolveSessionState(
         return { label: 'Executing', token: 'progress' };
       case 'awaiting_input':
         return { label: 'Awaiting Input', token: 'blocked' };
+      case 'paused':
+        return { label: 'Paused', token: 'status' };
       case 'completed':
         return { label: 'Completed', token: 'done' };
       case 'failed':
@@ -111,6 +117,23 @@ function resolveSessionState(
     default:
       return { label: 'Assigned', token: 'progress' };
   }
+}
+
+function findLatestEventSummary(
+  record: AgentSessionRecord | undefined,
+  types: string[]
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  for (let index = record.events.length - 1; index >= 0; index -= 1) {
+    const event = record.events[index];
+    if (types.includes(event.type)) {
+      return event.summary;
+    }
+  }
+  return undefined;
 }
 
 export class ActiveSessionsSidebarViewProvider
@@ -191,6 +214,14 @@ export class ActiveSessionsSidebarViewProvider
 
           const presentation = resolveSessionState(assignment, record);
           const supportsCopilotSession = record?.sessionId != null || assignment?.provider === 'copilot-cli';
+          const requiresApproval = record?.state === 'awaiting_approval';
+          const isPaused = record?.state === 'paused';
+          const attentionSummary = requiresApproval
+            ? findLatestEventSummary(record, ['permission_requested']) ?? 'Approval is required to continue.'
+            : isPaused
+              ? findLatestEventSummary(record, ['info', 'warning']) ?? 'This session is paused. Resume it to continue.'
+              : undefined;
+          const sortRank = requiresApproval ? 0 : isPaused ? 1 : hasLiveAgentSession ? 2 : 3;
           return {
             issueKey,
             summary,
@@ -204,7 +235,11 @@ export class ActiveSessionsSidebarViewProvider
             hasLiveAgentSession,
             hasStoredAgentSession: Boolean(record),
             canResumeSession: Boolean(record) && !hasLiveAgentSession,
-            canStartNewSession: supportsCopilotSession
+            canStartNewSession: supportsCopilotSession,
+            requiresApproval,
+            isPaused,
+            attentionSummary,
+            sortRank
           } satisfies ActiveSessionListItem;
         })
       );
@@ -213,9 +248,12 @@ export class ActiveSessionsSidebarViewProvider
         return;
       }
 
-      this.sessions = sessions.sort((left, right) =>
-        (right.assignedAt || '').localeCompare(left.assignedAt || '')
-      );
+      this.sessions = sessions.sort((left, right) => {
+        if (left.sortRank !== right.sortRank) {
+          return left.sortRank - right.sortRank;
+        }
+        return (right.assignedAt || '').localeCompare(left.assignedAt || '');
+      });
       this.loading = false;
       this.errorMessage = undefined;
       this.render();
@@ -293,8 +331,34 @@ export class ActiveSessionsSidebarViewProvider
     }
 
     const nonce = createNonce();
-    this.view.description = this.sessions.length > 0 ? String(this.sessions.length) : undefined;
-    this.view.badge = undefined;
+    const approvalCount = this.sessions.filter(session => session.requiresApproval).length;
+    const pausedCount = this.sessions.filter(session => session.isPaused).length;
+    const attentionCount = approvalCount + pausedCount;
+    const descriptionParts: string[] = [];
+    if (approvalCount > 0) {
+      descriptionParts.push(`${approvalCount} waiting`);
+    }
+    if (pausedCount > 0) {
+      descriptionParts.push(`${pausedCount} paused`);
+    }
+    this.view.description =
+      descriptionParts.length > 0
+        ? descriptionParts.join(' • ')
+        : this.sessions.length > 0
+          ? String(this.sessions.length)
+          : undefined;
+    this.view.badge =
+      attentionCount > 0
+        ? {
+            value: attentionCount,
+            tooltip:
+              approvalCount > 0 && pausedCount > 0
+                ? `${approvalCount} session(s) awaiting approval and ${pausedCount} paused session(s).`
+                : approvalCount > 0
+                  ? `${approvalCount} session(s) awaiting approval.`
+                  : `${pausedCount} paused session(s).`
+          }
+        : undefined;
 
     let content = '';
     if (this.errorMessage) {
@@ -309,7 +373,9 @@ export class ActiveSessionsSidebarViewProvider
           .map(session => {
             const classes = [
               'session-row',
-              this.selectedIssueKey === session.issueKey ? 'selected' : ''
+              this.selectedIssueKey === session.issueKey ? 'selected' : '',
+              session.requiresApproval ? 'needs-attention' : '',
+              session.isPaused ? 'is-paused' : ''
             ]
               .filter(Boolean)
               .join(' ');
@@ -322,6 +388,9 @@ export class ActiveSessionsSidebarViewProvider
                   : 'Assignment only',
               formatDate(session.assignedAt)
             ].join(' • ');
+            const attentionBanner = session.attentionSummary
+              ? `<div class="row-alert row-alert--${session.requiresApproval ? 'approval' : 'paused'}">${escapeHtml(session.attentionSummary)}</div>`
+              : '';
             return `<div class="${classes}" data-issue-key="${escapeHtml(session.issueKey)}" data-can-resume="${session.canResumeSession ? 'true' : 'false'}" data-can-start-new="${session.canStartNewSession ? 'true' : 'false'}" title="${escapeHtml(`${session.issueKey}: ${session.summary}`)}">
               <div class="row-main">
                 <div class="row-left">
@@ -333,6 +402,7 @@ export class ActiveSessionsSidebarViewProvider
                   <span class="pill pill--${session.stateToken}">${escapeHtml(session.stateLabel)}</span>
                 </div>
               </div>
+              ${attentionBanner}
               <div class="row-meta">${escapeHtml(meta)}</div>
             </div>`;
           })
@@ -381,6 +451,14 @@ export class ActiveSessionsSidebarViewProvider
         background: var(--vscode-list-activeSelectionBackground);
         color: var(--vscode-list-activeSelectionForeground);
       }
+      .session-row.needs-attention {
+        border-left: 3px solid var(--vscode-testing-iconFailed, var(--vscode-errorForeground));
+        padding-left: 9px;
+      }
+      .session-row.is-paused {
+        border-left: 3px solid var(--vscode-textPreformat-foreground, var(--vscode-symbolIcon-colorForeground));
+        padding-left: 9px;
+      }
       .row-main {
         display: flex;
         align-items: flex-start;
@@ -414,29 +492,57 @@ export class ActiveSessionsSidebarViewProvider
         font-size: 11px;
         color: var(--vscode-descriptionForeground);
       }
+      .row-alert {
+        margin-top: 8px;
+        padding: 7px 9px;
+        border-radius: 6px;
+        font-size: 11px;
+        line-height: 1.4;
+        border: 1px solid var(--vscode-panel-border);
+        background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+      }
+      .row-alert--approval {
+        border-color: color-mix(in srgb, var(--vscode-testing-iconFailed) 60%, var(--vscode-panel-border));
+        background: color-mix(in srgb, var(--vscode-testing-iconFailed) 12%, var(--vscode-editor-background));
+      }
+      .row-alert--paused {
+        border-color: color-mix(in srgb, var(--vscode-descriptionForeground) 55%, var(--vscode-panel-border));
+        background: color-mix(in srgb, var(--vscode-descriptionForeground) 8%, var(--vscode-editor-background));
+      }
       .pill {
         display: inline-flex;
         align-items: center;
         border-radius: 999px;
         padding: 2px 8px;
         font-size: 11px;
-        border: 1px solid var(--vscode-panel-border);
-        background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
+        font-weight: 500;
+        border: 1px solid transparent;
+        background: transparent;
       }
       .pill--ai {
-        border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 45%, var(--vscode-panel-border));
+        color: #93c5fd;
+        background: rgba(96, 165, 250, 0.1);
+        border-color: rgba(96, 165, 250, 0.2);
       }
       .pill--progress {
-        border-color: color-mix(in srgb, var(--vscode-charts-blue) 55%, var(--vscode-panel-border));
+        color: #93c5fd;
+        background: rgba(59, 130, 246, 0.1);
+        border-color: rgba(59, 130, 246, 0.2);
       }
       .pill--done {
-        border-color: color-mix(in srgb, var(--vscode-testing-iconPassed) 55%, var(--vscode-panel-border));
+        color: #86efac;
+        background: rgba(34, 197, 94, 0.1);
+        border-color: rgba(34, 197, 94, 0.2);
       }
       .pill--blocked {
-        border-color: color-mix(in srgb, var(--vscode-testing-iconFailed) 55%, var(--vscode-panel-border));
+        color: #fca5a5;
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.2);
       }
       .pill--status {
-        border-color: var(--vscode-panel-border);
+        color: #a1a1aa;
+        background: rgba(161, 161, 170, 0.1);
+        border-color: rgba(161, 161, 170, 0.2);
       }
       .session-context-menu {
         position: fixed;

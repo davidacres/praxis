@@ -161,13 +161,50 @@ export class AiSessionManager {
   }
 
   /** Set the plan text for an agent session. */
-  public setAgentPlan(issueKey: string, planText: string): void {
+  public setAgentPlan(
+    issueKey: string,
+    planText: string,
+    options?: {
+      persist?: boolean;
+    }
+  ): void {
     const record = this.agentSessions.get(issueKey);
     if (!record) {
       return;
     }
     record.planText = planText;
-    void this.persistAgentSessions();
+    if (options?.persist ?? true) {
+      void this.persistAgentSessions();
+    }
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** Update accumulated assistant output for an agent session. */
+  public updateAgentOutput(
+    issueKey: string,
+    output: {
+      reasoningText?: string;
+      responseText?: string;
+    },
+    options?: {
+      persist?: boolean;
+    }
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(output, 'reasoningText')) {
+      record.reasoningText = output.reasoningText;
+    }
+    if (Object.prototype.hasOwnProperty.call(output, 'responseText')) {
+      record.responseText = output.responseText;
+    }
+
+    if (options?.persist ?? true) {
+      void this.persistAgentSessions();
+    }
     this._onDidChangeAgentSession.fire(record);
   }
 

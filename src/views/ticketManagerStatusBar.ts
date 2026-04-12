@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { AiSessionManager } from '../ai/aiSessionManager';
 import { AI_PROVIDER_LABELS } from '../ai/aiProviderSetup';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { AppConfigStore } from '../config/jiraConfig';
@@ -11,6 +12,9 @@ export interface TicketManagerStatusSnapshot {
   connection?: ConnectionCheck;
   aiProviders: AiProvider[];
   defaultProvider: AiProvider | 'none';
+  activeSessionCount?: number;
+  approvalSessionCount?: number;
+  pausedSessionCount?: number;
   lastError?: string;
   isChecking: boolean;
 }
@@ -97,11 +101,55 @@ function getAiSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
+function getSessionAttentionSummary(snapshot: TicketManagerStatusSnapshot): {
+  shortLabel?: string;
+  detailLines: string[];
+  hasAttention: boolean;
+} {
+  const activeSessionCount = snapshot.activeSessionCount ?? 0;
+  const approvalSessionCount = snapshot.approvalSessionCount ?? 0;
+  const pausedSessionCount = snapshot.pausedSessionCount ?? 0;
+
+  const shortParts: string[] = [];
+  if (approvalSessionCount > 0) {
+    shortParts.push(
+      `${approvalSessionCount} approval${approvalSessionCount === 1 ? '' : 's'}`
+    );
+  }
+  if (pausedSessionCount > 0) {
+    shortParts.push(`${pausedSessionCount} paused`);
+  }
+
+  const detailLines: string[] = [];
+  if (activeSessionCount > 0) {
+    detailLines.push(
+      `Active sessions: ${activeSessionCount}`
+    );
+  }
+  if (approvalSessionCount > 0) {
+    detailLines.push(
+      `Approval required: ${approvalSessionCount}`
+    );
+  }
+  if (pausedSessionCount > 0) {
+    detailLines.push(
+      `Paused sessions: ${pausedSessionCount}`
+    );
+  }
+
+  return {
+    shortLabel: shortParts.length > 0 ? shortParts.join(' • ') : undefined,
+    detailLines,
+    hasAttention: approvalSessionCount > 0 || pausedSessionCount > 0
+  };
+}
+
 export function buildTicketManagerStatusPresentation(
   snapshot: TicketManagerStatusSnapshot
 ): TicketManagerStatusPresentation {
   const backendLabel = getBackendModeLabel(snapshot.backendMode);
   const aiSummary = getAiSummary(snapshot);
+  const sessionAttention = getSessionAttentionSummary(snapshot);
 
   let tone: StatusTone = 'ok';
   if (snapshot.isChecking) {
@@ -111,7 +159,8 @@ export function buildTicketManagerStatusPresentation(
   } else if (
     !snapshot.backendMode ||
     snapshot.connection?.status === 'warning' ||
-    aiSummary.tone === 'warning'
+    aiSummary.tone === 'warning' ||
+    sessionAttention.hasAttention
   ) {
     tone = 'warning';
   }
@@ -146,13 +195,18 @@ export function buildTicketManagerStatusPresentation(
       : undefined,
     '',
     `AI: ${escapeMarkdown(aiSummary.detailLabel)}`,
+    ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
     '',
-    '[Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
+    '[Open Active Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
   ].filter((line): line is string => line !== undefined);
 
+  const sessionAttentionSuffix = sessionAttention.shortLabel
+    ? ` • ${sessionAttention.shortLabel}`
+    : '';
+
   return {
-    text: `${icon} Ticket Manager: ${backendLabel} • AI ${aiSummary.shortLabel}`,
+    text: `${icon} Ticket Manager: ${backendLabel} • AI ${aiSummary.shortLabel}${sessionAttentionSuffix}`,
     tooltipMarkdown: tooltipLines.join('\n'),
     tone
   };
@@ -160,6 +214,7 @@ export function buildTicketManagerStatusPresentation(
 
 export class TicketManagerStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
+  private readonly disposables: vscode.Disposable[] = [];
   private refreshVersion = 0;
   private snapshot: TicketManagerStatusSnapshot = {
     aiProviders: [],
@@ -169,12 +224,27 @@ export class TicketManagerStatusBar implements vscode.Disposable {
 
   public constructor(
     private readonly configStore: AppConfigStore,
-    private readonly backendService: IssueTrackerService
+    private readonly backendService: IssueTrackerService,
+    private readonly aiSessionManager?: AiSessionManager
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.name = 'Ticket Manager Status';
     this.item.command = 'ticketManager.openSettings';
     this.item.show();
+
+    if (this.aiSessionManager) {
+      this.disposables.push(
+        this.aiSessionManager.onDidChangeSession(() => {
+          this.syncSessionState();
+          this.render();
+        }),
+        this.aiSessionManager.onDidChangeAgentSession(() => {
+          this.syncSessionState();
+          this.render();
+        })
+      );
+    }
+
     this.syncStaticState();
     this.render();
   }
@@ -230,6 +300,9 @@ export class TicketManagerStatusBar implements vscode.Disposable {
   }
 
   public dispose(): void {
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
     this.item.dispose();
   }
 
@@ -237,6 +310,35 @@ export class TicketManagerStatusBar implements vscode.Disposable {
     this.snapshot.backendMode = this.configStore.getBackendMode();
     this.snapshot.aiProviders = this.configStore.getConfiguredAiProviders();
     this.snapshot.defaultProvider = this.configStore.getAiDefaultProvider();
+    this.syncSessionState();
+  }
+
+  private syncSessionState(): void {
+    if (!this.aiSessionManager) {
+      this.snapshot.activeSessionCount = 0;
+      this.snapshot.approvalSessionCount = 0;
+      this.snapshot.pausedSessionCount = 0;
+      return;
+    }
+
+    const activeIssueKeys = new Set<string>(this.aiSessionManager.getActiveSessions().keys());
+    let approvalSessionCount = 0;
+    let pausedSessionCount = 0;
+
+    for (const [issueKey, record] of this.aiSessionManager.getAllAgentSessions().entries()) {
+      if (record.state !== 'completed' && record.state !== 'failed' && record.state !== 'aborted') {
+        activeIssueKeys.add(issueKey);
+      }
+      if (record.state === 'awaiting_approval') {
+        approvalSessionCount += 1;
+      } else if (record.state === 'paused') {
+        pausedSessionCount += 1;
+      }
+    }
+
+    this.snapshot.activeSessionCount = activeIssueKeys.size;
+    this.snapshot.approvalSessionCount = approvalSessionCount;
+    this.snapshot.pausedSessionCount = pausedSessionCount;
   }
 
   private render(): void {
@@ -244,6 +346,7 @@ export class TicketManagerStatusBar implements vscode.Disposable {
     const tooltip = new vscode.MarkdownString(presentation.tooltipMarkdown, true);
     tooltip.isTrusted = {
       enabledCommands: [
+        'ticketManager.activeSessions.focus',
         'ticketManager.configureAi',
         'ticketManager.openSettings',
         'ticketManager.checkConnection'
