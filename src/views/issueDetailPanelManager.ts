@@ -103,6 +103,7 @@ function renderSelectOptions(current: string | undefined, defaults: string[]): s
 
 export class IssueDetailPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
+  private panelIssueKey?: string;
   private activeIssueKey?: string;
   private details?: IssueDetails;
   private transitions: WorkflowTransition[] = [];
@@ -126,7 +127,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.loading = true;
     this.errorMessage = undefined;
     this.ensurePanel(issueKey);
-    this.render();
     this.panel?.reveal(vscode.ViewColumn.Beside, false);
     await this.refresh();
   }
@@ -146,19 +146,25 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.loading = false;
     this.errorMessage = undefined;
     this.requestGeneration += 1;
-    this.panel?.dispose();
-    this.panel = undefined;
+    const panel = this.panel;
+    this.resetPanelState();
+    panel?.dispose();
   }
 
   public dispose(): void {
-    this.panel?.dispose();
-    this.panel = undefined;
+    const panel = this.panel;
+    this.resetPanelState();
+    panel?.dispose();
   }
 
   private ensurePanel(issueKey: string): void {
     if (this.panel) {
-      this.panel.title = issueKey;
-      return;
+      if (this.panelIssueKey === issueKey) {
+        return;
+      }
+      const existingPanel = this.panel;
+      this.resetPanelState();
+      existingPanel.dispose();
     }
 
     this.panel = vscode.window.createWebviewPanel(
@@ -170,10 +176,27 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         retainContextWhenHidden: true
       }
     );
+    this.panelIssueKey = issueKey;
+
+    // Set initial loading HTML once — do not set webview.html again until data arrives
+    const nonce = createNonce();
+    this.panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading ${escapeHtml(issueKey)}</title>
+  <style>
+    body { margin: 0; padding: 24px; font-family: var(--vscode-font-family); color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); }
+  </style>
+</head>
+<body><h2>Loading ${escapeHtml(issueKey)}...</h2></body>
+</html>`;
 
     this.panel.onDidDispose(
       () => {
-        this.panel = undefined;
+        this.resetPanelState();
       },
       undefined,
       []
@@ -276,7 +299,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     const generation = ++this.requestGeneration;
     this.loading = true;
     this.errorMessage = undefined;
-    this.render();
 
     try {
       const [issue, transitions] = await Promise.all([
@@ -329,268 +351,104 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.parentItemsError = undefined;
     } finally {
       if (generation === this.requestGeneration) {
-        this.render();
+        this.renderFull();
       }
     }
   }
 
-  private render(): void {
+  private renderFull(): void {
     if (!this.panel) {
       return;
     }
 
-    const issueKey = this.activeIssueKey ?? 'Issue';
-    this.panel.title = issueKey;
-    try {
-      this.panel.webview.html = this.getHtml(this.panel.webview);
-    } catch (error) {
-      const escapedIssueKey = escapeHtml(issueKey);
-      const message = error instanceof Error ? error.message : String(error);
-      this.panel.webview.html = this.wrapPage(
-        createNonce(),
-        escapedIssueKey,
-        `<section class="empty-state error"><h2>Unable to render issue</h2><p>${escapeHtml(message)}</p></section>`,
-        escapedIssueKey
-      );
+    const nonce = createNonce();
+    const issueKey = this.activeIssueKey?.trim() || 'Issue';
+
+    // DEBUG: minimal HTML to isolate rendering issue
+    this.panel.webview.html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug: ${escapeHtml(issueKey)}</title>
+  <style>
+    body {
+      margin: 0; padding: 24px;
+      font-family: var(--vscode-font-family);
+      color: var(--vscode-editor-foreground);
+      background: var(--vscode-editor-background);
     }
+    h1 { color: var(--vscode-textLink-foreground); }
+    .info { margin: 16px 0; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Issue Detail Debug - ${escapeHtml(issueKey)}</h1>
+  <div class="info">
+    <p><strong>Loading:</strong> ${this.loading}</p>
+    <p><strong>Has details:</strong> ${Boolean(this.details)}</p>
+    <p><strong>Error:</strong> ${escapeHtml(this.errorMessage ?? 'none')}</p>
+    <p><strong>Rendered at:</strong> ${new Date().toISOString()}</p>
+  </div>
+</body>
+</html>`;
   }
 
-  private getHtml(webview: vscode.Webview): string {
-    const nonce = createNonce();
-    const issueKey = escapeHtml(this.activeIssueKey ?? '');
+  private resetPanelState(): void {
+    this.panel = undefined;
+    this.panelIssueKey = undefined;
+  }
+
+  private getHtml(nonce: string): string {
+    const issueKey = this.activeIssueKey?.trim() || 'Issue';
+    let bodyContent: string;
+    let documentTitle: string;
+    let headerTitle: string;
+    let headerSubtitle = '';
 
     if (this.loading) {
-      return this.wrapPage(
-        nonce,
-        issueKey,
-        `<section class="empty-state"><h2>Loading ${issueKey}…</h2></section>`,
-        `Loading ${issueKey}…`
-      );
+      documentTitle = `Loading ${issueKey}`;
+      headerTitle = `Loading ${issueKey}...`;
+      bodyContent = `<section class="empty-state"><h2>Loading ${escapeHtml(issueKey)}...</h2></section>`;
+    } else if (this.errorMessage) {
+      documentTitle = `${issueKey} - Ticket Details`;
+      headerTitle = issueKey;
+      bodyContent = `<section class="empty-state error"><h2>Unable to load issue</h2><p>${escapeHtml(this.errorMessage)}</p></section>`;
+    } else if (!this.details) {
+      documentTitle = `${issueKey} - Ticket Details`;
+      headerTitle = issueKey;
+      bodyContent = `<section class="empty-state"><h2>No issue data</h2></section>`;
+    } else {
+      const d = this.details;
+      documentTitle = `${d.key} - Ticket Details`;
+      headerTitle = d.key;
+      headerSubtitle = d.summary;
+      bodyContent = this.buildIssueBodyHtml(d);
     }
 
-    if (this.errorMessage) {
-      return this.wrapPage(
-        nonce,
-        issueKey,
-        `<section class="empty-state error"><h2>Unable to load issue</h2><p>${escapeHtml(this.errorMessage)}</p></section>`,
-        issueKey || 'Issue'
-      );
-    }
+    const subtitleHtml = headerSubtitle
+      ? `<p class="panel-subtitle">${escapeHtml(headerSubtitle)}</p>`
+      : '';
 
-    if (!this.details) {
-      return this.wrapPage(
-        nonce,
-        issueKey,
-        `<section class="empty-state"><h2>No issue data</h2></section>`,
-        issueKey || 'Issue'
-      );
-    }
-
-    const d = this.details;
-    const parentRule = getParentRule(d.issueType, this.backendService.mode);
-    const resolvedParentLabel = getResolvedParentLabel(
-      d.issueType,
-      this.backendService.mode,
-      d.parentIssue
-    );
-    const parentReference = formatParentReference(d.parentIssue);
-    const readonlyRows = [
-      ['Project', d.projectName ? `${d.projectKey} • ${d.projectName}` : d.projectKey ?? '—'],
-      ['Created', formatDate(d.created)],
-      ['Updated', formatDate(d.updated)]
-    ]
-      .map(
-        ([label, value]) => `<div class="detail-row">
-          <div class="detail-label">${escapeHtml(label)}</div>
-          <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
-        </div>`
-      )
-      .join('');
-    const statusOptions = `<option value="" selected>${escapeHtml(d.status)}</option>${this.transitions
-      .map(
-        transition =>
-          `<option value="${escapeHtml(transition.id)}">${escapeHtml(
-            transition.toStatus ?? transition.name
-          )}</option>`
-      )
-      .join('')}`;
-    const issueTypeOptions = renderSelectOptions(d.issueType, [
-      'Epic',
-      'Feature',
-      'Story',
-      'Task',
-      'Subtask',
-      'Bug',
-      'Issue'
-    ]);
-    const priorityOptions = renderSelectOptions(d.priority, [
-      'Critical',
-      'Highest',
-      'High',
-      'Medium',
-      'Low',
-      'Lowest'
-    ]);
-    const comments = (d.comments ?? [])
-      .map(comment => {
-        const formattedDate = formatDate(comment.created ?? comment.updated);
-        const metaParts = [comment.author, formattedDate !== '—' ? formattedDate : undefined].filter(
-          (value): value is string => Boolean(value)
-        );
-        return `<div class="comment-item">
-          <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
-          <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
-        </div>`;
-      })
-      .join('');
-
-    const body = `
-      <section class="card">
-        <h3>Details</h3>
-        <form id="issueEditForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">
-          ${readonlyRows}
-          <label class="field-group" for="summaryInput">
-            <span class="field-label">Summary</span>
-            <input
-              id="summaryInput"
-              class="field-input"
-              type="text"
-              value="${escapeHtml(d.summary)}"
-              placeholder="Issue summary"
-            />
-          </label>
-          <label class="field-group" for="statusSelect">
-            <span class="field-label">Status</span>
-            <select id="statusSelect" class="field-select" ${this.transitions.length === 0 ? 'disabled' : ''}>
-              ${statusOptions}
-            </select>
-          </label>
-          <label class="field-group" for="issueTypeSelect">
-            <span class="field-label">Ticket Type</span>
-            <select id="issueTypeSelect" class="field-select">
-              ${issueTypeOptions}
-            </select>
-          </label>
-          <label class="field-group" for="assigneeInput">
-            <span class="field-label">Assignee</span>
-            <input
-              id="assigneeInput"
-              class="field-input"
-              type="text"
-              value="${escapeHtml(d.assignee ?? '')}"
-              placeholder="Enter an assignee or leave blank"
-            />
-          </label>
-          <label class="field-group" for="prioritySelect">
-            <span class="field-label">Priority</span>
-            <select id="prioritySelect" class="field-select">
-              ${priorityOptions}
-            </select>
-          </label>
-          <div
-            class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
-            id="parentFieldGroup"
-            data-mode="${escapeHtml(this.backendService.mode)}"
-            data-initial-parent-key="${escapeHtml(d.parentKey ?? '')}"
-            data-current-parent-type="${escapeHtml(d.parentIssue?.issueType ?? '')}"
-            data-current-parent-summary="${escapeHtml(d.parentIssue?.summary ?? '')}"
-            data-current-parent-description="${escapeHtml(d.parentIssue?.description ?? '')}"
-          >
-            <span class="field-label" id="parentFieldLabel">${escapeHtml(resolvedParentLabel)}</span>
-            <input
-              id="parentInput"
-              class="field-input"
-              type="text"
-              value="${escapeHtml(d.parentKey ?? '')}"
-              placeholder="${escapeHtml(parentRule.placeholder)}"
-            />
-            <div class="field-help" id="parentFieldHint">${escapeHtml(parentRule.helperText)}</div>
-            <div class="parent-preview" id="parentPreview">
-              <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
-                parentReference || parentRule.emptyText
-              )}</div>
-              <div class="parent-preview-description markdown-body${d.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${markdownToHtmlSafe(
-                d.parentIssue?.description ?? ''
-              )}</div>
-            </div>
-            ${
-              this.parentItemsError
-                ? `<div class="form-status error">${escapeHtml(this.parentItemsError)}</div>`
-                : ''
-            }
-          </div>
-          <label class="field-group" for="descriptionInput">
-            <span class="field-label">Description</span>
-            <textarea
-              id="descriptionInput"
-              class="field-textarea"
-              placeholder="Add a description"
-            >${escapeHtml(d.description ?? '')}</textarea>
-          </label>
-          <div class="form-actions">
-            <button class="primary-button" id="saveButton" type="submit">Save</button>
-            <button class="secondary-button" id="resetButton" type="button">Reset</button>
-            <span class="form-status" id="formStatus" aria-live="polite"></span>
-          </div>
-        </form>
-      </section>
-      <section class="card">
-        <h3>Comments</h3>
-        <div class="comment-list">
-          ${
-            comments.length > 0
-              ? comments
-              : '<div class="comment-empty">No comments yet.</div>'
-          }
-        </div>
-        <form id="commentForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">
-          <label class="field-group" for="commentInput">
-            <span class="field-label">Add Comment</span>
-            <textarea
-              id="commentInput"
-              class="field-textarea comment-textarea"
-               placeholder="Write a comment (mention @copilot for a reply)"
-            ></textarea>
-          </label>
-          <div class="form-actions">
-            <button class="primary-button" id="addCommentButton" type="submit">Add Comment</button>
-            <span class="form-status" id="commentStatus" aria-live="polite"></span>
-          </div>
-        </form>
-      </section>
-    `;
-
-    return this.wrapPage(nonce, issueKey, body, escapeHtml(d.key), escapeHtml(d.summary));
-  }
-
-  private wrapPage(
-    nonce: string,
-    title: string,
-    body: string,
-    headerTitle: string = title,
-    headerSubtitle?: string
-  ): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(documentTitle)}</title>
   <style>
     :root { color-scheme: light dark; }
-    html, body {
-      height: 100%;
-    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
     body {
-      margin: 0;
       display: flex;
       font-family: var(--vscode-font-family);
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
     }
     .page {
-      box-sizing: border-box;
       display: flex;
       flex: 1;
       width: 100%;
@@ -598,7 +456,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       padding: 8px;
     }
     .content-shell {
-      box-sizing: border-box;
       display: flex;
       flex: 1;
       flex-direction: column;
@@ -754,11 +611,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
       border-color: var(--vscode-dropdown-border, var(--vscode-panel-border));
     }
-    .inline-action-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
     .form-actions {
       display: flex;
       align-items: center;
@@ -804,20 +656,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     .form-status.success {
       color: var(--vscode-testing-iconPassed, var(--vscode-textLink-foreground));
     }
-    .meta-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    .meta-table th {
-      text-align: left;
-      width: 120px;
-      padding: 6px 12px 6px 0;
-      color: var(--vscode-descriptionForeground);
-      font-weight: normal;
-      vertical-align: top;
-    }
-    .meta-table td { padding: 6px 0; }
     .detail-row {
       display: grid;
       grid-template-columns: 120px 1fr;
@@ -944,35 +782,34 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     <div class="content-shell">
       <header class="panel-header">
         <div class="panel-header-main">
-          <h1>${headerTitle}</h1>
-          ${headerSubtitle ? `<p class="panel-subtitle">${headerSubtitle}</p>` : ''}
+          <h1>${escapeHtml(headerTitle)}</h1>
+          ${subtitleHtml}
         </div>
         ${renderIconButton('refreshBtn', 'Refresh', 'refresh')}
       </header>
       <main class="content">
-        ${body}
+        ${bodyContent}
       </main>
     </div>
   </div>
   <script nonce="${nonce}">
-    const vscodeApi = acquireVsCodeApi();
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', () => vscodeApi.postMessage({ type: 'refresh' }));
-    }
+    const vscode = acquireVsCodeApi();
+
+    document.getElementById('refreshBtn')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'refresh' });
+    });
 
     function setStatusMessage(target, text, kind) {
-      if (!(target instanceof HTMLElement)) {
-        return;
-      }
-
+      if (!(target instanceof HTMLElement)) return;
       target.textContent = text || '';
       target.className = kind ? 'form-status ' + kind : 'form-status';
     }
 
-    const editForm = document.getElementById('issueEditForm');
-    let handleSaveIssueEditsResult = undefined;
-    if (editForm instanceof HTMLFormElement) {
+    // --- Issue edit form ---
+    (function () {
+      const editForm = document.getElementById('issueEditForm');
+      if (!(editForm instanceof HTMLFormElement)) return;
+
       const summaryInput = document.getElementById('summaryInput');
       const statusSelect = document.getElementById('statusSelect');
       const issueTypeSelect = document.getElementById('issueTypeSelect');
@@ -994,7 +831,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       let initialState = readCurrentState();
 
       function normalizeIssueType(value) {
-        return (value || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+        return (value || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
       }
 
       function getParentUi(issueType) {
@@ -1114,17 +951,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
       function getValidationError() {
         const summary = summaryInput instanceof HTMLInputElement ? summaryInput.value.trim() : '';
-        if (summary.length === 0) {
-          return 'Summary is required.';
-        }
+        if (summary.length === 0) return 'Summary is required.';
         const issueType = issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : '';
-        if (issueType.length === 0) {
-          return 'Ticket type is required.';
-        }
+        if (issueType.length === 0) return 'Ticket type is required.';
         const priority = prioritySelect instanceof HTMLSelectElement ? prioritySelect.value.trim() : '';
-        if (priority.length === 0) {
-          return 'Priority is required.';
-        }
+        if (priority.length === 0) return 'Priority is required.';
         const parentUi = getParentUi(issueType);
         const parentKey = parentInput instanceof HTMLInputElement ? parentInput.value.trim() : '';
         if (parentUi.canHaveParent && parentUi.requiresParent && parentKey.length === 0) {
@@ -1142,7 +973,6 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           setStatusMessage(formStatus, 'Saving...', '');
           return;
         }
-
         const validationError = getValidationError();
         if (validationError) {
           setStatusMessage(formStatus, validationError, 'error');
@@ -1185,21 +1015,17 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
       editForm.addEventListener('submit', event => {
         event.preventDefault();
-        if (saving) {
-          return;
-        }
-
+        if (saving) return;
         clearStatusOverride();
         const validationError = getValidationError();
         if (validationError) {
           refreshActions();
           return;
         }
-
         saving = true;
         refreshActions();
         const currentState = readCurrentState();
-        vscodeApi.postMessage({
+        vscode.postMessage({
           type: 'saveIssueEdits',
           issueKey: editForm.dataset.issueKey,
           summary: currentState.summary,
@@ -1213,57 +1039,47 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       });
 
       resetButton?.addEventListener('click', () => {
-        if (summaryInput instanceof HTMLInputElement) {
-          summaryInput.value = initialState.summary;
-        }
-        if (statusSelect instanceof HTMLSelectElement) {
-          statusSelect.value = initialState.transitionId;
-        }
-        if (issueTypeSelect instanceof HTMLSelectElement) {
-          issueTypeSelect.value = initialState.issueType;
-        }
-        if (assigneeInput instanceof HTMLInputElement) {
-          assigneeInput.value = initialState.assignee;
-        }
-        if (prioritySelect instanceof HTMLSelectElement) {
-          prioritySelect.value = initialState.priority;
-        }
-        if (descriptionInput instanceof HTMLTextAreaElement) {
-          descriptionInput.value = initialState.description;
-        }
-        if (parentInput instanceof HTMLInputElement) {
-          parentInput.value = initialState.parentKey;
-        }
+        if (summaryInput instanceof HTMLInputElement) summaryInput.value = initialState.summary;
+        if (statusSelect instanceof HTMLSelectElement) statusSelect.value = initialState.transitionId;
+        if (issueTypeSelect instanceof HTMLSelectElement) issueTypeSelect.value = initialState.issueType;
+        if (assigneeInput instanceof HTMLInputElement) assigneeInput.value = initialState.assignee;
+        if (prioritySelect instanceof HTMLSelectElement) prioritySelect.value = initialState.priority;
+        if (descriptionInput instanceof HTMLTextAreaElement) descriptionInput.value = initialState.description;
+        if (parentInput instanceof HTMLInputElement) parentInput.value = initialState.parentKey;
         clearStatusOverride();
         updateParentField();
         refreshActions();
       });
 
-      handleSaveIssueEditsResult = message => {
-        saving = false;
-        if (message.ok) {
-          initialState = readCurrentState();
-          if (statusSelect instanceof HTMLSelectElement) {
-            statusSelect.value = '';
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'saveIssueEditsResult') {
+          saving = false;
+          if (msg.ok) {
+            initialState = readCurrentState();
+            if (statusSelect instanceof HTMLSelectElement) statusSelect.value = '';
+            initialState.transitionId = '';
+            statusOverride = { text: 'Saved.', kind: 'success' };
+          } else {
+            statusOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to save changes.',
+              kind: 'error'
+            };
           }
-          initialState.transitionId = '';
-          statusOverride = { text: 'Saved.', kind: 'success' };
-        } else {
-          statusOverride = {
-            text: typeof message.error === 'string' ? message.error : 'Unable to save changes.',
-            kind: 'error'
-          };
+          refreshActions();
         }
-        refreshActions();
-      };
+      });
 
       updateParentField();
       refreshActions();
-    }
+    })();
 
-    const commentForm = document.getElementById('commentForm');
-    let handleAddIssueCommentResult = undefined;
-    if (commentForm instanceof HTMLFormElement) {
+    // --- Comment form ---
+    (function () {
+      const commentForm = document.getElementById('commentForm');
+      if (!(commentForm instanceof HTMLFormElement)) return;
+
       const commentInput = document.getElementById('commentInput');
       const addCommentButton = document.getElementById('addCommentButton');
       const commentStatus = document.getElementById('commentStatus');
@@ -1271,12 +1087,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       let commentOverride = undefined;
 
       function refreshCommentActions() {
-        const body =
-          commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
+        const body = commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
         if (addCommentButton instanceof HTMLButtonElement) {
           addCommentButton.disabled = commentSaving || body.length === 0;
         }
-
         if (commentOverride) {
           setStatusMessage(commentStatus, commentOverride.text, commentOverride.kind);
         } else if (commentSaving) {
@@ -1293,57 +1107,215 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
       commentForm.addEventListener('submit', event => {
         event.preventDefault();
-        const body =
-          commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
-        if (commentSaving || body.length === 0) {
-          return;
-        }
-
+        const body = commentInput instanceof HTMLTextAreaElement ? commentInput.value.trim() : '';
+        if (commentSaving || body.length === 0) return;
         commentSaving = true;
         commentOverride = undefined;
         refreshCommentActions();
-        vscodeApi.postMessage({
+        vscode.postMessage({
           type: 'addIssueComment',
           issueKey: commentForm.dataset.issueKey,
           body
         });
       });
 
-      handleAddIssueCommentResult = message => {
-        commentSaving = false;
-        if (message.ok) {
-          if (commentInput instanceof HTMLTextAreaElement) {
-            commentInput.value = '';
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'addIssueCommentResult') {
+          commentSaving = false;
+          if (msg.ok) {
+            if (commentInput instanceof HTMLTextAreaElement) commentInput.value = '';
+            commentOverride = { text: 'Comment added.', kind: 'success' };
+          } else {
+            commentOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to add comment.',
+              kind: 'error'
+            };
           }
-          commentOverride = { text: 'Comment added.', kind: 'success' };
-        } else {
-          commentOverride = {
-            text: typeof message.error === 'string' ? message.error : 'Unable to add comment.',
-            kind: 'error'
-          };
+          refreshCommentActions();
         }
-        refreshCommentActions();
-      };
+      });
 
       refreshCommentActions();
-    }
-
-    window.addEventListener('message', event => {
-      const message = event.data;
-      if (!message || typeof message.type !== 'string') {
-        return;
-      }
-
-      if (message.type === 'saveIssueEditsResult' && handleSaveIssueEditsResult) {
-        handleSaveIssueEditsResult(message);
-        return;
-      }
-      if (message.type === 'addIssueCommentResult' && handleAddIssueCommentResult) {
-        handleAddIssueCommentResult(message);
-      }
-    });
+    })();
   </script>
 </body>
 </html>`;
+  }
+
+  private buildIssueBodyHtml(d: IssueDetails): string {
+    const parentRule = getParentRule(d.issueType, this.backendService.mode);
+    const resolvedParentLabel = getResolvedParentLabel(
+      d.issueType,
+      this.backendService.mode,
+      d.parentIssue
+    );
+    const parentReference = formatParentReference(d.parentIssue);
+    const readonlyRows = [
+      ['Project', d.projectName ? `${d.projectKey} • ${d.projectName}` : d.projectKey ?? '—'],
+      ['Created', formatDate(d.created)],
+      ['Updated', formatDate(d.updated)]
+    ]
+      .map(
+        ([label, value]) => `<div class="detail-row">
+          <div class="detail-label">${escapeHtml(label)}</div>
+          <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
+        </div>`
+      )
+      .join('');
+    const statusOptions = `<option value="" selected>${escapeHtml(d.status)}</option>${this.transitions
+      .map(
+        transition =>
+          `<option value="${escapeHtml(transition.id)}">${escapeHtml(
+            transition.toStatus ?? transition.name
+          )}</option>`
+      )
+      .join('')}`;
+    const issueTypeOptions = renderSelectOptions(d.issueType, [
+      'Epic',
+      'Feature',
+      'Story',
+      'Task',
+      'Subtask',
+      'Bug',
+      'Issue'
+    ]);
+    const priorityOptions = renderSelectOptions(d.priority, [
+      'Critical',
+      'Highest',
+      'High',
+      'Medium',
+      'Low',
+      'Lowest'
+    ]);
+    const comments = (d.comments ?? [])
+      .map(comment => {
+        const formattedDate = formatDate(comment.created ?? comment.updated);
+        const metaParts = [comment.author, formattedDate !== '—' ? formattedDate : undefined].filter(
+          (value): value is string => Boolean(value)
+        );
+        return `<div class="comment-item">
+          <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
+          <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
+        </div>`;
+      })
+      .join('');
+
+    return `
+      <section class="card">
+        <h3>Details</h3>
+        <form id="issueEditForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">
+          ${readonlyRows}
+          <label class="field-group" for="summaryInput">
+            <span class="field-label">Summary</span>
+            <input
+              id="summaryInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(d.summary)}"
+              placeholder="Issue summary"
+            />
+          </label>
+          <label class="field-group" for="statusSelect">
+            <span class="field-label">Status</span>
+            <select id="statusSelect" class="field-select" ${this.transitions.length === 0 ? 'disabled' : ''}>
+              ${statusOptions}
+            </select>
+          </label>
+          <label class="field-group" for="issueTypeSelect">
+            <span class="field-label">Ticket Type</span>
+            <select id="issueTypeSelect" class="field-select">
+              ${issueTypeOptions}
+            </select>
+          </label>
+          <label class="field-group" for="assigneeInput">
+            <span class="field-label">Assignee</span>
+            <input
+              id="assigneeInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(d.assignee ?? '')}"
+              placeholder="Enter an assignee or leave blank"
+            />
+          </label>
+          <label class="field-group" for="prioritySelect">
+            <span class="field-label">Priority</span>
+            <select id="prioritySelect" class="field-select">
+              ${priorityOptions}
+            </select>
+          </label>
+          <div
+            class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
+            id="parentFieldGroup"
+            data-mode="${escapeHtml(this.backendService.mode)}"
+            data-initial-parent-key="${escapeHtml(d.parentKey ?? '')}"
+            data-current-parent-type="${escapeHtml(d.parentIssue?.issueType ?? '')}"
+            data-current-parent-summary="${escapeHtml(d.parentIssue?.summary ?? '')}"
+            data-current-parent-description="${escapeHtml(d.parentIssue?.description ?? '')}"
+          >
+            <span class="field-label" id="parentFieldLabel">${escapeHtml(resolvedParentLabel)}</span>
+            <input
+              id="parentInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(d.parentKey ?? '')}"
+              placeholder="${escapeHtml(parentRule.placeholder)}"
+            />
+            <div class="field-help" id="parentFieldHint">${escapeHtml(parentRule.helperText)}</div>
+            <div class="parent-preview" id="parentPreview">
+              <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
+                parentReference || parentRule.emptyText
+              )}</div>
+              <div class="parent-preview-description markdown-body${d.parentIssue?.description ? '' : ' is-hidden'}" id="parentPreviewDescription">${markdownToHtmlSafe(
+                d.parentIssue?.description ?? ''
+              )}</div>
+            </div>
+            ${
+              this.parentItemsError
+                ? `<div class="form-status error">${escapeHtml(this.parentItemsError)}</div>`
+                : ''
+            }
+          </div>
+          <label class="field-group" for="descriptionInput">
+            <span class="field-label">Description</span>
+            <textarea
+              id="descriptionInput"
+              class="field-textarea"
+              placeholder="Add a description"
+            >${escapeHtml(d.description ?? '')}</textarea>
+          </label>
+          <div class="form-actions">
+            <button class="primary-button" id="saveButton" type="submit">Save</button>
+            <button class="secondary-button" id="resetButton" type="button">Reset</button>
+            <span class="form-status" id="formStatus" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+      <section class="card">
+        <h3>Comments</h3>
+        <div class="comment-list">
+          ${
+            comments.length > 0
+              ? comments
+              : '<div class="comment-empty">No comments yet.</div>'
+          }
+        </div>
+        <form id="commentForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">
+          <label class="field-group" for="commentInput">
+            <span class="field-label">Add Comment</span>
+            <textarea
+              id="commentInput"
+              class="field-textarea comment-textarea"
+               placeholder="Write a comment (mention @copilot for a reply)"
+            ></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="primary-button" id="addCommentButton" type="submit">Add Comment</button>
+            <span class="form-status" id="commentStatus" aria-live="polite"></span>
+          </div>
+        </form>
+      </section>
+    `;
   }
 }
