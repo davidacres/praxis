@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {
+  identifyPlanFolder,
   parsePlanFolder,
   stableFeatureKey,
   stableStoryKey
@@ -49,6 +50,15 @@ export async function resolveSuggestedPlansFolderUri(): Promise<vscode.Uri | und
       } catch {
         // candidate doesn't exist — try next
       }
+    }
+  }
+
+  for (const wf of folders) {
+    try {
+      const identified = await identifyPlanFolder(wf.uri);
+      return identified.plansRootUri;
+    } catch {
+      // No plans tree found under this workspace root.
     }
   }
 

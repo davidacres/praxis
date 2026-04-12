@@ -14,6 +14,12 @@ export class AiSessionManager {
   private sessions: Map<string, AiAssignment>;
   private agentSessions: Map<string, AgentSessionRecord>;
 
+  private readonly _onDidChangeSession = new vscode.EventEmitter<{
+    issueKey: string;
+    session?: AiAssignment;
+  }>();
+  /** Fires when any AI assignment session changes. */
+  public readonly onDidChangeSession = this._onDidChangeSession.event;
   private readonly _onDidChangeAgentSession = new vscode.EventEmitter<AgentSessionRecord>();
   /** Fires when any agent session's state or events change. */
   public readonly onDidChangeAgentSession = this._onDidChangeAgentSession.event;
@@ -24,15 +30,17 @@ export class AiSessionManager {
   }
 
   /** Create a new AI session for the given issue and provider. */
-  public createSession(issueKey: string, provider: AiProvider): AiAssignment {
+  public createSession(issueKey: string, provider: AiProvider, label?: string): AiAssignment {
     const assignment: AiAssignment = {
       provider,
+      label: label?.trim() || undefined,
       sessionId: this.generateSessionId(),
       assignedAt: new Date().toISOString(),
       status: 'active'
     };
     this.sessions.set(issueKey, assignment);
     void this.persistSessions();
+    this._onDidChangeSession.fire({ issueKey, session: assignment });
     return assignment;
   }
 
@@ -52,12 +60,14 @@ export class AiSessionManager {
     }
     session.status = status;
     void this.persistSessions();
+    this._onDidChangeSession.fire({ issueKey, session });
   }
 
   /** Remove the session for an issue. */
   public removeSession(issueKey: string): void {
     if (this.sessions.delete(issueKey)) {
       void this.persistSessions();
+      this._onDidChangeSession.fire({ issueKey, session: undefined });
     }
   }
 
@@ -117,6 +127,13 @@ export class AiSessionManager {
       return;
     }
     record.state = state;
+    if (state === 'completed') {
+      this.updateSessionStatus(issueKey, 'completed');
+    } else if (state === 'failed' || state === 'aborted') {
+      this.updateSessionStatus(issueKey, 'failed');
+    } else {
+      this.updateSessionStatus(issueKey, 'active');
+    }
     if (state === 'completed' || state === 'failed' || state === 'aborted') {
       record.completedAt = new Date().toISOString();
     }
@@ -163,6 +180,7 @@ export class AiSessionManager {
   }
 
   public dispose(): void {
+    this._onDidChangeSession.dispose();
     this._onDidChangeAgentSession.dispose();
   }
 

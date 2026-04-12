@@ -82,18 +82,14 @@ async function extractApiError(response: Response, providerLabel: string): Promi
 async function runCopilotPrompt(
   prompt: string,
   options: {
-    cliPath: string;
+    cliPath?: string;
     systemPrompt: string;
     workingDirectory?: string;
   }
 ): Promise<string> {
-  const cliPath = options.cliPath.trim();
-  if (!cliPath) {
-    throw new Error('Copilot CLI path is not configured.');
-  }
-
   const sdk = await import('@github/copilot-sdk');
-  const client = new sdk.CopilotClient({ cliPath });
+  const cliPath = options.cliPath?.trim();
+  const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
   let session:
     | {
         disconnect(): Promise<void>;
@@ -210,7 +206,7 @@ export async function reviewTicketWithClaude(
 
 export async function reviewTicketWithCopilot(
   issue: IssueDetails,
-  cliPath: string,
+  cliPath: string | undefined,
   agentName: string,
   workingDirectory?: string
 ): Promise<string> {
@@ -229,7 +225,7 @@ export async function reviewTicketWithCopilot(
 
 export async function respondToCopilotComment(
   issue: IssueDetails,
-  cliPath: string,
+  cliPath: string | undefined,
   request: string,
   workingDirectory?: string
 ): Promise<string> {

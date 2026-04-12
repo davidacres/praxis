@@ -1,10 +1,11 @@
 # Ticket Manager
 
-Ticket Manager is a VS Code extension for working with issues and boards through a generic app surface. It supports three runtime modes:
+Ticket Manager is a VS Code extension for working with issues and boards through a generic app surface. It supports four runtime modes:
 
 - `jira`: Jira Connected mode through a Jira MCP server
 - `demo`: built-in sample data with no external service
 - `file`: a workspace plan file containing features, stories, tasks, bugs, statuses, and boards
+- `livefolder`: a markdown plans folder that is read live from disk
 
 ## Features
 
@@ -14,6 +15,7 @@ Ticket Manager is a VS Code extension for working with issues and boards through
 - Board editor tab with drag-and-drop status transitions
 - Issue details sidebar plus a full issue details tab
 - File mode with auto-discovery or creation of a `ticket-plan.jsonc` plan file
+- Live Folder mode with discovery of markdown plans plus optional markdown issue creation
 - Injectable backend service layer so the UI can switch between connected, demo, and file-backed implementations
 - Diagnostics for missing configuration, missing capabilities, and empty access
 
@@ -98,6 +100,25 @@ The starter plan models:
 
 along with workflow statuses, boards, parent-child relationships, and persisted status changes.
 
+### Live Folder Mode
+
+Live Folder mode reads a markdown plans tree directly from disk. Ticket Manager can start from the `plans` folder itself, the `features` folder, or a parent folder and will search for the plans tree automatically.
+
+Expected structure:
+
+- `plans/features/feature-NN-name/feature.md`
+- `plans/features/feature-NN-name/story-NN-M-name.md`
+- `plans/features/feature-NN-name/task-NN-M-name.md`
+- `plans/features/feature-NN-name/bug-NN-M-name.md`
+
+When issue creation is enabled, Ticket Manager follows the same layout:
+
+- Creating a `Feature` creates a new `feature-NN-name/feature.md` folder pair.
+- Creating a `Story`, `Task`, or `Bug` requires a parent `Feature` and writes a markdown file inside that feature folder.
+- New child issues are also added to the parent feature's `feature.md` item table so later status changes stay in sync.
+
+Use `ticketManager.liveFolderAllowIssueCreation` to disable markdown issue creation and keep Live Folder mode read-only from the extension.
+
 ## Boards
 
 Use the `Boards` view to browse available boards, then open a board in the editor area. The board tab groups issues into status columns, supports per-board column configuration, and keeps enabled columns visible even when they are empty.
@@ -114,6 +135,10 @@ Board filters are available through:
 - `ticketManager.connectionType`
 - `ticketManager.backendMode`
 - `ticketManager.planFilePath`
+- `ticketManager.liveFolderPath`
+- `ticketManager.liveFolderProjectKey`
+- `ticketManager.liveFolderProjectName`
+- `ticketManager.liveFolderAllowIssueCreation`
 - `ticketManager.stdioCommand`
 - `ticketManager.stdioArgs`
 - `ticketManager.stdioCwd`
@@ -127,12 +152,13 @@ Board filters are available through:
 
 1. Run `npm run compile`.
 2. Press `F5` to open the Extension Development Host.
-3. Run `Ticket Manager: Set Backend Mode` and choose `Jira Connected`, `Demo`, or `File`.
+3. Run `Ticket Manager: Set Backend Mode` and choose `Jira Connected`, `Demo`, `File`, or `Live Folder`.
 4. Confirm the Activity Bar icon appears and opens the `Tickets` container.
 5. If using Jira Connected mode, run `Ticket Manager: Configure Connection` and then `Ticket Manager: Check Connection`.
 6. Verify `My Issues` loads, filters update the list, parent item scoping narrows results, and `Change Status` refreshes the selected issue.
 7. Verify `Boards` loads, board filters work, selecting a board opens a tab, and selecting a board issue updates `Issue Details`.
 8. If using File mode, confirm a plan file is discovered or created and that changing a status updates the plan file on disk.
+9. If using Live Folder mode, confirm the plans folder is detected, existing markdown issues load, and new `Feature`/`Story`/`Task`/`Bug` items create markdown files when `ticketManager.liveFolderAllowIssueCreation` is enabled.
 
 ## Packaging
 

@@ -6,6 +6,7 @@ export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
 
 export interface AiAssignment {
   provider: AiProvider;
+  label?: string;
   sessionId: string;
   assignedAt: string; // ISO timestamp
   status: 'active' | 'completed' | 'failed';

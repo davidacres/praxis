@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { AppConfigStore } from '../config/jiraConfig';
+import {
+  buildParentValidationMessage,
+  getParentRule,
+  isAllowedParentType
+} from '../issues/issueHierarchy';
 import type {
   BackendMode,
   Board,
@@ -13,6 +18,7 @@ import type {
   FilterMetadata,
   IssueDetails,
   IssueFilters,
+  ParentIssueReference,
   IssueSummary,
   PagedIssues,
   ParentItemQueryOptions,
@@ -22,14 +28,16 @@ import type {
   WorkflowTransition
 } from '../types';
 import {
+  type ParsedChildFile,
   type ParsedFeatureFolder,
   type ParsedPlanFolder,
-  type ParsedStoryFile,
   parsePlanFolder,
+  stableChildKey,
   stableFeatureKey,
   stableStoryKey
 } from './markdownPlanParser';
 import {
+  appendFeatureItemTableRow,
   computeFeatureRollupStatus,
   updateFeatureStoryTable,
   writeStatusToMarkdownFile
@@ -46,6 +54,16 @@ const STATUSES = [
 ];
 
 const STATUS_NAMES = STATUSES.map(s => s.name);
+const LIVE_FOLDER_CREATION_DISABLED_ERROR =
+  'Live Folder issue creation is disabled. Enable ticketManager.liveFolderAllowIssueCreation to create markdown issues.';
+
+type CreatableLiveFolderIssueType = 'Feature' | 'Story' | 'Task' | 'Bug';
+
+const CHILD_FILE_PREFIX_BY_TYPE: Record<Exclude<CreatableLiveFolderIssueType, 'Feature'>, string> = {
+  Story: 'story',
+  Task: 'task',
+  Bug: 'bug'
+};
 
 function categoryForStatus(name: string): string {
   return STATUSES.find(s => s.name === name)?.category ?? 'todo';
@@ -59,12 +77,108 @@ function transitionsFrom(currentStatus: string): WorkflowTransition[] {
   }));
 }
 
+function normalizeLiveFolderIssueType(value: string): CreatableLiveFolderIssueType | undefined {
+  switch (value.trim().toLowerCase()) {
+    case 'epic':
+    case 'feature':
+      return 'Feature';
+    case 'story':
+      return 'Story';
+    case 'task':
+      return 'Task';
+    case 'bug':
+      return 'Bug';
+    default:
+      return undefined;
+  }
+}
+
+function padFeatureId(featureId: number): string {
+  return String(featureId).padStart(2, '0');
+}
+
+function slugifyPathSegment(value: string): string {
+  const slug = value
+    .normalize('NFKD')
+    .replace(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || 'item';
+}
+
+function buildFeatureDirectoryName(featureId: number, summary: string): string {
+  return `feature-${padFeatureId(featureId)}-${slugifyPathSegment(summary)}`;
+}
+
+function buildChildFileName(
+  issueType: Exclude<CreatableLiveFolderIssueType, 'Feature'>,
+  featureId: number,
+  childSeq: number,
+  summary: string
+): string {
+  return `${CHILD_FILE_PREFIX_BY_TYPE[issueType]}-${padFeatureId(featureId)}-${childSeq}-${slugifyPathSegment(summary)}.md`;
+}
+
+function buildDefaultDescription(issueType: CreatableLiveFolderIssueType): string {
+  return `Add details for this ${issueType.toLowerCase()}.`;
+}
+
+function buildIssueMarkdown(
+  issueType: CreatableLiveFolderIssueType,
+  title: string,
+  description: string | undefined,
+  createdAtIso: string,
+  parentKey?: string
+): string {
+  const lines = [
+    `# ${title}`,
+    '',
+    '**Status:** 📋 Proposed',
+    `**Created:** ${createdAtIso}`,
+    `**Type:** ${issueType}`
+  ];
+  if (parentKey) {
+    lines.push(`**Parent:** ${parentKey}`);
+  }
+  lines.push(
+    '',
+    '## Summary',
+    description?.trim() || buildDefaultDescription(issueType),
+    ''
+  );
+  if (issueType === 'Feature') {
+    lines.push(
+      '## Items',
+      '',
+      '| Ref | Type | Name | Status |',
+      '| --- | --- | --- | --- |',
+      ''
+    );
+  } else {
+    lines.push('## Dependencies', '', '');
+  }
+  return lines.join('\n');
+}
+
+function toParentIssueReference(issue: LiveIssue | undefined): ParentIssueReference | undefined {
+  if (!issue) {
+    return undefined;
+  }
+  return {
+    key: issue.key,
+    summary: issue.summary,
+    issueType: issue.issueType,
+    description: issue.description
+  };
+}
+
 // ── Internal model ──────────────────────────────────────────────────
 
 interface LiveIssue extends IssueSummary {
   sourceUri: vscode.Uri;
   featureId: number;
-  storySeq?: number;
+  childSeq?: number;
   featureDirName?: string;
 }
 
@@ -114,7 +228,7 @@ export class LiveFolderService implements IssueTrackerService {
       await this.ensureLoaded();
       return {
         status: 'ok',
-        message: `Live Folder: ${this.issues.length} items from ${this.plansRootUri?.fsPath ?? '(not set)'}`,
+        message: `Live Folder: ${this.issues.length} items from ${this.plansRootUri?.fsPath ?? '(not set)'} (${this.configStore.getLiveFolderAllowIssueCreation() ? 'issue creation enabled' : 'issue creation disabled'})`,
         toolCount: 0,
         projectCount: 1
       };
@@ -176,7 +290,7 @@ export class LiveFolderService implements IssueTrackerService {
 
   public async getFilterMetadata(_filters: IssueFilters): Promise<FilterMetadata> {
     await this.ensureLoaded();
-    const statuses = [...new Set(this.issues.map(i => i.status))];
+    const statuses = [...new Set([...STATUS_NAMES, ...this.issues.map(i => i.status)])];
     const issueTypes = [...new Set(this.issues.map(i => i.issueType))];
     return { statuses, issueTypes };
   }
@@ -191,6 +305,10 @@ export class LiveFolderService implements IssueTrackerService {
     if (filters.projectKeys.length > 0) {
       const pks = new Set(filters.projectKeys);
       features = features.filter(i => pks.has(i.projectKey));
+    }
+    if (filters.statuses.length > 0) {
+      const statuses = new Set(filters.statuses);
+      features = features.filter(i => statuses.has(i.status));
     }
     if (searchText) {
       const q = searchText.toLowerCase();
@@ -266,14 +384,92 @@ export class LiveFolderService implements IssueTrackerService {
       throw new Error(`Issue ${issueKey} not found`);
     }
     const transitions = transitionsFrom(issue.status);
-    return { ...issue, transitions, comments: [] };
+    const parentIssue = issue.parentKey
+      ? this.issues.find(candidate => candidate.key === issue.parentKey)
+      : undefined;
+    return {
+      ...issue,
+      parentIssue: toParentIssueReference(parentIssue),
+      transitions,
+      comments: []
+    };
   }
 
-  public async createIssue(_input: CreateIssueInput): Promise<IssueDetails> {
-    throw new Error('Live Folder mode does not support creating issues. Author plan files directly.');
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    await this.ensureLoaded();
+    if (!this.configStore.getLiveFolderAllowIssueCreation()) {
+      throw new Error(LIVE_FOLDER_CREATION_DISABLED_ERROR);
+    }
+    if (!this.featuresRootUri) {
+      throw new Error('Live Folder features root is not configured.');
+    }
+
+    const issueType = normalizeLiveFolderIssueType(input.issueType);
+    if (!issueType) {
+      throw new Error(
+        `Live Folder mode supports creating Feature, Story, Task, and Bug items. "${input.issueType}" is not supported.`
+      );
+    }
+
+    const projectKey = input.projectKey.trim();
+    if (projectKey !== this.projectKey) {
+      throw new Error(`Project ${projectKey} is not available in Live Folder mode.`);
+    }
+
+    const summary = input.summary.trim();
+    if (!summary) {
+      throw new Error('Summary cannot be empty.');
+    }
+    const description = input.description?.trim() || undefined;
+    const createdAt = new Date().toISOString();
+
+    if (issueType === 'Feature') {
+      if (input.parentKey?.trim()) {
+        throw new Error('Feature items cannot have a parent.');
+      }
+      const featureId = this.getNextFeatureId();
+      const featureDirUri = vscode.Uri.joinPath(
+        this.featuresRootUri,
+        buildFeatureDirectoryName(featureId, summary)
+      );
+      const featureFileUri = vscode.Uri.joinPath(featureDirUri, 'feature.md');
+
+      await vscode.workspace.fs.createDirectory(featureDirUri);
+      await this.writeManagedFile(
+        featureFileUri,
+        buildIssueMarkdown(issueType, summary, description, createdAt)
+      );
+
+      await this.loadFromDisk();
+      return this.getIssue(stableFeatureKey(this.projectKey, featureId));
+    }
+
+    const parentFeature = this.resolveCreateParent(projectKey, issueType, input.parentKey?.trim());
+    const childSeq = this.getNextChildSequence(parentFeature.featureId, issueType);
+    const childFileUri = vscode.Uri.joinPath(
+      this.featuresRootUri,
+      parentFeature.featureDirName!,
+      buildChildFileName(issueType, parentFeature.featureId, childSeq, summary)
+    );
+
+    await this.writeManagedFile(
+      childFileUri,
+      buildIssueMarkdown(issueType, summary, description, createdAt, parentFeature.key)
+    );
+    await this.writeFeatureItemTableRow(
+      parentFeature,
+      issueType,
+      childSeq,
+      summary,
+      STATUS_NAMES[0] ?? 'Backlog'
+    );
+
+    await this.loadFromDisk();
+    return this.getIssue(stableChildKey(this.projectKey, issueType, parentFeature.featureId, childSeq));
   }
 
   public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
+    await this.ensureLoaded();
     const issue = this.issues.find(i => i.key === issueKey);
     if (!issue) {
       throw new Error(`Issue ${issueKey} not found`);
@@ -282,7 +478,15 @@ export class LiveFolderService implements IssueTrackerService {
     if (input.assignee !== undefined) {
       issue.assignee = input.assignee ?? undefined;
     }
-    return { ...issue, transitions: transitionsFrom(issue.status), comments: [] };
+    const parentIssue = issue.parentKey
+      ? this.issues.find(candidate => candidate.key === issue.parentKey)
+      : undefined;
+    return {
+      ...issue,
+      parentIssue: toParentIssueReference(parentIssue),
+      transitions: transitionsFrom(issue.status),
+      comments: []
+    };
   }
 
   public async deleteIssue(_issueKey: string): Promise<void> {
@@ -337,18 +541,18 @@ export class LiveFolderService implements IssueTrackerService {
       issue.completed = new Date().toISOString();
     }
 
-    // Feature rollup: update parent feature.md story table + feature status
-    if (issue.storySeq !== undefined && issue.featureDirName) {
+    // Feature rollup: update parent feature.md item table + feature status
+    if (issue.childSeq !== undefined && issue.featureDirName && issue.issueType !== 'Feature') {
       const parentFeature = this.issues.find(
         i => i.issueType === 'Feature' && i.featureId === issue.featureId
       );
       if (parentFeature) {
-        // Update story table row in feature.md
+        // Update the feature.md item table row for this child item.
         this.recentWrites.add(parentFeature.sourceUri.toString());
         try {
           await updateFeatureStoryTable(
             parentFeature.sourceUri,
-            issue.storySeq,
+            issue.childSeq,
             issue.summary,
             newStatus
           );
@@ -356,21 +560,23 @@ export class LiveFolderService implements IssueTrackerService {
           setTimeout(() => this.recentWrites.delete(parentFeature.sourceUri.toString()), 2000);
         }
 
-        // Compute and apply feature rollup status
-        const siblingStories = this.issues.filter(
-          i => i.issueType === 'Story' && i.featureId === issue.featureId
-        );
-        const rollupStatus = computeFeatureRollupStatus(siblingStories.map(s => s.status));
-        if (rollupStatus && rollupStatus !== parentFeature.status) {
-          this.recentWrites.add(parentFeature.sourceUri.toString());
-          try {
-            await writeStatusToMarkdownFile(parentFeature.sourceUri, rollupStatus);
-          } finally {
-            setTimeout(() => this.recentWrites.delete(parentFeature.sourceUri.toString()), 2000);
+        // Only stories participate in the feature rollup workflow.
+        if (issue.issueType === 'Story') {
+          const siblingStories = this.issues.filter(
+            i => i.issueType === 'Story' && i.featureId === issue.featureId
+          );
+          const rollupStatus = computeFeatureRollupStatus(siblingStories.map(s => s.status));
+          if (rollupStatus && rollupStatus !== parentFeature.status) {
+            this.recentWrites.add(parentFeature.sourceUri.toString());
+            try {
+              await writeStatusToMarkdownFile(parentFeature.sourceUri, rollupStatus);
+            } finally {
+              setTimeout(() => this.recentWrites.delete(parentFeature.sourceUri.toString()), 2000);
+            }
+            parentFeature.status = rollupStatus;
+            parentFeature.statusCategory = categoryForStatus(rollupStatus);
+            parentFeature.updated = new Date().toISOString();
           }
-          parentFeature.status = rollupStatus;
-          parentFeature.statusCategory = categoryForStatus(rollupStatus);
-          parentFeature.updated = new Date().toISOString();
         }
       }
     }
@@ -409,19 +615,21 @@ export class LiveFolderService implements IssueTrackerService {
 
     this.projectKey = this.configStore.getLiveFolderProjectKey() || 'LIVE';
     this.projectName = this.configStore.getLiveFolderProjectName() || 'Live Folder';
-    this.plansRootUri = vscode.Uri.file(folderPath);
+    this.plansRootUri = undefined;
 
-    await this.loadFromDisk();
+    await this.loadFromDisk(folderPath);
     this.setupWatcher();
     this.loaded = true;
   }
 
-  private async loadFromDisk(): Promise<void> {
-    if (!this.plansRootUri) {
+  private async loadFromDisk(folderPathOverride?: string): Promise<void> {
+    const folderPath = folderPathOverride ?? this.plansRootUri?.fsPath;
+    if (!folderPath) {
       return;
     }
 
-    const parsed = await parsePlanFolder(this.plansRootUri);
+    const parsed = await parsePlanFolder(folderPath);
+    this.plansRootUri = parsed.plansRootUri;
     this.featuresRootUri = parsed.featuresRootUri;
     this.issues = this.buildIssueModel(parsed);
   }
@@ -453,29 +661,37 @@ export class LiveFolderService implements IssueTrackerService {
       });
     }
 
-    // Stories
-    for (const s of parsed.stories) {
-      const key = stableStoryKey(pk, s.featureId, s.storySeq);
-      const parentKey = stableFeatureKey(pk, s.featureId);
+    const featureDirNameById = new Map<number, string>();
+    for (const feature of parsed.features) {
+      featureDirNameById.set(feature.featureId, feature.dirName);
+    }
+
+    // Child items (stories, tasks, bugs)
+    for (const child of parsed.childItems) {
+      const key =
+        child.issueType === 'Story'
+          ? stableStoryKey(pk, child.featureId, child.sequence)
+          : stableChildKey(pk, child.issueType, child.featureId, child.sequence);
+      const parentKey = stableFeatureKey(pk, child.featureId);
       const now = new Date().toISOString();
       issues.push({
         key,
-        summary: s.title,
-        status: s.planStatus,
-        statusCategory: categoryForStatus(s.planStatus),
-        issueType: 'Story',
+        summary: child.title,
+        status: child.planStatus,
+        statusCategory: categoryForStatus(child.planStatus),
+        issueType: child.issueType,
         projectKey: pk,
         projectName: pn,
         parentKey,
         priority: 'Medium',
-        created: s.planningDates.created ?? now,
-        updated: s.planningDates.completed ?? now,
-        description: s.description,
-        branch: s.branch,
-        sourceUri: s.storyMdUri,
-        featureId: s.featureId,
-        storySeq: s.storySeq,
-        featureDirName: parsed.features.find(f => f.featureId === s.featureId)?.dirName
+        created: child.planningDates.created ?? now,
+        updated: child.planningDates.completed ?? now,
+        description: child.description,
+        branch: child.branch,
+        sourceUri: child.fileUri,
+        featureId: child.featureId,
+        childSeq: child.sequence,
+        featureDirName: featureDirNameById.get(child.featureId)
       });
     }
 
@@ -484,9 +700,13 @@ export class LiveFolderService implements IssueTrackerService {
     for (const f of parsed.features) {
       featureKeyByDir.set(f.dirName, stableFeatureKey(pk, f.featureId));
     }
-    const storyKeyByFS = new Map<string, string>();
-    for (const s of parsed.stories) {
-      storyKeyByFS.set(`${s.featureId}-${s.storySeq}`, stableStoryKey(pk, s.featureId, s.storySeq));
+    const childKeyByBaseName = new Map<string, string>();
+    for (const child of parsed.childItems) {
+      const key =
+        child.issueType === 'Story'
+          ? stableStoryKey(pk, child.featureId, child.sequence)
+          : stableChildKey(pk, child.issueType, child.featureId, child.sequence);
+      childKeyByBaseName.set(child.filename.replace(/\.md$/i, '').toLowerCase(), key);
     }
 
     // Attach dependsOn to each issue
@@ -495,9 +715,12 @@ export class LiveFolderService implements IssueTrackerService {
         key: stableFeatureKey(pk, f.featureId),
         tokens: f.depTokens
       })),
-      ...parsed.stories.map(s => ({
-        key: stableStoryKey(pk, s.featureId, s.storySeq),
-        tokens: s.depTokens
+      ...parsed.childItems.map(child => ({
+        key:
+          child.issueType === 'Story'
+            ? stableStoryKey(pk, child.featureId, child.sequence)
+            : stableChildKey(pk, child.issueType, child.featureId, child.sequence),
+        tokens: child.depTokens
       }))
     ];
 
@@ -519,12 +742,9 @@ export class LiveFolderService implements IssueTrackerService {
             resolved.push(k);
           }
         } else {
-          const sm = token.match(/^story-(\d+)-(\d+)/i);
-          if (sm) {
-            const k = storyKeyByFS.get(`${Number.parseInt(sm[1], 10)}-${Number.parseInt(sm[2], 10)}`);
-            if (k) {
-              resolved.push(k);
-            }
+          const k = childKeyByBaseName.get(token.toLowerCase());
+          if (k) {
+            resolved.push(k);
           }
         }
       }
@@ -534,6 +754,79 @@ export class LiveFolderService implements IssueTrackerService {
     }
 
     return issues;
+  }
+
+  private getNextFeatureId(): number {
+    const featureIds = this.issues
+      .filter(issue => issue.issueType === 'Feature')
+      .map(issue => issue.featureId);
+    return (featureIds.length > 0 ? Math.max(...featureIds) : 0) + 1;
+  }
+
+  private getNextChildSequence(
+    featureId: number,
+    issueType: Exclude<CreatableLiveFolderIssueType, 'Feature'>
+  ): number {
+    const childSequences = this.issues
+      .filter(issue => issue.featureId === featureId && issue.issueType === issueType)
+      .map(issue => issue.childSeq ?? 0);
+    return (childSequences.length > 0 ? Math.max(...childSequences) : 0) + 1;
+  }
+
+  private resolveCreateParent(
+    projectKey: string,
+    issueType: Exclude<CreatableLiveFolderIssueType, 'Feature'>,
+    parentKey: string | undefined
+  ): LiveIssue {
+    const rule = getParentRule(issueType, 'livefolder');
+    if (!parentKey) {
+      throw new Error(`${rule.defaultLabel} is required for ${issueType} items.`);
+    }
+
+    const parentIssue = this.issues.find(issue => issue.key === parentKey);
+    if (!parentIssue) {
+      throw new Error(`${rule.defaultLabel} ${parentKey} was not found.`);
+    }
+    if (parentIssue.projectKey !== projectKey) {
+      throw new Error(`${rule.defaultLabel} ${parentKey} must be in the same project.`);
+    }
+    if (!isAllowedParentType(parentIssue.issueType, issueType, 'livefolder')) {
+      throw new Error(buildParentValidationMessage(issueType, 'livefolder', parentIssue.issueType));
+    }
+    if (!parentIssue.featureDirName) {
+      throw new Error(`Feature ${parentIssue.key} is missing its live folder directory.`);
+    }
+    return parentIssue;
+  }
+
+  private async writeManagedFile(fileUri: vscode.Uri, contents: string): Promise<void> {
+    this.recentWrites.add(fileUri.toString());
+    try {
+      await vscode.workspace.fs.writeFile(fileUri, Buffer.from(contents, 'utf8'));
+    } finally {
+      setTimeout(() => this.recentWrites.delete(fileUri.toString()), 2000);
+    }
+  }
+
+  private async writeFeatureItemTableRow(
+    parentFeature: LiveIssue,
+    issueType: Exclude<CreatableLiveFolderIssueType, 'Feature'>,
+    childSeq: number,
+    summary: string,
+    status: string
+  ): Promise<void> {
+    this.recentWrites.add(parentFeature.sourceUri.toString());
+    try {
+      await appendFeatureItemTableRow(
+        parentFeature.sourceUri,
+        `${padFeatureId(parentFeature.featureId)}.${childSeq}`,
+        issueType,
+        summary,
+        status
+      );
+    } finally {
+      setTimeout(() => this.recentWrites.delete(parentFeature.sourceUri.toString()), 2000);
+    }
   }
 
   private setupWatcher(): void {

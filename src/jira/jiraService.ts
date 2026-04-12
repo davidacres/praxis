@@ -631,9 +631,26 @@ export class JiraService implements IssueTrackerService {
       issueTypes: []
     };
     const page = await this.getIssues(metadataFilters, 0, 50);
+    const transitionStatuses = (
+      await Promise.all(
+        page.issues
+          .map(issue => issue.key)
+          .filter((issueKey, index, array) => array.indexOf(issueKey) === index)
+          .slice(0, 20)
+          .map(async issueKey => {
+            try {
+              return (await this.getTransitions(issueKey))
+                .map(transition => transition.toStatus ?? transition.name)
+                .filter((status): status is string => Boolean(status && status.trim().length > 0));
+            } catch {
+              return [];
+            }
+          })
+      )
+    ).flat();
 
     return {
-      statuses: uniqueSorted(page.issues.map(issue => issue.status)),
+      statuses: uniqueSorted([...page.issues.map(issue => issue.status), ...transitionStatuses]),
       issueTypes: uniqueSorted(page.issues.map(issue => issue.issueType))
     };
   }
@@ -651,7 +668,7 @@ export class JiraService implements IssueTrackerService {
       return [];
     }
 
-    const jql = buildParentItemsJql(filters.projectKeys, searchText, allowedParentTypes);
+    const jql = buildParentItemsJql(filters.projectKeys, filters.statuses, searchText, allowedParentTypes);
     const response = await this.client.callTool(
       capabilities.searchIssues,
       {

@@ -1,4 +1,9 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
+import {
+  buildUnreadablePathError,
+  normalizeConfiguredFolderPath
+} from './pathUtils';
 
 // ── Shared types ────────────────────────────────────────────────────
 
@@ -32,9 +37,27 @@ export interface ParsedStoryFile {
   branch?: string;
 }
 
+export interface ParsedChildFile {
+  featureId: number;
+  sequence: number;
+  filename: string;
+  issueType: 'Story' | 'Task' | 'Bug';
+  title: string;
+  planStatus: string;
+  description: string;
+  relativePath: string;
+  fileUri: vscode.Uri;
+  depTokens: string[];
+  planningDates: ParsedPlanningDates;
+  branch?: string;
+}
+
 export interface ParsedPlanFolder {
   features: ParsedFeatureFolder[];
   stories: ParsedStoryFile[];
+  childItems: ParsedChildFile[];
+  /** The resolved root folder for the plans tree. */
+  plansRootUri: vscode.Uri;
   /** The resolved directory that contains the `feature-NN-*` subdirectories. */
   featuresRootUri: vscode.Uri;
 }
@@ -110,14 +133,50 @@ export function mapMarkdownStatusToPlanStatus(raw: string): string {
   return 'Backlog';
 }
 
-const FEATURE_DIR = /^feature-(\d+)-/i;
+export interface IdentifiedPlanFolder {
+  plansRootUri: vscode.Uri;
+  featuresRootUri: vscode.Uri;
+  featureEntries: [string, vscode.FileType][];
+}
 
-function parseStoryFileName(name: string): { featureId: number; storySeq: number } | undefined {
-  const m = name.match(/^story-(\d+)-(\d+)-.+\.md$/i);
+const FEATURE_DIR = /^feature-(\d+)-/i;
+const CHILD_FILE_PREFIX_TO_ISSUE_TYPE = {
+  story: 'Story',
+  task: 'Task',
+  bug: 'Bug'
+} as const;
+const MAX_PLAN_SEARCH_DEPTH = 6;
+const MAX_PLAN_SEARCH_DIRECTORIES = 500;
+const SEARCH_SKIP_DIRS = new Set([
+  '.git',
+  '.hg',
+  '.idea',
+  '.next',
+  '.svn',
+  '.turbo',
+  '.vscode',
+  'bin',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target'
+]);
+
+function parseChildFileName(
+  name: string
+): { featureId: number; sequence: number; issueType: 'Story' | 'Task' | 'Bug' } | undefined {
+  const m = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
   if (!m) {
     return undefined;
   }
-  return { featureId: Number.parseInt(m[1], 10), storySeq: Number.parseInt(m[2], 10) };
+  const prefix = m[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
+  return {
+    issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
+    featureId: Number.parseInt(m[2], 10),
+    sequence: Number.parseInt(m[3], 10)
+  };
 }
 
 function extractDependenciesSectionBody(content: string): string {
@@ -154,8 +213,8 @@ function scanDependencyTokens(text: string): string[] {
   while ((m = featureDir.exec(text))) {
     out.add(m[1]);
   }
-  const storyRef = /\b(story-\d+-\d+(?:-[a-z0-9]+)*)\b/gi;
-  while ((m = storyRef.exec(text))) {
+  const childRef = /\b((?:story|task|bug)-\d+-\d+(?:-[a-z0-9]+)*)\b/gi;
+  while ((m = childRef.exec(text))) {
     out.add(m[1]);
   }
   return [...out];
@@ -219,83 +278,237 @@ export function stableStoryKey(projectKey: string, featureId: number, storySeq: 
   return `${projectKey}-S${String(featureId).padStart(2, '0')}-${storySeq}`;
 }
 
+function childIssueTypeKeyPrefix(issueType: string): string {
+  switch (issueType.trim().toLowerCase()) {
+    case 'story':
+      return 'S';
+    case 'task':
+      return 'T';
+    case 'bug':
+      return 'B';
+    default:
+      return 'I';
+  }
+}
+
+export function stableChildKey(
+  projectKey: string,
+  issueType: string,
+  featureId: number,
+  sequence: number
+): string {
+  const prefix = childIssueTypeKeyPrefix(issueType);
+  return `${projectKey}-${prefix}${String(featureId).padStart(2, '0')}-${sequence}`;
+}
+
 // ── Main parser ─────────────────────────────────────────────────────
 
 /**
- * Locate the directory that contains `feature-NN-*` sub-folders.
- *
- * Search order:
- *  1. `<root>/features/`
- *  2. `<root>/` itself
- *  3. Any immediate subdirectory of `<root>` that contains `feature-NN-*` dirs
- *
- * Returns the resolved URI and its directory listing, or throws.
+ * Safely read a directory, returning `undefined` if it does not exist or is unreadable.
  */
-async function resolveFeaturesRoot(
-  plansRoot: vscode.Uri
-): Promise<{ featuresUri: vscode.Uri; entries: [string, vscode.FileType][] }> {
-  const hasFeatureDirs = (entries: [string, vscode.FileType][]): boolean =>
-    entries.some(([name, type]) => type === vscode.FileType.Directory && FEATURE_DIR.test(name));
-
-  // 1. Try <root>/features
+async function readDirectorySafe(
+  uri: vscode.Uri
+): Promise<[string, vscode.FileType][] | undefined> {
   try {
-    const featuresUri = vscode.Uri.joinPath(plansRoot, 'features');
-    const entries = await vscode.workspace.fs.readDirectory(featuresUri);
-    if (hasFeatureDirs(entries)) {
-      return { featuresUri, entries };
-    }
+    return await vscode.workspace.fs.readDirectory(uri);
   } catch {
-    // Not found — continue searching
+    return undefined;
+  }
+}
+
+async function hasFeatureMarkdown(featureDirUri: vscode.Uri): Promise<boolean> {
+  const entries = await readDirectorySafe(featureDirUri);
+  return (
+    entries?.some(
+      ([name, type]) => type === vscode.FileType.File && name.toLowerCase() === 'feature.md'
+    ) ?? false
+  );
+}
+
+async function containsFeaturePlanFolders(
+  rootUri: vscode.Uri,
+  entries: [string, vscode.FileType][]
+): Promise<boolean> {
+  for (const [name, type] of entries) {
+    if (type !== vscode.FileType.Directory || !FEATURE_DIR.test(name)) {
+      continue;
+    }
+    if (await hasFeatureMarkdown(vscode.Uri.joinPath(rootUri, name))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function scoreSearchDirectory(name: string): number {
+  const lower = name.toLowerCase();
+  if (lower === 'plans' || lower === 'plan') {
+    return 100;
+  }
+  if (lower === 'features' || lower === 'feature') {
+    return 90;
+  }
+  if (lower.includes('plan')) {
+    return 80;
+  }
+  if (lower.includes('feature')) {
+    return 70;
+  }
+  if (lower === 'docs' || lower === 'doc') {
+    return 60;
+  }
+  if (lower.includes('ticket') || lower.includes('roadmap')) {
+    return 50;
+  }
+  return 0;
+}
+
+function listSearchableSubdirectories(entries: [string, vscode.FileType][]): string[] {
+  return entries
+    .filter(
+      ([name, type]) => type === vscode.FileType.Directory && !SEARCH_SKIP_DIRS.has(name.toLowerCase())
+    )
+    .map(([name]) => name)
+    .sort((a, b) => {
+      const scoreDiff = scoreSearchDirectory(b) - scoreSearchDirectory(a);
+      return scoreDiff !== 0 ? scoreDiff : a.localeCompare(b);
+    });
+}
+
+function canonicalPlansRootUri(candidateRoot: vscode.Uri, featuresRootUri: vscode.Uri): vscode.Uri {
+  if (
+    candidateRoot.fsPath === featuresRootUri.fsPath &&
+    path.basename(featuresRootUri.fsPath).toLowerCase() === 'features'
+  ) {
+    return vscode.Uri.file(path.dirname(featuresRootUri.fsPath));
+  }
+  return candidateRoot;
+}
+
+function toDirectoryUri(selectedRoot: vscode.Uri | string): vscode.Uri {
+  if (typeof selectedRoot !== 'string') {
+    return selectedRoot;
+  }
+  return vscode.Uri.file(normalizeConfiguredFolderPath(selectedRoot));
+}
+
+async function identifyPlanFolderAtRoot(
+  candidateRoot: vscode.Uri,
+  rootEntries?: [string, vscode.FileType][]
+): Promise<IdentifiedPlanFolder | undefined> {
+  const featuresUri = vscode.Uri.joinPath(candidateRoot, 'features');
+  const featureEntries = await readDirectorySafe(featuresUri);
+  if (featureEntries && (await containsFeaturePlanFolders(featuresUri, featureEntries))) {
+    return {
+      plansRootUri: candidateRoot,
+      featuresRootUri: featuresUri,
+      featureEntries
+    };
   }
 
-  // 2. Try <root> itself
-  try {
-    const entries = await vscode.workspace.fs.readDirectory(plansRoot);
-    if (hasFeatureDirs(entries)) {
-      return { featuresUri: plansRoot, entries };
+  const entries = rootEntries ?? (await readDirectorySafe(candidateRoot));
+  if (entries && (await containsFeaturePlanFolders(candidateRoot, entries))) {
+    return {
+      plansRootUri: canonicalPlansRootUri(candidateRoot, candidateRoot),
+      featuresRootUri: candidateRoot,
+      featureEntries: entries
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve a selected folder to the actual plans root and features folder.
+ *
+ * Search order:
+ *  1. `<selected>/features/`
+ *  2. `<selected>/`
+ *  3. Nested subdirectories below `<selected>` (breadth-first, bounded search)
+ */
+export async function identifyPlanFolder(
+  selectedRoot: vscode.Uri | string,
+  onProgress?: (message: string) => void
+): Promise<IdentifiedPlanFolder> {
+  const selectedRootUri = toDirectoryUri(selectedRoot);
+
+  const directMatch = await identifyPlanFolderAtRoot(selectedRootUri);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const rootEntries = await readDirectorySafe(selectedRootUri);
+  if (!rootEntries) {
+    throw new Error(
+      buildUnreadablePathError(typeof selectedRoot === 'string' ? selectedRoot : selectedRootUri.fsPath)
+    );
+  }
+
+  const seen = new Set<string>([selectedRootUri.toString()]);
+  const queue = listSearchableSubdirectories(rootEntries).map(name => {
+    const uri = vscode.Uri.joinPath(selectedRootUri, name);
+    seen.add(uri.toString());
+    return { uri, depth: 1 };
+  });
+
+  let searchedDirectories = 1;
+  while (queue.length > 0 && searchedDirectories < MAX_PLAN_SEARCH_DIRECTORIES) {
+    const current = queue.shift()!;
+    if (current.depth > MAX_PLAN_SEARCH_DEPTH) {
+      continue;
     }
 
-    // 3. Try each immediate subdirectory of <root>
-    for (const [name, type] of entries) {
-      if (type !== vscode.FileType.Directory) {
-        continue;
-      }
-      try {
-        const subUri = vscode.Uri.joinPath(plansRoot, name);
-        const subEntries = await vscode.workspace.fs.readDirectory(subUri);
-        if (hasFeatureDirs(subEntries)) {
-          return { featuresUri: subUri, entries: subEntries };
-        }
-      } catch {
-        continue;
-      }
+    const currentEntries = await readDirectorySafe(current.uri);
+    if (!currentEntries) {
+      continue;
     }
-  } catch {
-    // Root itself is unreadable
+    searchedDirectories++;
+    onProgress?.(`Searching for plans in ${current.uri.fsPath}`);
+
+    const identified = await identifyPlanFolderAtRoot(current.uri, currentEntries);
+    if (identified) {
+      return identified;
+    }
+
+    if (current.depth >= MAX_PLAN_SEARCH_DEPTH) {
+      continue;
+    }
+
+    for (const name of listSearchableSubdirectories(currentEntries)) {
+      if (seen.size >= MAX_PLAN_SEARCH_DIRECTORIES) {
+        break;
+      }
+      const childUri = vscode.Uri.joinPath(current.uri, name);
+      const key = childUri.toString();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      queue.push({ uri: childUri, depth: current.depth + 1 });
+    }
   }
 
   throw new Error(
-    `No feature-NN-* folders found under the selected path or its subdirectories. ` +
-    `Expected layout: features/feature-01-…/feature.md`
+    `No feature-NN-* folders with feature.md were found under the selected path or its nested subdirectories. ` +
+      `Expected layout: plans/features/feature-01-…/feature.md`
   );
 }
 
 /**
- * Scans a `plans`-style root folder and returns parsed features and stories.
+ * Scans a `plans`-style root folder and returns parsed features and child markdown items.
  * Does not modify the source tree — pure read operation.
  *
- * Automatically discovers the features directory by searching:
- *  1. `<plansRoot>/features/`
- *  2. `<plansRoot>/` itself
- *  3. Any immediate subdirectory of `<plansRoot>`
+ * Automatically discovers the plans/features directory by searching beneath
+ * the selected root when needed.
  */
 export async function parsePlanFolder(
-  plansRoot: vscode.Uri,
+  plansRoot: vscode.Uri | string,
   onProgress?: (message: string) => void
 ): Promise<ParsedPlanFolder> {
   const progress = onProgress ?? (() => undefined);
 
-  const { featuresUri, entries: featureEntries } = await resolveFeaturesRoot(plansRoot);
+  const identified = await identifyPlanFolder(plansRoot, progress);
+  const { plansRootUri, featuresRootUri, featureEntries } = identified;
 
   progress('Scanning feature folders…');
 
@@ -309,7 +522,7 @@ export async function parsePlanFolder(
       continue;
     }
     const featureId = Number.parseInt(dirMatch[1], 10);
-    const featureMdUri = vscode.Uri.joinPath(featuresUri, name, 'feature.md');
+    const featureMdUri = vscode.Uri.joinPath(featuresRootUri, name, 'feature.md');
     let content: string;
     try {
       content = await readUtf8(featureMdUri);
@@ -337,8 +550,9 @@ export async function parsePlanFolder(
   });
 
   const stories: ParsedStoryFile[] = [];
+  const childItems: ParsedChildFile[] = [];
   for (const folder of features) {
-    const folderUri = vscode.Uri.joinPath(featuresUri, folder.dirName);
+    const folderUri = vscode.Uri.joinPath(featuresRootUri, folder.dirName);
     const files = await vscode.workspace.fs.readDirectory(folderUri);
     for (const [fname, ftype] of files) {
       if (ftype !== vscode.FileType.File || !fname.toLowerCase().endsWith('.md')) {
@@ -347,28 +561,57 @@ export async function parsePlanFolder(
       if (fname.toLowerCase() === 'feature.md') {
         continue;
       }
-      const parsed = parseStoryFileName(fname);
+      const parsed = parseChildFileName(fname);
       if (!parsed || parsed.featureId !== folder.featureId) {
         continue;
       }
-      const storyMdUri = vscode.Uri.joinPath(folderUri, fname);
-      const scontent = await readUtf8(storyMdUri);
-      progress(`Reading story: ${folder.dirName}/${fname}`);
-      stories.push({
+      const fileUri = vscode.Uri.joinPath(folderUri, fname);
+      const scontent = await readUtf8(fileUri);
+      progress(`Reading ${parsed.issueType.toLowerCase()}: ${folder.dirName}/${fname}`);
+      childItems.push({
         featureId: folder.featureId,
-        storySeq: parsed.storySeq,
+        sequence: parsed.sequence,
         filename: fname,
+        issueType: parsed.issueType,
         title: extractMainHeading(scontent),
         planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
         description: buildDescription(scontent),
         relativePath: `${folder.dirName}/${fname}`,
-        storyMdUri,
+        fileUri,
         depTokens: collectDependencyTokens(scontent),
         planningDates: extractPlanningDates(scontent),
         branch: extractBranchRaw(scontent)
       });
+      if (parsed.issueType === 'Story') {
+        stories.push({
+          featureId: folder.featureId,
+          storySeq: parsed.sequence,
+          filename: fname,
+          title: extractMainHeading(scontent),
+          planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
+          description: buildDescription(scontent),
+          relativePath: `${folder.dirName}/${fname}`,
+          storyMdUri: fileUri,
+          depTokens: collectDependencyTokens(scontent),
+          planningDates: extractPlanningDates(scontent),
+          branch: extractBranchRaw(scontent)
+        });
+      }
     }
   }
+
+  childItems.sort((a, b) => {
+    if (a.featureId !== b.featureId) {
+      return a.featureId - b.featureId;
+    }
+    if (a.issueType !== b.issueType) {
+      return a.issueType.localeCompare(b.issueType);
+    }
+    if (a.sequence !== b.sequence) {
+      return a.sequence - b.sequence;
+    }
+    return a.filename.localeCompare(b.filename);
+  });
 
   stories.sort((a, b) => {
     if (a.featureId !== b.featureId) {
@@ -380,5 +623,5 @@ export async function parsePlanFolder(
     return a.filename.localeCompare(b.filename);
   });
 
-  return { features, stories, featuresRootUri: featuresUri };
+  return { features, stories, childItems, plansRootUri, featuresRootUri };
 }

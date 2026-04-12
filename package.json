@@ -75,6 +75,12 @@
           "when": "ticketManager.configured"
         },
         {
+          "id": "ticketManager.activeSessions",
+          "name": "Active Sessions",
+          "type": "webview",
+          "when": "ticketManager.configured"
+        },
+        {
           "id": "ticketManager.issueDetails",
           "name": "Issue Details",
           "type": "webview",
@@ -86,6 +92,10 @@
       {
         "view": "ticketManager.myIssues",
         "contents": "Welcome to Ticket Manager!\\nConfigure a project to get started.\\n[$(gear) Configure Project](command:ticketManager.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
+      },
+      {
+        "view": "ticketManager.activeSessions",
+        "contents": "Assigned AI work and live agent runs appear here. Double-click a session to open the full session details tab."
       },
       {
         "view": "ticketManager.issueDetails",
@@ -132,6 +142,18 @@
         "icon": "$(gear)"
       },
       {
+        "command": "ticketManager.openSettings",
+        "title": "Open Settings",
+        "category": "Ticket Manager",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "ticketManager.configureAi",
+        "title": "Configure AI",
+        "category": "Ticket Manager",
+        "icon": "$(hubot)"
+      },
+      {
         "command": "ticketManager.delegateToCopilot",
         "title": "Delegate to Copilot Agent",
         "category": "Ticket Manager",
@@ -139,7 +161,7 @@
       },
       {
         "command": "ticketManager.viewAgentSession",
-        "title": "View Agent Session",
+        "title": "View AI Session",
         "category": "Ticket Manager",
         "icon": "$(eye)"
       },
@@ -358,7 +380,7 @@
       },
       {
         "command": "ticketManager.unassignAi",
-        "title": "Unassign AI Agent",
+        "title": "Abandon AI Session",
         "category": "Ticket Manager",
         "icon": "$(close)"
       },
@@ -508,6 +530,11 @@
         {
           "command": "ticketManager.clearFilters",
           "when": "view == ticketManager.myIssues"
+        },
+        {
+          "command": "ticketManager.refresh",
+          "when": "view == ticketManager.activeSessions",
+          "group": "navigation@1"
         },
         {
           "command": "ticketManager.changeStatus",
@@ -776,7 +803,7 @@
         "ticketManager.liveFolderPath": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Absolute path to a `plans` folder containing `features/feature-NN-*/feature.md` and `story-*.md` files. Used when **Live Folder** mode is active."
+          "markdownDescription": "Absolute path to a `plans` folder, `features` folder, or parent folder to search for `features/feature-NN-*/feature.md` and `story-*.md` files. Used when **Live Folder** mode is active."
         },
         "ticketManager.liveFolderProjectKey": {
           "type": "string",
@@ -787,6 +814,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Human-readable project name for the live folder (e.g. `ExampleHIS Integration`). Used when **Live Folder** mode is active."
+        },
+        "ticketManager.liveFolderAllowIssueCreation": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Allow Ticket Manager to create new markdown issue files when **Live Folder** mode is active. Disable this to keep the live folder read-only from the extension."
         },
         "ticketManager.liveFolderBoardListIconColor": {
           "type": "string",
@@ -808,10 +840,15 @@
           "default": "",
           "description": "Path to the Cursor CLI executable for AI agent assignment."
         },
+        "ticketManager.ai.copilotEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the GitHub Copilot SDK for AI reviews, in-app @copilot comment replies, and Copilot agent tasks."
+        },
         "ticketManager.ai.copilotCliPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Copilot CLI executable used by the Copilot SDK for AI reviews and in-app @copilot comment replies."
+          "description": "Optional advanced override for the CLI executable used by the GitHub Copilot SDK. Usually not needed."
         },
         "ticketManager.ai.defaultProvider": {
           "type": "string",
@@ -827,7 +864,7 @@
             "Use OpenAI as the default AI provider.",
             "Use Claude/Anthropic as the default AI provider.",
             "Use Cursor CLI as the default AI provider.",
-            "Use Copilot CLI as the default AI provider.",
+            "Use the GitHub Copilot SDK as the default AI provider.",
             "No default AI provider."
           ],
           "description": "Default AI provider to use when assigning tickets to an AI agent."

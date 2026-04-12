@@ -15,6 +15,12 @@ import {
   reviewTicketWithCopilot,
   reviewTicketWithOpenAi
 } from './ai/aiReviewService';
+import {
+  AI_PROVIDER_LABELS,
+  describeAiConfigurationResult,
+  promptToConfigureDefaultAiProvider,
+  sortAiOptionsByDefaultProvider
+} from './ai/aiProviderSetup';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -28,8 +34,10 @@ import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarView
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
+import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { CopilotAgentService } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
+import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
 import { getParentRule } from './issues/issueHierarchy';
 
 export interface TicketManagerExtensionApi {
@@ -48,13 +56,6 @@ export interface TicketManagerExtensionApi {
   outputChannel: vscode.OutputChannel;
 }
 
-const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
-  'openai': 'OpenAI',
-  'claude': 'Claude (Anthropic)',
-  'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'Copilot'
-};
-
 interface AiOptionPick {
   provider: AiProvider;
   label: string;
@@ -63,8 +64,14 @@ interface AiOptionPick {
   credential?: string;
 }
 
-function logError(output: vscode.OutputChannel, error: unknown): void {
-  output.appendLine(error instanceof Error ? error.stack ?? error.message : String(error));
+interface AiAssignmentMenuOption {
+  provider: AiProvider;
+  label: string;
+}
+
+function logError(output: vscode.OutputChannel, error: unknown, scope?: string): void {
+  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  output.appendLine(scope ? `[${scope}] ${message}` : message);
 }
 
 function extractCopilotRequest(body: string): string | undefined {
@@ -87,7 +94,13 @@ export async function activate(
   const configStore = new AppConfigStore();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
   const copilotAgentService = new CopilotAgentService(aiSessionManager, outputChannel);
-  const copilotSessionPanelManager = new CopilotSessionPanelManager(aiSessionManager, copilotAgentService);
+  const copilotSessionPanelManager = new CopilotSessionPanelManager(
+    aiSessionManager,
+    copilotAgentService,
+    async issueKey => {
+      await abandonAiSession(issueKey);
+    }
+  );
   const filterStore = new FilterStore(context);
   const boardStore = new BoardStore(context);
   const boardColumnStore = new BoardColumnStore(context);
@@ -96,7 +109,17 @@ export async function activate(
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
+  const ticketManagerStatusBar = new TicketManagerStatusBar(configStore, backendService);
   const workingDirectory = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+  function reportError(error: unknown, scope?: string): void {
+    logError(outputChannel, error, scope);
+    ticketManagerStatusBar.recordError(error);
+  }
+
+  function isCopilotSdkConfigured(): boolean {
+    return configStore.getConfiguredAiProviders().includes('copilot-cli');
+  }
 
   // Set mode context early so when-clauses on views evaluate correctly
   // before VS Code tries to resolve them.
@@ -119,6 +142,7 @@ export async function activate(
   let epicsSidebarViewProvider: EpicsSidebarViewProvider;
   let boardsSidebarViewProvider: BoardsSidebarViewProvider;
   let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
+  let activeSessionsSidebarViewProvider: ActiveSessionsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
   const boardPanelManager = new BoardPanelManager(
     backendService,
@@ -136,6 +160,7 @@ export async function activate(
       }
       issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
       epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
       await issueDetailPanelManager.refreshIfShowing(
         detailsProvider.getActiveIssue()?.key ?? ''
       );
@@ -153,6 +178,7 @@ export async function activate(
     }
     issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
     epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+    activeSessionsSidebarViewProvider?.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
     await boardPanelManager.refresh();
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
   });
@@ -358,6 +384,7 @@ export async function activate(
     boardPanelManager.setSelectedIssueKey(issue?.key);
     issuesSidebarViewProvider.setSelectedIssueKey(issue?.key);
     epicsSidebarViewProvider.setSelectedIssueKey(issue?.key);
+    activeSessionsSidebarViewProvider?.setSelectedIssueKey(issue?.key);
 
     if (!issue) {
       issueDetailPanelManager.clear();
@@ -446,7 +473,7 @@ export async function activate(
   }
 
   async function reportActionError(error: unknown): Promise<void> {
-    logError(outputChannel, error);
+    reportError(error);
     await vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
   }
 
@@ -739,9 +766,9 @@ export async function activate(
     const copilotRequest = extractCopilotRequest(body);
     if (copilotRequest) {
       const cliPath = configStore.getAiCopilotCliPath().trim();
-      if (!cliPath) {
+      if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
-          'Comment added, but no Copilot CLI path is configured for @copilot replies.'
+          'Comment added, but GitHub Copilot SDK is not configured for @copilot replies. Run Ticket Manager: Configure AI.'
         );
       } else {
         try {
@@ -754,7 +781,7 @@ export async function activate(
           );
           await backendService.addComment(issueKey, response);
         } catch (error) {
-          logError(outputChannel, error);
+          reportError(error);
           void vscode.window.showWarningMessage(
             `Comment added, but @copilot could not respond: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -768,8 +795,7 @@ export async function activate(
     const registeredAgents = configStore.getConfiguredAiAgents();
     const providers = configStore.getConfiguredAiProviders();
     const configuredProviders = new Set(registeredAgents.map(agent => agent.provider));
-
-    return [
+    const options = [
       ...registeredAgents.map(agent => ({
         provider: agent.provider,
         label: agent.name,
@@ -785,13 +811,205 @@ export async function activate(
           description: provider
         }))
     ];
+
+    return sortAiOptionsByDefaultProvider(options, configStore.getAiDefaultProvider());
+  }
+
+  function getAiAssignmentMenuOptions(): AiAssignmentMenuOption[] {
+    return getConfiguredAiOptions().map(option => ({
+      provider: option.provider,
+      label: option.label
+    }));
+  }
+
+  function refreshAiAssignmentMenus(): void {
+    const options = getAiAssignmentMenuOptions();
+    boardPanelManager.setAiAssignOptions(options);
+    issuesSidebarViewProvider?.setAiAssignOptions(options);
+  }
+
+  function isTerminalAgentState(state: string | undefined): boolean {
+    return state === 'completed' || state === 'failed' || state === 'aborted';
+  }
+
+  async function findTransitionIdForStatus(
+    issueKey: string,
+    targetStatus: string
+  ): Promise<string | undefined> {
+    const issue = await backendService.getIssue(issueKey);
+    if (
+      issue.status.trim().toLowerCase() === targetStatus.trim().toLowerCase() ||
+      issue.statusCategory?.toLowerCase() === 'done'
+    ) {
+      return undefined;
+    }
+    const transitions = issue.transitions?.length
+      ? issue.transitions
+      : await backendService.getTransitions(issueKey);
+    return transitions.find(
+      transition => transition.toStatus?.trim().toLowerCase() === targetStatus.trim().toLowerCase()
+    )?.id;
+  }
+
+  async function promptForAiAssignmentOption(issueKey: string): Promise<AiOptionPick | undefined> {
+    const options = getConfiguredAiOptions();
+    if (options.length === 0) {
+      await vscode.window.showWarningMessage(
+        'No AI providers are configured. Add API keys, a Cursor CLI path, or enable GitHub Copilot SDK in Settings → Ticket Manager → AI.'
+      );
+      return undefined;
+    }
+
+    if (options.length === 1) {
+      return options[0];
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      options.map(option => ({
+        label: option.label,
+        description: option.description,
+        option
+      })),
+      {
+        title: `Assign ${issueKey} to AI Agent`
+      }
+    );
+    return picked?.option;
+  }
+
+  async function refreshIssueAiPresentation(issueKey: string): Promise<void> {
+    await issuesSidebarViewProvider.refresh();
+    await activeSessionsSidebarViewProvider?.refresh();
+    if (detailsProvider.getActiveIssue()?.key === issueKey) {
+      const activeIssue = detailsProvider.getActiveIssue();
+      if (activeIssue) {
+        activeIssue.aiAssignment = aiSessionManager.getSession(issueKey);
+        await detailsProvider.setIssue(activeIssue);
+      }
+    }
+    await issueDetailPanelManager.refreshIfShowing(issueKey);
+  }
+
+  async function abandonAiSession(
+    issueKey: string,
+    options?: { showMessage?: boolean; clearAssignee?: boolean }
+  ): Promise<void> {
+    const showMessage = options?.showMessage ?? true;
+    const clearAssignee = options?.clearAssignee ?? true;
+    const session = aiSessionManager.getSession(issueKey);
+    const agentRecord = aiSessionManager.getAgentSession(issueKey);
+    if (!session && !agentRecord) {
+      if (showMessage) {
+        void vscode.window.showInformationMessage(`${issueKey} has no active AI session.`);
+      }
+      return;
+    }
+
+    if (agentRecord && !isTerminalAgentState(agentRecord.state)) {
+      if (copilotAgentService.hasActiveTask(issueKey)) {
+        await copilotAgentService.abortTask(issueKey);
+      } else {
+        aiSessionManager.updateAgentState(issueKey, 'aborted');
+      }
+    }
+
+    aiSessionManager.removeSession(issueKey);
+
+    if (clearAssignee) {
+      try {
+        const issue = await backendService.getIssue(issueKey);
+        const assignedLabel =
+          session?.label?.trim() ||
+          (session ? AI_PROVIDER_LABELS[session.provider] : AI_PROVIDER_LABELS['copilot-cli']);
+        if (issue.assignee?.trim() === assignedLabel) {
+          await updateIssueAndRefresh(issueKey, { assignee: null });
+        } else {
+          await refreshIssueAiPresentation(issueKey);
+        }
+      } catch {
+        await refreshIssueAiPresentation(issueKey);
+      }
+    } else {
+      await refreshIssueAiPresentation(issueKey);
+    }
+
+    if (showMessage) {
+      void vscode.window.showInformationMessage(`AI session abandoned for ${issueKey}.`);
+    }
+  }
+
+  async function assignIssueToAi(issueKey: string, chosen: AiOptionPick): Promise<void> {
+    const existing = aiSessionManager.getSession(issueKey);
+    const existingAgentRecord = aiSessionManager.getAgentSession(issueKey);
+    const existingStatus =
+      existingAgentRecord && !isTerminalAgentState(existingAgentRecord.state)
+        ? existingAgentRecord.state
+        : existing?.status;
+    if (existing || (existingAgentRecord && !isTerminalAgentState(existingAgentRecord.state))) {
+      const overwrite = await vscode.window.showWarningMessage(
+        `${issueKey} is already assigned to an AI agent (${existingStatus ?? 'active'}). Replace?`,
+        'Replace',
+        'Cancel'
+      );
+      if (overwrite !== 'Replace') {
+        return;
+      }
+      await abandonAiSession(issueKey, { showMessage: false, clearAssignee: false });
+    }
+
+    const assignment = aiSessionManager.createSession(issueKey, chosen.provider, chosen.label);
+    const activeIssue = detailsProvider.getActiveIssue();
+    if (activeIssue?.key === issueKey) {
+      activeIssue.aiAssignment = assignment;
+    }
+
+    try {
+      const transitionId = await findTransitionIdForStatus(issueKey, 'In Progress');
+      await updateIssueAndRefresh(issueKey, { assignee: chosen.label }, transitionId);
+      await refreshIssueAiPresentation(issueKey);
+    } catch (error) {
+      aiSessionManager.removeSession(issueKey);
+      if (activeIssue?.key === issueKey) {
+        activeIssue.aiAssignment = undefined;
+      }
+      await refreshIssueAiPresentation(issueKey);
+      throw error;
+    }
+
+    void vscode.window.showInformationMessage(
+      `${issueKey} assigned to ${chosen.label} (session: ${assignment.sessionId.slice(0, 8)})`
+    );
+  }
+
+  async function assignIssueToAiByProvider(issueKey: string, provider: AiProvider): Promise<void> {
+    const chosen = getConfiguredAiOptions().find(option => option.provider === provider);
+    if (!chosen) {
+      await vscode.window.showWarningMessage(
+        `The AI provider ${AI_PROVIDER_LABELS[provider] ?? provider} is no longer configured.`
+      );
+      return;
+    }
+
+    await assignIssueToAi(issueKey, chosen);
+  }
+
+  async function assignIssueToMe(issueKey: string): Promise<void> {
+    const label = await backendService.getSelfAssigneeLabel();
+    if (!label) {
+      void vscode.window.showWarningMessage(
+        'Could not resolve the current user for assignment. For Jira, use Edit to set an assignee manually.'
+      );
+      return;
+    }
+    await abandonAiSession(issueKey, { showMessage: false, clearAssignee: false });
+    await updateIssueAndRefresh(issueKey, { assignee: label });
   }
 
   async function reviewIssueWithAi(issueKey: string): Promise<void> {
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
       throw new Error(
-        'No AI providers are configured. Add an OpenAI key, Claude key, or Copilot CLI path in Settings.'
+        'No AI providers are configured. Add an OpenAI key, Claude key, Cursor CLI path, or enable GitHub Copilot SDK in Settings.'
       );
     }
 
@@ -846,7 +1064,12 @@ export async function activate(
     issueKey: string,
     options?: { openFullPanel?: boolean }
   ): Promise<void> {
-    await Promise.all([issuesProvider.refresh(), boardsProvider.refresh(), epicsSidebarViewProvider.refresh()]);
+    await Promise.all([
+      issuesProvider.refresh(),
+      boardsProvider.refresh(),
+      epicsSidebarViewProvider.refresh(),
+      activeSessionsSidebarViewProvider?.refresh() ?? Promise.resolve()
+    ]);
 
     const refreshedIssue =
       issuesProvider.getIssueByKey(issueKey) ?? (await backendService.getIssue(issueKey));
@@ -855,6 +1078,7 @@ export async function activate(
     boardPanelManager.setSelectedIssueKey(issueKey);
     issuesSidebarViewProvider.setSelectedIssueKey(issueKey);
     epicsSidebarViewProvider.setSelectedIssueKey(issueKey);
+    activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
     await boardPanelManager.refresh();
     await issueDetailPanelManager.refreshIfShowing(issueKey);
 
@@ -866,14 +1090,10 @@ export async function activate(
 
   boardPanelManager.setCardActions({
     assignToMe: async issueKey => {
-      const label = await backendService.getSelfAssigneeLabel();
-      if (!label) {
-        void vscode.window.showWarningMessage(
-          'Could not resolve the current user for assignment. For Jira, use Edit to set an assignee manually.'
-        );
-        return;
-      }
-      await updateIssueAndRefresh(issueKey, { assignee: label });
+      await assignIssueToMe(issueKey);
+    },
+    assignToAi: async (issueKey, provider) => {
+      await assignIssueToAiByProvider(issueKey, provider);
     },
     editIssue,
     deleteIssue
@@ -884,11 +1104,16 @@ export async function activate(
       await setModeContext(undefined);
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
       epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
       return;
     }
 
-    await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
+    await Promise.all([
+      issuesProvider.refresh(),
+      boardsProvider.refresh(),
+      activeSessionsSidebarViewProvider?.refresh() ?? Promise.resolve()
+    ]);
     const lastSelectedKey = filterStore.getLastSelectedIssueKey();
     if (lastSelectedKey) {
       const issue = issuesProvider.getIssueByKey(lastSelectedKey);
@@ -899,10 +1124,12 @@ export async function activate(
       boardPanelManager.setSelectedIssueKey(lastSelectedKey);
       issuesSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
       epicsSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(lastSelectedKey);
     } else {
       boardPanelManager.setSelectedIssueKey(undefined);
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
       epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+      activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
     }
 
     boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
@@ -918,6 +1145,12 @@ export async function activate(
     {
       onSelectIssue: async (issueKey, openFullPanel) => {
         await selectIssueByKey(issueKey, { openFullPanel });
+      },
+      onAssignToMe: async issueKey => {
+        await assignIssueToMe(issueKey);
+      },
+      onAssignToAi: async (issueKey, provider) => {
+        await assignIssueToAiByProvider(issueKey, provider);
       },
       onEditIssue: async issueKey => {
         await editIssue(issueKey);
@@ -937,6 +1170,7 @@ export async function activate(
       }
     }
   );
+  refreshAiAssignmentMenus();
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
     filterStore,
@@ -953,6 +1187,12 @@ export async function activate(
       },
       onDeleteEpic: async issueKey => {
         await deleteIssue(issueKey);
+      },
+      onSetSearchText: async (_searchText) => {
+        await refreshSearchActionContexts();
+      },
+      onSetStatuses: async (statuses) => {
+        await filterStore.setEpicStatuses(statuses);
       }
     }
   );
@@ -990,6 +1230,32 @@ export async function activate(
       }
     }
   );
+  activeSessionsSidebarViewProvider = new ActiveSessionsSidebarViewProvider(
+    backendService,
+    aiSessionManager,
+    {
+      onOpenSession: async issueKey => {
+        activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
+        copilotSessionPanelManager.open(issueKey);
+      }
+    }
+  );
+
+  function resolveIssueKeyFromArgOrActive(arg?: unknown): string | undefined {
+    if (typeof arg === 'string' && arg.trim().length > 0) {
+      return arg.trim();
+    }
+    if (
+      arg &&
+      typeof arg === 'object' &&
+      'issueKey' in arg &&
+      typeof (arg as { issueKey?: unknown }).issueKey === 'string'
+    ) {
+      return (arg as { issueKey: string }).issueKey;
+    }
+    return detailsProvider.getActiveIssue()?.key;
+  }
+
   await refreshSearchActionContexts();
 
   context.subscriptions.push(
@@ -997,49 +1263,49 @@ export async function activate(
       try {
         await createEpic();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchIssues', async () => {
       try {
         await searchIssues();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchIssuesActive', async () => {
       try {
         await searchIssues();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchEpics', async () => {
       try {
         await searchEpics();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchEpicsActive', async () => {
       try {
         await searchEpics();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchBoards', async () => {
       try {
         await searchBoards();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.searchBoardsActive', async () => {
       try {
         await searchBoards();
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.assignToAi', async () => {
@@ -1049,80 +1315,26 @@ export async function activate(
           await vscode.window.showInformationMessage('Select an issue first.');
           return;
         }
-
-        const existing = aiSessionManager.getSession(issue.key);
-        if (existing) {
-          const overwrite = await vscode.window.showWarningMessage(
-            `${issue.key} is already assigned to an AI agent (${existing.status}). Replace?`,
-            'Replace',
-            'Cancel'
-          );
-          if (overwrite !== 'Replace') {
-            return;
-          }
-        }
-
-        // Prefer registered agents (with names); fall back to raw provider list
-        const quickPickItems = getConfiguredAiOptions().map(option => ({
-          label: option.label,
-          description: option.description,
-          provider: option.provider,
-          agentName: option.agentName
-        }));
-        if (quickPickItems.length === 0) {
-          await vscode.window.showWarningMessage(
-            'No AI providers are configured. Add API keys in Settings → Ticket Manager → AI.'
-          );
-          return;
-        }
-
-        const picked = await vscode.window.showQuickPick(quickPickItems, {
-          title: `Assign ${issue.key} to AI Agent`
-        });
+        const picked = await promptForAiAssignmentOption(issue.key);
         if (!picked) {
           return;
         }
 
-        const assignment = aiSessionManager.createSession(issue.key, picked.provider);
-        issue.aiAssignment = assignment;
-
-        // If the agent has a registered name, also update the assignee field on the ticket
-        if (picked.agentName) {
-          await updateIssueAndRefresh(issue.key, { assignee: picked.agentName });
-        } else {
-          await detailsProvider.setIssue(issue);
-          issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
-        }
-
-        const displayName = picked.agentName ?? (AI_PROVIDER_LABELS[picked.provider] ?? picked.provider);
-        await vscode.window.showInformationMessage(
-          `${issue.key} assigned to ${displayName} (session: ${assignment.sessionId.slice(0, 8)})`
-        );
+        await assignIssueToAi(issue.key, picked);
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.unassignAi', async () => {
+    vscode.commands.registerCommand('ticketManager.unassignAi', async (arg?: unknown) => {
       try {
-        const issue = detailsProvider.getActiveIssue();
-        if (!issue) {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
           await vscode.window.showInformationMessage('Select an issue first.');
           return;
         }
-
-        const session = aiSessionManager.getSession(issue.key);
-        if (!session) {
-          await vscode.window.showInformationMessage(`${issue.key} has no AI assignment.`);
-          return;
-        }
-
-        aiSessionManager.removeSession(issue.key);
-        issue.aiAssignment = undefined;
-        await detailsProvider.setIssue(issue);
-        issuesSidebarViewProvider.setSelectedIssueKey(issue.key);
-        await vscode.window.showInformationMessage(`AI assignment removed from ${issue.key}.`);
+        await abandonAiSession(issueKey, { showMessage: true, clearAssignee: true });
       } catch (error) {
-        logError(outputChannel, error);
+        reportError(error);
       }
     }),
     vscode.commands.registerCommand('ticketManager.reviewWithAi', async () => {
@@ -1148,7 +1360,28 @@ export async function activate(
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
-        logError(outputChannel, error);
+        reportError(error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.openSettings', async () => {
+      await vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        '@ext:local-dev.ticket-manager ticketManager'
+      );
+    }),
+    vscode.commands.registerCommand('ticketManager.configureAi', async () => {
+      try {
+        const result = await promptToConfigureDefaultAiProvider();
+        refreshAiAssignmentMenus();
+        await ticketManagerStatusBar.refresh();
+        if (result.status !== 'cancelled') {
+          await vscode.window.showInformationMessage(describeAiConfigurationResult(result));
+        }
+      } catch (error) {
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+        reportError(error);
       }
     }),
     ...registerCommands({
@@ -1169,6 +1402,10 @@ export async function activate(
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
       ensureFilePlanConfigured,
       output: outputChannel,
+      onConnectionCheck: result => {
+        ticketManagerStatusBar.recordConnectionResult(result);
+      },
+      reportError,
       copilotAgentService,
       copilotSessionPanelManager,
       aiSessionManager
@@ -1176,18 +1413,21 @@ export async function activate(
     vscode.window.registerWebviewViewProvider('ticketManager.myIssues', issuesSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.boards', boardsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.activeSessions', activeSessionsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.issueDetails', issueDetailsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.setup', setupSidebarViewProvider),
     setupSidebarViewProvider,
     issuesSidebarViewProvider,
     epicsSidebarViewProvider,
     boardsSidebarViewProvider,
+    activeSessionsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
+    ticketManagerStatusBar,
     copilotAgentService,
     copilotSessionPanelManager,
     aiSessionManager,
     filterStore.onDidChange(() => {
-      void refreshSearchActionContexts().catch(error => logError(outputChannel, error));
+      void refreshSearchActionContexts().catch(error => reportError(error));
       void (async () => {
         try {
           const activeIssue = detailsProvider.getActiveIssue();
@@ -1199,15 +1439,16 @@ export async function activate(
           boardPanelManager.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
           issuesSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
           epicsSidebarViewProvider.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
+          activeSessionsSidebarViewProvider?.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
         } catch (error) {
-          logError(outputChannel, error);
+          reportError(error);
         }
       })();
     }),
     boardStore.onDidChange(() => {
-      void refreshSearchActionContexts().catch(error => logError(outputChannel, error));
+      void refreshSearchActionContexts().catch(error => reportError(error));
       boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
-      void boardsProvider.refresh().catch(error => logError(outputChannel, error));
+      void boardsProvider.refresh().catch(error => reportError(error));
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Test
       ? [
@@ -1216,8 +1457,29 @@ export async function activate(
               return;
             }
 
+            if (
+              event.affectsConfiguration('ticketManager.ai') &&
+              !event.affectsConfiguration('ticketManager.backendMode') &&
+              !event.affectsConfiguration('ticketManager.connectionType') &&
+              !event.affectsConfiguration('ticketManager.httpUrl') &&
+              !event.affectsConfiguration('ticketManager.stdioCommand') &&
+              !event.affectsConfiguration('ticketManager.stdioArgs') &&
+              !event.affectsConfiguration('ticketManager.stdioCwd') &&
+              !event.affectsConfiguration('ticketManager.planFilePath') &&
+              !event.affectsConfiguration('ticketManager.liveFolderPath') &&
+              !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
+              !event.affectsConfiguration('ticketManager.liveFolderProjectName') &&
+              !event.affectsConfiguration('ticketManager.workspaceMcpServerName') &&
+              !event.affectsConfiguration('ticketManager.userMcpServerRef')
+            ) {
+              refreshAiAssignmentMenus();
+              void ticketManagerStatusBar.refresh().catch(error => reportError(error));
+              return;
+            }
+
             void (async () => {
               try {
+                refreshAiAssignmentMenus();
                 await setModeContext(configStore.getBackendMode());
                 if (configStore.getBackendMode() === 'file') {
                   await ensureFilePlanConfigured(true);
@@ -1232,8 +1494,9 @@ export async function activate(
                 issueDetailPanelManager.clear();
                 await backendService.reset();
                 await refreshAndRestoreSelection();
+                await ticketManagerStatusBar.refresh();
               } catch (error) {
-                logError(outputChannel, error);
+                reportError(error);
               }
             })();
           })
@@ -1246,8 +1509,9 @@ export async function activate(
     if (configStore.getBackendMode()) {
       await refreshAndRestoreSelection();
     }
+    await ticketManagerStatusBar.refresh();
   } catch (error) {
-    logError(outputChannel, error);
+    reportError(error);
   }
 
   return {

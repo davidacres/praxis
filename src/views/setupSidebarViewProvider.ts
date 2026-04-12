@@ -1,4 +1,10 @@
 import * as vscode from 'vscode';
+import {
+  describeAiConfigurationResult,
+  promptToConfigureDefaultAiProvider
+} from '../ai/aiProviderSetup';
+import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
+import { toStoredFolderPath } from '../livefolder/pathUtils';
 
 function escapeHtml(value: string): string {
   return value
@@ -352,9 +358,9 @@ ${fields}
     const projectName = escapeHtml(this.setupFields.liveFolderProjectName ?? '');
     return `<div class="form-group">
   <label>Plans Folder Path</label>
-  <input type="text" data-field="liveFolderPath" value="${folderPath}" placeholder="e.g. C:\\project\\plans" />
+  <input type="text" data-field="liveFolderPath" value="${folderPath}" placeholder="e.g. C:\\project or C:\\project\\plans" />
   <button class="btn-browse" data-action="browse">Browse\u2026</button>
-  <div class="help-text">Folder containing features/feature-NN-*/feature.md</div>
+  <div class="help-text">Select a plans folder or a parent folder. Ticket Manager will search for features/feature-NN-*/feature.md.</div>
 </div>
 <div class="form-group">
   <label>Project Key</label>
@@ -517,11 +523,21 @@ ${connFields}`;
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            title: 'Select Plans Folder'
+            title: 'Select Folder to Search for Plans'
           });
           if (uris?.[0]) {
-            this.setupFields.liveFolderPath = uris[0].fsPath;
-            this.render();
+            try {
+              const { resolvedPath, changed } = await this.resolveLiveFolderPath(uris[0]);
+              this.setupFields.liveFolderPath = resolvedPath;
+              this.render();
+              if (changed) {
+                void vscode.window.showInformationMessage(`Found plans folder at ${resolvedPath}.`);
+              }
+            } catch (error) {
+              void vscode.window.showErrorMessage(
+                error instanceof Error ? error.message : String(error)
+              );
+            }
           }
         } else {
           const uris = await vscode.window.showOpenDialog({
@@ -556,20 +572,21 @@ ${connFields}`;
       return;
     }
 
+    const savedMode = this.setupMode;
+
     const config = vscode.workspace.getConfiguration('ticketManager');
-    let target = vscode.workspace.workspaceFolders?.length
+    const target = vscode.workspace.workspaceFolders?.length
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
 
     const updateSetting = async (key: string, value: unknown): Promise<void> => {
-      try {
-        await config.update(key, value, target);
-      } catch {
-        // Workspace write failed — fall back to Global
-        target = vscode.ConfigurationTarget.Global;
-        await config.update(key, value, target);
-      }
+      await config.update(key, value, target);
     };
+
+    if (this.setupMode === 'livefolder') {
+      const { resolvedPath } = await this.resolveLiveFolderPath(this.setupFields.liveFolderPath ?? '');
+      this.setupFields.liveFolderPath = resolvedPath;
+    }
 
     await updateSetting('backendMode', this.setupMode);
 
@@ -580,9 +597,7 @@ ${connFields}`;
         }
         break;
       case 'livefolder':
-        if (this.setupFields.liveFolderPath) {
-          await updateSetting('liveFolderPath', this.setupFields.liveFolderPath);
-        }
+        await updateSetting('liveFolderPath', this.setupFields.liveFolderPath);
         if (this.setupFields.liveFolderProjectKey) {
           await updateSetting('liveFolderProjectKey', this.setupFields.liveFolderProjectKey);
         }
@@ -641,12 +656,37 @@ ${connFields}`;
       }
     }
 
-    void vscode.window.showInformationMessage(`${this.setupMode === 'livefolder' ? 'Live Folder' : this.setupMode === 'file' ? 'File' : this.setupMode.toUpperCase()} configuration saved.`);
+    const aiResult = await promptToConfigureDefaultAiProvider();
+    void vscode.window.showInformationMessage(
+      `${
+        savedMode === 'livefolder'
+          ? 'Live Folder'
+          : savedMode === 'file'
+            ? 'File'
+            : savedMode.toUpperCase()
+      } configuration saved. ${describeAiConfigurationResult(aiResult)}`
+    );
 
     // Reset state and re-render to show mode selection
     this.setupStep = 0;
     this.setupMode = undefined;
     this.setupFields = {};
     this.render();
+  }
+
+  private async resolveLiveFolderPath(
+    folderPath: string | vscode.Uri
+  ): Promise<{ resolvedPath: string; changed: boolean }> {
+    const originalPath = typeof folderPath === 'string' ? folderPath.trim() : folderPath.fsPath;
+    if (!originalPath) {
+      throw new Error('Plans folder path is required for Live Folder mode.');
+    }
+
+    const identified = await identifyPlanFolder(folderPath);
+    const resolvedPath = toStoredFolderPath(identified.plansRootUri.fsPath);
+    return {
+      resolvedPath,
+      changed: resolvedPath !== toStoredFolderPath(originalPath)
+    };
   }
 }

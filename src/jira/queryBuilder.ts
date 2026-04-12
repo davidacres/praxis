@@ -55,6 +55,7 @@ export function buildIssuesJql(filters: IssueFilters, parentFieldMode: ParentFie
 
 export function buildParentItemsJql(
   projectKeys: string[],
+  statuses: string[] = [],
   searchText?: string,
   issueTypes: string[] = ['Epic']
 ): string {
@@ -67,6 +68,11 @@ export function buildParentItemsJql(
 
   if (projectClause) {
     clauses.push(projectClause);
+  }
+
+  const statusClause = buildInClause('status', statuses);
+  if (statusClause) {
+    clauses.push(statusClause);
   }
 
   if (searchText && searchText.trim().length > 0) {

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import type { CopilotAgentService } from '../ai/copilotAgentService';
 import type { AgentSessionRecord, AgentEventSummary } from '../ai/agentTypes';
+import type { AiAssignment, AiProvider } from '../types';
 
 function escapeHtml(value: string): string {
   return value
@@ -24,6 +25,24 @@ function asString(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined;
 }
 
+function formatDate(value: string | undefined): string {
+  if (!value) {
+    return 'Unknown';
+  }
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+const PROVIDER_LABELS: Record<AiProvider, string> = {
+  openai: 'OpenAI',
+  claude: 'Claude',
+  'cursor-cli': 'Cursor CLI',
+  'copilot-cli': 'GitHub Copilot SDK'
+};
+
 const STATE_LABELS: Record<string, { label: string; icon: string }> = {
   'not_started': { label: 'Not Started', icon: '⏳' },
   'planning': { label: 'Planning', icon: '📋' },
@@ -32,7 +51,8 @@ const STATE_LABELS: Record<string, { label: string; icon: string }> = {
   'awaiting_input': { label: 'Awaiting Input', icon: '❓' },
   'completed': { label: 'Completed', icon: '✅' },
   'failed': { label: 'Failed', icon: '❌' },
-  'aborted': { label: 'Aborted', icon: '🛑' }
+  'aborted': { label: 'Aborted', icon: '🛑' },
+  active: { label: 'Assigned', icon: '🤖' }
 };
 
 const EVENT_ICONS: Record<string, string> = {
@@ -54,21 +74,56 @@ const EVENT_ICONS: Record<string, string> = {
   'warning': '⚠️'
 };
 
-/** Manages one webview panel per agent session. */
+function resolveAssignmentLabel(
+  assignment: AiAssignment | undefined,
+  record: AgentSessionRecord | undefined
+): string {
+  if (assignment?.label?.trim()) {
+    return assignment.label.trim();
+  }
+  if (assignment) {
+    return PROVIDER_LABELS[assignment.provider] ?? assignment.provider;
+  }
+  if (record) {
+    return PROVIDER_LABELS['copilot-cli'];
+  }
+  return 'AI Session';
+}
+
+function resolveAssignmentStatus(
+  assignment: AiAssignment | undefined,
+  record: AgentSessionRecord | undefined
+): { label: string; icon: string } {
+  if (record) {
+    return STATE_LABELS[record.state] ?? { label: record.state, icon: '❔' };
+  }
+  if (assignment) {
+    return STATE_LABELS[assignment.status] ?? { label: assignment.status, icon: '❔' };
+  }
+  return { label: 'Unknown', icon: '❔' };
+}
+
+/** Manages one webview panel per AI session. */
 export class CopilotSessionPanelManager implements vscode.Disposable {
   private panels = new Map<string, vscode.WebviewPanel>();
   private disposables: vscode.Disposable[] = [];
 
-  constructor(
+  public constructor(
     private readonly sessionManager: AiSessionManager,
-    private readonly agentService: CopilotAgentService
+    private readonly agentService: CopilotAgentService,
+    private readonly onAbandonSession: (issueKey: string) => Promise<void>
   ) {
-    // Listen for session changes and push updates to open panels
     this.disposables.push(
-      this.sessionManager.onDidChangeAgentSession((record) => {
+      this.sessionManager.onDidChangeSession(({ issueKey }) => {
+        const panel = this.panels.get(issueKey);
+        if (panel) {
+          this.renderFull(panel, issueKey);
+        }
+      }),
+      this.sessionManager.onDidChangeAgentSession(record => {
         const panel = this.panels.get(record.issueKey);
         if (panel) {
-          this.updatePanel(panel, record);
+          this.updatePanel(panel, record.issueKey);
         }
       })
     );
@@ -82,15 +137,16 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       return;
     }
 
+    const assignment = this.sessionManager.getSession(issueKey);
     const record = this.sessionManager.getAgentSession(issueKey);
-    if (!record) {
-      vscode.window.showWarningMessage(`No agent session found for ${issueKey}.`);
+    if (!assignment && !record) {
+      vscode.window.showWarningMessage(`No AI session found for ${issueKey}.`);
       return;
     }
 
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.copilotSession',
-      `🤖 Agent: ${issueKey}`,
+      'ticketManager.aiSession',
+      `🤖 AI Session: ${issueKey}`,
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -99,16 +155,14 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     );
 
     this.panels.set(issueKey, panel);
-
     panel.onDidDispose(() => {
       this.panels.delete(issueKey);
     });
-
-    panel.webview.onDidReceiveMessage((message) => {
+    panel.webview.onDidReceiveMessage(message => {
       void this.handleMessage(issueKey, message);
     });
 
-    this.renderFull(panel, record);
+    this.renderFull(panel, issueKey);
   }
 
   public dispose(): void {
@@ -116,12 +170,10 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       panel.dispose();
     }
     this.panels.clear();
-    for (const d of this.disposables) {
-      d.dispose();
+    for (const disposable of this.disposables) {
+      disposable.dispose();
     }
   }
-
-  // ── Message handling ───────────────────────────────────────────
 
   private async handleMessage(issueKey: string, message: unknown): Promise<void> {
     if (!isRecord(message)) {
@@ -129,7 +181,6 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     }
 
     const type = asString(message.type);
-
     switch (type) {
       case 'respondInput': {
         const response = asString(message.response);
@@ -146,46 +197,111 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         break;
       }
       case 'abort': {
-        await this.agentService.abortTask(issueKey);
+        await this.onAbandonSession(issueKey);
         break;
       }
     }
   }
 
-  // ── Rendering ──────────────────────────────────────────────────
+  private updatePanel(panel: vscode.WebviewPanel, issueKey: string): void {
+    const assignment = this.sessionManager.getSession(issueKey);
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (!assignment && !record) {
+      this.renderFull(panel, issueKey);
+      return;
+    }
+    if (!record) {
+      this.renderFull(panel, issueKey);
+      return;
+    }
 
-  private updatePanel(panel: vscode.WebviewPanel, record: AgentSessionRecord): void {
-    // Push incremental update via postMessage
     panel.webview.postMessage({
       type: 'update',
       state: record.state,
       events: record.events,
       planText: record.planText,
-      stepCount: record.stepCount
+      stepCount: record.stepCount,
+      hasAgentSession: true
     });
   }
 
-  private renderFull(panel: vscode.WebviewPanel, record: AgentSessionRecord): void {
+  private renderFull(panel: vscode.WebviewPanel, issueKey: string): void {
     const nonce = createNonce();
-    panel.webview.html = this.getHtml(nonce, record);
+    panel.webview.html = this.getHtml(
+      nonce,
+      issueKey,
+      this.sessionManager.getSession(issueKey),
+      this.sessionManager.getAgentSession(issueKey)
+    );
   }
 
-  private getHtml(nonce: string, record: AgentSessionRecord): string {
-    const task = record.taskDefinition;
-    const stateInfo = STATE_LABELS[record.state] ?? { label: record.state, icon: '❔' };
+  private getHtml(
+    nonce: string,
+    issueKey: string,
+    assignment: AiAssignment | undefined,
+    record: AgentSessionRecord | undefined
+  ): string {
+    const statusInfo = resolveAssignmentStatus(assignment, record);
+    const task = record?.taskDefinition;
+    const assignmentLabel = resolveAssignmentLabel(assignment, record);
+    const sessionId = assignment?.sessionId ?? record?.sessionId ?? issueKey;
+    const startedAt = assignment?.assignedAt ?? record?.startedAt;
+    const hasLiveAgentSession = Boolean(record);
+    const maxSteps = Number(task?.maxSteps ?? 50);
+    const isTerminal = record ? this.isTerminal(record.state) : assignment?.status !== 'active';
+    const activityFeed = record ? this.renderEvents(record.events) : '';
+    const liveSessionSection = hasLiveAgentSession
+      ? `<details class="card" open>
+          <summary>Task Definition</summary>
+          <div class="field"><strong>Goal:</strong> ${escapeHtml(task?.goal ?? '—')}</div>
+          <div class="field"><strong>Scope:</strong> ${escapeHtml(task?.scope ?? '—')}</div>
+          <div class="field"><strong>Done when:</strong> ${escapeHtml(task?.definitionOfDone ?? '—')}</div>
+          ${task?.nonGoals?.length ? `<div class="field"><strong>Non-goals:</strong> ${task.nonGoals.map(goal => escapeHtml(goal)).join(', ')}</div>` : ''}
+        </details>
 
-    return /* html */ `<!DOCTYPE html>
+        <div id="plan-section" class="plan-section" style="${record?.planText ? '' : 'display:none'}">
+          <h3>Plan</h3>
+          <div id="plan-content" class="plan-content">${record?.planText ? escapeHtml(record.planText) : ''}</div>
+        </div>
+
+        <h3>Activity Feed</h3>
+        <div id="activity-feed">${activityFeed}</div>
+
+        <div id="input-area" class="input-area ${record?.state === 'awaiting_input' ? 'visible' : ''}">
+          <h3>Agent input requested</h3>
+          <textarea id="user-response" placeholder="Type your response..."></textarea>
+          <div class="btn-row">
+            <button id="send-input" class="btn">Send</button>
+          </div>
+        </div>
+
+        <div id="permission-area" class="input-area ${record?.state === 'awaiting_approval' ? 'visible' : ''}">
+          <h3>Permission Required</h3>
+          <p id="permission-desc" class="supporting-text">The agent is requesting permission to proceed.</p>
+          <div class="btn-row">
+            <button id="approve-once" class="btn">Approve Once</button>
+            <button id="approve-always" class="btn btn-secondary">Approve for Task</button>
+            <button id="deny-perm" class="btn btn-deny">Deny</button>
+          </div>
+        </div>`
+      : `<div class="card">
+          <h3>No live agent activity</h3>
+          <div class="field">This AI assignment does not currently have a running agent event stream. If you delegate the issue to Copilot, live planning and execution events will appear here.</div>
+        </div>`;
+
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Agent Session: ${escapeHtml(record.issueKey)}</title>
+  <title>AI Session: ${escapeHtml(issueKey)}</title>
   <style nonce="${nonce}">
     :root {
       --bg: var(--vscode-editor-background);
       --fg: var(--vscode-editor-foreground);
+      --muted: var(--vscode-descriptionForeground);
       --border: var(--vscode-panel-border, #444);
       --badge-bg: var(--vscode-badge-background);
       --badge-fg: var(--vscode-badge-foreground);
@@ -198,134 +314,194 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       --btn-secondary-bg: var(--vscode-button-secondaryBackground);
       --btn-secondary-fg: var(--vscode-button-secondaryForeground);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: var(--vscode-font-family); color: var(--fg); background: var(--bg); padding: 16px; }
-    h2 { font-size: 14px; margin-bottom: 8px; }
-    h3 { font-size: 13px; margin-bottom: 6px; font-weight: 600; }
-
-    .header {
-      display: flex; align-items: center; gap: 12px;
-      border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: var(--vscode-font-family);
+      color: var(--fg);
+      background: var(--bg);
     }
-    .header h2 { flex: 1; font-size: 16px; margin-bottom: 0; }
+    h2, h3 { margin: 0 0 8px; }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .header-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .header-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .header-meta {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
     .state-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      background: var(--badge-bg); color: var(--badge-fg);
-      padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--badge-bg);
+      color: var(--badge-fg);
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
     }
     .abort-btn {
-      background: var(--vscode-errorForeground, #f44); color: #fff;
-      border: none; border-radius: 4px; padding: 4px 12px; cursor: pointer; font-size: 12px;
+      border: none;
+      border-radius: 4px;
+      padding: 6px 12px;
+      background: var(--vscode-errorForeground, #f44);
+      color: #fff;
+      cursor: pointer;
+      font-size: 12px;
     }
     .abort-btn:hover { opacity: 0.85; }
     .abort-btn:disabled { opacity: 0.4; cursor: default; }
-
     .card {
-      border: 1px solid var(--border); border-radius: 6px;
-      padding: 12px; margin-bottom: 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 16px;
     }
-    .card summary { cursor: pointer; font-weight: 600; font-size: 13px; }
-    .card .field { margin-top: 6px; font-size: 12px; line-height: 1.5; }
-    .card .field strong { display: inline-block; min-width: 120px; }
-
+    .card summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .field {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .field strong {
+      display: inline-block;
+      min-width: 130px;
+    }
+    .supporting-text {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .plan-section { margin-bottom: 16px; }
+    .plan-content {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
     #activity-feed {
-      border: 1px solid var(--border); border-radius: 6px;
-      max-height: 50vh; overflow-y: auto; padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      max-height: 50vh;
+      overflow-y: auto;
+      padding: 8px;
+      margin-bottom: 16px;
     }
     .event-row {
-      display: flex; gap: 8px; padding: 4px 0;
+      display: flex;
+      gap: 8px;
+      padding: 4px 0;
       border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-      font-size: 12px; line-height: 1.4;
+      font-size: 12px;
+      line-height: 1.4;
     }
     .event-row:last-child { border-bottom: none; }
     .event-icon { flex-shrink: 0; width: 20px; text-align: center; }
-    .event-time { flex-shrink: 0; color: var(--vscode-descriptionForeground); min-width: 65px; }
+    .event-time { flex-shrink: 0; color: var(--muted); min-width: 65px; }
     .event-summary { flex: 1; word-break: break-word; }
-
-    .plan-section { margin-bottom: 16px; }
-    .plan-content {
-      background: var(--input-bg); border: 1px solid var(--border);
-      border-radius: 4px; padding: 10px; font-size: 12px;
-      white-space: pre-wrap; max-height: 200px; overflow-y: auto;
-    }
-
     .input-area {
-      margin-top: 16px; border: 1px solid var(--border);
-      border-radius: 6px; padding: 12px; display: none;
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      display: none;
     }
     .input-area.visible { display: block; }
-    .input-area h3 { margin-bottom: 8px; }
     .input-area textarea {
-      width: 100%; min-height: 60px; resize: vertical;
-      background: var(--input-bg); color: var(--input-fg);
-      border: 1px solid var(--input-border); border-radius: 4px; padding: 8px;
-      font-family: var(--vscode-font-family); font-size: 12px;
+      width: 100%;
+      min-height: 60px;
+      resize: vertical;
+      background: var(--input-bg);
+      color: var(--input-fg);
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      padding: 8px;
+      font-family: var(--vscode-font-family);
+      font-size: 12px;
     }
-    .input-area .btn-row { margin-top: 8px; display: flex; gap: 8px; }
+    .btn-row {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .btn {
-      padding: 5px 14px; border: none; border-radius: 4px; cursor: pointer;
-      font-size: 12px; font-weight: 500;
-      background: var(--btn-bg); color: var(--btn-fg);
+      padding: 5px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--btn-bg);
+      color: var(--btn-fg);
     }
     .btn:hover { background: var(--btn-hover); }
     .btn-secondary {
-      background: var(--btn-secondary-bg); color: var(--btn-secondary-fg);
+      background: var(--btn-secondary-bg);
+      color: var(--btn-secondary-fg);
     }
     .btn-deny {
-      background: var(--vscode-errorForeground, #f44); color: #fff;
+      background: var(--vscode-errorForeground, #f44);
+      color: #fff;
     }
-
-    .step-counter { font-size: 11px; color: var(--vscode-descriptionForeground); }
+    .step-counter {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h2>🤖 ${escapeHtml(record.issueKey)}</h2>
-    <span id="state-badge" class="state-badge">${stateInfo.icon} ${escapeHtml(stateInfo.label)}</span>
-    <span id="step-counter" class="step-counter">Steps: ${record.stepCount}/${task.maxSteps ?? 50}</span>
-    <button id="abort-btn" class="abort-btn" ${this.isTerminal(record.state) ? 'disabled' : ''}>Abort</button>
-  </div>
-
-  <details class="card" open>
-    <summary>Task Definition</summary>
-    <div class="field"><strong>Goal:</strong> ${escapeHtml(task.goal)}</div>
-    <div class="field"><strong>Scope:</strong> ${escapeHtml(task.scope)}</div>
-    <div class="field"><strong>Done when:</strong> ${escapeHtml(task.definitionOfDone)}</div>
-    ${task.nonGoals?.length ? `<div class="field"><strong>Non-goals:</strong> ${task.nonGoals.map(g => escapeHtml(g)).join(', ')}</div>` : ''}
-  </details>
-
-  <div id="plan-section" class="plan-section" style="${record.planText ? '' : 'display:none'}">
-    <h3>📋 Agent Plan</h3>
-    <div id="plan-content" class="plan-content">${record.planText ? escapeHtml(record.planText) : ''}</div>
-  </div>
-
-  <h3>Activity Feed</h3>
-  <div id="activity-feed">
-    ${this.renderEvents(record.events)}
-  </div>
-
-  <div id="input-area" class="input-area ${record.state === 'awaiting_input' ? 'visible' : ''}">
-    <h3>❓ Agent is asking for input</h3>
-    <textarea id="user-response" placeholder="Type your response..."></textarea>
-    <div class="btn-row">
-      <button id="send-input" class="btn">Send</button>
+    <div class="header-main">
+      <div class="header-title">🤖 ${escapeHtml(issueKey)}</div>
+      <div class="header-meta">${escapeHtml(assignmentLabel)} • Session ${escapeHtml(sessionId.slice(0, 8))}</div>
     </div>
+    <span id="state-badge" class="state-badge">${statusInfo.icon} ${escapeHtml(statusInfo.label)}</span>
+    <span id="step-counter" class="step-counter">${hasLiveAgentSession ? `Steps: ${record?.stepCount ?? 0}/${maxSteps}` : `Assigned: ${escapeHtml(formatDate(startedAt))}`}</span>
+    <button id="abort-btn" class="abort-btn" ${isTerminal ? 'disabled' : ''}>Abandon Session</button>
   </div>
 
-  <div id="permission-area" class="input-area ${record.state === 'awaiting_approval' ? 'visible' : ''}">
-    <h3>⚠️ Permission Required</h3>
-    <p id="permission-desc" style="font-size: 12px; margin-bottom: 8px;">The agent is requesting permission to proceed.</p>
-    <div class="btn-row">
-      <button id="approve-once" class="btn">Approve Once</button>
-      <button id="approve-always" class="btn btn-secondary">Approve for Task</button>
-      <button id="deny-perm" class="btn btn-deny">Deny</button>
-    </div>
+  <div class="card">
+    <h3>Session Details</h3>
+    <div class="field"><strong>Agent:</strong> <span id="agent-label">${escapeHtml(assignmentLabel)}</span></div>
+    <div class="field"><strong>Session ID:</strong> ${escapeHtml(sessionId)}</div>
+    <div class="field"><strong>Status:</strong> <span id="status-label">${escapeHtml(statusInfo.label)}</span></div>
+    <div class="field"><strong>Started:</strong> ${escapeHtml(formatDate(startedAt))}</div>
+    ${record?.completedAt ? `<div class="field"><strong>Completed:</strong> ${escapeHtml(formatDate(record.completedAt))}</div>` : ''}
   </div>
+
+  ${liveSessionSection}
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const feedEl = document.getElementById('activity-feed');
     const stateBadgeEl = document.getElementById('state-badge');
+    const statusLabelEl = document.getElementById('status-label');
     const stepCounterEl = document.getElementById('step-counter');
     const abortBtn = document.getElementById('abort-btn');
     const inputArea = document.getElementById('input-area');
@@ -335,9 +511,8 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 
     const stateLabels = ${JSON.stringify(STATE_LABELS).replace(/</g, '\\u003c')};
     const eventIcons = ${JSON.stringify(EVENT_ICONS).replace(/</g, '\\u003c')};
-    const maxSteps = ${Number(task.maxSteps ?? 50)};
-
-    let knownEventCount = ${Number(record.events.length)};
+    const maxSteps = ${maxSteps};
+    let knownEventCount = ${Number(record?.events.length ?? 0)};
 
     function formatTime(ts) {
       try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
@@ -354,90 +529,124 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     }
 
     function escapeHtml(s) {
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-              .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+      return String(s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
     }
 
     const terminalStates = new Set(['completed', 'failed', 'aborted']);
 
-    window.addEventListener('message', (event) => {
+    window.addEventListener('message', event => {
       const msg = event.data;
-      if (msg.type !== 'update') return;
-
-      // Update state badge
-      const info = stateLabels[msg.state] || { label: msg.state, icon: '❔' };
-      stateBadgeEl.textContent = info.icon + ' ' + info.label;
-
-      // Steps
-      stepCounterEl.textContent = 'Steps: ' + (msg.stepCount || 0) + '/' + maxSteps;
-
-      // Abort button
-      abortBtn.disabled = terminalStates.has(msg.state);
-
-      // Plan
-      if (msg.planText) {
-        const planSection = document.getElementById('plan-section');
-        planSection.style.display = '';
-        document.getElementById('plan-content').textContent = msg.planText;
+      if (msg.type !== 'update' || !msg.hasAgentSession) {
+        return;
       }
 
-      // Append new events
-      if (msg.events && msg.events.length > knownEventCount) {
+      const info = stateLabels[msg.state] || { label: msg.state, icon: '❔' };
+      stateBadgeEl.textContent = info.icon + ' ' + info.label;
+      if (statusLabelEl) {
+        statusLabelEl.textContent = info.label;
+      }
+      if (stepCounterEl) {
+        stepCounterEl.textContent = 'Steps: ' + (msg.stepCount || 0) + '/' + maxSteps;
+      }
+      if (abortBtn) {
+        abortBtn.disabled = terminalStates.has(msg.state);
+      }
+
+      if (msg.planText) {
+        const planSection = document.getElementById('plan-section');
+        if (planSection) {
+          planSection.style.display = '';
+        }
+        const planContent = document.getElementById('plan-content');
+        if (planContent) {
+          planContent.textContent = msg.planText;
+        }
+      }
+
+      if (feedEl && msg.events && msg.events.length > knownEventCount) {
         const newEvents = msg.events.slice(knownEventCount);
         feedEl.insertAdjacentHTML('beforeend', newEvents.map(renderEventRow).join(''));
         knownEventCount = msg.events.length;
         feedEl.scrollTop = feedEl.scrollHeight;
       }
 
-      // Input/permission areas
-      inputArea.classList.toggle('visible', msg.state === 'awaiting_input');
-      permArea.classList.toggle('visible', msg.state === 'awaiting_approval');
-    });
-
-    abortBtn.addEventListener('click', () => {
-      vscode.postMessage({ type: 'abort' });
-    });
-
-    sendBtn.addEventListener('click', () => {
-      const response = textarea.value.trim();
-      if (response) {
-        vscode.postMessage({ type: 'respondInput', response });
-        textarea.value = '';
+      if (inputArea) {
+        inputArea.classList.toggle('visible', msg.state === 'awaiting_input');
+      }
+      if (permArea) {
+        permArea.classList.toggle('visible', msg.state === 'awaiting_approval');
       }
     });
 
-    document.getElementById('approve-once').addEventListener('click', () => {
-      vscode.postMessage({ type: 'respondPermission', decision: 'allow_once' });
-    });
-    document.getElementById('approve-always').addEventListener('click', () => {
-      vscode.postMessage({ type: 'respondPermission', decision: 'allow_always' });
-    });
-    document.getElementById('deny-perm').addEventListener('click', () => {
-      vscode.postMessage({ type: 'respondPermission', decision: 'deny' });
-    });
+    if (abortBtn) {
+      abortBtn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'abort' });
+      });
+    }
 
-    // Auto-scroll on initial load
-    feedEl.scrollTop = feedEl.scrollHeight;
+    if (sendBtn && textarea) {
+      sendBtn.addEventListener('click', () => {
+        const response = textarea.value.trim();
+        if (response) {
+          vscode.postMessage({ type: 'respondInput', response });
+          textarea.value = '';
+        }
+      });
+    }
+
+    const approveOnce = document.getElementById('approve-once');
+    if (approveOnce) {
+      approveOnce.addEventListener('click', () => {
+        vscode.postMessage({ type: 'respondPermission', decision: 'allow_once' });
+      });
+    }
+    const approveAlways = document.getElementById('approve-always');
+    if (approveAlways) {
+      approveAlways.addEventListener('click', () => {
+        vscode.postMessage({ type: 'respondPermission', decision: 'allow_always' });
+      });
+    }
+    const denyPerm = document.getElementById('deny-perm');
+    if (denyPerm) {
+      denyPerm.addEventListener('click', () => {
+        vscode.postMessage({ type: 'respondPermission', decision: 'deny' });
+      });
+    }
+
+    if (feedEl) {
+      feedEl.scrollTop = feedEl.scrollHeight;
+    }
   </script>
 </body>
 </html>`;
   }
 
   private renderEvents(events: AgentEventSummary[]): string {
-    return events.map(ev => {
-      const icon = EVENT_ICONS[ev.type] ?? '•';
-      const time = this.formatTime(ev.timestamp);
-      return `<div class="event-row">
-        <span class="event-icon">${icon}</span>
-        <span class="event-time">${escapeHtml(time)}</span>
-        <span class="event-summary">${escapeHtml(ev.summary)}</span>
-      </div>`;
-    }).join('');
+    return events
+      .map(event => {
+        const icon = EVENT_ICONS[event.type] ?? '•';
+        const time = this.formatTime(event.timestamp);
+        return `<div class="event-row">
+          <span class="event-icon">${icon}</span>
+          <span class="event-time">${escapeHtml(time)}</span>
+          <span class="event-summary">${escapeHtml(event.summary)}</span>
+        </div>`;
+      })
+      .join('');
   }
 
-  private formatTime(ts: string): string {
+  private formatTime(timestamp: string): string {
     try {
-      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return new Date(timestamp).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
     } catch {
       return '';
     }

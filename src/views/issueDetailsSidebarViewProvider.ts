@@ -126,6 +126,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     this.disposables.push(
       this.detailsProvider.onDidChangeTreeData(() => {
         this.render();
+      }),
+      this.aiSessionManager.onDidChangeSession(({ issueKey }) => {
+        if (this.detailsProvider.getActiveIssue()?.key === issueKey) {
+          this.render();
+        }
+      }),
+      this.aiSessionManager.onDidChangeAgentSession(record => {
+        if (this.detailsProvider.getActiveIssue()?.key === record.issueKey) {
+          this.render();
+        }
       })
     );
   }
@@ -232,20 +242,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       if (!issueKey) {
         return;
       }
-      await vscode.commands.executeCommand('ticketManager.unassignAi');
+      await vscode.commands.executeCommand('ticketManager.unassignAi', issueKey);
     }
 
     if (type === 'viewAgentSession') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.viewAgentSession');
+        await vscode.commands.executeCommand('ticketManager.viewAgentSession', issueKey);
       }
     }
 
     if (type === 'abortAgentSession') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.abortAgentSession');
+        await vscode.commands.executeCommand('ticketManager.abortAgentSession', issueKey);
       }
     }
 
@@ -279,81 +289,82 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       return;
     }
 
-    const snapshot = this.detailsProvider.getSnapshot();
-    const nonce = createNonce();
-    let content = '';
+    try {
+      const snapshot = this.detailsProvider.getSnapshot();
+      const nonce = createNonce();
+      let content = '';
 
-    if (!snapshot.selectedIssue) {
-      content = '<div class="message">Select an issue to inspect its details.</div>';
-    } else if (snapshot.loading && !snapshot.detailedIssue) {
-      content = `<div class="message">Loading ${escapeHtml(snapshot.selectedIssue.key)}...</div>`;
-    } else if (snapshot.errorMessage) {
-      content = `<div class="message error">${escapeHtml(snapshot.errorMessage)}</div>`;
-    } else if (!snapshot.detailedIssue) {
-      content = '<div class="message">Issue details are unavailable.</div>';
-    } else {
-      const issue = snapshot.detailedIssue;
-      const agentNames = this.getAiAgentNames();
-      const parentRule = getParentRule(issue.issueType, this.backendService.mode);
-      const resolvedParentLabel = getResolvedParentLabel(
-        issue.issueType,
-        this.backendService.mode,
-        issue.parentIssue
-      );
-      const parentReference = formatParentReference(issue.parentIssue);
-      const readonlyRows = [
-        ['Project', issue.projectName ? `${issue.projectKey} • ${issue.projectName}` : issue.projectKey || '—'],
-        ['Created', formatDate(issue.created)],
-        ['Updated', formatDate(issue.updated)]
-      ]
-        .map(
-          ([label, value]) => `<div class="detail-row">
-            <div class="detail-label">${escapeHtml(label)}</div>
-            <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
-          </div>`
-        )
-        .join('');
+      if (!snapshot.selectedIssue) {
+        content = '<div class="message">Select an issue to inspect its details.</div>';
+      } else if (snapshot.loading && !snapshot.detailedIssue) {
+        content = `<div class="message">Loading ${escapeHtml(snapshot.selectedIssue.key)}...</div>`;
+      } else if (snapshot.errorMessage) {
+        content = `<div class="message error">${escapeHtml(snapshot.errorMessage)}</div>`;
+      } else if (!snapshot.detailedIssue) {
+        content = '<div class="message">Issue details are unavailable.</div>';
+      } else {
+        const issue = snapshot.detailedIssue;
+        const agentNames = this.getAiAgentNames();
+        const parentRule = getParentRule(issue.issueType, this.backendService.mode);
+        const resolvedParentLabel = getResolvedParentLabel(
+          issue.issueType,
+          this.backendService.mode,
+          issue.parentIssue
+        );
+        const parentReference = formatParentReference(issue.parentIssue);
+        const readonlyRows = [
+          ['Project', issue.projectName ? `${issue.projectKey} • ${issue.projectName}` : issue.projectKey || '—'],
+          ['Created', formatDate(issue.created)],
+          ['Updated', formatDate(issue.updated)]
+        ]
+          .map(
+            ([label, value]) => `<div class="detail-row">
+              <div class="detail-label">${escapeHtml(label)}</div>
+              <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
+            </div>`
+          )
+          .join('');
 
-      const statusOptions = `<option value="" selected>${escapeHtml(issue.status)}</option>${snapshot.transitions
-        .map(
-          transition =>
-            `<option value="${escapeHtml(transition.id)}">${escapeHtml(
-              transition.toStatus ?? transition.name
-            )}</option>`
-        )
-        .join('')}`;
-      const issueTypeOptions = renderSelectOptions(issue.issueType, [
-        'Epic',
-        'Feature',
-        'Story',
-        'Task',
-        'Subtask',
-        'Bug',
-        'Issue'
-      ]);
-      const priorityOptions = renderSelectOptions(issue.priority, [
-        'Critical',
-        'Highest',
-        'High',
-        'Medium',
-        'Low',
-        'Lowest'
-      ]);
+        const statusOptions = `<option value="" selected>${escapeHtml(issue.status)}</option>${snapshot.transitions
+          .map(
+            transition =>
+              `<option value="${escapeHtml(transition.id)}">${escapeHtml(
+                transition.toStatus ?? transition.name
+              )}</option>`
+          )
+          .join('')}`;
+        const issueTypeOptions = renderSelectOptions(issue.issueType, [
+          'Epic',
+          'Feature',
+          'Story',
+          'Task',
+          'Subtask',
+          'Bug',
+          'Issue'
+        ]);
+        const priorityOptions = renderSelectOptions(issue.priority, [
+          'Critical',
+          'Highest',
+          'High',
+          'Medium',
+          'Low',
+          'Lowest'
+        ]);
 
-      const comments = (issue.comments ?? [])
-        .map(comment => {
-          const formattedDate = formatDate(comment.created ?? comment.updated);
-          const metaParts = [comment.author, formattedDate !== '—' ? formattedDate : undefined].filter(
-            (value): value is string => Boolean(value)
-          );
-          return `<div class="comment-item">
-            <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
-            <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
-          </div>`;
-        })
-        .join('');
+        const comments = (issue.comments ?? [])
+          .map(comment => {
+            const formattedDate = formatDate(comment.created ?? comment.updated);
+            const metaParts = [comment.author, formattedDate !== '—' ? formattedDate : undefined].filter(
+              (value): value is string => Boolean(value)
+            );
+            return `<div class="comment-item">
+              <div class="comment-meta">${escapeHtml(metaParts.join(' • ') || 'Comment')}</div>
+              <div class="comment-body markdown-body">${markdownToHtmlSafe(comment.body)}</div>
+            </div>`;
+          })
+          .join('');
 
-      content = `<div class="item-list">
+        content = `<div class="item-list">
         <div class="issue-header" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
           <div class="header-main">
             <div class="item-key">${escapeHtml(issue.key)}</div>
@@ -472,9 +483,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           </div>
         </form>
       </div>`;
-    }
+      }
 
-    this.view.webview.html = `<!DOCTYPE html>
+      this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -1237,6 +1248,64 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </script>
   </body>
 </html>`;
+    } catch (error) {
+      const snapshot = this.detailsProvider.getSnapshot();
+      const nonce = createNonce();
+      const issueKey = snapshot.selectedIssue?.key ?? 'Issue Details';
+      const summary = snapshot.selectedIssue?.summary?.trim();
+      const message = error instanceof Error ? error.message : String(error);
+      this.view.webview.html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root { color-scheme: light dark; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-editor-foreground);
+        background: var(--vscode-sideBar-background);
+      }
+      .page {
+        box-sizing: border-box;
+        min-height: 100%;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .message {
+        padding: 10px;
+        border: 1px dashed var(--vscode-panel-border);
+        border-radius: 8px;
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+      }
+      .message.error {
+        color: var(--vscode-errorForeground);
+      }
+      .issue-key {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--vscode-textLink-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="message error">Unable to render issue details: ${escapeHtml(message)}</div>
+      <div class="message">
+        <div class="issue-key">${escapeHtml(issueKey)}</div>
+        ${summary ? `<div>${escapeHtml(summary)}</div>` : ''}
+      </div>
+    </div>
+    <script nonce="${nonce}"></script>
+  </body>
+</html>`;
+    }
   }
 
   private renderAiAssignmentSection(issueKey: string, agentNames: string[]): string {
@@ -1247,7 +1316,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       'openai': 'OpenAI',
       'claude': 'Claude',
       'cursor-cli': 'Cursor CLI',
-      'copilot-cli': 'Copilot'
+      'copilot-cli': 'GitHub Copilot SDK'
     };
 
     const statusTokenMap: Record<string, string> = {
@@ -1269,7 +1338,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       </div>`;
     }
 
-    const providerLabel = providerLabels[session.provider] ?? session.provider;
+    const providerLabel = session.label?.trim() || providerLabels[session.provider] || session.provider;
     const statusToken = statusTokenMap[session.status] ?? 'status';
     const shortSession = escapeHtml(session.sessionId.slice(0, 8));
     const assignedDate = formatDate(session.assignedAt);
@@ -1293,7 +1362,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         <div class="detail-value">${escapeHtml(assignedDate)}</div>
       </div>
       <div class="form-actions">
-        <button class="secondary-button" id="unassignAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Unassign AI</button>
+        <button class="secondary-button" id="unassignAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Abandon Session</button>
         ${reviewButton}
       </div>
       <span class="form-status" id="aiReviewStatus" aria-live="polite"></span>
