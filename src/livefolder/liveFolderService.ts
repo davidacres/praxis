@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import { AppConfigStore } from '../config/jiraConfig';
 import {
   buildParentValidationMessage,
   getParentRule,
@@ -182,6 +181,14 @@ interface LiveIssue extends IssueSummary {
   featureDirName?: string;
 }
 
+export interface LiveFolderConfigProvider {
+  getDefaultPageSize(): number;
+  getLiveFolderPath(): string;
+  getLiveFolderProjectKey(): string;
+  getLiveFolderProjectName(): string;
+  getLiveFolderAllowIssueCreation(): boolean;
+}
+
 // ── Service ─────────────────────────────────────────────────────────
 
 export class LiveFolderService implements IssueTrackerService {
@@ -199,7 +206,7 @@ export class LiveFolderService implements IssueTrackerService {
   /** Track URIs we just wrote to, so we can skip the watcher callback. */
   private recentWrites = new Set<string>();
 
-  public constructor(private readonly configStore: AppConfigStore) {}
+  public constructor(private readonly configStore: LiveFolderConfigProvider) {}
 
   // ── Lifecycle ───────────────────────────────────────────────────
 

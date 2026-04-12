@@ -17,7 +17,7 @@ export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
       ? 'jiraBoardListIconColor'
       : mode === 'demo'
         ? 'demoBoardListIconColor'
-        : mode === 'livefolder'
+        : mode === 'livefolder' || mode === 'userworkspace'
           ? 'liveFolderBoardListIconColor'
           : 'fileBoardListIconColor';
   const custom = cfg.get<string>(key, '').trim();
@@ -38,6 +38,7 @@ export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
     case 'gitlab':
       return DEFAULT_GITLAB_BOARD_ICON;
     case 'livefolder':
+    case 'userworkspace':
       return DEFAULT_LIVEFOLDER_BOARD_ICON;
   }
 }
@@ -56,6 +57,7 @@ export function boardListModeIconSvg(mode: BackendMode): string {
     case 'gitlab':
       return '<svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 12.6L9.1 6H4.9L7 12.6z" fill="currentColor"/><path d="M7 12.6L4.9 6H1.8L7 12.6z" fill="currentColor" opacity=".7"/><path d="M7 12.6l2.1-6.6h3.1L7 12.6z" fill="currentColor" opacity=".7"/><path d="M1.8 6l-.7 2.2c-.06.2.01.42.18.54L7 12.6 1.8 6z" fill="currentColor" opacity=".5"/><path d="M12.2 6l.7 2.2c.06.2-.01.42-.18.54L7 12.6 12.2 6z" fill="currentColor" opacity=".5"/></svg>';
     case 'livefolder':
+    case 'userworkspace':
       return '<svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3.5h3.5l1 1.5H12v6H2V3.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M5 8h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>';
   }
 }

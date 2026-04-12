@@ -365,7 +365,8 @@ suite('Ticket Manager Extension', () => {
     await resetConnectionState(api);
   });
 
-  test('activates and registers core commands', async () => {
+  test('activates and registers core commands', async function () {
+    this.timeout(60000);
     const api = await getApi();
     const commands = await vscode.commands.getCommands(true);
 

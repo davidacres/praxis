@@ -286,6 +286,14 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       { mode: 'jira', emoji: '🔗', title: 'Jira', desc: 'Connect to Jira via MCP server' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
+    if (!vscode.workspace.workspaceFolders?.length) {
+      modes.splice(2, 0, {
+        mode: 'userworkspace',
+        emoji: '🧰',
+        title: 'Create User Workspace',
+        desc: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later.'
+      });
+    }
 
     const cards = modes
       .map(
@@ -316,6 +324,9 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         break;
       case 'livefolder':
         fields = this.renderLiveFolderFields();
+        break;
+      case 'userworkspace':
+        fields = this.renderUserWorkspaceFields();
         break;
       case 'github':
         fields = this.renderGitHubFields();
@@ -370,6 +381,10 @@ ${fields}
   <label>Project Name</label>
   <input type="text" data-field="liveFolderProjectName" value="${projectName}" placeholder="e.g. TrakaHIS Integration" />
 </div>`;
+  }
+
+  private renderUserWorkspaceFields(): string {
+    return `<p class="info-text">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
   }
 
   private renderGitHubFields(): string {
@@ -575,9 +590,12 @@ ${connFields}`;
     const savedMode = this.setupMode;
 
     const config = vscode.workspace.getConfiguration('ticketManager');
-    const target = vscode.workspace.workspaceFolders?.length
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
+    const target =
+      this.setupMode === 'userworkspace'
+        ? vscode.ConfigurationTarget.Global
+        : vscode.workspace.workspaceFolders?.length
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
 
     const updateSetting = async (key: string, value: unknown): Promise<void> => {
       await config.update(key, value, target);
@@ -604,6 +622,8 @@ ${connFields}`;
         if (this.setupFields.liveFolderProjectName) {
           await updateSetting('liveFolderProjectName', this.setupFields.liveFolderProjectName);
         }
+        break;
+      case 'userworkspace':
         break;
       case 'github':
         if (this.setupFields.githubUrl) {
@@ -661,10 +681,12 @@ ${connFields}`;
       `${
         savedMode === 'livefolder'
           ? 'Live Folder'
+          : savedMode === 'userworkspace'
+            ? 'User Workspace'
           : savedMode === 'file'
             ? 'File'
             : savedMode.toUpperCase()
-      } configuration saved. ${describeAiConfigurationResult(aiResult)}`
+      } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
 
     // Reset state and re-render to show mode selection

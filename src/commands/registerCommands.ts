@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { AppConfigStore } from '../config/jiraConfig';
@@ -26,6 +27,7 @@ import {
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
+import { toStoredFolderPath } from '../livefolder/pathUtils';
 import {
   getParentRule,
   isAllowedParentType
@@ -339,8 +341,113 @@ const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  livefolder: ['Feature', 'Story', 'Task', 'Bug']
+  livefolder: ['Feature', 'Story', 'Task', 'Bug'],
+  userworkspace: ['Feature', 'Story', 'Task', 'Bug']
 };
+
+function suggestUserWorkspaceProjectName(folderPath: string): string {
+  const folderName = path.basename(folderPath).trim();
+  if (!folderName) {
+    return 'User Workspace Project';
+  }
+  return folderName
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function suggestUserWorkspaceProjectKey(folderPath: string): string {
+  const folderName = path.basename(folderPath).trim();
+  const compact = folderName.replace(/[^A-Za-z0-9]+/g, '');
+  if (compact && /^[A-Za-z]/.test(compact)) {
+    return compact.slice(0, 15).toUpperCase();
+  }
+  const initials = folderName
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase();
+  if (initials && /^[A-Z]/.test(initials)) {
+    return initials.slice(0, 15);
+  }
+  return 'PLANS';
+}
+
+async function promptForUserWorkspaceBoardInput(): Promise<{
+  name: string;
+  projectKey: string;
+  projectName: string;
+  liveFolderPath: string;
+} | undefined> {
+  const uris = await vscode.window.showOpenDialog({
+    canSelectFiles: false,
+    canSelectFolders: true,
+    canSelectMany: false,
+    title: 'Select Folder to Search for Plans'
+  });
+  if (!uris?.[0]) {
+    return undefined;
+  }
+
+  const identified = await identifyPlanFolder(uris[0]);
+  const liveFolderPath = toStoredFolderPath(identified.plansRootUri.fsPath);
+  if (liveFolderPath !== toStoredFolderPath(uris[0].fsPath)) {
+    void vscode.window.showInformationMessage(`Found plans folder at ${liveFolderPath}.`);
+  }
+
+  const projectKey = (
+    await vscode.window.showInputBox({
+      title: 'Project key',
+      prompt: 'Short key for issues on this board.',
+      value: suggestUserWorkspaceProjectKey(liveFolderPath),
+      ignoreFocusOut: true,
+      validateInput: value => {
+        const trimmed = value.trim();
+        return /^[A-Za-z][A-Za-z0-9_]{0,14}$/.test(trimmed)
+          ? undefined
+          : 'Use letters, numbers, or underscore; 1-15 characters, start with a letter.';
+      }
+    })
+  )?.trim();
+  if (!projectKey) {
+    return undefined;
+  }
+
+  const projectName = (
+    await vscode.window.showInputBox({
+      title: 'Project name',
+      prompt: 'Display name for this board project.',
+      value: suggestUserWorkspaceProjectName(liveFolderPath),
+      ignoreFocusOut: true,
+      validateInput: value =>
+        value.trim().length > 0 ? undefined : 'Project name is required.'
+    })
+  )?.trim();
+  if (!projectName) {
+    return undefined;
+  }
+
+  const name = (
+    await vscode.window.showInputBox({
+      title: 'Board name',
+      prompt: 'Name for the board shown in Ticket Manager.',
+      value: projectName,
+      ignoreFocusOut: true,
+      validateInput: value => (value.trim().length > 0 ? undefined : 'Board name is required.')
+    })
+  )?.trim();
+  if (!name) {
+    return undefined;
+  }
+
+  return {
+    name,
+    projectKey: projectKey.toUpperCase(),
+    projectName,
+    liveFolderPath
+  };
+}
 
 function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {
   if (arg instanceof BoardNode) {
@@ -655,9 +762,27 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.createBoard', async () => {
       try {
+        if (deps.backendService.mode === 'userworkspace') {
+          const draft = await promptForUserWorkspaceBoardInput();
+          if (!draft) {
+            return;
+          }
+          await deps.backendService.createBoard(draft);
+          await refreshViews(deps);
+          await vscode.window.showInformationMessage(`Created board "${draft.name}".`);
+          return;
+        }
+
         if (deps.backendService.mode === 'jira') {
           await vscode.window.showWarningMessage(
             'Creating boards is not supported in Jira Connected mode.'
+          );
+          return;
+        }
+
+        if (deps.backendService.mode === 'livefolder') {
+          await vscode.window.showWarningMessage(
+            'Creating boards is not supported in Live Folder mode. Use Create User Workspace for multiple plan-folder boards.'
           );
           return;
         }

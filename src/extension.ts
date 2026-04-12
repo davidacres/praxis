@@ -327,31 +327,40 @@ export async function activate(
   }
 
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
+    const options: Array<{ label: string; description: string; mode: BackendMode }> = [
+      {
+        label: 'Jira Connected',
+        description: 'Connect to Jira through the configured MCP server.',
+        mode: 'jira'
+      },
+      {
+        label: 'Demo',
+        description: 'Use built-in demo data.',
+        mode: 'demo'
+      },
+      {
+        label: 'File',
+        description: 'Use a plan file from the current workspace.',
+        mode: 'file'
+      },
+      {
+        label: 'Live Folder',
+        description: 'Two-way sync with a markdown plans folder.',
+        mode: 'livefolder'
+      }
+    ];
+    if (!vscode.workspace.workspaceFolders?.length) {
+      options.splice(2, 0, {
+        label: 'User Workspace',
+        description: 'Store boards outside VS Code workspaces and add plan folders as boards.',
+        mode: 'userworkspace'
+      });
+    }
+
     const picked = await vscode.window.showQuickPick<
       { label: string; description: string; mode: BackendMode }
     >(
-      [
-        {
-          label: 'Jira Connected',
-          description: 'Connect to Jira through the configured MCP server.',
-          mode: 'jira'
-        },
-        {
-          label: 'Demo',
-          description: 'Use built-in demo data.',
-          mode: 'demo'
-        },
-        {
-          label: 'File',
-          description: 'Use a plan file from the current workspace.',
-          mode: 'file'
-        },
-        {
-          label: 'Live Folder',
-          description: 'Two-way sync with a markdown plans folder.',
-          mode: 'livefolder'
-        }
-      ],
+      options,
       {
         title: 'Choose Backend Mode',
         ignoreFocusOut: true

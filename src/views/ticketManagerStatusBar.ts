@@ -39,6 +39,8 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
       return 'File';
     case 'livefolder':
       return 'Live Folder';
+    case 'userworkspace':
+      return 'User Workspace';
     case 'github':
       return 'GitHub';
     case 'gitlab':
