@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import type { CopilotAgentService } from '../ai/copilotAgentService';
-import type { AgentSessionRecord, AgentEventSummary } from '../ai/agentTypes';
+import { AGENT_DEFAULTS, type AgentSessionRecord, type AgentEventSummary } from '../ai/agentTypes';
 import type { AiAssignment, AiProvider } from '../types';
 
 function escapeHtml(value: string): string {
@@ -49,6 +49,7 @@ const STATE_LABELS: Record<string, { label: string; icon: string }> = {
   'awaiting_approval': { label: 'Awaiting Approval', icon: '⚠️' },
   'executing': { label: 'Executing', icon: '⚙️' },
   'awaiting_input': { label: 'Awaiting Input', icon: '❓' },
+  'paused': { label: 'Paused', icon: '⏸️' },
   'completed': { label: 'Completed', icon: '✅' },
   'failed': { label: 'Failed', icon: '❌' },
   'aborted': { label: 'Aborted', icon: '🛑' },
@@ -58,6 +59,7 @@ const STATE_LABELS: Record<string, { label: string; icon: string }> = {
 const EVENT_ICONS: Record<string, string> = {
   'session_start': '🚀',
   'intent': '🎯',
+  'reasoning': '🧠',
   'message': '💬',
   'plan': '📋',
   'tool_start': '🔧',
@@ -103,6 +105,40 @@ function resolveAssignmentStatus(
   return { label: 'Unknown', icon: '❔' };
 }
 
+function findLatestEventSummary(
+  record: AgentSessionRecord | undefined,
+  eventType: string
+): string | undefined {
+  if (!record) {
+    return undefined;
+  }
+
+  for (let index = record.events.length - 1; index >= 0; index -= 1) {
+    const event = record.events[index];
+    if (event.type === eventType) {
+      return event.summary;
+    }
+  }
+  return undefined;
+}
+
+function getQueuedPermissionLabel(count: number): string | undefined {
+  const additionalCount = Math.max(0, count - 1);
+  if (additionalCount === 0) {
+    return undefined;
+  }
+  return `${additionalCount} more queued request${additionalCount === 1 ? '' : 's'}.`;
+}
+
+function resolvePermissionDescription(
+  record: AgentSessionRecord | undefined,
+  pendingDescriptions: string[]
+): string {
+  return pendingDescriptions[0]
+    ?? findLatestEventSummary(record, 'permission_requested')
+    ?? 'The agent is requesting permission to proceed.';
+}
+
 /** Manages one webview panel per AI session. */
 export class CopilotSessionPanelManager implements vscode.Disposable {
   private panels = new Map<string, vscode.WebviewPanel>();
@@ -115,11 +151,18 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     private readonly onResumeSession: (issueKey: string) => Promise<void>,
     private readonly onStartNewSession: (issueKey: string) => Promise<void>
   ) {
+    const disposeActiveTaskListener = this.agentService.onDidChangeActiveTask(issueKey => {
+      if (this.panels.has(issueKey)) {
+        this.recreatePanel(issueKey);
+      }
+    });
     this.disposables.push(
+      new vscode.Disposable(() => {
+        disposeActiveTaskListener();
+      }),
       this.sessionManager.onDidChangeSession(({ issueKey }) => {
-        const panel = this.panels.get(issueKey);
-        if (panel) {
-          this.renderFull(panel, issueKey);
+        if (this.panels.has(issueKey)) {
+          this.recreatePanel(issueKey);
         }
       }),
       this.sessionManager.onDidChangeAgentSession(record => {
@@ -135,8 +178,9 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
   public open(issueKey: string): void {
     const existing = this.panels.get(issueKey);
     if (existing) {
-      this.renderFull(existing, issueKey);
-      existing.reveal(vscode.ViewColumn.Active);
+      // Dispose and recreate — VS Code Insiders requires webview.html
+      // to be set synchronously after panel creation for scripts to work.
+      this.recreatePanel(issueKey);
       return;
     }
 
@@ -147,25 +191,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       return;
     }
 
-    const panel = vscode.window.createWebviewPanel(
-      'ticketManager.aiSession',
-      `🤖 AI Session: ${issueKey}`,
-      vscode.ViewColumn.Active,
-      {
-        enableScripts: true,
-        retainContextWhenHidden: true
-      }
-    );
-
-    this.panels.set(issueKey, panel);
-    panel.onDidDispose(() => {
-      this.panels.delete(issueKey);
-    });
-    panel.webview.onDidReceiveMessage(message => {
-      void this.handleMessage(issueKey, message);
-    });
-
-    this.renderFull(panel, issueKey);
+    this.createPanel(issueKey);
   }
 
   public dispose(): void {
@@ -219,11 +245,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const record = this.sessionManager.getAgentSession(issueKey);
     const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
     if (!assignment && !record) {
-      this.renderFull(panel, issueKey);
+      this.recreatePanel(issueKey);
       return;
     }
     if (!record) {
-      this.renderFull(panel, issueKey);
+      this.recreatePanel(issueKey);
       return;
     }
 
@@ -232,19 +258,51 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       state: record.state,
       events: record.events,
       planText: record.planText,
+      reasoningText: record.reasoningText,
+      responseText: record.responseText,
+      permissionDescriptions: this.agentService.getPendingPermissionDescriptions(issueKey),
       stepCount: record.stepCount,
       hasAgentSession: hasLiveAgentSession
     });
   }
 
-  private renderFull(panel: vscode.WebviewPanel, issueKey: string): void {
+  /** Create a new panel and set html synchronously. */
+  private createPanel(issueKey: string): void {
     const nonce = createNonce();
+    const panel = vscode.window.createWebviewPanel(
+      'ticketManager.aiSession',
+      `🤖 AI Session: ${issueKey}`,
+      vscode.ViewColumn.Active,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true
+      }
+    );
+
     panel.webview.html = this.getHtml(
       nonce,
       issueKey,
       this.sessionManager.getSession(issueKey),
       this.sessionManager.getAgentSession(issueKey)
     );
+
+    this.panels.set(issueKey, panel);
+    panel.onDidDispose(() => {
+      this.panels.delete(issueKey);
+    });
+    panel.webview.onDidReceiveMessage(message => {
+      void this.handleMessage(issueKey, message);
+    });
+  }
+
+  /** Dispose existing panel and create a fresh one. */
+  private recreatePanel(issueKey: string): void {
+    const old = this.panels.get(issueKey);
+    if (old) {
+      this.panels.delete(issueKey);
+      old.dispose();
+    }
+    this.createPanel(issueKey);
   }
 
   private getHtml(
@@ -260,11 +318,26 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const startedAt = assignment?.assignedAt ?? record?.startedAt;
     const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
     const supportsCopilotSession = Boolean(record) || assignment?.provider === 'copilot-cli';
-    const maxSteps = Number(task?.maxSteps ?? 50);
+    const maxSteps = Number(task?.maxSteps ?? AGENT_DEFAULTS.maxSteps);
     const isTerminal = record ? this.isTerminal(record.state) : assignment?.status !== 'active';
     const activityFeed = record ? this.renderEvents(record.events) : '';
+    const pendingPermissionDescriptions = hasLiveAgentSession
+      ? this.agentService.getPendingPermissionDescriptions(issueKey)
+      : [];
+    const permissionDescription = resolvePermissionDescription(record, pendingPermissionDescriptions);
+    const queuedPermissionLabel = getQueuedPermissionLabel(pendingPermissionDescriptions.length);
     const liveSessionSection = record
       ? `${hasLiveAgentSession ? '' : `<div class="card"><h3>Session paused</h3><div class="field">This session is not currently connected to a live agent stream. You can review the saved activity below or resume the session to continue in real time.</div></div>`}
+        <div id="permission-area" class="input-area input-area--attention ${hasLiveAgentSession && record.state === 'awaiting_approval' ? 'visible' : ''}" role="alert" aria-live="assertive">
+          <h3>Permission Required</h3>
+          <p id="permission-desc" class="supporting-text">${escapeHtml(permissionDescription)}</p>
+          <div id="permission-queue" class="attention-queue" style="${queuedPermissionLabel ? '' : 'display:none'}">${escapeHtml(queuedPermissionLabel ?? '')}</div>
+          <div class="btn-row">
+            <button id="approve-once" class="btn">Approve Once</button>
+            <button id="approve-always" class="btn btn-secondary">Approve for Task</button>
+            <button id="deny-perm" class="btn btn-deny">Deny</button>
+          </div>
+        </div>
         <details class="card" open>
           <summary>Task Definition</summary>
           <div class="field"><strong>Goal:</strong> ${escapeHtml(task?.goal ?? '—')}</div>
@@ -278,6 +351,16 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
           <div id="plan-content" class="plan-content">${record.planText ? escapeHtml(record.planText) : ''}</div>
         </div>
 
+        <div id="reasoning-section" class="plan-section" style="${record.reasoningText ? '' : 'display:none'}">
+          <h3>Thinking / Reasoning</h3>
+          <div id="reasoning-content" class="plan-content">${record.reasoningText ? escapeHtml(record.reasoningText) : ''}</div>
+        </div>
+
+        <div id="response-section" class="plan-section" style="${record.responseText ? '' : 'display:none'}">
+          <h3>Assistant Response</h3>
+          <div id="response-content" class="plan-content">${record.responseText ? escapeHtml(record.responseText) : ''}</div>
+        </div>
+
         <h3>Activity Feed</h3>
         <div id="activity-feed">${activityFeed}</div>
 
@@ -286,16 +369,6 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
           <textarea id="user-response" placeholder="Type your response..."></textarea>
           <div class="btn-row">
             <button id="send-input" class="btn">Send</button>
-          </div>
-        </div>
-
-        <div id="permission-area" class="input-area ${hasLiveAgentSession && record.state === 'awaiting_approval' ? 'visible' : ''}">
-          <h3>Permission Required</h3>
-          <p id="permission-desc" class="supporting-text">The agent is requesting permission to proceed.</p>
-          <div class="btn-row">
-            <button id="approve-once" class="btn">Approve Once</button>
-            <button id="approve-always" class="btn btn-secondary">Approve for Task</button>
-            <button id="deny-perm" class="btn btn-deny">Deny</button>
           </div>
         </div>`
       : `<div class="card">
@@ -310,11 +383,10 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Session: ${escapeHtml(issueKey)}</title>
-  <style nonce="${nonce}">
+  <style>
     :root {
       --bg: var(--vscode-editor-background);
       --fg: var(--vscode-editor-foreground);
@@ -447,6 +519,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     .event-icon { flex-shrink: 0; width: 20px; text-align: center; }
     .event-time { flex-shrink: 0; color: var(--muted); min-width: 65px; }
     .event-summary { flex: 1; word-break: break-word; }
+    .event-detail {
+      margin-top: 4px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
     .input-area {
       margin-top: 16px;
       border: 1px solid var(--border);
@@ -455,6 +532,15 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       display: none;
     }
     .input-area.visible { display: block; }
+    .input-area--attention {
+      position: sticky;
+      top: 12px;
+      z-index: 5;
+      border-width: 2px;
+      border-color: color-mix(in srgb, var(--vscode-testing-iconFailed) 62%, var(--border));
+      background: color-mix(in srgb, var(--vscode-testing-iconFailed) 10%, var(--bg));
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+    }
     .input-area textarea {
       width: 100%;
       min-height: 60px;
@@ -491,6 +577,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     .btn-deny {
       background: var(--vscode-errorForeground, #f44);
       color: #fff;
+    }
+    .attention-queue {
+      margin-bottom: 8px;
+      font-size: 12px;
+      font-weight: 600;
     }
     .step-counter {
       font-size: 11px;
@@ -535,8 +626,14 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const resumeBtn = document.getElementById('resume-btn');
     const startNewBtn = document.getElementById('start-new-btn');
     const emptyStartNewBtn = document.getElementById('empty-start-new-btn');
+    const reasoningSectionEl = document.getElementById('reasoning-section');
+    const reasoningContentEl = document.getElementById('reasoning-content');
+    const responseSectionEl = document.getElementById('response-section');
+    const responseContentEl = document.getElementById('response-content');
     const inputArea = document.getElementById('input-area');
     const permArea = document.getElementById('permission-area');
+    const permissionDescEl = document.getElementById('permission-desc');
+    const permissionQueueEl = document.getElementById('permission-queue');
     const sendBtn = document.getElementById('send-input');
     const textarea = document.getElementById('user-response');
 
@@ -544,6 +641,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const eventIcons = ${JSON.stringify(EVENT_ICONS).replace(/</g, '\\u003c')};
     const maxSteps = ${maxSteps};
     let knownEventCount = ${Number(record?.events.length ?? 0)};
+    let permissionSignature = ${JSON.stringify(pendingPermissionDescriptions.join('\n')).replace(/</g, '\\u003c')};
 
     function formatTime(ts) {
       try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
@@ -552,10 +650,13 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 
     function renderEventRow(ev) {
       const icon = eventIcons[ev.type] || '•';
+      const detail = ev.detail
+        ? '<div class="event-detail">' + escapeHtml(ev.detail) + '</div>'
+        : '';
       return '<div class="event-row">'
         + '<span class="event-icon">' + icon + '</span>'
         + '<span class="event-time">' + formatTime(ev.timestamp) + '</span>'
-        + '<span class="event-summary">' + escapeHtml(ev.summary) + '</span>'
+        + '<span class="event-summary">' + escapeHtml(ev.summary) + detail + '</span>'
         + '</div>';
     }
 
@@ -569,6 +670,27 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     }
 
     const terminalStates = new Set(['completed', 'failed', 'aborted']);
+
+    function latestPermissionSummary(events) {
+      if (!Array.isArray(events)) {
+        return 'The agent is requesting permission to proceed.';
+      }
+      for (let index = events.length - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (event && event.type === 'permission_requested' && typeof event.summary === 'string') {
+          return event.summary;
+        }
+      }
+      return 'The agent is requesting permission to proceed.';
+    }
+
+    function formatQueuedPermissionLabel(descriptions) {
+      const count = Math.max(0, descriptions.length - 1);
+      if (count === 0) {
+        return '';
+      }
+      return count + ' more queued request' + (count === 1 ? '' : 's') + '.';
+    }
 
     window.addEventListener('message', event => {
       const msg = event.data;
@@ -597,6 +719,23 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         if (planContent) {
           planContent.textContent = msg.planText;
         }
+      } else {
+        const planSection = document.getElementById('plan-section');
+        if (planSection) {
+          planSection.style.display = 'none';
+        }
+      }
+
+      if (reasoningSectionEl && reasoningContentEl) {
+        const reasoningText = typeof msg.reasoningText === 'string' ? msg.reasoningText : '';
+        reasoningSectionEl.style.display = reasoningText ? '' : 'none';
+        reasoningContentEl.textContent = reasoningText;
+      }
+
+      if (responseSectionEl && responseContentEl) {
+        const responseText = typeof msg.responseText === 'string' ? msg.responseText : '';
+        responseSectionEl.style.display = responseText ? '' : 'none';
+        responseContentEl.textContent = responseText;
       }
 
       if (feedEl && msg.events && msg.events.length > knownEventCount) {
@@ -609,8 +748,29 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       if (inputArea) {
         inputArea.classList.toggle('visible', msg.state === 'awaiting_input');
       }
+      const permissionDescriptions = Array.isArray(msg.permissionDescriptions)
+        ? msg.permissionDescriptions.filter(description => typeof description === 'string' && description.trim().length > 0)
+        : [];
+      const permissionText = permissionDescriptions[0] || latestPermissionSummary(msg.events);
+      if (permissionDescEl) {
+        permissionDescEl.textContent = permissionText;
+      }
+      if (permissionQueueEl) {
+        const queueLabel = formatQueuedPermissionLabel(permissionDescriptions);
+        permissionQueueEl.textContent = queueLabel;
+        permissionQueueEl.style.display = queueLabel ? '' : 'none';
+      }
       if (permArea) {
-        permArea.classList.toggle('visible', msg.state === 'awaiting_approval');
+        const awaitingApproval = msg.state === 'awaiting_approval';
+        permArea.classList.toggle('visible', awaitingApproval);
+        const nextPermissionSignature = permissionDescriptions.join('\n');
+        if (awaitingApproval && nextPermissionSignature && nextPermissionSignature !== permissionSignature) {
+          permissionSignature = nextPermissionSignature;
+          permArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (!awaitingApproval) {
+          permissionSignature = '';
+        }
       }
     });
 
@@ -680,10 +840,13 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       .map(event => {
         const icon = EVENT_ICONS[event.type] ?? '•';
         const time = this.formatTime(event.timestamp);
+        const detail = event.detail
+          ? `<div class="event-detail">${escapeHtml(event.detail)}</div>`
+          : '';
         return `<div class="event-row">
           <span class="event-icon">${icon}</span>
           <span class="event-time">${escapeHtml(time)}</span>
-          <span class="event-summary">${escapeHtml(event.summary)}</span>
+          <span class="event-summary">${escapeHtml(event.summary)}${detail}</span>
         </div>`;
       })
       .join('');
