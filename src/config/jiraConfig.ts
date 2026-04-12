@@ -175,7 +175,7 @@ export class AppConfigStore {
   }
 
   public getBackendMode(): BackendMode | undefined {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<BackendMode>('backendMode');
+    return this.getWorkspaceScopedConfigValue<BackendMode>('backendMode');
   }
 
   public getEffectiveBackendMode(): BackendMode {
@@ -188,7 +188,7 @@ export class AppConfigStore {
   }
 
   public getPlanFilePath(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>(PLAN_FILE_KEY, '').trim();
+    return this.getWorkspaceScopedConfigValue<string>(PLAN_FILE_KEY, '').trim();
   }
 
   public async setPlanFilePath(planFilePath: string | undefined): Promise<void> {
@@ -297,15 +297,19 @@ export class AppConfigStore {
   // ── Live Folder settings ──────────────────────────────────────────
 
   public getLiveFolderPath(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderPath', '').trim();
+    return this.getWorkspaceScopedConfigValue<string>('liveFolderPath', '').trim();
   }
 
   public getLiveFolderProjectKey(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderProjectKey', '').trim();
+    return this.getWorkspaceScopedConfigValue<string>('liveFolderProjectKey', '').trim();
   }
 
   public getLiveFolderProjectName(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('liveFolderProjectName', '').trim();
+    return this.getWorkspaceScopedConfigValue<string>('liveFolderProjectName', '').trim();
+  }
+
+  public getLiveFolderAllowIssueCreation(): boolean {
+    return this.getWorkspaceScopedConfigValue<boolean>('liveFolderAllowIssueCreation', true);
   }
 
   public async setLiveFolderPath(value: string): Promise<void> {
@@ -341,6 +345,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotCliPath', '');
   }
 
+  public getAiCopilotEnabled(): boolean {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('ai.copilotEnabled', false);
+  }
+
   public getAiDefaultProvider(): AiProvider | 'none' {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
   }
@@ -364,7 +372,7 @@ export class AppConfigStore {
     if (this.getAiCursorCliPath().trim().length > 0) {
       providers.push('cursor-cli');
     }
-    if (this.getAiCopilotCliPath().trim().length > 0) {
+    if (this.getAiCopilotEnabled() || this.getAiCopilotCliPath().trim().length > 0) {
       providers.push('copilot-cli');
     }
     return providers;
@@ -397,6 +405,27 @@ export class AppConfigStore {
     return vscode.workspace.workspaceFolders?.length
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
+  }
+
+  private getWorkspaceScopedConfigValue<T>(key: string, defaultValue?: T): T {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const inspected = config.inspect<T>(key);
+    if (vscode.workspace.workspaceFolders?.length) {
+      if (inspected?.workspaceFolderValue !== undefined) {
+        return inspected.workspaceFolderValue;
+      }
+      if (inspected?.workspaceValue !== undefined) {
+        return inspected.workspaceValue;
+      }
+      return defaultValue as T;
+    }
+    if (inspected?.globalValue !== undefined) {
+      return inspected.globalValue;
+    }
+    if (inspected?.defaultValue !== undefined) {
+      return inspected.defaultValue;
+    }
+    return defaultValue as T;
   }
 
   public async getConnectionConfig(

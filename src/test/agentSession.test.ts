@@ -264,4 +264,37 @@ suite('AiSessionManager — Agent Sessions', () => {
     const record = manager.createAgentSession('CM', 's1', taskWithMax);
     assert.strictEqual(record.taskDefinition.maxSteps, 10);
   });
+
+  test('createSession stores the selected AI label and fires change events', () => {
+    let changedIssueKey: string | undefined;
+    let changedLabel: string | undefined;
+    const disposable = manager.onDidChangeSession(event => {
+      changedIssueKey = event.issueKey;
+      changedLabel = event.session?.label;
+    });
+
+    const session = manager.createSession('AI-1', 'openai', 'Planner Bot');
+
+    assert.strictEqual(session.label, 'Planner Bot');
+    assert.strictEqual(manager.getSession('AI-1')?.label, 'Planner Bot');
+    assert.strictEqual(changedIssueKey, 'AI-1');
+    assert.strictEqual(changedLabel, 'Planner Bot');
+    disposable.dispose();
+  });
+
+  test('agent terminal states update linked AI assignment status', () => {
+    manager.createSession('AI-2', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createAgentSession('AI-2', 'agent-1', taskDef);
+
+    manager.updateAgentState('AI-2', 'executing');
+    assert.strictEqual(manager.getSession('AI-2')?.status, 'active');
+
+    manager.updateAgentState('AI-2', 'completed');
+    assert.strictEqual(manager.getSession('AI-2')?.status, 'completed');
+
+    manager.createSession('AI-3', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createAgentSession('AI-3', 'agent-2', taskDef);
+    manager.updateAgentState('AI-3', 'failed');
+    assert.strictEqual(manager.getSession('AI-3')?.status, 'failed');
+  });
 });

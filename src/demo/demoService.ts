@@ -447,7 +447,7 @@ export class DemoService implements IssueTrackerService {
     const page = await this.getIssues(metadataFilters, 0, 200);
 
     return {
-      statuses: uniqueSorted(page.issues.map(issue => issue.status)),
+      statuses: uniqueSorted([...DEMO_BOARD_STATUS_ORDER, ...page.issues.map(issue => issue.status)]),
       issueTypes: uniqueSorted(page.issues.map(issue => issue.issueType))
     };
   }
@@ -472,6 +472,7 @@ export class DemoService implements IssueTrackerService {
           allowedParentTypes.some(parentType => parentType.toLowerCase() === issue.issueType.toLowerCase())
         )
         .filter(issue => filters.projectKeys.length === 0 || filters.projectKeys.includes(issue.projectKey))
+        .filter(issue => filters.statuses.length === 0 || filters.statuses.includes(issue.status))
         .filter(issue => {
           if (!query) {
             return true;

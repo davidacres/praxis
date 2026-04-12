@@ -25,6 +25,7 @@ import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
+import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import {
   getParentRule,
   isAllowedParentType
@@ -52,6 +53,10 @@ interface CommandDependencies {
   revealIssueDetailsTree: () => Promise<void>;
   ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
   output: vscode.OutputChannel;
+  reportError?: (error: unknown, scope?: string) => void;
+  onConnectionCheck?: (
+    result: Awaited<ReturnType<IssueTrackerService['checkConnection']>>
+  ) => void;
   copilotAgentService?: CopilotAgentService;
   copilotSessionPanelManager?: CopilotSessionPanelManager;
   aiSessionManager?: AiSessionManager;
@@ -66,6 +71,13 @@ function resolveIssue(
   }
 
   return detailsProvider.getActiveIssue();
+}
+
+function resolveIssueKey(detailsProvider: DetailsViewProvider, arg: unknown): string | undefined {
+  if (typeof arg === 'string' && arg.trim().length > 0) {
+    return arg.trim();
+  }
+  return resolveIssue(detailsProvider, arg)?.key;
 }
 
 function resolveBoard(
@@ -93,10 +105,25 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
     canSelectMany: false,
     canSelectFiles: false,
     canSelectFolders: true,
-    openLabel: 'Select plans root (folder that contains features/)',
+    openLabel: 'Select folder to search for plans',
     defaultUri: suggested ?? folders[0].uri
   });
   if (!chosen?.[0]) {
+    return;
+  }
+
+  let selectedPlansUri: vscode.Uri;
+  try {
+    const identified = await identifyPlanFolder(chosen[0]);
+    selectedPlansUri = identified.plansRootUri;
+    if (selectedPlansUri.toString() !== chosen[0].toString()) {
+      deps.output.appendLine(`[import] Resolved selected folder to ${selectedPlansUri.fsPath}`);
+    }
+  } catch (error) {
+    reportCommandError(deps, 'import', error);
+    await vscode.window.showErrorMessage(
+      error instanceof Error ? error.message : String(error)
+    );
     return;
   }
 
@@ -146,7 +173,7 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
         cancellable: false
       },
       async progress => {
-        return generateTicketPlanFromMarkdownFeatures(chosen[0], {
+        return generateTicketPlanFromMarkdownFeatures(selectedPlansUri, {
           projectKey,
           projectName,
           currentUser,
@@ -158,9 +185,7 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
       }
     );
   } catch (error) {
-    deps.output.appendLine(
-      `[import] ${error instanceof Error ? error.stack ?? error.message : String(error)}`
-    );
+    reportCommandError(deps, 'import', error);
     await vscode.window.showErrorMessage(
       error instanceof Error ? error.message : String(error)
     );
@@ -271,6 +296,19 @@ async function showConnectionResult(
   await vscode.window.showErrorMessage(result.message);
 }
 
+function reportCommandError(
+  deps: CommandDependencies,
+  scope: string,
+  error: unknown
+): void {
+  if (deps.reportError) {
+    deps.reportError(error, scope);
+    return;
+  }
+
+  deps.output.appendLine(`[${scope}] ${error instanceof Error ? error.stack ?? error.message : String(error)}`);
+}
+
 function unique(values: string[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
@@ -301,7 +339,7 @@ const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
   gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  livefolder: []
+  livefolder: ['Feature', 'Story', 'Task', 'Bug']
 };
 
 function resolveCreateBoard(deps: CommandDependencies, arg: unknown): Board | undefined {
@@ -489,15 +527,23 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await refreshViews(deps);
         await vscode.window.showInformationMessage(`Saved connection: ${result.description}`);
       } catch (error) {
-        deps.output.appendLine(`[config] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        reportCommandError(deps, 'config', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
       }
     }),
     vscode.commands.registerCommand('ticketManager.checkConnection', async () => {
-      const result = await deps.backendService.checkConnection();
-      await showConnectionResult(result);
+      try {
+        const result = await deps.backendService.checkConnection();
+        deps.onConnectionCheck?.(result);
+        await showConnectionResult(result);
+      } catch (error) {
+        reportCommandError(deps, 'check-connection', error);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     }),
     vscode.commands.registerCommand('ticketManager.setBackendMode', async () => {
       // Reset configured context so the setup sidebar becomes visible
@@ -522,7 +568,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await refreshViews(deps);
         await vscode.window.showInformationMessage(`Using ${result.description}.`);
       } catch (error) {
-        deps.output.appendLine(`[workspace-mcp] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        reportCommandError(deps, 'workspace-mcp', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -540,7 +586,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await refreshViews(deps);
         await vscode.window.showInformationMessage(`Using ${result.description}.`);
       } catch (error) {
-        deps.output.appendLine(`[user-mcp] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        reportCommandError(deps, 'user-mcp', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -561,9 +607,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         const details = await deps.backendService.getBoardDetails(board);
         await deps.boardColumnConfigPanel.open(board, details);
       } catch (error) {
-        deps.output.appendLine(
-          `[board-columns] ${error instanceof Error ? error.stack ?? error.message : error}`
-        );
+        reportCommandError(deps, 'board-columns', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -603,9 +647,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
             : `Created ${createdIssue.key}.`
         );
       } catch (error) {
-        deps.output.appendLine(
-          `[create-issue] ${error instanceof Error ? error.stack ?? error.message : error}`
-        );
+        reportCommandError(deps, 'create-issue', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -659,9 +701,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await refreshViews(deps);
         await vscode.window.showInformationMessage(`Created board "${name.trim()}".`);
       } catch (error) {
-        deps.output.appendLine(
-          `[create-board] ${error instanceof Error ? error.stack ?? error.message : error}`
-        );
+        reportCommandError(deps, 'create-board', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -967,7 +1007,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           `${issue.key} moved to ${picked.transition.toStatus ?? picked.transition.name}.`
         );
       } catch (error) {
-        deps.output.appendLine(`[transition] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        reportCommandError(deps, 'transition', error);
         const action = await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error),
           'Open External Link'
@@ -995,9 +1035,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         await deps.revealIssueDetailsTree();
         await deps.issueDetailPanelManager.open(key);
       } catch (error) {
-        deps.output.appendLine(
-          `[issue-details] ${error instanceof Error ? error.stack ?? error.message : error}`
-        );
+        reportCommandError(deps, 'issue-details', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -1103,9 +1141,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       }
 
       const cliPath = deps.configStore.getAiCopilotCliPath().trim();
-      if (!cliPath) {
+      if (!deps.configStore.getConfiguredAiProviders().includes('copilot-cli')) {
         vscode.window.showErrorMessage(
-          'Copilot CLI path is not configured. Set ticketManager.ai.copilotCliPath in Settings.'
+          'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
         );
         return;
       }
@@ -1127,7 +1165,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         deps.copilotSessionPanelManager.open(issue.key);
         vscode.window.showInformationMessage(`Copilot agent started for ${issue.key}`);
       } catch (error) {
-        deps.output.appendLine(`[delegateToCopilot] ${error instanceof Error ? error.stack ?? error.message : error}`);
+        reportCommandError(deps, 'delegateToCopilot', error);
         vscode.window.showErrorMessage(
           `Failed to start agent: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -1138,25 +1176,25 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       if (!deps.copilotSessionPanelManager) {
         return;
       }
-      const issue = resolveIssue(deps.detailsProvider, arg);
-      if (!issue) {
+      const issueKey = resolveIssueKey(deps.detailsProvider, arg);
+      if (!issueKey) {
         vscode.window.showWarningMessage('Select an issue first.');
         return;
       }
-      deps.copilotSessionPanelManager.open(issue.key);
+      deps.copilotSessionPanelManager.open(issueKey);
     }),
 
     vscode.commands.registerCommand('ticketManager.abortAgentSession', async (arg?: unknown) => {
       if (!deps.copilotAgentService) {
         return;
       }
-      const issue = resolveIssue(deps.detailsProvider, arg);
-      if (!issue) {
+      const issueKey = resolveIssueKey(deps.detailsProvider, arg);
+      if (!issueKey) {
         vscode.window.showWarningMessage('Select an issue first.');
         return;
       }
-      await deps.copilotAgentService.abortTask(issue.key);
-      vscode.window.showInformationMessage(`Agent session aborted for ${issue.key}.`);
+      await deps.copilotAgentService.abortTask(issueKey);
+      vscode.window.showInformationMessage(`Agent session aborted for ${issueKey}.`);
     })
   ];
 }

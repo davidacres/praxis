@@ -14,6 +14,21 @@ const USER_MCP_OVERRIDE_URI = vscode.workspace.workspaceFolders?.[0]
 const PLAN_FILE_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ticket-plan.jsonc')
   : undefined;
+const LIVE_FOLDER_TEST_ROOT_URI = vscode.workspace.workspaceFolders?.[0]
+  ? vscode.Uri.joinPath(
+      vscode.workspace.workspaceFolders[0].uri,
+      '.ticket-manager-test',
+      'live-folder-mode'
+    )
+  : undefined;
+
+interface LiveFolderFixture {
+  rootUri: vscode.Uri;
+  plansRootUri: vscode.Uri;
+  featuresRootUri: vscode.Uri;
+  featureDirUri: vscode.Uri;
+  featureKey: string;
+}
 
 async function waitFor(
   predicate: () => boolean | Promise<boolean>,
@@ -97,12 +112,80 @@ async function clearPlanFile(): Promise<void> {
   }
 }
 
+async function clearLiveFolderFixture(): Promise<void> {
+  if (!LIVE_FOLDER_TEST_ROOT_URI) {
+    return;
+  }
+
+  try {
+    await vscode.workspace.fs.delete(LIVE_FOLDER_TEST_ROOT_URI, { recursive: true, useTrash: false });
+  } catch {
+    // Ignore missing file.
+  }
+}
+
 async function writePlanFile(contents: string): Promise<void> {
   if (!PLAN_FILE_URI) {
     throw new Error('A workspace folder is required for file mode tests.');
   }
 
   await vscode.workspace.fs.writeFile(PLAN_FILE_URI, Buffer.from(contents, 'utf8'));
+}
+
+async function writeTextFile(uri: vscode.Uri, contents: string): Promise<void> {
+  const directory = vscode.Uri.joinPath(uri, '..');
+  await vscode.workspace.fs.createDirectory(directory);
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(contents, 'utf8'));
+}
+
+async function createLiveFolderFixture(name: string): Promise<LiveFolderFixture> {
+  if (!LIVE_FOLDER_TEST_ROOT_URI) {
+    throw new Error('A workspace folder is required for live folder tests.');
+  }
+
+  const rootUri = vscode.Uri.joinPath(LIVE_FOLDER_TEST_ROOT_URI, name);
+  const plansRootUri = vscode.Uri.joinPath(rootUri, 'product', 'docs', 'plans');
+  const featuresRootUri = vscode.Uri.joinPath(plansRootUri, 'features');
+  const featureDirUri = vscode.Uri.joinPath(featuresRootUri, 'feature-01-auth');
+
+  await vscode.workspace.fs.createDirectory(featureDirUri);
+  await writeTextFile(
+    vscode.Uri.joinPath(featureDirUri, 'feature.md'),
+    `# Authentication
+
+**Status:** Planned
+**Created:** 2026-01-01T00:00:00.000Z
+
+## Summary
+Implement authentication support.
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+`
+  );
+  await writeTextFile(
+    vscode.Uri.joinPath(featureDirUri, 'story-01-1-login-flow.md'),
+    `# Login flow
+
+**Status:** In Progress
+**Created:** 2026-01-02T00:00:00.000Z
+**Type:** Story
+**Parent:** APP-F01
+
+## Summary
+Build the first login story.
+`
+  );
+
+  return {
+    rootUri,
+    plansRootUri,
+    featuresRootUri,
+    featureDirUri,
+    featureKey: 'APP-F01'
+  };
 }
 
 async function writeUserMcpOverride(contents: string): Promise<void> {
@@ -121,6 +204,18 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
   await Promise.all([
     config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
     config.update('planFilePath', '', vscode.ConfigurationTarget.Workspace),
+    config.update('liveFolderPath', '', vscode.ConfigurationTarget.Workspace),
+    config.update('liveFolderProjectKey', '', vscode.ConfigurationTarget.Workspace),
+    config.update('liveFolderProjectName', '', vscode.ConfigurationTarget.Workspace),
+    config.update('liveFolderAllowIssueCreation', true, vscode.ConfigurationTarget.Workspace),
+    config.update('ai.openaiApiKey', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.openaiAgentName', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.claudeApiKey', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.claudeAgentName', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.cursorCliPath', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.copilotEnabled', false, vscode.ConfigurationTarget.Global),
+    config.update('ai.copilotCliPath', '', vscode.ConfigurationTarget.Global),
+    config.update('ai.defaultProvider', 'none', vscode.ConfigurationTarget.Global),
     config.update('connectionType', 'stdio', vscode.ConfigurationTarget.Global),
     config.update('stdioCommand', '', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [], vscode.ConfigurationTarget.Global),
@@ -132,6 +227,7 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
 
   await clearUserMcpOverride();
   await clearPlanFile();
+  await clearLiveFolderFixture();
   await api.backendService.reset();
   await api.filterStore.clearFilters();
   await api.boardStore.clearFilters();
@@ -234,6 +330,33 @@ async function configureFileScenario(api: TicketManagerExtensionApi): Promise<vo
   await api.refresh();
 }
 
+async function configureLiveFolderScenario(
+  api: TicketManagerExtensionApi,
+  options?: { allowIssueCreation?: boolean }
+): Promise<LiveFolderFixture> {
+  await resetConnectionState(api);
+  const fixture = await createLiveFolderFixture('default');
+  const config = vscode.workspace.getConfiguration('ticketManager');
+  await Promise.all([
+    config.update('backendMode', 'livefolder', vscode.ConfigurationTarget.Workspace),
+    config.update(
+      'liveFolderPath',
+      fixture.rootUri.fsPath.replace(/\\/g, '/'),
+      vscode.ConfigurationTarget.Workspace
+    ),
+    config.update('liveFolderProjectKey', 'APP', vscode.ConfigurationTarget.Workspace),
+    config.update('liveFolderProjectName', 'Application', vscode.ConfigurationTarget.Workspace),
+    config.update(
+      'liveFolderAllowIssueCreation',
+      options?.allowIssueCreation ?? true,
+      vscode.ConfigurationTarget.Workspace
+    )
+  ]);
+  await api.backendService.reset();
+  await api.refresh();
+  return fixture;
+}
+
 suite('Ticket Manager Extension', () => {
   suiteTeardown(async () => {
     const api = await getApi();
@@ -254,6 +377,8 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.importWorkspaceMcpConfig'));
     assert.ok(commands.includes('ticketManager.importUserMcpConfig'));
     assert.ok(commands.includes('ticketManager.setBackendMode'));
+    assert.ok(commands.includes('ticketManager.openSettings'));
+    assert.ok(commands.includes('ticketManager.configureAi'));
     assert.ok(commands.includes('ticketManager.openBoard'));
     assert.ok(commands.includes('ticketManager.setBoardProjects'));
     assert.ok(commands.includes('ticketManager.setBoardTypes'));
@@ -630,6 +755,111 @@ suite('Ticket Manager Extension', () => {
     }
   });
 
+  test('assigns file-backed issues to AI, updates assignee, and moves status in progress', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    await Promise.all([
+      config.update('ai.openaiApiKey', 'test-openai-key', vscode.ConfigurationTarget.Global),
+      config.update('ai.openaiAgentName', 'Planner Bot', vscode.ConfigurationTarget.Global)
+    ]);
+
+    const issue = await api.backendService.getIssue('APP-101');
+    await api.detailsProvider.setIssue(issue);
+
+    await vscode.commands.executeCommand('ticketManager.assignToAi');
+
+    const updatedIssue = await api.backendService.getIssue('APP-101');
+    const session = api.aiSessionManager.getSession('APP-101');
+
+    assert.strictEqual(updatedIssue.assignee, 'Planner Bot');
+    assert.strictEqual(updatedIssue.status, 'In Progress');
+    assert.ok(session, 'AI assignment should create a session record');
+    assert.strictEqual(session?.label, 'Planner Bot');
+    assert.strictEqual(session?.status, 'active');
+  });
+
+  test('creates live-folder features and child issues by writing markdown files', async () => {
+    const api = await getApi();
+    const fixture = await configureLiveFolderScenario(api);
+
+    await waitFor(() => api.issuesProvider.getCurrentIssues().length > 0);
+    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
+
+    const createdFeature = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Feature',
+      summary: 'Payments platform',
+      description: 'Own the payment orchestration work.'
+    });
+    const createdBug = await api.backendService.createIssue({
+      projectKey: 'APP',
+      issueType: 'Bug',
+      summary: 'Fix login timeout',
+      description: 'Resolve the token refresh timeout.',
+      parentKey: fixture.featureKey
+    });
+
+    await api.refresh();
+    await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdFeature.key)));
+    await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdBug.key)));
+
+    assert.strictEqual(createdFeature.issueType, 'Feature');
+    assert.strictEqual(createdBug.issueType, 'Bug');
+    assert.strictEqual(createdBug.parentKey, fixture.featureKey);
+    assert.strictEqual(createdBug.parentIssue?.issueType, 'Feature');
+
+    const createdFeatureFileUri = vscode.Uri.joinPath(
+      fixture.featuresRootUri,
+      'feature-02-payments-platform',
+      'feature.md'
+    );
+    const createdFeatureText = Buffer.from(
+      await vscode.workspace.fs.readFile(createdFeatureFileUri)
+    ).toString('utf8');
+    assert.match(createdFeatureText, /# Payments platform/);
+    assert.match(createdFeatureText, /\*\*Status:\*\* 📋 Proposed/);
+
+    const createdBugFileUri = vscode.Uri.joinPath(
+      fixture.featureDirUri,
+      'bug-01-1-fix-login-timeout.md'
+    );
+    const createdBugText = Buffer.from(await vscode.workspace.fs.readFile(createdBugFileUri)).toString(
+      'utf8'
+    );
+    assert.match(createdBugText, /# Fix login timeout/);
+    assert.match(createdBugText, /\*\*Parent:\*\* APP-F01/);
+
+    const parentFeatureText = Buffer.from(
+      await vscode.workspace.fs.readFile(vscode.Uri.joinPath(fixture.featureDirUri, 'feature.md'))
+    ).toString('utf8');
+    assert.match(parentFeatureText, /\| 01\.1 \| Bug \| Fix login timeout \| 📋 Proposed \|/);
+
+    const board = api.boardsProvider.getCurrentBoards()[0];
+    assert.ok(board, 'Live Folder mode should expose a board');
+    const boardDetails = await api.backendService.getBoardDetails(board!);
+    assert.ok(
+      boardDetails.issues.some(issue => issue.key === createdBug.key),
+      'Newly created live-folder issue should appear on the live board'
+    );
+  });
+
+  test('can disable live-folder issue creation with a workspace setting', async () => {
+    const api = await getApi();
+    await configureLiveFolderScenario(api, { allowIssueCreation: false });
+
+    await assert.rejects(
+      () =>
+        api.backendService.createIssue({
+          projectKey: 'APP',
+          issueType: 'Feature',
+          summary: 'Should stay read only'
+        }),
+      /disabled/i
+    );
+  });
+
   test('loads boards and applies board filters', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');
@@ -732,6 +962,66 @@ suite('Ticket Manager Extension', () => {
 
     const updatedIssue = api.issuesProvider.getIssueByKey('APP-101');
     assert.strictEqual(updatedIssue?.status, 'In Progress');
+  });
+
+  test('applies stored status filters to parent-item queries used by the EPICs view', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    await api.filterStore.updateFilters({
+      projectKeys: ['APP'],
+      statuses: ['Blocked']
+    });
+    await api.filterStore.setEpicStatuses(['In Progress']);
+
+    const inProgressParents = await api.backendService.getParentItems({
+      ...api.filterStore.getFilters(),
+      statuses: api.filterStore.getEpicStatuses()
+    });
+    assert.deepStrictEqual(inProgressParents.map(item => item.key), ['APP-100']);
+
+    await api.filterStore.setEpicStatuses(['Blocked']);
+
+    const blockedParents = await api.backendService.getParentItems({
+      ...api.filterStore.getFilters(),
+      statuses: api.filterStore.getEpicStatuses()
+    });
+    assert.deepStrictEqual(blockedParents, []);
+  });
+
+  test('includes transition-based workflow statuses in connected filter metadata', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    const metadata = await api.backendService.getFilterMetadata({
+      ...api.filterStore.getFilters(),
+      projectKeys: ['APP'],
+      parentKey: 'APP-100',
+      assigneeMode: 'all'
+    });
+
+    assert.ok(metadata.statuses.includes('To Do'));
+    assert.ok(metadata.statuses.includes('Blocked'));
+    assert.ok(metadata.statuses.includes('In Progress'));
+    assert.ok(metadata.statuses.includes('Backlog'));
+    assert.ok(metadata.statuses.includes('Done'));
+  });
+
+  test('includes workflow-defined statuses in file filter metadata even when unused', async () => {
+    const api = await getApi();
+    await configureFileScenario(api);
+
+    const metadata = await api.backendService.getFilterMetadata({
+      ...api.filterStore.getFilters(),
+      projectKeys: ['APP'],
+      assigneeMode: 'all'
+    });
+
+    assert.ok(metadata.statuses.includes('Backlog'));
+    assert.ok(metadata.statuses.includes('To Do'));
+    assert.ok(metadata.statuses.includes('In Progress'));
+    assert.ok(metadata.statuses.includes('Blocked'));
+    assert.ok(metadata.statuses.includes('Done'));
   });
 
   test('surfaces workflow transition failures', async () => {

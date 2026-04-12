@@ -7,7 +7,10 @@ const md = new MarkdownIt({
 });
 
 /** Renders user markdown to HTML. Raw HTML in source is escaped (no `html: true`). */
-export function markdownToHtmlSafe(markdown: string): string {
+export function markdownToHtmlSafe(markdown: unknown): string {
+  if (typeof markdown !== 'string') {
+    return '';
+  }
   const t = markdown.trim();
   if (!t) {
     return '';

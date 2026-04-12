@@ -88,7 +88,7 @@ export class CopilotAgentService implements vscode.Disposable {
   public async startTask(
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
-    options: { cliPath: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string }
   ): Promise<string> {
     // Abort any existing task for this issue
     if (this.activeTasks.has(issue.key)) {
@@ -96,12 +96,8 @@ export class CopilotAgentService implements vscode.Disposable {
     }
 
     const sdk = await import('@github/copilot-sdk');
-    const cliPath = options.cliPath.trim();
-    if (!cliPath) {
-      throw new Error('Copilot CLI path is not configured (ticketManager.ai.copilotCliPath).');
-    }
-
-    const client = new sdk.CopilotClient({ cliPath });
+    const cliPath = options.cliPath?.trim();
+    const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
     await client.start();
 
     const maxSteps = taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
@@ -222,7 +218,7 @@ Issue: ${issue.key} — ${issue.summary}`;
   /** Resume a previously disconnected session. */
   public async resumeTask(
     issueKey: string,
-    options: { cliPath: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string }
   ): Promise<void> {
     const record = this.sessionManager.getAgentSession(issueKey);
     if (!record) {
@@ -230,7 +226,8 @@ Issue: ${issue.key} — ${issue.summary}`;
     }
 
     const sdk = await import('@github/copilot-sdk');
-    const client = new sdk.CopilotClient({ cliPath: options.cliPath.trim() });
+    const cliPath = options.cliPath?.trim();
+    const client = new sdk.CopilotClient(cliPath ? { cliPath } : undefined);
     await client.start();
 
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;

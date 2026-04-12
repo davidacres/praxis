@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { FilterStore } from '../state/filterStore';
-import type { IssueSummary } from '../types';
+import type { IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
@@ -10,6 +10,8 @@ interface EpicsSidebarCallbacks {
   onCreateEpic: () => Promise<void>;
   onEditEpic: (issueKey: string) => Promise<void>;
   onDeleteEpic: (issueKey: string) => Promise<void>;
+  onSetSearchText?: (searchText: string) => Promise<void>;
+  onSetStatuses?: (statuses: string[]) => Promise<void>;
 }
 
 function escapeHtml(value: string): string {
@@ -23,6 +25,12 @@ function escapeHtml(value: string): string {
 
 function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(value => value.trim().length > 0))].sort((a, b) =>
+    a.localeCompare(b)
+  );
 }
 
 function isDoneIssue(issue: IssueSummary): boolean {
@@ -83,13 +91,26 @@ function renderStatusBadge(status: string | undefined): string {
   return `<span class="type-badge type-badge--${getStatusToken(label)}">${escapeHtml(label)}</span>`;
 }
 
+export function buildEpicStatusMetadataFilters(filters: IssueFilters): IssueFilters {
+  return {
+    ...filters,
+    statuses: [],
+    issueTypes: [],
+    searchText: '',
+    assigneeMode: 'all',
+    parentKey: undefined
+  };
+}
+
 export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private selectedIssueKey?: string;
   private searchText = '';
+  private statusOptions: string[] = [];
   private epics: IssueSummary[] = [];
   private errorMessage?: string;
   private requestGeneration = 0;
+  private supportingDataGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
   public constructor(
@@ -143,13 +164,15 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     }
 
     const generation = ++this.requestGeneration;
+    const supportingGeneration = ++this.supportingDataGeneration;
     const filters = this.filterStore.getFilters();
+    const epicStatuses = this.filterStore.getEpicStatuses();
 
     try {
       const epics = await this.backendService.getParentItems(
         {
           ...filters,
-          statuses: [],
+          statuses: epicStatuses,
           issueTypes: [],
           searchText: '',
           assigneeMode: 'all',
@@ -173,6 +196,21 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       this.errorMessage = error instanceof Error ? error.message : String(error);
     }
 
+    let statusOptions = unique([...epicStatuses, ...this.epics.map(epic => epic.status)]);
+    try {
+      const metadata = await this.backendService.getFilterMetadata(
+        buildEpicStatusMetadataFilters(filters)
+      );
+      statusOptions = unique([...statusOptions, ...metadata.statuses]);
+    } catch {
+      statusOptions = unique([...epicStatuses, ...this.epics.map(epic => epic.status)]);
+    }
+
+    if (supportingGeneration !== this.supportingDataGeneration) {
+      return;
+    }
+
+    this.statusOptions = statusOptions;
     this.render();
   }
 
@@ -200,6 +238,19 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         if (issueKey) {
           await this.callbacks.onSelectEpic(issueKey, Boolean(payload.openFullPanel));
         }
+        return;
+      }
+      case 'setSearchText': {
+        const searchText = typeof payload.searchText === 'string' ? payload.searchText : '';
+        await this.setSearchText(searchText);
+        await this.callbacks.onSetSearchText?.(searchText);
+        return;
+      }
+      case 'setStatuses': {
+        const statuses = Array.isArray(payload.statuses)
+          ? payload.statuses.filter((status): status is string => typeof status === 'string')
+          : [];
+        await this.callbacks.onSetStatuses?.(statuses);
         return;
       }
       case 'createEpic':
@@ -263,6 +314,107 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         gap: 8px;
         min-height: 100%;
         padding: 0;
+      }
+      .search-row {
+        display: flex;
+        width: 100%;
+        flex-shrink: 0;
+        box-sizing: border-box;
+        padding: 8px 0 0;
+        margin: 0;
+      }
+      .search-field {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        align-items: center;
+        gap: 4px;
+        box-sizing: border-box;
+        padding: 0 8px 0 10px;
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 4px;
+        background: var(--vscode-input-background);
+      }
+      .search-form {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+      }
+      .search-input {
+        flex: 1;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 7px 4px 7px 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: var(--vscode-input-foreground);
+        outline: none;
+        font-size: 13px;
+      }
+      .search-input::placeholder {
+        color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground));
+      }
+      .filter-wrap {
+        position: relative;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+      }
+      .filter-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 2;
+        width: 220px;
+        display: none;
+        box-sizing: border-box;
+        padding: 10px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-sideBar-background);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+      }
+      .filter-menu.open {
+        display: block;
+      }
+      .filter-title {
+        margin: 0 0 8px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--vscode-descriptionForeground);
+      }
+      .filter-options {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 220px;
+        overflow: auto;
+      }
+      .filter-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .filter-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .text-button {
+        border: 1px solid var(--vscode-button-border, transparent);
+        border-radius: 6px;
+        background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+        color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+        padding: 5px 9px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .text-button:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
       }
       .item-list {
         display: flex;
@@ -464,6 +616,51 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
 
+      const filterButton = document.getElementById('filterButton');
+      const filterMenu = document.getElementById('filterMenu');
+      if (filterButton && filterMenu) {
+        filterButton.addEventListener('click', event => {
+          event.preventDefault();
+          filterMenu.classList.toggle('open');
+        });
+        document.addEventListener('click', event => {
+          if (!filterMenu.contains(event.target) && !filterButton.contains(event.target)) {
+            filterMenu.classList.remove('open');
+          }
+        });
+      }
+
+      const searchForm = document.getElementById('searchForm');
+      const searchInput = document.getElementById('searchInput');
+      if (searchForm && searchInput) {
+        searchForm.addEventListener('submit', event => {
+          event.preventDefault();
+          vscodeApi.postMessage({ type: 'setSearchText', searchText: searchInput.value || '' });
+        });
+      }
+
+      const applyStatusesButton = document.getElementById('applyStatusesButton');
+      if (applyStatusesButton) {
+        applyStatusesButton.addEventListener('click', () => {
+          const statuses = [...document.querySelectorAll('.filter-option input:checked')].map(input => input.value);
+          vscodeApi.postMessage({ type: 'setStatuses', statuses });
+          if (filterMenu) filterMenu.classList.remove('open');
+        });
+      }
+
+      const clearStatusesButton = document.getElementById('clearStatusesButton');
+      if (clearStatusesButton) {
+        clearStatusesButton.addEventListener('click', () => {
+          document.querySelectorAll('.filter-option input:checked').forEach(cb => cb.checked = false);
+          vscodeApi.postMessage({ type: 'setStatuses', statuses: [] });
+          if (searchInput) {
+            searchInput.value = '';
+            vscodeApi.postMessage({ type: 'setSearchText', searchText: '' });
+          }
+          if (filterMenu) filterMenu.classList.remove('open');
+        });
+      }
+
       for (const row of document.querySelectorAll('[data-epic-key]')) {
         row.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'selectEpic', issueKey: row.getAttribute('data-epic-key') });
@@ -496,17 +693,19 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   }
 
   private renderContent(): string {
+    const epicStatuses = this.filterStore.getEpicStatuses();
     if (this.errorMessage) {
-      return `<div class="message error">${escapeHtml(this.errorMessage)}</div>`;
+      return `${this.renderSearchRow(epicStatuses)}<div class="message error">${escapeHtml(this.errorMessage)}</div>`;
     }
 
     if (this.epics.length === 0) {
-      return this.searchText
-        ? `<div class="message">No EPICs match "${escapeHtml(this.searchText)}".</div>`
-        : '<div class="message">No EPICs are available for the current project scope.</div>';
+      if (this.searchText || epicStatuses.length > 0) {
+        return `${this.renderSearchRow(epicStatuses)}<div class="message">No EPICs match the current filters.</div>`;
+      }
+      return `${this.renderSearchRow(epicStatuses)}<div class="message">No EPICs are available for the current project scope.</div>`;
     }
 
-    return `<div class="item-list">
+    return `${this.renderSearchRow(epicStatuses)}<div class="item-list">
       ${this.epics
         .map(epic => {
           const classes = [
@@ -545,6 +744,38 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           </div>`;
         })
         .join('')}
+    </div>`;
+  }
+
+  private renderSearchRow(epicStatuses: string[]): string {
+    return `<div class="search-row">
+      <div class="search-field">
+      <form class="search-form" id="searchForm">
+        <input class="search-input" id="searchInput" type="search" placeholder="Search EPICs..." value="${escapeHtml(this.searchText)}" />
+      </form>
+      <div class="filter-wrap">
+        ${renderIconButton('filterButton', 'Filter EPICs', 'filter')}
+        <div class="filter-menu" id="filterMenu">
+          <p class="filter-title">Status</p>
+          <div class="filter-options">
+            ${this.statusOptions.length > 0
+              ? this.statusOptions
+                  .map(
+                    status => `<label class="filter-option">
+                      <input type="checkbox" value="${escapeHtml(status)}" ${epicStatuses.includes(status) ? 'checked' : ''} />
+                      <span>${escapeHtml(status)}</span>
+                    </label>`
+                  )
+                  .join('')
+              : '<div class="message">No statuses available.</div>'}
+          </div>
+          <div class="filter-actions">
+            <button class="text-button" id="clearStatusesButton" type="button">Clear</button>
+            <button class="text-button" id="applyStatusesButton" type="button">Apply</button>
+          </div>
+        </div>
+      </div>
+      </div>
     </div>`;
   }
 }

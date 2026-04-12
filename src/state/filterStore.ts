@@ -3,6 +3,7 @@ import type { GroupingMode, IssueFilters, PersistedFilterState } from '../types'
 
 const FILTERS_KEY = 'ticketManager.filters';
 const GROUPING_KEY = 'ticketManager.grouping';
+const EPIC_STATUSES_KEY = 'ticketManager.epicStatuses';
 
 const DEFAULT_FILTERS: IssueFilters = {
   projectKeys: [],
@@ -47,12 +48,23 @@ export class FilterStore implements vscode.Disposable {
     return this.context.workspaceState.get<PersistedFilterState>(FILTERS_KEY)?.lastSelectedIssueKey;
   }
 
+  public getEpicStatuses(): string[] {
+    return [...(this.context.workspaceState.get<string[]>(EPIC_STATUSES_KEY) ?? [])];
+  }
+
   public async setLastSelectedIssueKey(key: string | undefined): Promise<void> {
     const filters = this.context.workspaceState.get<PersistedFilterState>(FILTERS_KEY) ?? {
       ...DEFAULT_FILTERS
     };
     filters.lastSelectedIssueKey = key;
     await this.context.workspaceState.update(FILTERS_KEY, filters);
+  }
+
+  public async setEpicStatuses(statuses: string[]): Promise<string[]> {
+    const next = [...statuses];
+    await this.context.workspaceState.update(EPIC_STATUSES_KEY, next);
+    this.onDidChangeEmitter.fire(this.getFilters());
+    return next;
   }
 
   public async updateFilters(patch: Partial<IssueFilters>): Promise<IssueFilters> {

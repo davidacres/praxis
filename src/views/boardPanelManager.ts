@@ -6,13 +6,19 @@ import { issueTypePillInlineStyle } from '../board/issueTypeColors';
 import { resolveStatusDotColor, statusPillInlineStyle } from '../board/statusColors';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
-import type { Board, BoardColumn, BoardDetails, IssueSummary } from '../types';
+import type { AiProvider, Board, BoardColumn, BoardDetails, IssueSummary } from '../types';
 import { applyBoardColumnPreferences } from './boardColumnLayout';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { renderIconButton } from './webviewToolbarIcons';
 
+interface BoardAiAssignmentOption {
+  provider: AiProvider;
+  label: string;
+}
+
 export interface BoardCardActionCallbacks {
   assignToMe: (issueKey: string) => Promise<void>;
+  assignToAi: (issueKey: string, provider: AiProvider) => Promise<void>;
   editIssue: (issueKey: string) => Promise<void>;
   deleteIssue: (issueKey: string) => Promise<void>;
 }
@@ -62,6 +68,7 @@ export class BoardPanelManager implements vscode.Disposable {
   private requestGeneration = 0;
   private selectedIssueKey?: string;
   private cardActions?: BoardCardActionCallbacks;
+  private aiAssignOptions: BoardAiAssignmentOption[] = [];
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -73,6 +80,11 @@ export class BoardPanelManager implements vscode.Disposable {
   /** Wired from activation after issue edit/delete helpers exist. */
   public setCardActions(callbacks: BoardCardActionCallbacks | undefined): void {
     this.cardActions = callbacks;
+  }
+
+  public setAiAssignOptions(options: BoardAiAssignmentOption[]): void {
+    this.aiAssignOptions = [...options];
+    this.render();
   }
 
   public getActiveBoard(): Board | undefined {
@@ -261,6 +273,7 @@ export class BoardPanelManager implements vscode.Disposable {
       if (!issueKey || !action) {
         return;
       }
+      const provider = asString(message.provider) as AiProvider | undefined;
       if (action === 'viewDetails') {
         await vscode.commands.executeCommand('ticketManager.openIssueFullDetails', issueKey);
         return;
@@ -272,6 +285,8 @@ export class BoardPanelManager implements vscode.Disposable {
       try {
         if (action === 'assignToMe') {
           await actions.assignToMe(issueKey);
+        } else if (action === 'assignToAi' && provider) {
+          await actions.assignToAi(issueKey, provider);
         } else if (action === 'edit') {
           await actions.editIssue(issueKey);
         } else if (action === 'delete') {
@@ -967,6 +982,11 @@ export class BoardPanelManager implements vscode.Disposable {
     </div>
     <div id="boardCardMenu" class="board-card-menu" hidden role="menu" aria-label="Issue actions">
       <button type="button" class="board-card-menu-item" role="menuitem" data-board-menu-action="assignToMe">Assign to me</button>
+      ${this.aiAssignOptions
+        .map(
+          option => `<button type="button" class="board-card-menu-item" role="menuitem" data-board-menu-action="assignToAi" data-board-menu-provider="${escapeHtml(option.provider)}">Assign to ${escapeHtml(option.label)}</button>`
+        )
+        .join('')}
       <button type="button" class="board-card-menu-item" role="menuitem" data-board-menu-action="edit">Edit</button>
       <button type="button" class="board-card-menu-item" role="menuitem" data-board-menu-action="delete">Delete</button>
       <button type="button" class="board-card-menu-item" role="menuitem" data-board-menu-action="viewDetails">View Details</button>
@@ -1041,9 +1061,10 @@ export class BoardPanelManager implements vscode.Disposable {
           btn.addEventListener('click', () => {
             const action = btn.getAttribute('data-board-menu-action');
             const issueKey = boardCardMenu.dataset.issueKey;
+            const provider = btn.getAttribute('data-board-menu-provider');
             boardCardMenu.hidden = true;
             if (issueKey && action) {
-              vscodeApi.postMessage({ type: 'boardCardAction', action, issueKey });
+              vscodeApi.postMessage({ type: 'boardCardAction', action, issueKey, provider });
             }
           });
         }

@@ -66,6 +66,18 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
     };
   }
 
+  if (mode === 'livefolder') {
+    return {
+      canHaveParent: true,
+      requiresParent: true,
+      allowedParentTypes: ['Feature'],
+      defaultLabel: 'Feature',
+      helperText: `${normalizeIssueTypeLabel(issueType)} items in Live Folder mode must belong to a Feature.`,
+      emptyText: 'No feature selected.',
+      placeholder: 'Enter a feature key'
+    };
+  }
+
   const allowedParentTypes = mode === 'jira' ? ['Epic'] : ['Epic', 'Feature'];
   return {
     canHaveParent: true,

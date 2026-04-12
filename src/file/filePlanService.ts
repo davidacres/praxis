@@ -509,6 +509,7 @@ export class FilePlanService implements IssueTrackerService {
   }
 
   public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
+    const plan = await this.loadPlan();
     const metadataFilters: IssueFilters = {
       ...filters,
       statuses: [],
@@ -516,7 +517,7 @@ export class FilePlanService implements IssueTrackerService {
     };
     const page = await this.getIssues(metadataFilters, 0, 500);
     return {
-      statuses: uniqueSorted(page.issues.map(issue => issue.status)),
+      statuses: uniqueSorted([...plan.defaultStatusOrder, ...page.issues.map(issue => issue.status)]),
       issueTypes: uniqueSorted(page.issues.map(issue => issue.issueType))
     };
   }
@@ -542,6 +543,7 @@ export class FilePlanService implements IssueTrackerService {
           allowedParentTypes.some(parentType => parentType.toLowerCase() === item.issueType.toLowerCase())
         )
         .filter(item => filters.projectKeys.length === 0 || filters.projectKeys.includes(item.projectKey))
+        .filter(item => filters.statuses.length === 0 || filters.statuses.includes(item.status))
         .filter(item => {
           if (!query) {
             return true;

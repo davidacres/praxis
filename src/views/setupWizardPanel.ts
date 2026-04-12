@@ -1,4 +1,10 @@
 import * as vscode from 'vscode';
+import {
+  describeAiConfigurationResult,
+  promptToConfigureDefaultAiProvider
+} from '../ai/aiProviderSetup';
+import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
+import { toStoredFolderPath } from '../livefolder/pathUtils';
 import type { BackendMode } from '../types';
 
 /* ------------------------------------------------------------------ */
@@ -202,11 +208,21 @@ export class SetupWizardPanel {
             canSelectMany: false,
             canSelectFolders: true,
             canSelectFiles: false,
-            openLabel: 'Select Plans Folder',
+            openLabel: 'Select Folder to Search for Plans',
           });
           if (uris && uris.length > 0) {
-            this.state.liveFolderPath = uris[0].fsPath;
-            this.rerender();
+            try {
+              const { resolvedPath, changed } = await this.resolveLiveFolderPath(uris[0]);
+              this.state.liveFolderPath = resolvedPath;
+              this.rerender();
+              if (changed) {
+                void vscode.window.showInformationMessage(`Found plans folder at ${resolvedPath}.`);
+              }
+            } catch (error) {
+              void vscode.window.showErrorMessage(
+                error instanceof Error ? error.message : String(error)
+              );
+            }
           }
         } else {
           const uris = await vscode.window.showOpenDialog({
@@ -223,7 +239,13 @@ export class SetupWizardPanel {
       }
 
       case 'save':
-        await this.saveConfiguration();
+        try {
+          await this.saveConfiguration();
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            `Failed to save configuration: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
         break;
     }
   }
@@ -237,10 +259,17 @@ export class SetupWizardPanel {
       return;
     }
 
+    const savedMode = this.state.selectedMode;
+
     const config = vscode.workspace.getConfiguration('ticketManager');
     const target = vscode.workspace.workspaceFolders?.length
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
+
+    if (this.state.selectedMode === 'livefolder') {
+      const { resolvedPath } = await this.resolveLiveFolderPath(this.state.liveFolderPath);
+      this.state.liveFolderPath = resolvedPath;
+    }
 
     await config.update('backendMode', this.state.selectedMode, target);
 
@@ -286,9 +315,20 @@ export class SetupWizardPanel {
       // demo needs no config
     }
 
-    this.onComplete?.(this.state.selectedMode);
+    this.onComplete?.(savedMode);
     this.onComplete = undefined;
     this.panel?.dispose();
+
+    const aiResult = await promptToConfigureDefaultAiProvider();
+    void vscode.window.showInformationMessage(
+      `${
+        savedMode === 'livefolder'
+          ? 'Live Folder'
+          : savedMode === 'file'
+            ? 'File'
+            : savedMode.toUpperCase()
+      } configuration saved. ${describeAiConfigurationResult(aiResult)}`
+    );
   }
 
   /* ---------------------------------------------------------------- */
@@ -299,6 +339,22 @@ export class SetupWizardPanel {
     if (this.panel) {
       this.panel.webview.html = this.getHtml();
     }
+  }
+
+  private async resolveLiveFolderPath(
+    folderPath: string | vscode.Uri
+  ): Promise<{ resolvedPath: string; changed: boolean }> {
+    const originalPath = typeof folderPath === 'string' ? folderPath.trim() : folderPath.fsPath;
+    if (!originalPath) {
+      throw new Error('Plans folder path is required for Live Folder mode.');
+    }
+
+    const identified = await identifyPlanFolder(folderPath);
+    const resolvedPath = toStoredFolderPath(identified.plansRootUri.fsPath);
+    return {
+      resolvedPath,
+      changed: resolvedPath !== toStoredFolderPath(originalPath)
+    };
   }
 
   /* ---------------------------------------------------------------- */
@@ -413,14 +469,14 @@ export class SetupWizardPanel {
 
   private renderLiveFolderForm(): string {
     return `
-      <p class="form-help">Point to a plans folder containing features/feature-NN-*/feature.md and story-*.md files.</p>
+      <p class="form-help">Select a plans folder or a parent folder. Ticket Manager will search for features/feature-NN-*/feature.md and story-*.md files.</p>
       <div class="field-group">
         <label class="field-label">Plans Folder Path</label>
         <div class="input-row">
           <input type="text" class="field-input input-flex"
                  data-field="liveFolderPath"
                  value="${esc(this.state.liveFolderPath)}"
-                 placeholder="C:\\project\\plans" />
+                 placeholder="C:\\project or C:\\project\\plans" />
           <button class="btn btn-secondary" data-action="browse">Browse…</button>
         </div>
       </div>

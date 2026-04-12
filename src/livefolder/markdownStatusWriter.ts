@@ -107,6 +107,69 @@ export async function updateFeatureStoryTable(
   return true;
 }
 
+export async function appendFeatureItemTableRow(
+  featureMdUri: vscode.Uri,
+  itemReference: string,
+  itemType: string,
+  itemName: string,
+  planStatus: string
+): Promise<boolean> {
+  let content: string;
+  try {
+    content = await readUtf8(featureMdUri);
+  } catch {
+    return false;
+  }
+
+  const mdStatus = planStatusToMarkdown(planStatus);
+  const escapedReference = itemReference.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedType = itemType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existingRow = new RegExp(`^\\|\\s*${escapedReference}\\s*\\|\\s*${escapedType}\\s*\\|`, 'mi');
+  if (existingRow.test(content)) {
+    return false;
+  }
+
+  const row = `| ${itemReference} | ${itemType} | ${itemName} | ${mdStatus} |`;
+  const normalized = content.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  const sectionIndex = lines.findIndex(line => /^##\s+(Items|Stories)\b/i.test(line.trim()));
+
+  if (sectionIndex >= 0) {
+    let insertIndex = sectionIndex + 1;
+    let hasHeader = false;
+    while (insertIndex < lines.length) {
+      const trimmed = lines[insertIndex].trim();
+      if (/^##\s+/.test(trimmed)) {
+        break;
+      }
+      if (/^\|\s*Ref\s*\|\s*Type\s*\|\s*Name\s*\|\s*Status\s*\|$/i.test(trimmed)) {
+        hasHeader = true;
+      }
+      insertIndex += 1;
+    }
+
+    const nextLines = [...lines];
+    if (!hasHeader) {
+      nextLines.splice(
+        insertIndex,
+        0,
+        '',
+        '| Ref | Type | Name | Status |',
+        '| --- | --- | --- | --- |',
+        row
+      );
+    } else {
+      nextLines.splice(insertIndex, 0, row);
+    }
+    await vscode.workspace.fs.writeFile(featureMdUri, new TextEncoder().encode(nextLines.join('\n')));
+    return true;
+  }
+
+  const updated = `${normalized.trimEnd()}\n\n## Items\n\n| Ref | Type | Name | Status |\n| --- | --- | --- | --- |\n${row}\n`;
+  await vscode.workspace.fs.writeFile(featureMdUri, new TextEncoder().encode(updated));
+  return true;
+}
+
 /**
  * Updates the feature-level `**Status:**` based on aggregate story statuses.
  * Rules:

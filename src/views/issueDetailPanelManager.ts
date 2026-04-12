@@ -119,7 +119,14 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
   public async open(issueKey: string): Promise<void> {
     this.activeIssueKey = issueKey;
+    this.details = undefined;
+    this.transitions = [];
+    this.parentItems = [];
+    this.parentItemsError = undefined;
+    this.loading = true;
+    this.errorMessage = undefined;
     this.ensurePanel(issueKey);
+    this.render();
     this.panel?.reveal(vscode.ViewColumn.Beside, false);
     await this.refresh();
   }
@@ -334,7 +341,18 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
     const issueKey = this.activeIssueKey ?? 'Issue';
     this.panel.title = issueKey;
-    this.panel.webview.html = this.getHtml(this.panel.webview);
+    try {
+      this.panel.webview.html = this.getHtml(this.panel.webview);
+    } catch (error) {
+      const escapedIssueKey = escapeHtml(issueKey);
+      const message = error instanceof Error ? error.message : String(error);
+      this.panel.webview.html = this.wrapPage(
+        createNonce(),
+        escapedIssueKey,
+        `<section class="empty-state error"><h2>Unable to render issue</h2><p>${escapeHtml(message)}</p></section>`,
+        escapedIssueKey
+      );
+    }
   }
 
   private getHtml(webview: vscode.Webview): string {

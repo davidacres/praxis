@@ -2,12 +2,19 @@ import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { FilterStore } from '../state/filterStore';
-import type { IssueFilters, IssueSummary } from '../types';
+import type { AiProvider, IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
+interface IssueAiAssignmentOption {
+  provider: AiProvider;
+  label: string;
+}
+
 interface IssuesSidebarCallbacks {
   onSelectIssue: (issueKey: string, openFullPanel?: boolean) => Promise<void>;
+  onAssignToMe: (issueKey: string) => Promise<void>;
+  onAssignToAi: (issueKey: string, provider: AiProvider) => Promise<void>;
   onEditIssue: (issueKey: string) => Promise<void>;
   onDeleteIssue: (issueKey: string) => Promise<void>;
   onSetSearchText?: (searchText: string) => Promise<void>;
@@ -101,10 +108,21 @@ function renderAssignmentBadge(issue: IssueSummary): string {
   return `<span class="type-badge type-badge--${token}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
+export function buildIssueStatusMetadataFilters(filters: IssueFilters): IssueFilters {
+  return {
+    ...filters,
+    statuses: [],
+    issueTypes: [],
+    searchText: '',
+    assigneeMode: 'all'
+  };
+}
+
 export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private selectedIssueKey?: string;
   private statusOptions: string[] = [];
+  private aiAssignOptions: IssueAiAssignmentOption[] = [];
   private supportingDataGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
 
@@ -121,6 +139,12 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       }),
       this.issuesProvider.onDidChangeTreeData(() => {
         void this.refresh();
+      }),
+      this.aiSessionManager.onDidChangeSession(() => {
+        this.render();
+      }),
+      this.aiSessionManager.onDidChangeAgentSession(() => {
+        this.render();
       })
     );
   }
@@ -140,6 +164,11 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     this.render();
   }
 
+  public setAiAssignOptions(options: IssueAiAssignmentOption[]): void {
+    this.aiAssignOptions = [...options];
+    this.render();
+  }
+
   public async refresh(): Promise<void> {
     if (!this.view) {
       return;
@@ -151,11 +180,9 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
     let statusOptions = unique([...filters.statuses, ...snapshot.issues.map(issue => issue.status)]);
     try {
-      const metadata = await this.backendService.getFilterMetadata({
-        ...filters,
-        statuses: [],
-        issueTypes: []
-      });
+      const metadata = await this.backendService.getFilterMetadata(
+        buildIssueStatusMetadataFilters(filters)
+      );
       statusOptions = unique([...statusOptions, ...metadata.statuses]);
     } catch {
       statusOptions = unique([...filters.statuses, ...snapshot.issues.map(issue => issue.status)]);
@@ -212,6 +239,21 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
         if (issueKey) {
           await this.callbacks.onEditIssue(issueKey);
+        }
+        return;
+      }
+      case 'assignToMe': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        if (issueKey) {
+          await this.callbacks.onAssignToMe(issueKey);
+        }
+        return;
+      }
+      case 'assignToAi': {
+        const issueKey = typeof payload.issueKey === 'string' ? payload.issueKey : undefined;
+        const provider = typeof payload.provider === 'string' ? payload.provider as AiProvider : undefined;
+        if (issueKey && provider) {
+          await this.callbacks.onAssignToAi(issueKey, provider);
         }
         return;
       }
@@ -397,6 +439,33 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       }
       .text-button:hover {
         background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
+      }
+      .issue-context-menu {
+        position: fixed;
+        z-index: 4;
+        min-width: 180px;
+        display: flex;
+        flex-direction: column;
+        padding: 6px 0;
+        border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+        border-radius: 8px;
+        background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.24);
+      }
+      .issue-context-menu[hidden] {
+        display: none;
+      }
+      .issue-context-menu-item {
+        border: none;
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        text-align: left;
+        padding: 8px 12px;
+        cursor: pointer;
+        font: inherit;
+      }
+      .issue-context-menu-item:hover {
+        background: var(--vscode-list-hoverBackground);
       }
       .section {
         display: flex;
@@ -615,6 +684,17 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       ${this.renderSearchRow(filters)}
       ${issuesSection}
     </div>
+    <div id="issueContextMenu" class="issue-context-menu" hidden role="menu" aria-label="Issue actions">
+      <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="assignToMe">Assign to me</button>
+      ${this.aiAssignOptions
+        .map(
+          option => `<button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="assignToAi" data-issue-menu-provider="${escapeHtml(option.provider)}">Assign to ${escapeHtml(option.label)}</button>`
+        )
+        .join('')}
+      <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="editIssue">Edit</button>
+      <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="deleteIssue">Delete</button>
+      <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="viewDetails">View Details</button>
+    </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
       const filterButton = document.getElementById('filterButton');
@@ -676,6 +756,54 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         row.addEventListener('dblclick', () => {
           vscodeApi.postMessage({ type: 'selectIssue', issueKey: row.getAttribute('data-issue-key'), openFullPanel: true });
         });
+      }
+
+      const issueContextMenu = document.getElementById('issueContextMenu');
+      if (issueContextMenu) {
+        issueContextMenu.addEventListener('click', event => event.stopPropagation());
+        document.addEventListener('click', () => {
+          issueContextMenu.hidden = true;
+        });
+        document.addEventListener('contextmenu', event => {
+          const row = event.target.closest('.issue-row');
+          if (!row) {
+            return;
+          }
+          event.preventDefault();
+          issueContextMenu.dataset.issueKey = row.getAttribute('data-issue-key') || '';
+          issueContextMenu.style.left = event.clientX + 'px';
+          issueContextMenu.style.top = event.clientY + 'px';
+          issueContextMenu.hidden = false;
+          requestAnimationFrame(() => {
+            const bounds = issueContextMenu.getBoundingClientRect();
+            let left = parseFloat(issueContextMenu.style.left) || 0;
+            let top = parseFloat(issueContextMenu.style.top) || 0;
+            if (left + bounds.width > window.innerWidth - 6) {
+              left = window.innerWidth - bounds.width - 6;
+            }
+            if (top + bounds.height > window.innerHeight - 6) {
+              top = window.innerHeight - bounds.height - 6;
+            }
+            issueContextMenu.style.left = Math.max(6, left) + 'px';
+            issueContextMenu.style.top = Math.max(6, top) + 'px';
+          });
+        });
+        for (const button of issueContextMenu.querySelectorAll('[data-issue-menu-action]')) {
+          button.addEventListener('click', () => {
+            const type = button.getAttribute('data-issue-menu-action');
+            const issueKey = issueContextMenu.dataset.issueKey;
+            const provider = button.getAttribute('data-issue-menu-provider');
+            issueContextMenu.hidden = true;
+            if (!issueKey || !type) {
+              return;
+            }
+            if (type === 'viewDetails') {
+              vscodeApi.postMessage({ type: 'selectIssue', issueKey, openFullPanel: true });
+              return;
+            }
+            vscodeApi.postMessage({ type, issueKey, provider });
+          });
+        }
       }
 
       for (const button of document.querySelectorAll('[data-edit-issue-key]')) {
