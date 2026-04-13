@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with connected, demo, and file-backed modes.",
   "license": "MIT",
@@ -36,6 +36,7 @@
     "watch:tsc": "tsc --noEmit --watch -p ./",
     "package": "npm run check-types && node esbuild.mjs --production",
     "check-types": "tsc --noEmit -p ./",
+    "pretest": "tsc -p ./",
     "test": "vscode-test --label integration",
     "install:vsix": "node ./scripts/install-vsix.cjs",
     "install:code": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode.ps1",

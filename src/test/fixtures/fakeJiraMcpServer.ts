@@ -163,7 +163,7 @@ function createIssues(): FakeIssue[] {
       key: 'APP-103',
       summary: 'Transition validation edge case',
       status: 'Blocked',
-      issueType: 'Task',
+      issueType: 'Bug',
       projectKey: 'APP',
       projectName: 'Application Platform',
       assigneeMode: 'me',
