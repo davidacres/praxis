@@ -214,6 +214,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'viewAiSession') {
+      await vscode.commands.executeCommand('ticketManager.viewAgentSession', this.activeIssueKey);
+      return;
+    }
+
     if (type === 'saveIssueEdits') {
       try {
         const summary = asString(message.summary);
@@ -1133,6 +1138,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     document.getElementById('lprButton')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'localPeerReview' });
     });
+    document.getElementById('viewAiSessionBtn')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'viewAiSession' });
+    });
   </script>
 </body>
 </html>`;
@@ -1287,6 +1295,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
             <button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>
+            <button class="secondary-button" id="viewAiSessionBtn" type="button">AI Session</button>
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
