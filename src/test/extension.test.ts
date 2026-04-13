@@ -450,6 +450,9 @@ suite('Ticket Manager Extension', () => {
 
     assert.ok(issueKeys.includes('APP-101'));
     assert.ok(issueKeys.includes('OPS-200'));
+    assert.ok(issueKeys.includes('APP-103'), 'Bug APP-103 should appear in My Issues');
+    const bugIssue = api.issuesProvider.getCurrentIssues().find(issue => issue.key === 'APP-103');
+    assert.strictEqual(bugIssue?.issueType, 'Bug', 'APP-103 should be typed as Bug');
     assert.ok(boardNames.includes('Application Board'));
     assert.strictEqual(result.status, 'ok');
     assert.match(result.message, /demo mode active/i);
@@ -905,6 +908,11 @@ suite('Ticket Manager Extension', () => {
 
     const snapshot = api.boardPanelManager.getSnapshot();
     assert.deepStrictEqual(snapshot.columnNames, ['Backlog', 'To Do', 'In Progress', 'Blocked']);
+
+    const boardDetails = await api.backendService.getBoardDetails(board!);
+    const bugOnBoard = boardDetails.issues.find(issue => issue.key === 'APP-103');
+    assert.ok(bugOnBoard, 'Bug APP-103 should appear on the Application Board');
+    assert.strictEqual(bugOnBoard?.issueType, 'Bug', 'APP-103 should be typed as Bug on the board');
 
     await api.boardPanelManager.selectIssue('APP-101');
     await waitFor(() => api.detailsProvider.getActiveIssue()?.key === 'APP-101');
