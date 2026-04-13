@@ -171,7 +171,7 @@ function createSeedIssues(): DemoIssue[] {
       key: 'APP-103',
       summary: 'Simulate workflow validation edge case',
       status: 'Blocked',
-      issueType: 'Task',
+      issueType: 'Bug',
       projectKey: 'APP',
       projectName: 'Application Platform',
       assigneeKind: 'me',
