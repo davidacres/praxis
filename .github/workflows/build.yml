@@ -20,11 +20,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: |
-          # Prefer a reproducible clean install, but fall back to `npm install` when the lockfile
-          # is out of sync (this is a temporary CI unblock). Commit a regenerated package-lock.json
-          # to the branch as the permanent fix.
-          npm ci || npm install --no-audit --no-fund
+        run: npm ci
 
       - name: Compile
         run: npm run compile
