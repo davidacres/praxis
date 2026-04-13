@@ -206,12 +206,21 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
 
   await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(result.jsonc));
   await deps.configStore.setPlanFilePath(saveUri.fsPath);
+  const { featuresImported, storiesImported, tasksImported, bugsImported } = result.stats;
+  const importParts = [`${featuresImported} features`, `${storiesImported} stories`];
+  if (tasksImported > 0) {
+    importParts.push(`${tasksImported} tasks`);
+  }
+  if (bugsImported > 0) {
+    importParts.push(`${bugsImported} bugs`);
+  }
+  const importSummary = importParts.join(', ');
   deps.output.appendLine(
-    `[import] ${result.stats.featuresImported} features, ${result.stats.storiesImported} stories → ${saveUri.fsPath}`
+    `[import] ${importSummary} → ${saveUri.fsPath}`
   );
 
   const goFile = await vscode.window.showInformationMessage(
-    `Imported ${result.stats.featuresImported} features and ${result.stats.storiesImported} stories from markdown into ${saveUri.fsPath}.`,
+    `Imported ${importSummary} from markdown into ${saveUri.fsPath}.`,
     'Switch to File mode'
   );
 

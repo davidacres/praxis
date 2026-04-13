@@ -3,7 +3,8 @@ import {
   identifyPlanFolder,
   parsePlanFolder,
   stableFeatureKey,
-  stableStoryKey
+  stableStoryKey,
+  stableChildKey
 } from '../livefolder/markdownPlanParser';
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -20,6 +21,8 @@ export interface ImportResult {
   stats: {
     featuresImported: number;
     storiesImported: number;
+    tasksImported: number;
+    bugsImported: number;
   };
 }
 
@@ -90,7 +93,7 @@ export async function generateTicketPlanFromMarkdownFeatures(
 
   const now = new Date().toISOString();
 
-  // Build items — features first, then stories with parent references
+  // Build items — features first, then child items (stories, tasks, bugs) with parent references
   const items: Record<string, unknown>[] = [];
   const boardIssueKeys: string[] = [];
 
@@ -112,25 +115,36 @@ export async function generateTicketPlanFromMarkdownFeatures(
     });
   }
 
-  for (const s of parsed.stories) {
-    const key = stableStoryKey(projectKey, s.featureId, s.storySeq);
-    const parentKey = stableFeatureKey(projectKey, s.featureId);
+  let tasksImported = 0;
+  let bugsImported = 0;
+  for (const child of parsed.childItems) {
+    const key =
+      child.issueType === 'Story'
+        ? stableStoryKey(projectKey, child.featureId, child.sequence)
+        : stableChildKey(projectKey, child.issueType, child.featureId, child.sequence);
+    const parentKey = stableFeatureKey(projectKey, child.featureId);
     boardIssueKeys.push(key);
     items.push({
       key,
-      summary: s.title,
-      type: 'Story',
-      status: s.planStatus,
+      summary: child.title,
+      type: child.issueType,
+      status: child.planStatus,
       projectKey,
       projectName,
       assignee: currentUser,
-      priority: 'Medium',
-      created: s.planningDates.created ?? now,
+      priority: child.issueType === 'Bug' ? 'High' : 'Medium',
+      created: child.planningDates.created ?? now,
       updated: now,
-      description: s.description,
+      description: child.description,
       parent: parentKey
     });
+    if (child.issueType === 'Task') {
+      tasksImported++;
+    } else if (child.issueType === 'Bug') {
+      bugsImported++;
+    }
   }
+  const storiesImported = parsed.childItems.filter(c => c.issueType === 'Story').length;
 
   const plan = {
     version: 1,
@@ -162,15 +176,22 @@ export async function generateTicketPlanFromMarkdownFeatures(
 
   const jsonc = JSON.stringify(plan, null, 2) + '\n';
 
-  onProgress(
-    `Done — ${parsed.features.length} feature(s), ${parsed.stories.length} story/stories.`
-  );
+  const statParts = [`${parsed.features.length} feature(s)`, `${storiesImported} story/stories`];
+  if (tasksImported > 0) {
+    statParts.push(`${tasksImported} task(s)`);
+  }
+  if (bugsImported > 0) {
+    statParts.push(`${bugsImported} bug(s)`);
+  }
+  onProgress(`Done — ${statParts.join(', ')}.`);
 
   return {
     jsonc,
     stats: {
       featuresImported: parsed.features.length,
-      storiesImported: parsed.stories.length
+      storiesImported,
+      tasksImported,
+      bugsImported
     }
   };
 }
