@@ -103,6 +103,47 @@ export function extractSectionBody(content: string, heading: string): string | u
   return undefined;
 }
 
+export interface ParsedComment {
+  author: string;
+  created: string;
+  body: string;
+}
+
+/**
+ * Extract comments from a `## Comments` section.
+ * Each comment is a block starting with `**author** — timestamp` followed by body lines.
+ */
+export function extractComments(content: string): ParsedComment[] {
+  const sectionBody = extractSectionBody(content, 'Comments');
+  if (!sectionBody) {
+    return [];
+  }
+  const comments: ParsedComment[] = [];
+  const headerRe = /^\*\*(.+?)\*\*\s*(?:—|--|-)\s*(.+)$/;
+  const lines = sectionBody.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length) {
+    const m = headerRe.exec(lines[i]);
+    if (m) {
+      const author = m[1].trim();
+      const created = m[2].trim();
+      i++;
+      const bodyLines: string[] = [];
+      while (i < lines.length && !headerRe.test(lines[i])) {
+        bodyLines.push(lines[i]);
+        i++;
+      }
+      const body = bodyLines.join('\n').trim();
+      if (body.length > 0) {
+        comments.push({ author, created, body });
+      }
+    } else {
+      i++;
+    }
+  }
+  return comments;
+}
+
 export function buildDescription(content: string): string {
   return (
     extractSectionBody(content, 'Summary') ??

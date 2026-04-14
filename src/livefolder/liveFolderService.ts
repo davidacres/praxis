@@ -30,12 +30,15 @@ import {
   type ParsedChildFile,
   type ParsedFeatureFolder,
   type ParsedPlanFolder,
+  extractComments,
   parsePlanFolder,
+  readUtf8,
   stableChildKey,
   stableFeatureKey,
   stableStoryKey
 } from './markdownPlanParser';
 import {
+  appendCommentToMarkdownFile,
   appendFeatureItemTableRow,
   computeFeatureRollupStatus,
   updateFeatureStoryTable,
@@ -394,11 +397,12 @@ export class LiveFolderService implements IssueTrackerService {
     const parentIssue = issue.parentKey
       ? this.issues.find(candidate => candidate.key === issue.parentKey)
       : undefined;
+    const comments = await this.readCommentsFromFile(issue);
     return {
       ...issue,
       parentIssue: toParentIssueReference(parentIssue),
       transitions,
-      comments: []
+      comments
     };
   }
 
@@ -488,11 +492,12 @@ export class LiveFolderService implements IssueTrackerService {
     const parentIssue = issue.parentKey
       ? this.issues.find(candidate => candidate.key === issue.parentKey)
       : undefined;
+    const comments = await this.readCommentsFromFile(issue);
     return {
       ...issue,
       parentIssue: toParentIssueReference(parentIssue),
       transitions: transitionsFrom(issue.status),
-      comments: []
+      comments
     };
   }
 
@@ -500,8 +505,23 @@ export class LiveFolderService implements IssueTrackerService {
     throw new Error('Live Folder mode does not support deleting issues. Remove plan files directly.');
   }
 
-  public async addComment(_issueKey: string, _body: string): Promise<void> {
-    throw new Error('Live Folder mode does not support comments.');
+  public async addComment(issueKey: string, body: string): Promise<void> {
+    const commentBody = body.trim();
+    if (commentBody.length === 0) {
+      throw new Error('Comment cannot be empty.');
+    }
+    await this.ensureLoaded();
+    const issue = this.issues.find(i => i.key === issueKey);
+    if (!issue) {
+      throw new Error(`Issue ${issueKey} not found`);
+    }
+    const author = 'Me';
+    this.recentWrites.add(issue.sourceUri.toString());
+    try {
+      await appendCommentToMarkdownFile(issue.sourceUri, author, commentBody);
+    } finally {
+      setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+    }
   }
 
   // ── Transitions ─────────────────────────────────────────────────
@@ -609,6 +629,22 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   // ── Internal ────────────────────────────────────────────────────
+
+  private async readCommentsFromFile(issue: LiveIssue): Promise<IssueDetails['comments']> {
+    try {
+      const content = await readUtf8(issue.sourceUri);
+      const parsed = extractComments(content);
+      return parsed.map((c, i) => ({
+        id: `${issue.key}-comment-${i + 1}`,
+        author: c.author,
+        body: c.body,
+        created: c.created,
+        updated: c.created
+      }));
+    } catch {
+      return [];
+    }
+  }
 
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) {
