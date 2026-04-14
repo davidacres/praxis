@@ -28,6 +28,8 @@ interface LiveFolderFixture {
   featuresRootUri: vscode.Uri;
   featureDirUri: vscode.Uri;
   featureKey: string;
+  storyKey: string;
+  storyFileUri: vscode.Uri;
 }
 
 async function waitFor(
@@ -179,12 +181,16 @@ Build the first login story.
 `
   );
 
+  const storyFileUri = vscode.Uri.joinPath(featureDirUri, 'story-01-1-login-flow.md');
+
   return {
     rootUri,
     plansRootUri,
     featuresRootUri,
     featureDirUri,
-    featureKey: 'APP-F01'
+    featureKey: 'APP-F01',
+    storyKey: 'APP-S01-1',
+    storyFileUri
   };
 }
 
@@ -862,6 +868,37 @@ suite('Ticket Manager Extension', () => {
         }),
       /disabled/i
     );
+  });
+
+  test('adds live-folder comments and persists them to the markdown file', async () => {
+    const api = await getApi();
+    const fixture = await configureLiveFolderScenario(api);
+
+    await waitFor(() => api.issuesProvider.getCurrentIssues().length > 0);
+
+    // Add a comment to the fixture story
+    await api.backendService.addComment(fixture.storyKey, 'First live-folder comment.');
+
+    // Verify comment is returned in issue details
+    const details = await api.backendService.getIssue(fixture.storyKey);
+    assert.ok(details.comments, 'Issue should have comments');
+    assert.strictEqual(details.comments!.length, 1);
+    assert.strictEqual(details.comments![0].body, 'First live-folder comment.');
+    assert.strictEqual(details.comments![0].author, 'Me');
+
+    // Verify comment is persisted in the markdown file
+    const storyText = Buffer.from(
+      await vscode.workspace.fs.readFile(fixture.storyFileUri)
+    ).toString('utf8');
+    assert.match(storyText, /## Comments/);
+    assert.match(storyText, /\*\*Me\*\*/);
+    assert.match(storyText, /First live-folder comment\./);
+
+    // Add a second comment and verify both are returned
+    await api.backendService.addComment(fixture.storyKey, 'Second comment.');
+    const details2 = await api.backendService.getIssue(fixture.storyKey);
+    assert.strictEqual(details2.comments!.length, 2);
+    assert.strictEqual(details2.comments![1].body, 'Second comment.');
   });
 
   test('loads boards and applies board filters', async () => {

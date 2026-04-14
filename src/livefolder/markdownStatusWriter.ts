@@ -193,3 +193,37 @@ export function computeFeatureRollupStatus(storyStatuses: string[]): string | un
   }
   return undefined;
 }
+
+/**
+ * Appends a comment to the `## Comments` section of a markdown file.
+ * Creates the section if it doesn't exist.
+ */
+export async function appendCommentToMarkdownFile(
+  fileUri: vscode.Uri,
+  author: string,
+  body: string
+): Promise<void> {
+  const content = await readUtf8(fileUri);
+  const normalized = content.replace(/\r\n/g, '\n');
+  const now = new Date().toISOString();
+  const commentBlock = `**${author}** — ${now}\n${body}`;
+
+  const lines = normalized.split('\n');
+  const sectionIndex = lines.findIndex(line => /^##\s+Comments\b/i.test(line.trim()));
+
+  let updated: string;
+  if (sectionIndex >= 0) {
+    // Find the end of the Comments section (next ## heading or EOF)
+    let endIndex = sectionIndex + 1;
+    while (endIndex < lines.length && !/^## /.test(lines[endIndex])) {
+      endIndex++;
+    }
+    const nextLines = [...lines];
+    nextLines.splice(endIndex, 0, '', commentBlock);
+    updated = nextLines.join('\n');
+  } else {
+    updated = `${normalized.trimEnd()}\n\n## Comments\n\n${commentBlock}\n`;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+}
