@@ -131,6 +131,7 @@ let deactivateHandler: (() => Promise<void>) | undefined;
 
 const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
 const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
+const COPILOT_ANALYSIS_START_COMMENT = 'request analysis starting';
 
 function getCommentActivityTimestamp(comment: IssueComment): string {
   return comment.updated ?? comment.created ?? '';
@@ -301,6 +302,10 @@ export async function activate(
 
   function hasCopilotClarificationComment(issue: IssueDetails): boolean {
     return issue.comments?.some(comment => comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER)) ?? false;
+  }
+
+  function hasCopilotAnalysisStartComment(issue: IssueDetails): boolean {
+    return issue.comments?.some(comment => comment.body.trim().toLowerCase() === COPILOT_ANALYSIS_START_COMMENT) ?? false;
   }
 
   async function postCopilotReply(issueKey: string, request: string): Promise<void> {
@@ -593,6 +598,10 @@ export async function activate(
           continue;
         }
 
+        if (!hasCopilotAnalysisStartComment(issue)) {
+          await backendService.addComment(issueKey, COPILOT_ANALYSIS_START_COMMENT);
+        }
+
         const clarificationComment = await buildCopilotClarificationComment(
           issue,
           cliPath,
@@ -859,7 +868,7 @@ export async function activate(
     },
     boardColumnStore
   );
-  issueDetailPanelManager = new IssueDetailPanelManager(backendService, async () => {
+  issueDetailPanelManager = new IssueDetailPanelManager(backendService, aiSessionManager, async () => {
     await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
     const active = detailsProvider.getActiveIssue();
     if (active) {

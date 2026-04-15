@@ -329,7 +329,7 @@ export async function discoverWorkspaceAgentWorkflows(
     const entries = await readdir(skillsRoot, { withFileTypes: true });
     const workflows = await Promise.all(
       entries
-        .filter(entry => entry.isDirectory())
+        .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
         .map(entry =>
           resolveConfiguredAgentWorkflow({
             workspaceRoot,

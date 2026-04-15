@@ -112,4 +112,32 @@ suite('clarificationReplyTracking', () => {
       'Dana: Tenant is ASSA.\n\nDana: Environment is production.'
     );
   });
+
+  test('ignores analysis-start comments when tracking pending human replies', () => {
+    const issue = createIssueWithComments([
+      {
+        id: 'comment-1',
+        author: 'Ticket Manager',
+        body: 'request analysis starting',
+        created: '2026-04-15T09:00:00.000Z'
+      },
+      {
+        id: 'comment-2',
+        author: 'Dana',
+        body: 'This is an AI-generated message.\nCopilot clarification request\n\n1. Which environment should this target?',
+        created: '2026-04-15T09:01:00.000Z'
+      },
+      {
+        id: 'comment-3',
+        author: 'Dana',
+        body: 'Use production.',
+        created: '2026-04-15T09:02:00.000Z'
+      }
+    ]);
+
+    assert.strictEqual(
+      extractPendingCopilotReplyRequest(issue),
+      'Dana: Use production.'
+    );
+  });
 });

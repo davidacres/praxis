@@ -242,6 +242,29 @@ function isSafeShellProbeSegment(segment: string): boolean {
   return patterns.some(pattern => pattern.test(normalized));
 }
 
+function isSafeGitInspectionSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const patterns = [
+    /^git\s+(?:--no-pager\s+)?status(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?branch(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?log(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?diff(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?show(?:\s+.*)?$/i,
+    /^git\s+rev-parse(?:\s+.*)?$/i,
+    /^git\s+symbolic-ref(?:\s+.*)?$/i,
+    /^git\s+describe(?:\s+.*)?$/i,
+    /^git\s+ls-files(?:\s+.*)?$/i,
+    /^git\s+remote\s+-v$/i,
+    /^git\s+remote\s+show(?:\s+.*)?$/i,
+    /^git\s+tag(?:\s+--list|\s+-l)?(?:\s+.*)?$/i,
+    /^git\s+stash\s+list(?:\s+.*)?$/i,
+    /^git\s+config\s+--get(?:-all)?(?:\s+.*)?$/i,
+    /^git\s+merge-base(?:\s+.*)?$/i,
+    /^git\s+submodule\s+status(?:\s+.*)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
 function isSafeBuildShellSegment(segment: string): boolean {
   const normalized = normalizeShellSegment(segment);
   const powershellScriptMatch = /^(?:pwsh|powershell)(?:\.exe)?\s+.+?-file\s+(?<script>[^\s]+)(?:\s+.*)?$/i.exec(normalized);
@@ -289,6 +312,7 @@ function shouldSilentlyApprovePermissionRequest(request: { kind?: string; [key: 
   return segments.every(segment =>
     isDirectoryChangeSegment(segment) ||
     isSafeShellProbeSegment(segment) ||
+    isSafeGitInspectionSegment(segment) ||
     isSafeBuildShellSegment(segment)
   );
 }

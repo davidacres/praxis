@@ -69,12 +69,15 @@ export interface DeliveryTaskResult {
 
 export interface DeliverySessionMetadata {
   source: 'jira-polling';
+  phase: 'analysis' | 'implementation';
   baseBranch: string;
   worktreeName: string;
   worktreePath: string;
   createdBranch: string;
   publishCommand: string;
   artifactPattern: string;
+  analysisSummary?: string;
+  analysisPlan?: string;
   summaryTemplate?: string;
   failureTemplate?: string;
   finalizationState: 'pending' | 'completed' | 'failed';

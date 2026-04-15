@@ -49,15 +49,12 @@ Format the response in markdown suitable for posting as a ticket comment.`;
 
 const COPILOT_CLARIFICATION_SYSTEM_PROMPT = `You are GitHub Copilot reviewing a ticket before implementation starts.
 If the ticket is specific enough to implement safely, reply with exactly READY.
-If the ticket is too vague, write a concise plain-text Jira comment body that:
-1. Briefly states that implementation is blocked by missing detail
-2. Lists the specific ambiguities or missing requirements
-3. Asks 2-5 concrete clarification questions
+If the ticket is too vague, output only 2-5 concrete clarification questions.
 
+Return the questions as a numbered plain-text list, one question per line.
+Do not include any preamble, explanation, rationale, analysis, tool output, or comment title.
 Do not claim that work has started.
-Do not use markdown headings, bold, italics, or bullet markers like * or #.
-Do not include an AI-generated notice or comment title because that will be added separately.
-Use short plain-text paragraphs and a numbered Questions list.`;
+Do not use markdown headings, bold, italics, or bullet markers like * or #.`;
 
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
 const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -174,7 +171,7 @@ async function runCopilotPrompt(
   }
 }
 
-function normalizeClarificationCommentBody(text: string): string {
+function normalizeClarificationText(text: string): string {
   return text
     .replaceAll('\r\n', '\n')
     .replaceAll(/^#{1,6}\s*/gm, '')
@@ -182,6 +179,81 @@ function normalizeClarificationCommentBody(text: string): string {
     .replaceAll(/\*(.*?)\*/g, '$1')
     .replaceAll(/`([^`]+)`/g, '$1')
     .trim();
+}
+
+function isQuestionLikeLine(text: string): boolean {
+  return /^(who|what|when|where|why|how|which|should|could|would|can|do|does|did|is|are|am|will|may)\b/i.test(text);
+}
+
+function isClarificationMetaLine(text: string): boolean {
+  return /^(this is an ai-generated message\.?|copilot clarification request|questions?\s*:|analysis\s*:|reasoning\s*:|thoughts?\s*:|thinking\s*:|tool(?:\s+output|\s+call|\s+result)?\s*:|assistant\s*:|ready)$/i.test(text);
+}
+
+export function extractClarificationQuestions(text: string): string[] {
+  const normalized = normalizeClarificationText(text);
+  const lines = normalized
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  const collected: string[] = [];
+  let inQuestionSection = false;
+
+  for (const line of lines) {
+    if (/^questions?\s*:$/i.test(line)) {
+      inQuestionSection = true;
+      continue;
+    }
+
+    if (isClarificationMetaLine(line)) {
+      continue;
+    }
+
+    const cleaned = line.replace(/^(?:\d+[.)]\s*|[-•]\s*)/, '').trim();
+    if (!cleaned) {
+      continue;
+    }
+
+    if (inQuestionSection || cleaned.includes('?') || isQuestionLikeLine(cleaned)) {
+      const questionMatches = cleaned.match(/[^?]+\?/g);
+      if (questionMatches && questionMatches.length > 0) {
+        for (const match of questionMatches) {
+          collected.push(match.trim());
+        }
+        continue;
+      }
+
+      collected.push(isQuestionLikeLine(cleaned) ? `${cleaned.replace(/[.\s]+$/, '')}?` : cleaned);
+    }
+  }
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const question of collected) {
+    const cleanedQuestion = question.replace(/^questions?\s*:\s*/i, '').trim();
+    if (!cleanedQuestion) {
+      continue;
+    }
+
+    const normalizedKey = cleanedQuestion.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      continue;
+    }
+
+    seen.add(normalizedKey);
+    deduped.push(cleanedQuestion);
+  }
+
+  return deduped.slice(0, 5);
+}
+
+export function normalizeClarificationCommentBody(text: string): string | undefined {
+  const questions = extractClarificationQuestions(text);
+  if (questions.length === 0) {
+    return undefined;
+  }
+
+  return questions.map((question, index) => `${index + 1}. ${question}`).join('\n');
 }
 
 export async function reviewTicketWithOpenAi(
@@ -332,6 +404,9 @@ ${ticketContext}`,
   }
 
   const normalizedBody = normalizeClarificationCommentBody(trimmed);
+  if (!normalizedBody) {
+    throw new Error('Copilot clarification response did not contain any clarification questions.');
+  }
 
   return `This is an AI-generated message.
 Copilot clarification request
