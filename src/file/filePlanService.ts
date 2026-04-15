@@ -13,6 +13,7 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueComment,
   IssueDetails,
   IssueFilters,
@@ -992,6 +993,18 @@ export class FilePlanService implements IssueTrackerService {
     );
 
     await vscode.workspace.fs.writeFile(plan.uri, Buffer.from(nextText, 'utf8'));
+  }
+
+  public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
+    throw new Error('Attachments are not supported in File Plan mode.');
+  }
+
+  public async downloadAttachment(
+    _issueKey: string,
+    _attachment: IssueAttachment,
+    _targetFilePath: string
+  ): Promise<void> {
+    throw new Error('Attachment downloads are not supported in File Plan mode.');
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

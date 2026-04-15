@@ -14,6 +14,7 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   IssueSummary,
@@ -341,6 +342,20 @@ export class UserWorkspaceService implements IssueTrackerService {
   public async addComment(issueKey: string, body: string): Promise<void> {
     const service = await this.resolveIssueService(issueKey);
     await service.addComment(issueKey, body);
+  }
+
+  public async attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void> {
+    const service = await this.resolveIssueService(issueKey);
+    await service.attachFile(issueKey, filePath, fileName);
+  }
+
+  public async downloadAttachment(
+    issueKey: string,
+    attachment: IssueAttachment,
+    targetFilePath: string
+  ): Promise<void> {
+    const service = await this.resolveIssueService(issueKey);
+    await service.downloadAttachment(issueKey, attachment, targetFilePath);
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

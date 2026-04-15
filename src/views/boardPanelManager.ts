@@ -7,7 +7,7 @@ import { resolveStatusDotColor, statusPillInlineStyle } from '../board/statusCol
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import type { AiProvider, Board, BoardColumn, BoardDetails, IssueSummary } from '../types';
-import { applyBoardColumnPreferences } from './boardColumnLayout';
+import { applyBoardColumnPreferences, getDefaultStatusColumnOrder } from './boardColumnLayout';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { renderIconButton } from './webviewToolbarIcons';
 
@@ -114,6 +114,14 @@ export class BoardPanelManager implements vscode.Disposable {
 
     try {
       const boardDetails = await this.backendService.getBoardDetails(this.activeBoard);
+      if (generation !== this.requestGeneration) {
+        return;
+      }
+
+      await this.boardColumnStore.normalizeLegacyPreferences(
+        this.activeBoard.id,
+        getDefaultStatusColumnOrder(boardDetails)
+      );
       if (generation !== this.requestGeneration) {
         return;
       }

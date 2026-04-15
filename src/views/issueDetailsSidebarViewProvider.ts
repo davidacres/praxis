@@ -138,6 +138,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         if (this.detailsProvider.getActiveIssue()?.key === record.issueKey) {
           this.render();
         }
+      }),
+      this.aiSessionManager.onDidChangeWorkflowAssignment(({ issueKey }) => {
+        if (this.detailsProvider.getActiveIssue()?.key === issueKey) {
+          this.render();
+        }
       })
     );
   }
@@ -268,7 +273,14 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     if (type === 'delegateToCopilot') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.delegateToCopilot');
+        await vscode.commands.executeCommand('ticketManager.delegateToCopilot', issueKey);
+      }
+    }
+
+    if (type === 'assignWorkflowPack') {
+      const issueKey = asString(message.issueKey);
+      if (issueKey) {
+        await vscode.commands.executeCommand('ticketManager.assignWorkflowPack', issueKey);
       }
     }
 
@@ -465,6 +477,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           </div>
         </form>
         ${this.renderAiAssignmentSection(issue.key, agentNames)}
+        ${this.renderWorkflowPackSection(issue.key)}
         ${this.renderCopilotAgentSection(issue.key)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Comments</div>
@@ -866,6 +879,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             label: 'Epic',
             helper:
               mode === 'jira'
+                || mode === 'jiraapi'
                 ? 'This item can only belong to an Epic.'
                 : 'This item can only belong to an Epic/Feature.',
             emptyText: 'No epic selected.',
@@ -1208,6 +1222,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
 
+      const assignWorkflowPackButton = document.getElementById('assignWorkflowPackButton');
+      if (assignWorkflowPackButton) {
+        assignWorkflowPackButton.addEventListener('click', () => {
+          const issueKey = assignWorkflowPackButton.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'assignWorkflowPack', issueKey });
+          }
+        });
+      }
+
       const reviewWithAiButton = document.getElementById('reviewWithAiButton');
       const aiReviewStatus = document.getElementById('aiReviewStatus');
       if (reviewWithAiButton) {
@@ -1430,6 +1454,43 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       <div class="form-actions">
         <button class="secondary-button" id="viewAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">View Session</button>
         ${!isTerminal ? `<button class="secondary-button" id="abortAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Abort</button>` : ''}
+      </div>
+    </div>`;
+  }
+
+  private renderWorkflowPackSection(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    if (!assignment) {
+      return `<div class="card">
+        <div class="section-title">Workflow Pack</div>
+        <div class="comment-empty">No workflow pack assigned.</div>
+        <div class="form-actions">
+          <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Assign Workflow Pack</button>
+        </div>
+      </div>`;
+    }
+
+    const sourceLabel = assignment.source === 'automatic' ? 'Automatic' : 'Manual';
+    return `<div class="card">
+      <div class="section-title">Workflow Pack</div>
+      <div class="detail-row">
+        <div class="detail-label">Name</div>
+        <div class="detail-value">${escapeHtml(assignment.workflow.name)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Source</div>
+        <div class="detail-value">${escapeHtml(sourceLabel)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">File</div>
+        <div class="detail-value detail-value--wrap">${escapeHtml(assignment.workflow.instructionsPath)}</div>
+      </div>
+      ${assignment.reason ? `<div class="detail-row">
+        <div class="detail-label">Reason</div>
+        <div class="detail-value detail-value--wrap">${escapeHtml(assignment.reason)}</div>
+      </div>` : ''}
+      <div class="form-actions">
+        <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Change Workflow Pack</button>
       </div>
     </div>`;
   }

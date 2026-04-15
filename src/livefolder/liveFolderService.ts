@@ -15,6 +15,7 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentIssueReference,
@@ -502,6 +503,18 @@ export class LiveFolderService implements IssueTrackerService {
 
   public async addComment(_issueKey: string, _body: string): Promise<void> {
     throw new Error('Live Folder mode does not support comments.');
+  }
+
+  public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
+    throw new Error('Live Folder mode does not support attachments.');
+  }
+
+  public async downloadAttachment(
+    _issueKey: string,
+    _attachment: IssueAttachment,
+    _targetFilePath: string
+  ): Promise<void> {
+    throw new Error('Live Folder mode does not support attachment downloads.');
   }
 
   // ── Transitions ─────────────────────────────────────────────────

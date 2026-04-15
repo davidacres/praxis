@@ -2,7 +2,7 @@
 
 Ticket Manager is a VS Code extension for working with issues and boards through a generic app surface. It supports four runtime modes:
 
-- `jira`: Jira Connected mode through a Jira MCP server
+- `jira`: Jira via MCP mode through a Jira MCP server
 - `demo`: built-in sample data with no external service
 - `file`: a workspace plan file containing features, stories, tasks, bugs, statuses, and boards
 - `livefolder`: a markdown plans folder that is read live from disk
@@ -54,9 +54,9 @@ Switch between modes with:
 - `Ticket Manager: Set Backend Mode`
 - `ticketManager.backendMode`
 
-### Jira Connected
+### Jira via MCP
 
-When Jira Connected mode is active, configure either:
+When Jira via MCP mode is active, configure either:
 
 - a local `stdio` Jira MCP server
 - a remote `http` Jira MCP server
@@ -72,7 +72,7 @@ Ticket Manager can also reuse Jira MCP servers from existing editor config in th
 
 Useful commands:
 
-- `Ticket Manager: Configure Connection`
+- `Ticket Manager: Configure Jira MCP Connection`
 - `Ticket Manager: Use Workspace MCP Configuration`
 - `Ticket Manager: Use User/Profile MCP Configuration`
 - `Ticket Manager: Check Connection`
@@ -152,9 +152,9 @@ Board filters are available through:
 
 1. Run `npm run compile`.
 2. Press `F5` to open the Extension Development Host.
-3. Run `Ticket Manager: Set Backend Mode` and choose `Jira Connected`, `Demo`, `File`, or `Live Folder`.
+3. Run `Ticket Manager: Set Backend Mode` and choose `Jira via MCP`, `Demo`, `File`, or `Live Folder`.
 4. Confirm the Activity Bar icon appears and opens the `Tickets` container.
-5. If using Jira Connected mode, run `Ticket Manager: Configure Connection` and then `Ticket Manager: Check Connection`.
+5. If using Jira via MCP mode, run `Ticket Manager: Configure Jira MCP Connection` and then `Ticket Manager: Check Connection`.
 6. Verify `My Issues` loads, filters update the list, parent item scoping narrows results, and `Change Status` refreshes the selected issue.
 7. Verify `Boards` loads, board filters work, selecting a board opens a tab, and selecting a board issue updates `Issue Details`.
 8. If using File mode, confirm a plan file is discovered or created and that changing a status updates the plan file on disk.

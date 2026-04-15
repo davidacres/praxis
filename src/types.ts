@@ -1,6 +1,7 @@
 export type ConnectionType = 'stdio' | 'http';
 export type BackendMode =
   | 'jira'
+  | 'jiraapi'
   | 'demo'
   | 'file'
   | 'github'
@@ -23,6 +24,16 @@ export interface AiAgentRegistration {
   name: string;
   provider: AiProvider;
   apiKey: string;
+}
+
+export interface DeliveryWorkflowSettings {
+  enabled: boolean;
+  publishCommand: string;
+  artifactPattern: string;
+  agentWorkflowPath?: string;
+  agentWorkflowUrl?: string;
+  summaryTemplate?: string;
+  failureTemplate?: string;
 }
 
 export interface SecretConnectionValues {
@@ -97,6 +108,18 @@ export interface IssueComment {
   raw?: unknown;
 }
 
+export interface IssueAttachment {
+  id?: string;
+  fileName: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  contentUrl?: string;
+  thumbnailUrl?: string;
+  created?: string;
+  author?: string;
+  raw?: unknown;
+}
+
 export interface ParentIssueReference {
   key: string;
   summary?: string;
@@ -128,6 +151,7 @@ export interface IssueSummary {
   branch?: string;
   /** When the work was completed (distinct from `updated`). */
   completed?: string;
+  attachments?: IssueAttachment[];
   /** AI agent assignment tracking for this issue. */
   aiAssignment?: AiAssignment;
   raw?: unknown;

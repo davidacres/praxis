@@ -5,6 +5,101 @@ const STORAGE_KEY = 'ticketManager.boardColumnPreferences';
 
 type PersistedMap = Record<string, BoardColumnPreferences>;
 
+function normalizeStatuses(statuses: string[]): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const status of statuses) {
+    const trimmed = status.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    unique.push(trimmed);
+  }
+  return unique;
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function buildLegacyWorkflowOrder(defaultWorkflow: string[]): string[] {
+  const normalized = normalizeStatuses(defaultWorkflow);
+  return normalized.includes('Backlog')
+    ? ['Backlog', ...normalized.filter(status => status !== 'Backlog')]
+    : normalized;
+}
+
+function realignLegacyStatuses(savedStatuses: string[], defaultWorkflow: string[]): string[] | undefined {
+  const normalizedSaved = normalizeStatuses(savedStatuses);
+  const normalizedWorkflow = normalizeStatuses(defaultWorkflow);
+  if (
+    normalizedSaved.length === 0 ||
+    normalizedWorkflow.length === 0 ||
+    normalizedSaved[0] !== 'Backlog' ||
+    normalizedWorkflow[0] === 'Backlog' ||
+    !normalizedWorkflow.includes('Backlog')
+  ) {
+    return undefined;
+  }
+
+  const workflowSet = new Set(normalizedWorkflow);
+  if (normalizedSaved.some(status => !workflowSet.has(status))) {
+    return undefined;
+  }
+
+  return normalizedWorkflow.filter(status => normalizedSaved.includes(status));
+}
+
+function hasPreferenceData(prefs: BoardColumnPreferences): boolean {
+  return Boolean(
+    prefs.workflowStatuses.length > 0 ||
+      prefs.orderedStatuses.length > 0 ||
+      prefs.projectPillColor ||
+      (prefs.swimLaneGroupBy && prefs.swimLaneGroupBy !== 'none') ||
+      prefs.issueFilterAssignee ||
+      prefs.issueFilterEpicKey ||
+      (prefs.issueFilterStatuses && prefs.issueFilterStatuses.length > 0) ||
+      (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) ||
+      (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0)
+  );
+}
+
+export function repairLegacyBacklogStatusPreferences(
+  prefs: BoardColumnPreferences,
+  defaultWorkflow: string[]
+): BoardColumnPreferences {
+  const normalizedWorkflow = normalizeStatuses(defaultWorkflow);
+  const repairedWorkflow = realignLegacyStatuses(prefs.workflowStatuses, normalizedWorkflow);
+  let nextWorkflowStatuses = prefs.workflowStatuses;
+  if (repairedWorkflow) {
+    nextWorkflowStatuses = arraysEqual(repairedWorkflow, normalizedWorkflow)
+      ? []
+      : repairedWorkflow;
+  }
+  const effectiveWorkflow = nextWorkflowStatuses.length > 0 ? nextWorkflowStatuses : normalizedWorkflow;
+  const repairedOrdered = realignLegacyStatuses(prefs.orderedStatuses, effectiveWorkflow);
+  let nextOrderedStatuses = prefs.orderedStatuses;
+  if (repairedOrdered) {
+    nextOrderedStatuses = arraysEqual(repairedOrdered, effectiveWorkflow)
+      ? []
+      : repairedOrdered;
+  }
+
+  if (
+    arraysEqual(nextWorkflowStatuses, prefs.workflowStatuses) &&
+    arraysEqual(nextOrderedStatuses, prefs.orderedStatuses)
+  ) {
+    return prefs;
+  }
+
+  return {
+    ...prefs,
+    workflowStatuses: nextWorkflowStatuses,
+    orderedStatuses: nextOrderedStatuses
+  };
+}
+
 export class BoardColumnStore implements vscode.Disposable {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 
@@ -58,7 +153,7 @@ export class BoardColumnStore implements vscode.Disposable {
     orderedKeys: string[]
   ): Promise<void> {
     const prefs = this.getPreferences(boardId);
-    const issueOrder = { ...(prefs.issueOrder ?? {}) };
+    const issueOrder = prefs.issueOrder ? { ...prefs.issueOrder } : {};
     issueOrder[status] = orderedKeys;
     await this.setPreferences(boardId, { ...prefs, issueOrder });
   }
@@ -73,6 +168,24 @@ export class BoardColumnStore implements vscode.Disposable {
   public async clearAllPreferences(): Promise<void> {
     await this.context.workspaceState.update(STORAGE_KEY, {});
     this.onDidChangeEmitter.fire();
+  }
+
+  public async normalizeLegacyPreferences(
+    boardId: string,
+    defaultWorkflow: string[]
+  ): Promise<BoardColumnPreferences> {
+    const current = this.getPreferences(boardId);
+    const repaired = repairLegacyBacklogStatusPreferences(current, defaultWorkflow);
+    if (repaired === current) {
+      return current;
+    }
+
+    if (hasPreferenceData(repaired)) {
+      await this.setPreferences(boardId, repaired);
+    } else {
+      await this.clearPreferences(boardId);
+    }
+    return repaired;
   }
 
   private getAll(): PersistedMap {

@@ -10,6 +10,7 @@ import type {
   ConfigureConnectionResult,
   ConnectionConfig,
   ConnectionType,
+  DeliveryWorkflowSettings,
   HttpConnectionConfig,
   ResolvedConnectionConfig,
   SecretConnectionValues,
@@ -31,6 +32,16 @@ const DEFAULT_PLAN_FILE_NAMES = [
   '.vscode/ticket-plan.jsonc',
   '.vscode/ticket-plan.json'
 ];
+const POLLING_CONFIG_PATH = path.resolve(__dirname, '..', '..', 'JiraPollingService', 'appsettings.json');
+
+interface JiraPollingDefaults {
+  baseUrl: string;
+  token: string;
+  projectKey: string;
+  rapidViewId?: number;
+  internalDns: string;
+  preferredResolveIp: string;
+}
 
 interface WorkspaceInputDefinition {
   type?: string;
@@ -155,6 +166,45 @@ function buildServerRef(sourcePath: string, serverName: string): string {
   return `${sourcePath}::${serverName}`;
 }
 
+let cachedJiraPollingDefaults: JiraPollingDefaults | undefined;
+
+function loadJiraPollingDefaults(): JiraPollingDefaults {
+  if (cachedJiraPollingDefaults) {
+    return cachedJiraPollingDefaults;
+  }
+
+  const fallback: JiraPollingDefaults = {
+    baseUrl: 'https://jira.assaabloy.net',
+    token: '',
+    projectKey: 'KAMAI',
+    rapidViewId: 9402,
+    internalDns: 'internal-Atlassian-Prod-LB-Jira-Internal-195841951.eu-west-1.elb.amazonaws.com',
+    preferredResolveIp: ''
+  };
+
+  try {
+    const rawText = fs.readFileSync(POLLING_CONFIG_PATH, 'utf8');
+    const parsed = parseJsonc(rawText);
+    const jiraPolling = isRecord(parsed) && isRecord(parsed.JiraPolling) ? parsed.JiraPolling : {};
+    cachedJiraPollingDefaults = {
+      baseUrl: asString(jiraPolling.BaseUrl)?.trim() || fallback.baseUrl,
+      token: asString(jiraPolling.Token)?.trim() || fallback.token,
+      projectKey: asString(jiraPolling.ProjectKey)?.trim() || fallback.projectKey,
+      internalDns: asString(jiraPolling.InternalDns)?.trim() || fallback.internalDns,
+      preferredResolveIp:
+        asString(jiraPolling.PreferredResolveIp)?.trim() || fallback.preferredResolveIp,
+      rapidViewId:
+        typeof jiraPolling.RapidViewId === 'number' && Number.isInteger(jiraPolling.RapidViewId)
+          ? jiraPolling.RapidViewId
+          : fallback.rapidViewId
+    };
+  } catch {
+    cachedJiraPollingDefaults = fallback;
+  }
+
+  return cachedJiraPollingDefaults;
+}
+
 export class AppConfigStore {
   public async getSecretValues(context: vscode.ExtensionContext): Promise<SecretConnectionValues> {
     const [storedEnv, storedHeaders] = await Promise.all([
@@ -180,6 +230,27 @@ export class AppConfigStore {
 
   public getEffectiveBackendMode(): BackendMode {
     return this.getBackendMode() ?? 'jira';
+  }
+
+  public hasJiraConnectionConfig(): boolean {
+    if (this.getSelectedWorkspaceServerName() || this.getSelectedUserServerRef()) {
+      return true;
+    }
+
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const connectionType = config.get<ConnectionType>('connectionType', 'stdio');
+    if (connectionType === 'http') {
+      return config.get<string>('httpUrl', '').trim().length > 0;
+    }
+
+    return config.get<string>('stdioCommand', '').trim().length > 0;
+  }
+
+  public hasJiraApiConfig(): boolean {
+    return (
+      this.getJiraApiBaseUrl().trim().length > 0 &&
+      this.getJiraApiToken().trim().length > 0
+    );
   }
 
   public async setBackendMode(mode: BackendMode): Promise<void> {
@@ -226,6 +297,66 @@ export class AppConfigStore {
 
   public getDefaultPageSize(): number {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<number>('defaultPageSize', 25);
+  }
+
+  public isJiraStartupPollingEnabled(): boolean {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.enabled', true);
+  }
+
+  public getJiraPollingRequiredLabel(): string {
+    const value = this.getWorkspaceScopedConfigValue<string>('jiraPolling.requiredLabel', 'syscfg');
+    return value.trim() || 'syscfg';
+  }
+
+  public getJiraPollingProjectKey(): string {
+    return loadJiraPollingDefaults().projectKey;
+  }
+
+  public getJiraPollingRapidViewId(): number | undefined {
+    return loadJiraPollingDefaults().rapidViewId;
+  }
+
+  public getJiraDefaultBaseUrl(): string {
+    return loadJiraPollingDefaults().baseUrl;
+  }
+
+  public getJiraApiInternalDns(): string {
+    return loadJiraPollingDefaults().internalDns;
+  }
+
+  public getJiraApiPreferredResolveIp(): string {
+    return loadJiraPollingDefaults().preferredResolveIp;
+  }
+
+  public getJiraApiBaseUrl(): string {
+    const configured = this.getWorkspaceScopedConfigValue<string>('jiraApiBaseUrl', '').trim();
+    return configured || loadJiraPollingDefaults().baseUrl;
+  }
+
+  public getJiraApiToken(): string {
+    const configured = this.getWorkspaceScopedConfigValue<string>('jiraApiToken', '').trim();
+    return configured || process.env.JIRA_TOKEN?.trim() || loadJiraPollingDefaults().token;
+  }
+
+  public getJiraApiEpicKey(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraApiEpicKey', '').trim();
+  }
+
+  public async setJiraApiBaseUrl(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraApiBaseUrl', value, target);
+  }
+
+  public async setJiraApiToken(value: string): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraApiToken', value, target);
+  }
+
+  public async setJiraApiEpicKey(value: string | undefined): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('jiraApiEpicKey', value?.trim() ?? '', target);
   }
 
   // ── GitHub settings ──────────────────────────────────────────────
@@ -363,6 +494,19 @@ export class AppConfigStore {
 
   public getAiMentionName(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.mentionName', '');
+  }
+
+  public getAiDeliveryWorkflowSettings(): DeliveryWorkflowSettings {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    return {
+      enabled: config.get<boolean>('ai.deliveryWorkflowEnabled', true),
+      publishCommand: config.get<string>('ai.deliveryPublishCommand', '').trim(),
+      artifactPattern: config.get<string>('ai.deliveryArtifactPattern', '').trim(),
+      agentWorkflowPath: config.get<string>('ai.deliveryAgentWorkflowPath', '').trim() || undefined,
+      agentWorkflowUrl: config.get<string>('ai.deliveryAgentWorkflowUrl', '').trim() || undefined,
+      summaryTemplate: config.get<string>('ai.deliverySummaryTemplate', '').trim() || undefined,
+      failureTemplate: config.get<string>('ai.deliveryFailureTemplate', '').trim() || undefined
+    };
   }
 
   public getConfiguredAiProviders(): AiProvider[] {
@@ -707,6 +851,14 @@ export class AppConfigStore {
       return 'User Workspace';
     }
 
+    if (this.getEffectiveBackendMode() === 'jiraapi') {
+      const baseUrl = this.getJiraApiBaseUrl();
+      const epicKey = this.getJiraApiEpicKey();
+      return baseUrl
+        ? `Jira API (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''})`
+        : 'Jira API (not configured)';
+    }
+
     const resolved = await this.getResolvedConnectionConfig(context);
     if (!resolved) {
       return 'Not configured';
@@ -771,13 +923,13 @@ export class AppConfigStore {
       [
         {
           label: 'Local Process',
-          description: 'Connect to a Jira MCP server over stdio.',
+          description: 'Connect to Jira via an MCP server over stdio.',
           mode: 'manual',
           value: 'stdio'
         },
         {
           label: 'Remote MCP Server',
-          description: 'Connect to a Jira MCP server over streamable HTTP.',
+          description: 'Connect to Jira via an MCP server over streamable HTTP.',
           mode: 'manual',
           value: 'http'
         },
@@ -793,7 +945,7 @@ export class AppConfigStore {
         }
       ],
       {
-        title: 'Ticket Manager: Connection Type',
+        title: 'Ticket Manager: Jira MCP Connection Type',
         placeHolder: existingType === 'stdio' ? 'Local Process' : 'Remote MCP Server'
       }
     );
@@ -812,7 +964,7 @@ export class AppConfigStore {
 
     if (selectedType.value === 'stdio') {
       const command = await vscode.window.showInputBox({
-        title: 'Ticket Manager: stdio command',
+        title: 'Ticket Manager: Jira MCP stdio command',
         prompt: 'Command used to start the Jira MCP server.',
         value: configuration.get<string>('stdioCommand', ''),
         ignoreFocusOut: true,
@@ -824,7 +976,7 @@ export class AppConfigStore {
       }
 
       const argsInput = await vscode.window.showInputBox({
-        title: 'Ticket Manager: stdio arguments',
+        title: 'Ticket Manager: Jira MCP stdio arguments',
         prompt: 'Arguments as a JSON array of strings.',
         value: formatJson(asStringArray(configuration.get<unknown>('stdioArgs', []))),
         ignoreFocusOut: true
@@ -835,7 +987,7 @@ export class AppConfigStore {
       }
 
       const cwd = await vscode.window.showInputBox({
-        title: 'Ticket Manager: stdio working directory',
+        title: 'Ticket Manager: Jira MCP working directory',
         prompt: 'Optional working directory for the Jira MCP server process.',
         value: configuration.get<string>('stdioCwd', ''),
         ignoreFocusOut: true
@@ -882,7 +1034,7 @@ export class AppConfigStore {
     }
 
     const url = await vscode.window.showInputBox({
-      title: 'Ticket Manager: HTTP URL',
+      title: 'Ticket Manager: Jira MCP HTTP URL',
       prompt: 'Base URL for the Jira MCP server.',
       value: configuration.get<string>('httpUrl', ''),
       ignoreFocusOut: true,

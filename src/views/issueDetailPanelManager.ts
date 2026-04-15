@@ -851,6 +851,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           label: 'Epic',
           helper:
             mode === 'jira'
+              || mode === 'jiraapi'
               ? 'This item can only belong to an Epic.'
               : 'This item can only belong to an Epic/Feature.',
           emptyText: 'No epic selected.',

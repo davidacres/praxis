@@ -1,0 +1,30 @@
+import type { BackendMode } from '../types';
+
+export interface BackendModeContextState {
+  mode: BackendMode | undefined;
+  configured: boolean;
+}
+
+export function resolveBackendModeContextState(
+  storedMode: BackendMode | undefined,
+  jiraMcpConfigured: boolean,
+  jiraApiConfigured: boolean
+): BackendModeContextState {
+  switch (storedMode) {
+    case 'demo':
+    case 'file':
+    case 'livefolder':
+    case 'userworkspace':
+      return { mode: storedMode, configured: true };
+    case 'jira':
+      return { mode: 'jira', configured: jiraMcpConfigured };
+    case 'jiraapi':
+      return { mode: 'jiraapi', configured: jiraApiConfigured };
+    default:
+      return jiraMcpConfigured
+        ? { mode: 'jira', configured: true }
+        : jiraApiConfigured
+          ? { mode: 'jiraapi', configured: true }
+          : { mode: undefined, configured: false };
+  }
+}

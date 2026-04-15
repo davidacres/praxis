@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { AiSessionManager } from './ai/aiSessionManager';
 import { BackendRouter } from './backends/backendRouter';
@@ -7,16 +8,19 @@ import { AppConfigStore } from './config/jiraConfig';
 import { createPlanTemplate } from './file/planTemplate';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
-import { FilterStore } from './state/filterStore';
+import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from './state/filterStore';
+import { StartupPollingController } from './jira/startupPollingController';
 import type {
   AiProvider,
   BackendMode,
   Board,
+  IssueComment,
   IssueDetails,
   IssueSummary,
   UpdateIssueInput
 } from './types';
 import {
+  buildCopilotClarificationComment,
   respondToCopilotComment,
   reviewTicketWithClaude,
   reviewTicketWithCopilot,
@@ -29,6 +33,7 @@ import {
   promptToConfigureDefaultAiProvider,
   sortAiOptionsByDefaultProvider
 } from './ai/aiProviderSetup';
+import { resolveBackendModeContextState } from './ui/backendModeContext';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -47,9 +52,28 @@ import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
-import type { AgentTaskDefinition } from './ai/agentTypes';
+import type { AgentSessionRecord, AgentTaskDefinition } from './ai/agentTypes';
 import { resolveCopilotCliOverride } from './ai/copilotSdkRuntime';
 import { getParentRule } from './issues/issueHierarchy';
+import {
+  buildDeliveryStartedComment,
+  buildDeliveryFailureComment,
+  buildDeliverySuccessComment,
+  buildDeliveryTaskDefinition,
+  buildMissingBaseBranchClarificationComment,
+  buildMissingWorkflowComment,
+  extractDeliveryBaseBranch,
+  parseDeliveryTaskResult,
+  validateDeliveryWorkflowSettings
+} from './ai/deliveryWorkflow';
+import { GitWorktreeManager } from './git/gitWorktreeManager';
+import {
+  discoverWorkspaceAgentWorkflows,
+  promptForAgentWorkflowSelection,
+  resolveRelevantAgentWorkflow,
+  resolveConfiguredAgentWorkflow
+} from './ai/agentWorkflowCatalog';
+import { stageIssueAttachments } from './ai/issueAttachmentContext';
 
 export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
@@ -105,12 +129,102 @@ function extractCopilotRequest(body: string, extraMentionName?: string): string 
 
 let deactivateHandler: (() => Promise<void>) | undefined;
 
+const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
+const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
+
+function getCommentActivityTimestamp(comment: IssueComment): string {
+  return comment.updated ?? comment.created ?? '';
+}
+
+function sortCommentsChronologically(comments: IssueComment[]): IssueComment[] {
+  return [...comments].sort((left, right) => {
+    const timestampComparison = getCommentActivityTimestamp(left).localeCompare(
+      getCommentActivityTimestamp(right)
+    );
+    if (timestampComparison !== 0) {
+      return timestampComparison;
+    }
+
+    return (left.id ?? '').localeCompare(right.id ?? '');
+  });
+}
+
+function isCopilotGeneratedComment(comment: IssueComment): boolean {
+  return (
+    comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER) ||
+    comment.body.includes(COPILOT_REPLY_COMMENT_MARKER)
+  );
+}
+
+function getCopilotCommentSignature(comment: IssueComment): string {
+  return `${comment.id ?? ''}|${getCommentActivityTimestamp(comment)}|${comment.body}`;
+}
+
+function getLatestCopilotCommentSignature(issue: IssueDetails): string | undefined {
+  const comments = sortCommentsChronologically(issue.comments ?? []);
+  for (let index = comments.length - 1; index >= 0; index -= 1) {
+    if (isCopilotGeneratedComment(comments[index])) {
+      return getCopilotCommentSignature(comments[index]);
+    }
+  }
+  return undefined;
+}
+
+export function extractPendingCopilotReplyRequest(issue: IssueDetails): string | undefined {
+  const comments = sortCommentsChronologically(issue.comments ?? []);
+  let lastCopilotCommentIndex = -1;
+
+  for (let index = 0; index < comments.length; index += 1) {
+    if (isCopilotGeneratedComment(comments[index])) {
+      lastCopilotCommentIndex = index;
+    }
+  }
+
+  if (lastCopilotCommentIndex < 0) {
+    return undefined;
+  }
+
+  const pendingReplies = comments
+    .slice(lastCopilotCommentIndex + 1)
+    .filter(comment => !isCopilotGeneratedComment(comment) && comment.body.trim().length > 0);
+
+  if (pendingReplies.length === 0) {
+    return undefined;
+  }
+
+  return pendingReplies
+    .map(comment => `${comment.author?.trim() || 'User'}: ${comment.body.trim()}`)
+    .join('\n\n');
+}
+
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
+  const handledPollingReplyStateKey = 'ticketManager.handledPollingReplyThreads';
+  const handledPollingReplies: Record<string, string> =
+    context.workspaceState.get<Record<string, string>>(handledPollingReplyStateKey) ?? {};
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
+  const startupPollingController = new StartupPollingController(
+    context,
+    configStore,
+    outputChannel,
+    async event => {
+      await processPollingClarificationRequests(event);
+      await processPollingClarificationReplies(event);
+
+      if (
+        event.newKeys.length === 0 &&
+        event.removedKeys.length === 0 &&
+        event.changedKeys.length === 0
+      ) {
+        return;
+      }
+
+      await refreshAndRestoreSelection();
+    }
+  );
   const copilotAgentLogger: CopilotAgentLogger = {
     appendLine(message: string): void {
       outputChannel.appendLine(message);
@@ -144,10 +258,23 @@ export async function activate(
     aiSessionManager
   );
   const workingDirectory = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const gitWorktreeManager = workingDirectory ? new GitWorktreeManager(outputChannel) : undefined;
   let suppressCloseWarning = false;
   let lastCloseWarningSignature: string | undefined;
   const permissionPromptSignatures = new Map<string, string>();
   const permissionPromptInFlight = new Set<string>();
+  const pollingClarificationInFlight = new Set<string>();
+  const pollingReplyInFlight = new Set<string>();
+  const deliveryFinalizationInFlight = new Set<string>();
+
+  async function setHandledPollingReply(issueKey: string, signature: string | undefined): Promise<void> {
+    if (signature) {
+      handledPollingReplies[issueKey] = signature;
+    } else {
+      delete handledPollingReplies[issueKey];
+    }
+    await context.workspaceState.update(handledPollingReplyStateKey, handledPollingReplies);
+  }
 
   function reportError(error: unknown, scope?: string): void {
     logError(outputChannel, error, scope);
@@ -170,6 +297,389 @@ export async function activate(
     const placeholder = buildCommentPlaceholder();
     issueDetailPanelManager.setCommentPlaceholder(placeholder);
     issueDetailsSidebarViewProvider?.setCommentPlaceholder(placeholder);
+  }
+
+  function hasCopilotClarificationComment(issue: IssueDetails): boolean {
+    return issue.comments?.some(comment => comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER)) ?? false;
+  }
+
+  async function postCopilotReply(issueKey: string, request: string): Promise<void> {
+    const cliPath = getCopilotCliPathOverride();
+    const issue = await backendService.getIssue(issueKey);
+    const response = await respondToCopilotComment(issue, cliPath, request, workingDirectory);
+    await backendService.addComment(issueKey, response);
+  }
+
+  function isDeliveryTask(
+    record: AgentSessionRecord | undefined
+  ): record is AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> } {
+    return record?.taskDefinition.kind === 'jira-delivery' && Boolean(record.delivery);
+  }
+
+  function getLatestAgentFailureSummary(record: AgentSessionRecord): string | undefined {
+    for (let index = record.events.length - 1; index >= 0; index -= 1) {
+      const event = record.events[index];
+      if (event.type === 'error' && event.summary.trim().length > 0) {
+        return event.summary.trim();
+      }
+    }
+    return undefined;
+  }
+
+  async function finalizeDeliverySession(record: AgentSessionRecord): Promise<void> {
+    if (!isDeliveryTask(record) || record.delivery.finalizationState !== 'pending') {
+      return;
+    }
+    const delivery = record.delivery;
+    if (deliveryFinalizationInFlight.has(record.issueKey)) {
+      return;
+    }
+
+    deliveryFinalizationInFlight.add(record.issueKey);
+    try {
+      if (record.state === 'completed') {
+        const result = parseDeliveryTaskResult(record.responseText);
+        if (!result) {
+          throw new Error(
+            'Copilot completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
+          );
+        }
+
+        const attachedArtifactNames: string[] = [];
+        for (const artifactPath of result.artifactPaths) {
+          const resolvedArtifactPath = path.isAbsolute(artifactPath)
+            ? artifactPath
+            : path.resolve(delivery.worktreePath, artifactPath);
+          await backendService.attachFile(record.issueKey, resolvedArtifactPath);
+          attachedArtifactNames.push(path.basename(resolvedArtifactPath));
+        }
+
+        await backendService.addComment(
+          record.issueKey,
+          buildDeliverySuccessComment(result, {
+            template: delivery.summaryTemplate,
+            attachedArtifactNames
+          })
+        );
+
+        aiSessionManager.updateAgentDelivery(record.issueKey, {
+          finalizationState: 'completed',
+          finalizationMessage: 'Attached delivery artifacts and posted summary comment.',
+          result
+        });
+        outputChannel.appendLine(`[Delivery] Finalized Jira delivery workflow for ${record.issueKey}.`);
+        return;
+      }
+
+      const failureReason =
+        getLatestAgentFailureSummary(record) ??
+        'Copilot delivery stopped before it completed the implementation workflow.';
+      await backendService.addComment(
+        record.issueKey,
+        buildDeliveryFailureComment(failureReason, {
+          template: delivery.failureTemplate,
+          branch: delivery.createdBranch,
+          commitHash: delivery.result?.commitHash,
+          pushedRef: delivery.result?.pushedRef
+        })
+      );
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        finalizationState: 'failed',
+        finalizationMessage: failureReason
+      });
+      outputChannel.appendLine(`[Delivery] Posted Jira failure summary for ${record.issueKey}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        finalizationState: 'failed',
+        finalizationMessage: message
+      });
+      try {
+        await backendService.addComment(
+          record.issueKey,
+          buildDeliveryFailureComment(message, {
+            template: delivery.failureTemplate,
+            branch: delivery.createdBranch,
+            commitHash: delivery.result?.commitHash,
+            pushedRef: delivery.result?.pushedRef
+          })
+        );
+      } catch (commentError) {
+        reportError(commentError, `deliveryFinalizeComment:${record.issueKey}`);
+      }
+      reportError(error, `deliveryFinalize:${record.issueKey}`);
+    } finally {
+      deliveryFinalizationInFlight.delete(record.issueKey);
+    }
+  }
+
+  async function startPollingDeliveryWorkflow(issue: IssueDetails): Promise<void> {
+    const currentIssue = await backendService.getIssue(issue.key);
+    const deliverySettings = configStore.getAiDeliveryWorkflowSettings();
+    const settingsErrors = validateDeliveryWorkflowSettings(deliverySettings);
+    if (!workingDirectory || !gitWorktreeManager) {
+      settingsErrors.push('Open the repository workspace before starting automatic delivery.');
+    }
+    if (settingsErrors.length > 0) {
+      await backendService.addComment(
+        issue.key,
+        buildDeliveryFailureComment(
+          `Implementation is ready, but the delivery workflow is not configured: ${settingsErrors.join(' ')}`,
+          { template: deliverySettings.failureTemplate }
+        )
+      );
+      return;
+    }
+    const deliveryWorkingDirectory = workingDirectory!;
+    const deliveryWorktreeManager = gitWorktreeManager!;
+    const issueWorkflowAssignment = aiSessionManager.getIssueWorkflowAssignment(currentIssue.key);
+    const configuredWorkflow = await resolveConfiguredAgentWorkflow({
+      workspaceRoot: deliveryWorkingDirectory,
+      configuredPath: deliverySettings.agentWorkflowPath,
+      workflowUrl: deliverySettings.agentWorkflowUrl
+    });
+    if (deliverySettings.agentWorkflowPath && !configuredWorkflow) {
+      outputChannel.appendLine(
+        `[Delivery] Skipping ${issue.key} because ticketManager.ai.deliveryAgentWorkflowPath could not be resolved: ${deliverySettings.agentWorkflowPath}`
+      );
+      return;
+    }
+    const discoveredWorkflows = await discoverWorkspaceAgentWorkflows(deliveryWorkingDirectory);
+    const automaticWorkflowResolution = resolveRelevantAgentWorkflow({
+      issue: currentIssue,
+      workflows: discoveredWorkflows
+    });
+    const assignedWorkflow = issueWorkflowAssignment?.workflow
+      ?? configuredWorkflow
+      ?? automaticWorkflowResolution.workflow;
+    if (!assignedWorkflow) {
+      await backendService.addComment(
+        currentIssue.key,
+        buildMissingWorkflowComment(automaticWorkflowResolution.recommendations)
+      );
+      return;
+    }
+    if (!issueWorkflowAssignment && automaticWorkflowResolution.workflow) {
+      aiSessionManager.setIssueWorkflowAssignment(currentIssue.key, automaticWorkflowResolution.workflow, {
+        source: 'automatic',
+        reason: automaticWorkflowResolution.reason
+      });
+    }
+
+    const baseBranch = extractDeliveryBaseBranch(currentIssue);
+    if (!baseBranch) {
+      await backendService.addComment(currentIssue.key, buildMissingBaseBranchClarificationComment());
+      return;
+    }
+
+    let issueAttachments;
+    try {
+      issueAttachments = await stageIssueAttachments({
+        issue: currentIssue,
+        backendService,
+        logger: outputChannel
+      });
+    } catch (error) {
+      await backendService.addComment(
+        currentIssue.key,
+        buildDeliveryFailureComment(
+          `Implementation is blocked because issue attachments could not be downloaded: ${error instanceof Error ? error.message : String(error)}`,
+          { template: deliverySettings.failureTemplate }
+        )
+      );
+      return;
+    }
+
+    const transitionId = await findTransitionIdForStatus(currentIssue.key, 'In Progress');
+    if (transitionId) {
+      await backendService.transitionIssue(currentIssue.key, transitionId);
+    }
+
+    const worktree = await deliveryWorktreeManager.prepareDeliveryWorktree(
+      currentIssue,
+      baseBranch,
+      deliveryWorkingDirectory
+    );
+    const taskDefinition = buildDeliveryTaskDefinition(currentIssue, {
+      baseBranch,
+      branchName: worktree.branchName,
+      worktreePath: worktree.worktreePath,
+      publishCommand: deliverySettings.publishCommand,
+      artifactPattern: deliverySettings.artifactPattern,
+      workflow: assignedWorkflow
+    });
+    const taskDefinitionWithAttachments = issueAttachments.length > 0
+      ? { ...taskDefinition, attachments: issueAttachments }
+      : taskDefinition;
+
+    await copilotAgentService.startTask(
+      {
+        ...currentIssue,
+        branch: worktree.branchName
+      },
+      taskDefinitionWithAttachments,
+      {
+        cliPath: getCopilotCliPathOverride(),
+        workingDirectory: worktree.worktreePath
+      }
+    );
+
+    aiSessionManager.updateAgentDelivery(
+      issue.key,
+      {
+        source: 'jira-polling',
+        baseBranch,
+        worktreeName: worktree.worktreeName,
+        worktreePath: worktree.worktreePath,
+        createdBranch: worktree.branchName,
+        publishCommand: deliverySettings.publishCommand,
+        artifactPattern: deliverySettings.artifactPattern,
+        summaryTemplate: deliverySettings.summaryTemplate,
+        failureTemplate: deliverySettings.failureTemplate,
+        finalizationState: 'pending'
+      },
+      { replace: true }
+    );
+    try {
+      await backendService.addComment(
+        currentIssue.key,
+        buildDeliveryStartedComment({
+          baseBranch,
+          branchName: worktree.branchName,
+          worktreeName: worktree.worktreeName,
+          workflow: taskDefinitionWithAttachments.workflow
+        })
+      );
+    } catch (error) {
+      reportError(error, `deliveryStartComment:${currentIssue.key}`);
+    }
+    await activeSessionsSidebarViewProvider?.refresh();
+    outputChannel.appendLine(
+      `[Delivery] Started Jira delivery workflow for ${currentIssue.key} from base branch ${baseBranch}.`
+    );
+  }
+
+  async function processPollingClarificationRequests(event: {
+    newKeys: string[];
+    changedKeys: string[];
+    eligibleIssueKeys: string[];
+  }): Promise<void> {
+    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])].filter(issueKey =>
+      event.eligibleIssueKeys.includes(issueKey)
+    );
+
+    if (candidateKeys.length === 0) {
+      return;
+    }
+
+    if (!isCopilotSdkConfigured()) {
+      outputChannel.appendLine(
+        '[Jira Polling] Clarification comments skipped because GitHub Copilot SDK is not configured.'
+      );
+      return;
+    }
+
+    const cliPath = getCopilotCliPathOverride();
+
+    for (const issueKey of candidateKeys) {
+      if (pollingClarificationInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
+        continue;
+      }
+
+      pollingClarificationInFlight.add(issueKey);
+      try {
+        const issue = await backendService.getIssue(issueKey);
+        if (hasCopilotClarificationComment(issue)) {
+          continue;
+        }
+
+        const clarificationComment = await buildCopilotClarificationComment(
+          issue,
+          cliPath,
+          workingDirectory
+        );
+        if (!clarificationComment) {
+          continue;
+        }
+
+        await backendService.addComment(issueKey, clarificationComment);
+        outputChannel.appendLine(
+          `[Jira Polling] Posted Copilot clarification request on ${issueKey}.`
+        );
+      } catch (error) {
+        reportError(error, `pollingClarification:${issueKey}`);
+      } finally {
+        pollingClarificationInFlight.delete(issueKey);
+      }
+    }
+  }
+
+  async function processPollingClarificationReplies(event: {
+    newKeys: string[];
+    changedKeys: string[];
+    eligibleIssueKeys: string[];
+  }): Promise<void> {
+    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])].filter(issueKey =>
+      event.eligibleIssueKeys.includes(issueKey)
+    );
+
+    if (candidateKeys.length === 0) {
+      return;
+    }
+
+    if (!isCopilotSdkConfigured()) {
+      outputChannel.appendLine(
+        '[Jira Polling] Clarification reply handling skipped because GitHub Copilot SDK is not configured.'
+      );
+      return;
+    }
+
+    for (const issueKey of candidateKeys) {
+      if (pollingReplyInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
+        continue;
+      }
+
+      pollingReplyInFlight.add(issueKey);
+      try {
+        const issue = await backendService.getIssue(issueKey);
+        const latestCopilotSignature = getLatestCopilotCommentSignature(issue);
+        const replyRequest = extractPendingCopilotReplyRequest(issue);
+        if (!replyRequest) {
+          continue;
+        }
+        if (latestCopilotSignature && handledPollingReplies[issueKey] === latestCopilotSignature) {
+          continue;
+        }
+
+        const clarificationComment = await buildCopilotClarificationComment(
+          issue,
+          getCopilotCliPathOverride(),
+          workingDirectory
+        );
+        if (clarificationComment) {
+          await backendService.addComment(issueKey, clarificationComment);
+          if (latestCopilotSignature) {
+            await setHandledPollingReply(issueKey, latestCopilotSignature);
+          }
+          outputChannel.appendLine(
+            `[Jira Polling] Posted another Copilot clarification request on ${issueKey} after a user reply.`
+          );
+          continue;
+        }
+
+        await startPollingDeliveryWorkflow(issue);
+        if (latestCopilotSignature) {
+          await setHandledPollingReply(issueKey, latestCopilotSignature);
+        }
+        outputChannel.appendLine(
+          `[Jira Polling] Started delivery workflow on ${issueKey} after clarification replies completed.`
+        );
+      } catch (error) {
+        reportError(error, `pollingClarificationReply:${issueKey}`);
+      } finally {
+        pollingReplyInFlight.delete(issueKey);
+      }
+    }
   }
 
   async function revealActiveSessionsView(): Promise<void> {
@@ -300,14 +810,21 @@ export async function activate(
   // before VS Code tries to resolve them.
   // !ticketManager.configured is true when the key is false OR doesn't exist,
   // which means the setup view shows by default before activate() even runs.
-  const initialMode = configStore.getBackendMode();
+  const getModeContextState = () =>
+    resolveBackendModeContextState(
+      configStore.getBackendMode(),
+      configStore.hasJiraConnectionConfig(),
+      configStore.hasJiraApiConfig()
+    );
+  const JIRA_API_SCOPE_MIGRATION_KEY = 'ticketManager.jiraApiEpicIssueScopeMigrated';
+  const initialModeContext = getModeContextState();
   await vscode.commands.executeCommand(
     'setContext', 'ticketManager.mode',
-    initialMode ?? 'unconfigured'
+    initialModeContext.mode ?? 'unconfigured'
   );
   await vscode.commands.executeCommand(
     'setContext', 'ticketManager.configured',
-    !!initialMode
+    initialModeContext.configured
   );
 
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
@@ -399,6 +916,14 @@ export async function activate(
     boardColumnConfigPanel,
     newProjectWizardPanel,
     aiSessionManager.onDidChangeAgentSession(record => {
+      if (
+        isDeliveryTask(record) &&
+        record.delivery.finalizationState === 'pending' &&
+        (record.state === 'completed' || record.state === 'failed')
+      ) {
+        void finalizeDeliverySession(record);
+      }
+
       if (record.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(record.issueKey)) {
         void promptForPendingPermission(record.issueKey);
         return;
@@ -460,9 +985,33 @@ export async function activate(
     }
   }
 
-  async function setModeContext(mode: BackendMode | undefined): Promise<void> {
-    await vscode.commands.executeCommand('setContext', 'ticketManager.mode', mode ?? 'unconfigured');
-    await vscode.commands.executeCommand('setContext', 'ticketManager.configured', !!mode);
+  async function setModeContext(): Promise<void> {
+    const modeContext = getModeContextState();
+    await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
+    await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
+  }
+
+  async function ensureJiraApiIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
+    if (modeContext.mode !== 'jiraapi' || !modeContext.configured) {
+      return;
+    }
+
+    if (configStore.getJiraApiEpicKey().trim().length === 0) {
+      return;
+    }
+
+    if (context.workspaceState.get<boolean>(JIRA_API_SCOPE_MIGRATION_KEY) === true) {
+      return;
+    }
+
+    const filters = filterStore.getFilters();
+    if (!shouldAdoptJiraApiEpicIssueScope(filters)) {
+      await context.workspaceState.update(JIRA_API_SCOPE_MIGRATION_KEY, true);
+      return;
+    }
+
+    await filterStore.updateFilters({ assigneeMode: 'all' });
+    await context.workspaceState.update(JIRA_API_SCOPE_MIGRATION_KEY, true);
   }
 
   async function refreshSearchActionContexts(): Promise<void> {
@@ -483,6 +1032,44 @@ export async function activate(
         boardStore.getFilters().searchText.trim().length > 0
       )
     ]);
+  }
+
+  async function linkEpicToWorkspace(issueKey: string): Promise<void> {
+    if (backendService.mode !== 'jiraapi') {
+      void vscode.window.showWarningMessage('Epic linking from the Epics view is available in Jira API mode only.');
+      return;
+    }
+
+    const currentLinkedEpicKey = configStore.getJiraApiEpicKey();
+    if (currentLinkedEpicKey === issueKey) {
+      void vscode.window.showInformationMessage(`${issueKey} is already linked to this workspace.`);
+      return;
+    }
+
+    const confirmation = await vscode.window.showInformationMessage(
+      `Do you want to link ${issueKey} to this repo?`,
+      {
+        modal: true,
+        detail: 'This sets the workspace Jira API epic link. New Jira API issue creation will use this epic as the default parent.'
+      },
+      'Link Epic',
+      'Cancel'
+    );
+    if (confirmation !== 'Link Epic') {
+      return;
+    }
+
+    await configStore.setJiraApiEpicKey(issueKey);
+    epicsSidebarViewProvider.setLinkedEpicKey(issueKey);
+    await Promise.all([
+      issuesProvider.refresh(),
+      boardsProvider.refresh(),
+      epicsSidebarViewProvider.refresh()
+    ]);
+    await selectBoard(await resolveBoardById(`epic:${issueKey}`));
+    await boardPanelManager.refresh();
+    await ticketManagerStatusBar.refresh();
+    void vscode.window.showInformationMessage(`Linked this repo to Jira epic ${issueKey}.`);
   }
 
   async function ensureFilePlanConfigured(interactive: boolean): Promise<boolean> {
@@ -574,9 +1161,14 @@ export async function activate(
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
     const options: Array<{ label: string; description: string; mode: BackendMode }> = [
       {
-        label: 'Jira Connected',
-        description: 'Connect to Jira through the configured MCP server.',
+        label: 'Jira via MCP',
+        description: 'Connect to Jira through a configured MCP server.',
         mode: 'jira'
+      },
+      {
+        label: 'Jira API',
+        description: 'Connect directly to Jira Server/Data Center over REST.',
+        mode: 'jiraapi'
       },
       {
         label: 'Demo',
@@ -617,14 +1209,14 @@ export async function activate(
 
   async function ensureStartupConfiguration(): Promise<void> {
     if (context.extensionMode === vscode.ExtensionMode.Test) {
-      await setModeContext(configStore.getBackendMode());
+      await setModeContext();
       return;
     }
 
-    const mode = configStore.getBackendMode();
-    await setModeContext(mode);
+    const modeContext = getModeContextState();
+    await setModeContext();
 
-    if (mode === 'file') {
+    if (modeContext.mode === 'file' && modeContext.configured) {
       await ensureFilePlanConfigured(true);
     }
   }
@@ -723,7 +1315,7 @@ export async function activate(
   }
 
   function getEpicIssueType(mode: BackendMode): string {
-    return mode === 'jira' ? 'Epic' : 'Feature';
+    return mode === 'jira' || mode === 'jiraapi' ? 'Epic' : 'Feature';
   }
 
   async function reportActionError(error: unknown): Promise<void> {
@@ -1019,21 +1611,13 @@ export async function activate(
     await backendService.addComment(issueKey, body);
     const copilotRequest = extractCopilotRequest(body, configStore.getAiMentionName());
     if (copilotRequest) {
-      const cliPath = getCopilotCliPathOverride();
       if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
           'Comment added, but GitHub Copilot SDK is not configured for @copilot replies. Run Ticket Manager: Configure AI.'
         );
       } else {
         try {
-          const issue = await backendService.getIssue(issueKey);
-          const response = await respondToCopilotComment(
-            issue,
-            cliPath,
-            copilotRequest,
-            workingDirectory
-          );
-          await backendService.addComment(issueKey, response);
+          await postCopilotReply(issueKey, copilotRequest);
         } catch (error) {
           reportError(error);
           void vscode.window.showWarningMessage(
@@ -1286,6 +1870,7 @@ export async function activate(
     issue: IssueDetails,
     previous?: AgentTaskDefinition
   ): Promise<AgentTaskDefinition | undefined> {
+    const issueWorkflowAssignment = aiSessionManager.getIssueWorkflowAssignment(issue.key);
     const planContext = await loadPlanContext(issue.key);
     const defaultGoal = previous?.goal ??
       `${issue.summary}${issue.description ? '\\n' + issue.description.slice(0, 200) : ''}` +
@@ -1325,10 +1910,21 @@ export async function activate(
       return undefined;
     }
 
+    const workflow = await promptForAgentWorkflowSelection({
+      workspaceRoot: workingDirectory,
+      previous: previous?.workflow ?? issueWorkflowAssignment?.workflow,
+      title: 'Workflow Pack',
+      placeHolder: 'Select an optional workflow pack for this Copilot task'
+    });
+    if (workflow === null) {
+      return undefined;
+    }
+
     return {
       goal,
       scope: scope || 'This issue and related files',
       definitionOfDone: definitionOfDone || 'Task complete',
+      workflow,
       maxSteps: previous?.maxSteps,
       timeoutMs: previous?.timeoutMs,
       nonGoals: previous?.nonGoals
@@ -1363,7 +1959,16 @@ export async function activate(
         return;
       }
 
-      await copilotAgentService.startTask(issue, taskDefinition, {
+      const issueAttachments = await stageIssueAttachments({
+        issue,
+        backendService,
+        logger: outputChannel
+      });
+      const taskDefinitionWithAttachments = issueAttachments.length > 0
+        ? { ...taskDefinition, attachments: issueAttachments }
+        : taskDefinition;
+
+      await copilotAgentService.startTask(issue, taskDefinitionWithAttachments, {
         cliPath: getCopilotCliPathOverride({ showWarning: true }),
         workingDirectory
       });
@@ -1379,6 +1984,15 @@ export async function activate(
         `Failed to start a new Copilot session: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+  }
+
+  function resolveAgentWorkingDirectory(record?: AgentSessionRecord): string | undefined {
+    const deliveryWorktreePath = record?.delivery?.worktreePath?.trim();
+    if (deliveryWorktreePath) {
+      return deliveryWorktreePath;
+    }
+
+    return workingDirectory;
   }
 
   async function resumeCopilotSession(issueKey: string): Promise<void> {
@@ -1404,7 +2018,7 @@ export async function activate(
     try {
       await copilotAgentService.resumeTask(issueKey, {
         cliPath: getCopilotCliPathOverride({ showWarning: true }),
-        workingDirectory
+        workingDirectory: resolveAgentWorkingDirectory(record)
       });
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       await activeSessionsSidebarViewProvider?.refresh();
@@ -1515,8 +2129,12 @@ export async function activate(
   });
 
   const refreshAndRestoreSelection = async (): Promise<void> => {
-    if (!configStore.getBackendMode()) {
-      await setModeContext(undefined);
+    const modeContext = getModeContextState();
+    await setModeContext();
+    await ensureJiraApiIssueScopeVisibility(modeContext);
+    epicsSidebarViewProvider.setLinkedEpicKey(configStore.getJiraApiEpicKey());
+
+    if (!modeContext.configured) {
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
       epicsSidebarViewProvider.setSelectedIssueKey(undefined);
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
@@ -1599,6 +2217,9 @@ export async function activate(
       },
       onEditEpic: async issueKey => {
         await editEpic(issueKey);
+      },
+      onLinkEpic: async issueKey => {
+        await linkEpicToWorkspace(issueKey);
       },
       onDeleteEpic: async issueKey => {
         await deleteIssue(issueKey);
@@ -1877,6 +2498,7 @@ export async function activate(
     activeSessionsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
     ticketManagerStatusBar,
+    startupPollingController,
     copilotAgentService,
     copilotSessionPanelManager,
     aiSessionManager,
@@ -1934,8 +2556,9 @@ export async function activate(
             void (async () => {
               try {
                 refreshAiAssignmentMenus();
-                await setModeContext(configStore.getBackendMode());
-                if (configStore.getBackendMode() === 'file') {
+                const modeContext = getModeContextState();
+                await setModeContext();
+                if (modeContext.mode === 'file' && modeContext.configured) {
                   await ensureFilePlanConfigured(true);
                 }
                 await filterStore.setLastSelectedIssueKey(undefined);
@@ -1948,6 +2571,7 @@ export async function activate(
                 issueDetailPanelManager.clear();
                 await backendService.reset();
                 await refreshAndRestoreSelection();
+                await startupPollingController.refresh();
                 await ticketManagerStatusBar.refresh();
               } catch (error) {
                 reportError(error);
@@ -1960,15 +2584,17 @@ export async function activate(
 
   try {
     await ensureStartupConfiguration();
-    if (configStore.getBackendMode()) {
+    if (getModeContextState().configured) {
       await refreshAndRestoreSelection();
     }
+    await startupPollingController.refresh();
     await ticketManagerStatusBar.refresh();
   } catch (error) {
     reportError(error);
   }
 
   deactivateHandler = async () => {
+    await startupPollingController.stop();
     await copilotAgentService.pauseAllTasks(
       'Session paused because VS Code is closing. Reopen VS Code and resume to continue.'
     );

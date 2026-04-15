@@ -72,8 +72,10 @@ suite('IssueDetailsSidebarViewProvider', () => {
       {
         getSession: () => undefined,
         getAgentSession: () => undefined,
+        getIssueWorkflowAssignment: () => undefined,
         onDidChangeSession: () => new vscode.Disposable(() => {}),
-        onDidChangeAgentSession: () => new vscode.Disposable(() => {})
+        onDidChangeAgentSession: () => new vscode.Disposable(() => {}),
+        onDidChangeWorkflowAssignment: () => new vscode.Disposable(() => {})
       } as unknown as AiSessionManager,
       () => {
         throw new Error('agent lookup failed');
