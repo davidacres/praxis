@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -48,6 +48,44 @@ suite('agentWorkflowCatalog', () => {
       id: 'add-edit-dotnet-web-api',
       name: 'Add/Edit .NET Web API Workflow',
       description: 'Multi-agent orchestration workflow for CRUD Web API delivery.',
+      instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md',
+      link: undefined
+    });
+  });
+
+  test('discovers workflow packs from symlinked skill directories', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-workflow-'));
+    tempDirs.push(tempRoot);
+
+    const sharedSkillRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-shared-skill-'));
+    tempDirs.push(sharedSkillRoot);
+
+    const sharedSkillDir = path.join(sharedSkillRoot, 'add-edit-dotnet-web-api');
+    await mkdir(sharedSkillDir, { recursive: true });
+    await writeFile(
+      path.join(sharedSkillDir, 'SKILL.md'),
+      [
+        '---',
+        'name: add-edit-dotnet-web-api',
+        'description: Shared workflow loaded through a symlinked folder.',
+        '---',
+        '',
+        '# Add/Edit .NET Web API Workflow'
+      ].join('\n'),
+      'utf8'
+    );
+
+    const skillsRoot = path.join(tempRoot, '.github', 'skills');
+    await mkdir(skillsRoot, { recursive: true });
+    await symlink(sharedSkillDir, path.join(skillsRoot, 'add-edit-dotnet-web-api'), 'junction');
+
+    const workflows = await discoverWorkspaceAgentWorkflows(tempRoot);
+
+    assert.strictEqual(workflows.length, 1);
+    assert.deepStrictEqual(workflows[0], {
+      id: 'add-edit-dotnet-web-api',
+      name: 'Add/Edit .NET Web API Workflow',
+      description: 'Shared workflow loaded through a symlinked folder.',
       instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md',
       link: undefined
     });

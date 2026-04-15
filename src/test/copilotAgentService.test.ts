@@ -302,6 +302,29 @@ suite('CopilotAgentService', () => {
     assert.deepStrictEqual(sessionManager.stateChanges, []);
   });
 
+  test('read-only git inspection commands are silently auto-approved', async () => {
+    const sessionManager = new FakeSessionManager();
+    const issueKey = 'TM-3B-GIT';
+    sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
+
+    const service = new CopilotAgentService(sessionManager as never, {
+      appendLine(): void {}
+    });
+
+    const activeTask = createActiveTask(issueKey);
+    (service as any).activeTasks.set(issueKey, activeTask);
+
+    const hooks = (service as any).createInteractiveSessionHooks(issueKey);
+    const result = await hooks.onPermissionRequest({
+      kind: 'shell',
+      fullCommandText: String.raw`cd C:\dev\ticket-manager-worktrees\KAMAI-43-system-configurator-test-ticket2055 && git --no-pager status && git --no-pager branch`
+    });
+
+    assert.strictEqual(result.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
+  });
+
   test('non-build shell commands still require explicit approval', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-3C';

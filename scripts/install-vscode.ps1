@@ -17,12 +17,32 @@ $vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version)
 $extensionId = "$($packageJson.publisher).$($packageJson.name)"
 $quotedVsixPath = '"' + $vsixPath + '"'
 
-$codeCli = Get-Command code -ErrorAction SilentlyContinue
-if (-not $codeCli) {
-    throw 'VS Code CLI (code) was not found on PATH. Open VS Code and run "Shell Command: Install code command in PATH".'
+function Get-StableVsCodeCliPath {
+    $candidatePaths = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code.cmd'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code'),
+        (Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code.cmd'),
+        (Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft VS Code\bin\code.cmd'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft VS Code\bin\code')
+    )
+
+    foreach ($candidate in $candidatePaths) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    $codeCommand = Get-Command code -ErrorAction SilentlyContinue
+    if ($codeCommand -and $codeCommand.Source -match 'Microsoft VS Code') {
+        return $codeCommand.Source
+    }
+
+    throw 'Stable VS Code CLI was not found. Install VS Code or add the stable VS Code shell command to PATH.'
 }
 
-$quotedCodeCliPath = '"' + $codeCli.Source + '"'
+$codeCliPath = Get-StableVsCodeCliPath
+$quotedCodeCliPath = '"' + $codeCliPath + '"'
 
 if (-not $SkipPackage) {
     Push-Location $projectRoot

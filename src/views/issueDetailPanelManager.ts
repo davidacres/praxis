@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { AiSessionManager } from '../ai/aiSessionManager';
+import {
+  discoverWorkspaceAgentWorkflows
+} from '../ai/agentWorkflowCatalog';
+import type { AgentWorkflowReference } from '../ai/agentTypes';
 import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
 import {
   formatParentReference,
@@ -108,17 +113,28 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private details?: IssueDetails;
   private transitions: WorkflowTransition[] = [];
   private parentItems: IssueSummary[] = [];
+  private availableWorkflows: AgentWorkflowReference[] = [];
   private parentItemsError?: string;
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
+  private readonly disposables: vscode.Disposable[] = [];
 
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
   public constructor(
     private readonly backendService: IssueTrackerService,
+    private readonly aiSessionManager: AiSessionManager,
     private readonly onAfterTransition: () => Promise<void>
-  ) {}
+  ) {
+    this.disposables.push(
+      this.aiSessionManager.onDidChangeWorkflowAssignment(({ issueKey }) => {
+        if (this.activeIssueKey === issueKey && this.panel) {
+          void this.refreshIfShowing(issueKey);
+        }
+      })
+    );
+  }
 
   public setCommentPlaceholder(text: string): void {
     this.commentPlaceholder = text;
@@ -167,6 +183,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.details = undefined;
     this.transitions = [];
     this.parentItems = [];
+    this.availableWorkflows = [];
     this.parentItemsError = undefined;
     this.loading = false;
     this.errorMessage = undefined;
@@ -177,6 +194,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   }
 
   public dispose(): void {
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
     const panel = this.panel;
     this.resetPanelState();
     panel?.dispose();
@@ -258,6 +278,46 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'setWorkflowPack') {
+      try {
+        const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
+        if (!workflowInstructionsPath) {
+          this.aiSessionManager.removeIssueWorkflowAssignment(this.activeIssueKey);
+          await this.panel?.webview.postMessage({
+            type: 'setWorkflowPackResult',
+            ok: true,
+            assignment: undefined
+          });
+          return;
+        }
+
+        const workflow = this.findWorkflowChoice(this.activeIssueKey, workflowInstructionsPath);
+        if (!workflow) {
+          throw new Error('The selected workflow pack is no longer available. Refresh the issue details and try again.');
+        }
+
+        const assignment = this.aiSessionManager.setIssueWorkflowAssignment(this.activeIssueKey, workflow, {
+          source: 'manual'
+        });
+        await this.panel?.webview.postMessage({
+          type: 'setWorkflowPackResult',
+          ok: true,
+          assignment: {
+            name: assignment.workflow.name,
+            source: this.formatWorkflowAssignmentSource(assignment.source),
+            reason: assignment.reason ?? ''
+          }
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'setWorkflowPackResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
     if (type !== 'addIssueComment') {
       return;
     }
@@ -289,9 +349,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.errorMessage = undefined;
 
     try {
-      const [issue, transitions] = await Promise.all([
+      const [issue, transitions, availableWorkflows] = await Promise.all([
         this.backendService.getIssue(issueKey),
-        this.backendService.getTransitions(issueKey)
+        this.backendService.getTransitions(issueKey),
+        discoverWorkspaceAgentWorkflows(this.getWorkspaceRoot())
       ]);
 
       let parentItems: IssueSummary[] = [];
@@ -324,6 +385,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.details = { ...issue, transitions };
       this.transitions = transitions;
       this.parentItems = parentItems;
+      this.availableWorkflows = availableWorkflows;
       this.parentItemsError = parentItemsError;
       this.loading = false;
     } catch (error) {
@@ -336,8 +398,92 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.details = undefined;
       this.transitions = [];
       this.parentItems = [];
+      this.availableWorkflows = [];
       this.parentItemsError = undefined;
     }
+  }
+
+  private getWorkspaceRoot(): string | undefined {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  private getWorkflowChoices(issueKey: string): AgentWorkflowReference[] {
+    const choices = [...this.availableWorkflows];
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    if (
+      assignment &&
+      !choices.some(
+        workflow =>
+          workflow.instructionsPath === assignment.workflow.instructionsPath ||
+          workflow.id === assignment.workflow.id
+      )
+    ) {
+      choices.unshift(assignment.workflow);
+    }
+    return choices;
+  }
+
+  private findWorkflowChoice(issueKey: string, workflowInstructionsPath: string): AgentWorkflowReference | undefined {
+    return this.getWorkflowChoices(issueKey).find(
+      workflow =>
+        workflow.instructionsPath === workflowInstructionsPath || workflow.id === workflowInstructionsPath
+    );
+  }
+
+  private formatWorkflowAssignmentSource(source: 'manual' | 'automatic'): string {
+    return source === 'automatic' ? 'Automatic' : 'Manual';
+  }
+
+  private renderWorkflowSelectOptions(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    const selectedValue = assignment?.workflow.instructionsPath ?? '';
+    const workflowOptions = this.getWorkflowChoices(issueKey)
+      .map(
+        workflow => `<option value="${escapeHtml(workflow.instructionsPath)}" ${workflow.instructionsPath === selectedValue ? 'selected' : ''}>${escapeHtml(workflow.name)}</option>`
+      )
+      .join('');
+
+    return `<option value="" ${selectedValue ? '' : 'selected'}>No workflow pack</option>${workflowOptions}`;
+  }
+
+  private renderWorkflowPackSection(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    const hasWorkflowChoices = this.getWorkflowChoices(issueKey).length > 0 || Boolean(assignment);
+
+    return `
+      <section class="card">
+        <h3>Workflow Pack</h3>
+        <label class="field-group" for="workflowSelect">
+          <span class="field-label">Workflow</span>
+          <select
+            id="workflowSelect"
+            class="field-select"
+            data-issue-key="${escapeHtml(issueKey)}"
+            ${hasWorkflowChoices ? '' : 'disabled'}
+          >
+            ${this.renderWorkflowSelectOptions(issueKey)}
+          </select>
+          <div class="field-help">
+            ${hasWorkflowChoices
+              ? 'This workflow is used for Copilot delegation and Jira polling for this issue.'
+              : 'No workflow packs were found in .github/skills for this workspace.'}
+          </div>
+        </label>
+        <div class="detail-row${assignment ? '' : ' is-hidden'}" id="workflowSourceRow">
+          <div class="detail-label">Source</div>
+          <div class="detail-value" id="workflowSourceValue">${escapeHtml(
+            assignment ? this.formatWorkflowAssignmentSource(assignment.source) : ''
+          )}</div>
+        </div>
+        <div class="detail-row${assignment?.reason ? '' : ' is-hidden'}" id="workflowReasonRow">
+          <div class="detail-label">Reason</div>
+          <div class="detail-value detail-value--wrap" id="workflowReasonValue">${escapeHtml(
+            assignment?.reason ?? ''
+          )}</div>
+        </div>
+        <div class="form-status" id="workflowStatus" aria-live="polite"></div>
+      </section>
+    `;
   }
 
   private createPanelWithHtml(issueKey: string): void {
@@ -1142,6 +1288,97 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     document.getElementById('viewAiSessionBtn')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'viewAiSession' });
     });
+
+    // --- Workflow selector ---
+    (function () {
+      const workflowSelect = document.getElementById('workflowSelect');
+      const workflowStatus = document.getElementById('workflowStatus');
+      const workflowSourceRow = document.getElementById('workflowSourceRow');
+      const workflowSourceValue = document.getElementById('workflowSourceValue');
+      const workflowReasonRow = document.getElementById('workflowReasonRow');
+      const workflowReasonValue = document.getElementById('workflowReasonValue');
+
+      if (!(workflowSelect instanceof HTMLSelectElement)) return;
+
+      let saving = false;
+      let initialValue = workflowSelect.value;
+      let statusOverride = undefined;
+
+      function updateAssignmentUi(assignment) {
+        const source = typeof assignment?.source === 'string' ? assignment.source : '';
+        const reason = typeof assignment?.reason === 'string' ? assignment.reason : '';
+
+        if (workflowSourceValue instanceof HTMLElement) {
+          workflowSourceValue.textContent = source;
+        }
+        if (workflowSourceRow instanceof HTMLElement) {
+          workflowSourceRow.classList.toggle('is-hidden', !source);
+        }
+        if (workflowReasonValue instanceof HTMLElement) {
+          workflowReasonValue.textContent = reason;
+        }
+        if (workflowReasonRow instanceof HTMLElement) {
+          workflowReasonRow.classList.toggle('is-hidden', !reason);
+        }
+      }
+
+      function renderWorkflowStatus() {
+        if (statusOverride) {
+          setStatusMessage(workflowStatus, statusOverride.text, statusOverride.kind);
+          return;
+        }
+        if (saving) {
+          setStatusMessage(workflowStatus, 'Updating workflow pack...', '');
+          return;
+        }
+        setStatusMessage(workflowStatus, '', '');
+      }
+
+      function refreshWorkflowActions() {
+        workflowSelect.disabled = saving || workflowSelect.options.length === 0;
+        renderWorkflowStatus();
+      }
+
+      workflowSelect.addEventListener('change', () => {
+        if (saving || workflowSelect.value === initialValue) {
+          return;
+        }
+
+        statusOverride = undefined;
+        saving = true;
+        refreshWorkflowActions();
+        vscode.postMessage({
+          type: 'setWorkflowPack',
+          issueKey: workflowSelect.dataset.issueKey,
+          workflowInstructionsPath: workflowSelect.value
+        });
+      });
+
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'setWorkflowPackResult') {
+          saving = false;
+          if (msg.ok) {
+            initialValue = workflowSelect.value;
+            updateAssignmentUi(msg.assignment);
+            statusOverride = {
+              text: 'Workflow pack updated.',
+              kind: 'success'
+            };
+          } else {
+            workflowSelect.value = initialValue;
+            statusOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to update workflow pack.',
+              kind: 'error'
+            };
+          }
+          refreshWorkflowActions();
+        }
+      });
+
+      refreshWorkflowActions();
+    })();
   </script>
 </body>
 </html>`;
@@ -1301,6 +1538,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           </div>
         </form>
       </section>
+      ${this.renderWorkflowPackSection(d.key)}
       <section class="card">
         <h3>Comments</h3>
         <div class="comment-list">
