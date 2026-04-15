@@ -152,6 +152,13 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     webviewView.webview.options = { enableScripts: true };
+    this.disposables.push(
+      webviewView.onDidDispose(() => {
+        if (this.view === webviewView) {
+          this.view = undefined;
+        }
+      })
+    );
     webviewView.webview.onDidReceiveMessage(
       message => { void this.handleMessage(message); },
       undefined, this.disposables
@@ -282,11 +289,12 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const nonce = createNonce();
     const issuesSection = this.renderIssuesSection(snapshot, filters);
 
-    this.view.title = undefined;
-    this.view.description = String(snapshot.issues.length);
-    this.view.badge = undefined;
+    try {
+      this.view.title = undefined;
+      this.view.description = String(snapshot.issues.length);
+      this.view.badge = undefined;
 
-    this.view.webview.html = `<!DOCTYPE html>
+      this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -830,6 +838,14 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     </script>
   </body>
 </html>`;
+    } catch (error) {
+      if (error instanceof Error && /disposed/i.test(error.message)) {
+        this.view = undefined;
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private renderIssuesSection(

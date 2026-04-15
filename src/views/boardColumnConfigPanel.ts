@@ -74,8 +74,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
 
   public async open(board: Board, details: BoardDetails): Promise<void> {
     this.ensurePanel();
-    const prefs = this.columnStore.getPreferences(board.id);
     const defaultWorkflow = getDefaultStatusColumnOrder(details);
+    await this.columnStore.normalizeLegacyPreferences(board.id, defaultWorkflow);
+    const prefs = this.columnStore.getPreferences(board.id);
     const workflowRows = buildWorkflowRows(prefs, defaultWorkflow);
     const columnRows = buildColumnRows(prefs, workflowRows);
 

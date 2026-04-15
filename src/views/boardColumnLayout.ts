@@ -47,14 +47,7 @@ export function getDefaultStatusColumnOrder(
   }
 
   if (details.columnStatusOrder?.length) {
-    const ordered = normalizeOrderedStatuses([...details.columnStatusOrder]);
-    for (let index = DEFAULT_BOARD_STATUS_PREFIX.length - 1; index >= 0; index -= 1) {
-      const statusName = DEFAULT_BOARD_STATUS_PREFIX[index];
-      if (!ordered.includes(statusName)) {
-        ordered.unshift(statusName);
-      }
-    }
-    return ordered;
+    return normalizeOrderedStatuses([...details.columnStatusOrder]);
   }
 
   const ordered: string[] = [];

@@ -14,11 +14,15 @@ if (-not (Test-Path $packageJsonPath)) {
 
 $packageJson = Get-Content -Raw -Path $packageJsonPath | ConvertFrom-Json
 $vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version).vsix"
+$extensionId = "$($packageJson.publisher).$($packageJson.name)"
+$quotedVsixPath = '"' + $vsixPath + '"'
 
 $codeCli = Get-Command code -ErrorAction SilentlyContinue
 if (-not $codeCli) {
     throw 'VS Code CLI (code) was not found on PATH. Open VS Code and run "Shell Command: Install code command in PATH".'
 }
+
+$quotedCodeCliPath = '"' + $codeCli.Source + '"'
 
 if (-not $SkipPackage) {
     Push-Location $projectRoot
@@ -34,5 +38,12 @@ if (-not (Test-Path $vsixPath)) {
     throw "VSIX not found at $vsixPath"
 }
 
+Write-Host "Removing existing $extensionId from VS Code"
+& cmd.exe /d /c "$quotedCodeCliPath --uninstall-extension $extensionId >nul 2>nul"
+
 Write-Host "Installing $vsixPath into VS Code"
-& code --install-extension $vsixPath
+& cmd.exe /d /c "$quotedCodeCliPath --install-extension $quotedVsixPath --force"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "VS Code failed to install $vsixPath (exit code $LASTEXITCODE)."
+}

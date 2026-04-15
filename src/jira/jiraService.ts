@@ -16,6 +16,7 @@ import type {
   CreateIssueInput,
   FilterMetadata,
   JiraCapabilities,
+  IssueAttachment,
   IssueComment,
   IssueDetails,
   IssueFilters,
@@ -525,7 +526,7 @@ export class JiraService implements IssueTrackerService {
     if (!connection) {
       return {
         status: 'error',
-        message: 'No Jira MCP connection is configured.',
+        message: 'No Jira via MCP connection is configured.',
         toolCount: 0
       };
     }
@@ -771,15 +772,15 @@ export class JiraService implements IssueTrackerService {
   }
 
   public async updateBoard(_boardId: string, _input: UpdateBoardInput): Promise<Board> {
-    throw new Error('Boards cannot be edited in Jira Connected mode.');
+    throw new Error('Boards cannot be edited in Jira via MCP mode.');
   }
 
   public async createBoard(_input: CreateBoardInput): Promise<Board> {
-    throw new Error('Creating boards is not supported in Jira Connected mode.');
+    throw new Error('Creating boards is not supported in Jira via MCP mode.');
   }
 
   public async deleteBoard(_boardId: string): Promise<void> {
-    throw new Error('Boards cannot be deleted in Jira Connected mode.');
+    throw new Error('Boards cannot be deleted in Jira via MCP mode.');
   }
 
   public async getIssue(issueKey: string): Promise<IssueDetails> {
@@ -966,6 +967,18 @@ export class JiraService implements IssueTrackerService {
     );
   }
 
+  public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
+    throw new Error('Attachments are not supported in Jira MCP mode. Use Jira API mode for delivery artifacts.');
+  }
+
+  public async downloadAttachment(
+    _issueKey: string,
+    _attachment: IssueAttachment,
+    _targetFilePath: string
+  ): Promise<void> {
+    throw new Error('Attachment downloads are not supported in Jira MCP mode. Use Jira API mode when attachment context is required.');
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     const { config, capabilities } = await this.ensureConnected();
     const response = await this.client.callTool(
@@ -1012,7 +1025,7 @@ export class JiraService implements IssueTrackerService {
       explicitConnection ?? (await this.configStore.getConnectionConfig(this.context));
     if (!config) {
       throw new Error(
-        'No Jira MCP connection is configured. Run "Ticket Manager: Configure Connection".'
+        'No Jira via MCP connection is configured. Run "Ticket Manager: Configure Jira MCP Connection".'
       );
     }
 

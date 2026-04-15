@@ -71,17 +71,90 @@ const PLANNING_SYSTEM_PROMPT = `You are an autonomous Copilot-powered worker ope
 - Do not fix pre-existing issues unrelated to the task.
 `;
 
-function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+function slugifyNamingSegment(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replaceAll(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '');
+}
+
+function stripIssueKeyPrefix(value: string, issueKey: string): string {
+  const normalizedIssueKey = slugifyNamingSegment(issueKey);
+  if (!value || !normalizedIssueKey) {
+    return value;
+  }
+  if (value === normalizedIssueKey) {
+    return '';
+  }
+  if (value.startsWith(`${normalizedIssueKey}-`)) {
+    return value.slice(normalizedIssueKey.length + 1);
+  }
+  return value;
+}
+
+export function buildWorktreeName(issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>): string {
+  const source = issue.summary || issue.branch?.trim() || issue.key;
+  const normalizedSource = stripIssueKeyPrefix(slugifyNamingSegment(source), issue.key);
+  const suffix = normalizedSource.slice(0, 48).replaceAll(/-+$/g, '') || 'work-item';
+  return `${issue.key}-${suffix}`;
+}
+
+export function buildMsiVersionExample(
+  issueKey: string,
+  baseVersion = '1.0.0.1',
+  buildIdentifier = 'buildx'
+): string {
+  return `${baseVersion}-${issueKey}-${buildIdentifier}`;
+}
+
+export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+  const workflow = task.workflow
+    ? [
+        '\n## Assigned Workflow Pack',
+        `- Name: ${task.workflow.name}`,
+        `- Instructions file: ${task.workflow.instructionsPath}`,
+        task.workflow.description ? `- Description: ${task.workflow.description}` : undefined,
+        task.workflow.link ? `- Reference link: ${task.workflow.link}` : undefined,
+        '- Treat this workflow pack as the execution playbook for this task.',
+        '- Read the instructions file before taking implementation actions.',
+        '- Follow the workflow ordering, sub-agent choices, and review gates unless they conflict with explicit user instructions or this task contract.'
+      ].filter((line): line is string => Boolean(line)).join('\n')
+    : '';
+  const attachments = task.attachments?.length
+    ? [
+        '\n## Issue Attachments',
+        '- The following issue attachments were downloaded locally before execution.',
+        '- Review any relevant screenshots, mockups, specs, or supporting files before implementation.',
+        ...task.attachments.map(attachment =>
+          [
+            `- ${attachment.fileName}: ${attachment.localPath}`,
+            attachment.mediaType ? `  media type: ${attachment.mediaType}` : undefined,
+            typeof attachment.sizeBytes === 'number' ? `  size bytes: ${attachment.sizeBytes}` : undefined,
+            attachment.sourceUrl ? `  source: ${attachment.sourceUrl}` : undefined
+          ].filter((line): line is string => Boolean(line)).join('\n')
+        )
+      ].join('\n')
+    : '';
   const nonGoals = task.nonGoals?.length
     ? `\n## Non-Goals (do NOT touch)\n${task.nonGoals.map(g => `- ${g}`).join('\n')}`
     : '';
+  const completionContract = task.completionContract?.trim()
+    ? `\n## Completion Contract\n${task.completionContract.trim()}`
+    : '';
+  const worktreeName = buildWorktreeName(issue);
+  const msiVersionExample = buildMsiVersionExample(issue.key);
 
   return `${PLANNING_SYSTEM_PROMPT}
 ## Task
 **Goal:** ${task.goal}
 **Scope:** ${task.scope}
 **Definition of Done:** ${task.definitionOfDone}
+${workflow}
+${attachments}
 ${nonGoals}
+${completionContract}
 
 ## Issue Context
 - Key: ${issue.key}
@@ -89,6 +162,13 @@ ${nonGoals}
 - Type: ${issue.issueType}
 - Status: ${issue.status}
 ${issue.description ? `- Description:\n${issue.description.slice(0, 4000)}` : ''}
+
+## Execution Conventions
+- If you create a git worktree, its name MUST start with ${issue.key}.
+- Use a worktree name like: ${worktreeName}
+- If you publish a new MSI, keep the base version and append -${issue.key}-<build-id>.
+- Use an MSI version like: ${msiVersionExample}
+- Do not publish a generic MSI artifact name or version that omits the Jira issue key.
 `;
 }
 
@@ -139,13 +219,87 @@ function formatPermissionDescription(request: { kind?: string; [key: string]: un
   }
 }
 
+function normalizeShellSegment(segment: string): string {
+  return segment.replaceAll(/\s+/g, ' ').trim();
+}
+
+function isDirectoryChangeSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment).toLowerCase();
+  return normalized.startsWith('cd ') || normalized.startsWith('set-location ') || normalized.startsWith('push-location ');
+}
+
+function isSafeShellProbeSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const patterns = [
+    /^dotnet\s+--version(?:\s+2>&1)?$/i,
+    /^node\s+--version(?:\s+2>&1)?$/i,
+    /^npm\s+--version(?:\s+2>&1)?$/i,
+    /^git\s+--version(?:\s+2>&1)?$/i,
+    /^python(?:3)?\s+--version(?:\s+2>&1)?$/i,
+    /^where(?:\.exe)?\s+(?:dotnet|node|npm|git|python(?:3)?)(?:\s+2>&1)?$/i,
+    /^(?:pwd|get-location)(?:\s+2>&1)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
+function isSafeBuildShellSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const powershellScriptMatch = /^(?:pwsh|powershell)(?:\.exe)?\s+.+?-file\s+(?<script>[^\s]+)(?:\s+.*)?$/i.exec(normalized);
+  if (powershellScriptMatch?.groups?.script) {
+    const scriptPath = powershellScriptMatch.groups.script.replaceAll(/^['"]|['"]$/g, '').toLowerCase();
+    if (
+      scriptPath.includes('build') ||
+      scriptPath.includes('publish') ||
+      scriptPath.includes('package') ||
+      scriptPath.includes('test') ||
+      scriptPath.includes('install')
+    ) {
+      return true;
+    }
+  }
+
+  const patterns = [
+    /^dotnet\s+(?:build|publish|test|pack|restore|msbuild|clean|workload\s+restore)(?:\s+.*)?$/i,
+    /^msbuild(?:\.exe)?\s+.+$/i,
+    /^npm\s+(?:build|compile|package|pack|test|ci)(?:\s+.*)?$/i,
+    /^npm\s+run\s+(?:build|compile|package|pack|test|ci)(?:\s+.*)?$/i,
+    /^npm\s+(?:install(?::[\w:-]+)|run\s+install(?::[\w:-]+))(?:\s+.*)?$/i,
+    /^npx\s+.+$/i,
+    /^(?:candle|light|heat|wix)(?:\.exe)?\s+.+$/i,
+    /^nuget(?:\.exe)?\s+(?:restore|pack)(?:\s+.*)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
+function shouldSilentlyApprovePermissionRequest(request: { kind?: string; [key: string]: unknown }): boolean {
+  if (asString(request.kind) !== 'shell') {
+    return false;
+  }
+
+  const command = asString(request.fullCommandText)?.trim();
+  if (!command) {
+    return false;
+  }
+
+  const segments = command.split('&&').map(segment => segment.trim()).filter(segment => segment.length > 0);
+  if (segments.length === 0) {
+    return false;
+  }
+
+  return segments.every(segment =>
+    isDirectoryChangeSegment(segment) ||
+    isSafeShellProbeSegment(segment) ||
+    isSafeBuildShellSegment(segment)
+  );
+}
+
 export interface CopilotAgentLogger {
   appendLine(message: string): void;
 }
 
 export class CopilotAgentService {
-  private activeTasks = new Map<string, ActiveTask>();
-  private activeTaskListeners = new Set<(issueKey: string) => void>();
+  private readonly activeTasks = new Map<string, ActiveTask>();
+  private readonly activeTaskListeners = new Set<(issueKey: string) => void>();
 
   constructor(
     private readonly sessionManager: AiSessionManager,
@@ -880,6 +1034,14 @@ Issue: ${issue.key} — ${issue.summary}`;
         const permInfo = formatPermissionDescription(request);
         if (task.allowPermissionsForTask) {
           this.appendEvent(issueKey, evt('permission_completed', `${permInfo.description} (auto-approved for task)`));
+          return { kind: 'approved' as const };
+        }
+
+        if (shouldSilentlyApprovePermissionRequest(request)) {
+          this.appendEvent(
+            issueKey,
+            evt('permission_completed', `${permInfo.description} (silently auto-approved safe probe)`)
+          );
           return { kind: 'approved' as const };
         }
 

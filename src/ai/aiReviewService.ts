@@ -47,7 +47,20 @@ Be concise, practical, and collaborative.
 Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
+const COPILOT_CLARIFICATION_SYSTEM_PROMPT = `You are GitHub Copilot reviewing a ticket before implementation starts.
+If the ticket is specific enough to implement safely, reply with exactly READY.
+If the ticket is too vague, write a concise plain-text Jira comment body that:
+1. Briefly states that implementation is blocked by missing detail
+2. Lists the specific ambiguities or missing requirements
+3. Asks 2-5 concrete clarification questions
+
+Do not claim that work has started.
+Do not use markdown headings, bold, italics, or bullet markers like * or #.
+Do not include an AI-generated notice or comment title because that will be added separately.
+Use short plain-text paragraphs and a numbered Questions list.`;
+
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
+const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
 
 function buildTicketContext(
   issue: IssueDetails,
@@ -117,6 +130,7 @@ async function runCopilotPrompt(
     cliPath?: string;
     systemPrompt: string;
     workingDirectory?: string;
+    timeoutMs?: number;
   }
 ): Promise<string> {
   const sdk = await import('@github/copilot-sdk');
@@ -125,9 +139,13 @@ async function runCopilotPrompt(
   let session:
     | {
         disconnect(): Promise<void>;
-        sendAndWait(args: { prompt: string }): Promise<{ data?: { content?: string } } | undefined>;
+        sendAndWait(
+          args: { prompt: string },
+          timeout?: number
+        ): Promise<{ data?: { content?: string } } | undefined>;
       }
     | undefined;
+  const timeoutMs = options.timeoutMs ?? COPILOT_PROMPT_TIMEOUT_MS;
   try {
     await client.start();
     session = await client.createSession({
@@ -141,7 +159,7 @@ async function runCopilotPrompt(
       workingDirectory: options.workingDirectory
     });
 
-    const response = await session.sendAndWait({ prompt });
+    const response = await session.sendAndWait({ prompt }, timeoutMs);
     const content = response?.data?.content?.trim();
     if (!content) {
       throw new Error('Copilot returned an empty response.');
@@ -154,6 +172,16 @@ async function runCopilotPrompt(
     }
     await client.stop();
   }
+}
+
+function normalizeClarificationCommentBody(text: string): string {
+  return text
+    .replaceAll('\r\n', '\n')
+    .replaceAll(/^#{1,6}\s*/gm, '')
+    .replaceAll(/\*\*(.*?)\*\*/g, '$1')
+    .replaceAll(/\*(.*?)\*/g, '$1')
+    .replaceAll(/`([^`]+)`/g, '$1')
+    .trim();
 }
 
 export async function reviewTicketWithOpenAi(
@@ -275,6 +303,40 @@ export async function respondToCopilotComment(
   );
 
   return `## @copilot reply\n\n${content}`;
+}
+
+export async function buildCopilotClarificationComment(
+  issue: IssueDetails,
+  cliPath: string | undefined,
+  workingDirectory?: string
+): Promise<string | undefined> {
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
+  const content = await runCopilotPrompt(
+    `Assess whether this ticket is specific enough to implement without making risky assumptions. Reply READY if no clarification is needed. Otherwise draft a concise Jira comment requesting the missing details.
+
+Ticket context:
+${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
+      workingDirectory
+    }
+  );
+
+  const trimmed = content.trim();
+  if (trimmed === 'READY') {
+    return undefined;
+  }
+
+  const normalizedBody = normalizeClarificationCommentBody(trimmed);
+
+  return `This is an AI-generated message.
+Copilot clarification request
+
+${normalizedBody}`;
 }
 
 // ── Local Peer Review (LPR) ──────────────────────────────────────

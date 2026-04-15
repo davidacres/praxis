@@ -1,0 +1,136 @@
+import * as assert from 'node:assert';
+import {
+  buildDeliveryStartedComment,
+  buildDeliveryTaskDefinition,
+  extractDeliveryBaseBranch,
+  parseDeliveryTaskResult
+} from '../ai/deliveryWorkflow';
+
+suite('deliveryWorkflow', () => {
+  test('extracts the most recent explicit base branch from Jira comments', () => {
+    const branch = extractDeliveryBaseBranch({
+      description: '**Branch:** main',
+      comments: [
+        {
+          id: 'comment-1',
+          body: 'Base branch: release/1.2',
+          created: '2026-04-15T10:00:00.000Z'
+        },
+        {
+          id: 'comment-2',
+          body: 'Base branch: feature/hotfix-123',
+          created: '2026-04-15T11:00:00.000Z'
+        }
+      ]
+    });
+
+    assert.strictEqual(branch, 'feature/hotfix-123');
+  });
+
+  test('falls back to the Jira description when no branch marker exists in comments', () => {
+    const branch = extractDeliveryBaseBranch({
+      description: 'Implementation details\n\n**Branch:** release/2026.04',
+      comments: [
+        {
+          id: 'comment-1',
+          body: 'No branch marker here.',
+          created: '2026-04-15T10:00:00.000Z'
+        }
+      ]
+    });
+
+    assert.strictEqual(branch, 'release/2026.04');
+  });
+
+  test('builds a delivery task definition with a structured completion contract', () => {
+    const task = buildDeliveryTaskDefinition(
+      {
+        key: 'KAMAI-39',
+        summary: 'Ship the MSI delivery change',
+        issueType: 'Story',
+        status: 'Selected for Development',
+        description: 'Implement the requested workflow.'
+      },
+      {
+        baseBranch: 'main',
+        branchName: 'KAMAI-39-ship-the-msi-delivery-change',
+        worktreePath: 'C:/worktrees/KAMAI-39-ship-the-msi-delivery-change',
+        publishCommand: 'pwsh ./build-msi.ps1',
+        artifactPattern: 'dist/*.msi',
+        workflow: {
+          id: 'add-edit-dotnet-web-api',
+          name: 'Add/Edit .NET Web API Workflow',
+          instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md'
+        }
+      }
+    );
+
+    assert.strictEqual(task.kind, 'jira-delivery');
+    assert.ok(task.completionContract?.includes('DELIVERY_RESULT'));
+    assert.ok(task.definitionOfDone.includes('dist/*.msi'));
+    assert.strictEqual(task.workflow?.id, 'add-edit-dotnet-web-api');
+  });
+
+  test('builds a Jira start comment that includes the assigned workflow link', () => {
+    const comment = buildDeliveryStartedComment({
+      baseBranch: 'main',
+      branchName: 'KAMAI-39-ship-the-msi-delivery-change',
+      worktreeName: 'KAMAI-39-ship-the-msi-delivery-change',
+      workflow: {
+        id: 'add-edit-dotnet-web-api',
+        name: 'Add/Edit .NET Web API Workflow',
+        description: 'Multi-agent orchestration workflow for CRUD Web API work.',
+        instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md',
+        link: 'https://git.example/workflows/add-edit-dotnet-web-api'
+      }
+    });
+
+    assert.ok(comment.includes('Copilot delivery workflow started'));
+    assert.ok(comment.includes('Workflow: Add/Edit .NET Web API Workflow'));
+    assert.ok(comment.includes('.github/skills/add-edit-dotnet-web-api/SKILL.md'));
+    assert.ok(comment.includes('https://git.example/workflows/add-edit-dotnet-web-api'));
+  });
+
+  test('parses a structured delivery result payload', () => {
+    const payload = [
+      'Work complete.',
+      '',
+      'DELIVERY_RESULT',
+      '',
+      '```json',
+      '{',
+      '  "status": "success",',
+      '  "summary": "Implemented the worktree-backed delivery workflow and added Jira MSI attachment support.",',
+      '  "branch": "KAMAI-39-ship-the-msi-delivery-change",',
+      '  "commitHash": "abc1234",',
+      '  "pushedRef": "origin/KAMAI-39-ship-the-msi-delivery-change",',
+      '  "artifactPaths": ["dist/TicketManager-KAMAI-39.msi"]',
+      '}',
+      '```'
+    ].join('\n');
+    const result = parseDeliveryTaskResult(payload);
+
+    assert.deepStrictEqual(result, {
+      status: 'success',
+      summary: 'Implemented the worktree-backed delivery workflow and added Jira MSI attachment support.',
+      branch: 'KAMAI-39-ship-the-msi-delivery-change',
+      commitHash: 'abc1234',
+      pushedRef: 'origin/KAMAI-39-ship-the-msi-delivery-change',
+      artifactPaths: ['dist/TicketManager-KAMAI-39.msi'],
+      failureReason: undefined
+    });
+  });
+
+  test('rejects malformed delivery results that omit artifact paths on success', () => {
+    const result = parseDeliveryTaskResult(`DELIVERY_RESULT\n\n\`\`\`json
+{
+  "status": "success",
+  "summary": "Done.",
+  "branch": "KAMAI-39-work-item",
+  "artifactPaths": []
+}
+\`\`\``);
+
+    assert.strictEqual(result, undefined);
+  });
+});

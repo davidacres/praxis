@@ -64,6 +64,11 @@ interface SetupState {
   jiraStdioArgs: string;
   jiraCwd: string;
   jiraHttpUrl: string;
+  jiraPollingRequiredLabel: string;
+  jiraPollingEnabled: boolean;
+  jiraApiBaseUrl: string;
+  jiraApiToken: string;
+  jiraApiEpicKey: string;
 }
 
 function createInitialState(): SetupState {
@@ -87,6 +92,11 @@ function createInitialState(): SetupState {
     jiraStdioArgs: '',
     jiraCwd: '',
     jiraHttpUrl: '',
+    jiraPollingRequiredLabel: 'syscfg',
+    jiraPollingEnabled: true,
+    jiraApiBaseUrl: '',
+    jiraApiToken: '',
+    jiraApiEpicKey: '',
   };
 }
 
@@ -106,7 +116,8 @@ const MODE_OPTIONS: ModeOption[] = [
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
   { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Connect to GitHub repositories and issues' },
   { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Connect to a GitLab instance for issues and boards' },
-  { mode: 'jira', icon: '🔗', title: 'Jira', description: 'Connect to Jira via MCP server' },
+  { mode: 'jira', icon: '🔗', title: 'Jira via MCP', description: 'Connect to Jira through an MCP server' },
+  { mode: 'jiraapi', icon: '📡', title: 'Jira API', description: 'Connect directly to Jira Server/Data Center' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
 
@@ -198,6 +209,16 @@ export class SetupWizardPanel {
         const mode = typeof message.mode === 'string' ? message.mode as SetupBackendMode : undefined;
         if (mode) {
           this.state.selectedMode = mode;
+          if (mode === 'jira' || mode === 'jiraapi') {
+            const config = vscode.workspace.getConfiguration('ticketManager');
+            this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
+            this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', true);
+            if (mode === 'jiraapi') {
+              this.state.jiraApiBaseUrl = config.get<string>('jiraApiBaseUrl', '');
+              this.state.jiraApiToken = config.get<string>('jiraApiToken', '');
+              this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+            }
+          }
           this.state.step = 1;
           this.rerender();
         }
@@ -211,10 +232,15 @@ export class SetupWizardPanel {
 
       case 'updateField': {
         const field = typeof message.field === 'string' ? message.field : '';
-        const value = typeof message.value === 'string' ? message.value : '';
-        if (field && field in this.state) {
-          (this.state as unknown as Record<string, unknown>)[field] = value;
+        const value = message.value;
+        if (field === 'jiraPollingEnabled') {
+          this.state.jiraPollingEnabled = value !== false;
+        } else if (field === 'jiraPollingRequiredLabel') {
+          this.state.jiraPollingRequiredLabel = typeof value === 'string' ? value : '';
+        } else if (field && field in this.state) {
+          (this.state as unknown as Record<string, unknown>)[field] = typeof value === 'string' ? value : '';
           this.rerender();
+          return;
         }
         break;
       }
@@ -325,6 +351,12 @@ export class SetupWizardPanel {
 
       case 'jira':
         await config.update('connectionType', this.state.jiraConnectionType, target);
+        await config.update(
+          'jiraPolling.requiredLabel',
+          this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
+          target
+        );
+        await config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target);
         if (this.state.jiraConnectionType === 'stdio') {
           await config.update('stdioCommand', this.state.jiraStdioCommand, target);
           await config.update('stdioArgs', this.state.jiraStdioArgs.split(' ').filter(Boolean), target);
@@ -332,6 +364,18 @@ export class SetupWizardPanel {
         } else {
           await config.update('httpUrl', this.state.jiraHttpUrl, target);
         }
+        break;
+
+      case 'jiraapi':
+        await config.update('jiraApiBaseUrl', this.state.jiraApiBaseUrl.trim(), target);
+        await config.update('jiraApiToken', this.state.jiraApiToken.trim(), target);
+        await config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target);
+        await config.update(
+          'jiraPolling.requiredLabel',
+          this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
+          target
+        );
+        await config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target);
         break;
 
       // demo needs no config
@@ -458,6 +502,9 @@ export class SetupWizardPanel {
         break;
       case 'jira':
         formHtml = this.renderJiraForm();
+        break;
+      case 'jiraapi':
+        formHtml = this.renderJiraApiForm();
         break;
       case 'demo':
         formHtml = this.renderDemoForm();
@@ -658,7 +705,7 @@ export class SetupWizardPanel {
       </div>` : '';
 
     return `
-      <p class="form-help">Jira uses an MCP server. Configure the connection to your Jira MCP server.</p>
+      <p class="form-help">This Jira mode uses MCP. Configure the connection to your Jira MCP server.</p>
       <div class="field-group">
         <label class="field-label">Connection Type</label>
         <div class="radio-group">
@@ -666,18 +713,88 @@ export class SetupWizardPanel {
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="stdio" ${isStdio ? 'checked' : ''} />
-            Local MCP (stdio)
+            Jira MCP via stdio
           </label>
           <label class="radio-label">
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="http" ${isHttp ? 'checked' : ''} />
-            Remote MCP (HTTP)
+            Jira MCP via HTTP
+          </label>
+        </div>
+      </div>
+      <div class="polling-section">
+        <div class="field-label">JIRA polling</div>
+        <p class="field-hint polling-hint">Polls the Jira API every 30 seconds to get tickets with the specified label.</p>
+        <div class="field-group">
+          <label class="field-label">Label</label>
+          <input type="text" class="field-input"
+                 data-field="jiraPollingRequiredLabel"
+                 value="${esc(this.state.jiraPollingRequiredLabel)}"
+                 placeholder="syscfg" />
+        </div>
+        <div class="field-group polling-toggle-row">
+          <label class="toggle-switch" for="jiraPollingEnabled">
+            <input type="checkbox"
+                   id="jiraPollingEnabled"
+                   data-field="jiraPollingEnabled"
+                   ${this.state.jiraPollingEnabled ? 'checked' : ''} />
+            <span class="toggle-slider" aria-hidden="true"></span>
+            <span>Enable JIRA polling</span>
           </label>
         </div>
       </div>
       ${stdioFields}
       ${httpFields}`;
+  }
+
+  private renderJiraApiForm(): string {
+    const epicKey = esc(this.state.jiraApiEpicKey);
+    return `
+      <p class="form-help">Jira API mode connects directly to Jira Server/Data Center and syncs this repo against the linked epic. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
+      <div class="field-group">
+        <label class="field-label">Jira Base URL</label>
+        <input type="text" class="field-input"
+               data-field="jiraApiBaseUrl"
+               value="${esc(this.state.jiraApiBaseUrl)}"
+               placeholder="Defaults to the polling service Jira base URL" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Personal Access Token</label>
+        <input type="password" class="field-input"
+               data-field="jiraApiToken"
+               value="${esc(this.state.jiraApiToken)}"
+               placeholder="Leave blank to use JIRA_TOKEN" />
+            </div>
+            <div class="field-group">
+         <label class="field-label">Linked Epic Key</label>
+         <input type="text" class="field-input"
+           data-field="jiraApiEpicKey"
+           value="${epicKey}"
+           placeholder="Optional: e.g. KAMAI-123" />
+         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira API issue creation will use it as the default parent.</p>
+      </div>
+      <div class="polling-section">
+        <div class="field-label">AI execution gate</div>
+        <p class="field-hint polling-hint">The poller syncs all tasks linked to the epic. Only linked-epic tasks with this label and the configured todo-stage status are eligible for AI execution.</p>
+        <div class="field-group">
+          <label class="field-label">Label</label>
+          <input type="text" class="field-input"
+                 data-field="jiraPollingRequiredLabel"
+                 value="${esc(this.state.jiraPollingRequiredLabel)}"
+                 placeholder="syscfg" />
+        </div>
+        <div class="field-group polling-toggle-row">
+          <label class="toggle-switch" for="jiraApiPollingEnabled">
+            <input type="checkbox"
+                   id="jiraApiPollingEnabled"
+                   data-field="jiraPollingEnabled"
+                   ${this.state.jiraPollingEnabled ? 'checked' : ''} />
+            <span class="toggle-slider" aria-hidden="true"></span>
+            <span class="toggle-label">Enable JIRA polling</span>
+          </label>
+        </div>
+      </div>`;
   }
 
   /* -- Demo form --------------------------------------------------- */
@@ -823,6 +940,18 @@ export class SetupWizardPanel {
         margin-top: 4px;
       }
 
+      .polling-section {
+        margin: 18px 0;
+        padding: 14px;
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-input-border));
+        border-radius: 8px;
+        background: var(--vscode-editorWidget-background, transparent);
+      }
+
+      .polling-hint {
+        margin-bottom: 12px;
+      }
+
       .link {
         color: var(--vscode-textLink-foreground);
         text-decoration: none;
@@ -845,6 +974,70 @@ export class SetupWizardPanel {
         align-items: center;
         gap: 6px;
         cursor: pointer;
+      }
+
+      .polling-toggle-row {
+        margin-bottom: 0;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: center;
+        column-gap: 10px;
+        width: 100%;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle-switch input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .toggle-slider {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex: 0 0 40px;
+        border-radius: 999px;
+        background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.35));
+        transition: background 0.15s ease;
+      }
+
+      .toggle-label {
+        min-width: 0;
+        line-height: 1.35;
+        white-space: normal;
+      }
+
+      .toggle-slider::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--vscode-input-foreground, #fff);
+        transition: transform 0.15s ease;
+      }
+
+      .toggle-switch input:checked + .toggle-slider {
+        background: var(--vscode-button-background);
+      }
+
+      .toggle-switch input:checked + .toggle-slider::after {
+        transform: translateX(18px);
+      }
+
+      .toggle-switch input:focus-visible + .toggle-slider {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
       }
 
       /* ---- Buttons ---- */
@@ -918,14 +1111,16 @@ export class SetupWizardPanel {
       document.addEventListener('input', e => {
         const target = e.target;
         if (target.dataset && target.dataset.field) {
-          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value: target.value });
+          const value = target.type === 'checkbox' ? target.checked : target.value;
+          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value });
         }
       });
 
       document.addEventListener('change', e => {
         const target = e.target;
         if (target.dataset && target.dataset.field) {
-          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value: target.value });
+          const value = target.type === 'checkbox' ? target.checked : target.value;
+          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value });
         }
       });
     `;

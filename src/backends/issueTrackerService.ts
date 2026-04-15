@@ -7,6 +7,7 @@ import type {
   ConnectionCheck,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentItemQueryOptions,
@@ -44,6 +45,8 @@ export interface IssueTrackerService extends vscode.Disposable {
   updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails>;
   deleteIssue(issueKey: string): Promise<void>;
   addComment(issueKey: string, body: string): Promise<void>;
+  attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void>;
+  downloadAttachment(issueKey: string, attachment: IssueAttachment, targetFilePath: string): Promise<void>;
   getTransitions(issueKey: string): Promise<WorkflowTransition[]>;
   transitionIssue(issueKey: string, transitionId: string): Promise<void>;
   getBrowseUrl(issue: IssueSummary): Promise<string | undefined>;

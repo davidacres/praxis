@@ -5,7 +5,10 @@ src/**
 .vscode/**
 .vscode-test.*
 tsconfig.json
+JiraPollingService/**
 !out/**
 !media/**
+!JiraPollingService/appsettings.json
+!JiraPollingService/node/**
 !README.md
 !LICENSE

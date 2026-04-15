@@ -8,6 +8,7 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentItemQueryOptions,
@@ -21,6 +22,7 @@ import type {
 import { AppConfigStore } from '../config/jiraConfig';
 import { DemoService } from '../demo/demoService';
 import { FilePlanService } from '../file/filePlanService';
+import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
@@ -134,6 +136,18 @@ export class BackendRouter implements IssueTrackerService {
     return (await this.getService()).addComment(issueKey, body);
   }
 
+  public async attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void> {
+    return (await this.getService()).attachFile(issueKey, filePath, fileName);
+  }
+
+  public async downloadAttachment(
+    issueKey: string,
+    attachment: IssueAttachment,
+    targetFilePath: string
+  ): Promise<void> {
+    return (await this.getService()).downloadAttachment(issueKey, attachment, targetFilePath);
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     return (await this.getService()).getTransitions(issueKey);
   }
@@ -167,6 +181,8 @@ export class BackendRouter implements IssueTrackerService {
         ? new DemoService(this.configStore)
         : configuredMode === 'file'
           ? new FilePlanService(this.configStore)
+          : configuredMode === 'jiraapi'
+            ? new JiraApiService(this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
             : configuredMode === 'userworkspace'

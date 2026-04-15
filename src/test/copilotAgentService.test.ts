@@ -1,6 +1,11 @@
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import type { AgentEventSummary, AgentSessionRecord, AgentTaskDefinition } from '../ai/agentTypes';
-import { CopilotAgentService } from '../ai/copilotAgentService';
+import {
+  buildMsiVersionExample,
+  buildSystemPrompt,
+  buildWorktreeName,
+  CopilotAgentService
+} from '../ai/copilotAgentService';
 
 class FakeSessionManager {
   public readonly records = new Map<string, AgentSessionRecord>();
@@ -94,6 +99,52 @@ function createActiveTask(issueKey: string) {
 }
 
 suite('CopilotAgentService', () => {
+  test('buildWorktreeName prefixes the issue key and normalizes the suffix', () => {
+    const worktreeName = buildWorktreeName({
+      key: 'KAMAI-39',
+      summary: 'KAMAI-39 Update some stuff',
+      branch: 'feature/update-some-stuff'
+    } as never);
+
+    assert.strictEqual(worktreeName, 'KAMAI-39-update-some-stuff');
+  });
+
+  test('buildMsiVersionExample appends issue key and build identifier', () => {
+    assert.strictEqual(
+      buildMsiVersionExample('TWT-999'),
+      '1.0.0.1-TWT-999-buildx'
+    );
+  });
+
+  test('buildSystemPrompt includes ticket-based worktree and MSI naming rules', () => {
+    const taskDefinition: AgentTaskDefinition = {
+      goal: 'Publish a fix',
+      scope: 'repo',
+      definitionOfDone: 'MSI published',
+      workflow: {
+        id: 'add-edit-dotnet-web-api',
+        name: 'Add/Edit .NET Web API Workflow',
+        description: 'Runs implementation, review, security, and test phases.',
+        instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md',
+        link: 'https://example.test/workflows/add-edit-dotnet-web-api'
+      }
+    };
+
+    const prompt = buildSystemPrompt(taskDefinition, {
+      key: 'TWT-999',
+      summary: 'Ship updated installer',
+      status: 'Ready for Development',
+      issueType: 'Task'
+    } as never);
+
+    assert.ok(prompt.includes('its name MUST start with TWT-999'));
+    assert.ok(prompt.includes('Use a worktree name like: TWT-999-ship-updated-installer'));
+    assert.ok(prompt.includes('Use an MSI version like: 1.0.0.1-TWT-999-buildx'));
+    assert.ok(prompt.includes('## Assigned Workflow Pack'));
+    assert.ok(prompt.includes('.github/skills/add-edit-dotnet-web-api/SKILL.md'));
+    assert.ok(prompt.includes('https://example.test/workflows/add-edit-dotnet-web-api'));
+  });
+
   test('cleanup while awaiting permission does not revert session back to executing', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-1';
@@ -187,13 +238,97 @@ suite('CopilotAgentService', () => {
     assert.strictEqual(activeTask.pendingPermissions.length, 0);
     assert.strictEqual(activeTask.allowPermissionsForTask, true);
     assert.strictEqual(
-      sessionManager.stateChanges[sessionManager.stateChanges.length - 1]?.state,
+      sessionManager.stateChanges.at(-1)?.state,
       'executing'
     );
 
     const autoApproved = await hooks.onPermissionRequest({ kind: 'read', fileName: 'd.md' });
     assert.strictEqual(autoApproved.kind, 'approved');
     assert.strictEqual(activeTask.pendingPermissions.length, 0);
+  });
+
+  test('safe shell version probes are silently auto-approved', async () => {
+    const sessionManager = new FakeSessionManager();
+    const issueKey = 'TM-3A';
+    sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
+
+    const service = new CopilotAgentService(sessionManager as never, {
+      appendLine(): void {}
+    });
+
+    const activeTask = createActiveTask(issueKey);
+    (service as any).activeTasks.set(issueKey, activeTask);
+
+    const hooks = (service as any).createInteractiveSessionHooks(issueKey);
+    const result = await hooks.onPermissionRequest({
+      kind: 'shell',
+      fullCommandText: String.raw`cd C:\dev\ticket-manager-worktrees\KAMAI-42 && dotnet --version 2>&1`
+    });
+
+    assert.strictEqual(result.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
+    assert.ok(
+      sessionManager.appendedEvents.some(({ events }) =>
+        events.some(
+          event =>
+            event.type === 'permission_completed' &&
+            event.summary.includes('silently auto-approved safe probe')
+        )
+      )
+    );
+  });
+
+  test('shell build commands are silently auto-approved', async () => {
+    const sessionManager = new FakeSessionManager();
+    const issueKey = 'TM-3B';
+    sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
+
+    const service = new CopilotAgentService(sessionManager as never, {
+      appendLine(): void {}
+    });
+
+    const activeTask = createActiveTask(issueKey);
+    (service as any).activeTasks.set(issueKey, activeTask);
+
+    const hooks = (service as any).createInteractiveSessionHooks(issueKey);
+    const result = await hooks.onPermissionRequest({
+      kind: 'shell',
+      fullCommandText: String.raw`cd C:\dev\ticket-manager-worktrees\KAMAI-42 && dotnet build`
+    });
+
+    assert.strictEqual(result.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
+  });
+
+  test('non-build shell commands still require explicit approval', async () => {
+    const sessionManager = new FakeSessionManager();
+    const issueKey = 'TM-3C';
+    sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
+
+    const service = new CopilotAgentService(sessionManager as never, {
+      appendLine(): void {}
+    });
+
+    const activeTask = createActiveTask(issueKey);
+    (service as any).activeTasks.set(issueKey, activeTask);
+
+    const hooks = (service as any).createInteractiveSessionHooks(issueKey);
+    const permissionPromise = hooks.onPermissionRequest({
+      kind: 'shell',
+      fullCommandText: String.raw`cd C:\dev\ticket-manager-worktrees\KAMAI-42 && git push origin HEAD`
+    });
+
+    assert.strictEqual(activeTask.pendingPermissions.length, 1);
+    assert.deepStrictEqual(
+      sessionManager.stateChanges.map(change => change.state),
+      ['awaiting_approval']
+    );
+
+    service.respondToPermission(issueKey, 'deny');
+    const result = await permissionPromise;
+    assert.strictEqual(result.kind, 'denied-interactively-by-user');
   });
 
   test('pauseTask marks the session paused and removes the live task', async () => {
