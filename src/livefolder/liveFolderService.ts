@@ -179,7 +179,7 @@ function toParentIssueReference(issue: LiveIssue | undefined): ParentIssueRefere
 
 interface LiveIssue extends IssueSummary {
   sourceUri: vscode.Uri;
-  featureId: number;
+  featureId: number | undefined;
   childSeq?: number;
   featureDirName?: string;
 }
@@ -456,11 +456,11 @@ export class LiveFolderService implements IssueTrackerService {
     }
 
     const parentFeature = this.resolveCreateParent(projectKey, issueType, input.parentKey?.trim());
-    const childSeq = this.getNextChildSequence(parentFeature.featureId, issueType);
+    const childSeq = this.getNextChildSequence(parentFeature.featureId!, issueType);
     const childFileUri = vscode.Uri.joinPath(
       this.featuresRootUri,
       parentFeature.featureDirName!,
-      buildChildFileName(issueType, parentFeature.featureId, childSeq, summary)
+      buildChildFileName(issueType, parentFeature.featureId!, childSeq, summary)
     );
 
     await this.writeManagedFile(
@@ -476,7 +476,7 @@ export class LiveFolderService implements IssueTrackerService {
     );
 
     await this.loadFromDisk();
-    return this.getIssue(stableChildKey(this.projectKey, issueType, parentFeature.featureId, childSeq));
+    return this.getIssue(stableChildKey(this.projectKey, issueType, parentFeature.featureId!, childSeq));
   }
 
   public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> {
@@ -711,11 +711,14 @@ export class LiveFolderService implements IssueTrackerService {
 
     // Child items (stories, tasks, bugs)
     for (const child of parsed.childItems) {
+      const fid = child.featureId ?? 0;
       const key =
         child.issueType === 'Story'
-          ? stableStoryKey(pk, child.featureId, child.sequence)
-          : stableChildKey(pk, child.issueType, child.featureId, child.sequence);
-      const parentKey = stableFeatureKey(pk, child.featureId);
+          ? stableStoryKey(pk, fid, child.sequence)
+          : stableChildKey(pk, child.issueType, fid, child.sequence);
+      const parentKey = child.featureId !== undefined
+        ? stableFeatureKey(pk, child.featureId)
+        : undefined;
       const now = new Date().toISOString();
       issues.push({
         key,
@@ -734,7 +737,9 @@ export class LiveFolderService implements IssueTrackerService {
         sourceUri: child.fileUri,
         featureId: child.featureId,
         childSeq: child.sequence,
-        featureDirName: featureDirNameById.get(child.featureId)
+        featureDirName: child.featureId !== undefined
+          ? featureDirNameById.get(child.featureId)
+          : undefined
       });
     }
 
@@ -745,10 +750,11 @@ export class LiveFolderService implements IssueTrackerService {
     }
     const childKeyByBaseName = new Map<string, string>();
     for (const child of parsed.childItems) {
+      const fid = child.featureId ?? 0;
       const key =
         child.issueType === 'Story'
-          ? stableStoryKey(pk, child.featureId, child.sequence)
-          : stableChildKey(pk, child.issueType, child.featureId, child.sequence);
+          ? stableStoryKey(pk, fid, child.sequence)
+          : stableChildKey(pk, child.issueType, fid, child.sequence);
       childKeyByBaseName.set(child.filename.replace(/\.md$/i, '').toLowerCase(), key);
     }
 
@@ -758,13 +764,16 @@ export class LiveFolderService implements IssueTrackerService {
         key: stableFeatureKey(pk, f.featureId),
         tokens: f.depTokens
       })),
-      ...parsed.childItems.map(child => ({
-        key:
-          child.issueType === 'Story'
-            ? stableStoryKey(pk, child.featureId, child.sequence)
-            : stableChildKey(pk, child.issueType, child.featureId, child.sequence),
-        tokens: child.depTokens
-      }))
+      ...parsed.childItems.map(child => {
+        const fid = child.featureId ?? 0;
+        return {
+          key:
+            child.issueType === 'Story'
+              ? stableStoryKey(pk, fid, child.sequence)
+              : stableChildKey(pk, child.issueType, fid, child.sequence),
+          tokens: child.depTokens
+        };
+      })
     ];
 
     for (const { key, tokens } of allParsed) {
@@ -801,8 +810,8 @@ export class LiveFolderService implements IssueTrackerService {
 
   private getNextFeatureId(): number {
     const featureIds = this.issues
-      .filter(issue => issue.issueType === 'Feature')
-      .map(issue => issue.featureId);
+      .filter(issue => issue.issueType === 'Feature' && issue.featureId !== undefined)
+      .map(issue => issue.featureId as number);
     return (featureIds.length > 0 ? Math.max(...featureIds) : 0) + 1;
   }
 
@@ -862,7 +871,7 @@ export class LiveFolderService implements IssueTrackerService {
     try {
       await appendFeatureItemTableRow(
         parentFeature.sourceUri,
-        `${padFeatureId(parentFeature.featureId)}.${childSeq}`,
+        `${padFeatureId(parentFeature.featureId!)}.${childSeq}`,
         issueType,
         summary,
         status
