@@ -180,4 +180,31 @@ A bug filed at the features root, not inside a feature folder.
     assert.strictEqual(rootBug!.featureId, 1);
     assert.strictEqual(rootBug!.planStatus, 'To Do');
   });
+
+  test('parsePlanFolder discovers bugs in plans/bugs/ subdirectory', async () => {
+    const fixture = await createLiveFolderFixture('bugs-subdir');
+    fixtureRoots.push(fixture.rootUri);
+
+    // Place a bug file in plans/bugs/
+    const bugsDirUri = vscode.Uri.joinPath(fixture.plansRootUri, 'bugs');
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-01-2-payment-error.md'),
+      `# Payment error
+
+**Status:** In Progress
+
+## Summary
+Payment processing fails intermittently.
+`
+    );
+
+    const parsed = await parsePlanFolder(fixture.rootUri);
+    const subdirBug = parsed.childItems.find(
+      item => item.issueType === 'Bug' && item.title === 'Payment error'
+    );
+
+    assert.ok(subdirBug, 'Bug in plans/bugs/ should be discovered');
+    assert.strictEqual(subdirBug!.featureId, 1);
+    assert.strictEqual(subdirBug!.planStatus, 'In Progress');
+  });
 });

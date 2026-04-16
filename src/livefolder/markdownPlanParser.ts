@@ -645,50 +645,84 @@ export async function parsePlanFolder(
     }
   }
 
-  // Also scan the features root for child items not nested inside feature dirs
+  // Also scan the features root and additional directories for child items
+  // not nested inside feature dirs (e.g., plans/, plans/bugs/)
   const featureIdSet = new Set(features.map(f => f.featureId));
-  for (const [fname, ftype] of featureEntries) {
-    if (ftype !== vscode.FileType.File || !fname.toLowerCase().endsWith('.md')) {
-      continue;
+  const additionalDirs: vscode.Uri[] = [featuresRootUri];
+
+  // Scan plansRootUri if it differs from featuresRootUri
+  if (plansRootUri.fsPath !== featuresRootUri.fsPath) {
+    additionalDirs.push(plansRootUri);
+  }
+
+  // Scan well-known child-item subdirectories under plansRootUri
+  for (const subdir of ['bugs', 'tasks', 'stories']) {
+    const subdirUri = vscode.Uri.joinPath(plansRootUri, subdir);
+    try {
+      const stat = await vscode.workspace.fs.stat(subdirUri);
+      if (stat.type === vscode.FileType.Directory) {
+        additionalDirs.push(subdirUri);
+      }
+    } catch {
+      // Subdirectory doesn't exist — skip
     }
-    if (seenChildFiles.has(fname.toLowerCase())) {
-      continue;
+  }
+
+  for (const dirUri of additionalDirs) {
+    let dirEntries: [string, vscode.FileType][];
+    if (dirUri.fsPath === featuresRootUri.fsPath) {
+      dirEntries = featureEntries;
+    } else {
+      const entries = await readDirectorySafe(dirUri);
+      if (!entries) {
+        continue;
+      }
+      dirEntries = entries;
     }
-    const parsed = parseChildFileName(fname);
-    if (!parsed || !featureIdSet.has(parsed.featureId)) {
-      continue;
-    }
-    const fileUri = vscode.Uri.joinPath(featuresRootUri, fname);
-    const scontent = await readUtf8(fileUri);
-    progress(`Reading ${parsed.issueType.toLowerCase()}: ${fname}`);
-    childItems.push({
-      featureId: parsed.featureId,
-      sequence: parsed.sequence,
-      filename: fname,
-      issueType: parsed.issueType,
-      title: extractMainHeading(scontent),
-      planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
-      description: buildDescription(scontent),
-      relativePath: fname,
-      fileUri,
-      depTokens: collectDependencyTokens(scontent),
-      planningDates: extractPlanningDates(scontent),
-      branch: extractBranchRaw(scontent)
-    });
-    if (parsed.issueType === 'Story') {
-      stories.push({
+    for (const [fname, ftype] of dirEntries) {
+      if (ftype !== vscode.FileType.File || !fname.toLowerCase().endsWith('.md')) {
+        continue;
+      }
+      if (seenChildFiles.has(fname.toLowerCase())) {
+        continue;
+      }
+      const parsed = parseChildFileName(fname);
+      if (!parsed || !featureIdSet.has(parsed.featureId)) {
+        continue;
+      }
+      const fileUri = vscode.Uri.joinPath(dirUri, fname);
+      const scontent = await readUtf8(fileUri);
+      progress(`Reading ${parsed.issueType.toLowerCase()}: ${fname}`);
+      seenChildFiles.add(fname.toLowerCase());
+      childItems.push({
         featureId: parsed.featureId,
-        storySeq: parsed.sequence,
+        sequence: parsed.sequence,
         filename: fname,
+        issueType: parsed.issueType,
         title: extractMainHeading(scontent),
         planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
         description: buildDescription(scontent),
         relativePath: fname,
-        storyMdUri: fileUri,
+        fileUri,
         depTokens: collectDependencyTokens(scontent),
         planningDates: extractPlanningDates(scontent),
         branch: extractBranchRaw(scontent)
       });
+      if (parsed.issueType === 'Story') {
+        stories.push({
+          featureId: parsed.featureId,
+          storySeq: parsed.sequence,
+          filename: fname,
+          title: extractMainHeading(scontent),
+          planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
+          description: buildDescription(scontent),
+          relativePath: fname,
+          storyMdUri: fileUri,
+          depTokens: collectDependencyTokens(scontent),
+          planningDates: extractPlanningDates(scontent),
+          branch: extractBranchRaw(scontent)
+        });
+      }
     }
   }
 
