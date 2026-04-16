@@ -38,7 +38,7 @@ export interface ParsedStoryFile {
 }
 
 export interface ParsedChildFile {
-  featureId: number;
+  featureId: number | undefined;
   sequence: number;
   filename: string;
   issueType: 'Story' | 'Task' | 'Bug';
@@ -205,19 +205,44 @@ const SEARCH_SKIP_DIRS = new Set([
   'target'
 ]);
 
-function parseChildFileName(
-  name: string
-): { featureId: number; sequence: number; issueType: 'Story' | 'Task' | 'Bug' } | undefined {
-  const m = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
-  if (!m) {
-    return undefined;
+interface ParsedChildFileName {
+  featureId: number | undefined;
+  sequence: number;
+  issueType: 'Story' | 'Task' | 'Bug';
+}
+
+/**
+ * Parse child item filenames in two formats:
+ * - Strict: `{type}-{featureId}-{sequence}-{slug}.md` (e.g., bug-01-1-fix.md)
+ * - Loose:  `{type}-{sequence}-{ref}-{slug}.md` (e.g., bug-001-s107-name.md)
+ *
+ * The loose format is used when bugs/tasks are filed independently and the
+ * second segment is not a pure number (contains letters like "s107").
+ */
+function parseChildFileName(name: string): ParsedChildFileName | undefined {
+  // Strict format: type-featureId-sequence-slug.md
+  const strict = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
+  if (strict) {
+    const prefix = strict[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
+    return {
+      issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
+      featureId: Number.parseInt(strict[2], 10),
+      sequence: Number.parseInt(strict[3], 10)
+    };
   }
-  const prefix = m[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
-  return {
-    issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
-    featureId: Number.parseInt(m[2], 10),
-    sequence: Number.parseInt(m[3], 10)
-  };
+
+  // Loose format: type-sequence-ref-slug.md (ref contains letters)
+  const loose = name.match(/^(story|task|bug)-(\d+)-[a-z]\w*-.+\.md$/i);
+  if (loose) {
+    const prefix = loose[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
+    return {
+      issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
+      featureId: undefined,
+      sequence: Number.parseInt(loose[2], 10)
+    };
+  }
+
+  return undefined;
 }
 
 function extractDependenciesSectionBody(content: string): string {
@@ -606,15 +631,21 @@ export async function parsePlanFolder(
         continue;
       }
       const parsed = parseChildFileName(fname);
-      if (!parsed || parsed.featureId !== folder.featureId) {
+      if (!parsed) {
         continue;
       }
+      // Strict-format files must match the folder's featureId;
+      // loose-format files (featureId undefined) inherit it from the folder.
+      if (parsed.featureId !== undefined && parsed.featureId !== folder.featureId) {
+        continue;
+      }
+      const resolvedFeatureId = parsed.featureId ?? folder.featureId;
       const fileUri = vscode.Uri.joinPath(folderUri, fname);
       const scontent = await readUtf8(fileUri);
       progress(`Reading ${parsed.issueType.toLowerCase()}: ${folder.dirName}/${fname}`);
       seenChildFiles.add(fname.toLowerCase());
       childItems.push({
-        featureId: folder.featureId,
+        featureId: resolvedFeatureId,
         sequence: parsed.sequence,
         filename: fname,
         issueType: parsed.issueType,
@@ -629,7 +660,7 @@ export async function parsePlanFolder(
       });
       if (parsed.issueType === 'Story') {
         stories.push({
-          featureId: folder.featureId,
+          featureId: resolvedFeatureId,
           storySeq: parsed.sequence,
           filename: fname,
           title: extractMainHeading(scontent),
@@ -687,7 +718,11 @@ export async function parsePlanFolder(
         continue;
       }
       const parsed = parseChildFileName(fname);
-      if (!parsed || !featureIdSet.has(parsed.featureId)) {
+      if (!parsed) {
+        continue;
+      }
+      // Strict-format must reference a known feature; loose-format (no featureId) is always accepted
+      if (parsed.featureId !== undefined && !featureIdSet.has(parsed.featureId)) {
         continue;
       }
       const fileUri = vscode.Uri.joinPath(dirUri, fname);
@@ -708,7 +743,7 @@ export async function parsePlanFolder(
         planningDates: extractPlanningDates(scontent),
         branch: extractBranchRaw(scontent)
       });
-      if (parsed.issueType === 'Story') {
+      if (parsed.issueType === 'Story' && parsed.featureId !== undefined) {
         stories.push({
           featureId: parsed.featureId,
           storySeq: parsed.sequence,
@@ -727,8 +762,10 @@ export async function parsePlanFolder(
   }
 
   childItems.sort((a, b) => {
-    if (a.featureId !== b.featureId) {
-      return a.featureId - b.featureId;
+    const aFid = a.featureId ?? 0;
+    const bFid = b.featureId ?? 0;
+    if (aFid !== bFid) {
+      return aFid - bFid;
     }
     if (a.issueType !== b.issueType) {
       return a.issueType.localeCompare(b.issueType);

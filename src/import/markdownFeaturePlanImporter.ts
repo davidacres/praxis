@@ -118,11 +118,14 @@ export async function generateTicketPlanFromMarkdownFeatures(
   let tasksImported = 0;
   let bugsImported = 0;
   for (const child of parsed.childItems) {
+    const fid = child.featureId ?? 0;
     const key =
       child.issueType === 'Story'
-        ? stableStoryKey(projectKey, child.featureId, child.sequence)
-        : stableChildKey(projectKey, child.issueType, child.featureId, child.sequence);
-    const parentKey = stableFeatureKey(projectKey, child.featureId);
+        ? stableStoryKey(projectKey, fid, child.sequence)
+        : stableChildKey(projectKey, child.issueType, fid, child.sequence);
+    const parentKey = child.featureId !== undefined
+      ? stableFeatureKey(projectKey, child.featureId)
+      : undefined;
     boardIssueKeys.push(key);
     items.push({
       key,

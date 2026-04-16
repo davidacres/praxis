@@ -181,30 +181,31 @@ A bug filed at the features root, not inside a feature folder.
     assert.strictEqual(rootBug!.planStatus, 'To Do');
   });
 
-  test('parsePlanFolder discovers bugs in plans/bugs/ subdirectory', async () => {
-    const fixture = await createLiveFolderFixture('bugs-subdir');
+  test('parsePlanFolder discovers bugs with loose filename format (bug-NNN-sRef-slug)', async () => {
+    const fixture = await createLiveFolderFixture('bugs-loose');
     fixtureRoots.push(fixture.rootUri);
 
-    // Place a bug file in plans/bugs/
+    // Place a bug file with loose naming: bug-001-s107-slug.md
     const bugsDirUri = vscode.Uri.joinPath(fixture.plansRootUri, 'bugs');
     await writeTextFile(
-      vscode.Uri.joinPath(bugsDirUri, 'bug-01-2-payment-error.md'),
-      `# Payment error
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
+      `# ISyncResultBuilder null ref
 
-**Status:** In Progress
+**Status:** Open
 
 ## Summary
-Payment processing fails intermittently.
+NullReferenceException in ISyncResultBuilder when sync completes.
 `
     );
 
     const parsed = await parsePlanFolder(fixture.rootUri);
-    const subdirBug = parsed.childItems.find(
-      item => item.issueType === 'Bug' && item.title === 'Payment error'
+    const looseBug = parsed.childItems.find(
+      item => item.issueType === 'Bug' && item.title === 'ISyncResultBuilder null ref'
     );
 
-    assert.ok(subdirBug, 'Bug in plans/bugs/ should be discovered');
-    assert.strictEqual(subdirBug!.featureId, 1);
-    assert.strictEqual(subdirBug!.planStatus, 'In Progress');
+    assert.ok(looseBug, 'Bug with loose filename format should be discovered');
+    assert.strictEqual(looseBug!.featureId, undefined, 'Loose-format bugs have no featureId');
+    assert.strictEqual(looseBug!.sequence, 1);
+    assert.strictEqual(looseBug!.planStatus, 'Backlog', 'Open maps to Backlog status');
   });
 });
