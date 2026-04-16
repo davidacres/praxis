@@ -154,4 +154,30 @@ Resolve the timeout when refreshing tokens.
       'Fix login timeout'
     );
   });
+
+  test('parsePlanFolder picks up child items at the features root level', async () => {
+    const fixture = await createLiveFolderFixture('root-level-children');
+    fixtureRoots.push(fixture.rootUri);
+
+    // Place a bug file directly in the features/ root (not inside a feature dir)
+    await writeTextFile(
+      vscode.Uri.joinPath(fixture.featuresRootUri, 'bug-01-1-root-level-crash.md'),
+      `# Root level crash
+
+**Status:** To Do
+
+## Summary
+A bug filed at the features root, not inside a feature folder.
+`
+    );
+
+    const parsed = await parsePlanFolder(fixture.rootUri);
+    const rootBug = parsed.childItems.find(
+      item => item.issueType === 'Bug' && item.title === 'Root level crash'
+    );
+
+    assert.ok(rootBug, 'Bug at features root should be discovered');
+    assert.strictEqual(rootBug!.featureId, 1);
+    assert.strictEqual(rootBug!.planStatus, 'To Do');
+  });
 });
