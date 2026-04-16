@@ -40,6 +40,23 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       undefined,
       this.disposables
     );
+
+    // When the view becomes visible again (e.g. after the user resets the
+    // backend mode), reset to the mode-selection screen so they see a clean
+    // starting state instead of a stale form.
+    webviewView.onDidChangeVisibility(
+      () => {
+        if (webviewView.visible) {
+          this.setupStep = 0;
+          this.setupMode = undefined;
+          this.setupFields = {};
+          this.render();
+        }
+      },
+      undefined,
+      this.disposables
+    );
+
     this.render();
   }
 
@@ -689,11 +706,10 @@ ${connFields}`;
       } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
 
-    // Reset state and re-render to show mode selection
-    this.setupStep = 0;
-    this.setupMode = undefined;
-    this.setupFields = {};
-    this.render();
+    // Don't reset state or re-render here.  The onDidChangeConfiguration
+    // handler sets ticketManager.configured = true, which hides this sidebar
+    // via the when-clause.  If the view later becomes visible again (e.g. on
+    // mode reset), the onDidChangeVisibility handler resets to step 0.
   }
 
   private async resolveLiveFolderPath(
