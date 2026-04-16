@@ -252,4 +252,45 @@ Sync manager times out after 30s.
     assert.strictEqual(bug1!.issueType, 'Bug');
     assert.strictEqual(bug2!.issueType, 'Bug');
   });
+
+  test('parsePlanFolder discovers bugs alongside features (user folder structure)', async () => {
+    // Mimics: plans/bugs/*.md + plans/features/feature-01-xxx/feature.md
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const rootUri = vscode.Uri.joinPath(
+      workspaceFolder!.uri, '.ticket-manager-test', `mixed-${uniqueSuffix}`
+    );
+    fixtureRoots.push(rootUri);
+    const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
+
+    // Create a feature
+    const featureDirUri = vscode.Uri.joinPath(plansUri, 'features', 'feature-01-his-connectivity');
+    await writeTextFile(
+      vscode.Uri.joinPath(featureDirUri, 'feature.md'),
+      `# HIS Connectivity\n\n**Status:** Done\n\n## Summary\nConnect to HIS.\n`
+    );
+
+    // Create bugs in plans/bugs/ with loose naming
+    const bugsDirUri = vscode.Uri.joinPath(plansUri, 'bugs');
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
+      `# ISyncResultBuilder null ref\n\n**Status:** In Progress\n\n## Summary\nNull ref.\n`
+    );
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-004-s3776-syncmanager-106.md'),
+      `# SyncManager 106\n\n**Status:** Backlog\n\n## Summary\nSync issue.\n`
+    );
+
+    const parsed = await parsePlanFolder(rootUri);
+    assert.strictEqual(parsed.features.length, 1, 'One feature expected');
+    assert.strictEqual(
+      parsed.childItems.filter(i => i.issueType === 'Bug').length,
+      2,
+      'Both bugs should be discovered alongside features'
+    );
+    const bug1 = parsed.childItems.find(i => i.issueType === 'Bug' && i.sequence === 1);
+    assert.ok(bug1, 'bug-001-s107 should be discovered');
+    assert.strictEqual(bug1!.featureId, undefined, 'Loose bug has no featureId');
+  });
 });
