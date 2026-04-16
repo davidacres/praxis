@@ -1946,8 +1946,18 @@ export async function activate(
                 await refreshSearchActionContexts();
                 boardPanelManager.clear();
                 issueDetailPanelManager.clear();
-                await backendService.reset();
-                await refreshAndRestoreSelection();
+
+                // reset() and refresh can fail transiently while settings are
+                // being saved incrementally (e.g. backendMode written before
+                // liveFolderPath).  Swallow the error; the next config-change
+                // event will retry with all settings in place.
+                try {
+                  await backendService.reset();
+                  await refreshAndRestoreSelection();
+                } catch {
+                  // Will be retried on the next onDidChangeConfiguration
+                }
+
                 await ticketManagerStatusBar.refresh();
               } catch (error) {
                 reportError(error);
