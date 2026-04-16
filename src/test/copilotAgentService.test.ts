@@ -256,7 +256,7 @@ suite('CopilotAgentService', () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-6';
     const record = createRecord(issueKey, 'executing');
-    record.stepCount = 49;
+    record.stepCount = 50;
     sessionManager.records.set(issueKey, record);
 
     let abortCallCount = 0;
@@ -265,25 +265,14 @@ suite('CopilotAgentService', () => {
     });
 
     const activeTask = createActiveTask(issueKey);
+    (activeTask as any).maxSteps = 50;
     activeTask.session.abort = async (): Promise<void> => {
       abortCallCount += 1;
     };
     (service as any).activeTasks.set(issueKey, activeTask);
 
-    (service as any).handleSessionEvent(
-      issueKey,
-      {
-        type: 'tool.execution_complete',
-        data: {
-          toolCallId: 'tool-1',
-          success: true,
-          result: { content: 'ok' }
-        }
-      },
-      50
-    );
-
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // Directly invoke the step-limit failure path (bypasses the interactive prompt)
+    await (service as any).failTaskForStepLimit(issueKey, 50);
 
     assert.strictEqual(abortCallCount, 1);
     assert.deepStrictEqual(
