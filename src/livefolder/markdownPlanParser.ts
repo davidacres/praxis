@@ -458,6 +458,19 @@ function toDirectoryUri(selectedRoot: vscode.Uri | string): vscode.Uri {
   return vscode.Uri.file(normalizeConfiguredFolderPath(selectedRoot));
 }
 
+const CHILD_ITEM_SUBDIRS = ['bugs', 'tasks', 'stories'];
+
+async function containsChildItemDirs(rootUri: vscode.Uri): Promise<boolean> {
+  for (const subdir of CHILD_ITEM_SUBDIRS) {
+    const subdirUri = vscode.Uri.joinPath(rootUri, subdir);
+    const entries = await readDirectorySafe(subdirUri);
+    if (entries?.some(([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.md'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function identifyPlanFolderAtRoot(
   candidateRoot: vscode.Uri,
   rootEntries?: [string, vscode.FileType][]
@@ -478,6 +491,16 @@ async function identifyPlanFolderAtRoot(
       plansRootUri: canonicalPlansRootUri(candidateRoot, candidateRoot),
       featuresRootUri: candidateRoot,
       featureEntries: entries
+    };
+  }
+
+  // Accept as a plan folder if it has child-item subdirectories (bugs/, tasks/, stories/)
+  // even without feature folders — supports standalone bug/task tracking
+  if (await containsChildItemDirs(candidateRoot)) {
+    return {
+      plansRootUri: candidateRoot,
+      featuresRootUri: featureEntries ? featuresUri : candidateRoot,
+      featureEntries: featureEntries ?? entries ?? []
     };
   }
 
@@ -687,7 +710,7 @@ export async function parsePlanFolder(
   }
 
   // Scan well-known child-item subdirectories under plansRootUri
-  for (const subdir of ['bugs', 'tasks', 'stories']) {
+  for (const subdir of CHILD_ITEM_SUBDIRS) {
     const subdirUri = vscode.Uri.joinPath(plansRootUri, subdir);
     try {
       const stat = await vscode.workspace.fs.stat(subdirUri);

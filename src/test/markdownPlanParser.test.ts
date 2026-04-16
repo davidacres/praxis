@@ -208,4 +208,48 @@ NullReferenceException in ISyncResultBuilder when sync completes.
     assert.strictEqual(looseBug!.sequence, 1);
     assert.strictEqual(looseBug!.planStatus, 'Backlog', 'Open maps to Backlog status');
   });
+
+  test('parsePlanFolder works with only plans/bugs/ and no feature folders', async () => {
+    // Create a minimal fixture manually — no features
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const rootUri = vscode.Uri.joinPath(
+      workspaceFolder!.uri, '.ticket-manager-test', `bugs-only-${uniqueSuffix}`
+    );
+    fixtureRoots.push(rootUri);
+    const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
+    const bugsDirUri = vscode.Uri.joinPath(plansUri, 'bugs');
+
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-null-ref.md'),
+      `# Null reference in sync
+
+**Status:** In Progress
+
+## Summary
+NullReferenceException during sync.
+`
+    );
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-002-s107-timeout.md'),
+      `# Timeout in sync manager
+
+**Status:** Done
+
+## Summary
+Sync manager times out after 30s.
+`
+    );
+
+    const parsed = await parsePlanFolder(rootUri);
+    assert.strictEqual(parsed.features.length, 0, 'No features expected');
+    assert.strictEqual(parsed.childItems.length, 2, 'Both bugs should be discovered');
+    const bug1 = parsed.childItems.find(i => i.sequence === 1);
+    const bug2 = parsed.childItems.find(i => i.sequence === 2);
+    assert.ok(bug1, 'Bug 001 should be found');
+    assert.ok(bug2, 'Bug 002 should be found');
+    assert.strictEqual(bug1!.issueType, 'Bug');
+    assert.strictEqual(bug2!.issueType, 'Bug');
+  });
 });
