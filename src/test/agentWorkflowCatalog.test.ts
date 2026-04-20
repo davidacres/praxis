@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   discoverWorkspaceAgentWorkflows,
+  resolveWorkflowReference,
   resolveRelevantAgentWorkflow,
   resolveConfiguredAgentWorkflow
 } from '../ai/agentWorkflowCatalog';
@@ -162,5 +163,31 @@ suite('agentWorkflowCatalog', () => {
 
     assert.strictEqual(resolution.workflow, undefined);
     assert.ok(resolution.recommendations.includes('UI or frontend implementation workflow'));
+  });
+
+  test('resolves an explicit workflow reference by name or id', () => {
+    const workflows = [
+      {
+        id: 'add-edit-dotnet-web-api',
+        name: 'Add/Edit .NET Web API Workflow',
+        description: 'Workflow for ASP.NET Core REST API delivery.',
+        instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md'
+      },
+      {
+        id: 'frontend-ui',
+        name: 'Frontend UI Workflow',
+        description: 'Workflow for React pages and CSS refinements.',
+        instructionsPath: '.github/skills/frontend-ui/SKILL.md'
+      }
+    ];
+
+    assert.strictEqual(
+      resolveWorkflowReference('Workflow pack: add-edit-dotnet-web-api', workflows)?.id,
+      'add-edit-dotnet-web-api'
+    );
+    assert.strictEqual(
+      resolveWorkflowReference('Add/Edit .NET Web API Workflow', workflows)?.id,
+      'add-edit-dotnet-web-api'
+    );
   });
 });

@@ -1470,7 +1470,34 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       </div>`;
     }
 
-    const sourceLabel = assignment.source === 'automatic' ? 'Automatic' : 'Manual';
+    const sourceLabel = assignment.source === 'automatic'
+      ? 'Automatic'
+      : assignment.source === 'analysis'
+        ? 'Analysis'
+        : 'Manual';
+
+    if (!assignment.workflow) {
+      // Explicit "No workflow pack" choice — delivery proceeds without a directive.
+      return `<div class="card">
+        <div class="section-title">Workflow Pack</div>
+        <div class="detail-row">
+          <div class="detail-label">Name</div>
+          <div class="detail-value">No workflow pack (explicitly chosen)</div>
+        </div>
+        <div class="detail-row">
+          <div class="detail-label">Source</div>
+          <div class="detail-value">${escapeHtml(sourceLabel)}</div>
+        </div>
+        ${assignment.reason ? `<div class="detail-row">
+          <div class="detail-label">Reason</div>
+          <div class="detail-value detail-value--wrap">${escapeHtml(assignment.reason)}</div>
+        </div>` : ''}
+        <div class="form-actions">
+          <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Change Workflow Pack</button>
+        </div>
+      </div>`;
+    }
+
     return `<div class="card">
       <div class="section-title">Workflow Pack</div>
       <div class="detail-row">

@@ -24,10 +24,16 @@ export interface AgentWorkflowReference {
   link?: string;
 }
 
-export type WorkflowAssignmentSource = 'manual' | 'automatic';
+export type WorkflowAssignmentSource = 'manual' | 'automatic' | 'analysis';
 
 export interface IssueWorkflowAssignment {
-  workflow: AgentWorkflowReference;
+  /**
+   * The chosen workflow pack. `undefined` means the user (or analysis) explicitly
+   * selected "No workflow pack" for this issue — delivery should still proceed
+   * but without a workflow directive. Compare to absence of an assignment
+   * record, which means the user has not yet made a choice.
+   */
+  workflow?: AgentWorkflowReference;
   source: WorkflowAssignmentSource;
   assignedAt: string;
   reason?: string;
@@ -53,7 +59,7 @@ export interface AgentTaskDefinition {
   completionContract?: string;
   /** Hard limit on tool invocations before the session is stopped. Default: 200. */
   maxSteps?: number;
-  /** Hard timeout in ms for the entire task. Default: 1 800 000 (30 min). */
+  /** Hard timeout in ms for the entire task. Default: 10 800 000 (3 h). */
   timeoutMs?: number;
 }
 
@@ -63,19 +69,50 @@ export interface DeliveryTaskResult {
   branch: string;
   commitHash?: string;
   pushedRef?: string;
+  buildIdentifier?: string;
   artifactPaths: string[];
   failureReason?: string;
 }
 
+export interface DeliveryMergeRequestNoteSnapshot {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeliveryMergeRequestFeedbackContext {
+  triggeredAt: string;
+  notes: DeliveryMergeRequestNoteSnapshot[];
+}
+
+export interface DeliveryMergeRequestMetadata {
+  iid: number;
+  webUrl: string;
+  title: string;
+  sourceBranch: string;
+  targetBranch: string;
+  state: string;
+  createdAt?: string;
+  updatedAt?: string;
+  mergeCommitSha?: string;
+  handledNotes?: Record<string, string>;
+  lastSeenAt?: string;
+  pendingFeedback?: DeliveryMergeRequestFeedbackContext;
+  buildRequiredOnMerge?: boolean;
+}
+
 export interface DeliverySessionMetadata {
   source: 'jira-polling';
-  phase: 'analysis' | 'implementation';
+  phase: 'analysis' | 'implementation' | 'merge-request-feedback';
   baseBranch: string;
   worktreeName: string;
   worktreePath: string;
   createdBranch: string;
   publishCommand: string;
   artifactPattern: string;
+  mergeRequest?: DeliveryMergeRequestMetadata;
   analysisSummary?: string;
   analysisPlan?: string;
   summaryTemplate?: string;
@@ -131,5 +168,5 @@ export interface AgentSessionRecord {
 /** Default guardrail limits. */
 export const AGENT_DEFAULTS = {
   maxSteps: 500,
-  timeoutMs: 30 * 60 * 1000 // 30 minutes
+  timeoutMs: 3 * 60 * 60 * 1000 // 3 hours — delivery workflows can run E2E suites, long builds, and iterative reviews
 } as const;

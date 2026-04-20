@@ -282,11 +282,18 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       try {
         const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
         if (!workflowInstructionsPath) {
-          this.aiSessionManager.removeIssueWorkflowAssignment(this.activeIssueKey);
+          const assignment = this.aiSessionManager.setIssueWorkflowAssignment(this.activeIssueKey, undefined, {
+            source: 'manual',
+            reason: 'User explicitly selected "No workflow pack".'
+          });
           await this.panel?.webview.postMessage({
             type: 'setWorkflowPackResult',
             ok: true,
-            assignment: undefined
+            assignment: {
+              name: 'No workflow pack',
+              source: this.formatWorkflowAssignmentSource(assignment.source),
+              reason: assignment.reason ?? ''
+            }
           });
           return;
         }
@@ -303,7 +310,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           type: 'setWorkflowPackResult',
           ok: true,
           assignment: {
-            name: assignment.workflow.name,
+            name: assignment.workflow?.name ?? 'No workflow pack',
             source: this.formatWorkflowAssignmentSource(assignment.source),
             reason: assignment.reason ?? ''
           }
@@ -411,11 +418,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     const choices = [...this.availableWorkflows];
     const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
     if (
-      assignment &&
+      assignment?.workflow &&
       !choices.some(
         workflow =>
-          workflow.instructionsPath === assignment.workflow.instructionsPath ||
-          workflow.id === assignment.workflow.id
+          workflow.instructionsPath === assignment.workflow!.instructionsPath ||
+          workflow.id === assignment.workflow!.id
       )
     ) {
       choices.unshift(assignment.workflow);
@@ -430,13 +437,19 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     );
   }
 
-  private formatWorkflowAssignmentSource(source: 'manual' | 'automatic'): string {
-    return source === 'automatic' ? 'Automatic' : 'Manual';
+  private formatWorkflowAssignmentSource(source: 'manual' | 'automatic' | 'analysis'): string {
+    if (source === 'automatic') {
+      return 'Automatic';
+    }
+    if (source === 'analysis') {
+      return 'Analysis';
+    }
+    return 'Manual';
   }
 
   private renderWorkflowSelectOptions(issueKey: string): string {
     const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
-    const selectedValue = assignment?.workflow.instructionsPath ?? '';
+    const selectedValue = assignment?.workflow?.instructionsPath ?? '';
     const workflowOptions = this.getWorkflowChoices(issueKey)
       .map(
         workflow => `<option value="${escapeHtml(workflow.instructionsPath)}" ${workflow.instructionsPath === selectedValue ? 'selected' : ''}>${escapeHtml(workflow.name)}</option>`

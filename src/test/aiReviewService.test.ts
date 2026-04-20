@@ -1,7 +1,8 @@
 import * as assert from 'node:assert';
 import {
   extractClarificationQuestions,
-  normalizeClarificationCommentBody
+  normalizeClarificationCommentBody,
+  parseCopilotImplementationReadinessAssessment
 } from '../ai/aiReviewService';
 
 suite('aiReviewService clarification comment sanitization', () => {
@@ -39,5 +40,41 @@ Questions:
       body,
       '1. Which environment should this target?\n2. What tenant should be used?'
     );
+  });
+
+  test('parses a structured copilot readiness assessment result', () => {
+    const assessment = parseCopilotImplementationReadinessAssessment([
+      '```json',
+      '{',
+      '  "status": "ready",',
+      '  "workflowReference": "add-edit-dotnet-web-api",',
+      '  "comment": ""',
+      '}',
+      '```'
+    ].join('\n'));
+
+    assert.deepStrictEqual(assessment, {
+      status: 'ready',
+      workflowReference: 'add-edit-dotnet-web-api',
+      clarificationComment: undefined
+    });
+  });
+
+  test('parses a clarification assessment comment when workflow is missing', () => {
+    const assessment = parseCopilotImplementationReadinessAssessment([
+      '```json',
+      '{',
+      '  "status": "needs_clarification",',
+      '  "workflowReference": "",',
+      '  "comment": "Please specify the workflow pack for this ticket in Ticket Manager or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api."',
+      '}',
+      '```'
+    ].join('\n'));
+
+    assert.deepStrictEqual(assessment, {
+      status: 'needs_clarification',
+      workflowReference: undefined,
+      clarificationComment: 'Please specify the workflow pack for this ticket in Ticket Manager or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api.'
+    });
   });
 });

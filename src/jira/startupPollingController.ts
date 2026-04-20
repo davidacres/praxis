@@ -20,7 +20,19 @@ interface PollingConfig {
 }
 
 interface PollingSyncEvent {
-  issues: Array<{ key: string }>;
+  issues: Array<{
+    key: string;
+    fields?: {
+      summary?: string;
+      updated?: string;
+      status?: {
+        name?: string;
+        statusCategory?: {
+          name?: string;
+        };
+      };
+    };
+  }>;
   newKeys: string[];
   removedKeys: string[];
   changedKeys: string[];
@@ -229,10 +241,6 @@ export class StartupPollingController implements vscode.Disposable {
     if (event.eligibleIssueKeys.length > 0) {
       this.appendLine(`AI-eligible issues: ${formatIssueKeyList(event.eligibleIssueKeys)}`);
     }
-
-    this.appendLine(
-      'Comment management: clarification comments can be posted automatically for new or changed AI-eligible issues when Copilot is configured. User replies after Copilot-generated clarification or reply comments are also picked up on the next poll.'
-    );
   }
 
   private loadPollingModule(): PollingModule {

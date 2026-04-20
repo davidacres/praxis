@@ -146,6 +146,7 @@ export class ActiveSessionsSidebarViewProvider
   private errorMessage?: string;
   private selectedIssueKey?: string;
   private generation = 0;
+  private shellInstalled = false;
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -166,6 +167,10 @@ export class ActiveSessionsSidebarViewProvider
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     webviewView.webview.options = { enableScripts: true };
+    this.shellInstalled = false;
+    webviewView.onDidDispose(() => {
+      this.shellInstalled = false;
+    });
     webviewView.webview.onDidReceiveMessage(
       message => {
         void this.handleMessage(message);
@@ -183,9 +188,15 @@ export class ActiveSessionsSidebarViewProvider
 
   public async refresh(): Promise<void> {
     const generation = ++this.generation;
-    this.loading = true;
+    // Only show the "Loading..." placeholder on the very first load.
+    // Incremental refreshes keep the existing list visible so hovering/right-click
+    // is not interrupted by a DOM rebuild.
+    const isInitialLoad = this.sessions.length === 0 && !this.errorMessage;
+    this.loading = isInitialLoad;
     this.errorMessage = undefined;
-    this.render();
+    if (isInitialLoad) {
+      this.render();
+    }
 
     try {
       const assignmentEntries = [...this.aiSessionManager.getActiveSessions().entries()];
@@ -330,7 +341,6 @@ export class ActiveSessionsSidebarViewProvider
       return;
     }
 
-    const nonce = createNonce();
     const approvalCount = this.sessions.filter(session => session.requiresApproval).length;
     const pausedCount = this.sessions.filter(session => session.isPaused).length;
     const attentionCount = approvalCount + pausedCount;
@@ -360,57 +370,41 @@ export class ActiveSessionsSidebarViewProvider
           }
         : undefined;
 
-    let content = '';
-    if (this.errorMessage) {
-      content = `<div class="message error">${escapeHtml(this.errorMessage)}</div>`;
-    } else if (this.loading && this.sessions.length === 0) {
-      content = '<div class="message">Loading active sessions...</div>';
-    } else if (this.sessions.length === 0) {
-      content = '<div class="message">No active AI sessions.</div>';
-    } else {
-      content = `<div class="item-list">
-        ${this.sessions
-          .map(session => {
-            const classes = [
-              'session-row',
-              this.selectedIssueKey === session.issueKey ? 'selected' : '',
-              session.requiresApproval ? 'needs-attention' : '',
-              session.isPaused ? 'is-paused' : ''
-            ]
-              .filter(Boolean)
-              .join(' ');
-            const meta = [
-              `Assignee: ${session.assigneeLabel}`,
-              session.hasLiveAgentSession
-                ? 'Live agent activity'
-                : session.hasStoredAgentSession
-                  ? 'Stored session available'
-                  : 'Assignment only',
-              formatDate(session.assignedAt)
-            ].join(' • ');
-            const attentionBanner = session.attentionSummary
-              ? `<div class="row-alert row-alert--${session.requiresApproval ? 'approval' : 'paused'}">${escapeHtml(session.attentionSummary)}</div>`
-              : '';
-            return `<div class="${classes}" data-issue-key="${escapeHtml(session.issueKey)}" data-can-resume="${session.canResumeSession ? 'true' : 'false'}" data-can-start-new="${session.canStartNewSession ? 'true' : 'false'}" title="${escapeHtml(`${session.issueKey}: ${session.summary}`)}">
-              <div class="row-main">
-                <div class="row-left">
-                  <div class="item-key">${escapeHtml(session.issueKey)}</div>
-                  <div class="item-summary">${escapeHtml(session.summary)}</div>
-                </div>
-                <div class="row-right">
-                  <span class="pill pill--ai">${escapeHtml(session.providerLabel)}</span>
-                  <span class="pill pill--${session.stateToken}">${escapeHtml(session.stateLabel)}</span>
-                </div>
-              </div>
-              ${attentionBanner}
-              <div class="row-meta">${escapeHtml(meta)}</div>
-            </div>`;
-          })
-          .join('')}
-      </div>`;
+    if (!this.shellInstalled) {
+      this.view.webview.html = this.buildShellHtml();
+      this.shellInstalled = true;
     }
 
-    this.view.webview.html = `<!DOCTYPE html>
+    void this.view.webview.postMessage({
+      type: 'update',
+      payload: {
+        loading: this.loading,
+        errorMessage: this.errorMessage,
+        selectedIssueKey: this.selectedIssueKey,
+        sessions: this.sessions.map(session => ({
+          issueKey: session.issueKey,
+          summary: session.summary,
+          providerLabel: session.providerLabel,
+          stateLabel: session.stateLabel,
+          stateToken: session.stateToken,
+          assigneeLabel: session.assigneeLabel,
+          assignedAt: session.assignedAt,
+          assignedAtLabel: formatDate(session.assignedAt),
+          hasLiveAgentSession: session.hasLiveAgentSession,
+          hasStoredAgentSession: session.hasStoredAgentSession,
+          canResumeSession: session.canResumeSession,
+          canStartNewSession: session.canStartNewSession,
+          requiresApproval: session.requiresApproval,
+          isPaused: session.isPaused,
+          attentionSummary: session.attentionSummary
+        }))
+      }
+    });
+  }
+
+  private buildShellHtml(): string {
+    const nonce = createNonce();
+    return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -576,7 +570,7 @@ export class ActiveSessionsSidebarViewProvider
     </style>
   </head>
   <body>
-    <div class="page">${content}</div>
+    <div id="listContainer" class="page"><div class="message">Loading active sessions...</div></div>
     <div id="sessionContextMenu" class="session-context-menu" hidden role="menu" aria-label="Session actions">
       <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="openSession">Open Session</button>
       <button type="button" class="session-context-menu-item" role="menuitem" data-session-menu-action="resumeSession">Resume Session</button>
@@ -585,9 +579,19 @@ export class ActiveSessionsSidebarViewProvider
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const listContainer = document.getElementById('listContainer');
       const sessionContextMenu = document.getElementById('sessionContextMenu');
       const resumeMenuItem = sessionContextMenu?.querySelector('[data-session-menu-action="resumeSession"]');
       const startNewMenuItem = sessionContextMenu?.querySelector('[data-session-menu-action="startNewSession"]');
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
 
       function hideSessionMenu() {
         if (sessionContextMenu) {
@@ -595,14 +599,72 @@ export class ActiveSessionsSidebarViewProvider
         }
       }
 
-      for (const row of document.querySelectorAll('.session-row')) {
-        row.addEventListener('click', () => {
+      function renderList(state) {
+        if (!listContainer) return;
+        if (state.errorMessage) {
+          listContainer.innerHTML = '<div class="message error">' + escapeHtml(state.errorMessage) + '</div>';
+          return;
+        }
+        if (state.loading && (!state.sessions || state.sessions.length === 0)) {
+          listContainer.innerHTML = '<div class="message">Loading active sessions...</div>';
+          return;
+        }
+        if (!state.sessions || state.sessions.length === 0) {
+          listContainer.innerHTML = '<div class="message">No active AI sessions.</div>';
+          return;
+        }
+        const rows = state.sessions.map(session => {
+          const classes = ['session-row'];
+          if (state.selectedIssueKey === session.issueKey) classes.push('selected');
+          if (session.requiresApproval) classes.push('needs-attention');
+          if (session.isPaused) classes.push('is-paused');
+          const metaParts = [
+            'Assignee: ' + session.assigneeLabel,
+            session.hasLiveAgentSession
+              ? 'Live agent activity'
+              : session.hasStoredAgentSession
+                ? 'Stored session available'
+                : 'Assignment only',
+            session.assignedAtLabel
+          ];
+          const attentionBanner = session.attentionSummary
+            ? '<div class="row-alert row-alert--' + (session.requiresApproval ? 'approval' : 'paused') + '">' + escapeHtml(session.attentionSummary) + '</div>'
+            : '';
+          return '<div class="' + classes.join(' ') + '"'
+            + ' data-issue-key="' + escapeHtml(session.issueKey) + '"'
+            + ' data-can-resume="' + (session.canResumeSession ? 'true' : 'false') + '"'
+            + ' data-can-start-new="' + (session.canStartNewSession ? 'true' : 'false') + '"'
+            + ' title="' + escapeHtml(session.issueKey + ': ' + session.summary) + '">'
+            + '<div class="row-main">'
+            + '<div class="row-left">'
+            + '<div class="item-key">' + escapeHtml(session.issueKey) + '</div>'
+            + '<div class="item-summary">' + escapeHtml(session.summary) + '</div>'
+            + '</div>'
+            + '<div class="row-right">'
+            + '<span class="pill pill--ai">' + escapeHtml(session.providerLabel) + '</span>'
+            + '<span class="pill pill--' + escapeHtml(session.stateToken) + '">' + escapeHtml(session.stateLabel) + '</span>'
+            + '</div>'
+            + '</div>'
+            + attentionBanner
+            + '<div class="row-meta">' + escapeHtml(metaParts.join(' • ')) + '</div>'
+            + '</div>';
+        }).join('');
+        listContainer.innerHTML = '<div class="item-list">' + rows + '</div>';
+      }
+
+      // Delegate interactions so they survive list re-renders.
+      if (listContainer) {
+        listContainer.addEventListener('click', event => {
+          const row = event.target instanceof Element ? event.target.closest('.session-row') : null;
+          if (!row) return;
           const issueKey = row.getAttribute('data-issue-key');
           if (issueKey) {
             vscodeApi.postMessage({ type: 'selectSession', issueKey });
           }
         });
-        row.addEventListener('dblclick', () => {
+        listContainer.addEventListener('dblclick', event => {
+          const row = event.target instanceof Element ? event.target.closest('.session-row') : null;
+          if (!row) return;
           const issueKey = row.getAttribute('data-issue-key');
           if (issueKey) {
             vscodeApi.postMessage({ type: 'openSession', issueKey });
@@ -666,6 +728,12 @@ export class ActiveSessionsSidebarViewProvider
           });
         });
       }
+
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || msg.type !== 'update' || !msg.payload) return;
+        renderList(msg.payload);
+      });
     </script>
   </body>
 </html>`;

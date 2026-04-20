@@ -1,5 +1,9 @@
 {
     "ticketManager.workspaceMcpServerName": "",
     "ticketManager.backendMode": "jira",
-    "ticketManager.planFilePath": ""
+    "ticketManager.liveFolderPath": "",
+    "ticketManager.liveFolderAllowIssueCreation": true,
+    "ticketManager.planFilePath": "",
+    "ticketManager.liveFolderProjectKey": "",
+    "ticketManager.liveFolderProjectName": ""
 }

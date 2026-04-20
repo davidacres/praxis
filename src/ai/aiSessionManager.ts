@@ -270,7 +270,7 @@ export class AiSessionManager {
 
   public setIssueWorkflowAssignment(
     issueKey: string,
-    workflow: AgentWorkflowReference,
+    workflow: AgentWorkflowReference | undefined,
     options?: {
       source?: WorkflowAssignmentSource;
       assignedAt?: string;
@@ -376,16 +376,25 @@ export class AiSessionManager {
     const result = new Map<string, IssueWorkflowAssignment>();
     for (const [key, value] of Object.entries(stored)) {
       if (
-        value &&
-        typeof value.assignedAt === 'string' &&
-        (value.source === 'manual' || value.source === 'automatic') &&
+        !value ||
+        typeof value.assignedAt !== 'string' ||
+        (value.source !== 'manual' && value.source !== 'automatic' && value.source !== 'analysis')
+      ) {
+        continue;
+      }
+      // workflow is optional: `undefined` represents an explicit "No workflow pack" choice.
+      const hasValidWorkflow =
         value.workflow &&
         typeof value.workflow.id === 'string' &&
         typeof value.workflow.name === 'string' &&
-        typeof value.workflow.instructionsPath === 'string'
-      ) {
-        result.set(key, value);
+        typeof value.workflow.instructionsPath === 'string';
+      if (value.workflow && !hasValidWorkflow) {
+        continue;
       }
+      result.set(key, {
+        ...value,
+        workflow: hasValidWorkflow ? value.workflow : undefined
+      });
     }
 
     return result;

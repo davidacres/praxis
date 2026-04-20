@@ -76,6 +76,32 @@ function deriveBrowseUrl(selfUrl: string | undefined, key: string): string | und
   }
 }
 
+function normalizeUserDisplayName(raw: unknown): string | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  return asString(raw.displayName) ?? asString(raw.name) ?? asString(raw.key);
+}
+
+function buildJiraMention(raw: unknown): string | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const accountId = asString(raw.accountId)?.trim();
+  if (accountId) {
+    return `[~accountid:${accountId}]`;
+  }
+
+  const userName = asString(raw.name)?.trim() || asString(raw.key)?.trim();
+  if (userName) {
+    return `[~${userName}]`;
+  }
+
+  return undefined;
+}
+
 function extractDescription(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value;
@@ -235,6 +261,7 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
       : {};
   const parent = isRecord(fields.parent) ? fields.parent : {};
   const assignee = isRecord(fields.assignee) ? fields.assignee : {};
+  const reporter = isRecord(fields.reporter) ? fields.reporter : {};
   const priority = isRecord(fields.priority) ? fields.priority : {};
 
   const key = asString(raw.key);
@@ -258,7 +285,9 @@ function normalizeIssue(raw: unknown): IssueSummary | undefined {
     projectName: asString(project.name),
     parentKey: asString(parent.key),
     parentIssue: normalizeParentIssue(parent),
-    assignee: asString(assignee.displayName) ?? asString(assignee.name),
+    assignee: normalizeUserDisplayName(assignee),
+    reporter: normalizeUserDisplayName(reporter),
+    reporterMention: buildJiraMention(reporter),
     priority: asString(priority.name) ?? asString(fields.priority),
     created: asString(fields.created) ?? asString(raw.created),
     updated: asString(fields.updated) ?? asString(raw.updated),

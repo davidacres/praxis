@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import * as vscode from 'vscode';
 import { AiSessionManager } from './ai/aiSessionManager';
 import { BackendRouter } from './backends/backendRouter';
@@ -6,6 +7,7 @@ import type { IssueTrackerService } from './backends/issueTrackerService';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { createPlanTemplate } from './file/planTemplate';
+import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from './state/filterStore';
@@ -17,10 +19,11 @@ import type {
   IssueComment,
   IssueDetails,
   IssueSummary,
-  UpdateIssueInput
+  UpdateIssueInput,
+  WorkflowTransition
 } from './types';
 import {
-  buildCopilotClarificationComment,
+  assessCopilotImplementationReadiness,
   respondToCopilotComment,
   reviewTicketWithClaude,
   reviewTicketWithCopilot,
@@ -52,28 +55,51 @@ import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
-import type { AgentSessionRecord, AgentTaskDefinition } from './ai/agentTypes';
+import type { AgentSessionRecord, AgentTaskDefinition, AgentWorkflowReference } from './ai/agentTypes';
 import { resolveCopilotCliOverride } from './ai/copilotSdkRuntime';
 import { getParentRule } from './issues/issueHierarchy';
 import {
+  buildDeliveryAnalysisBlockedComment,
+  buildDeliveryAnalysisTaskDefinition,
   buildDeliveryStartedComment,
   buildDeliveryFailureComment,
+  buildPollingAnalysisReadyComment,
+  resolveDeliveryPublishCommand,
   buildDeliverySuccessComment,
   buildDeliveryTaskDefinition,
   buildMissingBaseBranchClarificationComment,
   buildMissingWorkflowComment,
   extractDeliveryBaseBranch,
+  parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
   validateDeliveryWorkflowSettings
 } from './ai/deliveryWorkflow';
+import {
+  buildMergeRequestCreatedComment,
+  buildMergeRequestFailureReplyComment,
+  buildMergeRequestFeedbackTaskDefinition,
+  buildMergeRequestReplyComment,
+  parseMergeRequestFeedbackResult
+} from './ai/mergeRequestWorkflow';
 import { GitWorktreeManager } from './git/gitWorktreeManager';
 import {
   discoverWorkspaceAgentWorkflows,
   promptForAgentWorkflowSelection,
-  resolveRelevantAgentWorkflow,
-  resolveConfiguredAgentWorkflow
+  resolveWorkflowReference
 } from './ai/agentWorkflowCatalog';
 import { stageIssueAttachments } from './ai/issueAttachmentContext';
+import {
+  createGitLabHandledNoteState,
+  diffGitLabDiscussionNotes,
+  GitLabApiService,
+  inferGitLabProjectFromRepo,
+  isTicketManagerManagedMergeRequestNote,
+  mergeRequestMatchesIssueKey,
+  shouldCreateMergeRequestForStatusChange,
+  wrapTicketManagerManagedMergeRequestNote,
+  type GitLabDiscussionNote,
+  type GitLabMergeRequest
+} from './gitlab/gitLabApiService';
 
 export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
@@ -132,6 +158,159 @@ let deactivateHandler: (() => Promise<void>) | undefined;
 const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
 const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
 const COPILOT_ANALYSIS_START_COMMENT = 'request analysis starting';
+const COPILOT_ANALYSIS_READY_COMMENT_MARKER = 'Copilot readiness analysis passed';
+const DELIVERY_FORWARD_STATUS_PREFERENCES = [
+  'ready for qa',
+  'qa ready',
+  'ready for test',
+  'ready for testing',
+  'testing',
+  'in review',
+  'review',
+  'ready for validation',
+  'resolved',
+  'closed',
+  'done'
+] as const;
+const DELIVERY_NON_PROGRESS_PATTERNS = [
+  /block/i,
+  /backlog/i,
+  /^to do$/i,
+  /^todo$/i,
+  /selected for development/i,
+  /^open$/i,
+  /^new$/i,
+  /cancel/i,
+  /reject/i,
+  /resume/i,
+  /reopen/i,
+  /hold/i
+] as const;
+
+interface PollingIssueSnapshot {
+  key: string;
+  fields?: {
+    summary?: string;
+    updated?: string;
+    status?: {
+      name?: string;
+      statusCategory?: {
+        name?: string;
+      };
+    };
+  };
+}
+
+interface PollingSyncEvent {
+  issues: PollingIssueSnapshot[];
+  newKeys: string[];
+  removedKeys: string[];
+  changedKeys: string[];
+  eligibleIssueKeys: string[];
+}
+
+interface ResolvedGitLabAutomation {
+  client: GitLabApiService;
+  baseUrl: string;
+  projectPath: string;
+}
+
+function formatStatusSnapshot(status: string | undefined, statusCategory: string | undefined): string {
+  return JSON.stringify({
+    status: status?.trim() ?? '',
+    statusCategory: statusCategory?.trim() ?? ''
+  });
+}
+
+function parseStatusSnapshot(snapshot: string | undefined): { status?: string; statusCategory?: string } {
+  if (!snapshot?.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(snapshot) as { status?: unknown; statusCategory?: unknown };
+    return {
+      status: typeof parsed.status === 'string' ? parsed.status : undefined,
+      statusCategory: typeof parsed.statusCategory === 'string' ? parsed.statusCategory : undefined
+    };
+  } catch {
+    return {
+      status: snapshot
+    };
+  }
+}
+
+function buildMergeRequestDescription(
+  issue: IssueDetails,
+  record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
+): string {
+  const lines = [
+    `Jira ticket: ${issue.key}`,
+    `Summary: ${issue.summary}`,
+    `Base branch: ${record.delivery.baseBranch}`,
+    `Delivery branch: ${record.delivery.createdBranch}`
+  ];
+  if (issue.description?.trim()) {
+    lines.push('', issue.description.trim().slice(0, 4000));
+  }
+  return lines.join('\n');
+}
+
+function filterGitLabNotesForAutomation(notes: GitLabDiscussionNote[]): GitLabDiscussionNote[] {
+  return notes.filter(note =>
+    !note.system &&
+    note.body.trim().length > 0 &&
+    !isTicketManagerManagedMergeRequestNote(note.body)
+  );
+}
+
+function normalizeTransitionLabel(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+function isNonProgressTransitionLabel(value: string): boolean {
+  return DELIVERY_NON_PROGRESS_PATTERNS.some(pattern => pattern.test(value));
+}
+
+export function selectNextDeliveryTransition(
+  issue: Pick<IssueDetails, 'status' | 'statusCategory' | 'transitions'>
+): WorkflowTransition | undefined {
+  if (issue.statusCategory?.trim().toLowerCase() === 'done') {
+    return undefined;
+  }
+
+  const currentStatus = normalizeTransitionLabel(issue.status);
+  const candidates = (issue.transitions ?? [])
+    .map((transition, index) => ({
+      transition,
+      index,
+      targetStatus: normalizeTransitionLabel(transition.toStatus || transition.name),
+      transitionName: normalizeTransitionLabel(transition.name)
+    }))
+    .filter(candidate => candidate.targetStatus.length > 0 && candidate.targetStatus !== currentStatus)
+    .map(candidate => {
+      const preferredIndex = DELIVERY_FORWARD_STATUS_PREFERENCES.indexOf(
+        candidate.targetStatus as (typeof DELIVERY_FORWARD_STATUS_PREFERENCES)[number]
+      );
+      const isNonProgress =
+        isNonProgressTransitionLabel(candidate.targetStatus) ||
+        isNonProgressTransitionLabel(candidate.transitionName);
+      const score = preferredIndex >= 0
+        ? 100 - preferredIndex
+        : isNonProgress
+          ? -10
+          : 50;
+
+      return {
+        ...candidate,
+        score
+      };
+    })
+    .filter(candidate => candidate.score >= 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+
+  return candidates[0]?.transition;
+}
 
 function getCommentActivityTimestamp(comment: IssueComment): string {
   return comment.updated ?? comment.created ?? '';
@@ -154,6 +333,32 @@ function isCopilotGeneratedComment(comment: IssueComment): boolean {
   return (
     comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER) ||
     comment.body.includes(COPILOT_REPLY_COMMENT_MARKER)
+  );
+}
+
+function formatPollingClarificationComment(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (trimmed.includes(COPILOT_CLARIFICATION_COMMENT_MARKER)) {
+    return trimmed;
+  }
+
+  return [
+    '**THIS IS AN AI-GENERATED MESSAGE.**',
+    COPILOT_CLARIFICATION_COMMENT_MARKER,
+    '',
+    trimmed
+  ].join('\n');
+}
+
+function isAnalysisLifecycleComment(comment: IssueComment): boolean {
+  const normalizedBody = comment.body.trim();
+  return (
+    isCopilotGeneratedComment(comment)
+    || normalizedBody.toLowerCase() === COPILOT_ANALYSIS_START_COMMENT
+    || normalizedBody.includes(COPILOT_ANALYSIS_READY_COMMENT_MARKER)
   );
 }
 
@@ -187,23 +392,130 @@ export function extractPendingCopilotReplyRequest(issue: IssueDetails): string |
 
   const pendingReplies = comments
     .slice(lastCopilotCommentIndex + 1)
-    .filter(comment => !isCopilotGeneratedComment(comment) && comment.body.trim().length > 0);
+    .filter(comment => !isCopilotGeneratedComment(comment) && comment.body.trim().length > 0)
+    .map(comment => {
+      const stripped = stripAiBotPrefix(comment.body);
+      return stripped === undefined ? undefined : { comment, body: stripped };
+    })
+    .filter((entry): entry is { comment: IssueComment; body: string } => entry !== undefined);
 
   if (pendingReplies.length === 0) {
     return undefined;
   }
 
   return pendingReplies
-    .map(comment => `${comment.author?.trim() || 'User'}: ${comment.body.trim()}`)
+    .map(({ comment, body }) => `${comment.author?.trim() || 'User'}: ${body}`)
     .join('\n\n');
+}
+
+/**
+ * Jira polling only treats a comment as a reply to the Copilot agent when the
+ * comment starts with the literal trigger `#AIbot`. Everything else is ignored
+ * so the bot never responds to unrelated discussion on a ticket.
+ *
+ * Returns the comment body with the prefix removed when the trigger is present,
+ * or `undefined` when the comment should be ignored.
+ */
+export function stripAiBotPrefix(body: string): string | undefined {
+  const trimmed = body.trim();
+  const match = /^#aibot\b[\s:,-]*/i.exec(trimmed);
+  if (!match) {
+    return undefined;
+  }
+  const remainder = trimmed.slice(match[0].length).trim();
+  return remainder.length > 0 ? remainder : undefined;
+}
+
+/**
+ * Returns true when the ticket already has at least one Copilot analysis
+ * lifecycle comment (analysis start, readiness-ready marker, or any other
+ * Copilot-generated comment). Used to detect "the bot has spoken once — do
+ * not re-engage unless the user explicitly pings with #AIbot".
+ */
+export function hasAnyAnalysisLifecycleComment(issue: Pick<IssueDetails, 'comments'>): boolean {
+  return (issue.comments ?? []).some(comment => isAnalysisLifecycleComment(comment));
+}
+
+/**
+ * Returns true when there is at least one user comment starting with the
+ * `#AIbot` trigger that was posted AFTER the most recent analysis lifecycle
+ * comment. This is the only condition under which polling is allowed to
+ * re-run analysis / delivery after the bot has already weighed in once.
+ */
+export function hasPendingAiBotTrigger(issue: Pick<IssueDetails, 'comments'>): boolean {
+  const comments = sortCommentsChronologically(issue.comments ?? []);
+  let lastLifecycleIndex = -1;
+  for (let index = 0; index < comments.length; index += 1) {
+    if (isAnalysisLifecycleComment(comments[index])) {
+      lastLifecycleIndex = index;
+    }
+  }
+  if (lastLifecycleIndex < 0) {
+    return false;
+  }
+  for (let index = lastLifecycleIndex + 1; index < comments.length; index += 1) {
+    const comment = comments[index];
+    if (isAnalysisLifecycleComment(comment)) {
+      continue;
+    }
+    if (stripAiBotPrefix(comment.body) !== undefined) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function buildPollingAnalysisSignature(issue: Pick<
+  IssueDetails,
+  'key' | 'summary' | 'description' | 'status' | 'issueType' | 'priority' | 'parentIssue' | 'comments'
+>): string {
+  // Only #AIbot-prefixed comments should be able to invalidate the analysis
+  // signature. Random user chatter on the ticket must never re-trigger
+  // analysis or delivery — the bot only reacts when explicitly addressed.
+  const relevantComments = sortCommentsChronologically(issue.comments ?? [])
+    .filter(comment => !isAnalysisLifecycleComment(comment))
+    .map(comment => {
+      const triggered = stripAiBotPrefix(comment.body);
+      if (triggered === undefined) {
+        return undefined;
+      }
+      return {
+        id: comment.id ?? '',
+        author: comment.author ?? '',
+        body: triggered,
+        timestamp: getCommentActivityTimestamp(comment)
+      };
+    })
+    .filter((entry): entry is { id: string; author: string; body: string; timestamp: string } => entry !== undefined);
+
+  return createHash('sha1')
+    .update(
+      JSON.stringify({
+        key: issue.key,
+        summary: issue.summary,
+        description: issue.description ?? '',
+        status: issue.status,
+        issueType: issue.issueType,
+        priority: issue.priority ?? '',
+        parentKey: issue.parentIssue?.key ?? '',
+        comments: relevantComments
+      })
+    )
+    .digest('hex');
 }
 
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
   const handledPollingReplyStateKey = 'ticketManager.handledPollingReplyThreads';
+  const handledPollingAnalysisStateKey = 'ticketManager.handledPollingAnalysis';
+  const pollingStatusSnapshotStateKey = 'ticketManager.pollingStatusSnapshots';
   const handledPollingReplies: Record<string, string> =
     context.workspaceState.get<Record<string, string>>(handledPollingReplyStateKey) ?? {};
+  const handledPollingAnalyses: Record<string, string> =
+    context.workspaceState.get<Record<string, string>>(handledPollingAnalysisStateKey) ?? {};
+  const pollingStatusSnapshots: Record<string, string> =
+    context.workspaceState.get<Record<string, string>>(pollingStatusSnapshotStateKey) ?? {};
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
@@ -214,6 +526,7 @@ export async function activate(
     async event => {
       await processPollingClarificationRequests(event);
       await processPollingClarificationReplies(event);
+      await processPollingMergeRequestAutomation(event);
 
       if (
         event.newKeys.length === 0 &&
@@ -267,6 +580,10 @@ export async function activate(
   const pollingClarificationInFlight = new Set<string>();
   const pollingReplyInFlight = new Set<string>();
   const deliveryFinalizationInFlight = new Set<string>();
+  const mergeRequestAutomationInFlight = new Set<string>();
+  let cachedGitLabAutomationKey: string | undefined;
+  let cachedGitLabAutomation: ResolvedGitLabAutomation | undefined;
+  let lastGitLabAutomationSkipReason: string | undefined;
 
   async function setHandledPollingReply(issueKey: string, signature: string | undefined): Promise<void> {
     if (signature) {
@@ -275,6 +592,22 @@ export async function activate(
       delete handledPollingReplies[issueKey];
     }
     await context.workspaceState.update(handledPollingReplyStateKey, handledPollingReplies);
+  }
+
+  async function setHandledPollingAnalysis(issueKey: string, signature: string | undefined): Promise<void> {
+    if (signature) {
+      handledPollingAnalyses[issueKey] = signature;
+    } else {
+      delete handledPollingAnalyses[issueKey];
+    }
+    await context.workspaceState.update(handledPollingAnalysisStateKey, handledPollingAnalyses);
+  }
+
+  async function persistPollingStatusSnapshots(nextSnapshots: Record<string, string>): Promise<void> {
+    for (const [issueKey, snapshot] of Object.entries(nextSnapshots)) {
+      pollingStatusSnapshots[issueKey] = snapshot;
+    }
+    await context.workspaceState.update(pollingStatusSnapshotStateKey, pollingStatusSnapshots);
   }
 
   function reportError(error: unknown, scope?: string): void {
@@ -315,6 +648,60 @@ export async function activate(
     await backendService.addComment(issueKey, response);
   }
 
+  async function handlePollingAnalysisReady(
+    issue: IssueDetails,
+    options?: {
+      analysisSignature?: string;
+      replySignature?: string;
+    }
+  ): Promise<void> {
+    const started = await startPollingDeliveryWorkflow(issue, {
+      preTransitionComment: buildPollingAnalysisReadyComment()
+    });
+    if (started) {
+      outputChannel.appendLine(
+        `[Jira Polling] Readiness analysis passed on ${issue.key}; delivery workflow started.`
+      );
+    }
+
+    if (options?.analysisSignature !== undefined) {
+      await setHandledPollingAnalysis(issue.key, options.analysisSignature);
+    }
+    if (options?.replySignature !== undefined) {
+      await setHandledPollingReply(issue.key, options.replySignature);
+    }
+  }
+
+  function ensureWorkflowAssignedFromAnalysis(
+    issueKey: string,
+    workflowReference: string | undefined,
+    availableWorkflows: AgentWorkflowReference[]
+  ): void {
+    if (aiSessionManager.getIssueWorkflowAssignment(issueKey)) {
+      return;
+    }
+
+    const resolvedWorkflow = resolveWorkflowReference(workflowReference, availableWorkflows);
+
+    // Workflow packs are optional. When analysis reports "ready" we always
+    // record an assignment so the delivery flow sees a decision, even when
+    // the ticket did not name a pack (assignment.workflow === undefined
+    // represents an explicit "no workflow pack" choice).
+    let reason: string;
+    if (resolvedWorkflow) {
+      reason = workflowReference?.trim()
+        ? `Extracted from Jira during analysis: ${workflowReference.trim()}`
+        : 'Extracted from Jira during analysis.';
+    } else {
+      reason = 'Analysis determined no workflow pack is needed.';
+    }
+
+    aiSessionManager.setIssueWorkflowAssignment(issueKey, resolvedWorkflow, {
+      source: 'analysis',
+      reason
+    });
+  }
+
   function isDeliveryTask(
     record: AgentSessionRecord | undefined
   ): record is AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> } {
@@ -331,6 +718,83 @@ export async function activate(
     return undefined;
   }
 
+  async function advanceDeliveredIssueToNextStatus(issueKey: string): Promise<string | undefined> {
+    const currentIssue = await backendService.getIssue(issueKey);
+    const transitions = currentIssue.transitions?.length
+      ? currentIssue.transitions
+      : await backendService.getTransitions(issueKey);
+    const selectedTransition = selectNextDeliveryTransition({
+      status: currentIssue.status,
+      statusCategory: currentIssue.statusCategory,
+      transitions
+    });
+    if (!selectedTransition) {
+      return undefined;
+    }
+
+    await backendService.transitionIssue(issueKey, selectedTransition.id);
+    await syncIssueAfterMutation(issueKey);
+    return selectedTransition.toStatus?.trim() || selectedTransition.name.trim() || undefined;
+  }
+
+  async function startFreshDeliveryImplementationSession(
+    issue: IssueDetails,
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> },
+    analysisResult: NonNullable<ReturnType<typeof parseDeliveryAnalysisResult>>
+  ): Promise<void> {
+    const implementationTaskDefinition = buildDeliveryTaskDefinition(issue, {
+      baseBranch: record.delivery.baseBranch,
+      branchName: record.delivery.createdBranch,
+      worktreePath: record.delivery.worktreePath,
+      publishCommand: record.delivery.publishCommand,
+      artifactPattern: record.delivery.artifactPattern,
+      workflow: record.taskDefinition.workflow,
+      analysis: analysisResult
+    });
+    const taskDefinitionWithAttachments = record.taskDefinition.attachments?.length
+      ? { ...implementationTaskDefinition, attachments: record.taskDefinition.attachments }
+      : implementationTaskDefinition;
+
+    await copilotAgentService.startTask(
+      {
+        ...issue,
+        branch: record.delivery.createdBranch
+      },
+      taskDefinitionWithAttachments,
+      {
+        cliPath: getCopilotCliPathOverride(),
+        workingDirectory: record.delivery.worktreePath
+      }
+    );
+
+    aiSessionManager.updateAgentDelivery(
+      issue.key,
+      {
+        ...record.delivery,
+        phase: 'implementation',
+        analysisSummary: analysisResult.summary,
+        analysisPlan: analysisResult.implementationPlan,
+        finalizationState: 'pending',
+        finalizationMessage: 'Fresh implementation session started after delivery analysis.'
+      },
+      { replace: true }
+    );
+
+    try {
+      await backendService.addComment(
+        issue.key,
+        buildDeliveryStartedComment({
+          baseBranch: record.delivery.baseBranch,
+          branchName: record.delivery.createdBranch,
+          worktreeName: record.delivery.worktreeName,
+          workflow: taskDefinitionWithAttachments.workflow
+        })
+      );
+    } catch (error) {
+      reportError(error, `deliveryStartComment:${issue.key}`);
+    }
+  }
+
   async function finalizeDeliverySession(record: AgentSessionRecord): Promise<void> {
     if (!isDeliveryTask(record) || record.delivery.finalizationState !== 'pending') {
       return;
@@ -343,6 +807,74 @@ export async function activate(
     deliveryFinalizationInFlight.add(record.issueKey);
     try {
       if (record.state === 'completed') {
+        if (delivery.phase === 'merge-request-feedback') {
+          const mergeRequest = delivery.mergeRequest;
+          if (!mergeRequest) {
+            throw new Error('Copilot completed a merge request feedback task but no merge request metadata is attached to the delivery session.');
+          }
+
+          const feedbackResult = parseMergeRequestFeedbackResult(record.responseText);
+          if (!feedbackResult) {
+            throw new Error(
+              'Copilot completed the merge request feedback task but did not return a valid MERGE_REQUEST_FEEDBACK_RESULT payload.'
+            );
+          }
+
+          const gitLabAutomation = await resolveGitLabAutomation();
+          if (!gitLabAutomation) {
+            throw new Error('GitLab MR automation is not configured, so the feedback reply could not be posted.');
+          }
+
+          await gitLabAutomation.client.addMergeRequestNote(
+            mergeRequest.iid,
+            wrapTicketManagerManagedMergeRequestNote(buildMergeRequestReplyComment(feedbackResult))
+          );
+          aiSessionManager.updateAgentDelivery(record.issueKey, {
+            ...delivery,
+            phase: 'implementation',
+            finalizationState: 'completed',
+            finalizationMessage: 'Posted a merge request reply after processing review feedback.',
+            mergeRequest: {
+              ...mergeRequest,
+              pendingFeedback: undefined,
+              buildRequiredOnMerge: mergeRequest.buildRequiredOnMerge || feedbackResult.didEditCode
+            }
+          }, { replace: true });
+          outputChannel.appendLine(`[GitLab MR] Posted automated merge request reply for ${record.issueKey}.`);
+          return;
+        }
+
+        if (delivery.phase === 'analysis') {
+          const analysisResult = parseDeliveryAnalysisResult(record.responseText);
+          if (!analysisResult) {
+            throw new Error(
+              'Copilot completed the delivery analysis session but did not return a valid DELIVERY_ANALYSIS_RESULT payload.'
+            );
+          }
+
+          if (analysisResult.status === 'blocked') {
+            await backendService.addComment(
+              record.issueKey,
+              buildDeliveryAnalysisBlockedComment(analysisResult)
+            );
+            aiSessionManager.updateAgentDelivery(record.issueKey, {
+              finalizationState: 'failed',
+              finalizationMessage: analysisResult.summary,
+              analysisSummary: analysisResult.summary,
+              analysisPlan: undefined
+            });
+            outputChannel.appendLine(`[Delivery] Delivery analysis blocked ${record.issueKey}.`);
+            return;
+          }
+
+          const refreshedIssue = await backendService.getIssue(record.issueKey);
+          await startFreshDeliveryImplementationSession(refreshedIssue, record, analysisResult);
+          outputChannel.appendLine(
+            `[Delivery] Started fresh implementation session for ${record.issueKey} after delivery analysis.`
+          );
+          return;
+        }
+
         const result = parseDeliveryTaskResult(record.responseText);
         if (!result) {
           throw new Error(
@@ -351,25 +883,56 @@ export async function activate(
         }
 
         const attachedArtifactNames: string[] = [];
-        for (const artifactPath of result.artifactPaths) {
+        for (const [artifactIndex, artifactPath] of result.artifactPaths.entries()) {
           const resolvedArtifactPath = path.isAbsolute(artifactPath)
             ? artifactPath
             : path.resolve(delivery.worktreePath, artifactPath);
-          await backendService.attachFile(record.issueKey, resolvedArtifactPath);
-          attachedArtifactNames.push(path.basename(resolvedArtifactPath));
+          const preparedUpload = await prepareArtifactForJiraUpload(resolvedArtifactPath, {
+            issueKey: record.issueKey,
+            buildIdentifier: result.buildIdentifier,
+            artifactIndex
+          });
+          try {
+            await backendService.attachFile(
+              record.issueKey,
+              preparedUpload.uploadPath,
+              preparedUpload.attachmentName
+            );
+            attachedArtifactNames.push(preparedUpload.attachmentName);
+          } finally {
+            await preparedUpload.cleanup?.();
+          }
         }
+
+        const currentIssue = await backendService.getIssue(record.issueKey);
 
         await backendService.addComment(
           record.issueKey,
           buildDeliverySuccessComment(result, {
             template: delivery.summaryTemplate,
-            attachedArtifactNames
+            attachedArtifactNames,
+            reporterMention: currentIssue.reporterMention,
+            reporterName: currentIssue.reporter
           })
         );
 
+        let advancedStatus: string | undefined;
+        try {
+          advancedStatus = await advanceDeliveredIssueToNextStatus(record.issueKey);
+          if (advancedStatus) {
+            outputChannel.appendLine(
+              `[Delivery] Advanced ${record.issueKey} to ${advancedStatus} after successful delivery finalization.`
+            );
+          }
+        } catch (transitionError) {
+          reportError(transitionError, `deliveryAdvance:${record.issueKey}`);
+        }
+
         aiSessionManager.updateAgentDelivery(record.issueKey, {
           finalizationState: 'completed',
-          finalizationMessage: 'Attached delivery artifacts and posted summary comment.',
+          finalizationMessage: advancedStatus
+            ? `Attached delivery artifacts, posted summary comment, and moved the ticket to ${advancedStatus}.`
+            : 'Attached delivery artifacts and posted summary comment.',
           result
         });
         outputChannel.appendLine(`[Delivery] Finalized Jira delivery workflow for ${record.issueKey}.`);
@@ -378,7 +941,20 @@ export async function activate(
 
       const failureReason =
         getLatestAgentFailureSummary(record) ??
-        'Copilot delivery stopped before it completed the implementation workflow.';
+        (delivery.phase === 'analysis'
+          ? 'Copilot delivery analysis stopped before it determined whether implementation could start.'
+          : delivery.phase === 'merge-request-feedback'
+            ? 'Copilot stopped before it could process the latest merge request feedback.'
+          : 'Copilot delivery stopped before it completed the implementation workflow.');
+      if (delivery.phase === 'merge-request-feedback' && delivery.mergeRequest) {
+        const gitLabAutomation = await resolveGitLabAutomation();
+        if (gitLabAutomation) {
+          await gitLabAutomation.client.addMergeRequestNote(
+            delivery.mergeRequest.iid,
+            wrapTicketManagerManagedMergeRequestNote(buildMergeRequestFailureReplyComment(failureReason))
+          );
+        }
+      }
       await backendService.addComment(
         record.issueKey,
         buildDeliveryFailureComment(failureReason, {
@@ -399,6 +975,19 @@ export async function activate(
         finalizationState: 'failed',
         finalizationMessage: message
       });
+      if (delivery.phase === 'merge-request-feedback' && delivery.mergeRequest) {
+        try {
+          const gitLabAutomation = await resolveGitLabAutomation();
+          if (gitLabAutomation) {
+            await gitLabAutomation.client.addMergeRequestNote(
+              delivery.mergeRequest.iid,
+              wrapTicketManagerManagedMergeRequestNote(buildMergeRequestFailureReplyComment(message))
+            );
+          }
+        } catch (mergeRequestCommentError) {
+          reportError(mergeRequestCommentError, `gitlabMergeRequestReply:${record.issueKey}`);
+        }
+      }
       try {
         await backendService.addComment(
           record.issueKey,
@@ -418,7 +1007,12 @@ export async function activate(
     }
   }
 
-  async function startPollingDeliveryWorkflow(issue: IssueDetails): Promise<void> {
+  async function startPollingDeliveryWorkflow(
+    issue: IssueDetails,
+    options?: {
+      preTransitionComment?: string;
+    }
+  ): Promise<boolean> {
     const currentIssue = await backendService.getIssue(issue.key);
     const deliverySettings = configStore.getAiDeliveryWorkflowSettings();
     const settingsErrors = validateDeliveryWorkflowSettings(deliverySettings);
@@ -433,48 +1027,30 @@ export async function activate(
           { template: deliverySettings.failureTemplate }
         )
       );
-      return;
+      return false;
     }
     const deliveryWorkingDirectory = workingDirectory!;
     const deliveryWorktreeManager = gitWorktreeManager!;
     const issueWorkflowAssignment = aiSessionManager.getIssueWorkflowAssignment(currentIssue.key);
-    const configuredWorkflow = await resolveConfiguredAgentWorkflow({
-      workspaceRoot: deliveryWorkingDirectory,
-      configuredPath: deliverySettings.agentWorkflowPath,
-      workflowUrl: deliverySettings.agentWorkflowUrl
-    });
-    if (deliverySettings.agentWorkflowPath && !configuredWorkflow) {
-      outputChannel.appendLine(
-        `[Delivery] Skipping ${issue.key} because ticketManager.ai.deliveryAgentWorkflowPath could not be resolved: ${deliverySettings.agentWorkflowPath}`
-      );
-      return;
-    }
     const discoveredWorkflows = await discoverWorkspaceAgentWorkflows(deliveryWorkingDirectory);
-    const automaticWorkflowResolution = resolveRelevantAgentWorkflow({
-      issue: currentIssue,
-      workflows: discoveredWorkflows
-    });
-    const assignedWorkflow = issueWorkflowAssignment?.workflow
-      ?? configuredWorkflow
-      ?? automaticWorkflowResolution.workflow;
-    if (!assignedWorkflow) {
+    const assignedWorkflow = issueWorkflowAssignment?.workflow;
+    if (!issueWorkflowAssignment) {
+      // No choice has been recorded yet — ask the user. An assignment with
+      // `workflow === undefined` is treated as an explicit "no workflow pack"
+      // decision and allowed to proceed.
       await backendService.addComment(
         currentIssue.key,
-        buildMissingWorkflowComment(automaticWorkflowResolution.recommendations)
+        buildMissingWorkflowComment(
+          discoveredWorkflows.map(workflow => `${workflow.name} (${workflow.id}) — ${workflow.instructionsPath}`)
+        )
       );
-      return;
-    }
-    if (!issueWorkflowAssignment && automaticWorkflowResolution.workflow) {
-      aiSessionManager.setIssueWorkflowAssignment(currentIssue.key, automaticWorkflowResolution.workflow, {
-        source: 'automatic',
-        reason: automaticWorkflowResolution.reason
-      });
+      return false;
     }
 
     const baseBranch = extractDeliveryBaseBranch(currentIssue);
     if (!baseBranch) {
       await backendService.addComment(currentIssue.key, buildMissingBaseBranchClarificationComment());
-      return;
+      return false;
     }
 
     let issueAttachments;
@@ -492,12 +1068,7 @@ export async function activate(
           { template: deliverySettings.failureTemplate }
         )
       );
-      return;
-    }
-
-    const transitionId = await findTransitionIdForStatus(currentIssue.key, 'In Progress');
-    if (transitionId) {
-      await backendService.transitionIssue(currentIssue.key, transitionId);
+      return false;
     }
 
     const worktree = await deliveryWorktreeManager.prepareDeliveryWorktree(
@@ -505,11 +1076,25 @@ export async function activate(
       baseBranch,
       deliveryWorkingDirectory
     );
-    const taskDefinition = buildDeliveryTaskDefinition(currentIssue, {
+    const scopedPublishCommand = resolveDeliveryPublishCommand(
+      deliverySettings.publishCommand,
+      worktree.worktreePath
+    );
+
+    if (options?.preTransitionComment?.trim()) {
+      await backendService.addComment(currentIssue.key, options.preTransitionComment.trim());
+    }
+
+    const transitionId = await findTransitionIdForStatus(currentIssue.key, 'In Progress');
+    if (transitionId) {
+      await backendService.transitionIssue(currentIssue.key, transitionId);
+    }
+
+    const taskDefinition = buildDeliveryAnalysisTaskDefinition(currentIssue, {
       baseBranch,
       branchName: worktree.branchName,
       worktreePath: worktree.worktreePath,
-      publishCommand: deliverySettings.publishCommand,
+      publishCommand: scopedPublishCommand,
       artifactPattern: deliverySettings.artifactPattern,
       workflow: assignedWorkflow
     });
@@ -533,11 +1118,12 @@ export async function activate(
       issue.key,
       {
         source: 'jira-polling',
+        phase: 'analysis',
         baseBranch,
         worktreeName: worktree.worktreeName,
         worktreePath: worktree.worktreePath,
         createdBranch: worktree.branchName,
-        publishCommand: deliverySettings.publishCommand,
+        publishCommand: scopedPublishCommand,
         artifactPattern: deliverySettings.artifactPattern,
         summaryTemplate: deliverySettings.summaryTemplate,
         failureTemplate: deliverySettings.failureTemplate,
@@ -545,23 +1131,11 @@ export async function activate(
       },
       { replace: true }
     );
-    try {
-      await backendService.addComment(
-        currentIssue.key,
-        buildDeliveryStartedComment({
-          baseBranch,
-          branchName: worktree.branchName,
-          worktreeName: worktree.worktreeName,
-          workflow: taskDefinitionWithAttachments.workflow
-        })
-      );
-    } catch (error) {
-      reportError(error, `deliveryStartComment:${currentIssue.key}`);
-    }
     await activeSessionsSidebarViewProvider?.refresh();
     outputChannel.appendLine(
       `[Delivery] Started Jira delivery workflow for ${currentIssue.key} from base branch ${baseBranch}.`
     );
+    return true;
   }
 
   async function processPollingClarificationRequests(event: {
@@ -585,6 +1159,7 @@ export async function activate(
     }
 
     const cliPath = getCopilotCliPathOverride();
+    const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
 
     for (const issueKey of candidateKeys) {
       if (pollingClarificationInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
@@ -594,7 +1169,23 @@ export async function activate(
       pollingClarificationInFlight.add(issueKey);
       try {
         const issue = await backendService.getIssue(issueKey);
+        const analysisSignature = buildPollingAnalysisSignature(issue);
         if (hasCopilotClarificationComment(issue)) {
+          continue;
+        }
+        // Hard gate: once any analysis lifecycle comment exists on the ticket
+        // (start, ready, clarification, or other Copilot reply), never re-run
+        // analysis unless the user has explicitly pinged the bot with an
+        // #AIbot-prefixed comment posted after the last bot comment. This is
+        // immune to state-cache drift and version upgrades.
+        if (hasAnyAnalysisLifecycleComment(issue) && !hasPendingAiBotTrigger(issue)) {
+          outputChannel.appendLine(
+            `[Jira Polling] Skipping re-analysis on ${issueKey}: no pending #AIbot trigger since last bot activity.`
+          );
+          await setHandledPollingAnalysis(issueKey, analysisSignature);
+          continue;
+        }
+        if (handledPollingAnalyses[issueKey] === analysisSignature) {
           continue;
         }
 
@@ -602,16 +1193,40 @@ export async function activate(
           await backendService.addComment(issueKey, COPILOT_ANALYSIS_START_COMMENT);
         }
 
-        const clarificationComment = await buildCopilotClarificationComment(
+        const readinessAssessment = await assessCopilotImplementationReadiness(
           issue,
           cliPath,
-          workingDirectory
+          {
+            workingDirectory,
+            availableWorkflows,
+            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow
+          }
         );
-        if (!clarificationComment) {
+        if (readinessAssessment.status === 'ready') {
+          ensureWorkflowAssignedFromAnalysis(
+            issueKey,
+            readinessAssessment.workflowReference,
+            availableWorkflows
+          );
+
+          await handlePollingAnalysisReady(issue, {
+            analysisSignature
+          });
           continue;
         }
 
-        await backendService.addComment(issueKey, clarificationComment);
+        if (!readinessAssessment.clarificationComment) {
+          outputChannel.appendLine(
+            `[Jira Polling] Readiness assessment on ${issueKey} returned needs_clarification without a comment body — skipping.`
+          );
+          await setHandledPollingAnalysis(issueKey, analysisSignature);
+          continue;
+        }
+        await backendService.addComment(
+          issueKey,
+          formatPollingClarificationComment(readinessAssessment.clarificationComment)
+        );
+        await setHandledPollingAnalysis(issueKey, analysisSignature);
         outputChannel.appendLine(
           `[Jira Polling] Posted Copilot clarification request on ${issueKey}.`
         );
@@ -643,6 +1258,8 @@ export async function activate(
       return;
     }
 
+    const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
+
     for (const issueKey of candidateKeys) {
       if (pollingReplyInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
         continue;
@@ -652,21 +1269,56 @@ export async function activate(
       try {
         const issue = await backendService.getIssue(issueKey);
         const latestCopilotSignature = getLatestCopilotCommentSignature(issue);
+        // Primary #AIbot gate: if there is no #AIbot-prefixed comment posted
+        // after the last bot activity, do absolutely nothing. No analysis,
+        // no comments, no delivery. This is the single most important rule
+        // for polling-triggered work.
+        if (!hasPendingAiBotTrigger(issue)) {
+          outputChannel.appendLine(
+            `[Jira Polling] Skipping reply handling on ${issueKey}: no pending #AIbot trigger comment after last bot activity.`
+          );
+          continue;
+        }
         const replyRequest = extractPendingCopilotReplyRequest(issue);
         if (!replyRequest) {
+          outputChannel.appendLine(
+            `[Jira Polling] Skipping reply handling on ${issueKey}: #AIbot trigger present but no extractable reply body.`
+          );
           continue;
         }
         if (latestCopilotSignature && handledPollingReplies[issueKey] === latestCopilotSignature) {
+          outputChannel.appendLine(
+            `[Jira Polling] Skipping reply handling on ${issueKey}: already handled the current Copilot comment signature.`
+          );
           continue;
         }
+        outputChannel.appendLine(
+          `[Jira Polling] Processing #AIbot reply on ${issueKey}: ${replyRequest.slice(0, 120)}`
+        );
 
-        const clarificationComment = await buildCopilotClarificationComment(
+        const readinessAssessment = await assessCopilotImplementationReadiness(
           issue,
           getCopilotCliPathOverride(),
-          workingDirectory
+          {
+            workingDirectory,
+            availableWorkflows,
+            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow
+          }
         );
-        if (clarificationComment) {
-          await backendService.addComment(issueKey, clarificationComment);
+        if (readinessAssessment.status === 'needs_clarification') {
+          if (!readinessAssessment.clarificationComment) {
+            outputChannel.appendLine(
+              `[Jira Polling] Readiness assessment on ${issueKey} returned needs_clarification without a comment body — skipping.`
+            );
+            if (latestCopilotSignature) {
+              await setHandledPollingReply(issueKey, latestCopilotSignature);
+            }
+            continue;
+          }
+          await backendService.addComment(
+            issueKey,
+            formatPollingClarificationComment(readinessAssessment.clarificationComment)
+          );
           if (latestCopilotSignature) {
             await setHandledPollingReply(issueKey, latestCopilotSignature);
           }
@@ -676,13 +1328,15 @@ export async function activate(
           continue;
         }
 
-        await startPollingDeliveryWorkflow(issue);
-        if (latestCopilotSignature) {
-          await setHandledPollingReply(issueKey, latestCopilotSignature);
-        }
-        outputChannel.appendLine(
-          `[Jira Polling] Started delivery workflow on ${issueKey} after clarification replies completed.`
+        ensureWorkflowAssignedFromAnalysis(
+          issueKey,
+          readinessAssessment.workflowReference,
+          availableWorkflows
         );
+
+        await handlePollingAnalysisReady(issue, {
+          replySignature: latestCopilotSignature
+        });
       } catch (error) {
         reportError(error, `pollingClarificationReply:${issueKey}`);
       } finally {
@@ -753,55 +1407,12 @@ export async function activate(
   }
 
   async function promptForPendingPermission(issueKey: string): Promise<void> {
-    const record = aiSessionManager.getAgentSession(issueKey);
-    if (!record || record.state !== 'awaiting_approval' || !copilotAgentService.hasActiveTask(issueKey)) {
-      clearPermissionPromptTracking(issueKey);
-      return;
-    }
-
-    const snapshot = buildPermissionPromptSnapshot(issueKey);
-    if (
-      !snapshot.signature ||
-      permissionPromptInFlight.has(issueKey) ||
-      permissionPromptSignatures.get(issueKey) === snapshot.signature
-    ) {
-      return;
-    }
-
-    permissionPromptSignatures.set(issueKey, snapshot.signature);
-    permissionPromptInFlight.add(issueKey);
-
-    try {
-      const selection = await vscode.window.showWarningMessage(
-        `${issueKey} is waiting for permission.`,
-        {
-          modal: true,
-          detail: snapshot.detail
-            ? `${snapshot.detail}\n\nChoose how Ticket Manager should respond.`
-            : 'The agent is requesting permission to proceed.'
-        },
-        'Approve Once',
-        'Approve for Task',
-        'Deny',
-        'Open Session'
-      );
-
-      if (selection === 'Approve Once') {
-        copilotAgentService.respondToPermission(issueKey, 'allow_once');
-      } else if (selection === 'Approve for Task') {
-        copilotAgentService.respondToPermission(issueKey, 'allow_always');
-      } else if (selection === 'Deny') {
-        copilotAgentService.respondToPermission(issueKey, 'deny');
-      } else if (selection === 'Open Session') {
-        await openAiSession(issueKey);
-      }
-    } finally {
-      permissionPromptInFlight.delete(issueKey);
-      const latestRecord = aiSessionManager.getAgentSession(issueKey);
-      if (latestRecord?.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(issueKey)) {
-        void promptForPendingPermission(issueKey);
-      }
-    }
+    // Autopilot mode: Ticket Manager agents auto-approve every Copilot SDK
+    // permission request, so a user-facing permission modal must never fire.
+    // Kept as a no-op so legacy call sites compile without reintroducing the
+    // prompt.
+    clearPermissionPromptTracking(issueKey);
+    return Promise.resolve();
   }
 
   function getCopilotCliPathOverride(options?: { showWarning?: boolean }): string | undefined {
@@ -813,6 +1424,330 @@ export async function activate(
       }
     }
     return cliPath;
+  }
+
+  async function resolveGitLabAutomation(): Promise<ResolvedGitLabAutomation | undefined> {
+    let skipReason: string | undefined;
+
+    if (!workingDirectory) {
+      skipReason = 'GitLab MR automation skipped: open the repository workspace first.';
+    } else if (configStore.getGitLabConnectionType() !== 'api') {
+      skipReason = 'GitLab MR automation skipped: only direct GitLab API mode is supported for automated MR handling.';
+    }
+
+    if (skipReason) {
+      if (skipReason !== lastGitLabAutomationSkipReason) {
+        outputChannel.appendLine(`[GitLab MR] ${skipReason}`);
+        lastGitLabAutomationSkipReason = skipReason;
+      }
+      return undefined;
+    }
+
+    let inferredRemote;
+    try {
+      inferredRemote = await inferGitLabProjectFromRepo(workingDirectory!);
+    } catch (error) {
+      skipReason = `GitLab MR automation skipped: could not infer the GitLab project from origin: ${error instanceof Error ? error.message : String(error)}`;
+      if (skipReason !== lastGitLabAutomationSkipReason) {
+        outputChannel.appendLine(`[GitLab MR] ${skipReason}`);
+        lastGitLabAutomationSkipReason = skipReason;
+      }
+      return undefined;
+    }
+
+    const baseUrl = configStore.getGitLabUrl().trim() || inferredRemote.baseUrl;
+    const token = configStore.getGitLabApiKey().trim() || process.env.GITLAB_TOKEN?.trim() || '';
+    if (!token) {
+      skipReason = 'GitLab MR automation skipped: configure ticketManager.gitlabApiKey or set GITLAB_TOKEN.';
+      if (skipReason !== lastGitLabAutomationSkipReason) {
+        outputChannel.appendLine(`[GitLab MR] ${skipReason}`);
+        lastGitLabAutomationSkipReason = skipReason;
+      }
+      return undefined;
+    }
+
+    const cacheKey = JSON.stringify({
+      baseUrl,
+      projectPath: inferredRemote.projectPath,
+      tokenHash: createHash('sha1').update(token).digest('hex')
+    });
+    if (cachedGitLabAutomation && cachedGitLabAutomationKey === cacheKey) {
+      return cachedGitLabAutomation;
+    }
+
+    cachedGitLabAutomation = {
+      client: new GitLabApiService({
+        baseUrl,
+        projectPath: inferredRemote.projectPath,
+        token
+      }),
+      baseUrl,
+      projectPath: inferredRemote.projectPath
+    };
+    cachedGitLabAutomationKey = cacheKey;
+    lastGitLabAutomationSkipReason = undefined;
+    return cachedGitLabAutomation;
+  }
+
+  function mapMergeRequestMetadata(
+    mergeRequest: GitLabMergeRequest,
+    existing?: NonNullable<NonNullable<AgentSessionRecord['delivery']>['mergeRequest']>,
+    handledNotes?: Record<string, string>,
+    pendingFeedback?: NonNullable<NonNullable<AgentSessionRecord['delivery']>['mergeRequest']>['pendingFeedback']
+  ): NonNullable<NonNullable<AgentSessionRecord['delivery']>['mergeRequest']> {
+    return {
+      iid: mergeRequest.iid,
+      webUrl: mergeRequest.webUrl,
+      title: mergeRequest.title,
+      sourceBranch: mergeRequest.sourceBranch,
+      targetBranch: mergeRequest.targetBranch,
+      state: mergeRequest.state,
+      createdAt: mergeRequest.createdAt,
+      updatedAt: mergeRequest.updatedAt,
+      mergeCommitSha: mergeRequest.mergeCommitSha,
+      handledNotes: handledNotes ?? existing?.handledNotes,
+      lastSeenAt: new Date().toISOString(),
+      pendingFeedback,
+      buildRequiredOnMerge: existing?.buildRequiredOnMerge ?? false
+    };
+  }
+
+  async function ensureMergeRequestForDoneIssue(issueKey: string): Promise<void> {
+    const record = aiSessionManager.getAgentSession(issueKey);
+    if (!isDeliveryTask(record)) {
+      return;
+    }
+
+    const sourceBranch = record.delivery.createdBranch.trim();
+    if (!sourceBranch || record.delivery.mergeRequest?.iid) {
+      return;
+    }
+
+    const gitLabAutomation = await resolveGitLabAutomation();
+    if (!gitLabAutomation) {
+      return;
+    }
+
+    const issue = await backendService.getIssue(issueKey);
+    const existingMergeRequests = await gitLabAutomation.client.listMergeRequestsForSourceBranch(sourceBranch);
+    let mergeRequest = existingMergeRequests.find(candidate => mergeRequestMatchesIssueKey(candidate, issue.key))
+      ?? existingMergeRequests[0];
+    let created = false;
+    if (!mergeRequest) {
+      mergeRequest = await gitLabAutomation.client.createMergeRequest({
+        sourceBranch,
+        targetBranch: record.delivery.baseBranch,
+        title: `${issue.key}: ${issue.summary}`,
+        description: buildMergeRequestDescription(issue, record),
+        removeSourceBranch: true
+      });
+      created = true;
+    }
+
+    const notes = filterGitLabNotesForAutomation(
+      await gitLabAutomation.client.listMergeRequestDiscussions(mergeRequest.iid)
+    );
+
+    aiSessionManager.updateAgentDelivery(issueKey, {
+      mergeRequest: mapMergeRequestMetadata(
+        mergeRequest,
+        record.delivery.mergeRequest,
+        createGitLabHandledNoteState(notes),
+        record.delivery.mergeRequest?.pendingFeedback
+      )
+    });
+
+    if (created) {
+      await backendService.addComment(issueKey, buildMergeRequestCreatedComment(mergeRequest.webUrl));
+      outputChannel.appendLine(`[GitLab MR] Created merge request !${mergeRequest.iid} for ${issueKey} on ${sourceBranch}.`);
+    } else {
+      outputChannel.appendLine(`[GitLab MR] Reusing merge request !${mergeRequest.iid} for ${issueKey} on ${sourceBranch}.`);
+    }
+  }
+
+  async function startMergeRequestFeedbackSession(
+    issue: IssueDetails,
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> },
+    mergeRequest: GitLabMergeRequest,
+    currentNotes: GitLabDiscussionNote[],
+    changedNotes: GitLabDiscussionNote[]
+  ): Promise<void> {
+    const taskDefinition = buildMergeRequestFeedbackTaskDefinition(issue, {
+      branchName: record.delivery.createdBranch,
+      worktreePath: record.delivery.worktreePath,
+      mergeRequestUrl: mergeRequest.webUrl,
+      sourceBranch: mergeRequest.sourceBranch,
+      targetBranch: mergeRequest.targetBranch,
+      notes: changedNotes.map(note => ({
+        author: note.author,
+        body: note.body,
+        updatedAt: note.updatedAt
+      })),
+      workflow: record.taskDefinition.workflow
+    });
+
+    await copilotAgentService.startTask(
+      {
+        ...issue,
+        branch: record.delivery.createdBranch
+      },
+      taskDefinition,
+      {
+        cliPath: getCopilotCliPathOverride(),
+        workingDirectory: record.delivery.worktreePath
+      }
+    );
+
+    aiSessionManager.updateAgentDelivery(issue.key, {
+      ...record.delivery,
+      phase: 'merge-request-feedback',
+      finalizationState: 'pending',
+      finalizationMessage: `Processing ${changedNotes.length} merge request comment(s).`,
+      mergeRequest: mapMergeRequestMetadata(
+        mergeRequest,
+        record.delivery.mergeRequest,
+        createGitLabHandledNoteState(currentNotes),
+        {
+          triggeredAt: new Date().toISOString(),
+          notes: changedNotes.map(note => ({
+            id: note.id,
+            author: note.author,
+            body: note.body,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt
+          }))
+        }
+      )
+    }, { replace: true });
+
+    outputChannel.appendLine(
+      `[GitLab MR] Started merge request feedback session for ${issue.key} covering ${changedNotes.length} note(s).`
+    );
+  }
+
+  async function syncTrackedMergeRequest(
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> },
+    gitLabAutomation: ResolvedGitLabAutomation
+  ): Promise<void> {
+    const mergeRequestState = record.delivery.mergeRequest;
+    if (!mergeRequestState) {
+      return;
+    }
+
+    const mergeRequest = await gitLabAutomation.client.getMergeRequest(mergeRequestState.iid);
+    const notes = filterGitLabNotesForAutomation(
+      await gitLabAutomation.client.listMergeRequestDiscussions(mergeRequest.iid)
+    );
+    const { newNotes, updatedNotes } = diffGitLabDiscussionNotes(
+      mergeRequestState.handledNotes,
+      notes,
+      !mergeRequestState.lastSeenAt
+    );
+
+    if (mergeRequest.state !== 'opened') {
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        mergeRequest: mapMergeRequestMetadata(
+          mergeRequest,
+          mergeRequestState,
+          createGitLabHandledNoteState(notes),
+          mergeRequestState.pendingFeedback
+        )
+      });
+      return;
+    }
+
+    if (newNotes.length === 0 && updatedNotes.length === 0) {
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        mergeRequest: mapMergeRequestMetadata(
+          mergeRequest,
+          mergeRequestState,
+          createGitLabHandledNoteState(notes),
+          mergeRequestState.pendingFeedback
+        )
+      });
+      return;
+    }
+
+    if (copilotAgentService.hasActiveTask(record.issueKey) || record.delivery.finalizationState === 'pending') {
+      outputChannel.appendLine(
+        `[GitLab MR] Skipping feedback session for ${record.issueKey}: ${newNotes.length + updatedNotes.length} note(s) changed while a task is already active.`
+      );
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        mergeRequest: mapMergeRequestMetadata(
+          mergeRequest,
+          mergeRequestState,
+          mergeRequestState.handledNotes,
+          mergeRequestState.pendingFeedback
+        )
+      });
+      return;
+    }
+
+    outputChannel.appendLine(
+      `[GitLab MR] Detected ${newNotes.length} new and ${updatedNotes.length} updated merge request note(s) for ${record.issueKey}.`
+    );
+    const issue = await backendService.getIssue(record.issueKey);
+    await startMergeRequestFeedbackSession(issue, record, mergeRequest, notes, [...newNotes, ...updatedNotes]);
+  }
+
+  async function syncTrackedMergeRequests(): Promise<void> {
+    const gitLabAutomation = await resolveGitLabAutomation();
+    if (!gitLabAutomation) {
+      return;
+    }
+
+    for (const record of aiSessionManager.getAllAgentSessions().values()) {
+      if (!isDeliveryTask(record) || !record.delivery.mergeRequest?.iid) {
+        continue;
+      }
+      if (mergeRequestAutomationInFlight.has(record.issueKey)) {
+        continue;
+      }
+
+      mergeRequestAutomationInFlight.add(record.issueKey);
+      try {
+        await syncTrackedMergeRequest(record, gitLabAutomation);
+      } catch (error) {
+        reportError(error, `gitlabMergeRequestSync:${record.issueKey}`);
+      } finally {
+        mergeRequestAutomationInFlight.delete(record.issueKey);
+      }
+    }
+  }
+
+  async function processPollingMergeRequestAutomation(event: PollingSyncEvent): Promise<void> {
+    const nextSnapshots = event.issues.reduce<Record<string, string>>((result, issue) => {
+      result[issue.key] = formatStatusSnapshot(
+        issue.fields?.status?.name,
+        issue.fields?.status?.statusCategory?.name
+      );
+      return result;
+    }, {});
+
+    const transitionCandidates = [...new Set([...event.newKeys, ...event.changedKeys])];
+    for (const issueKey of transitionCandidates) {
+      const currentSnapshot = parseStatusSnapshot(nextSnapshots[issueKey]);
+      const previousSnapshot = parseStatusSnapshot(pollingStatusSnapshots[issueKey]);
+      if (!shouldCreateMergeRequestForStatusChange({
+        previousStatus: previousSnapshot.status,
+        currentStatus: currentSnapshot.status,
+        currentStatusCategory: currentSnapshot.statusCategory
+      })) {
+        continue;
+      }
+
+      outputChannel.appendLine(
+        `[GitLab MR] ${issueKey} transitioned from ${previousSnapshot.status ?? 'unknown'} to ${currentSnapshot.status ?? 'unknown'}; preparing merge request automation.`
+      );
+      try {
+        await ensureMergeRequestForDoneIssue(issueKey);
+      } catch (error) {
+        reportError(error, `gitlabMergeRequestEnsure:${issueKey}`);
+      }
+    }
+
+    await syncTrackedMergeRequests();
+    await persistPollingStatusSnapshots(nextSnapshots);
   }
 
   // Set mode context early so when-clauses on views evaluate correctly

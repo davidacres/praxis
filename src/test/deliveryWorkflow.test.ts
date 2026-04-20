@@ -1,9 +1,14 @@
 import * as assert from 'node:assert';
 import {
+  buildDeliveryAnalysisTaskDefinition,
+  buildDeliverySuccessComment,
+  buildPollingAnalysisReadyComment,
   buildDeliveryStartedComment,
   buildDeliveryTaskDefinition,
   extractDeliveryBaseBranch,
-  parseDeliveryTaskResult
+  parseDeliveryAnalysisResult,
+  parseDeliveryTaskResult,
+  resolveDeliveryPublishCommand
 } from '../ai/deliveryWorkflow';
 
 suite('deliveryWorkflow', () => {
@@ -67,8 +72,33 @@ suite('deliveryWorkflow', () => {
 
     assert.strictEqual(task.kind, 'jira-delivery');
     assert.ok(task.completionContract?.includes('DELIVERY_RESULT'));
+    assert.ok(task.completionContract?.includes('"buildIdentifier"'));
     assert.ok(task.definitionOfDone.includes('dist/*.msi'));
     assert.strictEqual(task.workflow?.id, 'add-edit-dotnet-web-api');
+  });
+
+  test('builds an analysis-only delivery task definition for the first session', () => {
+    const task = buildDeliveryAnalysisTaskDefinition(
+      {
+        key: 'KAMAI-39',
+        summary: 'Ship the MSI delivery change',
+        issueType: 'Story',
+        status: 'Selected for Development',
+        description: 'Implement the requested workflow.'
+      },
+      {
+        baseBranch: 'main',
+        branchName: 'KAMAI-39-ship-the-msi-delivery-change',
+        worktreePath: 'C:/worktrees/KAMAI-39-ship-the-msi-delivery-change',
+        publishCommand: 'pwsh ./build-msi.ps1',
+        artifactPattern: 'dist/*.msi'
+      }
+    );
+
+    assert.strictEqual(task.kind, 'jira-delivery');
+    assert.ok(task.goal.includes('Analyze whether KAMAI-39'));
+    assert.ok(task.completionContract?.includes('DELIVERY_ANALYSIS_RESULT'));
+    assert.ok(task.nonGoals?.includes('Do not begin implementation in this analysis session.'));
   });
 
   test('builds a Jira start comment that includes the assigned workflow link', () => {
@@ -91,6 +121,66 @@ suite('deliveryWorkflow', () => {
     assert.ok(comment.includes('https://git.example/workflows/add-edit-dotnet-web-api'));
   });
 
+  test('builds a polling analysis ready comment before delivery starts', () => {
+    const comment = buildPollingAnalysisReadyComment();
+
+    assert.ok(comment.includes('Copilot readiness analysis passed'));
+    assert.ok(comment.includes('Analysis result: READY'));
+    assert.ok(comment.includes('Ticket Manager is now preparing the delivery workflow.'));
+  });
+
+  test('rewrites powershell file publish commands to be worktree-scoped', () => {
+    const command = resolveDeliveryPublishCommand(
+      String.raw`powershell -ExecutionPolicy Bypass -File .\scripts\build-installer-msi.ps1 -Configuration Release -RuntimeIdentifier win-x64`,
+      String.raw`C:\dev\system-configurator\.worktrees\KAMAI-44-test`
+    );
+
+    assert.ok(command.includes('powershell -ExecutionPolicy Bypass -Command'));
+    assert.ok(command.includes(String.raw`Set-Location -LiteralPath 'C:\dev\system-configurator\.worktrees\KAMAI-44-test'`));
+    assert.ok(command.includes(String.raw`& 'C:\dev\system-configurator\.worktrees\KAMAI-44-test\scripts\build-installer-msi.ps1' -Configuration Release -RuntimeIdentifier win-x64`));
+  });
+
+  test('keeps non-powershell publish commands unchanged', () => {
+    const command = resolveDeliveryPublishCommand(
+      'dotnet publish src/App/App.csproj -c Release',
+      String.raw`C:\dev\system-configurator\.worktrees\KAMAI-44-test`
+    );
+
+    assert.strictEqual(command, 'dotnet publish src/App/App.csproj -c Release');
+  });
+
+  test('prepends the reporter mention to the delivery success comment', () => {
+    const comment = buildDeliverySuccessComment(
+      {
+        status: 'success',
+        summary: 'Implemented the requested change.',
+        branch: 'KAMAI-45-implemented-change',
+        artifactPaths: ['publish/installer/SystemConfigurator.msi']
+      },
+      {
+        reporterMention: '[~accountid:abc123]'
+      }
+    );
+
+    assert.ok(comment.startsWith('[~accountid:abc123] Implementation summary'));
+  });
+
+  test('falls back to reporter name when no Jira mention token exists', () => {
+    const comment = buildDeliverySuccessComment(
+      {
+        status: 'success',
+        summary: 'Implemented the requested change.',
+        branch: 'KAMAI-45-implemented-change',
+        artifactPaths: ['publish/installer/SystemConfigurator.msi']
+      },
+      {
+        reporterName: 'David Acres'
+      }
+    );
+
+    assert.ok(comment.startsWith('@David Acres Implementation summary'));
+  });
+
   test('parses a structured delivery result payload', () => {
     const payload = [
       'Work complete.',
@@ -104,6 +194,7 @@ suite('deliveryWorkflow', () => {
       '  "branch": "KAMAI-39-ship-the-msi-delivery-change",',
       '  "commitHash": "abc1234",',
       '  "pushedRef": "origin/KAMAI-39-ship-the-msi-delivery-change",',
+      '  "buildIdentifier": "01",',
       '  "artifactPaths": ["dist/TicketManager-KAMAI-39.msi"]',
       '}',
       '```'
@@ -116,8 +207,33 @@ suite('deliveryWorkflow', () => {
       branch: 'KAMAI-39-ship-the-msi-delivery-change',
       commitHash: 'abc1234',
       pushedRef: 'origin/KAMAI-39-ship-the-msi-delivery-change',
+      buildIdentifier: '01',
       artifactPaths: ['dist/TicketManager-KAMAI-39.msi'],
       failureReason: undefined
+    });
+  });
+
+  test('parses a structured delivery analysis result payload', () => {
+    const result = parseDeliveryAnalysisResult([
+      'Analysis complete.',
+      '',
+      'DELIVERY_ANALYSIS_RESULT',
+      '',
+      '```json',
+      '{',
+      '  "status": "ready",',
+      '  "summary": "The ticket is ready for implementation in the prepared worktree.",',
+      '  "implementationPlan": "1. Update the workflow orchestration. 2. Add tests. 3. Validate packaging.",',
+      '  "blockers": []',
+      '}',
+      '```'
+    ].join('\n'));
+
+    assert.deepStrictEqual(result, {
+      status: 'ready',
+      summary: 'The ticket is ready for implementation in the prepared worktree.',
+      implementationPlan: '1. Update the workflow orchestration. 2. Add tests. 3. Validate packaging.',
+      blockers: []
     });
   });
 

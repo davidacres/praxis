@@ -98,6 +98,45 @@ Run the standalone Node tests:
 node --test .\JiraPollingService\node\polling.test.js
 ```
 
+## Standalone Jira MR Poller
+
+There is now a second standalone runtime for local MR-driven testing:
+
+```powershell
+node .\JiraPollingService\node\standalone-cli.js --repo-path C:\dev\system-configurator --issue-key KAMAI-999991
+```
+
+This service reuses the Jira poller structure, but runs independently of the extension and adds GitLab merge-request polling with local JSON state.
+
+What it does:
+
+- tracks either Jira-linked issue keys or explicit `--issue-key` values
+- resolves the GitLab project from `--repo-path` when `GITLAB_URL` and `GITLAB_PROJECT` are not set
+- polls matching merge requests and discussions using `GITLAB_TOKEN`
+- establishes a baseline on first sight of an MR, then logs newly added or updated comments on later polls
+- keeps merge-request state in `.standalone-jira-mr-state.json` by default
+- arms merge-time MSI generation only when the service itself later reports code edits on an existing MR
+
+Useful flags:
+
+- `--once`
+- `--repo-path <path>`
+- `--issue-key <ISSUE-123>` (repeatable)
+- `--state-path <path>`
+- `--poll-interval <seconds>`
+- `--gitlab-url <url>`
+- `--gitlab-project <group/project>`
+- `--mode dry-run|mutable`
+- `--executor-command <shell command>`
+- `--publish-command <shell command>`
+- `--artifact-pattern <glob or relative path>`
+
+To run the standalone unit tests:
+
+```powershell
+node --test .\JiraPollingService\node\standalone.test.js
+```
+
 ## Expected Output
 
 On startup, the service logs the Jira board reference and JQL. On each polling cycle it logs:

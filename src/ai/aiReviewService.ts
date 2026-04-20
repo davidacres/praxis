@@ -1,4 +1,5 @@
 import type { IssueDetails } from '../types';
+import type { AgentWorkflowReference } from './agentTypes';
 import { resolveCopilotClientOptions } from './copilotSdkRuntime';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
@@ -48,13 +49,39 @@ Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
 const COPILOT_CLARIFICATION_SYSTEM_PROMPT = `You are GitHub Copilot reviewing a ticket before implementation starts.
-If the ticket is specific enough to implement safely, reply with exactly READY.
-If the ticket is too vague, output only 2-5 concrete clarification questions.
 
-Return the questions as a numbered plain-text list, one question per line.
-Do not include any preamble, explanation, rationale, analysis, tool output, or comment title.
-Do not claim that work has started.
-Do not use markdown headings, bold, italics, or bullet markers like * or #.`;
+Workflow packs are OPTIONAL. A ticket is allowed to proceed with no workflow pack assigned.
+Never ask the user to assign a workflow pack, never suggest workflow packs, and never block
+on workflow pack selection. Do not infer or auto-pick a workflow pack from the technical
+content of the ticket.
+
+Only populate "workflowReference" when one of these is true:
+  (a) A workflow pack is already assigned in Ticket Manager — echo its id.
+  (b) The ticket description or a comment explicitly names one of the available workflow packs
+      (e.g. a line like "Workflow pack: add-edit-dotnet-web-api"). Wording such as
+      "use no workflow", "no workflow pack", or the absence of any such line means no workflow
+      pack — leave "workflowReference" blank and still return status "ready" if the rest of
+      the ticket is clear enough to implement.
+
+Return exactly one JSON code block and nothing else.
+
+Schema:
+{
+  "status": "ready" | "needs_clarification",
+  "workflowReference": "optional — only set when the ticket or Ticket Manager explicitly names a workflow pack",
+  "comment": "required when status is needs_clarification"
+}
+
+Rules:
+- status must be "ready" when the ticket is specific enough to implement safely, regardless
+  of whether a workflow pack is assigned.
+- status must be "needs_clarification" only when there are genuine missing technical or
+  scope details that would force risky assumptions during implementation. Missing workflow
+  pack assignment is NEVER by itself a reason for clarification.
+- comment must be a concise Jira-ready plain-text comment body listing the missing
+  non-workflow details. Do not mention workflow packs in the comment.
+- Do not include markdown headings, code fences outside the single JSON block, rationale,
+  tool output, or claims that work has started.`;
 
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
 const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -181,12 +208,101 @@ function normalizeClarificationText(text: string): string {
     .trim();
 }
 
+function buildWorkflowPromptContext(workflows: AgentWorkflowReference[]): string {
+  if (workflows.length === 0) {
+    return 'Available workflow packs: none currently discovered in the workspace.';
+  }
+
+  return [
+    'Available workflow packs:',
+    ...workflows.map(workflow => {
+      const lines = [
+        `- Name: ${workflow.name}`,
+        `  Id: ${workflow.id}`,
+        `  File: ${workflow.instructionsPath}`
+      ];
+      if (workflow.link) {
+        lines.push(`  Link: ${workflow.link}`);
+      }
+      return lines.join('\n');
+    })
+  ].join('\n');
+}
+
+function extractJsonCodeBlock(text: string): string | undefined {
+  const match = /```json\s*([\s\S]*?)```/i.exec(text);
+  return match?.[1]?.trim();
+}
+
+function normalizeClarificationComment(text: string): string | undefined {
+  const normalized = text
+    .replaceAll('\r\n', '\n')
+    .replaceAll(/^```(?:json|markdown|text)?\s*/gim, '')
+    .replaceAll(/```$/gim, '')
+    .trim();
+  return normalized || undefined;
+}
+
+export interface CopilotImplementationReadinessAssessment {
+  status: 'ready' | 'needs_clarification';
+  workflowReference?: string;
+  clarificationComment?: string;
+}
+
+export function parseCopilotImplementationReadinessAssessment(
+  text: string | undefined
+): CopilotImplementationReadinessAssessment | undefined {
+  if (!text?.trim()) {
+    return undefined;
+  }
+
+  const jsonText = extractJsonCodeBlock(text);
+  if (!jsonText) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return undefined;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const status = candidate.status === 'ready' || candidate.status === 'needs_clarification'
+    ? candidate.status
+    : undefined;
+  const workflowReference = typeof candidate.workflowReference === 'string'
+    ? candidate.workflowReference.trim() || undefined
+    : undefined;
+  const clarificationComment = typeof candidate.comment === 'string'
+    ? normalizeClarificationComment(candidate.comment)
+    : undefined;
+
+  if (!status) {
+    return undefined;
+  }
+  if (status === 'needs_clarification' && !clarificationComment) {
+    return undefined;
+  }
+
+  return {
+    status,
+    workflowReference,
+    clarificationComment
+  };
+}
+
 function isQuestionLikeLine(text: string): boolean {
   return /^(who|what|when|where|why|how|which|should|could|would|can|do|does|did|is|are|am|will|may)\b/i.test(text);
 }
 
 function isClarificationMetaLine(text: string): boolean {
-  return /^(this is an ai-generated message\.?|copilot clarification request|questions?\s*:|analysis\s*:|reasoning\s*:|thoughts?\s*:|thinking\s*:|tool(?:\s+output|\s+call|\s+result)?\s*:|assistant\s*:|ready)$/i.test(text);
+  return /^(\*{0,2}this is an ai-generated message\.?\*{0,2}|copilot clarification request|questions?\s*:|analysis\s*:|reasoning\s*:|thoughts?\s*:|thinking\s*:|tool(?:\s+output|\s+call|\s+result)?\s*:|assistant\s*:|ready)$/i.test(text);
 }
 
 export function extractClarificationQuestions(text: string): string[] {
@@ -408,10 +524,60 @@ ${ticketContext}`,
     throw new Error('Copilot clarification response did not contain any clarification questions.');
   }
 
-  return `This is an AI-generated message.
+  return `**THIS IS AN AI-GENERATED MESSAGE.**
 Copilot clarification request
 
-${normalizedBody}`;
+${normalizedBody}
+
+_Reply to the bot by starting your comment with \`#AIbot\` (e.g. \`#AIbot use the production cluster\`). Comments without that prefix are ignored._`;
+}
+
+export async function assessCopilotImplementationReadiness(
+  issue: IssueDetails,
+  cliPath: string | undefined,
+  options?: {
+    workingDirectory?: string;
+    availableWorkflows?: AgentWorkflowReference[];
+    assignedWorkflow?: AgentWorkflowReference;
+  }
+): Promise<CopilotImplementationReadinessAssessment> {
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
+  const assignedWorkflowContext = options?.assignedWorkflow
+    ? [
+        'Currently assigned workflow pack in Ticket Manager:',
+        `- Name: ${options.assignedWorkflow.name}`,
+        `- Id: ${options.assignedWorkflow.id}`,
+        `- File: ${options.assignedWorkflow.instructionsPath}`,
+        options.assignedWorkflow.link ? `- Link: ${options.assignedWorkflow.link}` : undefined
+      ].filter((line): line is string => Boolean(line)).join('\n')
+    : 'Currently assigned workflow pack in Ticket Manager: none. (This is acceptable — workflow packs are optional.)';
+  const workflowContext = buildWorkflowPromptContext(options?.availableWorkflows ?? []);
+
+  const content = await runCopilotPrompt(
+    `Assess whether this ticket is specific enough to implement without making risky assumptions.
+
+${assignedWorkflowContext}
+
+${workflowContext}
+
+Ticket context:
+${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
+      workingDirectory: options?.workingDirectory
+    }
+  );
+
+  const assessment = parseCopilotImplementationReadinessAssessment(content);
+  if (!assessment) {
+    throw new Error('Copilot readiness assessment did not return a valid JSON result.');
+  }
+
+  return assessment;
 }
 
 // ── Local Peer Review (LPR) ──────────────────────────────────────
