@@ -139,6 +139,8 @@ export interface IssueSummary {
   parentKey?: string;
   parentIssue?: ParentIssueReference;
   assignee?: string;
+  reporter?: string;
+  reporterMention?: string;
   priority?: string;
   created?: string;
   updated?: string;

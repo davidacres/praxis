@@ -40,11 +40,11 @@ suite('Copilot SDK runtime config', () => {
     const usesNativeBinary = /[\\/]@github[\\/]copilot-[^\\/]+[\\/].*copilot(?:\.exe)?$/i.test(cliPath);
 
     assert.ok(usesJsLoader || usesNativeBinary);
+    assert.deepStrictEqual(resolved.clientOptions.cliArgs, ['--allow-all', '--no-ask-user']);
+    assert.strictEqual(resolved.clientOptions.env?.COPILOT_ALLOW_ALL, '1');
+    assert.strictEqual(resolved.clientOptions.env?.PATH, 'test-path');
     if (usesJsLoader) {
       assert.strictEqual(resolved.clientOptions.env?.ELECTRON_RUN_AS_NODE, '1');
-      assert.strictEqual(resolved.clientOptions.env?.PATH, 'test-path');
-    } else {
-      assert.strictEqual(resolved.clientOptions.env, undefined);
     }
   });
 
@@ -56,6 +56,8 @@ suite('Copilot SDK runtime config', () => {
 
     assert.strictEqual(resolved.clientOptions.cliPath, 'C:/copilot/index.js');
     assert.strictEqual(resolved.clientOptions.env?.ELECTRON_RUN_AS_NODE, '1');
+    assert.strictEqual(resolved.clientOptions.env?.COPILOT_ALLOW_ALL, '1');
+    assert.deepStrictEqual(resolved.clientOptions.cliArgs, ['--allow-all', '--no-ask-user']);
   });
 
   test('does not force ELECTRON_RUN_AS_NODE for native cli executables', () => {
@@ -65,6 +67,8 @@ suite('Copilot SDK runtime config', () => {
     });
 
     assert.strictEqual(resolved.clientOptions.cliPath, 'C:/copilot/copilot.exe');
-    assert.strictEqual(resolved.clientOptions.env, undefined);
+    assert.strictEqual(resolved.clientOptions.env?.ELECTRON_RUN_AS_NODE, undefined);
+    assert.strictEqual(resolved.clientOptions.env?.COPILOT_ALLOW_ALL, '1');
+    assert.deepStrictEqual(resolved.clientOptions.cliArgs, ['--allow-all', '--no-ask-user']);
   });
 });

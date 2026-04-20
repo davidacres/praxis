@@ -228,7 +228,7 @@ suite('AiSessionManager — Agent Sessions', () => {
 
     const assignment = manager.getIssueWorkflowAssignment('ISSUE-1');
     assert.ok(assignment);
-    assert.strictEqual(assignment?.workflow.id, 'add-edit-dotnet-web-api');
+    assert.strictEqual(assignment?.workflow?.id, 'add-edit-dotnet-web-api');
     assert.strictEqual(assignment?.source, 'manual');
     assert.strictEqual(assignment?.reason, 'Chosen by user');
 
@@ -241,7 +241,7 @@ suite('AiSessionManager — Agent Sessions', () => {
     let lastWorkflowId: string | undefined;
     const disposable = manager.onDidChangeWorkflowAssignment(event => {
       lastIssueKey = event.issueKey;
-      lastWorkflowId = event.assignment?.workflow.id;
+      lastWorkflowId = event.assignment?.workflow?.id;
     });
 
     manager.setIssueWorkflowAssignment('ISSUE-2', {

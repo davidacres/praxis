@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.2",
+  "version": "0.0.13",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -10,6 +10,16 @@
   "type": "commonjs",
   "main": "./out/extension.js",
   "icon": "media/marketplace-icon.png",
+  "files": [
+    "out/extension.js",
+    "media/**",
+    "JiraPollingService/appsettings.json",
+    "JiraPollingService/node/polling.js",
+    "node_modules/@github/copilot-win32-x64/package.json",
+    "node_modules/@github/copilot-win32-x64/copilot.exe",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -40,6 +50,9 @@
     "jira-polling": "node ./JiraPollingService/node/cli.js",
     "jira-polling:once": "node ./JiraPollingService/node/cli.js --once",
     "jira-polling:test": "node --test ./JiraPollingService/node/polling.test.js",
+    "jira-mr-polling": "node ./JiraPollingService/node/standalone-cli.js",
+    "jira-mr-polling:once": "node ./JiraPollingService/node/standalone-cli.js --once",
+    "jira-mr-polling:test": "node --test ./JiraPollingService/node/standalone.test.js",
     "bedrock:glm-test": "node ./scripts/test-bedrock-glm5.cjs",
     "bedrock:proxy": "node ./scripts/bedrock-sanitize-proxy.cjs",
     "install:vsix": "node ./scripts/install-vsix.cjs",
@@ -1018,7 +1031,8 @@
     "@github/copilot-sdk": "^0.2.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "jsonc-parser": "^3.3.1",
-    "markdown-it": "^14.1.1"
+    "markdown-it": "^14.1.1",
+    "yazl": "^3.3.1"
   },
   "overrides": {
     "diff": "^8.0.4",
@@ -1029,6 +1043,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.5.0",
     "@types/vscode": "1.105.0",
+    "@types/yazl": "^3.3.1",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.28.0",

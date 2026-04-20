@@ -199,6 +199,11 @@ function matchesWorkflow(left: AgentWorkflowReference, right: AgentWorkflowRefer
   );
 }
 
+function getWorkflowReferenceCandidates(workflow: AgentWorkflowReference): string[] {
+  return [workflow.id, workflow.name, workflow.instructionsPath, workflow.link]
+    .filter((value): value is string => Boolean(value?.trim()));
+}
+
 function buildWorkflowSearchText(workflow: AgentWorkflowReference): string {
   return [workflow.id, workflow.name, workflow.description, workflow.instructionsPath]
     .filter((value): value is string => Boolean(value))
@@ -284,6 +289,36 @@ export function resolveRelevantAgentWorkflow(options: {
   };
 }
 
+export function resolveWorkflowReference(
+  reference: string | undefined,
+  workflows: AgentWorkflowReference[]
+): AgentWorkflowReference | undefined {
+  const trimmedReference = reference?.trim();
+  if (!trimmedReference) {
+    return undefined;
+  }
+
+  const normalizedReference = normalizeForMatching(trimmedReference);
+  const exactMatches = workflows.filter(workflow =>
+    getWorkflowReferenceCandidates(workflow).some(candidate => normalizeForMatching(candidate) === normalizedReference)
+  );
+  if (exactMatches.length === 1) {
+    return exactMatches[0];
+  }
+
+  const partialMatches = workflows.filter(workflow =>
+    getWorkflowReferenceCandidates(workflow).some(candidate => {
+      const normalizedCandidate = normalizeForMatching(candidate);
+      return normalizedReference.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedReference);
+    })
+  );
+  if (partialMatches.length === 1) {
+    return partialMatches[0];
+  }
+
+  return undefined;
+}
+
 export async function resolveConfiguredAgentWorkflow(options: {
   workspaceRoot?: string;
   configuredPath?: string;
@@ -364,7 +399,7 @@ export async function promptForAgentWorkflowSelection(options: {
   const items: WorkflowQuickPickItem[] = [
     {
       label: 'No workflow pack',
-      description: options.previous ? 'Clear the currently assigned workflow' : 'Run without a workflow pack',
+      description: 'Run without a workflow pack — delivery will proceed with no workflow directive',
       pickType: 'none'
     },
     ...discovered.map(workflow => ({

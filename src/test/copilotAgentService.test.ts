@@ -139,13 +139,14 @@ suite('CopilotAgentService', () => {
 
     assert.ok(prompt.includes('its name MUST start with TWT-999'));
     assert.ok(prompt.includes('Use a worktree name like: TWT-999-ship-updated-installer'));
+    assert.ok(prompt.includes('Return that same <build-id> in DELIVERY_RESULT.buildIdentifier'));
     assert.ok(prompt.includes('Use an MSI version like: 1.0.0.1-TWT-999-buildx'));
     assert.ok(prompt.includes('## Assigned Workflow Pack'));
     assert.ok(prompt.includes('.github/skills/add-edit-dotnet-web-api/SKILL.md'));
     assert.ok(prompt.includes('https://example.test/workflows/add-edit-dotnet-web-api'));
   });
 
-  test('cleanup while awaiting permission does not revert session back to executing', async () => {
+  test('permission requests are always auto-approved without prompting', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-1';
     sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
@@ -161,18 +162,24 @@ suite('CopilotAgentService', () => {
     (service as any).activeTasks.set(issueKey, activeTask);
 
     const hooks = (service as any).createInteractiveSessionHooks(issueKey);
-    const permissionPromise = hooks.onPermissionRequest({ kind: 'write' });
+    const permissionResult = await hooks.onPermissionRequest({
+      kind: 'write',
+      fileName: 'src/notes.md'
+    });
 
-    await (service as any).cleanupTask(issueKey);
-    const permissionResult = await permissionPromise;
-
-    assert.deepStrictEqual(
-      sessionManager.stateChanges.map(change => change.state),
-      ['awaiting_approval']
+    assert.strictEqual(permissionResult.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
+    assert.ok(
+      sessionManager.appendedEvents.some(({ events }) =>
+        events.some(
+          event =>
+            event.type === 'permission_completed' &&
+            event.summary.includes('auto-approved by default policy')
+        )
+      )
     );
-    assert.strictEqual(permissionResult.kind, 'denied-interactively-by-user');
-    assert.ok(logLines.some(line => line.includes('permission_requested')));
-    assert.strictEqual((service as any).activeTasks.has(issueKey), false);
+    assert.ok(logLines.some(line => line.includes('permission_completed')));
   });
 
   test('session shutdown marks the task as failed and cleans it up', async () => {
@@ -212,7 +219,7 @@ suite('CopilotAgentService', () => {
     assert.strictEqual((service as any).activeTasks.has(issueKey), false);
   });
 
-  test('allow_always resolves all queued permission requests and enables auto-approval', async () => {
+  test('allow_always is a no-op because every request is auto-approved on arrival', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-3';
     sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
@@ -225,26 +232,52 @@ suite('CopilotAgentService', () => {
     (service as any).activeTasks.set(issueKey, activeTask);
 
     const hooks = (service as any).createInteractiveSessionHooks(issueKey);
-    const firstPermission = hooks.onPermissionRequest({ kind: 'read', fileName: 'a.md' });
-    const secondPermission = hooks.onPermissionRequest({ kind: 'read', fileName: 'b.md' });
-    const thirdPermission = hooks.onPermissionRequest({ kind: 'read', fileName: 'c.md' });
+    const results = await Promise.all([
+      hooks.onPermissionRequest({ kind: 'write', fileName: 'a.md' }),
+      hooks.onPermissionRequest({ kind: 'write', fileName: 'b.md' }),
+      hooks.onPermissionRequest({ kind: 'shell', fullCommandText: 'git push origin HEAD' })
+    ]);
 
-    assert.strictEqual(activeTask.pendingPermissions.length, 3);
-
-    service.respondToPermission(issueKey, 'allow_always');
-
-    const results = await Promise.all([firstPermission, secondPermission, thirdPermission]);
     assert.deepStrictEqual(results.map(result => result.kind), ['approved', 'approved', 'approved']);
     assert.strictEqual(activeTask.pendingPermissions.length, 0);
-    assert.strictEqual(activeTask.allowPermissionsForTask, true);
-    assert.strictEqual(
-      sessionManager.stateChanges.at(-1)?.state,
-      'executing'
-    );
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
 
-    const autoApproved = await hooks.onPermissionRequest({ kind: 'read', fileName: 'd.md' });
-    assert.strictEqual(autoApproved.kind, 'approved');
+    // respondToPermission is a user-driven escape hatch; with no pending
+    // requests it must be a safe no-op.
+    service.respondToPermission(issueKey, 'allow_always');
     assert.strictEqual(activeTask.pendingPermissions.length, 0);
+  });
+
+  test('read permissions are silently auto-approved', async () => {
+    const sessionManager = new FakeSessionManager();
+    const issueKey = 'TM-3A-READ';
+    sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
+
+    const service = new CopilotAgentService(sessionManager as never, {
+      appendLine(): void {}
+    });
+
+    const activeTask = createActiveTask(issueKey);
+    (service as any).activeTasks.set(issueKey, activeTask);
+
+    const hooks = (service as any).createInteractiveSessionHooks(issueKey);
+    const result = await hooks.onPermissionRequest({
+      kind: 'read',
+      fileName: 'src/extension.ts'
+    });
+
+    assert.strictEqual(result.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
+    assert.ok(
+      sessionManager.appendedEvents.some(({ events }) =>
+        events.some(
+          event =>
+            event.type === 'permission_completed' &&
+            event.summary.includes('Permission requested: read src/extension.ts')
+        )
+      )
+    );
   });
 
   test('safe shell version probes are silently auto-approved', async () => {
@@ -273,7 +306,7 @@ suite('CopilotAgentService', () => {
         events.some(
           event =>
             event.type === 'permission_completed' &&
-            event.summary.includes('silently auto-approved safe probe')
+            event.summary.includes('auto-approved by default policy')
         )
       )
     );
@@ -325,7 +358,7 @@ suite('CopilotAgentService', () => {
     assert.deepStrictEqual(sessionManager.stateChanges, []);
   });
 
-  test('non-build shell commands still require explicit approval', async () => {
+  test('non-build shell commands are now also auto-approved under the default-allow policy', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-3C';
     sessionManager.records.set(issueKey, createRecord(issueKey, 'planning'));
@@ -338,20 +371,14 @@ suite('CopilotAgentService', () => {
     (service as any).activeTasks.set(issueKey, activeTask);
 
     const hooks = (service as any).createInteractiveSessionHooks(issueKey);
-    const permissionPromise = hooks.onPermissionRequest({
+    const result = await hooks.onPermissionRequest({
       kind: 'shell',
       fullCommandText: String.raw`cd C:\dev\ticket-manager-worktrees\KAMAI-42 && git push origin HEAD`
     });
 
-    assert.strictEqual(activeTask.pendingPermissions.length, 1);
-    assert.deepStrictEqual(
-      sessionManager.stateChanges.map(change => change.state),
-      ['awaiting_approval']
-    );
-
-    service.respondToPermission(issueKey, 'deny');
-    const result = await permissionPromise;
-    assert.strictEqual(result.kind, 'denied-interactively-by-user');
+    assert.strictEqual(result.kind, 'approved');
+    assert.strictEqual(activeTask.pendingPermissions.length, 0);
+    assert.deepStrictEqual(sessionManager.stateChanges, []);
   });
 
   test('pauseTask marks the session paused and removes the live task', async () => {

@@ -1528,8 +1528,13 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       }
 
       if (!workflow) {
-        deps.aiSessionManager.removeIssueWorkflowAssignment(issueKey);
-        vscode.window.showInformationMessage(`Cleared workflow pack for ${issueKey}.`);
+        deps.aiSessionManager.setIssueWorkflowAssignment(issueKey, undefined, {
+          source: 'manual',
+          reason: 'User explicitly selected "No workflow pack".'
+        });
+        vscode.window.showInformationMessage(
+          `Recorded explicit "no workflow pack" choice for ${issueKey}. Delivery will proceed without a workflow directive.`
+        );
         return;
       }
 
