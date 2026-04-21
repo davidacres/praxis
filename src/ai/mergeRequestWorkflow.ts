@@ -53,11 +53,13 @@ export function buildMergeRequestFeedbackTaskDefinition(
       `Review merge request feedback on ${options.mergeRequestUrl}.`,
       `The source branch is ${options.sourceBranch} and the target branch is ${options.targetBranch}.`,
       issue.description?.trim() ? `Ticket description:\n${issue.description.trim().slice(0, 4000)}` : undefined,
-      `Latest merge request notes to address:\n${noteSummary}`
+      `Latest merge request notes to address:\n${noteSummary}`,
+      'IMPORTANT: If the reviewer is asking a question or requesting an explanation (not requesting a code change), reply with a clear answer in the replyComment field and set didEditCode to false. Only modify code when the reviewer explicitly requests a change.'
     ].filter((part): part is string => Boolean(part)).join('\n\n'),
     definitionOfDone: [
       `The latest merge request feedback for ${issue.key} is addressed.`,
-      'Any necessary code changes are committed and pushed when applicable.',
+      'If the feedback is a question, provide a clear and concise answer without making unnecessary code changes.',
+      'If the feedback requests code changes, make only the requested changes, commit, and push.',
       'A concise reply comment is prepared for posting back to the merge request.'
     ].join(' '),
     workflow: options.workflow,
