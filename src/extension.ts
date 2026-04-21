@@ -30,6 +30,7 @@ import {
   reviewTicketWithOpenAi,
   runLocalPeerReview
 } from './ai/aiReviewService';
+import { ClaudeAgentService, ClaudeAgentLogger } from './ai/claudeAgentService';
 import {
   AI_PROVIDER_LABELS,
   describeAiConfigurationResult,
@@ -53,12 +54,13 @@ import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
-import { CopilotSessionPanelManager } from './views/copilotSessionPanel';
+import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
 import type { AgentSessionRecord, AgentTaskDefinition, AgentWorkflowReference } from './ai/agentTypes';
 import { resolveCopilotCliOverride } from './ai/copilotSdkRuntime';
 import { getParentRule } from './issues/issueHierarchy';
 import {
+  AI_COMMENT_HEADER,
   buildDeliveryAnalysisBlockedComment,
   buildDeliveryAnalysisTaskDefinition,
   buildDeliveryStartedComment,
@@ -69,6 +71,7 @@ import {
   buildDeliveryTaskDefinition,
   buildMissingBaseBranchClarificationComment,
   buildMissingWorkflowComment,
+  extractAgentProviderDirective,
   extractDeliveryBaseBranch,
   parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
@@ -157,8 +160,8 @@ let deactivateHandler: (() => Promise<void>) | undefined;
 
 const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
 const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
-const COPILOT_ANALYSIS_START_COMMENT = 'request analysis starting';
-const COPILOT_ANALYSIS_READY_COMMENT_MARKER = 'Copilot readiness analysis passed';
+const COPILOT_ANALYSIS_START_COMMENT = `${AI_COMMENT_HEADER}\nAnalysis starting`;
+const COPILOT_ANALYSIS_READY_COMMENT_MARKER = 'AI readiness analysis passed';
 const DELIVERY_FORWARD_STATUS_PREFERENCES = [
   'ready for qa',
   'qa ready',
@@ -331,6 +334,7 @@ function sortCommentsChronologically(comments: IssueComment[]): IssueComment[] {
 
 function isCopilotGeneratedComment(comment: IssueComment): boolean {
   return (
+    comment.body.includes(AI_COMMENT_HEADER) ||
     comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER) ||
     comment.body.includes(COPILOT_REPLY_COMMENT_MARKER)
   );
@@ -346,7 +350,7 @@ function formatPollingClarificationComment(body: string): string {
   }
 
   return [
-    '**THIS IS AN AI-GENERATED MESSAGE.**',
+    AI_COMMENT_HEADER,
     COPILOT_CLARIFICATION_COMMENT_MARKER,
     '',
     trimmed
@@ -357,7 +361,6 @@ function isAnalysisLifecycleComment(comment: IssueComment): boolean {
   const normalizedBody = comment.body.trim();
   return (
     isCopilotGeneratedComment(comment)
-    || normalizedBody.toLowerCase() === COPILOT_ANALYSIS_START_COMMENT
     || normalizedBody.includes(COPILOT_ANALYSIS_READY_COMMENT_MARKER)
   );
 }
@@ -545,9 +548,48 @@ export async function activate(
     }
   };
   const copilotAgentService = new CopilotAgentService(aiSessionManager, copilotAgentLogger);
+  const claudeAgentLogger: ClaudeAgentLogger = new ClaudeAgentLogger(outputChannel);
+  const claudeAgentService = new ClaudeAgentService(aiSessionManager, claudeAgentLogger);
+  const agentSessionController: AgentSessionController = {
+    onDidChangeActiveTask(listener) {
+      const disposeCopilot = copilotAgentService.onDidChangeActiveTask(listener);
+      const disposeClaude = claudeAgentService.onDidChangeActiveTask(listener);
+      return () => {
+        disposeCopilot();
+        disposeClaude();
+      };
+    },
+    respondToInput(issueKey, response) {
+      if (claudeAgentService.hasActiveTask(issueKey)) {
+        claudeAgentService.respondToInput(issueKey, response);
+        return;
+      }
+      copilotAgentService.respondToInput(issueKey, response);
+    },
+    respondToPermission(issueKey, decision) {
+      if (claudeAgentService.hasActiveTask(issueKey)) {
+        claudeAgentService.respondToPermission(issueKey, decision);
+        return;
+      }
+      copilotAgentService.respondToPermission(issueKey, decision);
+    },
+    hasActiveTask(issueKey) {
+      return copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey);
+    },
+    getPendingPermissionDescriptions(issueKey) {
+      return claudeAgentService.hasActiveTask(issueKey)
+        ? claudeAgentService.getPendingPermissionDescriptions(issueKey)
+        : copilotAgentService.getPendingPermissionDescriptions(issueKey);
+    },
+    getPendingPermissions(issueKey) {
+      return claudeAgentService.hasActiveTask(issueKey)
+        ? claudeAgentService.getPendingPermissions(issueKey)
+        : copilotAgentService.getPendingPermissions(issueKey);
+    }
+  };
   const copilotSessionPanelManager = new CopilotSessionPanelManager(
     aiSessionManager,
-    copilotAgentService,
+    agentSessionController,
     async issueKey => {
       await abandonAiSession(issueKey);
     },
@@ -616,7 +658,16 @@ export async function activate(
   }
 
   function isCopilotSdkConfigured(): boolean {
-    return configStore.getConfiguredAiProviders().includes('copilot-cli');
+    const providers = configStore.getConfiguredAiProviders();
+    // Default to Copilot SDK when no agent provider is explicitly configured.
+    if (!providers.includes('copilot-cli') && !providers.includes('claude-cli')) {
+      return true;
+    }
+    return providers.includes('copilot-cli');
+  }
+
+  function isClaudeSdkConfigured(): boolean {
+    return configStore.getConfiguredAiProviders().includes('claude-cli');
   }
 
   function buildCommentPlaceholder(): string {
@@ -638,7 +689,7 @@ export async function activate(
   }
 
   function hasCopilotAnalysisStartComment(issue: IssueDetails): boolean {
-    return issue.comments?.some(comment => comment.body.trim().toLowerCase() === COPILOT_ANALYSIS_START_COMMENT) ?? false;
+    return issue.comments?.some(comment => comment.body.includes('Analysis starting')) ?? false;
   }
 
   async function postCopilotReply(issueKey: string, request: string): Promise<void> {
@@ -655,9 +706,7 @@ export async function activate(
       replySignature?: string;
     }
   ): Promise<void> {
-    const started = await startPollingDeliveryWorkflow(issue, {
-      preTransitionComment: buildPollingAnalysisReadyComment()
-    });
+    const started = await startPollingDeliveryWorkflow(issue);
     if (started) {
       outputChannel.appendLine(
         `[Jira Polling] Readiness analysis passed on ${issue.key}; delivery workflow started.`
@@ -755,14 +804,14 @@ export async function activate(
       ? { ...implementationTaskDefinition, attachments: record.taskDefinition.attachments }
       : implementationTaskDefinition;
 
-    await copilotAgentService.startTask(
+    const provider = await startAgentTask(
       {
         ...issue,
         branch: record.delivery.createdBranch
       },
       taskDefinitionWithAttachments,
       {
-        cliPath: getCopilotCliPathOverride(),
+        provider: resolvePreferredAgentProvider(issue.key, record, issue),
         workingDirectory: record.delivery.worktreePath
       }
     );
@@ -784,6 +833,7 @@ export async function activate(
       await backendService.addComment(
         issue.key,
         buildDeliveryStartedComment({
+          agentLabel: getAgentDisplayName(provider),
           baseBranch: record.delivery.baseBranch,
           branchName: record.delivery.createdBranch,
           worktreeName: record.delivery.worktreeName,
@@ -807,16 +857,16 @@ export async function activate(
     deliveryFinalizationInFlight.add(record.issueKey);
     try {
       if (record.state === 'completed') {
-        if (delivery.phase === 'merge-request-feedback') {
-          const mergeRequest = delivery.mergeRequest;
+          if (delivery.phase === 'merge-request-feedback') {
+            const mergeRequest = delivery.mergeRequest;
           if (!mergeRequest) {
-            throw new Error('Copilot completed a merge request feedback task but no merge request metadata is attached to the delivery session.');
+              throw new Error('The AI agent completed a merge request feedback task but no merge request metadata is attached to the delivery session.');
           }
 
           const feedbackResult = parseMergeRequestFeedbackResult(record.responseText);
           if (!feedbackResult) {
             throw new Error(
-              'Copilot completed the merge request feedback task but did not return a valid MERGE_REQUEST_FEEDBACK_RESULT payload.'
+                'The AI agent completed the merge request feedback task but did not return a valid MERGE_REQUEST_FEEDBACK_RESULT payload.'
             );
           }
 
@@ -848,7 +898,7 @@ export async function activate(
           const analysisResult = parseDeliveryAnalysisResult(record.responseText);
           if (!analysisResult) {
             throw new Error(
-              'Copilot completed the delivery analysis session but did not return a valid DELIVERY_ANALYSIS_RESULT payload.'
+              'The AI agent completed the delivery analysis session but did not return a valid DELIVERY_ANALYSIS_RESULT payload.'
             );
           }
 
@@ -867,6 +917,10 @@ export async function activate(
             return;
           }
 
+          await backendService.addComment(
+            record.issueKey,
+            buildPollingAnalysisReadyComment()
+          );
           const refreshedIssue = await backendService.getIssue(record.issueKey);
           await startFreshDeliveryImplementationSession(refreshedIssue, record, analysisResult);
           outputChannel.appendLine(
@@ -878,15 +932,24 @@ export async function activate(
         const result = parseDeliveryTaskResult(record.responseText);
         if (!result) {
           throw new Error(
-            'Copilot completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
+            'The AI agent completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
           );
         }
 
         const attachedArtifactNames: string[] = [];
+        const seenArtifactPaths = new Set<string>();
         for (const [artifactIndex, artifactPath] of result.artifactPaths.entries()) {
           const resolvedArtifactPath = path.isAbsolute(artifactPath)
             ? artifactPath
             : path.resolve(delivery.worktreePath, artifactPath);
+          const normalizedArtifactPath = path.normalize(resolvedArtifactPath).toLowerCase();
+          if (seenArtifactPaths.has(normalizedArtifactPath)) {
+            outputChannel.appendLine(
+              `[Delivery] Skipping duplicate artifact path for ${record.issueKey}: ${artifactPath}`
+            );
+            continue;
+          }
+          seenArtifactPaths.add(normalizedArtifactPath);
           const preparedUpload = await prepareArtifactForJiraUpload(resolvedArtifactPath, {
             issueKey: record.issueKey,
             buildIdentifier: result.buildIdentifier,
@@ -942,10 +1005,10 @@ export async function activate(
       const failureReason =
         getLatestAgentFailureSummary(record) ??
         (delivery.phase === 'analysis'
-          ? 'Copilot delivery analysis stopped before it determined whether implementation could start.'
+          ? 'The AI delivery analysis stopped before it determined whether implementation could start.'
           : delivery.phase === 'merge-request-feedback'
-            ? 'Copilot stopped before it could process the latest merge request feedback.'
-          : 'Copilot delivery stopped before it completed the implementation workflow.');
+            ? 'The AI agent stopped before it could process the latest merge request feedback.'
+          : 'The AI delivery workflow stopped before it completed the implementation work.');
       if (delivery.phase === 'merge-request-feedback' && delivery.mergeRequest) {
         const gitLabAutomation = await resolveGitLabAutomation();
         if (gitLabAutomation) {
@@ -1102,14 +1165,14 @@ export async function activate(
       ? { ...taskDefinition, attachments: issueAttachments }
       : taskDefinition;
 
-    await copilotAgentService.startTask(
+    const provider = await startAgentTask(
       {
         ...currentIssue,
         branch: worktree.branchName
       },
       taskDefinitionWithAttachments,
       {
-        cliPath: getCopilotCliPathOverride(),
+        provider: resolvePreferredAgentProvider(currentIssue.key, undefined, currentIssue),
         workingDirectory: worktree.worktreePath
       }
     );
@@ -1133,7 +1196,7 @@ export async function activate(
     );
     await activeSessionsSidebarViewProvider?.refresh();
     outputChannel.appendLine(
-      `[Delivery] Started Jira delivery workflow for ${currentIssue.key} from base branch ${baseBranch}.`
+      `[Delivery] Started Jira delivery workflow for ${currentIssue.key} from base branch ${baseBranch} using ${getAgentDisplayName(provider)}.`
     );
     return true;
   }
@@ -1151,9 +1214,9 @@ export async function activate(
       return;
     }
 
-    if (!isCopilotSdkConfigured()) {
+    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
       outputChannel.appendLine(
-        '[Jira Polling] Clarification comments skipped because GitHub Copilot SDK is not configured.'
+        '[Jira Polling] Clarification comments skipped because neither GitHub Copilot SDK nor Claude Code CLI is configured.'
       );
       return;
     }
@@ -1162,7 +1225,7 @@ export async function activate(
     const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
 
     for (const issueKey of candidateKeys) {
-      if (pollingClarificationInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
+      if (pollingClarificationInFlight.has(issueKey) || hasActiveAgentTask(issueKey)) {
         continue;
       }
 
@@ -1193,13 +1256,27 @@ export async function activate(
           await backendService.addComment(issueKey, COPILOT_ANALYSIS_START_COMMENT);
         }
 
+        let stagedAttachments;
+        try {
+          stagedAttachments = await stageIssueAttachments({
+            issue,
+            backendService,
+            logger: outputChannel
+          });
+        } catch (error) {
+          outputChannel.appendLine(
+            `[Jira Polling] Warning: could not stage attachments for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+
         const readinessAssessment = await assessCopilotImplementationReadiness(
           issue,
           cliPath,
           {
             workingDirectory,
             availableWorkflows,
-            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow
+            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow,
+            stagedAttachments
           }
         );
         if (readinessAssessment.status === 'ready') {
@@ -1243,17 +1320,19 @@ export async function activate(
     changedKeys: string[];
     eligibleIssueKeys: string[];
   }): Promise<void> {
-    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])].filter(issueKey =>
-      event.eligibleIssueKeys.includes(issueKey)
-    );
+    // Reply processing uses ALL changed/new keys — not just eligible ones.
+    // The status-based eligibility gate is only for initial analysis triggers.
+    // For replies, the explicit #AIbot prefix is the gating mechanism, and
+    // tickets may have transitioned away from RequiredStatus during delivery.
+    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])];
 
     if (candidateKeys.length === 0) {
       return;
     }
 
-    if (!isCopilotSdkConfigured()) {
+    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
       outputChannel.appendLine(
-        '[Jira Polling] Clarification reply handling skipped because GitHub Copilot SDK is not configured.'
+        '[Jira Polling] Clarification reply handling skipped because neither GitHub Copilot SDK nor Claude Code CLI is configured.'
       );
       return;
     }
@@ -1261,7 +1340,7 @@ export async function activate(
     const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
 
     for (const issueKey of candidateKeys) {
-      if (pollingReplyInFlight.has(issueKey) || copilotAgentService.hasActiveTask(issueKey)) {
+      if (pollingReplyInFlight.has(issueKey) || hasActiveAgentTask(issueKey)) {
         continue;
       }
 
@@ -1296,13 +1375,27 @@ export async function activate(
           `[Jira Polling] Processing #AIbot reply on ${issueKey}: ${replyRequest.slice(0, 120)}`
         );
 
+        let replyStagedAttachments;
+        try {
+          replyStagedAttachments = await stageIssueAttachments({
+            issue,
+            backendService,
+            logger: outputChannel
+          });
+        } catch (error) {
+          outputChannel.appendLine(
+            `[Jira Polling] Warning: could not stage attachments for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+
         const readinessAssessment = await assessCopilotImplementationReadiness(
           issue,
           getCopilotCliPathOverride(),
           {
             workingDirectory,
             availableWorkflows,
-            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow
+            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow,
+            stagedAttachments: replyStagedAttachments
           }
         );
         if (readinessAssessment.status === 'needs_clarification') {
@@ -1424,6 +1517,144 @@ export async function activate(
       }
     }
     return cliPath;
+  }
+
+  function getClaudeCliPathOverride(options?: { showWarning?: boolean }): string | undefined {
+    const cliPath = configStore.getAiClaudeCliPath();
+    if (cliPath) {
+      return cliPath;
+    }
+    return process.platform === 'win32' ? 'claude.exe' : 'claude';
+  }
+
+  type AgentRuntimeProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+
+  function isAgentRuntimeProvider(provider: AiProvider | undefined): provider is AgentRuntimeProvider {
+    return provider === 'copilot-cli' || provider === 'claude-cli';
+  }
+
+  function isAgentRuntimeConfigured(provider: AgentRuntimeProvider): boolean {
+    return provider === 'claude-cli' ? isClaudeSdkConfigured() : isCopilotSdkConfigured();
+  }
+
+  function resolvePreferredAgentProvider(
+    issueKey: string,
+    record?: AgentSessionRecord,
+    issue?: Pick<IssueDetails, 'description' | 'comments'>
+  ): AgentRuntimeProvider | undefined {
+    const assignmentProvider = aiSessionManager.getSession(issueKey)?.provider;
+    if (isAgentRuntimeProvider(assignmentProvider) && isAgentRuntimeConfigured(assignmentProvider)) {
+      return assignmentProvider;
+    }
+
+    if (record?.provider && isAgentRuntimeConfigured(record.provider)) {
+      return record.provider;
+    }
+
+    // Check if the Jira ticket specifies which agent to use
+    if (issue) {
+      const ticketDirective = extractAgentProviderDirective(issue);
+      if (ticketDirective && isAgentRuntimeConfigured(ticketDirective)) {
+        return ticketDirective;
+      }
+    }
+
+    const defaultProvider = configStore.getAiDefaultProvider();
+    if (defaultProvider !== 'none' && isAgentRuntimeProvider(defaultProvider) && isAgentRuntimeConfigured(defaultProvider)) {
+      return defaultProvider;
+    }
+
+    if (isCopilotSdkConfigured()) {
+      return 'copilot-cli';
+    }
+    if (isClaudeSdkConfigured()) {
+      return 'claude-cli';
+    }
+    return undefined;
+  }
+
+  function getAgentDisplayName(provider: AgentRuntimeProvider): string {
+    return provider === 'claude-cli' ? 'Claude Code' : 'GitHub Copilot';
+  }
+
+  function hasActiveAgentTask(issueKey: string): boolean {
+    return copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey);
+  }
+
+  function getActiveAgentTaskIssueKeys(): string[] {
+    return [...new Set([
+      ...copilotAgentService.getActiveTaskIssueKeys(),
+      ...claudeAgentService.getActiveTaskIssueKeys()
+    ])];
+  }
+
+  async function abortActiveAgentTask(issueKey: string): Promise<void> {
+    if (claudeAgentService.hasActiveTask(issueKey)) {
+      await claudeAgentService.abortTask(issueKey);
+    }
+    if (copilotAgentService.hasActiveTask(issueKey)) {
+      await copilotAgentService.abortTask(issueKey);
+    }
+  }
+
+  async function pauseAllAgentTasks(reason: string): Promise<void> {
+    await Promise.all([
+      copilotAgentService.pauseAllTasks(reason),
+      claudeAgentService.pauseAllTasks(reason)
+    ]);
+  }
+
+  async function startAgentTask(
+    issue: IssueDetails,
+    taskDefinition: AgentTaskDefinition,
+    options?: {
+      provider?: AgentRuntimeProvider;
+      workingDirectory?: string;
+    }
+  ): Promise<AgentRuntimeProvider> {
+    const provider = options?.provider ?? resolvePreferredAgentProvider(issue.key, undefined, issue);
+    if (!provider) {
+      throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
+    }
+
+    if (provider === 'claude-cli') {
+      await claudeAgentService.startTask(issue, taskDefinition, {
+        cliPath: getClaudeCliPathOverride({ showWarning: true }),
+        workingDirectory: options?.workingDirectory
+      });
+      return provider;
+    }
+
+    await copilotAgentService.startTask(issue, taskDefinition, {
+      cliPath: getCopilotCliPathOverride({ showWarning: true }),
+      workingDirectory: options?.workingDirectory
+    });
+    return provider;
+  }
+
+  async function resumeAgentTask(
+    issueKey: string,
+    record: AgentSessionRecord
+  ): Promise<AgentRuntimeProvider> {
+    const provider = resolvePreferredAgentProvider(issueKey, record);
+    if (!provider) {
+      throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
+    }
+
+    const workingDirectory = resolveAgentWorkingDirectory(record);
+    if (provider === 'claude-cli') {
+      await claudeAgentService.resumeTask(issueKey, {
+        cliPath: getClaudeCliPathOverride({ showWarning: true }),
+        workingDirectory
+      });
+      return provider;
+    }
+
+    await copilotAgentService.resumeTask(issueKey, {
+      cliPath: getCopilotCliPathOverride({ showWarning: true }),
+      workingDirectory
+    });
+    return provider;
   }
 
   async function resolveGitLabAutomation(): Promise<ResolvedGitLabAutomation | undefined> {
@@ -1586,14 +1817,14 @@ export async function activate(
       workflow: record.taskDefinition.workflow
     });
 
-    await copilotAgentService.startTask(
+    await startAgentTask(
       {
         ...issue,
         branch: record.delivery.createdBranch
       },
       taskDefinition,
       {
-        cliPath: getCopilotCliPathOverride(),
+        provider: resolvePreferredAgentProvider(issue.key, record, issue),
         workingDirectory: record.delivery.worktreePath
       }
     );
@@ -1668,7 +1899,7 @@ export async function activate(
       return;
     }
 
-    if (copilotAgentService.hasActiveTask(record.issueKey) || record.delivery.finalizationState === 'pending') {
+    if (hasActiveAgentTask(record.issueKey) || record.delivery.finalizationState === 'pending') {
       outputChannel.appendLine(
         `[GitLab MR] Skipping feedback session for ${record.issueKey}: ${newNotes.length + updatedNotes.length} note(s) changed while a task is already active.`
       );
@@ -1880,7 +2111,7 @@ export async function activate(
         return;
       }
 
-      const activeIssueKeys = copilotAgentService.getActiveTaskIssueKeys().sort();
+      const activeIssueKeys = getActiveAgentTaskIssueKeys().sort((left, right) => left.localeCompare(right));
       if (activeIssueKeys.length === 0 || suppressCloseWarning) {
         if (activeIssueKeys.length === 0) {
           lastCloseWarningSignature = undefined;
@@ -2688,8 +2919,8 @@ export async function activate(
     }
 
     if (agentRecord && !isTerminalAgentState(agentRecord.state)) {
-      if (copilotAgentService.hasActiveTask(issueKey)) {
-        await copilotAgentService.abortTask(issueKey);
+      if (hasActiveAgentTask(issueKey)) {
+        await abortActiveAgentTask(issueKey);
       } else {
         aiSessionManager.updateAgentState(issueKey, 'aborted');
       }
@@ -2702,7 +2933,11 @@ export async function activate(
         const issue = await backendService.getIssue(issueKey);
         const assignedLabel =
           session?.label?.trim() ||
-          (session ? AI_PROVIDER_LABELS[session.provider] : AI_PROVIDER_LABELS['copilot-cli']);
+          (session
+            ? AI_PROVIDER_LABELS[session.provider]
+            : agentRecord?.provider
+              ? AI_PROVIDER_LABELS[agentRecord.provider]
+              : AI_PROVIDER_LABELS['copilot-cli']);
         if (issue.assignee?.trim() === assignedLabel) {
           await updateIssueAndRefresh(issueKey, { assignee: null });
         } else {
@@ -2876,25 +3111,25 @@ export async function activate(
   }
 
   async function startNewCopilotSession(issueKey: string): Promise<void> {
-    if (!isCopilotSdkConfigured()) {
+    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
+        'Neither GitHub Copilot SDK nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
       );
       return;
     }
 
     try {
       const existingRecord = aiSessionManager.getAgentSession(issueKey);
-      if (copilotAgentService.hasActiveTask(issueKey)) {
+      if (hasActiveAgentTask(issueKey)) {
         const replace = await vscode.window.showWarningMessage(
-          `${issueKey} already has a live Copilot session. Start a new one instead?`,
+          `${issueKey} already has a live AI session. Start a new one instead?`,
           'Start New',
           'Cancel'
         );
         if (replace !== 'Start New') {
           return;
         }
-        await copilotAgentService.abortTask(issueKey);
+        await abortActiveAgentTask(issueKey);
       }
 
       const issue = await backendService.getIssue(issueKey);
@@ -2912,20 +3147,20 @@ export async function activate(
         ? { ...taskDefinition, attachments: issueAttachments }
         : taskDefinition;
 
-      await copilotAgentService.startTask(issue, taskDefinitionWithAttachments, {
-        cliPath: getCopilotCliPathOverride({ showWarning: true }),
+      const provider = await startAgentTask(issue, taskDefinitionWithAttachments, {
+        provider: resolvePreferredAgentProvider(issueKey, existingRecord, issue),
         workingDirectory
       });
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       await activeSessionsSidebarViewProvider?.refresh();
       copilotSessionPanelManager.open(issueKey);
       void vscode.window.showInformationMessage(
-        `Copilot session started for ${issueKey}. Closing VS Code will pause it so you can resume later.`
+        `${getAgentDisplayName(provider)} session started for ${issueKey}. Closing VS Code will pause it so you can resume later.`
       );
     } catch (error) {
       reportError(error, 'startNewCopilotSession');
       void vscode.window.showErrorMessage(
-        `Failed to start a new Copilot session: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to start a new AI session: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -2940,40 +3175,37 @@ export async function activate(
   }
 
   async function resumeCopilotSession(issueKey: string): Promise<void> {
-    if (!isCopilotSdkConfigured()) {
+    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'GitHub Copilot SDK is not configured. Run Ticket Manager: Configure AI.'
+        'Neither GitHub Copilot SDK nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
       );
       return;
     }
 
     const record = aiSessionManager.getAgentSession(issueKey);
     if (!record) {
-      void vscode.window.showWarningMessage(`No resumable Copilot session was found for ${issueKey}.`);
+      void vscode.window.showWarningMessage(`No resumable AI session was found for ${issueKey}.`);
       return;
     }
 
-    if (copilotAgentService.hasActiveTask(issueKey)) {
+    if (hasActiveAgentTask(issueKey)) {
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       copilotSessionPanelManager.open(issueKey);
       return;
     }
 
     try {
-      await copilotAgentService.resumeTask(issueKey, {
-        cliPath: getCopilotCliPathOverride({ showWarning: true }),
-        workingDirectory: resolveAgentWorkingDirectory(record)
-      });
+      const provider = await resumeAgentTask(issueKey, record);
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(issueKey);
       await activeSessionsSidebarViewProvider?.refresh();
       copilotSessionPanelManager.open(issueKey);
       void vscode.window.showInformationMessage(
-        `Copilot session resumed for ${issueKey}. Closing VS Code will pause it so you can resume later.`
+        `${getAgentDisplayName(provider)} session resumed for ${issueKey}. Closing VS Code will pause it so you can resume later.`
       );
     } catch (error) {
       reportError(error, 'resumeCopilotSession');
       void vscode.window.showErrorMessage(
-        `Failed to resume Copilot session: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to resume the AI session: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -3021,6 +3253,7 @@ export async function activate(
         workingDirectory
       );
     } else {
+      // Claude Code CLI is only used for agent tasks, not for AI reviews
       throw new Error(`AI review is not supported for provider: ${chosen.provider}`);
     }
 
@@ -3214,7 +3447,7 @@ export async function activate(
   activeSessionsSidebarViewProvider = new ActiveSessionsSidebarViewProvider(
     backendService,
     aiSessionManager,
-    issueKey => copilotAgentService.hasActiveTask(issueKey),
+    issueKey => copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey),
     {
       onOpenSession: async issueKey => {
         activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
@@ -3382,6 +3615,18 @@ export async function activate(
         reportError(error, 'localPeerReview');
       }
     }),
+    vscode.commands.registerCommand('ticketManager.startClaudeSession', async (arg?: unknown) => {
+      try {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+        await startNewCopilotSession(issueKey); // This will now prefer Claude Code
+      } catch (error) {
+        reportError(error);
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.openSettings', async () => {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
@@ -3539,7 +3784,7 @@ export async function activate(
 
   deactivateHandler = async () => {
     await startupPollingController.stop();
-    await copilotAgentService.pauseAllTasks(
+    await pauseAllAgentTasks(
       'Session paused because VS Code is closing. Reopen VS Code and resume to continue.'
     );
   };

@@ -10,7 +10,7 @@ export type BackendMode =
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
+export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli' | 'claude-cli';
 
 export interface AiAssignment {
   provider: AiProvider;

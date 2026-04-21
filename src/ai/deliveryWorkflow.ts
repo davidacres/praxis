@@ -1,9 +1,12 @@
 import type { IssueComment, IssueDetails, DeliveryWorkflowSettings } from '../types';
+import type { AiProvider } from '../types';
 import type { AgentTaskDefinition, AgentWorkflowReference, DeliveryTaskResult } from './agentTypes';
 import * as path from 'node:path';
 
 const DELIVERY_ANALYSIS_RESULT_MARKER = 'DELIVERY_ANALYSIS_RESULT';
 const DELIVERY_RESULT_MARKER = 'DELIVERY_RESULT';
+
+export const AI_COMMENT_HEADER = '**THIS IS AN AI-GENERATED MESSAGE.**';
 
 export interface DeliveryAnalysisResult {
   status: 'ready' | 'blocked';
@@ -108,6 +111,55 @@ export function extractDeliveryBaseBranch(issue: Pick<IssueDetails, 'description
   return extractBranchFromText(issue.description);
 }
 
+type AgentCliProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+
+const AGENT_PROVIDER_PATTERNS: Array<{ pattern: RegExp; provider: AgentCliProvider }> = [
+  { pattern: /\buse\s+claude\s*(?:code)?\b/i, provider: 'claude-cli' },
+  { pattern: /\bagent\s*:\s*claude\s*(?:code)?\b/i, provider: 'claude-cli' },
+  { pattern: /\bcli\s*:\s*claude\s*(?:code)?\b/i, provider: 'claude-cli' },
+  { pattern: /\buse\s+copilot\b/i, provider: 'copilot-cli' },
+  { pattern: /\bagent\s*:\s*copilot\b/i, provider: 'copilot-cli' },
+  { pattern: /\bcli\s*:\s*copilot\b/i, provider: 'copilot-cli' },
+  { pattern: /\buse\s+github\s+copilot\b/i, provider: 'copilot-cli' },
+  { pattern: /\bagent\s*:\s*github\s+copilot\b/i, provider: 'copilot-cli' }
+];
+
+function extractProviderFromText(text: string | undefined): AgentCliProvider | undefined {
+  if (!text?.trim()) {
+    return undefined;
+  }
+  for (const { pattern, provider } of AGENT_PROVIDER_PATTERNS) {
+    if (pattern.test(text)) {
+      return provider;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Scans the issue description and comments (most recent first) for a directive
+ * indicating which CLI agent to use. Supports patterns like:
+ *   - "use claude code" / "use copilot"
+ *   - "Agent: claude code" / "Agent: copilot"
+ *   - "CLI: claude" / "CLI: copilot"
+ */
+export function extractAgentProviderDirective(
+  issue: Pick<IssueDetails, 'description' | 'comments'>
+): AgentCliProvider | undefined {
+  const comments = [...(issue.comments ?? [])].sort((left, right) =>
+    commentTimestamp(right).localeCompare(commentTimestamp(left))
+  );
+
+  for (const comment of comments) {
+    const provider = extractProviderFromText(comment.body);
+    if (provider) {
+      return provider;
+    }
+  }
+
+  return extractProviderFromText(issue.description);
+}
+
 export function validateDeliveryWorkflowSettings(settings: DeliveryWorkflowSettings): string[] {
   const errors: string[] = [];
   if (!settings.enabled) {
@@ -124,7 +176,7 @@ export function validateDeliveryWorkflowSettings(settings: DeliveryWorkflowSetti
 
 export function buildMissingBaseBranchClarificationComment(): string {
   return [
-    '**THIS IS AN AI-GENERATED MESSAGE.**',
+    AI_COMMENT_HEADER,
     'Copilot clarification request',
     '',
     'Implementation is blocked because the ticket does not specify the base branch to create the delivery worktree from.',
@@ -144,7 +196,7 @@ export function buildMissingWorkflowComment(recommendations: string[]): string {
       ];
 
   return [
-    '**THIS IS AN AI-GENERATED MESSAGE.**',
+    AI_COMMENT_HEADER,
     'Copilot clarification request',
     '',
     'Workflow assignment required.',
@@ -435,10 +487,14 @@ export function buildDeliverySuccessComment(
     reporterName: reporterName ?? ''
   });
   if (template) {
-    return reporterPrefix ? `${reporterPrefix}${template}` : template;
+    const prefixed = reporterPrefix
+      ? `${AI_COMMENT_HEADER}\n${reporterPrefix}${template}`
+      : `${AI_COMMENT_HEADER}\n${template}`;
+    return prefixed;
   }
 
   const lines = [
+    AI_COMMENT_HEADER,
     `${reporterPrefix}Implementation summary`.trimEnd(),
     '',
     result.summary,
@@ -458,19 +514,22 @@ export function buildDeliverySuccessComment(
 }
 
 export function buildDeliveryStartedComment(options: {
+  agentLabel?: string;
   baseBranch: string;
   branchName: string;
   worktreeName: string;
   workflow?: AgentWorkflowReference;
 }): string {
   const lines = [
-    'Copilot delivery workflow started',
+    AI_COMMENT_HEADER,
+    'AI delivery workflow started',
     '',
     'Implementation is now running for this ticket.',
+    options.agentLabel ? `Agent: ${options.agentLabel}` : undefined,
     `Base branch: ${options.baseBranch}`,
     `Delivery branch: ${options.branchName}`,
     `Worktree: ${options.worktreeName}`
-  ];
+  ].filter((line): line is string => Boolean(line));
 
   if (options.workflow) {
     lines.push(`Workflow: ${options.workflow.name}`);
@@ -488,7 +547,8 @@ export function buildDeliveryStartedComment(options: {
 
 export function buildPollingAnalysisReadyComment(): string {
   return [
-    'Copilot readiness analysis passed',
+    AI_COMMENT_HEADER,
+    'AI readiness analysis passed',
     '',
     'Analysis result: READY',
     'The ticket is specific enough to implement without making risky assumptions.',
@@ -507,10 +567,10 @@ export function buildDeliveryFailureComment(
     pushedRef: options?.pushedRef ?? ''
   });
   if (template) {
-    return template;
+    return `${AI_COMMENT_HEADER}\n${template}`;
   }
 
-  const lines = ['Delivery workflow failed', '', failureReason];
+  const lines = [AI_COMMENT_HEADER, 'Delivery workflow failed', '', failureReason];
   if (options?.branch) {
     lines.push('', `Branch: ${options.branch}`);
   }
@@ -524,7 +584,7 @@ export function buildDeliveryFailureComment(
 }
 
 export function buildDeliveryAnalysisBlockedComment(result: DeliveryAnalysisResult): string {
-  const lines = ['Delivery implementation blocked', '', result.summary];
+  const lines = [AI_COMMENT_HEADER, 'Delivery implementation blocked', '', result.summary];
   if (result.blockers.length > 0) {
     lines.push('', 'Blockers:');
     for (const [index, blocker] of result.blockers.entries()) {

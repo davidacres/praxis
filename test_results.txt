@@ -1,0 +1,247 @@
+
+> ticket-manager@0.0.13 test
+> vscode-test --label integration
+
+- Resolving version...
+Γ£ö Validated version: 1.116.0
+Γ£ö Found existing install in C:\dev\ticket-manager-extension\.vscode-test\vscode-win32-x64-archive-1.116.0
+(node:10976) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+[main 2026-04-20T19:01:34.291Z] update#setState disabled
+[main 2026-04-20T19:01:34.293Z] update#ctor - updates are disabled by the environment
+Ignoring terminal.integrated.initialHint.copilotCli as terminal.integrated.initialHint is true
+Started local extension host with pid 28680.
+Loading development extension at c:\dev\ticket-manager-extension
+Ignoring terminal.integrated.initialHint.copilotCli as terminal.integrated.initialHint is true
+Unable to create workbench contribution 'workbench.contrib.agentHostTerminal'. {}
+Settings Sync: Account status changed from uninitialized to unavailable
+
+  UserWorkspaceService
+    Γ£ö store persists user workspace board definitions
+    Γ£ö aggregates boards from multiple plan folders and scopes board details (302ms)
+    Γ£ö creates issues inside the selected user workspace board (82ms)
+  TicketManagerStatusBar
+    Γ£ö shows setup warning when backend is unconfigured
+    Γ£ö shows default AI provider in healthy state
+    Γ£ö last error takes precedence over healthy connection state
+    Γ£ö surfaces paused sessions and pending approvals as attention state
+  Sidebar status metadata filters
+    Γ£ö issue status metadata ignores search and broadens assignee scope
+    Γ£ö epic status metadata ignores issue-only filters and widens assignee scope
+  mergeRequestWorkflow
+    Γ£ö builds a merge request feedback task definition with a structured result contract
+    Γ£ö parses a structured merge request feedback result
+    Γ£ö builds reply comments that include push metadata when code changed
+    Γ£ö builds a concise failure reply comment
+  markdownPlanParser
+    Γ£ö identifyPlanFolder finds a nested plans root from a parent folder
+    Γ£ö identifyPlanFolder normalizes a selected features folder back to the plans root (55ms)
+    Γ£ö identifyPlanFolder accepts stored string paths with forward slashes
+    Γ£ö parsePlanFolder parses features and stories from an ancestor folder selection (45ms)
+    Γ£ö parsePlanFolder also captures task and bug markdown files as child items (121ms)
+  livefolder path utils
+    Γ£ö win32 paths round-trip safely through stored forward-slash form
+    Γ£ö win32 normalization also accepts raw backslash input
+    Γ£ö posix paths round-trip unchanged
+    Γ£ö malformed windows paths are detected explicitly
+    Γ£ö non-malformed posix paths do not get windows-specific guidance
+  jiraArtifactArchive
+    Γ£ö zips MSI artifacts before upload with ticket and build suffixes
+    Γ£ö defaults the MSI build suffix to a zero-padded artifact index
+    Γ£ö keeps non-MSI artifacts unchanged
+  jiraApiService
+    Γ£ö uses exact agile board status order when board configuration is available
+    Γ£ö falls back to workflow and issue statuses when board configuration is unavailable
+  IssueDetailsSidebarViewProvider
+    Γ£ö renders a fallback error page instead of going blank
+  issueAttachmentContext
+    Γ£ö downloads attachments and writes a manifest file
+  gitWorktreeManager
+    Γ£ö stores delivery worktrees under the loaded repository
+  gitLabApiService
+    Γ£ö parses SSH remotes into https base URLs and project paths
+    Γ£ö matches issue keys against merge request metadata
+    Γ£ö flattens and sorts GitLab discussion notes
+    Γ£ö diffs GitLab notes while suppressing the baseline snapshot
+    Γ£ö detects Ticket Manager managed merge request notes
+    Γ£ö creates merge requests only for in-review to done transitions
+  FilterStore
+    Γ£ö recognizes the untouched default issue scope for Jira API epic migration
+    Γ£ö does not override an explicitly broadened or narrowed issue scope
+    Γ£ö persists status filters across store instances
+    Γ£ö persists EPIC status filters independently from My Issues statuses
+    Γ£ö clearing My Issues filters does not clear EPIC status filters
+  Ticket Manager Extension
+    Γ£ö activates and registers core commands (132ms)
+    Γ£ö loads my issues from the fake connected backend (1544ms)
+    Γ£ö reports a warning when no projects are accessible (734ms)
+    1) automatically reuses workspace .vscode/mcp.json when manual config is empty
+    Γ£ö automatically reuses user/profile MCP config when manual and workspace config are empty (700ms)
+    Γ£ö loads demo data without any connected backend when demo mode is enabled (284ms)
+    Γ£ö creates issues through the connected backend and refreshes the sidebar (984ms)
+    Γ£ö supports connected task and subtask parent rules with parent metadata (716ms)
+    Γ£ö updates connected issues, reassigns EPICs, and deletes created EPICs (709ms)
+    Γ£ö adds connected comments and exposes them in issue details (693ms)
+    Γ£ö loads file-backed plan data and persists status changes (478ms)
+    Γ£ö creates file-backed issues and persists them to the plan file (357ms)
+    Γ£ö supports file-backed task and subtask parent rules with parent metadata (305ms)
+    Γ£ö updates and deletes file-backed issues while persisting EPIC assignment changes (355ms)
+    Γ£ö adds file-backed comments and persists them to the plan file (298ms)
+    Γ£ö assigns file-backed issues to AI, updates assignee, and moves status in progress (509ms)
+    Γ£ö creates live-folder features and child issues by writing markdown files (582ms)
+    Γ£ö can disable live-folder issue creation with a workspace setting (591ms)
+    Γ£ö loads boards and applies board filters (907ms)
+    Γ£ö opens a board panel with status columns and syncs issue selection to details (1015ms)
+[main 2026-04-20T19:02:02.694Z] CodeWindow: failed to load (reason: <unknown>, code: -3)
+    Γ£ö applies saved board workflow overrides before column customization (1422ms)
+    Γ£ö supports parent-item scoping and successful status transitions (1440ms)
+    Γ£ö applies stored status filters to parent-item queries used by the EPICs view (1523ms)
+    Γ£ö includes transition-based workflow statuses in connected filter metadata (1447ms)
+    Γ£ö includes workflow-defined statuses in file filter metadata even when unused (1018ms)
+[main 2026-04-20T19:02:08.157Z] CodeWindow: failed to load (reason: <unknown>, code: -3)
+    Γ£ö surfaces workflow transition failures (1651ms)
+    Γ£ö falls back to the alternate parent field when parent queries are rejected (1498ms)
+    Γ£ö fails connection checks when required Jira capabilities are missing (1432ms)
+  deliveryWorkflow
+    Γ£ö extracts the most recent explicit base branch from Jira comments
+    Γ£ö falls back to the Jira description when no branch marker exists in comments
+    Γ£ö builds a delivery task definition with a structured completion contract
+    Γ£ö builds an analysis-only delivery task definition for the first session
+    Γ£ö builds a Jira start comment that includes the assigned workflow link
+    Γ£ö builds a polling analysis ready comment before delivery starts
+    Γ£ö rewrites powershell file publish commands to be worktree-scoped
+    Γ£ö keeps non-powershell publish commands unchanged
+    Γ£ö prepends the reporter mention to the delivery success comment
+    Γ£ö falls back to reporter name when no Jira mention token exists
+    Γ£ö parses a structured delivery result payload
+    Γ£ö parses a structured delivery analysis result payload
+    Γ£ö rejects malformed delivery results that omit artifact paths on success
+  deliveryTransitionSelection
+    Γ£ö prefers an intermediate forward state over done
+    Γ£ö prefers done over blocked when those are the only transitions
+    Γ£ö returns undefined when only non-progress transitions are available
+  Copilot SDK runtime config
+    Γ£ö returns no override when no cli path is configured
+    Γ£ö preserves a real custom copilot cli override
+    Γ£ö ignores vscode cli launcher paths
+    Γ£ö ignores cursor cli launcher paths
+    Γ£ö uses ELECTRON_RUN_AS_NODE for default bundled runtime under Electron
+    Γ£ö uses ELECTRON_RUN_AS_NODE for javascript cli overrides under Electron
+    Γ£ö does not force ELECTRON_RUN_AS_NODE for native cli executables
+  CopilotAgentService
+    Γ£ö buildWorktreeName prefixes the issue key and normalizes the suffix
+    Γ£ö buildMsiVersionExample appends issue key and build identifier
+    Γ£ö buildSystemPrompt includes ticket-based worktree and MSI naming rules
+    Γ£ö permission requests are always auto-approved without prompting
+    Γ£ö session shutdown marks the task as failed and cleans it up
+    Γ£ö allow_always is a no-op because every request is auto-approved on arrival
+    Γ£ö read permissions are silently auto-approved
+    Γ£ö safe shell version probes are silently auto-approved
+    Γ£ö shell build commands are silently auto-approved
+    Γ£ö read-only git inspection commands are silently auto-approved
+    Γ£ö non-build shell commands are now also auto-approved under the default-allow policy
+    Γ£ö pauseTask marks the session paused and removes the live task
+    Γ£ö abortTask is idempotent when multiple callers stop the same session
+    Γ£ö step limit failure is recorded once and not reported as a user abort
+  AppConfigStore workspace-scoped settings
+    Γ£ö workspace projects ignore global backend mode (49ms)
+    Γ£ö workspace projects ignore global live folder path (41ms)
+    Γ£ö workspace values override conflicting global values (384ms)
+  clarificationReplyTracking
+    Γ£ö returns undefined when there is no Copilot-generated comment in the thread
+    Γ£ö extracts a user reply that arrives after a Copilot clarification comment
+    Γ£ö ignores pending comments that do not start with the #AIbot trigger
+    Γ£ö only picks up #AIbot-prefixed comments and strips the trigger
+    Γ£ö stripAiBotPrefix returns undefined when the trigger is absent
+    Γ£ö stripAiBotPrefix accepts common separators after the trigger
+    Γ£ö only includes human replies that arrive after the latest Copilot-generated comment
+    Γ£ö combines multiple human comments after the latest Copilot-generated comment
+    Γ£ö ignores analysis-start comments when tracking pending human replies
+    Γ£ö tracks replies after a workflow assignment clarification comment
+    Γ£ö polling analysis signature ignores analysis lifecycle comments
+    Γ£ö polling analysis signature ignores workflow assignment clarification comments
+    Γ£ö polling analysis signature ignores non-#AIbot user comments
+    Γ£ö polling analysis signature changes when a #AIbot comment is added
+    Γ£ö hasAnyAnalysisLifecycleComment detects readiness-passed comment
+    Γ£ö hasPendingAiBotTrigger is false when user posts a non-#AIbot comment after analysis
+    Γ£ö hasPendingAiBotTrigger is true only when user posts #AIbot-prefixed comment after analysis
+    Γ£ö hasPendingAiBotTrigger ignores #AIbot comments posted BEFORE the latest bot activity
+  boardColumnStore
+    Γ£ö realigns legacy backlog-first workflow preferences to current workflow order
+    Γ£ö realigns arbitrary stale backlog-first permutations to the current workflow order
+    Γ£ö realigns legacy backlog-first ordered statuses for existing boards
+  boardColumnLayout
+    Γ£ö uses the exact workflow order supplied by the board details
+    Γ£ö applies default workflow ordering without forcing backlog to the front
+  backend mode context
+    Γ£ö treats configured Jira connections as configured without a stored workspace mode
+    Γ£ö keeps Jira unconfigured when no connection details exist
+    Γ£ö treats configured Jira API mode as configured
+    Γ£ö keeps explicit non-Jira modes configured
+  aiReviewService clarification comment sanitization
+    Γ£ö keeps only numbered clarification questions
+    Γ£ö strips tool traces and reasoning from Copilot clarification output
+    Γ£ö adds a question mark for question-like numbered lines missing punctuation
+    Γ£ö parses a structured copilot readiness assessment result
+    Γ£ö parses a clarification assessment comment when workflow is missing
+  AI provider setup
+    Γ£ö includes GitHub Copilot SDK in setup options
+    Γ£ö includes Claude Code CLI in setup options
+    Γ£ö sorts configured options by default provider
+  AppConfigStore AI settings
+    Γ£ö copilot sdk enablement counts as configured without cli path (64ms)
+    Γ£ö legacy copilot cli path still counts as configured (64ms)
+    Γ£ö claude code cli path counts as configured (66ms)
+  agentWorkflowCatalog
+    Γ£ö discovers workspace workflow packs from .github/skills
+    Γ£ö discovers workflow packs from symlinked skill directories
+    Γ£ö resolves a configured workflow directory to the repo-relative skill file
+    Γ£ö matches a relevant workflow from issue text
+    Γ£ö recommends workflow types when no relevant workflow is found
+    Γ£ö resolves an explicit workflow reference by name or id
+  Agent Types & Defaults
+    Γ£ö AGENT_DEFAULTS contains expected fields
+    Γ£ö All valid AgentTaskStates are string literals
+  AiSessionManager ΓÇö Agent Sessions
+    Γ£ö createAgentSession creates and returns a new record
+    Γ£ö createAgentSession stores the runtime provider when supplied
+    Γ£ö getAgentSession returns created session
+    Γ£ö getAgentSession returns undefined for non-existent key
+    Γ£ö getAllAgentSessions returns a snapshot
+    Γ£ö updateAgentState transitions state
+    Γ£ö updateAgentState sets completedAt for terminal states
+    Γ£ö updateAgentState sets completedAt for failed state
+    Γ£ö updateAgentState sets completedAt for aborted state
+    Γ£ö updateAgentState clears completedAt when returning to an active state
+    Γ£ö updateAgentState keeps paused sessions active and not completed
+    Γ£ö updateAgentState is no-op for unknown key
+    Γ£ö appendAgentEvents adds events and increments steps
+    Γ£ö appendAgentEvents without step increment does not change stepCount
+    Γ£ö setAgentPlan stores plan text
+    Γ£ö updateAgentOutput stores reasoning and response text
+    Γ£ö updateAgentOutput fires change events
+    Γ£ö removeAgentSession deletes the record
+    Γ£ö removeAgentSession is no-op for unknown key
+    Γ£ö stores and removes issue workflow assignments
+    Γ£ö fires workflow assignment change events
+    Γ£ö onDidChangeAgentSession fires on create
+    Γ£ö onDidChangeAgentSession fires on state change
+    Γ£ö onDidChangeAgentSession fires on append events
+    Γ£ö state machine: full lifecycle not_started ΓåÆ planning ΓåÆ executing ΓåÆ completed
+    Γ£ö state machine: executing ΓåÆ awaiting_approval ΓåÆ executing ΓåÆ awaiting_input ΓåÆ executing ΓåÆ completed
+    Γ£ö max steps default is applied correctly
+    Γ£ö custom maxSteps is preserved
+    Γ£ö createSession stores the selected AI label and fires change events
+    Γ£ö agent terminal states update linked AI assignment status
+  185 passing (40s)
+  1 failing
+  1) Ticket Manager Extension
+       automatically reuses workspace .vscode/mcp.json when manual config is empty:
+     Error: Timed out waiting for condition.
+  	at waitFor (c:\dev\ticket-manager-extension\out\test\extension.test.js:61:11)
+  	at async Context.<anonymous> (c:\dev\ticket-manager-extension\out\test\extension.test.js:368:9)
+
+1 test failed.
+[main 2026-04-20T19:02:17.537Z] Extension host with pid 28680 exited with code: 0, signal: unknown.
+Exit code:   1

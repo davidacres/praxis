@@ -264,7 +264,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-4',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed\n\nAnalysis result: READY\nThe ticket is specific enough to implement without making risky assumptions.\nTicket Manager is now preparing the delivery workflow.',
+        body: 'AI readiness analysis passed\n\nAnalysis result: READY\nThe ticket is specific enough to implement without making risky assumptions.\nTicket Manager is now preparing the delivery workflow.',
         created: '2026-04-15T09:03:00.000Z'
       }
     ]);
@@ -306,7 +306,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-1',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed\n\nAnalysis result: READY\nThe ticket is specific enough to implement without making risky assumptions.',
+        body: 'AI readiness analysis passed\n\nAnalysis result: READY\nThe ticket is specific enough to implement without making risky assumptions.',
         created: '2026-04-15T09:00:00.000Z'
       }
     ]);
@@ -333,7 +333,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-1',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed',
+        body: 'AI readiness analysis passed',
         created: '2026-04-15T09:00:00.000Z'
       }
     ]);
@@ -359,7 +359,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-1',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed\n\nAnalysis result: READY',
+        body: 'AI readiness analysis passed\n\nAnalysis result: READY',
         created: '2026-04-15T09:00:00.000Z'
       }
     ]);
@@ -371,7 +371,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-1',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed\n\nAnalysis result: READY',
+        body: 'AI readiness analysis passed\n\nAnalysis result: READY',
         created: '2026-04-15T09:00:00.000Z'
       },
       {
@@ -393,7 +393,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-1',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed',
+        body: 'AI readiness analysis passed',
         created: '2026-04-15T09:00:00.000Z'
       },
       {
@@ -417,7 +417,7 @@ suite('clarificationReplyTracking', () => {
       {
         id: 'comment-2',
         author: 'Ticket Manager',
-        body: 'Copilot readiness analysis passed',
+        body: 'AI readiness analysis passed',
         created: '2026-04-15T09:05:00.000Z'
       }
     ]);

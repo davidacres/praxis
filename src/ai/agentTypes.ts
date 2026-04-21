@@ -1,3 +1,5 @@
+import type { AiProvider } from '../types';
+
 // ── Agent Task State Machine ─────────────────────────────────────────────
 //
 //  NotStarted → Planning → AwaitingApproval → Executing ⇄ AwaitingInput
@@ -153,6 +155,7 @@ export type AgentEventType =
 export interface AgentSessionRecord {
   issueKey: string;
   sessionId: string;
+  provider?: Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;

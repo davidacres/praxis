@@ -5,6 +5,7 @@ import {
   buildPollingAnalysisReadyComment,
   buildDeliveryStartedComment,
   buildDeliveryTaskDefinition,
+  extractAgentProviderDirective,
   extractDeliveryBaseBranch,
   parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
@@ -115,7 +116,7 @@ suite('deliveryWorkflow', () => {
       }
     });
 
-    assert.ok(comment.includes('Copilot delivery workflow started'));
+    assert.ok(comment.includes('AI delivery workflow started'));
     assert.ok(comment.includes('Workflow: Add/Edit .NET Web API Workflow'));
     assert.ok(comment.includes('.github/skills/add-edit-dotnet-web-api/SKILL.md'));
     assert.ok(comment.includes('https://git.example/workflows/add-edit-dotnet-web-api'));
@@ -124,7 +125,7 @@ suite('deliveryWorkflow', () => {
   test('builds a polling analysis ready comment before delivery starts', () => {
     const comment = buildPollingAnalysisReadyComment();
 
-    assert.ok(comment.includes('Copilot readiness analysis passed'));
+    assert.ok(comment.includes('AI readiness analysis passed'));
     assert.ok(comment.includes('Analysis result: READY'));
     assert.ok(comment.includes('Ticket Manager is now preparing the delivery workflow.'));
   });
@@ -162,7 +163,8 @@ suite('deliveryWorkflow', () => {
       }
     );
 
-    assert.ok(comment.startsWith('[~accountid:abc123] Implementation summary'));
+    assert.ok(comment.startsWith('**THIS IS AN AI-GENERATED MESSAGE.**'));
+    assert.ok(comment.includes('[~accountid:abc123] Implementation summary'));
   });
 
   test('falls back to reporter name when no Jira mention token exists', () => {
@@ -178,7 +180,8 @@ suite('deliveryWorkflow', () => {
       }
     );
 
-    assert.ok(comment.startsWith('@Daryl Collins Implementation summary'));
+    assert.ok(comment.startsWith('**THIS IS AN AI-GENERATED MESSAGE.**'));
+    assert.ok(comment.includes('@Daryl Collins Implementation summary'));
   });
 
   test('parses a structured delivery result payload', () => {
@@ -248,5 +251,65 @@ suite('deliveryWorkflow', () => {
 \`\`\``);
 
     assert.strictEqual(result, undefined);
+  });
+
+  test('extractAgentProviderDirective detects "use claude code" in description', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'Implement the new feature.\n\nuse claude code',
+      comments: []
+    });
+    assert.strictEqual(provider, 'claude-cli');
+  });
+
+  test('extractAgentProviderDirective detects "use copilot" in description', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'Ship this fix.\n\nuse copilot',
+      comments: []
+    });
+    assert.strictEqual(provider, 'copilot-cli');
+  });
+
+  test('extractAgentProviderDirective detects "Agent: claude" in a comment', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'Some work item.',
+      comments: [
+        { id: '1', body: 'Agent: claude', created: '2026-04-15T10:00:00.000Z' }
+      ]
+    });
+    assert.strictEqual(provider, 'claude-cli');
+  });
+
+  test('extractAgentProviderDirective prefers most recent comment over description', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'use copilot',
+      comments: [
+        { id: '1', body: 'use claude code', created: '2026-04-15T10:00:00.000Z' }
+      ]
+    });
+    assert.strictEqual(provider, 'claude-cli');
+  });
+
+  test('extractAgentProviderDirective returns undefined when no directive found', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'Just a regular ticket with no agent preference.',
+      comments: []
+    });
+    assert.strictEqual(provider, undefined);
+  });
+
+  test('extractAgentProviderDirective detects "use github copilot" case-insensitively', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'Use GitHub Copilot for this task.',
+      comments: []
+    });
+    assert.strictEqual(provider, 'copilot-cli');
+  });
+
+  test('extractAgentProviderDirective detects "CLI: copilot" format', () => {
+    const provider = extractAgentProviderDirective({
+      description: 'CLI: copilot\n\nImplement the feature.',
+      comments: []
+    });
+    assert.strictEqual(provider, 'copilot-cli');
   });
 });
