@@ -18,6 +18,16 @@ suite('AI provider setup', () => {
     assert.strictEqual(AI_PROVIDER_LABELS['copilot-cli'], 'GitHub Copilot SDK');
   });
 
+  test('includes Claude Code CLI in setup options', () => {
+    const options = buildAiProviderSetupOptions();
+    const claudeCliOption = options.find(option => option.provider === 'claude-cli');
+
+    assert.ok(claudeCliOption);
+    assert.strictEqual(claudeCliOption?.label, 'Claude Code CLI');
+    assert.ok(claudeCliOption?.detail?.includes('Claude Code CLI'));
+    assert.strictEqual(AI_PROVIDER_LABELS['claude-cli'], 'Claude Code CLI');
+  });
+
   test('sorts configured options by default provider', () => {
     const options: Array<{ provider: AiProvider; label: string }> = [
       { provider: 'openai', label: 'OpenAI' },

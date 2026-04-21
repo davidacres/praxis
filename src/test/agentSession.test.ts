@@ -67,6 +67,13 @@ suite('AiSessionManager — Agent Sessions', () => {
     assert.deepStrictEqual(record.events, []);
   });
 
+  test('createAgentSession stores the runtime provider when supplied', () => {
+    const record = manager.createAgentSession('ISSUE-CLAUDE', 'session-claude', taskDef, 'claude-cli');
+
+    assert.strictEqual(record.provider, 'claude-cli');
+    assert.strictEqual(manager.getAgentSession('ISSUE-CLAUDE')?.provider, 'claude-cli');
+  });
+
   test('getAgentSession returns created session', () => {
     manager.createAgentSession('ISSUE-1', 'sess-1', taskDef);
     const fetched = manager.getAgentSession('ISSUE-1');

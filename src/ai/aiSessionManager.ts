@@ -15,6 +15,8 @@ const STORAGE_KEY = 'ticketManager.aiSessions';
 const AGENT_STORAGE_KEY = 'ticketManager.agentSessions';
 const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'ticketManager.issueWorkflowAssignments';
 
+type AgentRuntimeProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+
 export class AiSessionManager {
   private sessions: Map<string, AiAssignment>;
   private agentSessions: Map<string, AgentSessionRecord>;
@@ -106,11 +108,13 @@ export class AiSessionManager {
   public createAgentSession(
     issueKey: string,
     sessionId: string,
-    taskDefinition: AgentTaskDefinition
+    taskDefinition: AgentTaskDefinition,
+    provider?: AgentRuntimeProvider
   ): AgentSessionRecord {
     const record: AgentSessionRecord = {
       issueKey,
       sessionId,
+      provider,
       state: 'not_started',
       taskDefinition,
       events: [],

@@ -35,7 +35,8 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
   openai: 'OpenAI',
   claude: 'Claude',
   'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK'
+  'copilot-cli': 'GitHub Copilot SDK',
+  'claude-cli': 'Claude Code CLI'
 };
 
 function escapeHtml(value: string): string {
@@ -75,6 +76,9 @@ function resolveProviderLabel(
   }
   if (assignment) {
     return PROVIDER_LABELS[assignment.provider] ?? assignment.provider;
+  }
+  if (record?.provider) {
+    return PROVIDER_LABELS[record.provider] ?? record.provider;
   }
   if (record) {
     return PROVIDER_LABELS['copilot-cli'];
@@ -224,7 +228,10 @@ export class ActiveSessionsSidebarViewProvider
           }
 
           const presentation = resolveSessionState(assignment, record);
-          const supportsCopilotSession = record?.sessionId != null || assignment?.provider === 'copilot-cli';
+          const supportsCopilotSession =
+            record?.sessionId != null ||
+            assignment?.provider === 'copilot-cli' ||
+            assignment?.provider === 'claude-cli';
           const requiresApproval = record?.state === 'awaiting_approval';
           const isPaused = record?.state === 'paused';
           const attentionSummary = requiresApproval

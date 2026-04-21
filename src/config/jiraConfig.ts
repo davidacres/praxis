@@ -476,6 +476,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotCliPath', '');
   }
 
+  public getAiClaudeCliPath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeCliPath', '');
+  }
+
   public getAiCopilotEnabled(): boolean {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('ai.copilotEnabled', false);
   }
@@ -522,6 +526,9 @@ export class AppConfigStore {
     }
     if (this.getAiCopilotEnabled() || this.getAiCopilotCliPath().trim().length > 0) {
       providers.push('copilot-cli');
+    }
+    if (this.getAiClaudeCliPath().trim().length > 0) {
+      providers.push('claude-cli');
     }
     return providers;
   }

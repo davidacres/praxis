@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -178,6 +178,12 @@
       {
         "command": "ticketManager.delegateToCopilot",
         "title": "Delegate to Copilot Agent",
+        "category": "Ticket Manager",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "ticketManager.startClaudeSession",
+        "title": "Start Claude Code Session",
         "category": "Ticket Manager",
         "icon": "$(hubot)"
       },
@@ -942,6 +948,11 @@
           "default": "",
           "description": "Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless you are debugging a local Copilot SDK installation."
         },
+        "ticketManager.ai.claudeCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Claude Code CLI executable for AI agent assignment."
+        },
         "ticketManager.ai.defaultProvider": {
           "type": "string",
           "default": "none",
@@ -950,6 +961,7 @@
             "claude",
             "cursor-cli",
             "copilot-cli",
+            "claude-cli",
             "none"
           ],
           "enumDescriptions": [
@@ -957,6 +969,7 @@
             "Use Claude/Anthropic as the default AI provider.",
             "Use Cursor CLI as the default AI provider.",
             "Use the GitHub Copilot SDK as the default AI provider.",
+            "Use Claude Code CLI as the default AI provider.",
             "No default AI provider."
           ],
           "description": "Default AI provider to use when assigning tickets to an AI agent."

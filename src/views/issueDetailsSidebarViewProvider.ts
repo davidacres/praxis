@@ -1346,7 +1346,8 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       'openai': 'OpenAI',
       'claude': 'Claude',
       'cursor-cli': 'Cursor CLI',
-      'copilot-cli': 'GitHub Copilot SDK'
+      'copilot-cli': 'GitHub Copilot SDK',
+      'claude-cli': 'Claude Code CLI'
     };
 
     const statusTokenMap: Record<string, string> = {

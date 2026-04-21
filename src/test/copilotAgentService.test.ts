@@ -1,5 +1,6 @@
 import * as assert from 'node:assert';
 import type { AgentEventSummary, AgentSessionRecord, AgentTaskDefinition } from '../ai/agentTypes';
+import { AGENT_DEFAULTS } from '../ai/agentTypes';
 import {
   buildMsiVersionExample,
   buildSystemPrompt,
@@ -94,7 +95,8 @@ function createActiveTask(issueKey: string) {
     allowPermissionsForTask: false,
     messageBuffers: new Map<string, string>(),
     reasoningBuffers: new Map<string, string>(),
-    toolNames: new Map<string, string>()
+    toolNames: new Map<string, string>(),
+    maxSteps: AGENT_DEFAULTS.maxSteps as number
   };
 }
 
@@ -450,6 +452,7 @@ suite('CopilotAgentService', () => {
     });
 
     const activeTask = createActiveTask(issueKey);
+    activeTask.maxSteps = 50;
     activeTask.session.abort = async (): Promise<void> => {
       abortCallCount += 1;
     };
@@ -470,20 +473,22 @@ suite('CopilotAgentService', () => {
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    assert.strictEqual(abortCallCount, 1);
+    // Autopilot mode: no abort when step limit reached - it extends the limit instead
+    assert.strictEqual(abortCallCount, 0);
     assert.deepStrictEqual(
       sessionManager.stateChanges.map(change => change.state),
-      ['failed']
+      // No state change - continues executing
+      []
     );
     const flatEvents = sessionManager.appendedEvents.flatMap(({ events }) => events);
+    // Should warn about approaching limit
     assert.ok(
       flatEvents.some(
         event =>
-          event.type === 'error' &&
-          event.summary.includes('step limit (50)')
+          event.type === 'warning' &&
+          event.summary.includes('step limit')
       )
     );
-    assert.strictEqual(flatEvents.filter(event => event.type === 'aborted').length, 0);
-    assert.strictEqual(service.hasActiveTask(issueKey), false);
+    assert.strictEqual(service.hasActiveTask(issueKey), true);
   });
 });

@@ -123,6 +123,15 @@ function buildTicketContext(
       parts.push(`- **${author}:** ${body}`);
     }
   }
+  if (issue.attachments && issue.attachments.length > 0) {
+    parts.push(`\n**Attachments (${issue.attachments.length}):**`);
+    for (const attachment of issue.attachments) {
+      const size = typeof attachment.sizeBytes === 'number'
+        ? ` (${Math.round(attachment.sizeBytes / 1024)} KB)`
+        : '';
+      parts.push(`- ${attachment.fileName}${size}${attachment.mimeType ? ` [${attachment.mimeType}]` : ''}`);
+    }
+  }
   return parts.join('\n');
 }
 
@@ -539,12 +548,22 @@ export async function assessCopilotImplementationReadiness(
     workingDirectory?: string;
     availableWorkflows?: AgentWorkflowReference[];
     assignedWorkflow?: AgentWorkflowReference;
+    stagedAttachments?: Array<{ fileName: string; localPath: string; mediaType?: string }>;
   }
 ): Promise<CopilotImplementationReadinessAssessment> {
   const ticketContext = buildTicketContext(issue, {
     recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
     newestComments: true
   });
+  const attachmentContext = options?.stagedAttachments?.length
+    ? [
+        '\nLocally staged issue attachments (downloaded from Jira before this analysis):',
+        ...options.stagedAttachments.map(a =>
+          `- ${a.fileName}: ${a.localPath}${a.mediaType ? ` [${a.mediaType}]` : ''}`
+        ),
+        'Review these files when they are relevant to the ticket (screenshots, mockups, specs).'
+      ].join('\n')
+    : '';
   const assignedWorkflowContext = options?.assignedWorkflow
     ? [
         'Currently assigned workflow pack in Ticket Manager:',
@@ -562,6 +581,7 @@ export async function assessCopilotImplementationReadiness(
 ${assignedWorkflowContext}
 
 ${workflowContext}
+${attachmentContext}
 
 Ticket context:
 ${ticketContext}`,

@@ -67,12 +67,26 @@ async function writeAttachmentManifest(
   };
 }
 
+function isBuildArtifact(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.msi.zip');
+}
+
 export async function stageIssueAttachments(options: {
   issue: Pick<IssueDetails, 'key' | 'attachments'>;
   backendService: IssueTrackerService;
   logger?: AttachmentLogger;
 }): Promise<AgentTaskAttachment[]> {
-  const issueAttachments = options.issue.attachments?.filter(attachment => attachment.fileName.trim().length > 0) ?? [];
+  const allAttachments = options.issue.attachments?.filter(attachment => attachment.fileName.trim().length > 0) ?? [];
+  const issueAttachments: IssueAttachment[] = [];
+  for (const attachment of allAttachments) {
+    if (isBuildArtifact(attachment.fileName)) {
+      options.logger?.appendLine(
+        `[Attachment] Skipping build artifact ${attachment.fileName} for ${options.issue.key}`
+      );
+      continue;
+    }
+    issueAttachments.push(attachment);
+  }
   if (issueAttachments.length === 0) {
     return [];
   }
