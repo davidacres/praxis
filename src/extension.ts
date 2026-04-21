@@ -875,10 +875,27 @@ export async function activate(
             throw new Error('GitLab MR automation is not configured, so the feedback reply could not be posted.');
           }
 
-          await gitLabAutomation.client.addMergeRequestNote(
-            mergeRequest.iid,
-            wrapTicketManagerManagedMergeRequestNote(buildMergeRequestReplyComment(feedbackResult))
-          );
+          const replyBody = wrapTicketManagerManagedMergeRequestNote(buildMergeRequestReplyComment(feedbackResult));
+          const triggeringDiscussionIds = [
+            ...new Set(
+              (mergeRequest.pendingFeedback?.notes ?? [])
+                .map(note => note.discussionId)
+                .filter((id): id is string => typeof id === 'string' && id.length > 0)
+            )
+          ];
+          if (triggeringDiscussionIds.length === 1) {
+            try {
+              await gitLabAutomation.client.replyToMergeRequestDiscussion(
+                mergeRequest.iid,
+                triggeringDiscussionIds[0],
+                replyBody
+              );
+            } catch {
+              await gitLabAutomation.client.addMergeRequestNote(mergeRequest.iid, replyBody);
+            }
+          } else {
+            await gitLabAutomation.client.addMergeRequestNote(mergeRequest.iid, replyBody);
+          }
           aiSessionManager.updateAgentDelivery(record.issueKey, {
             ...delivery,
             phase: 'implementation',
@@ -1842,6 +1859,7 @@ export async function activate(
           triggeredAt: new Date().toISOString(),
           notes: changedNotes.map(note => ({
             id: note.id,
+            discussionId: note.discussionId,
             author: note.author,
             body: note.body,
             createdAt: note.createdAt,

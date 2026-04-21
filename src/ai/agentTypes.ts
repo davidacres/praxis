@@ -78,6 +78,7 @@ export interface DeliveryTaskResult {
 
 export interface DeliveryMergeRequestNoteSnapshot {
   id: string;
+  discussionId?: string;
   author: string;
   body: string;
   createdAt: string;

@@ -38,11 +38,13 @@ suite('gitLabApiService', () => {
   test('flattens and sorts GitLab discussion notes', () => {
     const notes = flattenGitLabDiscussionNotes([
       {
+        id: 'disc-2',
         notes: [
           { id: 2, body: 'Later', created_at: '2026-04-16T10:00:01Z', updated_at: '2026-04-16T10:00:01Z', author: { username: 'bob' } }
         ]
       },
       {
+        id: 'disc-1',
         notes: [
           { id: 1, body: 'Earlier', created_at: '2026-04-16T10:00:00Z', updated_at: '2026-04-16T10:00:00Z', author: { username: 'alice' } }
         ]
@@ -50,10 +52,12 @@ suite('gitLabApiService', () => {
     ]);
 
     assert.deepStrictEqual(notes.map(note => note.id), ['1', '2']);
+    assert.strictEqual(notes[0].discussionId, 'disc-1');
+    assert.strictEqual(notes[1].discussionId, 'disc-2');
   });
 
   test('diffs GitLab notes while suppressing the baseline snapshot', () => {
-    const baseline = [{ id: '1', author: 'alice', body: 'Existing', createdAt: 'a', updatedAt: 'a', system: false }];
+    const baseline = [{ id: '1', discussionId: 'd1', author: 'alice', body: 'Existing', createdAt: 'a', updatedAt: 'a', system: false }];
     assert.deepStrictEqual(diffGitLabDiscussionNotes({}, baseline, true), {
       newNotes: [],
       updatedNotes: []
@@ -61,7 +65,7 @@ suite('gitLabApiService', () => {
 
     const current = [
       ...baseline,
-      { id: '2', author: 'bob', body: 'New note', createdAt: 'b', updatedAt: 'b', system: false }
+      { id: '2', discussionId: 'd2', author: 'bob', body: 'New note', createdAt: 'b', updatedAt: 'b', system: false }
     ];
     const diff = diffGitLabDiscussionNotes(createGitLabHandledNoteState(baseline), current, false);
     assert.strictEqual(diff.newNotes.length, 1);

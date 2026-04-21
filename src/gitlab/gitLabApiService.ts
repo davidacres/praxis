@@ -33,6 +33,7 @@ export interface GitLabMergeRequest {
 
 export interface GitLabDiscussionNote {
   id: string;
+  discussionId: string;
   author: string;
   body: string;
   createdAt: string;
@@ -116,6 +117,7 @@ export function mergeRequestMatchesIssueKey(
 export function flattenGitLabDiscussionNotes(discussions: unknown[]): GitLabDiscussionNote[] {
   return discussions
     .flatMap(discussion => {
+      const discussionId = String((discussion as { id?: string })?.id ?? '');
       const noteEntries = Array.isArray((discussion as { notes?: unknown[] })?.notes)
         ? (discussion as { notes: unknown[] }).notes
         : [];
@@ -130,6 +132,7 @@ export function flattenGitLabDiscussionNotes(discussions: unknown[]): GitLabDisc
         };
         return {
           id: String(entry.id ?? ''),
+          discussionId,
           author: entry.author?.username ?? entry.author?.name ?? 'unknown',
           body: entry.body ?? '',
           createdAt: entry.created_at ?? '',
@@ -321,6 +324,15 @@ export class GitLabApiService {
     await this.requestJson(
       'POST',
       `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}/notes`,
+      undefined,
+      { body: body.trim() }
+    );
+  }
+
+  public async replyToMergeRequestDiscussion(iid: number, discussionId: string, body: string): Promise<void> {
+    await this.requestJson(
+      'POST',
+      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}/discussions/${encodeURIComponent(discussionId)}/notes`,
       undefined,
       { body: body.trim() }
     );
