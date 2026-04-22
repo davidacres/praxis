@@ -8,6 +8,17 @@ import { buildWorktreeName } from '../ai/copilotAgentService';
 
 const execFile = util.promisify(execFileCallback);
 
+export class WorktreeConflictError extends Error {
+  public readonly worktreePath: string;
+  public readonly worktreeName: string;
+  constructor(worktreePath: string, worktreeName: string) {
+    super(`The delivery worktree path already exists: ${worktreePath}`);
+    this.name = 'WorktreeConflictError';
+    this.worktreePath = worktreePath;
+    this.worktreeName = worktreeName;
+  }
+}
+
 export interface PreparedWorktree {
   repoRoot: string;
   worktreeRoot: string;
@@ -62,7 +73,8 @@ export class GitWorktreeManager {
   public async prepareDeliveryWorktree(
     issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>,
     baseBranch: string,
-    workspacePath: string
+    workspacePath: string,
+    options?: { forceClean?: boolean }
   ): Promise<PreparedWorktree> {
     const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
     if (!repoRoot) {
@@ -77,8 +89,16 @@ export class GitWorktreeManager {
 
     try {
       await fs.access(worktreePath);
-      throw new Error(`The delivery worktree path already exists: ${worktreePath}`);
+      if (options?.forceClean) {
+        this.output.appendLine(`[Delivery] Force-cleaning existing worktree ${worktreeName}.`);
+        await this.removeWorktree(repoRoot, worktreePath, worktreeName);
+      } else {
+        throw new WorktreeConflictError(worktreePath, worktreeName);
+      }
     } catch (error) {
+      if (error instanceof WorktreeConflictError) {
+        throw error;
+      }
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
       }
@@ -108,6 +128,68 @@ export class GitWorktreeManager {
       branchName: worktreeName,
       baseBranch
     };
+  }
+
+  /**
+   * Merge a sub-task branch into the feature branch from the main repo root.
+   * Uses --no-ff to create a merge commit for traceability.
+   * After merging, pushes the feature branch and cleans up the sub-task worktree/branch.
+   */
+  public async mergeSubTaskBranch(
+    workspacePath: string,
+    subTaskBranch: string,
+    featureBranch: string,
+    subTaskWorktreePath: string,
+    options?: { gitExtraArgs?: string[] }
+  ): Promise<{ mergeCommit: string }> {
+    const repoRoot = await readStdout('git', ['rev-parse', '--show-toplevel'], workspacePath);
+
+    // Fetch latest to ensure we have current state of both branches
+    await execFile('git', ['fetch', 'origin'], { cwd: repoRoot, windowsHide: true });
+
+    // Check out the feature branch in the main repo to perform the merge
+    const currentBranch = await readStdout('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot);
+
+    await execFile('git', ['checkout', featureBranch], { cwd: repoRoot, windowsHide: true });
+    try {
+      // Pull latest feature branch changes
+      await execFile('git', ['pull', '--ff-only', 'origin', featureBranch], { cwd: repoRoot, windowsHide: true }).catch(() => {
+        // May fail if no upstream tracking yet — that's OK
+      });
+
+      // Merge the sub-task branch with a merge commit
+      await execFile(
+        'git',
+        ['merge', '--no-ff', '-m', `Merge ${subTaskBranch} into ${featureBranch}`, subTaskBranch],
+        { cwd: repoRoot, windowsHide: true }
+      );
+
+      const mergeCommit = await readStdout('git', ['rev-parse', 'HEAD'], repoRoot);
+
+      // Push the feature branch with the merge
+      const pushArgs = [...(options?.gitExtraArgs ?? []), 'push', 'origin', featureBranch];
+      await execFile('git', pushArgs, { cwd: repoRoot, windowsHide: true });
+
+      this.output.appendLine(
+        `[Delivery] Merged ${subTaskBranch} into ${featureBranch} (commit: ${mergeCommit.slice(0, 8)}).`
+      );
+
+      // Clean up: remove the sub-task worktree and branch
+      await this.removeWorktree(repoRoot, subTaskWorktreePath, subTaskBranch);
+
+      return { mergeCommit };
+    } catch (mergeError) {
+      // If merge fails, abort it and restore state
+      await execFile('git', ['merge', '--abort'], { cwd: repoRoot, windowsHide: true }).catch(() => {});
+      throw mergeError;
+    } finally {
+      // Restore original branch
+      if (currentBranch && currentBranch !== featureBranch) {
+        await execFile('git', ['checkout', currentBranch], { cwd: repoRoot, windowsHide: true }).catch(() => {
+          // Best-effort restore
+        });
+      }
+    }
   }
 
   /**
@@ -265,5 +347,30 @@ export class GitWorktreeManager {
       }
       throw error;
     }
+  }
+
+  /**
+   * Removes an existing worktree and its branch so a fresh one can be created.
+   */
+  private async removeWorktree(repoRoot: string, worktreePath: string, branchName: string): Promise<void> {
+    try {
+      await execFile('git', ['worktree', 'remove', worktreePath, '--force'], {
+        cwd: repoRoot,
+        windowsHide: true
+      });
+    } catch {
+      // git worktree remove may fail if the worktree is corrupted — fall back to manual cleanup
+      try {
+        await fs.rm(worktreePath, { recursive: true, force: true });
+      } catch { /* best effort */ }
+      await execFile('git', ['worktree', 'prune'], { cwd: repoRoot, windowsHide: true }).catch(() => {});
+    }
+    // Delete the branch so `worktree add -b` can recreate it
+    try {
+      await execFile('git', ['branch', '-D', branchName], {
+        cwd: repoRoot,
+        windowsHide: true
+      });
+    } catch { /* branch may not exist */ }
   }
 }

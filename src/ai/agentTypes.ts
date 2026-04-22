@@ -106,9 +106,35 @@ export interface DeliveryMergeRequestMetadata {
   buildRequiredOnMerge?: boolean;
 }
 
+export interface FeatureSubTaskRecord {
+  /** Jira issue key of the created sub-task. */
+  issueKey: string;
+  summary: string;
+  order: number;
+  /** Workflow pack assigned to this sub-task (if any). */
+  workflow?: AgentWorkflowReference;
+  /** Agent session state for the sub-task delivery. */
+  deliveryState?: 'pending' | 'in-progress' | 'completed' | 'failed';
+  /** Worktree branch name when a delivery session is active. */
+  worktreeBranch?: string;
+}
+
+export interface FeatureDecompositionMetadata {
+  /** The parent feature request issue key. */
+  parentIssueKey: string;
+  /** The feature branch all sub-task MRs merge into. */
+  featureBranch: string;
+  /** The base branch the feature branch was created from. */
+  baseBranch: string;
+  /** Sub-tasks created from the decomposition. */
+  subTasks: FeatureSubTaskRecord[];
+  /** Summary from the decomposition agent. */
+  decompositionSummary?: string;
+}
+
 export interface DeliverySessionMetadata {
   source: 'jira-polling';
-  phase: 'analysis' | 'implementation' | 'merge-request-feedback';
+  phase: 'analysis' | 'implementation' | 'merge-request-feedback' | 'feature-decomposition';
   baseBranch: string;
   worktreeName: string;
   worktreePath: string;
@@ -123,6 +149,10 @@ export interface DeliverySessionMetadata {
   finalizationState: 'pending' | 'completed' | 'failed';
   finalizationMessage?: string;
   result?: DeliveryTaskResult;
+  /** When this is a sub-task delivery, the parent feature request issue key. */
+  parentFeatureIssueKey?: string;
+  /** Present when this is a feature request decomposition workflow. */
+  featureDecomposition?: FeatureDecompositionMetadata;
 }
 
 /** Compact event record for display and persistence (not the raw SDK event). */

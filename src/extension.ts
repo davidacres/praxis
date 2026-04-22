@@ -69,8 +69,11 @@ import {
   resolveDeliveryPublishCommand,
   buildDeliverySuccessComment,
   buildDeliveryTaskDefinition,
+  buildSubTaskAnalysisTaskDefinition,
+  buildSubTaskDeliveryTaskDefinition,
   buildMissingBaseBranchClarificationComment,
   buildMissingWorkflowComment,
+  buildWorktreeConflictClarificationComment,
   extractAgentProviderDirective,
   extractDeliveryBaseBranch,
   parseDeliveryAnalysisResult,
@@ -78,13 +81,23 @@ import {
   validateDeliveryWorkflowSettings
 } from './ai/deliveryWorkflow';
 import {
+  isFeatureRequestTicket,
+  buildFeatureDecompositionTaskDefinition,
+  buildFeatureDecompositionStartedComment,
+  buildFeatureDecompositionCompleteComment,
+  buildFeatureDecompositionBlockedComment,
+  parseFeatureDecompositionResult,
+  type FeatureDecompositionResult
+} from './ai/featureDecompositionWorkflow';
+import type { FeatureSubTaskRecord } from './ai/agentTypes';
+import {
   buildMergeRequestCreatedComment,
   buildMergeRequestFailureReplyComment,
   buildMergeRequestFeedbackTaskDefinition,
   buildMergeRequestReplyComment,
   parseMergeRequestFeedbackResult
 } from './ai/mergeRequestWorkflow';
-import { GitWorktreeManager } from './git/gitWorktreeManager';
+import { GitWorktreeManager, WorktreeConflictError } from './git/gitWorktreeManager';
 import {
   discoverWorkspaceAgentWorkflows,
   promptForAgentWorkflowSelection,
@@ -162,6 +175,8 @@ const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
 const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
 const COPILOT_ANALYSIS_START_COMMENT = `${AI_COMMENT_HEADER}\nAnalysis starting`;
 const COPILOT_ANALYSIS_READY_COMMENT_MARKER = 'AI readiness analysis passed';
+const COPILOT_AGENT_INPUT_REQUEST_MARKER = 'Agent input requested';
+const WORKTREE_CONFLICT_COMMENT_MARKER = 'existing worktree/branch conflict';
 const DELIVERY_FORWARD_STATUS_PREFERENCES = [
   'ready for qa',
   'qa ready',
@@ -529,6 +544,7 @@ export async function activate(
     async event => {
       await processPollingClarificationRequests(event);
       await processPollingClarificationReplies(event);
+      await processPollingAgentInputReplies(event);
       await processPollingMergeRequestAutomation(event);
 
       if (
@@ -621,6 +637,7 @@ export async function activate(
   const permissionPromptInFlight = new Set<string>();
   const pollingClarificationInFlight = new Set<string>();
   const pollingReplyInFlight = new Set<string>();
+  const pollingAgentInputReplyInFlight = new Set<string>();
   const deliveryFinalizationInFlight = new Set<string>();
   const mergeRequestAutomationInFlight = new Set<string>();
   let cachedGitLabAutomationKey: string | undefined;
@@ -646,6 +663,10 @@ export async function activate(
   }
 
   async function persistPollingStatusSnapshots(nextSnapshots: Record<string, string>): Promise<void> {
+    const keysToRemove = Object.keys(pollingStatusSnapshots).filter(key => !(key in nextSnapshots));
+    for (const key of keysToRemove) {
+      delete pollingStatusSnapshots[key];
+    }
     for (const [issueKey, snapshot] of Object.entries(nextSnapshots)) {
       pollingStatusSnapshots[issueKey] = snapshot;
     }
@@ -704,13 +725,42 @@ export async function activate(
     options?: {
       analysisSignature?: string;
       replySignature?: string;
+      forceCleanWorktree?: boolean;
     }
   ): Promise<void> {
-    const started = await startPollingDeliveryWorkflow(issue);
-    if (started) {
+    // Route feature requests to the decomposition workflow
+    let started: boolean;
+    try {
+    if (isFeatureRequestTicket(issue)) {
       outputChannel.appendLine(
-        `[Jira Polling] Readiness analysis passed on ${issue.key}; delivery workflow started.`
+        `[Jira Polling] Detected feature request on ${issue.key}; routing to decomposition workflow.`
       );
+      started = await startFeatureDecompositionWorkflow(issue, { forceCleanWorktree: options?.forceCleanWorktree });
+      if (started) {
+        outputChannel.appendLine(
+          `[Jira Polling] Feature decomposition workflow started for ${issue.key}.`
+        );
+      }
+    } else {
+      started = await startPollingDeliveryWorkflow(issue, { forceCleanWorktree: options?.forceCleanWorktree });
+      if (started) {
+        outputChannel.appendLine(
+          `[Jira Polling] Readiness analysis passed on ${issue.key}; delivery workflow started.`
+        );
+      }
+    }
+    } catch (error) {
+      if (error instanceof WorktreeConflictError) {
+        outputChannel.appendLine(
+          `[Jira Polling] Worktree conflict for ${issue.key}: ${error.worktreeName} already exists. Posting clarification comment.`
+        );
+        await backendService.addComment(
+          issue.key,
+          buildWorktreeConflictClarificationComment(error.worktreeName)
+        );
+        return;
+      }
+      throw error;
     }
 
     if (options?.analysisSignature !== undefined) {
@@ -791,15 +841,24 @@ export async function activate(
     record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> },
     analysisResult: NonNullable<ReturnType<typeof parseDeliveryAnalysisResult>>
   ): Promise<void> {
-    const implementationTaskDefinition = buildDeliveryTaskDefinition(issue, {
-      baseBranch: record.delivery.baseBranch,
-      branchName: record.delivery.createdBranch,
-      worktreePath: record.delivery.worktreePath,
-      publishCommand: record.delivery.publishCommand,
-      artifactPattern: record.delivery.artifactPattern,
-      workflow: record.taskDefinition.workflow,
-      analysis: analysisResult
-    });
+    const isSubTask = Boolean(record.delivery.parentFeatureIssueKey);
+    const implementationTaskDefinition = isSubTask
+      ? buildSubTaskDeliveryTaskDefinition(issue, {
+          baseBranch: record.delivery.baseBranch,
+          branchName: record.delivery.createdBranch,
+          worktreePath: record.delivery.worktreePath,
+          workflow: record.taskDefinition.workflow,
+          analysis: analysisResult
+        })
+      : buildDeliveryTaskDefinition(issue, {
+          baseBranch: record.delivery.baseBranch,
+          branchName: record.delivery.createdBranch,
+          worktreePath: record.delivery.worktreePath,
+          publishCommand: record.delivery.publishCommand,
+          artifactPattern: record.delivery.artifactPattern,
+          workflow: record.taskDefinition.workflow,
+          analysis: analysisResult
+        });
     const taskDefinitionWithAttachments = record.taskDefinition.attachments?.length
       ? { ...implementationTaskDefinition, attachments: record.taskDefinition.attachments }
       : implementationTaskDefinition;
@@ -843,6 +902,239 @@ export async function activate(
     } catch (error) {
       reportError(error, `deliveryStartComment:${issue.key}`);
     }
+  }
+
+  /**
+   * Recover in-flight delivery sessions after an extension restart.
+   * Scans all persisted agent sessions and processes any that were interrupted:
+   * 0. Sessions that were paused by deactivation while actively running → auto-resume
+   * 1. Sessions with finalizationState='pending' that completed/failed → finalize them
+   * 2. Sub-task deliveries that finalized but never created an MR → create MR
+   * 3. Sub-task MRs that were merged but next sub-task wasn't started → advance
+   */
+  async function recoverPendingDeliverySessions(): Promise<void> {
+    const allSessions = aiSessionManager.getAllAgentSessions();
+    let recoveredCount = 0;
+
+    // First pass: auto-resume paused delivery sessions
+    for (const [issueKey, record] of allSessions) {
+      if (!isDeliveryTask(record)) {
+        continue;
+      }
+
+      if (
+        record.state === 'paused' &&
+        record.delivery.source === 'jira-polling' &&
+        record.delivery.finalizationState === 'pending'
+      ) {
+        outputChannel.appendLine(
+          `[Recovery] Found paused delivery session for ${issueKey} (phase: ${record.delivery.phase}). Auto-resuming.`
+        );
+        try {
+          await resumeAgentTask(issueKey, record);
+          outputChannel.appendLine(`[Recovery] Successfully resumed session for ${issueKey}.`);
+          recoveredCount++;
+        } catch (error) {
+          outputChannel.appendLine(
+            `[Recovery] Failed to resume session for ${issueKey}: ${error instanceof Error ? error.message : String(error)}. Will attempt restart.`
+          );
+          // If resume fails (e.g. SDK session expired), restart the delivery
+          // from the current phase with a fresh agent task.
+          try {
+            await restartPausedDeliverySession(issueKey, record);
+            recoveredCount++;
+          } catch (restartError) {
+            reportError(restartError, `recovery:restart:${issueKey}`);
+          }
+        }
+        continue;
+      }
+    }
+
+    // Second pass: handle completed/failed sessions that need finalization or advancement
+    for (const [issueKey, record] of allSessions) {
+      if (!isDeliveryTask(record)) {
+        continue;
+      }
+      const delivery = record.delivery;
+
+      // Skip sessions we just resumed above
+      if (record.state === 'paused') {
+        continue;
+      }
+
+      // Case 1: Session completed/failed but finalization never ran (e.g. restart mid-flight)
+      if (
+        delivery.finalizationState === 'pending' &&
+        (record.state === 'completed' || record.state === 'failed')
+      ) {
+        outputChannel.appendLine(
+          `[Recovery] Found pending finalization for ${issueKey} (state: ${record.state}, phase: ${delivery.phase}). Re-triggering finalization.`
+        );
+        void finalizeDeliverySession(record);
+        recoveredCount++;
+        continue;
+      }
+
+      // Case 2: Sub-task delivery finalized but wasn't properly completed
+      // under the new flow (transition to Done + MR creation). This handles
+      // sub-tasks that completed under older code or where the finalization
+      // was interrupted between steps.
+      if (
+        delivery.parentFeatureIssueKey &&
+        delivery.finalizationState === 'completed'
+      ) {
+        try {
+          // Ensure the parent's sub-task tracking reflects completion
+          updateParentSubTaskState(delivery.parentFeatureIssueKey, issueKey, 'completed');
+
+          // Ensure the sub-task is transitioned to Done in Jira
+          const subTaskIssue = await backendService.getIssue(issueKey);
+          if (subTaskIssue.status !== 'Done') {
+            const doneTransitionId = await findTransitionIdForStatus(issueKey, 'Done');
+            if (doneTransitionId) {
+              await backendService.transitionIssue(issueKey, doneTransitionId);
+              outputChannel.appendLine(
+                `[Recovery] Transitioned sub-task ${issueKey} to Done.`
+              );
+            }
+          }
+
+          // Ensure the MR exists
+          if (!delivery.mergeRequest?.iid) {
+            outputChannel.appendLine(
+              `[Recovery] Sub-task ${issueKey} completed but has no merge request. Creating MR.`
+            );
+            await ensureMergeRequestForDoneIssue(issueKey);
+          }
+          recoveredCount++;
+        } catch (error) {
+          reportError(error, `recovery:subTaskComplete:${issueKey}`);
+        }
+        continue;
+      }
+
+      // Case 3: Sub-task MR was merged but next sub-task was never started
+      if (
+        delivery.parentFeatureIssueKey &&
+        delivery.mergeRequest?.state === 'merged'
+      ) {
+        const parentRecord = aiSessionManager.getAgentSession(delivery.parentFeatureIssueKey);
+        const featureDecomp = parentRecord?.delivery?.featureDecomposition;
+        if (featureDecomp) {
+          const hasNextPending = featureDecomp.subTasks
+            .sort((a, b) => a.order - b.order)
+            .some(st => st.deliveryState === 'pending');
+          const hasInProgress = featureDecomp.subTasks
+            .some(st => st.deliveryState === 'in-progress');
+          // Only advance if there's a pending sub-task but none currently in-progress
+          if (hasNextPending && !hasInProgress) {
+            outputChannel.appendLine(
+              `[Recovery] Sub-task ${issueKey} MR merged but next sub-task not started. Advancing.`
+            );
+            try {
+              await advanceToNextSubTask(delivery.parentFeatureIssueKey);
+              recoveredCount++;
+            } catch (error) {
+              reportError(error, `recovery:advanceSubTask:${issueKey}`);
+            }
+          }
+        }
+      }
+    }
+
+    if (recoveredCount > 0) {
+      outputChannel.appendLine(
+        `[Recovery] Recovered ${recoveredCount} delivery session(s) from previous run.`
+      );
+    }
+  }
+
+  /**
+   * When a paused delivery session cannot be resumed (e.g. SDK session expired),
+   * restart the delivery from scratch using the persisted metadata. The existing
+   * worktree and branch are reused — only the agent task is recreated.
+   */
+  async function restartPausedDeliverySession(
+    issueKey: string,
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
+  ): Promise<void> {
+    const delivery = record.delivery;
+    const issue = await backendService.getIssue(issueKey);
+
+    // Determine whether this is a sub-task delivery
+    const isSubTask = Boolean(delivery.parentFeatureIssueKey);
+
+    // Rebuild the task definition based on the delivery phase
+    let taskDefinition: AgentTaskDefinition;
+    if (delivery.phase === 'analysis') {
+      taskDefinition = isSubTask
+        ? buildSubTaskAnalysisTaskDefinition(issue, {
+            baseBranch: delivery.baseBranch,
+            branchName: delivery.createdBranch,
+            worktreePath: delivery.worktreePath,
+            workflow: record.taskDefinition.workflow
+          })
+        : buildDeliveryAnalysisTaskDefinition(issue, {
+            baseBranch: delivery.baseBranch,
+            branchName: delivery.createdBranch,
+            worktreePath: delivery.worktreePath,
+            publishCommand: delivery.publishCommand,
+            artifactPattern: delivery.artifactPattern,
+            workflow: record.taskDefinition.workflow
+          });
+    } else if (delivery.phase === 'implementation') {
+      const analysis = delivery.analysisSummary
+        ? { status: 'ready' as const, summary: delivery.analysisSummary, implementationPlan: delivery.analysisPlan, blockers: [] }
+        : undefined;
+      taskDefinition = isSubTask
+        ? buildSubTaskDeliveryTaskDefinition(issue, {
+            baseBranch: delivery.baseBranch,
+            branchName: delivery.createdBranch,
+            worktreePath: delivery.worktreePath,
+            workflow: record.taskDefinition.workflow,
+            analysis
+          })
+        : buildDeliveryTaskDefinition(issue, {
+            baseBranch: delivery.baseBranch,
+            branchName: delivery.createdBranch,
+            worktreePath: delivery.worktreePath,
+            publishCommand: delivery.publishCommand,
+            artifactPattern: delivery.artifactPattern,
+            workflow: record.taskDefinition.workflow,
+            analysis
+          });
+    } else {
+      outputChannel.appendLine(
+        `[Recovery] Cannot restart ${issueKey}: unsupported phase '${delivery.phase}'.`
+      );
+      return;
+    }
+
+    // Carry over any attachments from the original task
+    if (record.taskDefinition.attachments?.length) {
+      taskDefinition.attachments = record.taskDefinition.attachments;
+    }
+
+    const provider = await startAgentTask(
+      { ...issue, branch: delivery.createdBranch },
+      taskDefinition,
+      {
+        provider: resolvePreferredAgentProvider(issueKey, record, issue),
+        workingDirectory: delivery.worktreePath
+      }
+    );
+
+    // Preserve the existing delivery metadata (worktree, branches, parent reference, etc.)
+    aiSessionManager.updateAgentDelivery(issueKey, {
+      ...delivery,
+      finalizationState: 'pending',
+      finalizationMessage: `Session restarted after VS Code restart (phase: ${delivery.phase}).`
+    }, { replace: true });
+
+    outputChannel.appendLine(
+      `[Recovery] Restarted delivery for ${issueKey} in ${delivery.phase} phase using ${getAgentDisplayName(provider)}.`
+    );
   }
 
   async function finalizeDeliverySession(record: AgentSessionRecord): Promise<void> {
@@ -946,11 +1238,124 @@ export async function activate(
           return;
         }
 
+        if (delivery.phase === 'feature-decomposition') {
+          await finalizeFeatureDecomposition(record);
+          return;
+        }
+
         const result = parseDeliveryTaskResult(record.responseText);
         if (!result) {
           throw new Error(
             'The AI agent completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
           );
+        }
+
+        // Sub-task deliveries: skip publish/artifact upload, transition to Done.
+        // Either auto-merge into feature branch or create MR, depending on config.
+        if (delivery.parentFeatureIssueKey) {
+          const currentIssue = await backendService.getIssue(record.issueKey);
+          const autoMerge = configStore.isAutoMergeSubTasksEnabled();
+
+          await backendService.addComment(
+            record.issueKey,
+            buildDeliverySuccessComment(result, {
+              template: delivery.summaryTemplate,
+              attachedArtifactNames: [],
+              reporterMention: currentIssue.reporterMention,
+              reporterName: currentIssue.reporter
+            })
+          );
+
+          // Transition sub-task to Done
+          let advancedStatus: string | undefined;
+          try {
+            const doneTransitionId = await findTransitionIdForStatus(record.issueKey, 'Done');
+            if (doneTransitionId) {
+              await backendService.transitionIssue(record.issueKey, doneTransitionId);
+              advancedStatus = 'Done';
+              outputChannel.appendLine(
+                `[Feature Sub-task] Transitioned ${record.issueKey} to Done.`
+              );
+            } else {
+              advancedStatus = await advanceDeliveredIssueToNextStatus(record.issueKey);
+            }
+          } catch (transitionError) {
+            reportError(transitionError, `subTaskDeliveryAdvance:${record.issueKey}`);
+          }
+
+          updateParentSubTaskState(delivery.parentFeatureIssueKey, record.issueKey, 'completed');
+
+          if (autoMerge) {
+            // Auto-merge: merge sub-task branch into the feature branch directly
+            try {
+              // Build git auth args from GITLAB_TOKEN if available
+              const gitExtraArgs: string[] = [];
+              const gitlabToken = process.env.GITLAB_TOKEN;
+              if (gitlabToken) {
+                const auth = Buffer.from(`oauth2:${gitlabToken}`).toString('base64');
+                gitExtraArgs.push('-c', `http.extraHeader=Authorization: Basic ${auth}`);
+              }
+
+              const mergeResult = await gitWorktreeManager!.mergeSubTaskBranch(
+                workingDirectory!,
+                delivery.createdBranch,
+                delivery.baseBranch,
+                delivery.worktreePath,
+                { gitExtraArgs }
+              );
+              outputChannel.appendLine(
+                `[Feature Sub-task] Auto-merged ${record.issueKey} into ${delivery.baseBranch} (commit: ${mergeResult.mergeCommit.slice(0, 8)}).`
+              );
+
+              aiSessionManager.updateAgentDelivery(record.issueKey, {
+                finalizationState: 'completed',
+                finalizationMessage: advancedStatus
+                  ? `Posted summary, moved to ${advancedStatus}, and auto-merged into ${delivery.baseBranch}.`
+                  : `Posted summary and auto-merged into ${delivery.baseBranch}.`,
+                result
+              });
+
+              // Immediately advance to the next sub-task
+              await advanceToNextSubTask(delivery.parentFeatureIssueKey);
+            } catch (mergeError) {
+              reportError(mergeError, `subTaskAutoMerge:${record.issueKey}`);
+              outputChannel.appendLine(
+                `[Feature Sub-task] Auto-merge failed for ${record.issueKey}: ${mergeError instanceof Error ? mergeError.message : String(mergeError)}. Falling back to MR.`
+              );
+              // Fallback: create MR if auto-merge fails (e.g. merge conflict)
+              try {
+                await ensureMergeRequestForDoneIssue(record.issueKey);
+              } catch (mrError) {
+                reportError(mrError, `subTaskMergeRequestFallback:${record.issueKey}`);
+              }
+              aiSessionManager.updateAgentDelivery(record.issueKey, {
+                finalizationState: 'completed',
+                finalizationMessage: `Auto-merge failed. Created merge request instead. Next sub-task starts after MR merge.`,
+                result
+              });
+            }
+          } else {
+            // MR mode: create MR targeting the feature branch, wait for merge
+            try {
+              await ensureMergeRequestForDoneIssue(record.issueKey);
+              outputChannel.appendLine(
+                `[Feature Sub-task] Created/ensured MR for sub-task ${record.issueKey}. Next sub-task will start when this MR is merged.`
+              );
+            } catch (mrError) {
+              reportError(mrError, `subTaskMergeRequest:${record.issueKey}`);
+            }
+
+            aiSessionManager.updateAgentDelivery(record.issueKey, {
+              finalizationState: 'completed',
+              finalizationMessage: advancedStatus
+                ? `Posted summary, moved to ${advancedStatus}, and created merge request. Next sub-task starts after MR merge.`
+                : 'Posted summary and created merge request. Next sub-task starts after MR merge.',
+              result
+            });
+          }
+
+          outputChannel.appendLine(`[Feature Sub-task] Finalized sub-task delivery for ${record.issueKey}.`);
+          return;
         }
 
         const attachedArtifactNames: string[] = [];
@@ -1049,6 +1454,12 @@ export async function activate(
         finalizationMessage: failureReason
       });
       outputChannel.appendLine(`[Delivery] Posted Jira failure summary for ${record.issueKey}.`);
+
+      // If this is a sub-task delivery, update parent state (do not advance — the
+      // next sub-task only starts after MR merge, and failures halt the chain).
+      if (delivery.parentFeatureIssueKey) {
+        updateParentSubTaskState(delivery.parentFeatureIssueKey, record.issueKey, 'failed');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       aiSessionManager.updateAgentDelivery(record.issueKey, {
@@ -1082,6 +1493,11 @@ export async function activate(
         reportError(commentError, `deliveryFinalizeComment:${record.issueKey}`);
       }
       reportError(error, `deliveryFinalize:${record.issueKey}`);
+
+      // If this is a sub-task delivery, update parent state.
+      if (delivery.parentFeatureIssueKey) {
+        updateParentSubTaskState(delivery.parentFeatureIssueKey, record.issueKey, 'failed');
+      }
     } finally {
       deliveryFinalizationInFlight.delete(record.issueKey);
     }
@@ -1091,6 +1507,7 @@ export async function activate(
     issue: IssueDetails,
     options?: {
       preTransitionComment?: string;
+      forceCleanWorktree?: boolean;
     }
   ): Promise<boolean> {
     const currentIssue = await backendService.getIssue(issue.key);
@@ -1127,7 +1544,7 @@ export async function activate(
       return false;
     }
 
-    const baseBranch = extractDeliveryBaseBranch(currentIssue);
+    const baseBranch = extractDeliveryBaseBranch(currentIssue) ?? configStore.getDeliveryDefaultBaseBranch();
     if (!baseBranch) {
       await backendService.addComment(currentIssue.key, buildMissingBaseBranchClarificationComment());
       return false;
@@ -1154,7 +1571,8 @@ export async function activate(
     const worktree = await deliveryWorktreeManager.prepareDeliveryWorktree(
       currentIssue,
       baseBranch,
-      deliveryWorkingDirectory
+      deliveryWorkingDirectory,
+      { forceClean: options?.forceCleanWorktree }
     );
     const scopedPublishCommand = resolveDeliveryPublishCommand(
       deliverySettings.publishCommand,
@@ -1218,6 +1636,523 @@ export async function activate(
     return true;
   }
 
+  /**
+   * Start the feature decomposition workflow for a feature request ticket.
+   * Creates a worktree, runs the decomposition agent, creates sub-tasks in Jira,
+   * and sets up the feature branch structure.
+   */
+  async function startFeatureDecompositionWorkflow(
+    issue: IssueDetails,
+    options?: { forceCleanWorktree?: boolean }
+  ): Promise<boolean> {
+    const currentIssue = await backendService.getIssue(issue.key);
+    const deliverySettings = configStore.getAiDeliveryWorkflowSettings();
+    const settingsErrors = validateDeliveryWorkflowSettings(deliverySettings);
+    if (!workingDirectory || !gitWorktreeManager) {
+      settingsErrors.push('Open the repository workspace before starting feature decomposition.');
+    }
+    if (settingsErrors.length > 0) {
+      await backendService.addComment(
+        issue.key,
+        buildDeliveryFailureComment(
+          `Feature decomposition is blocked: ${settingsErrors.join(' ')}`,
+          { template: deliverySettings.failureTemplate }
+        )
+      );
+      return false;
+    }
+    const deliveryWorkingDirectory = workingDirectory!;
+    const deliveryWorktreeManager = gitWorktreeManager!;
+
+    const baseBranch = extractDeliveryBaseBranch(currentIssue) ?? configStore.getDeliveryDefaultBaseBranch();
+    if (!baseBranch) {
+      await backendService.addComment(currentIssue.key, buildMissingBaseBranchClarificationComment());
+      return false;
+    }
+
+    let issueAttachments: Awaited<ReturnType<typeof stageIssueAttachments>> | undefined;
+    try {
+      issueAttachments = await stageIssueAttachments({
+        issue: currentIssue,
+        backendService,
+        logger: outputChannel
+      });
+    } catch (error) {
+      outputChannel.appendLine(
+        `[Feature Decomposition] Warning: could not stage attachments for ${currentIssue.key}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    const worktree = await deliveryWorktreeManager.prepareDeliveryWorktree(
+      currentIssue,
+      baseBranch,
+      deliveryWorkingDirectory,
+      { forceClean: options?.forceCleanWorktree }
+    );
+
+    const availableWorkflows = await discoverWorkspaceAgentWorkflows(deliveryWorkingDirectory);
+    const assignedWorkflow = aiSessionManager.getIssueWorkflowAssignment(currentIssue.key)?.workflow;
+
+    const scopedPublishCommand = resolveDeliveryPublishCommand(
+      deliverySettings.publishCommand,
+      worktree.worktreePath
+    );
+
+    const taskDefinition = buildFeatureDecompositionTaskDefinition(currentIssue, {
+      baseBranch,
+      worktreePath: worktree.worktreePath,
+      availableWorkflows,
+      workflow: assignedWorkflow
+    });
+    const taskDefinitionWithAttachments = issueAttachments?.length
+      ? { ...taskDefinition, attachments: issueAttachments }
+      : taskDefinition;
+
+    const transitionId = await findTransitionIdForStatus(currentIssue.key, 'In Progress');
+    if (transitionId) {
+      await backendService.transitionIssue(currentIssue.key, transitionId);
+    }
+
+    const provider = await startAgentTask(
+      {
+        ...currentIssue,
+        branch: worktree.branchName
+      },
+      taskDefinitionWithAttachments,
+      {
+        provider: resolvePreferredAgentProvider(currentIssue.key, undefined, currentIssue),
+        workingDirectory: worktree.worktreePath
+      }
+    );
+
+    aiSessionManager.updateAgentDelivery(
+      issue.key,
+      {
+        source: 'jira-polling',
+        phase: 'feature-decomposition',
+        baseBranch,
+        worktreeName: worktree.worktreeName,
+        worktreePath: worktree.worktreePath,
+        createdBranch: worktree.branchName,
+        publishCommand: scopedPublishCommand,
+        artifactPattern: deliverySettings.artifactPattern,
+        summaryTemplate: deliverySettings.summaryTemplate,
+        failureTemplate: deliverySettings.failureTemplate,
+        finalizationState: 'pending'
+      },
+      { replace: true }
+    );
+
+    try {
+      await backendService.addComment(
+        issue.key,
+        buildFeatureDecompositionStartedComment({
+          agentLabel: getAgentDisplayName(provider),
+          baseBranch,
+          worktreeName: worktree.worktreeName
+        })
+      );
+    } catch (error) {
+      reportError(error, `featureDecompositionStartComment:${issue.key}`);
+    }
+
+    await activeSessionsSidebarViewProvider?.refresh();
+    outputChannel.appendLine(
+      `[Feature Decomposition] Started decomposition workflow for ${currentIssue.key} from base branch ${baseBranch} using ${getAgentDisplayName(provider)}.`
+    );
+    return true;
+  }
+
+  /**
+   * Finalize a feature decomposition session: parse the result, create sub-tasks
+   * in Jira, and set up the feature branch.
+   */
+  async function finalizeFeatureDecomposition(
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
+  ): Promise<void> {
+    const decompositionResult = parseFeatureDecompositionResult(record.responseText);
+    if (!decompositionResult) {
+      throw new Error(
+        'The AI agent completed the feature decomposition session but did not return a valid FEATURE_DECOMPOSITION_RESULT payload.'
+      );
+    }
+
+    if (decompositionResult.status === 'blocked') {
+      await backendService.addComment(
+        record.issueKey,
+        buildFeatureDecompositionBlockedComment(decompositionResult)
+      );
+      aiSessionManager.updateAgentDelivery(record.issueKey, {
+        finalizationState: 'failed',
+        finalizationMessage: decompositionResult.summary
+      });
+      outputChannel.appendLine(`[Feature Decomposition] Decomposition blocked for ${record.issueKey}.`);
+      return;
+    }
+
+    // Create feature branch from base branch
+    const featureBranch = decompositionResult.featureBranch;
+    if (workingDirectory) {
+      try {
+        const { execFile: execFileCb } = require('node:child_process');
+        const { promisify } = require('node:util');
+        const execFileAsync = promisify(execFileCb);
+        // Create the feature branch from the base branch
+        await execFileAsync('git', ['branch', featureBranch, record.delivery.baseBranch], {
+          cwd: workingDirectory,
+          windowsHide: true
+        });
+        // Push the feature branch to origin
+        const auth = process.env.GITLAB_TOKEN
+          ? Buffer.from(`oauth2:${process.env.GITLAB_TOKEN}`).toString('base64')
+          : undefined;
+        const pushArgs = auth
+          ? ['-c', `http.extraHeader=Authorization: Basic ${auth}`, 'push', '-u', 'origin', featureBranch]
+          : ['push', '-u', 'origin', featureBranch];
+        await execFileAsync('git', pushArgs, {
+          cwd: workingDirectory,
+          windowsHide: true
+        });
+        outputChannel.appendLine(`[Feature Decomposition] Created and pushed feature branch ${featureBranch} from ${record.delivery.baseBranch}.`);
+      } catch (error) {
+        outputChannel.appendLine(
+          `[Feature Decomposition] Warning: could not create feature branch ${featureBranch}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+
+    // Create sub-tasks in Jira
+    const issue = await backendService.getIssue(record.issueKey);
+    const subTaskRecords: FeatureSubTaskRecord[] = [];
+
+    if (backendService.createSubTasks) {
+      const createdKeys = await backendService.createSubTasks(
+        record.issueKey,
+        issue.projectKey,
+        decompositionResult.subTasks.map(st => ({
+          summary: st.summary,
+          description: st.description,
+          issueType: st.issueType
+        }))
+      );
+
+      const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
+
+      for (const [index, key] of createdKeys.entries()) {
+        const subTaskDef = decompositionResult.subTasks[index];
+        const subTaskRecord: FeatureSubTaskRecord = {
+          issueKey: key,
+          summary: subTaskDef.summary,
+          order: subTaskDef.order,
+          deliveryState: 'pending'
+        };
+
+        // Auto-assign workflow if suggested
+        if (subTaskDef.suggestedWorkflow) {
+          const resolvedWorkflow = resolveWorkflowReference(subTaskDef.suggestedWorkflow, availableWorkflows);
+          if (resolvedWorkflow) {
+            aiSessionManager.setIssueWorkflowAssignment(key, resolvedWorkflow, {
+              source: 'analysis',
+              reason: `Suggested by feature decomposition of ${record.issueKey}.`
+            });
+            subTaskRecord.workflow = resolvedWorkflow;
+          }
+        }
+
+        subTaskRecords.push(subTaskRecord);
+      }
+    }
+
+    // Update delivery metadata with feature decomposition info
+    aiSessionManager.updateAgentDelivery(record.issueKey, {
+      finalizationState: 'completed',
+      finalizationMessage: `Feature decomposed into ${subTaskRecords.length} sub-tasks on branch ${featureBranch}.`,
+      featureDecomposition: {
+        parentIssueKey: record.issueKey,
+        featureBranch,
+        baseBranch: record.delivery.baseBranch,
+        subTasks: subTaskRecords,
+        decompositionSummary: decompositionResult.summary
+      }
+    });
+
+    // Add base branch info to each sub-task description in Jira
+    for (const subTaskRecord of subTaskRecords) {
+      try {
+        await backendService.addComment(
+          subTaskRecord.issueKey,
+          `**Base branch:** ${featureBranch}\n\nThis sub-task is part of feature ${record.issueKey}. Changes should be merged into the feature branch \`${featureBranch}\`.`
+        );
+      } catch (error) {
+        reportError(error, `featureSubTaskComment:${subTaskRecord.issueKey}`);
+      }
+    }
+
+    await backendService.addComment(
+      record.issueKey,
+      buildFeatureDecompositionCompleteComment(decompositionResult)
+    );
+
+    outputChannel.appendLine(
+      `[Feature Decomposition] Created ${subTaskRecords.length} sub-tasks for ${record.issueKey} on feature branch ${featureBranch}.`
+    );
+
+    // Automatically start the first sub-task
+    await advanceToNextSubTask(record.issueKey);
+  }
+
+  /**
+   * Update a sub-task's deliveryState in the parent's feature decomposition metadata.
+   */
+  function updateParentSubTaskState(
+    parentIssueKey: string,
+    subTaskKey: string,
+    state: 'pending' | 'in-progress' | 'completed' | 'failed'
+  ): void {
+    const parentRecord = aiSessionManager.getAgentSession(parentIssueKey);
+    if (!parentRecord?.delivery?.featureDecomposition) {
+      return;
+    }
+    const featureDecomp = parentRecord.delivery.featureDecomposition;
+    const updatedSubTasks = featureDecomp.subTasks.map(st =>
+      st.issueKey === subTaskKey ? { ...st, deliveryState: state } : st
+    );
+    aiSessionManager.updateAgentDelivery(parentIssueKey, {
+      featureDecomposition: { ...featureDecomp, subTasks: updatedSubTasks }
+    });
+  }
+
+  /**
+   * Find and start the next pending sub-task in a feature decomposition.
+   * Called after the decomposition finishes and after each sub-task delivery
+   * completes (success or failure) to automatically chain execution.
+   */
+  async function advanceToNextSubTask(parentIssueKey: string): Promise<void> {
+    const parentRecord = aiSessionManager.getAgentSession(parentIssueKey);
+    if (!parentRecord?.delivery?.featureDecomposition) {
+      return;
+    }
+
+    const featureDecomp = parentRecord.delivery.featureDecomposition;
+    const nextPending = featureDecomp.subTasks
+      .sort((a, b) => a.order - b.order)
+      .find(st => st.deliveryState === 'pending');
+
+    if (!nextPending) {
+      const allCompleted = featureDecomp.subTasks.every(st => st.deliveryState === 'completed');
+      if (allCompleted) {
+        outputChannel.appendLine(
+          `[Feature Decomposition] All sub-tasks for ${parentIssueKey} have been completed.`
+        );
+
+        // Create MR from feature branch to base branch
+        let mrUrl: string | undefined;
+        try {
+          const gitLabAutomation = await resolveGitLabAutomation();
+          if (gitLabAutomation) {
+            const parentIssue = await backendService.getIssue(parentIssueKey);
+            const existingMRs = await gitLabAutomation.client.listMergeRequestsForSourceBranch(featureDecomp.featureBranch);
+            let featureMR = existingMRs.find(mr => mr.sourceBranch === featureDecomp.featureBranch && mr.state === 'opened');
+            if (!featureMR) {
+              featureMR = await gitLabAutomation.client.createMergeRequest({
+                sourceBranch: featureDecomp.featureBranch,
+                targetBranch: featureDecomp.baseBranch,
+                title: `${parentIssueKey}: ${parentIssue.summary}`,
+                description: [
+                  `Implements ${parentIssueKey}: ${parentIssue.summary}`,
+                  '',
+                  `This feature was decomposed into ${featureDecomp.subTasks.length} sub-tasks:`,
+                  ...featureDecomp.subTasks.map(st => `- ${st.issueKey}: ${st.summary}`),
+                  '',
+                  `Feature branch: \`${featureDecomp.featureBranch}\``,
+                  `Target branch: \`${featureDecomp.baseBranch}\``
+                ].join('\n'),
+                removeSourceBranch: true
+              });
+              outputChannel.appendLine(
+                `[Feature Decomposition] Created MR !${featureMR.iid} from ${featureDecomp.featureBranch} to ${featureDecomp.baseBranch}.`
+              );
+            }
+            mrUrl = featureMR.webUrl;
+
+            // Store MR metadata on the parent delivery record
+            aiSessionManager.updateAgentDelivery(parentIssueKey, {
+              mergeRequest: {
+                iid: featureMR.iid,
+                webUrl: featureMR.webUrl,
+                title: featureMR.title,
+                sourceBranch: featureMR.sourceBranch,
+                targetBranch: featureMR.targetBranch,
+                state: featureMR.state
+              }
+            });
+          }
+        } catch (error) {
+          reportError(error, `featureBranchMR:${parentIssueKey}`);
+        }
+
+        try {
+          const mrLine = mrUrl ? `\n\nMerge request: ${mrUrl}` : '';
+          await backendService.addComment(
+            parentIssueKey,
+            `All ${featureDecomp.subTasks.length} sub-tasks have been completed. The feature branch \`${featureDecomp.featureBranch}\` is ready for final review and merge into \`${featureDecomp.baseBranch}\`.${mrLine}`
+          );
+        } catch (error) {
+          reportError(error, `featureAllSubTasksComplete:${parentIssueKey}`);
+        }
+      } else {
+        const summary = featureDecomp.subTasks.reduce(
+          (acc, st) => { acc[st.deliveryState ?? 'pending'] = (acc[st.deliveryState ?? 'pending'] ?? 0) + 1; return acc; },
+          {} as Record<string, number>
+        );
+        outputChannel.appendLine(
+          `[Feature Decomposition] No more pending sub-tasks for ${parentIssueKey}. Status: ${JSON.stringify(summary)}`
+        );
+      }
+      return;
+    }
+
+    outputChannel.appendLine(
+      `[Feature Decomposition] Advancing to next sub-task ${nextPending.issueKey} (order: ${nextPending.order}) for ${parentIssueKey}.`
+    );
+
+    try {
+      await startSubTaskDelivery(parentIssueKey, nextPending.issueKey);
+    } catch (error) {
+      if (error instanceof WorktreeConflictError) {
+        outputChannel.appendLine(
+          `[Feature Decomposition] Worktree conflict for sub-task ${nextPending.issueKey}: ${error.worktreeName} already exists. Posting clarification comment.`
+        );
+        await backendService.addComment(
+          parentIssueKey,
+          buildWorktreeConflictClarificationComment(error.worktreeName)
+        );
+        return;
+      }
+      reportError(error, `advanceSubTask:${nextPending.issueKey}`);
+      outputChannel.appendLine(
+        `[Feature Decomposition] Failed to start sub-task ${nextPending.issueKey}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Start the delivery workflow for a specific sub-task of a feature request.
+   * The sub-task worktree branches off the feature branch, and the MR targets
+   * the feature branch.
+   */
+  async function startSubTaskDelivery(
+    parentIssueKey: string,
+    subTaskKey: string,
+    options?: { forceCleanWorktree?: boolean }
+  ): Promise<boolean> {
+    const parentRecord = aiSessionManager.getAgentSession(parentIssueKey);
+    if (!parentRecord?.delivery?.featureDecomposition) {
+      throw new Error(`No feature decomposition found for ${parentIssueKey}.`);
+    }
+
+    const featureDecomp = parentRecord.delivery.featureDecomposition;
+    const subTaskRecord = featureDecomp.subTasks.find(st => st.issueKey === subTaskKey);
+    if (!subTaskRecord) {
+      throw new Error(`Sub-task ${subTaskKey} not found in feature decomposition of ${parentIssueKey}.`);
+    }
+
+    const deliverySettings = configStore.getAiDeliveryWorkflowSettings();
+    if (!workingDirectory || !gitWorktreeManager) {
+      throw new Error('Open the repository workspace before starting sub-task delivery.');
+    }
+
+    const subTaskIssue = await backendService.getIssue(subTaskKey);
+
+    // The sub-task branches off the feature branch, not the base branch
+    const featureBranch = featureDecomp.featureBranch;
+    const worktree = await gitWorktreeManager.prepareDeliveryWorktree(
+      subTaskIssue,
+      featureBranch,
+      workingDirectory,
+      { forceClean: options?.forceCleanWorktree }
+    );
+
+    const workflow = aiSessionManager.getIssueWorkflowAssignment(subTaskKey)?.workflow ?? subTaskRecord.workflow;
+    const taskDefinition = buildSubTaskAnalysisTaskDefinition(subTaskIssue, {
+      baseBranch: featureBranch,
+      branchName: worktree.branchName,
+      worktreePath: worktree.worktreePath,
+      workflow
+    });
+
+    // Transition sub-task to In Progress
+    const transitionId = await findTransitionIdForStatus(subTaskKey, 'In Progress');
+    if (transitionId) {
+      await backendService.transitionIssue(subTaskKey, transitionId);
+    }
+
+    const provider = await startAgentTask(
+      {
+        ...subTaskIssue,
+        branch: worktree.branchName
+      },
+      taskDefinition,
+      {
+        provider: resolvePreferredAgentProvider(subTaskKey, undefined, subTaskIssue),
+        workingDirectory: worktree.worktreePath
+      }
+    );
+
+    aiSessionManager.updateAgentDelivery(
+      subTaskKey,
+      {
+        source: 'jira-polling',
+        phase: 'analysis',
+        baseBranch: featureBranch,
+        worktreeName: worktree.worktreeName,
+        worktreePath: worktree.worktreePath,
+        createdBranch: worktree.branchName,
+        publishCommand: '',
+        artifactPattern: '',
+        summaryTemplate: deliverySettings.summaryTemplate,
+        failureTemplate: deliverySettings.failureTemplate,
+        finalizationState: 'pending',
+        parentFeatureIssueKey: parentIssueKey
+      },
+      { replace: true }
+    );
+
+    // Update the parent's feature decomposition record
+    const updatedSubTasks = featureDecomp.subTasks.map(st =>
+      st.issueKey === subTaskKey
+        ? { ...st, deliveryState: 'in-progress' as const, worktreeBranch: worktree.branchName }
+        : st
+    );
+    aiSessionManager.updateAgentDelivery(parentIssueKey, {
+      featureDecomposition: {
+        ...featureDecomp,
+        subTasks: updatedSubTasks
+      }
+    });
+
+    try {
+      await backendService.addComment(
+        subTaskKey,
+        buildDeliveryStartedComment({
+          agentLabel: getAgentDisplayName(provider),
+          baseBranch: featureBranch,
+          branchName: worktree.branchName,
+          worktreeName: worktree.worktreeName,
+          workflow
+        })
+      );
+    } catch (error) {
+      reportError(error, `subTaskDeliveryStartComment:${subTaskKey}`);
+    }
+
+    await activeSessionsSidebarViewProvider?.refresh();
+    outputChannel.appendLine(
+      `[Feature Sub-task] Started delivery workflow for sub-task ${subTaskKey} (parent: ${parentIssueKey}) from feature branch ${featureBranch} using ${getAgentDisplayName(provider)}.`
+    );
+    return true;
+  }
+
   async function processPollingClarificationRequests(event: {
     newKeys: string[];
     changedKeys: string[];
@@ -1238,6 +2173,7 @@ export async function activate(
       return;
     }
 
+    const clarificationEnabled = configStore.isJiraPollingClarificationAnalysisEnabled();
     const cliPath = getCopilotCliPathOverride();
     const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
 
@@ -1250,6 +2186,29 @@ export async function activate(
       try {
         const issue = await backendService.getIssue(issueKey);
         const analysisSignature = buildPollingAnalysisSignature(issue);
+
+        if (!clarificationEnabled) {
+          // Clarification analysis is disabled — proceed directly to delivery
+          // with whatever information the ticket provides.
+          if (hasAnyAnalysisLifecycleComment(issue) && !hasPendingAiBotTrigger(issue)) {
+            await setHandledPollingAnalysis(issueKey, analysisSignature);
+            continue;
+          }
+          if (handledPollingAnalyses[issueKey] === analysisSignature) {
+            continue;
+          }
+
+          // Try to extract workflow reference from the ticket description/comments
+          const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
+          ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
+
+          outputChannel.appendLine(
+            `[Jira Polling] Clarification analysis disabled — proceeding directly to delivery for ${issueKey}.`
+          );
+          await handlePollingAnalysisReady(issue, { analysisSignature });
+          continue;
+        }
+
         if (hasCopilotClarificationComment(issue)) {
           continue;
         }
@@ -1354,6 +2313,7 @@ export async function activate(
       return;
     }
 
+    const clarificationEnabled = configStore.isJiraPollingClarificationAnalysisEnabled();
     const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
 
     for (const issueKey of candidateKeys) {
@@ -1391,6 +2351,52 @@ export async function activate(
         outputChannel.appendLine(
           `[Jira Polling] Processing #AIbot reply on ${issueKey}: ${replyRequest.slice(0, 120)}`
         );
+
+        // Check if this is a reply to a worktree conflict clarification
+        const hasWorktreeConflict = issue.comments?.some(c => c.body.includes(WORKTREE_CONFLICT_COMMENT_MARKER)) ?? false;
+        if (hasWorktreeConflict) {
+          const normalizedReply = replyRequest.trim().toLowerCase();
+          if (normalizedReply.includes('delete') || normalizedReply.includes('start fresh') || normalizedReply.includes('start over') || normalizedReply.includes('clean')) {
+            outputChannel.appendLine(
+              `[Jira Polling] Worktree conflict resolved for ${issueKey}: user chose to delete and start fresh.`
+            );
+            const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
+            ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
+            await handlePollingAnalysisReady(issue, {
+              replySignature: latestCopilotSignature,
+              forceCleanWorktree: true
+            });
+            continue;
+          }
+          if (normalizedReply.includes('reuse') || normalizedReply.includes('continue') || normalizedReply.includes('keep')) {
+            outputChannel.appendLine(
+              `[Jira Polling] Worktree conflict resolved for ${issueKey}: user chose to reuse existing worktree. Manual intervention needed.`
+            );
+            await backendService.addComment(
+              issueKey,
+              `${AI_COMMENT_HEADER}\nUnderstood — keeping the existing worktree. Please start the delivery manually from the Ticket Manager task details view, or transition the ticket back to "To Do" and reply with \`#AIbot delete\` to start fresh.`
+            );
+            if (latestCopilotSignature) {
+              await setHandledPollingReply(issueKey, latestCopilotSignature);
+            }
+            continue;
+          }
+        }
+
+        if (!clarificationEnabled) {
+          // Clarification analysis is disabled — treat #AIbot replies as
+          // a direct instruction to proceed with delivery.
+          const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
+          ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
+
+          outputChannel.appendLine(
+            `[Jira Polling] Clarification analysis disabled — proceeding directly to delivery for ${issueKey} after #AIbot reply.`
+          );
+          await handlePollingAnalysisReady(issue, {
+            replySignature: latestCopilotSignature
+          });
+          continue;
+        }
 
         let replyStagedAttachments;
         try {
@@ -1451,6 +2457,79 @@ export async function activate(
         reportError(error, `pollingClarificationReply:${issueKey}`);
       } finally {
         pollingReplyInFlight.delete(issueKey);
+      }
+    }
+  }
+
+  async function postAgentInputRequestComment(
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
+  ): Promise<void> {
+    const { issueKey } = record;
+    const lastInputEvent = [...record.events]
+      .reverse()
+      .find(event => event.type === 'user_input_requested');
+    const question = lastInputEvent?.summary ?? 'The AI agent needs your input to continue.';
+    const commentBody = [
+      AI_COMMENT_HEADER,
+      COPILOT_AGENT_INPUT_REQUEST_MARKER,
+      '',
+      question,
+      '',
+      'Reply with "#AIbot <your answer>" so the bot sees your response.'
+    ].join('\n');
+
+    try {
+      await backendService.addComment(issueKey, commentBody);
+      outputChannel.appendLine(
+        `[Agent Input] Posted input request comment on ${issueKey}: ${question.slice(0, 120)}`
+      );
+    } catch (error) {
+      reportError(error, `agentInputComment:${issueKey}`);
+    }
+  }
+
+  async function processPollingAgentInputReplies(event: {
+    newKeys: string[];
+    changedKeys: string[];
+  }): Promise<void> {
+    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])];
+    if (candidateKeys.length === 0) {
+      return;
+    }
+
+    const awaitingInputKeys = new Set<string>();
+    for (const [key, record] of aiSessionManager.getAllAgentSessions()) {
+      if (record.state === 'awaiting_input' && hasActiveAgentTask(key)) {
+        awaitingInputKeys.add(key);
+      }
+    }
+
+    for (const issueKey of candidateKeys) {
+      if (!awaitingInputKeys.has(issueKey)) {
+        continue;
+      }
+      if (pollingAgentInputReplyInFlight.has(issueKey)) {
+        continue;
+      }
+
+      pollingAgentInputReplyInFlight.add(issueKey);
+      try {
+        const issue = await backendService.getIssue(issueKey);
+        if (!hasPendingAiBotTrigger(issue)) {
+          continue;
+        }
+        const replyBody = extractPendingCopilotReplyRequest(issue);
+        if (!replyBody) {
+          continue;
+        }
+        outputChannel.appendLine(
+          `[Agent Input] Routing #AIbot reply to awaiting agent on ${issueKey}: ${replyBody.slice(0, 120)}`
+        );
+        agentSessionController.respondToInput(issueKey, replyBody);
+      } catch (error) {
+        reportError(error, `pollingAgentInputReply:${issueKey}`);
+      } finally {
+        pollingAgentInputReplyInFlight.delete(issueKey);
       }
     }
   }
@@ -1902,6 +2981,23 @@ export async function activate(
           mergeRequestState.pendingFeedback
         )
       });
+
+      // When a sub-task MR is merged, advance to the next sub-task.
+      // Guard against re-triggering: only advance if we haven't already recorded the merge.
+      if (
+        mergeRequest.state === 'merged'
+        && record.delivery.parentFeatureIssueKey
+        && mergeRequestState.state !== 'merged'
+      ) {
+        outputChannel.appendLine(
+          `[Feature Sub-task] MR !${mergeRequest.iid} for sub-task ${record.issueKey} has been merged. Advancing to next sub-task.`
+        );
+        try {
+          await advanceToNextSubTask(record.delivery.parentFeatureIssueKey);
+        } catch (advanceError) {
+          reportError(advanceError, `advanceSubTaskAfterMerge:${record.issueKey}`);
+        }
+      }
       return;
     }
 
@@ -2038,8 +3134,8 @@ export async function activate(
       await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
       const active = detailsProvider.getActiveIssue();
       if (active) {
-        const refreshedIssue = issuesProvider.getIssueByKey(active.key) ?? active;
-        await detailsProvider.setIssue(refreshedIssue);
+        const refreshedIssue = issuesProvider.getIssueByKey(active.key);
+        await detailsProvider.setIssue(refreshedIssue ?? undefined);
       } else {
         await detailsProvider.refresh();
       }
@@ -2056,8 +3152,8 @@ export async function activate(
     await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
     const active = detailsProvider.getActiveIssue();
     if (active) {
-      const refreshedIssue = issuesProvider.getIssueByKey(active.key) ?? active;
-      await detailsProvider.setIssue(refreshedIssue);
+      const refreshedIssue = issuesProvider.getIssueByKey(active.key);
+      await detailsProvider.setIssue(refreshedIssue ?? undefined);
     } else {
       await detailsProvider.refresh();
     }
@@ -2115,6 +3211,10 @@ export async function activate(
         (record.state === 'completed' || record.state === 'failed')
       ) {
         void finalizeDeliverySession(record);
+      }
+
+      if (record.state === 'awaiting_input' && isDeliveryTask(record)) {
+        void postAgentInputRequestComment(record);
       }
 
       if (record.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(record.issueKey)) {
@@ -2857,6 +3957,8 @@ export async function activate(
     const options = getAiAssignmentMenuOptions();
     boardPanelManager.setAiAssignOptions(options);
     issuesSidebarViewProvider?.setAiAssignOptions(options);
+    issueDetailPanelManager.setAiAssignOptions(options);
+    issueDetailsSidebarViewProvider?.setAiAssignOptions(options);
   }
 
   function isTerminalAgentState(state: string | undefined): boolean {
@@ -3348,11 +4450,19 @@ export async function activate(
       if (issue) {
         await detailsProvider.setIssue(issue);
         await revealIssueDetailsInSidebar({ focus: false });
+        boardPanelManager.setSelectedIssueKey(lastSelectedKey);
+        issuesSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
+        epicsSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
+        activeSessionsSidebarViewProvider?.setSelectedIssueKey(lastSelectedKey);
+      } else {
+        await filterStore.setLastSelectedIssueKey(undefined);
+        await detailsProvider.setIssue(undefined);
+        boardPanelManager.setSelectedIssueKey(undefined);
+        issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+        epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+        activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
+        issueDetailPanelManager.clear();
       }
-      boardPanelManager.setSelectedIssueKey(lastSelectedKey);
-      issuesSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
-      epicsSidebarViewProvider.setSelectedIssueKey(lastSelectedKey);
-      activeSessionsSidebarViewProvider?.setSelectedIssueKey(lastSelectedKey);
     } else {
       boardPanelManager.setSelectedIssueKey(undefined);
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
@@ -3562,13 +4672,19 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.assignToAi', async (arg?: unknown) => {
+    vscode.commands.registerCommand('ticketManager.assignToAi', async (arg?: unknown, providerArg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
           await vscode.window.showInformationMessage('Select an issue first.');
           return;
         }
+
+        if (typeof providerArg === 'string') {
+          await assignIssueToAiByProvider(issueKey, providerArg as AiProvider);
+          return;
+        }
+
         const picked = await promptForAiAssignmentOption(issueKey);
         if (!picked) {
           return;
@@ -3643,6 +4759,21 @@ export async function activate(
         await startNewCopilotSession(issueKey); // This will now prefer Claude Code
       } catch (error) {
         reportError(error);
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.startSubTaskDelivery', async (parentIssueKey?: string, subTaskKey?: string) => {
+      if (!parentIssueKey || !subTaskKey) {
+        void vscode.window.showErrorMessage('Parent issue key and sub-task key are required.');
+        return;
+      }
+      try {
+        await startSubTaskDelivery(parentIssueKey, subTaskKey);
+        void vscode.window.showInformationMessage(`Started delivery workflow for sub-task ${subTaskKey}.`);
+      } catch (error) {
+        reportError(error, `startSubTaskDelivery:${subTaskKey}`);
+        void vscode.window.showErrorMessage(
+          `Failed to start sub-task delivery: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }),
     vscode.commands.registerCommand('ticketManager.openSettings', async () => {
@@ -3796,6 +4927,11 @@ export async function activate(
     }
     await startupPollingController.refresh();
     await ticketManagerStatusBar.refresh();
+
+    // Recover in-flight delivery sessions that were interrupted by a restart.
+    // The onDidChangeAgentSession listener only fires on changes, so sessions
+    // that were already pending finalization at shutdown must be re-triggered.
+    await recoverPendingDeliverySessions();
   } catch (error) {
     reportError(error);
   }

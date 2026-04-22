@@ -4,8 +4,8 @@ import type { AiSessionManager } from '../ai/aiSessionManager';
 import {
   discoverWorkspaceAgentWorkflows
 } from '../ai/agentWorkflowCatalog';
-import type { AgentWorkflowReference } from '../ai/agentTypes';
-import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
+import type { AgentWorkflowReference, FeatureSubTaskRecord } from '../ai/agentTypes';
+import type { AiProvider, IssueDetails, IssueSummary, SubTaskSummary, WorkflowTransition } from '../types';
 import {
   formatParentReference,
   getParentRule,
@@ -106,6 +106,11 @@ function renderSelectOptions(current: string | undefined, defaults: string[]): s
     .join('');
 }
 
+interface DetailAiAssignOption {
+  provider: AiProvider;
+  label: string;
+}
+
 export class IssueDetailPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private panelIssueKey?: string;
@@ -114,11 +119,14 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private transitions: WorkflowTransition[] = [];
   private parentItems: IssueSummary[] = [];
   private availableWorkflows: AgentWorkflowReference[] = [];
+  private subTasks: SubTaskSummary[] = [];
+  private featureSubTaskRecords: FeatureSubTaskRecord[] = [];
   private parentItemsError?: string;
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
+  private aiAssignOptions: DetailAiAssignOption[] = [];
 
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
@@ -138,6 +146,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
   public setCommentPlaceholder(text: string): void {
     this.commentPlaceholder = text;
+  }
+
+  public setAiAssignOptions(options: DetailAiAssignOption[]): void {
+    this.aiAssignOptions = [...options];
   }
 
   public async open(issueKey: string): Promise<void> {
@@ -184,6 +196,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.transitions = [];
     this.parentItems = [];
     this.availableWorkflows = [];
+    this.subTasks = [];
+    this.featureSubTaskRecords = [];
     this.parentItemsError = undefined;
     this.loading = false;
     this.errorMessage = undefined;
@@ -225,7 +239,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
 
     if (type === 'assignToAi') {
-      await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+      const provider = asString(message.provider) as AiProvider | undefined;
+      if (provider) {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey, provider);
+      } else {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+      }
       return;
     }
 
@@ -325,6 +344,52 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'assignSubTaskWorkflow') {
+      const subTaskKey = asString(message.subTaskKey)?.trim();
+      const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
+      if (!subTaskKey) {
+        return;
+      }
+
+      try {
+        if (!workflowInstructionsPath) {
+          this.aiSessionManager.setIssueWorkflowAssignment(subTaskKey, undefined, {
+            source: 'manual',
+            reason: 'User explicitly selected "No workflow pack" for sub-task.'
+          });
+        } else {
+          const workflow = this.findWorkflowChoice(subTaskKey, workflowInstructionsPath);
+          if (workflow) {
+            this.aiSessionManager.setIssueWorkflowAssignment(subTaskKey, workflow, {
+              source: 'manual'
+            });
+          }
+        }
+        await this.panel?.webview.postMessage({
+          type: 'assignSubTaskWorkflowResult',
+          ok: true,
+          subTaskKey
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'assignSubTaskWorkflowResult',
+          ok: false,
+          subTaskKey,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    if (type === 'startSubTaskDelivery') {
+      const subTaskKey = asString(message.subTaskKey)?.trim();
+      if (!subTaskKey) {
+        return;
+      }
+      await vscode.commands.executeCommand('ticketManager.startSubTaskDelivery', this.activeIssueKey, subTaskKey);
+      return;
+    }
+
     if (type !== 'addIssueComment') {
       return;
     }
@@ -389,10 +454,26 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         return;
       }
 
-      this.details = { ...issue, transitions };
+      // Fetch sub-tasks if the backend supports it
+      let subTasks: SubTaskSummary[] = [];
+      if (this.backendService.getSubTasks) {
+        try {
+          subTasks = await this.backendService.getSubTasks(issueKey);
+        } catch {
+          subTasks = [];
+        }
+      }
+
+      // Get feature decomposition records from session manager
+      const agentSession = this.aiSessionManager.getAgentSession(issueKey);
+      const featureSubTaskRecords = agentSession?.delivery?.featureDecomposition?.subTasks ?? [];
+
+      this.details = { ...issue, transitions, subTasks };
       this.transitions = transitions;
       this.parentItems = parentItems;
       this.availableWorkflows = availableWorkflows;
+      this.subTasks = subTasks;
+      this.featureSubTaskRecords = featureSubTaskRecords;
       this.parentItemsError = parentItemsError;
       this.loading = false;
     } catch (error) {
@@ -406,6 +487,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.transitions = [];
       this.parentItems = [];
       this.availableWorkflows = [];
+      this.subTasks = [];
+      this.featureSubTaskRecords = [];
       this.parentItemsError = undefined;
     }
   }
@@ -922,6 +1005,60 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       color: var(--vscode-editor-foreground);
     }
     .empty-state.error { color: var(--vscode-errorForeground); }
+    .subtask-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .subtask-row {
+      padding: 10px 12px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+    }
+    .subtask-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .subtask-state-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .subtask-key {
+      font-weight: 600;
+      color: var(--vscode-textLink-foreground);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .subtask-summary {
+      font-size: 13px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .subtask-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .subtask-workflow-select {
+      flex: 1;
+      min-width: 0;
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 4px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font-size: 12px;
+    }
+    .subtask-start-btn {
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -1295,6 +1432,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     document.getElementById('assignToAiBtn')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'assignToAi' });
     });
+    document.querySelectorAll('.assign-ai-provider-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const provider = btn.getAttribute('data-provider');
+        vscode.postMessage({ type: 'assignToAi', provider });
+      });
+    });
     document.getElementById('lprButton')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'localPeerReview' });
     });
@@ -1391,10 +1534,90 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       });
 
       refreshWorkflowActions();
+
+      // ── Sub-task workflow assignment and delivery start ──
+      document.querySelectorAll('.subtask-workflow-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const subTaskKey = select.getAttribute('data-subtask-key');
+          const workflowInstructionsPath = select.value;
+          if (subTaskKey) {
+            vscode.postMessage({
+              type: 'assignSubTaskWorkflow',
+              subTaskKey,
+              workflowInstructionsPath
+            });
+          }
+        });
+      });
+      document.querySelectorAll('.subtask-start-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const subTaskKey = btn.getAttribute('data-subtask-key');
+          if (subTaskKey) {
+            vscode.postMessage({
+              type: 'startSubTaskDelivery',
+              subTaskKey
+            });
+          }
+        });
+      });
     })();
   </script>
 </body>
 </html>`;
+  }
+
+  private renderSubTasksSection(issueKey: string): string {
+    if (this.subTasks.length === 0 && this.featureSubTaskRecords.length === 0) {
+      return '';
+    }
+
+    const workflowOptions = this.getWorkflowChoices(issueKey);
+    const subTaskRows = this.subTasks.map(subTask => {
+      const featureRecord = this.featureSubTaskRecords.find(r => r.issueKey === subTask.key);
+      const assignment = this.aiSessionManager.getIssueWorkflowAssignment(subTask.key);
+      const selectedWorkflowPath = assignment?.workflow?.instructionsPath ?? '';
+      const deliveryState = featureRecord?.deliveryState ?? 'pending';
+
+      const workflowSelectHtml = workflowOptions.length > 0
+        ? `<select class="subtask-workflow-select" data-subtask-key="${escapeHtml(subTask.key)}">
+            <option value="" ${selectedWorkflowPath ? '' : 'selected'}>No workflow</option>
+            ${workflowOptions.map(w =>
+              `<option value="${escapeHtml(w.instructionsPath)}" ${w.instructionsPath === selectedWorkflowPath ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
+            ).join('')}
+          </select>`
+        : '<span class="field-help">No workflows available</span>';
+
+      const stateIcon = deliveryState === 'completed' ? '✅'
+        : deliveryState === 'in-progress' ? '🔄'
+        : deliveryState === 'failed' ? '❌'
+        : '⏳';
+
+      const startBtnHtml = deliveryState === 'pending' || deliveryState === 'failed'
+        ? `<button type="button" class="subtask-start-btn assign-btn" data-subtask-key="${escapeHtml(subTask.key)}">Start</button>`
+        : '';
+
+      return `<div class="subtask-row">
+        <div class="subtask-header">
+          <span class="subtask-state-icon">${stateIcon}</span>
+          <span class="subtask-key">${escapeHtml(subTask.key)}</span>
+          <span class="subtask-summary">${escapeHtml(subTask.summary)}</span>
+          ${renderPill(subTask.status)}
+        </div>
+        <div class="subtask-actions">
+          ${workflowSelectHtml}
+          ${startBtnHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      <section class="card">
+        <h3>Sub-Tasks</h3>
+        <div class="subtask-list">
+          ${subTaskRows || '<div class="comment-empty">No sub-tasks.</div>'}
+        </div>
+      </section>
+    `;
   }
 
   private buildIssueBodyHtml(d: IssueDetails): string {
@@ -1493,7 +1716,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             />
             <div class="assign-actions">
               <button type="button" class="assign-btn" id="assignToMeBtn">Assign to Me</button>
-              <button type="button" class="assign-btn" id="assignToAiBtn">Assign to AI</button>
+              ${this.aiAssignOptions.length > 0
+                ? this.aiAssignOptions.map(
+                    option => `<button type="button" class="assign-btn assign-ai-provider-btn" data-provider="${escapeHtml(option.provider)}">Assign to ${escapeHtml(option.label)}</button>`
+                  ).join('')
+                : '<button type="button" class="assign-btn" id="assignToAiBtn">Assign to AI</button>'
+              }
             </div>
           </label>
           <label class="field-group" for="prioritySelect">
@@ -1552,6 +1780,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         </form>
       </section>
       ${this.renderWorkflowPackSection(d.key)}
+      ${this.renderSubTasksSection(d.key)}
       <section class="card">
         <h3>Comments</h3>
         <div class="comment-list">

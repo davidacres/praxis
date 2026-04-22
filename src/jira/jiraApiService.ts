@@ -26,6 +26,7 @@ import type {
   IssueSummary,
   PagedIssues,
   Project,
+  SubTaskSummary,
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
@@ -1020,6 +1021,71 @@ export class JiraApiService implements IssueTrackerService {
   public async getSelfAssigneeLabel(): Promise<string | undefined> {
     const user = await this.getCurrentUser();
     return user.displayName ?? user.name;
+  }
+
+  /**
+   * Fetch sub-tasks for a given parent issue.
+   * Uses JQL to find issues whose parent is the given key.
+   */
+  public async getSubTasks(parentKey: string): Promise<SubTaskSummary[]> {
+    const jql = `parent = ${parentKey} ORDER BY rank ASC, key ASC`;
+    const fields = 'summary,status,issuetype,assignee';
+    const response = await this.requestJson(
+      'GET',
+      `/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=${encodeURIComponent(fields)}&maxResults=100`
+    );
+    if (!isRecord(response)) {
+      return [];
+    }
+    const issues = toArray(response.issues);
+    const results: SubTaskSummary[] = [];
+    for (const raw of issues) {
+      if (!isRecord(raw)) {
+        continue;
+      }
+      const key = asString(raw.key);
+      if (!key) {
+        continue;
+      }
+      const f = isRecord(raw.fields) ? raw.fields : raw;
+      const status = isRecord(f.status) ? f.status : {};
+      const issueType = isRecord(f.issuetype) ? f.issuetype : {};
+      const assignee = isRecord(f.assignee) ? f.assignee : {};
+      results.push({
+        key,
+        summary: asString(f.summary) ?? '(No summary)',
+        status: asString(status.name) ?? 'Unknown',
+        statusCategory: isRecord(status.statusCategory)
+          ? asString(status.statusCategory.name)
+          : undefined,
+        issueType: asString(issueType.name) ?? 'Task',
+        assignee: asString(assignee.displayName) ?? asString(assignee.name)
+      });
+    }
+    return results;
+  }
+
+  /**
+   * Create multiple sub-tasks linked to a parent issue in a single call sequence.
+   * Returns the created issue keys in order.
+   */
+  public async createSubTasks(
+    parentKey: string,
+    projectKey: string,
+    subTasks: Array<{ summary: string; description: string; issueType?: string }>
+  ): Promise<string[]> {
+    const createdKeys: string[] = [];
+    for (const subTask of subTasks) {
+      const created = await this.createIssue({
+        projectKey,
+        issueType: 'Sub-task',
+        summary: subTask.summary,
+        description: subTask.description,
+        parentKey
+      });
+      createdKeys.push(created.key);
+    }
+    return createdKeys;
   }
 
   public dispose(): void {
