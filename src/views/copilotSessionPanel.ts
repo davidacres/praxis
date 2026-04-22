@@ -487,6 +487,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         <div class="feed-section">
           <div class="feed-header">
             <h3>Activity Feed</h3>
+            <label class="auto-scroll-toggle"><input type="checkbox" id="auto-scroll-toggle" checked /> Auto-scroll</label>
             <div class="feed-filters">
               <button class="filter-btn active" data-filter="message">Messages</button>
               <button class="filter-btn" data-filter="error">Errors</button>
@@ -842,6 +843,20 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       margin-bottom: 8px;
     }
     .feed-header h3 { margin: 0; }
+    .auto-scroll-toggle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .auto-scroll-toggle input {
+      cursor: pointer;
+      accent-color: var(--accent, #007acc);
+    }
     .feed-filters {
       display: flex;
       gap: 4px;
@@ -1288,6 +1303,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     let knownEventCount = ${Number(record?.events.length ?? 0)};
     let permissionSignature = ${JSON.stringify(pendingPermissionDescriptions.join('\n')).replace(/</g, '\\u003c')};
     let currentFilter = 'message';
+    let autoScroll = true;
+    var autoScrollToggle = document.getElementById('auto-scroll-toggle');
+    if (autoScrollToggle) {
+      autoScrollToggle.addEventListener('change', function() { autoScroll = this.checked; });
+    }
     const verboseMode = ${verboseFeed ? 'true' : 'false'};
     const verboseCategories = { tool: true, system: true };
 
@@ -1519,7 +1539,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         var newEvents = msg.events.slice(knownEventCount);
         feedEl.insertAdjacentHTML('beforeend', newEvents.map(renderEventRow).join(''));
         knownEventCount = msg.events.length;
-        feedEl.scrollTop = feedEl.scrollHeight;
+        if (autoScroll) { feedEl.scrollTop = feedEl.scrollHeight; }
         if (activeTab !== 'live') showTabDot('live');
       }
 
@@ -1642,6 +1662,20 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 
     if (feedEl) {
       feedEl.scrollTop = feedEl.scrollHeight;
+    }
+
+    // Pause auto-scroll when user scrolls up manually
+    if (feedEl && autoScrollToggle) {
+      feedEl.addEventListener('scroll', function() {
+        var atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
+        if (!atBottom && autoScroll) {
+          autoScroll = false;
+          autoScrollToggle.checked = false;
+        } else if (atBottom && !autoScroll) {
+          autoScroll = true;
+          autoScrollToggle.checked = true;
+        }
+      });
     }
   </script>
 </body>

@@ -15,6 +15,7 @@ import type {
   IssueSummary,
   PagedIssues,
   Project,
+  SubTaskSummary,
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
@@ -162,6 +163,26 @@ export class BackendRouter implements IssueTrackerService {
 
   public async getSelfAssigneeLabel(): Promise<string | undefined> {
     return (await this.getService()).getSelfAssigneeLabel();
+  }
+
+  public async getSubTasks(parentKey: string): Promise<SubTaskSummary[]> {
+    const service = await this.getService();
+    if (service.getSubTasks) {
+      return service.getSubTasks(parentKey);
+    }
+    return [];
+  }
+
+  public async createSubTasks(
+    parentKey: string,
+    projectKey: string,
+    subTasks: Array<{ summary: string; description: string; issueType?: string }>
+  ): Promise<string[]> {
+    const service = await this.getService();
+    if (service.createSubTasks) {
+      return service.createSubTasks(parentKey, projectKey, subTasks);
+    }
+    throw new Error('Sub-task creation is not supported by the current backend.');
   }
 
   public dispose(): void {

@@ -308,6 +308,19 @@ export class AppConfigStore {
     return value.trim() || 'syscfg';
   }
 
+  public isJiraPollingClarificationAnalysisEnabled(): boolean {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.clarificationAnalysis', false);
+  }
+
+  public getDeliveryDefaultBaseBranch(): string | undefined {
+    const value = vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('delivery.defaultBaseBranch', '');
+    return value.trim() || undefined;
+  }
+
+  public isAutoMergeSubTasksEnabled(): boolean {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('delivery.autoMergeSubTasks', true);
+  }
+
   public getJiraPollingProjectKey(): string {
     return loadJiraPollingDefaults().projectKey;
   }

@@ -58,11 +58,11 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
     return {
       canHaveParent: true,
       requiresParent: true,
-      allowedParentTypes: ['Story'],
-      defaultLabel: 'Story',
-      helperText: 'Subtasks can only belong to a story.',
-      emptyText: 'No story selected.',
-      placeholder: 'Enter a story key'
+      allowedParentTypes: ['Story', 'Task', 'Bug'],
+      defaultLabel: 'Parent',
+      helperText: 'Subtasks must belong to a story, task, or bug.',
+      emptyText: 'No parent selected.',
+      placeholder: 'Enter a parent issue key'
     };
   }
 

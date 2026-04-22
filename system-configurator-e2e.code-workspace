@@ -15,6 +15,7 @@
     "ticketManager.ai.defaultProvider": "claude-cli",
     "ticketManager.ai.deliveryWorkflowEnabled": true,
     "ticketManager.ai.deliveryPublishCommand": "powershell -ExecutionPolicy Bypass -File ./scripts/build-installer-msi.ps1 -Configuration Release -RuntimeIdentifier win-x64",
-    "ticketManager.ai.deliveryArtifactPattern": "publish/installer/SystemConfigurator.msi"
+    "ticketManager.ai.deliveryArtifactPattern": "publish/installer/SystemConfigurator.msi",
+    "ticketManager.delivery.defaultBaseBranch": "main"
   }
 }

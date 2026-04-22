@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.14",
+  "version": "0.0.16",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -23,6 +23,9 @@
   "engines": {
     "vscode": "^1.105.0"
   },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "categories": [
     "Other"
   ],
@@ -162,6 +165,12 @@
         "title": "Configure Project",
         "category": "Ticket Manager",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ticketManager.startSubTaskDelivery",
+        "title": "Start Sub-Task Delivery",
+        "category": "Ticket Manager",
+        "icon": "$(play)"
       },
       {
         "command": "ticketManager.openSettings",
@@ -870,6 +879,24 @@
           "default": "syscfg",
           "scope": "window",
           "markdownDescription": "Jira label used as the AI execution gate by the built-in poller. In **Jira API** mode, linked-epic tasks are synced regardless of label, but only tasks with this label are eligible for AI execution."
+        },
+        "ticketManager.jiraPolling.clarificationAnalysis": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "When enabled, the poller runs a readiness analysis on each eligible ticket and may post clarification questions before starting work. When disabled (default), the agent proceeds directly to implementation with the information available on the ticket."
+        },
+        "ticketManager.delivery.defaultBaseBranch": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Default base branch to use when a Jira ticket does not specify one (e.g. `main`, `develop`). When empty, the agent will post a clarification comment asking for the branch."
+        },
+        "ticketManager.delivery.autoMergeSubTasks": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "When enabled (default), completed sub-task branches are automatically merged into the feature branch without creating a merge request. A single MR is raised from the feature branch to the base branch after all sub-tasks complete. When disabled, each sub-task creates its own MR targeting the feature branch."
         },
         "ticketManager.workspaceMcpServerName": {
           "type": "string",

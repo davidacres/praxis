@@ -127,6 +127,15 @@ export interface ParentIssueReference {
   description?: string;
 }
 
+export interface SubTaskSummary {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory?: string;
+  issueType: string;
+  assignee?: string;
+}
+
 export interface IssueSummary {
   id?: string;
   key: string;
@@ -156,6 +165,8 @@ export interface IssueSummary {
   attachments?: IssueAttachment[];
   /** AI agent assignment tracking for this issue. */
   aiAssignment?: AiAssignment;
+  /** Sub-tasks linked to this issue (populated for feature requests). */
+  subTasks?: SubTaskSummary[];
   raw?: unknown;
 }
 

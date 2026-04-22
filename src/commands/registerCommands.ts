@@ -482,9 +482,15 @@ async function refreshViews(deps: CommandDependencies): Promise<void> {
   await Promise.all([deps.issuesProvider.refresh(), deps.boardsProvider.refresh()]);
   const activeIssue = deps.detailsProvider.getActiveIssue();
   if (activeIssue) {
-    const refreshedIssue = deps.issuesProvider.getIssueByKey(activeIssue.key) ?? activeIssue;
-    await deps.detailsProvider.setIssue(refreshedIssue);
-    deps.boardPanelManager.setSelectedIssueKey(refreshedIssue.key);
+    const refreshedIssue = deps.issuesProvider.getIssueByKey(activeIssue.key);
+    if (refreshedIssue) {
+      await deps.detailsProvider.setIssue(refreshedIssue);
+      deps.boardPanelManager.setSelectedIssueKey(refreshedIssue.key);
+    } else {
+      await deps.detailsProvider.setIssue(undefined);
+      deps.boardPanelManager.setSelectedIssueKey(undefined);
+      deps.issueDetailPanelManager.clear();
+    }
   } else {
     await deps.detailsProvider.refresh();
     deps.boardPanelManager.setSelectedIssueKey(undefined);

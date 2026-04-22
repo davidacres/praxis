@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { AGENT_DEFAULTS } from '../ai/agentTypes';
-import type { UpdateIssueInput } from '../types';
+import type { UpdateIssueInput, AiProvider } from '../types';
 import {
   formatParentReference,
   getParentRule,
@@ -112,11 +112,17 @@ function renderSelectOptions(current: string | undefined, defaults: string[]): s
     .join('');
 }
 
+interface SidebarAiAssignOption {
+  provider: AiProvider;
+  label: string;
+}
+
 export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private readonly disposables: vscode.Disposable[] = [];
   private viewDisposables: vscode.Disposable[] = [];
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
+  private aiAssignOptions: SidebarAiAssignOption[] = [];
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -149,6 +155,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
 
   public setCommentPlaceholder(text: string): void {
     this.commentPlaceholder = text;
+  }
+
+  public setAiAssignOptions(options: SidebarAiAssignOption[]): void {
+    this.aiAssignOptions = [...options];
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -274,6 +284,14 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const issueKey = asString(message.issueKey);
       if (issueKey) {
         await vscode.commands.executeCommand('ticketManager.delegateToCopilot', issueKey);
+      }
+    }
+
+    if (type === 'assignToAi') {
+      const issueKey = asString(message.issueKey);
+      const provider = asString(message.provider);
+      if (issueKey && provider) {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', issueKey, provider);
       }
     }
 
@@ -1212,12 +1230,19 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
 
-      const delegateBtn = document.getElementById('delegateToCopilotButton');
+      const delegateBtn = document.getElementById('delegateToAiButton');
       if (delegateBtn) {
         delegateBtn.addEventListener('click', () => {
           const issueKey = delegateBtn.getAttribute('data-issue-key');
           if (issueKey) {
-            vscodeApi.postMessage({ type: 'delegateToCopilot', issueKey });
+            const selectEl = document.getElementById('aiProviderSelect');
+            const provider = (selectEl instanceof HTMLSelectElement ? selectEl.value : null)
+              || delegateBtn.getAttribute('data-provider');
+            if (provider) {
+              vscodeApi.postMessage({ type: 'assignToAi', issueKey, provider });
+            } else {
+              vscodeApi.postMessage({ type: 'delegateToCopilot', issueKey });
+            }
           }
         });
       }
@@ -1416,11 +1441,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     };
 
     if (!record) {
+      const providerSelect = this.aiAssignOptions.length > 1
+        ? `<select id="aiProviderSelect" class="field-select">
+            ${this.aiAssignOptions.map(opt => `<option value="${escapeHtml(opt.provider)}">${escapeHtml(opt.label)}</option>`).join('')}
+          </select>`
+        : '';
+      const delegateLabel = this.aiAssignOptions.length === 1
+        ? `Delegate to ${escapeHtml(this.aiAssignOptions[0].label)}`
+        : 'Delegate to AI';
       return `<div class="card">
-        <div class="section-title">Copilot Agent</div>
-        <div class="comment-empty">No Copilot agent session.</div>
+        <div class="section-title">AI Agent</div>
+        <div class="comment-empty">No agent session.</div>
         <div class="form-actions">
-          <button class="secondary-button" id="delegateToCopilotButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Delegate to Copilot</button>
+          ${providerSelect}
+          <button class="secondary-button" id="delegateToAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}"${this.aiAssignOptions.length === 1 ? ` data-provider="${escapeHtml(this.aiAssignOptions[0].provider)}"` : ''}>${delegateLabel}</button>
         </div>
       </div>`;
     }

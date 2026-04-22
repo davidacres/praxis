@@ -188,6 +188,21 @@ export function buildMissingBaseBranchClarificationComment(): string {
   ].join('\n');
 }
 
+export function buildWorktreeConflictClarificationComment(worktreeName: string): string {
+  return [
+    AI_COMMENT_HEADER,
+    'existing worktree/branch conflict',
+    '',
+    `A worktree and branch named \`${worktreeName}\` already exist from a previous attempt.`,
+    '',
+    'How would you like to proceed?',
+    '- **Delete** the existing worktree/branch and start fresh',
+    '- **Reuse** the existing worktree and continue from where it left off',
+    '',
+    'Reply with `#AIbot delete` to remove the old worktree and start over, or `#AIbot reuse` to continue with the existing branch.'
+  ].join('\n');
+}
+
 export function buildMissingWorkflowComment(recommendations: string[]): string {
   const suggestionLines = recommendations.length > 0
     ? recommendations.map((recommendation, index) => `${index + 1}. ${recommendation}`)
@@ -261,6 +276,56 @@ export function buildDeliveryAnalysisTaskDefinition(
   };
 }
 
+export function buildSubTaskAnalysisTaskDefinition(
+  issue: Pick<IssueDetails, 'key' | 'summary' | 'description' | 'issueType' | 'status'>,
+  options: {
+    baseBranch: string;
+    branchName: string;
+    worktreePath: string;
+    workflow?: AgentWorkflowReference;
+  }
+): AgentTaskDefinition {
+  return {
+    kind: 'jira-delivery',
+    goal: `Analyze whether ${issue.key}: ${issue.summary} is ready for implementation from base branch ${options.baseBranch} in the dedicated worktree at ${options.worktreePath}.`,
+    scope: [
+      `Work only inside ${options.worktreePath}.`,
+      `Inspect the repo, ticket, and workflow pack to decide whether implementation can start safely on branch ${options.branchName}.`,
+      'This is a sub-task of a larger feature. Focus only on the scope described in this ticket.',
+      issue.description?.trim() ? `Ticket description:\n${issue.description.trim().slice(0, 4000)}` : undefined
+    ].filter((part): part is string => Boolean(part)).join('\n\n'),
+    definitionOfDone: [
+      `You determine whether ${issue.key} is ready for implementation without making risky assumptions.`,
+      'You provide a concise readiness summary and implementation plan when ready.',
+      'You provide explicit blockers when implementation should not start.'
+    ].join(' '),
+    workflow: options.workflow,
+    nonGoals: [
+      'Do not modify files or create commits during the analysis phase.',
+      'Do not run mutating git commands, publish commands, or MSI build steps during the analysis phase.',
+      'Do not post Jira comments or transcripts yourself.',
+      'Do not work outside the prepared worktree.',
+      'Do not begin implementation in this analysis session.'
+    ],
+    completionContract: [
+      `When the analysis is complete, end your final response with ${DELIVERY_ANALYSIS_RESULT_MARKER} followed by exactly one JSON code block.`,
+      'Use this schema:',
+      '```json',
+      '{',
+      '  "status": "ready" | "blocked",',
+      '  "summary": "concise implementation-readiness summary",',
+      '  "implementationPlan": "required when status is ready",',
+      '  "blockers": ["required when status is blocked"]',
+      '}',
+      '```',
+      'If status is ready, implementationPlan must describe the execution plan for the next fresh implementation session.',
+      'If status is blocked, blockers must contain the concrete missing details or technical blockers.'
+    ].join('\n'),
+    timeoutMs: 2 * 60 * 60 * 1000,
+    maxSteps: 250
+  };
+}
+
 export function buildDeliveryTaskDefinition(
   issue: Pick<IssueDetails, 'key' | 'summary' | 'description' | 'issueType' | 'status'>,
   options: {
@@ -327,6 +392,80 @@ export function buildDeliveryTaskDefinition(
     ].join('\n'),
     timeoutMs: 6 * 60 * 60 * 1000, // 6 hours — implementation can run full E2E suites, MSI builds, and multi-iteration review loops
     maxSteps: 700
+  };
+}
+
+/**
+ * Builds a task definition for a feature-decomposition sub-task.
+ * Sub-tasks skip publish/artifact steps — they only implement, test, commit, and push.
+ * Publishing and artifact upload happen once at the parent feature level after all
+ * sub-task MRs are merged.
+ */
+export function buildSubTaskDeliveryTaskDefinition(
+  issue: Pick<IssueDetails, 'key' | 'summary' | 'description' | 'issueType' | 'status'>,
+  options: {
+    baseBranch: string;
+    branchName: string;
+    worktreePath: string;
+    workflow?: AgentWorkflowReference;
+    analysis?: DeliveryAnalysisResult;
+  }
+): AgentTaskDefinition {
+  const analysisContext = options.analysis
+    ? [
+        'Implementation analysis summary:',
+        options.analysis.summary,
+        '',
+        'Implementation plan from the completed analysis session:',
+        options.analysis.implementationPlan ?? '(not provided)'
+      ].join('\n')
+    : undefined;
+
+  return {
+    kind: 'jira-delivery',
+    goal: `Implement ${issue.key}: ${issue.summary} from base branch ${options.baseBranch} in the dedicated worktree at ${options.worktreePath}.`,
+    scope: [
+      `Work only inside ${options.worktreePath}.`,
+      `Create code changes for ${issue.key} on branch ${options.branchName}.`,
+      'This is a sub-task of a larger feature. Focus only on the scope described in this ticket.',
+      'When running build or unit test gates, only fix failures that your own code changes caused. Treat any other failure as a pre-existing issue: record it under failureReason in the completion contract as a BLOCKED result and stop.',
+      'Time-box any single diagnostic loop to at most three consecutive investigative actions (read/search/re-run). If after that the root cause still looks like environment or harness, stop and return a failure/blocked completion.',
+      analysisContext,
+      issue.description?.trim() ? `Ticket description:\n${issue.description.trim().slice(0, 4000)}` : undefined
+    ].filter((part): part is string => Boolean(part)).join('\n\n'),
+    definitionOfDone: [
+      `All implementation changes for ${issue.key} are complete and validated.`,
+      `The branch ${options.branchName} is committed and pushed.`,
+      'Unit tests pass for the changed code.',
+      'Do NOT run publish, MSI build, or artifact generation steps — those will be done at the feature level after all sub-tasks are merged.'
+    ].join(' '),
+    workflow: options.workflow,
+    nonGoals: [
+      'Do not post Jira comments or transcripts yourself.',
+      'Do not work outside the prepared worktree.',
+      'Do not skip commit or push steps.',
+      'Do not run publish commands, MSI builds, or artifact generation.',
+      'Do not attempt to fix pre-existing test-harness or environment failures.',
+      'Do not modify test infrastructure, CI scripts, appsettings, launch profiles, or unrelated projects.'
+    ],
+    completionContract: [
+      `When the work is complete, end your final response with ${DELIVERY_RESULT_MARKER} followed by exactly one JSON code block.`,
+      'Use this schema:',
+      '```json',
+      '{',
+      '  "status": "success" | "failure",',
+      '  "summary": "concise implementation summary",',
+      '  "branch": "pushed branch name",',
+      '  "commitHash": "git commit hash or empty string",',
+      '  "pushedRef": "remote ref or empty string",',
+      '  "buildIdentifier": "",',
+      '  "artifactPaths": [],',
+      '  "failureReason": "required when status is failure"',
+      '}',
+      '```'
+    ].join('\n'),
+    timeoutMs: 4 * 60 * 60 * 1000,
+    maxSteps: 500
   };
 }
 
