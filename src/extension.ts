@@ -76,6 +76,7 @@ import {
   buildWorktreeConflictClarificationComment,
   extractAgentProviderDirective,
   extractDeliveryBaseBranch,
+  extractModelDirective,
   parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
   validateDeliveryWorkflowSettings
@@ -355,7 +356,7 @@ function isCopilotGeneratedComment(comment: IssueComment): boolean {
   );
 }
 
-function formatPollingClarificationComment(body: string): string {
+function formatPollingClarificationComment(body: string, reporterMention?: string): string {
   const trimmed = body.trim();
   if (!trimmed) {
     return trimmed;
@@ -364,12 +365,17 @@ function formatPollingClarificationComment(body: string): string {
     return trimmed;
   }
 
-  return [
+  const parts = [
     AI_COMMENT_HEADER,
     COPILOT_CLARIFICATION_COMMENT_MARKER,
-    '',
-    trimmed
-  ].join('\n');
+    ''
+  ];
+  if (reporterMention) {
+    parts.push(`${reporterMention},`);
+    parts.push('');
+  }
+  parts.push(trimmed);
+  return parts.join('\n');
 }
 
 function isAnalysisLifecycleComment(comment: IssueComment): boolean {
@@ -1243,16 +1249,26 @@ export async function activate(
           return;
         }
 
-        const result = parseDeliveryTaskResult(record.responseText);
-        if (!result) {
-          throw new Error(
-            'The AI agent completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
-          );
-        }
+        let result = parseDeliveryTaskResult(record.responseText);
 
         // Sub-task deliveries: skip publish/artifact upload, transition to Done.
         // Either auto-merge into feature branch or create MR, depending on config.
+        // If the agent didn't return a valid DELIVERY_RESULT, synthesize one from
+        // delivery metadata so the chain can proceed (the branch/commit info is
+        // already known from the worktree setup).
         if (delivery.parentFeatureIssueKey) {
+          if (!result) {
+            outputChannel.appendLine(
+              `[Feature Sub-task] Agent for ${record.issueKey} did not return a DELIVERY_RESULT payload. Synthesizing result from delivery metadata.`
+            );
+            result = {
+              status: record.state === 'completed' ? 'success' : 'failure',
+              summary: record.responseText?.trim().slice(-500) || 'Sub-task delivery completed (no structured result returned by agent).',
+              branch: delivery.createdBranch,
+              artifactPaths: [],
+              failureReason: record.state !== 'completed' ? 'Agent did not return a structured DELIVERY_RESULT payload.' : undefined
+            };
+          }
           const currentIssue = await backendService.getIssue(record.issueKey);
           const autoMerge = configStore.isAutoMergeSubTasksEnabled();
 
@@ -1358,7 +1374,17 @@ export async function activate(
           return;
         }
 
+        // Non-sub-task deliveries require a valid DELIVERY_RESULT
+        if (!result) {
+          throw new Error(
+            'The AI agent completed the delivery task but did not return a valid DELIVERY_RESULT payload.'
+          );
+        }
+
         const attachedArtifactNames: string[] = [];
+        const previouslyUploaded = new Set(
+          (delivery.uploadedArtifactNames ?? []).map(n => n.toLowerCase())
+        );
         const seenArtifactPaths = new Set<string>();
         for (const [artifactIndex, artifactPath] of result.artifactPaths.entries()) {
           const resolvedArtifactPath = path.isAbsolute(artifactPath)
@@ -1377,6 +1403,14 @@ export async function activate(
             buildIdentifier: result.buildIdentifier,
             artifactIndex
           });
+          if (previouslyUploaded.has(preparedUpload.attachmentName.toLowerCase())) {
+            outputChannel.appendLine(
+              `[Delivery] Skipping already-uploaded artifact for ${record.issueKey}: ${preparedUpload.attachmentName}`
+            );
+            await preparedUpload.cleanup?.();
+            attachedArtifactNames.push(preparedUpload.attachmentName);
+            continue;
+          }
           try {
             await backendService.attachFile(
               record.issueKey,
@@ -1384,6 +1418,10 @@ export async function activate(
               preparedUpload.attachmentName
             );
             attachedArtifactNames.push(preparedUpload.attachmentName);
+            // Persist after each successful upload so recovery skips it
+            aiSessionManager.updateAgentDelivery(record.issueKey, {
+              uploadedArtifactNames: [...attachedArtifactNames]
+            });
           } finally {
             await preparedUpload.cleanup?.();
           }
@@ -1778,9 +1816,10 @@ export async function activate(
     }
 
     if (decompositionResult.status === 'blocked') {
+      const issue = await backendService.getIssue(record.issueKey);
       await backendService.addComment(
         record.issueKey,
-        buildFeatureDecompositionBlockedComment(decompositionResult)
+        buildFeatureDecompositionBlockedComment(decompositionResult, issue.reporterMention)
       );
       aiSessionManager.updateAgentDelivery(record.issueKey, {
         finalizationState: 'failed',
@@ -2187,6 +2226,18 @@ export async function activate(
         const issue = await backendService.getIssue(issueKey);
         const analysisSignature = buildPollingAnalysisSignature(issue);
 
+        // If any bot comment is a worktree/branch conflict, the replies flow
+        // must handle the user's #AIbot response — not the requests flow.
+        // Skip here so we don't accidentally re-trigger delivery without
+        // forceCleanWorktree and post duplicate conflict comments.
+        const hasWorktreeConflict = issue.comments?.some(c => c.body.includes(WORKTREE_CONFLICT_COMMENT_MARKER)) ?? false;
+        if (hasWorktreeConflict) {
+          outputChannel.appendLine(
+            `[Jira Polling] Deferring ${issueKey} to reply handler: pending worktree conflict awaiting user response.`
+          );
+          continue;
+        }
+
         if (!clarificationEnabled) {
           // Clarification analysis is disabled — proceed directly to delivery
           // with whatever information the ticket provides.
@@ -2277,7 +2328,7 @@ export async function activate(
         }
         await backendService.addComment(
           issueKey,
-          formatPollingClarificationComment(readinessAssessment.clarificationComment)
+          formatPollingClarificationComment(readinessAssessment.clarificationComment, issue.reporterMention)
         );
         await setHandledPollingAnalysis(issueKey, analysisSignature);
         outputChannel.appendLine(
@@ -2359,6 +2410,10 @@ export async function activate(
           if (normalizedReply.includes('delete') || normalizedReply.includes('start fresh') || normalizedReply.includes('start over') || normalizedReply.includes('clean')) {
             outputChannel.appendLine(
               `[Jira Polling] Worktree conflict resolved for ${issueKey}: user chose to delete and start fresh.`
+            );
+            await backendService.addComment(
+              issueKey,
+              `${AI_COMMENT_HEADER}\nUnderstood — deleting the existing worktree/branch and starting a fresh delivery.`
             );
             const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
             ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
@@ -2469,11 +2524,13 @@ export async function activate(
       .reverse()
       .find(event => event.type === 'user_input_requested');
     const question = lastInputEvent?.summary ?? 'The AI agent needs your input to continue.';
+    const issue = await backendService.getIssue(issueKey);
+    const mentionLine = issue.reporterMention ? `${issue.reporterMention},\n\n` : '';
     const commentBody = [
       AI_COMMENT_HEADER,
       COPILOT_AGENT_INPUT_REQUEST_MARKER,
       '',
-      question,
+      `${mentionLine}${question}`,
       '',
       'Reply with "#AIbot <your answer>" so the bot sees your response.'
     ].join('\n');
@@ -2700,6 +2757,25 @@ export async function activate(
     ]);
   }
 
+  function resolveModelOverride(
+    issueKey: string,
+    issue?: Pick<IssueDetails, 'description' | 'comments'>
+  ): string | undefined {
+    // 1. Explicit UI override stored in session manager
+    const uiOverride = aiSessionManager.getIssueModelOverride(issueKey);
+    if (uiOverride) {
+      return uiOverride;
+    }
+    // 2. Ticket description / comment directive
+    if (issue) {
+      const ticketModel = extractModelDirective(issue);
+      if (ticketModel) {
+        return ticketModel;
+      }
+    }
+    return undefined;
+  }
+
   async function startAgentTask(
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
@@ -2713,17 +2789,24 @@ export async function activate(
       throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
     }
 
+    const model = resolveModelOverride(issue.key, issue);
+    if (model) {
+      outputChannel.appendLine(`[Agent] Using model override '${model}' for ${issue.key}.`);
+    }
+
     if (provider === 'claude-cli') {
       await claudeAgentService.startTask(issue, taskDefinition, {
         cliPath: getClaudeCliPathOverride({ showWarning: true }),
-        workingDirectory: options?.workingDirectory
+        workingDirectory: options?.workingDirectory,
+        model
       });
       return provider;
     }
 
     await copilotAgentService.startTask(issue, taskDefinition, {
       cliPath: getCopilotCliPathOverride({ showWarning: true }),
-      workingDirectory: options?.workingDirectory
+      workingDirectory: options?.workingDirectory,
+      model
     });
     return provider;
   }
@@ -2737,18 +2820,21 @@ export async function activate(
       throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
     }
 
+    const model = resolveModelOverride(issueKey);
     const workingDirectory = resolveAgentWorkingDirectory(record);
     if (provider === 'claude-cli') {
       await claudeAgentService.resumeTask(issueKey, {
         cliPath: getClaudeCliPathOverride({ showWarning: true }),
-        workingDirectory
+        workingDirectory,
+        model
       });
       return provider;
     }
 
     await copilotAgentService.resumeTask(issueKey, {
       cliPath: getCopilotCliPathOverride({ showWarning: true }),
-      workingDirectory
+      workingDirectory,
+      model
     });
     return provider;
   }
