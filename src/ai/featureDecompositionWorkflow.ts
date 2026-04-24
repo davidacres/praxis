@@ -254,15 +254,22 @@ export function buildFeatureDecompositionCompleteComment(
 }
 
 export function buildFeatureDecompositionBlockedComment(
-  result: FeatureDecompositionResult
+  result: FeatureDecompositionResult,
+  reporterMention?: string
 ): string {
   const AI_COMMENT_HEADER = '**THIS IS AN AI-GENERATED MESSAGE.**';
   const lines = [
     AI_COMMENT_HEADER,
     'Feature decomposition blocked',
-    '',
-    result.summary
+    ''
   ];
+
+  if (reporterMention) {
+    lines.push(`${reporterMention},`);
+    lines.push('');
+  }
+
+  lines.push(result.summary);
 
   if (result.blockers && result.blockers.length > 0) {
     lines.push('', 'Blockers:');

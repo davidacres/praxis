@@ -149,6 +149,8 @@ export interface DeliverySessionMetadata {
   finalizationState: 'pending' | 'completed' | 'failed';
   finalizationMessage?: string;
   result?: DeliveryTaskResult;
+  /** Artifact names already uploaded to Jira — used to avoid duplicates on recovery. */
+  uploadedArtifactNames?: string[];
   /** When this is a sub-task delivery, the parent feature request issue key. */
   parentFeatureIssueKey?: string;
   /** Present when this is a feature request decomposition workflow. */

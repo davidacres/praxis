@@ -160,6 +160,74 @@ export function extractAgentProviderDirective(
   return extractProviderFromText(issue.description);
 }
 
+// ── Model directive extraction ──────────────────────────────────
+
+/** Well-known shorthands mapped to the exact model ID accepted by the CLI. */
+const MODEL_SHORTHAND_MAP: Record<string, string> = {
+  'opus-4.6': 'claude-opus-4-6',
+  'opus-4-6': 'claude-opus-4-6',
+  'opus4.6': 'claude-opus-4-6',
+  'sonnet-4.6': 'claude-sonnet-4-6',
+  'sonnet-4-6': 'claude-sonnet-4-6',
+  'sonnet4.6': 'claude-sonnet-4-6',
+  'haiku-3.5': 'claude-haiku-3-5',
+  'haiku-3-5': 'claude-haiku-3-5',
+};
+
+/** Normalise a raw model value from a ticket directive into a CLI model ID. */
+export function normalizeModelId(raw: string): string {
+  const trimmed = raw.trim().replace(/^`+|`+$/g, '').trim();
+  if (!trimmed) {
+    return '';
+  }
+  return MODEL_SHORTHAND_MAP[trimmed.toLowerCase()] ?? trimmed;
+}
+
+const MODEL_DIRECTIVE_PATTERNS = [
+  /^\s*\*\*Model:\*\*\s*(.+)$/im,
+  /^\s*Model\s*:\s*(.+)$/im,
+];
+
+function extractModelFromText(text: string | undefined): string | undefined {
+  if (!text?.trim()) {
+    return undefined;
+  }
+  const normalized = normalizeLineEnding(text);
+  for (const pattern of MODEL_DIRECTIVE_PATTERNS) {
+    const match = normalized.match(pattern);
+    if (match?.[1]) {
+      const model = normalizeModelId(match[1]);
+      if (model) {
+        return model;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Scans the issue description and comments (most recent first) for a model
+ * directive. Supports patterns like:
+ *   - "Model: opus-4.6"
+ *   - "**Model:** claude-opus-4-6"
+ */
+export function extractModelDirective(
+  issue: Pick<IssueDetails, 'description' | 'comments'>
+): string | undefined {
+  const comments = [...(issue.comments ?? [])].sort((left, right) =>
+    commentTimestamp(right).localeCompare(commentTimestamp(left))
+  );
+
+  for (const comment of comments) {
+    const model = extractModelFromText(comment.body);
+    if (model) {
+      return model;
+    }
+  }
+
+  return extractModelFromText(issue.description);
+}
+
 export function validateDeliveryWorkflowSettings(settings: DeliveryWorkflowSettings): string[] {
   const errors: string[] = [];
   if (!settings.enabled) {
@@ -247,7 +315,8 @@ export function buildDeliveryAnalysisTaskDefinition(
     definitionOfDone: [
       `You determine whether ${issue.key} is ready for implementation without making risky assumptions.`,
       'You provide a concise readiness summary and implementation plan when ready.',
-      'You provide explicit blockers when implementation should not start.'
+      'You provide explicit blockers when implementation should not start.',
+      'Your final message ends with the structured DELIVERY_ANALYSIS_RESULT JSON block as described in the completion contract — this is mandatory.'
     ].join(' '),
     workflow: options.workflow,
     nonGoals: [
@@ -258,6 +327,8 @@ export function buildDeliveryAnalysisTaskDefinition(
       'Do not begin implementation in this analysis session.'
     ],
     completionContract: [
+      'CRITICAL — YOU MUST INCLUDE THIS BLOCK. The automation pipeline that processes your response depends on parsing this structured output. If you omit it, the entire workflow fails.',
+      '',
       `When the analysis is complete, end your final response with ${DELIVERY_ANALYSIS_RESULT_MARKER} followed by exactly one JSON code block.`,
       'Use this schema:',
       '```json',
@@ -269,7 +340,9 @@ export function buildDeliveryAnalysisTaskDefinition(
       '}',
       '```',
       'If status is ready, implementationPlan must describe the execution plan for the next fresh implementation session.',
-      'If status is blocked, blockers must contain the concrete missing details or technical blockers.'
+      'If status is blocked, blockers must contain the concrete missing details or technical blockers.',
+      '',
+      'REMINDER: Your final message MUST end with the structured result block above. Do not end with a plain-text summary.'
     ].join('\n'),
     timeoutMs: 2 * 60 * 60 * 1000, // 2 hours — analysis may inspect large repos / attachments
     maxSteps: 250
@@ -297,7 +370,8 @@ export function buildSubTaskAnalysisTaskDefinition(
     definitionOfDone: [
       `You determine whether ${issue.key} is ready for implementation without making risky assumptions.`,
       'You provide a concise readiness summary and implementation plan when ready.',
-      'You provide explicit blockers when implementation should not start.'
+      'You provide explicit blockers when implementation should not start.',
+      'Your final message ends with the structured DELIVERY_ANALYSIS_RESULT JSON block as described in the completion contract — this is mandatory.'
     ].join(' '),
     workflow: options.workflow,
     nonGoals: [
@@ -308,6 +382,8 @@ export function buildSubTaskAnalysisTaskDefinition(
       'Do not begin implementation in this analysis session.'
     ],
     completionContract: [
+      'CRITICAL — YOU MUST INCLUDE THIS BLOCK. The automation pipeline that processes your response depends on parsing this structured output. If you omit it, the entire workflow fails.',
+      '',
       `When the analysis is complete, end your final response with ${DELIVERY_ANALYSIS_RESULT_MARKER} followed by exactly one JSON code block.`,
       'Use this schema:',
       '```json',
@@ -319,7 +395,9 @@ export function buildSubTaskAnalysisTaskDefinition(
       '}',
       '```',
       'If status is ready, implementationPlan must describe the execution plan for the next fresh implementation session.',
-      'If status is blocked, blockers must contain the concrete missing details or technical blockers.'
+      'If status is blocked, blockers must contain the concrete missing details or technical blockers.',
+      '',
+      'REMINDER: Your final message MUST end with the structured result block above. Do not end with a plain-text summary.'
     ].join('\n'),
     timeoutMs: 2 * 60 * 60 * 1000,
     maxSteps: 250
@@ -363,7 +441,8 @@ export function buildDeliveryTaskDefinition(
       `All implementation changes for ${issue.key} are complete and validated.`,
       `The branch ${options.branchName} is committed and pushed.`,
       `The worktree-scoped MSI publish command succeeds: ${options.publishCommand}.`,
-      `You identify the MSI artifact path(s) matching ${options.artifactPattern}.`
+      `You identify the MSI artifact path(s) matching ${options.artifactPattern}.`,
+      'Your final message ends with the structured DELIVERY_RESULT JSON block as described in the completion contract — this is mandatory.'
     ].join(' '),
     workflow: options.workflow,
     nonGoals: [
@@ -374,6 +453,8 @@ export function buildDeliveryTaskDefinition(
       'Do not modify test infrastructure, CI scripts, appsettings, launch profiles, or unrelated projects to work around environment problems.'
     ],
     completionContract: [
+      'CRITICAL — YOU MUST INCLUDE THIS BLOCK. The automation pipeline that processes your response depends on parsing this structured output. If you omit it, the entire workflow fails.',
+      '',
       `When the work is complete, end your final response with ${DELIVERY_RESULT_MARKER} followed by exactly one JSON code block.`,
       'Use this schema:',
       '```json',
@@ -388,7 +469,9 @@ export function buildDeliveryTaskDefinition(
       '  "failureReason": "required when status is failure"',
       '}',
       '```',
-      'Use artifactPaths relative to the worktree root when possible.'
+      'Use artifactPaths relative to the worktree root when possible.',
+      '',
+      'REMINDER: Your final message MUST end with the structured result block above. Do not end with a plain-text summary.'
     ].join('\n'),
     timeoutMs: 6 * 60 * 60 * 1000, // 6 hours — implementation can run full E2E suites, MSI builds, and multi-iteration review loops
     maxSteps: 700
@@ -437,7 +520,8 @@ export function buildSubTaskDeliveryTaskDefinition(
       `All implementation changes for ${issue.key} are complete and validated.`,
       `The branch ${options.branchName} is committed and pushed.`,
       'Unit tests pass for the changed code.',
-      'Do NOT run publish, MSI build, or artifact generation steps — those will be done at the feature level after all sub-tasks are merged.'
+      'Do NOT run publish, MSI build, or artifact generation steps — those will be done at the feature level after all sub-tasks are merged.',
+      'Your final message ends with the structured DELIVERY_RESULT JSON block as described in the completion contract — this is mandatory.'
     ].join(' '),
     workflow: options.workflow,
     nonGoals: [
@@ -449,6 +533,8 @@ export function buildSubTaskDeliveryTaskDefinition(
       'Do not modify test infrastructure, CI scripts, appsettings, launch profiles, or unrelated projects.'
     ],
     completionContract: [
+      'CRITICAL — YOU MUST INCLUDE THIS BLOCK. The automation pipeline that processes your response depends on parsing this structured output. If you omit it, the entire workflow fails.',
+      '',
       `When the work is complete, end your final response with ${DELIVERY_RESULT_MARKER} followed by exactly one JSON code block.`,
       'Use this schema:',
       '```json',
@@ -462,7 +548,9 @@ export function buildSubTaskDeliveryTaskDefinition(
       '  "artifactPaths": [],',
       '  "failureReason": "required when status is failure"',
       '}',
-      '```'
+      '```',
+      '',
+      'REMINDER: Your final message MUST end with the structured result block above. Do not end with a plain-text summary.'
     ].join('\n'),
     timeoutMs: 4 * 60 * 60 * 1000,
     maxSteps: 500

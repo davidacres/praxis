@@ -16,7 +16,7 @@ import { resolveCopilotClientOptions } from './copilotSdkRuntime';
  * Exposed per GitHub's model comparison (Deep reasoning / debugging tier).
  * Can be overridden per-session if we ever add a setting for it.
  */
-const COPILOT_DEFAULT_MODEL = 'gpt-5.4';
+const COPILOT_DEFAULT_MODEL = 'claude-opus-4-6';
 
 interface ActiveTask {
   issueKey: string;
@@ -72,6 +72,16 @@ const PLANNING_SYSTEM_PROMPT = `You are an autonomous Copilot-powered worker ope
 - Stop deterministically when the Definition of Done is satisfied.
 - Surface progress and intent continuously.
 - You must never improvise your own lifecycle.
+
+## Analysis-First Approach (MANDATORY)
+Before writing any code or making any changes, you MUST complete a thorough analysis phase:
+1. **Understand the system**: Read and explore the codebase to build a mental model of the architecture, key modules, data flow, and conventions already in use. Identify the entry points, services, and patterns the project relies on.
+2. **Understand the requirement**: Break the task requirement down into every discrete change that needs to happen. Identify all files, functions, types, tests, and configurations that will be affected.
+3. **Identify dependencies and side-effects**: Trace how the areas you plan to change are used elsewhere. Search for all call sites, imports, and references so you do not miss downstream impacts.
+4. **Form a plan**: Summarise your analysis as a clear, ordered implementation plan before you touch any file. State which files will be created or modified and why.
+5. **Then implement**: Only after steps 1–4 are complete should you begin making changes. Implement methodically, following your plan.
+
+Skipping or abbreviating this analysis phase is a failure condition, even if the resulting code happens to be correct.
 
 ## Guardrails
 - Stopping correctly is a success condition.
@@ -418,7 +428,7 @@ export class CopilotAgentService {
   public async startTask(
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<string> {
     // Abort any existing task for this issue
     if (this.activeTasks.has(issue.key)) {
@@ -454,12 +464,13 @@ export class CopilotAgentService {
     let session: ActiveTask['session'];
     try {
       const hooks = this.createInteractiveSessionHooks(issue.key);
-      this.logger.appendLine(`[Agent] Creating Copilot session for ${issue.key} with model=${COPILOT_DEFAULT_MODEL}`);
+      const resolvedModel = options.model || COPILOT_DEFAULT_MODEL;
+      this.logger.appendLine(`[Agent] Creating Copilot session for ${issue.key} with model=${resolvedModel}`);
       session = await client.createSession({
         clientName: 'ticket-manager-agent',
         infiniteSessions: { enabled: true },
         streaming: true,
-        model: COPILOT_DEFAULT_MODEL,
+        model: resolvedModel,
         systemMessage: { content: systemPrompt },
         workingDirectory: options.workingDirectory,
         ...hooks
@@ -468,11 +479,11 @@ export class CopilotAgentService {
       // createSession({ model }) can be silently ignored by the CLI if the
       // model ID is unknown, so we re-assert via setModel and log outcomes.
       try {
-        await session.setModel?.(COPILOT_DEFAULT_MODEL);
-        this.logger.appendLine(`[Agent] Session ${issue.key} model set to ${COPILOT_DEFAULT_MODEL}.`);
+        await session.setModel?.(resolvedModel);
+        this.logger.appendLine(`[Agent] Session ${issue.key} model set to ${resolvedModel}.`);
       } catch (modelErr) {
         this.logger.appendLine(
-          `[Agent] Failed to set model '${COPILOT_DEFAULT_MODEL}' on session for ${issue.key}: ${(modelErr as Error).message}`
+          `[Agent] Failed to set model '${resolvedModel}' on session for ${issue.key}: ${(modelErr as Error).message}`
         );
       }
       // Log the available models once per session so we can verify the ID
@@ -621,7 +632,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflowDirective}`;
   /** Resume a previously disconnected session. */
   public async resumeTask(
     issueKey: string,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
       this.logger.appendLine(`[Agent] Session for ${issueKey} is already active.`);
@@ -648,8 +659,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflowDirective}`;
         workingDirectory: options.workingDirectory
       });
       // Ensure resumed sessions run on our preferred model.
+      const resolvedResumeModel = options.model || COPILOT_DEFAULT_MODEL;
       try {
-        await session.setModel?.(COPILOT_DEFAULT_MODEL);
+        await session.setModel?.(resolvedResumeModel);
       } catch (modelErr) {
         this.logger.appendLine(`[Agent] Failed to set model on resumed session for ${issueKey}: ${(modelErr as Error).message}`);
       }

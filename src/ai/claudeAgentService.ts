@@ -11,7 +11,7 @@ import type {
 import { AGENT_DEFAULTS } from './agentTypes';
 import { buildSystemPrompt, type PermissionInfo } from './copilotAgentService';
 
-const CLAUDE_DEFAULT_MODEL = 'claude-sonnet-4-6';
+const CLAUDE_DEFAULT_MODEL = 'claude-opus-4-6';
 
 interface ActiveTask {
   issueKey: string;
@@ -95,7 +95,7 @@ export class ClaudeAgentService {
   public async startTask(
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<string> {
     if (this.activeTasks.has(issue.key)) {
       await this.abortTask(issue.key);
@@ -144,7 +144,7 @@ export class ClaudeAgentService {
 
   public async resumeTask(
     issueKey: string,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
       this.logger.appendLine(`Session for ${issueKey} is already active.`);
@@ -269,11 +269,11 @@ export class ClaudeAgentService {
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
     sessionId: string,
-    options: { cliPath?: string; workingDirectory?: string },
+    options: { cliPath?: string; workingDirectory?: string; model?: string },
     resume: boolean
   ): nodeChildProcess.ChildProcessWithoutNullStreams {
     const cliPath = options.cliPath || (process.platform === 'win32' ? 'claude.exe' : 'claude');
-    const args = this.buildClaudeArgs(issue, taskDefinition, sessionId, resume);
+    const args = this.buildClaudeArgs(issue, taskDefinition, sessionId, resume, options.model);
 
     this.logger.appendLine(`Launching Claude Code with session ${sessionId} using ${cliPath}`);
     return nodeChildProcess.spawn(cliPath, args, {
@@ -287,17 +287,21 @@ export class ClaudeAgentService {
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
     sessionId: string,
-    resume: boolean
+    resume: boolean,
+    modelOverride?: string
   ): string[] {
     const prompt = resume
       ? `Continue working on the existing task for issue ${issue.key}.`
       : `Execute the task described in the system prompt.\n\nIssue: ${issue.key} - ${issue.summary}`;
+    const resolvedModel = modelOverride || CLAUDE_DEFAULT_MODEL;
+    const sessionName = `${issue.key} — ${issue.summary}`.slice(0, 120);
     const args = [
       '--print',
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
-      '--model', CLAUDE_DEFAULT_MODEL,
+      '--model', resolvedModel,
+      '--name', sessionName,
       '--system-prompt', buildSystemPrompt(taskDefinition, issue),
       '--permission-mode', 'bypassPermissions',
       '--dangerously-skip-permissions'

@@ -344,6 +344,29 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'setModel') {
+      try {
+        const model = asString(message.model)?.trim() ?? '';
+        if (model) {
+          this.aiSessionManager.setIssueModelOverride(this.activeIssueKey, model);
+        } else {
+          this.aiSessionManager.removeIssueModelOverride(this.activeIssueKey);
+        }
+        await this.panel?.webview.postMessage({
+          type: 'setModelResult',
+          ok: true,
+          model
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'setModelResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
     if (type === 'assignSubTaskWorkflow') {
       const subTaskKey = asString(message.subTaskKey)?.trim();
       const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
@@ -578,6 +601,61 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           )}</div>
         </div>
         <div class="form-status" id="workflowStatus" aria-live="polite"></div>
+      </section>
+    `;
+  }
+
+  private static readonly KNOWN_MODELS: Array<{ id: string; label: string }> = [
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'claude-haiku-3-5', label: 'Claude Haiku 3.5' },
+    { id: 'gpt-5.4', label: 'GPT 5.4' },
+    { id: 'o3', label: 'o3' },
+  ];
+
+  private renderModelSection(issueKey: string): string {
+    const currentModel = this.aiSessionManager.getIssueModelOverride(issueKey) ?? '';
+    const isKnown = !currentModel || IssueDetailPanelManager.KNOWN_MODELS.some(m => m.id === currentModel);
+
+    const modelOptions = IssueDetailPanelManager.KNOWN_MODELS.map(
+      m => `<option value="${escapeHtml(m.id)}" ${m.id === currentModel ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
+    ).join('');
+
+    // If the current model is a custom value not in the known list, add it as an option
+    const customOption = (!isKnown && currentModel)
+      ? `<option value="${escapeHtml(currentModel)}" selected>${escapeHtml(currentModel)}</option>`
+      : '';
+
+    return `
+      <section class="card">
+        <h3>Model</h3>
+        <label class="field-group" for="modelSelect">
+          <span class="field-label">AI Model</span>
+          <select
+            id="modelSelect"
+            class="field-select"
+            data-issue-key="${escapeHtml(issueKey)}"
+          >
+            <option value="" ${!currentModel ? 'selected' : ''}>Default</option>
+            ${modelOptions}
+            ${customOption}
+            <option value="__custom__">Custom…</option>
+          </select>
+          <div class="field-help">
+            Override the AI model for this issue. You can also add <code>Model: opus-4.6</code> in the Jira description.
+          </div>
+        </label>
+        <div class="field-group${currentModel && !isKnown ? '' : ' is-hidden'}" id="customModelGroup">
+          <span class="field-label">Custom Model ID</span>
+          <input
+            id="customModelInput"
+            class="field-input"
+            type="text"
+            value="${escapeHtml(isKnown ? '' : currentModel)}"
+            placeholder="e.g. claude-opus-4-6"
+          />
+        </div>
+        <div class="form-status" id="modelStatus" aria-live="polite"></div>
       </section>
     `;
   }
@@ -1561,6 +1639,105 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         });
       });
     })();
+
+    // --- Model selector ---
+    (function () {
+      const modelSelect = document.getElementById('modelSelect');
+      const modelStatus = document.getElementById('modelStatus');
+      const customModelGroup = document.getElementById('customModelGroup');
+      const customModelInput = document.getElementById('customModelInput');
+
+      if (!(modelSelect instanceof HTMLSelectElement)) return;
+
+      let saving = false;
+      let initialValue = modelSelect.value;
+      let statusOverride = undefined;
+
+      function showCustomInput(show) {
+        if (customModelGroup instanceof HTMLElement) {
+          customModelGroup.classList.toggle('is-hidden', !show);
+        }
+      }
+
+      function renderModelStatus() {
+        if (statusOverride) {
+          setStatusMessage(modelStatus, statusOverride.text, statusOverride.kind);
+          return;
+        }
+        if (saving) {
+          setStatusMessage(modelStatus, 'Updating model...', '');
+          return;
+        }
+        setStatusMessage(modelStatus, '', '');
+      }
+
+      function refreshModelActions() {
+        modelSelect.disabled = saving;
+        renderModelStatus();
+      }
+
+      function sendModelUpdate(model) {
+        statusOverride = undefined;
+        saving = true;
+        refreshModelActions();
+        vscode.postMessage({
+          type: 'setModel',
+          issueKey: modelSelect.dataset.issueKey,
+          model: model
+        });
+      }
+
+      modelSelect.addEventListener('change', () => {
+        if (saving) return;
+        const value = modelSelect.value;
+        if (value === '__custom__') {
+          showCustomInput(true);
+          if (customModelInput instanceof HTMLInputElement) {
+            customModelInput.focus();
+          }
+          return;
+        }
+        showCustomInput(false);
+        if (value === initialValue) return;
+        sendModelUpdate(value);
+      });
+
+      if (customModelInput instanceof HTMLInputElement) {
+        customModelInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = customModelInput.value.trim();
+            if (value) {
+              sendModelUpdate(value);
+            }
+          }
+        });
+      }
+
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'setModelResult') {
+          saving = false;
+          if (msg.ok) {
+            initialValue = typeof msg.model === 'string' ? msg.model : '';
+            statusOverride = {
+              text: initialValue ? 'Model updated to ' + initialValue + '.' : 'Model reset to default.',
+              kind: 'success'
+            };
+          } else {
+            modelSelect.value = initialValue;
+            statusOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to update model.',
+              kind: 'error'
+            };
+          }
+          refreshModelActions();
+        }
+      });
+
+      refreshModelActions();
+    })();
   </script>
 </body>
 </html>`;
@@ -1780,6 +1957,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         </form>
       </section>
       ${this.renderWorkflowPackSection(d.key)}
+      ${this.renderModelSection(d.key)}
       ${this.renderSubTasksSection(d.key)}
       <section class="card">
         <h3>Comments</h3>
