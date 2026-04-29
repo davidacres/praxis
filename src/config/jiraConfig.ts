@@ -501,6 +501,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
   }
 
+  public getAiDefaultModel(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.defaultModel', '');
+  }
+
   public getAiOpenaiAgentName(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiAgentName', '');
   }

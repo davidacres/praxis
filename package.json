@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -217,6 +217,12 @@
       {
         "command": "ticketManager.importMarkdownFeaturePlan",
         "title": "Import Plan from Markdown Features",
+        "category": "Ticket Manager",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "ticketManager.importMarkdownFiles",
+        "title": "Import Markdown Files to Template Format",
         "category": "Ticket Manager",
         "icon": "$(file-code)"
       },

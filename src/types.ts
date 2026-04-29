@@ -151,6 +151,10 @@ export interface IssueSummary {
   reporter?: string;
   reporterMention?: string;
   priority?: string;
+  severity?: string;
+  reportedBy?: string;
+  complexity?: string;
+  model?: string;
   created?: string;
   updated?: string;
   selfUrl?: string;
@@ -190,6 +194,9 @@ export interface UpdateIssueInput {
   parentKey?: string | null;
   assignee?: string | null;
   priority?: string;
+  severity?: string;
+  reportedBy?: string;
+  model?: string;
   issueType?: string;
 }
 

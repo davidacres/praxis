@@ -21,6 +21,9 @@ export interface ParsedFeatureFolder {
   featureMdUri: vscode.Uri;
   depTokens: string[];
   planningDates: ParsedPlanningDates;
+  priority?: string;
+  model?: string;
+  complexity?: string;
 }
 
 export interface ParsedStoryFile {
@@ -38,7 +41,7 @@ export interface ParsedStoryFile {
 }
 
 export interface ParsedChildFile {
-  featureId: number;
+  featureId: number | undefined;
   sequence: number;
   filename: string;
   issueType: 'Story' | 'Task' | 'Bug';
@@ -50,6 +53,11 @@ export interface ParsedChildFile {
   depTokens: string[];
   planningDates: ParsedPlanningDates;
   branch?: string;
+  priority?: string;
+  severity?: string;
+  reportedBy?: string;
+  model?: string;
+  complexity?: string;
 }
 
 export interface ParsedPlanFolder {
@@ -84,6 +92,36 @@ export function extractBranchRaw(content: string): string | undefined {
   return m?.[1]?.trim() || undefined;
 }
 
+export function extractPriorityRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Priority:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
+export function extractSeverityRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Severity:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
+export function extractReportedByRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Reported By:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
+export function extractModelRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Model:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
+export function extractTypeRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Type:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
+export function extractComplexityRaw(content: string): string | undefined {
+  const m = content.match(/^\*\*Complexity:\*\*\s*(.+)$/m);
+  return m?.[1]?.trim() || undefined;
+}
+
 export function extractSectionBody(content: string, heading: string): string | undefined {
   const lines = content.split(/\r?\n/);
   let i = 0;
@@ -103,8 +141,50 @@ export function extractSectionBody(content: string, heading: string): string | u
   return undefined;
 }
 
+export interface ParsedComment {
+  author: string;
+  created: string;
+  body: string;
+}
+
+/**
+ * Extract comments from a `## Comments` section.
+ * Each comment is a block starting with `**author** — timestamp` followed by body lines.
+ */
+export function extractComments(content: string): ParsedComment[] {
+  const sectionBody = extractSectionBody(content, 'Comments');
+  if (!sectionBody) {
+    return [];
+  }
+  const comments: ParsedComment[] = [];
+  const headerRe = /^\*\*(.+?)\*\*\s*(?:—|--|-)\s*(.+)$/;
+  const lines = sectionBody.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length) {
+    const m = headerRe.exec(lines[i]);
+    if (m) {
+      const author = m[1].trim();
+      const created = m[2].trim();
+      i++;
+      const bodyLines: string[] = [];
+      while (i < lines.length && !headerRe.test(lines[i])) {
+        bodyLines.push(lines[i]);
+        i++;
+      }
+      const body = bodyLines.join('\n').trim();
+      if (body.length > 0) {
+        comments.push({ author, created, body });
+      }
+    } else {
+      i++;
+    }
+  }
+  return comments;
+}
+
 export function buildDescription(content: string): string {
   return (
+    extractSectionBody(content, 'Description') ??
     extractSectionBody(content, 'Summary') ??
     extractSectionBody(content, 'Deliverables (from master plan)') ??
     extractSectionBody(content, 'Deliverables') ??
@@ -145,6 +225,18 @@ const CHILD_FILE_PREFIX_TO_ISSUE_TYPE = {
   task: 'Task',
   bug: 'Bug'
 } as const;
+
+/** Normalize a `**Type:**` front matter value to a canonical child issue type, or undefined. */
+function normalizeChildIssueType(raw: string | undefined): 'Story' | 'Task' | 'Bug' | undefined {
+  const trimmed = raw?.trim().toLowerCase();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed === 'story') { return 'Story'; }
+  if (trimmed === 'task') { return 'Task'; }
+  if (trimmed === 'bug') { return 'Bug'; }
+  return undefined;
+}
 const MAX_PLAN_SEARCH_DEPTH = 6;
 const MAX_PLAN_SEARCH_DIRECTORIES = 500;
 const SEARCH_SKIP_DIRS = new Set([
@@ -164,19 +256,44 @@ const SEARCH_SKIP_DIRS = new Set([
   'target'
 ]);
 
-function parseChildFileName(
-  name: string
-): { featureId: number; sequence: number; issueType: 'Story' | 'Task' | 'Bug' } | undefined {
-  const m = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
-  if (!m) {
-    return undefined;
+interface ParsedChildFileName {
+  featureId: number | undefined;
+  sequence: number;
+  issueType: 'Story' | 'Task' | 'Bug';
+}
+
+/**
+ * Parse child item filenames in two formats:
+ * - Strict: `{type}-{featureId}-{sequence}-{slug}.md` (e.g., bug-01-1-fix.md)
+ * - Loose:  `{type}-{sequence}-{ref}-{slug}.md` (e.g., bug-001-s107-name.md)
+ *
+ * The loose format is used when bugs/tasks are filed independently and the
+ * second segment is not a pure number (contains letters like "s107").
+ */
+function parseChildFileName(name: string): ParsedChildFileName | undefined {
+  // Strict format: type-featureId-sequence-slug.md
+  const strict = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
+  if (strict) {
+    const prefix = strict[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
+    return {
+      issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
+      featureId: Number.parseInt(strict[2], 10),
+      sequence: Number.parseInt(strict[3], 10)
+    };
   }
-  const prefix = m[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
-  return {
-    issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
-    featureId: Number.parseInt(m[2], 10),
-    sequence: Number.parseInt(m[3], 10)
-  };
+
+  // Loose format: type-sequence-ref-slug.md (ref contains letters)
+  const loose = name.match(/^(story|task|bug)-(\d+)-[a-z]\w*-.+\.md$/i);
+  if (loose) {
+    const prefix = loose[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
+    return {
+      issueType: CHILD_FILE_PREFIX_TO_ISSUE_TYPE[prefix],
+      featureId: undefined,
+      sequence: Number.parseInt(loose[2], 10)
+    };
+  }
+
+  return undefined;
 }
 
 function extractDependenciesSectionBody(content: string): string {
@@ -330,7 +447,7 @@ async function containsFeaturePlanFolders(
   entries: [string, vscode.FileType][]
 ): Promise<boolean> {
   for (const [name, type] of entries) {
-    if (type !== vscode.FileType.Directory || !FEATURE_DIR.test(name)) {
+    if (type !== vscode.FileType.Directory) {
       continue;
     }
     if (await hasFeatureMarkdown(vscode.Uri.joinPath(rootUri, name))) {
@@ -392,6 +509,66 @@ function toDirectoryUri(selectedRoot: vscode.Uri | string): vscode.Uri {
   return vscode.Uri.file(normalizeConfiguredFolderPath(selectedRoot));
 }
 
+const CHILD_ITEM_SUBDIRS = ['bugs', 'tasks', 'stories'];
+
+async function containsChildItemDirs(rootUri: vscode.Uri): Promise<boolean> {
+  for (const subdir of CHILD_ITEM_SUBDIRS) {
+    const subdirUri = vscode.Uri.joinPath(rootUri, subdir);
+    const entries = await readDirectorySafe(subdirUri);
+    if (entries?.some(([name, type]) => type === vscode.FileType.File && name.toLowerCase().endsWith('.md'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Check if a directory (or its immediate subdirectories) contains .md files with recognized front matter types. */
+async function containsTypedMarkdownFiles(rootUri: vscode.Uri): Promise<boolean> {
+  const entries = await readDirectorySafe(rootUri);
+  if (!entries) {
+    return false;
+  }
+
+  // Check .md files directly in this directory
+  for (const [name, type] of entries) {
+    if (type === vscode.FileType.File && name.toLowerCase().endsWith('.md')) {
+      try {
+        const content = await readUtf8(vscode.Uri.joinPath(rootUri, name));
+        if (normalizeChildIssueType(extractTypeRaw(content))) {
+          return true;
+        }
+      } catch {
+        // Skip unreadable files
+      }
+    }
+  }
+
+  // Check .md files in immediate subdirectories (any name, not just bugs/tasks/stories)
+  for (const [name, type] of entries) {
+    if (type !== vscode.FileType.Directory || SEARCH_SKIP_DIRS.has(name.toLowerCase())) {
+      continue;
+    }
+    const subEntries = await readDirectorySafe(vscode.Uri.joinPath(rootUri, name));
+    if (!subEntries) {
+      continue;
+    }
+    for (const [fname, ftype] of subEntries) {
+      if (ftype === vscode.FileType.File && fname.toLowerCase().endsWith('.md')) {
+        try {
+          const content = await readUtf8(vscode.Uri.joinPath(rootUri, name, fname));
+          if (normalizeChildIssueType(extractTypeRaw(content))) {
+            return true;
+          }
+        } catch {
+          // Skip unreadable files
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 async function identifyPlanFolderAtRoot(
   candidateRoot: vscode.Uri,
   rootEntries?: [string, vscode.FileType][]
@@ -412,6 +589,25 @@ async function identifyPlanFolderAtRoot(
       plansRootUri: canonicalPlansRootUri(candidateRoot, candidateRoot),
       featuresRootUri: candidateRoot,
       featureEntries: entries
+    };
+  }
+
+  // Accept as a plan folder if it has child-item subdirectories (bugs/, tasks/, stories/)
+  // even without feature folders — supports standalone bug/task tracking
+  if (await containsChildItemDirs(candidateRoot)) {
+    return {
+      plansRootUri: candidateRoot,
+      featuresRootUri: featureEntries ? featuresUri : candidateRoot,
+      featureEntries: featureEntries ?? entries ?? []
+    };
+  }
+
+  // Accept if any .md files (here or in immediate subdirs) have recognized **Type:** front matter
+  if (await containsTypedMarkdownFiles(candidateRoot)) {
+    return {
+      plansRootUri: candidateRoot,
+      featuresRootUri: featureEntries ? featuresUri : candidateRoot,
+      featureEntries: featureEntries ?? entries ?? []
     };
   }
 
@@ -489,8 +685,8 @@ export async function identifyPlanFolder(
   }
 
   throw new Error(
-    `No feature-NN-* folders with feature.md were found under the selected path or its nested subdirectories. ` +
-      `Expected layout: plans/features/feature-01-…/feature.md`
+    `No plan folders were found under the selected path or its nested subdirectories. ` +
+      `Expected: directories containing .md files with front matter (e.g. **Type:** Story/Task/Bug), or directories containing feature.md.`
   );
 }
 
@@ -512,16 +708,12 @@ export async function parsePlanFolder(
 
   progress('Scanning feature folders…');
 
+  let autoFeatureId = 9000;
   const features: ParsedFeatureFolder[] = [];
   for (const [name, type] of featureEntries) {
     if (type !== vscode.FileType.Directory) {
       continue;
     }
-    const dirMatch = name.match(FEATURE_DIR);
-    if (!dirMatch) {
-      continue;
-    }
-    const featureId = Number.parseInt(dirMatch[1], 10);
     const featureMdUri = vscode.Uri.joinPath(featuresRootUri, name, 'feature.md');
     let content: string;
     try {
@@ -529,6 +721,8 @@ export async function parsePlanFolder(
     } catch {
       continue;
     }
+    const dirMatch = name.match(FEATURE_DIR);
+    const featureId = dirMatch ? Number.parseInt(dirMatch[1], 10) : autoFeatureId++;
     progress(`Reading feature: ${name}/feature.md`);
     features.push({
       dirName: name,
@@ -538,7 +732,10 @@ export async function parsePlanFolder(
       description: buildDescription(content),
       featureMdUri,
       depTokens: collectDependencyTokens(content),
-      planningDates: extractPlanningDates(content)
+      planningDates: extractPlanningDates(content),
+      priority: extractPriorityRaw(content),
+      model: extractModelRaw(content),
+      complexity: extractComplexityRaw(content)
     });
   }
 
@@ -551,6 +748,10 @@ export async function parsePlanFolder(
 
   const stories: ParsedStoryFile[] = [];
   const childItems: ParsedChildFile[] = [];
+  const seenChildFiles = new Set<string>();
+  let autoSequence = 9000; // high base to avoid collisions with filename-derived sequences
+
+  // Scan inside each feature directory
   for (const folder of features) {
     const folderUri = vscode.Uri.joinPath(featuresRootUri, folder.dirName);
     const files = await vscode.workspace.fs.readDirectory(folderUri);
@@ -561,18 +762,42 @@ export async function parsePlanFolder(
       if (fname.toLowerCase() === 'feature.md') {
         continue;
       }
-      const parsed = parseChildFileName(fname);
-      if (!parsed || parsed.featureId !== folder.featureId) {
-        continue;
-      }
       const fileUri = vscode.Uri.joinPath(folderUri, fname);
       const scontent = await readUtf8(fileUri);
-      progress(`Reading ${parsed.issueType.toLowerCase()}: ${folder.dirName}/${fname}`);
+
+      // Try filename-based parsing first, then fall back to front matter **Type:**
+      const parsed = parseChildFileName(fname);
+      let issueType: 'Story' | 'Task' | 'Bug';
+      let resolvedFeatureId: number;
+      let sequence: number;
+
+      if (parsed) {
+        // Strict-format files must match the folder's featureId;
+        // loose-format files (featureId undefined) inherit it from the folder.
+        if (parsed.featureId !== undefined && parsed.featureId !== folder.featureId) {
+          continue;
+        }
+        issueType = parsed.issueType;
+        resolvedFeatureId = parsed.featureId ?? folder.featureId;
+        sequence = parsed.sequence;
+      } else {
+        // Fall back to front matter type detection
+        const contentType = normalizeChildIssueType(extractTypeRaw(scontent));
+        if (!contentType) {
+          continue;
+        }
+        issueType = contentType;
+        resolvedFeatureId = folder.featureId;
+        sequence = autoSequence++;
+      }
+
+      progress(`Reading ${issueType.toLowerCase()}: ${folder.dirName}/${fname}`);
+      seenChildFiles.add(fname.toLowerCase());
       childItems.push({
-        featureId: folder.featureId,
-        sequence: parsed.sequence,
+        featureId: resolvedFeatureId,
+        sequence,
         filename: fname,
-        issueType: parsed.issueType,
+        issueType,
         title: extractMainHeading(scontent),
         planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
         description: buildDescription(scontent),
@@ -580,12 +805,17 @@ export async function parsePlanFolder(
         fileUri,
         depTokens: collectDependencyTokens(scontent),
         planningDates: extractPlanningDates(scontent),
-        branch: extractBranchRaw(scontent)
+        branch: extractBranchRaw(scontent),
+        priority: extractPriorityRaw(scontent),
+        model: extractModelRaw(scontent),
+        complexity: extractComplexityRaw(scontent),
+        severity: extractSeverityRaw(scontent),
+        reportedBy: extractReportedByRaw(scontent)
       });
-      if (parsed.issueType === 'Story') {
+      if (issueType === 'Story') {
         stories.push({
-          featureId: folder.featureId,
-          storySeq: parsed.sequence,
+          featureId: resolvedFeatureId,
+          storySeq: sequence,
           filename: fname,
           title: extractMainHeading(scontent),
           planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
@@ -600,9 +830,128 @@ export async function parsePlanFolder(
     }
   }
 
+  // Also scan the features root and additional directories for child items
+  // not nested inside feature dirs (e.g., plans/, plans/bugs/, or any subdirectory)
+  const featureIdSet = new Set(features.map(f => f.featureId));
+  const featureDirNames = new Set(features.map(f => f.dirName.toLowerCase()));
+  const additionalDirs: vscode.Uri[] = [featuresRootUri];
+  const scannedDirPaths = new Set<string>([featuresRootUri.fsPath]);
+
+  // Scan plansRootUri if it differs from featuresRootUri
+  if (plansRootUri.fsPath !== featuresRootUri.fsPath) {
+    additionalDirs.push(plansRootUri);
+    scannedDirPaths.add(plansRootUri.fsPath);
+  }
+
+  // Scan ALL subdirectories under plansRootUri (not just bugs/tasks/stories)
+  const rootEntriesToScan = await readDirectorySafe(plansRootUri);
+  if (rootEntriesToScan) {
+    for (const [subName, subType] of rootEntriesToScan) {
+      if (subType !== vscode.FileType.Directory || SEARCH_SKIP_DIRS.has(subName.toLowerCase())) {
+        continue;
+      }
+      // Skip feature directories — already scanned above
+      if (featureDirNames.has(subName.toLowerCase())) {
+        continue;
+      }
+      const subdirUri = vscode.Uri.joinPath(plansRootUri, subName);
+      if (!scannedDirPaths.has(subdirUri.fsPath)) {
+        additionalDirs.push(subdirUri);
+        scannedDirPaths.add(subdirUri.fsPath);
+      }
+    }
+  }
+
+  for (const dirUri of additionalDirs) {
+    let dirEntries: [string, vscode.FileType][];
+    if (dirUri.fsPath === featuresRootUri.fsPath) {
+      dirEntries = featureEntries;
+    } else {
+      const entries = await readDirectorySafe(dirUri);
+      if (!entries) {
+        continue;
+      }
+      dirEntries = entries;
+    }
+    for (const [fname, ftype] of dirEntries) {
+      if (ftype !== vscode.FileType.File || !fname.toLowerCase().endsWith('.md')) {
+        continue;
+      }
+      if (seenChildFiles.has(fname.toLowerCase())) {
+        continue;
+      }
+      const fileUri = vscode.Uri.joinPath(dirUri, fname);
+      const scontent = await readUtf8(fileUri);
+
+      // Try filename-based parsing first, then fall back to front matter **Type:**
+      const parsed = parseChildFileName(fname);
+      let issueType: 'Story' | 'Task' | 'Bug';
+      let resolvedFeatureId: number | undefined;
+      let sequence: number;
+
+      if (parsed) {
+        // Strict-format must reference a known feature; loose-format (no featureId) is always accepted
+        if (parsed.featureId !== undefined && !featureIdSet.has(parsed.featureId)) {
+          continue;
+        }
+        issueType = parsed.issueType;
+        resolvedFeatureId = parsed.featureId;
+        sequence = parsed.sequence;
+      } else {
+        // Fall back to front matter type detection
+        const contentType = normalizeChildIssueType(extractTypeRaw(scontent));
+        if (!contentType) {
+          continue;
+        }
+        issueType = contentType;
+        resolvedFeatureId = undefined;
+        sequence = autoSequence++;
+      }
+
+      progress(`Reading ${issueType.toLowerCase()}: ${fname}`);
+      seenChildFiles.add(fname.toLowerCase());
+      childItems.push({
+        featureId: resolvedFeatureId,
+        sequence,
+        filename: fname,
+        issueType,
+        title: extractMainHeading(scontent),
+        planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
+        description: buildDescription(scontent),
+        relativePath: fname,
+        fileUri,
+        depTokens: collectDependencyTokens(scontent),
+        planningDates: extractPlanningDates(scontent),
+        branch: extractBranchRaw(scontent),
+        priority: extractPriorityRaw(scontent),
+        model: extractModelRaw(scontent),
+        complexity: extractComplexityRaw(scontent),
+        severity: extractSeverityRaw(scontent),
+        reportedBy: extractReportedByRaw(scontent)
+      });
+      if (issueType === 'Story' && resolvedFeatureId !== undefined) {
+        stories.push({
+          featureId: resolvedFeatureId,
+          storySeq: sequence,
+          filename: fname,
+          title: extractMainHeading(scontent),
+          planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
+          description: buildDescription(scontent),
+          relativePath: fname,
+          storyMdUri: fileUri,
+          depTokens: collectDependencyTokens(scontent),
+          planningDates: extractPlanningDates(scontent),
+          branch: extractBranchRaw(scontent)
+        });
+      }
+    }
+  }
+
   childItems.sort((a, b) => {
-    if (a.featureId !== b.featureId) {
-      return a.featureId - b.featureId;
+    const aFid = a.featureId ?? 0;
+    const bFid = b.featureId ?? 0;
+    if (aFid !== bFid) {
+      return aFid - bFid;
     }
     if (a.issueType !== b.issueType) {
       return a.issueType.localeCompare(b.issueType);

@@ -101,7 +101,8 @@ suite('UserWorkspaceService', () => {
     service = new UserWorkspaceService(
       {
         getDefaultPageSize: () => 50,
-        getLiveFolderAllowIssueCreation: () => true
+        getLiveFolderAllowIssueCreation: () => true,
+        getAiDefaultModel: () => ''
       },
       store
     );

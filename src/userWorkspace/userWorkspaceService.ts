@@ -82,11 +82,16 @@ class UserWorkspaceLiveFolderConfigProvider implements LiveFolderConfigProvider 
   public getLiveFolderAllowIssueCreation(): boolean {
     return this.appConfigStore.getLiveFolderAllowIssueCreation();
   }
+
+  public getAiDefaultModel(): string {
+    return this.appConfigStore.getAiDefaultModel();
+  }
 }
 
 export interface UserWorkspaceConfigProvider {
   getDefaultPageSize(): number;
   getLiveFolderAllowIssueCreation(): boolean;
+  getAiDefaultModel(): string;
 }
 
 export class UserWorkspaceService implements IssueTrackerService {
