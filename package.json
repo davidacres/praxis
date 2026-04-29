@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -915,6 +915,50 @@
           "default": "",
           "scope": "application",
           "description": "Optional user/profile MCP server reference to use when Jira via MCP mode is not manually configured and no workspace MCP server is selected."
+        },
+        "ticketManager.priorityColors": {
+          "type": "object",
+          "default": {
+            "Critical": "#DC2626",
+            "Highest": "linear-gradient(to bottom, #DC2626, #EA580C)",
+            "High": "#F59E0B",
+            "Medium": "linear-gradient(to bottom, #F59E0B, #3B82F6)",
+            "Low": "linear-gradient(to bottom, #3B82F6, #22C55E)",
+            "Lowest": "#22C55E"
+          },
+          "description": "Colors for the priority indicator bar on ticket cards. Values can be hex colors or CSS linear gradients.",
+          "properties": {
+            "Critical": {
+              "type": "string",
+              "default": "#DC2626",
+              "description": "Color for Critical priority."
+            },
+            "Highest": {
+              "type": "string",
+              "default": "linear-gradient(to bottom, #DC2626, #EA580C)",
+              "description": "Color for Highest priority."
+            },
+            "High": {
+              "type": "string",
+              "default": "#F59E0B",
+              "description": "Color for High priority."
+            },
+            "Medium": {
+              "type": "string",
+              "default": "linear-gradient(to bottom, #F59E0B, #3B82F6)",
+              "description": "Color for Medium priority."
+            },
+            "Low": {
+              "type": "string",
+              "default": "linear-gradient(to bottom, #3B82F6, #22C55E)",
+              "description": "Color for Low priority."
+            },
+            "Lowest": {
+              "type": "string",
+              "default": "#22C55E",
+              "description": "Color for Lowest priority."
+            }
+          }
         },
         "ticketManager.jiraBoardListIconColor": {
           "type": "string",

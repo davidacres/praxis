@@ -61,6 +61,9 @@ function hasPreferenceData(prefs: BoardColumnPreferences): boolean {
       prefs.issueFilterEpicKey ||
       (prefs.issueFilterStatuses && prefs.issueFilterStatuses.length > 0) ||
       (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) ||
+      prefs.viewMode === 'list' ||
+      (prefs.listGroupOrder && prefs.listGroupOrder.length > 0) ||
+      prefs.maxAgeWeeks !== undefined ||
       (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0)
   );
 }
@@ -139,6 +142,15 @@ export class BoardColumnStore implements vscode.Disposable {
     if (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) {
       next.statusColors = { ...prefs.statusColors };
     }
+    if (prefs.viewMode === 'list') {
+      next.viewMode = prefs.viewMode;
+    }
+    if (prefs.listGroupOrder?.length) {
+      next.listGroupOrder = [...prefs.listGroupOrder];
+    }
+    if (prefs.maxAgeWeeks !== undefined) {
+      next.maxAgeWeeks = prefs.maxAgeWeeks;
+    }
     if (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0) {
       next.issueOrder = { ...prefs.issueOrder };
     }
@@ -156,6 +168,16 @@ export class BoardColumnStore implements vscode.Disposable {
     const issueOrder = prefs.issueOrder ? { ...prefs.issueOrder } : {};
     issueOrder[status] = orderedKeys;
     await this.setPreferences(boardId, { ...prefs, issueOrder });
+  }
+
+  public async setViewMode(boardId: string, viewMode: 'board' | 'list'): Promise<void> {
+    const prefs = this.getPreferences(boardId);
+    await this.setPreferences(boardId, { ...prefs, viewMode });
+  }
+
+  public async setGroupOrder(boardId: string, orderedStatuses: string[]): Promise<void> {
+    const prefs = this.getPreferences(boardId);
+    await this.setPreferences(boardId, { ...prefs, listGroupOrder: orderedStatuses });
   }
 
   public async clearPreferences(boardId: string): Promise<void> {

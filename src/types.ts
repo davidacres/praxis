@@ -320,8 +320,12 @@ export interface BoardColumnPreferences {
   issueFilterStatuses?: string[];
   /** Per-status column dot color; key is exact status name as on the board. */
   statusColors?: Record<string, string>;
-  /** Board panel layout: Kanban columns vs execution sequence flow. */
-  viewMode?: 'columns' | 'sequence';
+  /** Board panel layout: Kanban columns or grouped list view. */
+  viewMode?: 'board' | 'list';
+  /** List-view group order by exact status name. */
+  listGroupOrder?: string[];
+  /** Hide issues not updated within this many weeks; 0 shows all issues regardless of age. */
+  maxAgeWeeks?: number;
   /** Per-column card order for visual priority; key is status name, value is ordered issue keys. */
   issueOrder?: Record<string, string[]>;
 }

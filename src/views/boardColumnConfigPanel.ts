@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DEFAULT_MAX_AGE_WEEKS } from '../board/boardIssueFilters';
 import { defaultStatusDotHex, sanitizeStatusColors } from '../board/statusColors';
 import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
 import type { BoardColumnStore } from '../state/boardColumnStore';
@@ -101,6 +102,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       issueFilterAssignee: prefs.issueFilterAssignee ?? '',
       issueFilterEpicKey: prefs.issueFilterEpicKey ?? '',
       issueFilterStatuses: prefs.issueFilterStatuses ?? [],
+      maxAgeWeeks: prefs.maxAgeWeeks ?? DEFAULT_MAX_AGE_WEEKS,
       defaultStatusHex,
       statusColorsState
     };
@@ -220,6 +222,13 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       if (issueFilterStatuses.length > 0) {
         nextPrefs.issueFilterStatuses = issueFilterStatuses;
       }
+      const maxAgeWeeks =
+        typeof message.maxAgeWeeks === 'number' && Number.isFinite(message.maxAgeWeeks)
+          ? Math.max(0, Math.floor(message.maxAgeWeeks))
+          : DEFAULT_MAX_AGE_WEEKS;
+      if (maxAgeWeeks !== DEFAULT_MAX_AGE_WEEKS) {
+        nextPrefs.maxAgeWeeks = maxAgeWeeks;
+      }
       if (statusColorsOut) {
         nextPrefs.statusColors = statusColorsOut;
       }
@@ -230,6 +239,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         Boolean(nextPrefs.issueFilterAssignee) ||
         Boolean(nextPrefs.issueFilterEpicKey) ||
         (nextPrefs.issueFilterStatuses && nextPrefs.issueFilterStatuses.length > 0) ||
+        nextPrefs.maxAgeWeeks !== undefined ||
         Boolean(nextPrefs.statusColors && Object.keys(nextPrefs.statusColors).length > 0);
 
       if (
@@ -265,6 +275,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     issueFilterAssignee: string;
     issueFilterEpicKey: string;
     issueFilterStatuses: string[];
+    maxAgeWeeks: number;
     defaultStatusHex: Record<string, string>;
     statusColorsState: Record<string, string>;
   }): string {
@@ -496,6 +507,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     <input type="text" id="issueFilterEpicKey" class="field-input" value="${escapeHtml(
       payload.issueFilterEpicKey
     )}" placeholder="e.g. APP-100 or summary text" />
+    <label class="field-label" for="maxAgeWeeks">Hide tickets not updated within (weeks)</label>
+    <input type="number" id="maxAgeWeeks" class="field-input" style="max-width:120px;" min="0" step="1" value="${payload.maxAgeWeeks}" placeholder="0 = show all" />
+    <span class="helper">0 = show all tickets regardless of age</span>
     <p class="helper" style="margin-top:12px;">Include tickets in these statuses</p>
     <div id="filterStatusList" class="list"></div>
   </section>
@@ -929,6 +943,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         swimLaneGroupBy: document.getElementById('swimLaneSelect').value,
         issueFilterAssignee: document.getElementById('issueFilterAssignee').value.trim(),
         issueFilterEpicKey: document.getElementById('issueFilterEpicKey').value.trim(),
+        maxAgeWeeks: parseInt(document.getElementById('maxAgeWeeks').value, 10) || 0,
         issueFilterStatuses: issueFilterStatusesPayload,
         statusColors: statusColorsMap
       });
