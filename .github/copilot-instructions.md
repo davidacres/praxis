@@ -25,20 +25,13 @@ extension. They are also the rules the delivery workflow itself relies on.
 
 ## Pushing from a worktree (non-interactive)
 
-The remote `origin` is configured as `git@...:example/software/ai/tools/ticket-manager-extension.git`.
-SSH pushes require a passphrase-protected key and an active ssh-agent, which the
-agent does NOT have. Do **not** try to `ssh-add`, launch `ssh-agent`, or prompt
-the user for a passphrase.
+The remote `origin` is configured as HTTPS:
 
-The repository ships with a local URL rewrite rule that transparently turns every
-SSH remote into HTTPS:
-
-```
-[url "https://git.example.com/"]
-    insteadOf = git@git.example.com:
+```text
+https://git.example.com/example/software/ai/tools/ticket-manager-extension.git
 ```
 
-Use one of the following push patterns. Both are fully non-interactive.
+Use one of the following push patterns. Both avoid SSH prompts.
 
 ### Option A — `GITLAB_TOKEN` env var (preferred for agents)
 
@@ -72,8 +65,8 @@ available.
 
 - Do not attempt `ssh-add`, `eval $(ssh-agent)`, or prompt the user for a
   passphrase.
-- Do not rewrite `origin` with `git remote set-url` — the repo-level `insteadOf`
-  rule already handles the SSH→HTTPS translation.
+- Do not rewrite `origin` with `git remote set-url` unless the task explicitly
+  asks you to change remotes.
 - Do not push with `--force` or `--force-with-lease` unless the task explicitly
   calls for it.
 
