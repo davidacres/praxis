@@ -154,4 +154,159 @@ Resolve the timeout when refreshing tokens.
       'Fix login timeout'
     );
   });
+
+  test('parsePlanFolder picks up child items at the features root level', async () => {
+    const fixture = await createLiveFolderFixture('root-level-children');
+    fixtureRoots.push(fixture.rootUri);
+
+    await writeTextFile(
+      vscode.Uri.joinPath(fixture.featuresRootUri, 'bug-01-1-root-level-crash.md'),
+      `# Root level crash
+
+**Status:** To Do
+
+## Summary
+A bug filed at the features root, not inside a feature folder.
+`
+    );
+
+    const parsed = await parsePlanFolder(fixture.rootUri);
+    const rootBug = parsed.childItems.find(
+      item => item.issueType === 'Bug' && item.title === 'Root level crash'
+    );
+
+    assert.ok(rootBug, 'Bug at features root should be discovered');
+    assert.strictEqual(rootBug!.featureId, 1);
+    assert.strictEqual(rootBug!.planStatus, 'To Do');
+  });
+
+  test('parsePlanFolder discovers bugs with loose filename format (bug-NNN-sRef-slug)', async () => {
+    const fixture = await createLiveFolderFixture('bugs-loose');
+    fixtureRoots.push(fixture.rootUri);
+
+    const bugsDirUri = vscode.Uri.joinPath(fixture.plansRootUri, 'bugs');
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
+      `# ISyncResultBuilder null ref
+
+**Status:** Open
+
+## Summary
+NullReferenceException in ISyncResultBuilder when sync completes.
+`
+    );
+
+    const parsed = await parsePlanFolder(fixture.rootUri);
+    const looseBug = parsed.childItems.find(
+      item => item.issueType === 'Bug' && item.title === 'ISyncResultBuilder null ref'
+    );
+
+    assert.ok(looseBug, 'Bug with loose filename format should be discovered');
+    assert.strictEqual(looseBug!.featureId, undefined, 'Loose-format bugs have no featureId');
+    assert.strictEqual(looseBug!.sequence, 1);
+    assert.strictEqual(looseBug!.planStatus, 'Backlog', 'Open maps to Backlog status');
+  });
+
+  test('parsePlanFolder works with only plans/bugs/ and no feature folders', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const rootUri = vscode.Uri.joinPath(
+      workspaceFolder!.uri,
+      '.ticket-manager-test',
+      `bugs-only-${uniqueSuffix}`
+    );
+    fixtureRoots.push(rootUri);
+    const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
+    const bugsDirUri = vscode.Uri.joinPath(plansUri, 'bugs');
+
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-null-ref.md'),
+      `# Null reference in sync
+
+**Status:** In Progress
+
+## Summary
+NullReferenceException during sync.
+`
+    );
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-002-s107-timeout.md'),
+      `# Timeout in sync manager
+
+**Status:** Done
+
+## Summary
+Sync manager times out after 30s.
+`
+    );
+
+    const parsed = await parsePlanFolder(rootUri);
+    assert.strictEqual(parsed.features.length, 0, 'No features expected');
+    assert.strictEqual(parsed.childItems.length, 2, 'Both bugs should be discovered');
+    const bug1 = parsed.childItems.find(i => i.sequence === 1);
+    const bug2 = parsed.childItems.find(i => i.sequence === 2);
+    assert.ok(bug1, 'Bug 001 should be found');
+    assert.ok(bug2, 'Bug 002 should be found');
+    assert.strictEqual(bug1!.issueType, 'Bug');
+    assert.strictEqual(bug2!.issueType, 'Bug');
+  });
+
+  test('parsePlanFolder discovers bugs alongside features', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(workspaceFolder);
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const rootUri = vscode.Uri.joinPath(
+      workspaceFolder!.uri,
+      '.ticket-manager-test',
+      `mixed-${uniqueSuffix}`
+    );
+    fixtureRoots.push(rootUri);
+    const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
+
+    const featureDirUri = vscode.Uri.joinPath(plansUri, 'features', 'feature-01-his-connectivity');
+    await writeTextFile(
+      vscode.Uri.joinPath(featureDirUri, 'feature.md'),
+      `# HIS Connectivity
+
+**Status:** Done
+
+## Summary
+Connect to HIS.
+`
+    );
+
+    const bugsDirUri = vscode.Uri.joinPath(plansUri, 'bugs');
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
+      `# ISyncResultBuilder null ref
+
+**Status:** In Progress
+
+## Summary
+Null ref.
+`
+    );
+    await writeTextFile(
+      vscode.Uri.joinPath(bugsDirUri, 'bug-004-s3776-syncmanager-106.md'),
+      `# SyncManager 106
+
+**Status:** Backlog
+
+## Summary
+Sync issue.
+`
+    );
+
+    const parsed = await parsePlanFolder(rootUri);
+    assert.strictEqual(parsed.features.length, 1, 'One feature expected');
+    assert.strictEqual(
+      parsed.childItems.filter(i => i.issueType === 'Bug').length,
+      2,
+      'Both bugs should be discovered alongside features'
+    );
+    const bug1 = parsed.childItems.find(i => i.issueType === 'Bug' && i.sequence === 1);
+    assert.ok(bug1, 'bug-001-s107 should be discovered');
+    assert.strictEqual(bug1!.featureId, undefined, 'Loose bug has no featureId');
+  });
 });

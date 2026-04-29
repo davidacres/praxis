@@ -199,6 +199,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       return;
     }
 
+    if (type === 'refresh') {
+      await this.detailsProvider.refresh();
+      return;
+    }
+
     if (type === 'saveIssueEdits') {
       const issueKey = asString(message.issueKey);
       const summary = asString(message.summary);
@@ -211,6 +216,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const assignee = asString(message.assignee) ?? '';
       const priority = asString(message.priority);
       const issueType = asString(message.issueType);
+      const model = asString(message.model);
+      const severity = asString(message.severity);
+      const reportedBy = asString(message.reportedBy);
       const transitionId = asString(message.transitionId) ?? undefined;
 
       try {
@@ -220,7 +228,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           parentKey: parentKey.trim() || null,
           assignee: assignee.trim() || null,
           priority,
-          issueType
+          issueType,
+          model,
+          severity,
+          reportedBy
         }, transitionId);
         await this.view.webview.postMessage({
           type: 'saveIssueEditsResult',
@@ -386,6 +397,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           'Low',
           'Lowest'
         ]);
+        const metadataModelOptions = renderSelectOptions(issue.model, [
+          'claude-sonnet-4-20250514',
+          'claude-opus-4-20250514',
+          'gpt-4.1',
+          'gpt-4.1-mini',
+          'o3',
+          'o4-mini'
+        ]);
+        const severityOptions = renderSelectOptions(issue.severity, [
+          'Critical',
+          'High',
+          'Medium',
+          'Low'
+        ]);
 
         const comments = (issue.comments ?? [])
           .map(comment => {
@@ -404,6 +429,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         <div class="issue-header" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
           <div class="header-main">
             <div class="item-key">${escapeHtml(issue.key)}</div>
+            <button class="icon-button" id="refreshBtn" type="button" title="Refresh" aria-label="Refresh issue details">Refresh</button>
           </div>
         </div>
         <form class="card edit-form" id="issueEditForm" data-issue-key="${escapeHtml(issue.key)}">
@@ -453,6 +479,38 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               ${priorityOptions}
             </select>
           </label>
+          <label class="field-group" for="issueModelSelect">
+            <span class="field-label">Requested Model</span>
+            <select id="issueModelSelect" class="field-select">
+              <option value="">— Use default —</option>
+              ${metadataModelOptions}
+            </select>
+          </label>
+          <label class="field-group" for="severitySelect">
+            <span class="field-label">Severity</span>
+            <select id="severitySelect" class="field-select">
+              <option value="">— None —</option>
+              ${severityOptions}
+            </select>
+          </label>
+          <label class="field-group" for="reportedByInput">
+            <span class="field-label">Reported By</span>
+            <input
+              id="reportedByInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(issue.reportedBy ?? '')}"
+              placeholder="Source or reporter"
+            />
+          </label>
+          <div class="detail-row">
+            <div class="detail-label">Branch</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(issue.branch || '—')}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Complexity</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(issue.complexity || '—')}</div>
+          </div>
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
@@ -559,6 +617,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         gap: 6px;
         flex-wrap: wrap;
         min-width: 0;
+      }
+      .icon-button {
+        margin-left: auto;
+        border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-panel-border));
+        border-radius: 4px;
+        background: var(--vscode-button-secondaryBackground, transparent);
+        color: var(--vscode-button-secondaryForeground, var(--vscode-descriptionForeground));
+        padding: 2px 6px;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .icon-button:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
       }
       .item-key {
         flex-shrink: 0;
@@ -832,6 +904,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      document.getElementById('refreshBtn')?.addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'refresh' });
+      });
+
       function setStatusMessage(target, text, kind) {
         if (!(target instanceof HTMLElement)) {
           return;
@@ -849,6 +925,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         const issueTypeSelect = document.getElementById('issueTypeSelect');
         const assigneeInput = document.getElementById('assigneeInput');
         const prioritySelect = document.getElementById('prioritySelect');
+        const issueModelSelect = document.getElementById('issueModelSelect');
+        const severitySelect = document.getElementById('severitySelect');
+        const reportedByInput = document.getElementById('reportedByInput');
         const descriptionInput = document.getElementById('descriptionInput');
         const parentFieldGroup = document.getElementById('parentFieldGroup');
         const parentFieldLabel = document.getElementById('parentFieldLabel');
@@ -965,6 +1044,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             issueType: issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '',
             assignee: assigneeInput instanceof HTMLInputElement ? assigneeInput.value : '',
             priority: prioritySelect instanceof HTMLSelectElement ? prioritySelect.value : '',
+            model: issueModelSelect instanceof HTMLSelectElement ? issueModelSelect.value : '',
+            severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
+            reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
             description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
             parentKey:
               parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
@@ -979,6 +1061,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             currentState.issueType !== initialState.issueType ||
             currentState.assignee !== initialState.assignee ||
             currentState.priority !== initialState.priority ||
+            currentState.model !== initialState.model ||
+            currentState.severity !== initialState.severity ||
+            currentState.reportedBy !== initialState.reportedBy ||
             currentState.description !== initialState.description ||
             currentState.parentKey !== initialState.parentKey
           );
@@ -1052,6 +1137,9 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         issueTypeSelect?.addEventListener('change', onFormInput);
         assigneeInput?.addEventListener('input', onFormInput);
         prioritySelect?.addEventListener('change', onFormInput);
+        issueModelSelect?.addEventListener('change', onFormInput);
+        severitySelect?.addEventListener('change', onFormInput);
+        reportedByInput?.addEventListener('input', onFormInput);
         descriptionInput?.addEventListener('input', onFormInput);
         parentInput?.addEventListener('input', onFormInput);
 
@@ -1071,7 +1159,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           saving = true;
           refreshActions();
           const currentState = readCurrentState();
-          vscodeApi.postMessage({
+          const payload = {
             type: 'saveIssueEdits',
             issueKey: editForm.dataset.issueKey,
             summary: currentState.summary,
@@ -1081,7 +1169,17 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             priority: currentState.priority,
             description: currentState.description,
             parentKey: currentState.parentKey
-          });
+          };
+          if (currentState.model !== initialState.model) {
+            payload.model = currentState.model;
+          }
+          if (currentState.severity !== initialState.severity) {
+            payload.severity = currentState.severity;
+          }
+          if (currentState.reportedBy !== initialState.reportedBy) {
+            payload.reportedBy = currentState.reportedBy;
+          }
+          vscodeApi.postMessage(payload);
         });
 
         resetButton?.addEventListener('click', () => {
@@ -1099,6 +1197,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           }
           if (prioritySelect instanceof HTMLSelectElement) {
             prioritySelect.value = initialState.priority;
+          }
+          if (issueModelSelect instanceof HTMLSelectElement) {
+            issueModelSelect.value = initialState.model;
+          }
+          if (severitySelect instanceof HTMLSelectElement) {
+            severitySelect.value = initialState.severity;
+          }
+          if (reportedByInput instanceof HTMLInputElement) {
+            reportedByInput.value = initialState.reportedBy;
           }
           if (descriptionInput instanceof HTMLTextAreaElement) {
             descriptionInput.value = initialState.description;

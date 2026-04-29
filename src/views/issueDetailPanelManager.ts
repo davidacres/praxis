@@ -270,6 +270,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         const assignee = asString(message.assignee) ?? '';
         const priority = asString(message.priority);
         const issueType = asString(message.issueType);
+        const model = asString(message.model);
+        const severity = asString(message.severity);
+        const reportedBy = asString(message.reportedBy);
         const transitionId = asString(message.transitionId) ?? undefined;
         await this.backendService.updateIssue(this.activeIssueKey, {
           summary,
@@ -277,7 +280,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           parentKey: parentKey.trim() || null,
           assignee: assignee.trim() || null,
           priority,
-          issueType
+          issueType,
+          model,
+          severity,
+          reportedBy
         });
         if (transitionId) {
           await this.backendService.transitionIssue(this.activeIssueKey, transitionId);
@@ -1177,6 +1183,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       const issueTypeSelect = document.getElementById('issueTypeSelect');
       const assigneeInput = document.getElementById('assigneeInput');
       const prioritySelect = document.getElementById('prioritySelect');
+      const issueModelSelect = document.getElementById('issueModelSelect');
+      const severitySelect = document.getElementById('severitySelect');
+      const reportedByInput = document.getElementById('reportedByInput');
       const descriptionInput = document.getElementById('descriptionInput');
       const parentFieldGroup = document.getElementById('parentFieldGroup');
       const parentFieldLabel = document.getElementById('parentFieldLabel');
@@ -1293,6 +1302,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           issueType: issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '',
           assignee: assigneeInput instanceof HTMLInputElement ? assigneeInput.value : '',
           priority: prioritySelect instanceof HTMLSelectElement ? prioritySelect.value : '',
+          model: issueModelSelect instanceof HTMLSelectElement ? issueModelSelect.value : '',
+          severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
+          reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
           description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
           parentKey:
             parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
@@ -1307,6 +1319,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           currentState.issueType !== initialState.issueType ||
           currentState.assignee !== initialState.assignee ||
           currentState.priority !== initialState.priority ||
+          currentState.model !== initialState.model ||
+          currentState.severity !== initialState.severity ||
+          currentState.reportedBy !== initialState.reportedBy ||
           currentState.description !== initialState.description ||
           currentState.parentKey !== initialState.parentKey
         );
@@ -1373,6 +1388,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       issueTypeSelect?.addEventListener('change', onFormInput);
       assigneeInput?.addEventListener('input', onFormInput);
       prioritySelect?.addEventListener('change', onFormInput);
+      issueModelSelect?.addEventListener('change', onFormInput);
+      severitySelect?.addEventListener('change', onFormInput);
+      reportedByInput?.addEventListener('input', onFormInput);
       descriptionInput?.addEventListener('input', onFormInput);
       parentInput?.addEventListener('input', onFormInput);
 
@@ -1388,7 +1406,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         saving = true;
         refreshActions();
         const currentState = readCurrentState();
-        vscode.postMessage({
+        const payload = {
           type: 'saveIssueEdits',
           issueKey: editForm.dataset.issueKey,
           summary: currentState.summary,
@@ -1398,7 +1416,17 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           priority: currentState.priority,
           description: currentState.description,
           parentKey: currentState.parentKey
-        });
+        };
+        if (currentState.model !== initialState.model) {
+          payload.model = currentState.model;
+        }
+        if (currentState.severity !== initialState.severity) {
+          payload.severity = currentState.severity;
+        }
+        if (currentState.reportedBy !== initialState.reportedBy) {
+          payload.reportedBy = currentState.reportedBy;
+        }
+        vscode.postMessage(payload);
       });
 
       resetButton?.addEventListener('click', () => {
@@ -1407,6 +1435,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         if (issueTypeSelect instanceof HTMLSelectElement) issueTypeSelect.value = initialState.issueType;
         if (assigneeInput instanceof HTMLInputElement) assigneeInput.value = initialState.assignee;
         if (prioritySelect instanceof HTMLSelectElement) prioritySelect.value = initialState.priority;
+        if (issueModelSelect instanceof HTMLSelectElement) issueModelSelect.value = initialState.model;
+        if (severitySelect instanceof HTMLSelectElement) severitySelect.value = initialState.severity;
+        if (reportedByInput instanceof HTMLInputElement) reportedByInput.value = initialState.reportedBy;
         if (descriptionInput instanceof HTMLTextAreaElement) descriptionInput.value = initialState.description;
         if (parentInput instanceof HTMLInputElement) parentInput.value = initialState.parentKey;
         clearStatusOverride();
@@ -1842,6 +1873,28 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       'Low',
       'Lowest'
     ]);
+    const metadataModelOptions = renderSelectOptions(d.model, [
+      'claude-sonnet-4-20250514',
+      'claude-opus-4-20250514',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'o3',
+      'o4-mini'
+    ]);
+    const severityOptions = renderSelectOptions(d.severity, [
+      'Critical',
+      'High',
+      'Medium',
+      'Low'
+    ]);
+    const currentAssignment = this.aiSessionManager.getSession(d.key);
+    const hasPreviousAgentSession = Boolean(this.aiSessionManager.getAgentSession(d.key));
+    const sessionBtnDisabled = currentAssignment || hasPreviousAgentSession ? '' : ' disabled';
+    const sessionBtnTitle = currentAssignment
+      ? 'View active AI session'
+      : hasPreviousAgentSession
+        ? 'View previous AI session'
+        : 'Assign to AI first';
     const comments = (d.comments ?? [])
       .map(comment => {
         const formattedDate = formatDate(comment.created ?? comment.updated);
@@ -1907,6 +1960,38 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               ${priorityOptions}
             </select>
           </label>
+          <label class="field-group" for="issueModelSelect">
+            <span class="field-label">Requested Model</span>
+            <select id="issueModelSelect" class="field-select">
+              <option value="">— Use default —</option>
+              ${metadataModelOptions}
+            </select>
+          </label>
+          <label class="field-group" for="severitySelect">
+            <span class="field-label">Severity</span>
+            <select id="severitySelect" class="field-select">
+              <option value="">— None —</option>
+              ${severityOptions}
+            </select>
+          </label>
+          <label class="field-group" for="reportedByInput">
+            <span class="field-label">Reported By</span>
+            <input
+              id="reportedByInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(d.reportedBy ?? '')}"
+              placeholder="Source or reporter"
+            />
+          </label>
+          <div class="detail-row">
+            <div class="detail-label">Branch</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(d.branch || '—')}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Complexity</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(d.complexity || '—')}</div>
+          </div>
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
@@ -1951,7 +2036,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
             <button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>
-            <button class="secondary-button" id="viewAiSessionBtn" type="button">AI Session</button>
+            <button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>

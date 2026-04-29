@@ -981,6 +981,11 @@
           "default": "",
           "description": "Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless you are debugging a local Copilot SDK installation."
         },
+        "ticketManager.ai.copilotAgentName": {
+          "type": "string",
+          "default": "",
+          "description": "Legacy display name for the GitHub Copilot agent. The current Copilot SDK integration uses its built-in label unless this value is present in older user settings."
+        },
         "ticketManager.ai.claudeCliPath": {
           "type": "string",
           "default": "",
@@ -1006,6 +1011,11 @@
             "No default AI provider."
           ],
           "description": "Default AI provider to use when assigning tickets to an AI agent."
+        },
+        "ticketManager.ai.defaultModel": {
+          "type": "string",
+          "default": "",
+          "description": "Default AI model to store on newly created live-folder markdown tickets when a model is configured. Leave empty to omit the model field."
         },
         "ticketManager.ai.openaiAgentName": {
           "type": "string",
