@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.18",
+  "version": "0.0.20",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -1028,7 +1028,7 @@
         "ticketManager.ai.copilotAgentName": {
           "type": "string",
           "default": "",
-          "description": "Legacy display name for the GitHub Copilot agent. The current Copilot SDK integration uses its built-in label unless this value is present in older user settings."
+          "description": "Display and @mention name for the GitHub Copilot agent. Leave empty to use the built-in GitHub Copilot SDK label."
         },
         "ticketManager.ai.claudeCliPath": {
           "type": "string",
@@ -1070,11 +1070,6 @@
           "type": "string",
           "default": "",
           "description": "Display name for the Claude agent (e.g. 'Claude AI'). When set, this name appears as an assignee option and is used when assigning tickets to the Claude agent."
-        },
-        "ticketManager.ai.mentionName": {
-          "type": "string",
-          "default": "",
-          "description": "Custom @mention name for triggering AI responses in comments (e.g. 'daveai'). When set, both @copilot and @<name> will trigger an AI reply. Leave blank to only respond to @copilot."
         },
         "ticketManager.ai.verboseActivityFeed": {
           "type": "boolean",

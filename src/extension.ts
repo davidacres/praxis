@@ -153,12 +153,16 @@ function logError(output: vscode.OutputChannel, error: unknown, scope?: string):
   output.appendLine(scope ? `[${scope}] ${message}` : message);
 }
 
-function extractCopilotRequest(body: string, extraMentionName?: string): string | undefined {
-  const names = ['copilot'];
-  if (extraMentionName) {
-    names.push(extraMentionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractCopilotRequest(body: string, mentionNames: string[] = ['copilot']): string | undefined {
+  const names = [...new Set(mentionNames.map(name => name.trim()).filter(Boolean))].map(escapeRegExp);
+  if (names.length === 0) {
+    return undefined;
   }
-  const pattern = new RegExp(`(?:^|\\s)@(?:${names.join('|')})\\b[:,]?\\s*`, 'i');
+  const pattern = new RegExp(`(?:^|\\s)@(?:${names.join('|')})(?=$|[\\s:,.!?])[:,]?\\s*`, 'i');
   const mentionMatch = body.match(pattern);
   if (!mentionMatch) {
     return undefined;
@@ -698,16 +702,68 @@ export async function activate(
     return configStore.getConfiguredAiProviders().includes('claude-cli');
   }
 
-  function buildCommentPlaceholder(): string {
-    const custom = configStore.getAiMentionName().trim();
-    if (custom) {
-      return `Write a comment (mention @copilot or @${custom} for a reply)`;
+  function normalizeMentionName(name: string | undefined): string | undefined {
+    const trimmed = name?.trim().replace(/^@+/, '').trim();
+    return trimmed || undefined;
+  }
+
+  function getProviderAgentDisplayName(provider: AiProvider): string {
+    if (provider === 'copilot-cli') {
+      return configStore.getAiCopilotAgentName().trim() || AI_PROVIDER_LABELS[provider];
+    }
+    return AI_PROVIDER_LABELS[provider] ?? provider;
+  }
+
+  function resolveActiveAgentMentionName(issueKey?: string): string | undefined {
+    if (issueKey) {
+      const assignment = aiSessionManager.getSession(issueKey);
+      const assignmentLabel = normalizeMentionName(
+        assignment?.label ?? (assignment ? getProviderAgentDisplayName(assignment.provider) : undefined)
+      );
+      if (assignmentLabel) {
+        return assignmentLabel;
+      }
+
+      const agentRecord = aiSessionManager.getAgentSession(issueKey);
+      const agentLabel = normalizeMentionName(
+        agentRecord?.provider ? getProviderAgentDisplayName(agentRecord.provider) : undefined
+      );
+      if (agentLabel) {
+        return agentLabel;
+      }
+    }
+
+    const defaultOption = getConfiguredAiOptions()[0];
+    return normalizeMentionName(defaultOption?.agentName ?? defaultOption?.label);
+  }
+
+  function buildCommentMentionNames(issueKey?: string): string[] {
+    const names = ['copilot'];
+    const activeAgentName = resolveActiveAgentMentionName(issueKey);
+    if (activeAgentName) {
+      names.push(activeAgentName);
+    }
+
+    const legacyMentionName = normalizeMentionName(configStore.getAiMentionName());
+    if (legacyMentionName) {
+      names.push(legacyMentionName);
+    }
+
+    return [...new Set(names.map(name => name.toLowerCase()))].map(lowerName =>
+      names.find(name => name.toLowerCase() === lowerName) ?? lowerName
+    );
+  }
+
+  function buildCommentPlaceholder(issueKey?: string): string {
+    const activeAgentName = resolveActiveAgentMentionName(issueKey);
+    if (activeAgentName && activeAgentName.toLowerCase() !== 'copilot') {
+      return `Write a comment (mention @${activeAgentName} for a reply)`;
     }
     return 'Write a comment (mention @copilot for a reply)';
   }
 
   function updateCommentPlaceholders(): void {
-    const placeholder = buildCommentPlaceholder();
+    const placeholder = buildCommentPlaceholder(detailsProvider.getActiveIssue()?.key);
     issueDetailPanelManager.setCommentPlaceholder(placeholder);
     issueDetailsSidebarViewProvider?.setCommentPlaceholder(placeholder);
   }
@@ -3186,12 +3242,20 @@ export async function activate(
   // before VS Code tries to resolve them.
   // !ticketManager.configured is true when the key is false OR doesn't exist,
   // which means the setup view shows by default before activate() even runs.
-  const getModeContextState = () =>
-    resolveBackendModeContextState(
+  const getModeContextState = () => {
+    const resolved = resolveBackendModeContextState(
       configStore.getBackendMode(),
       configStore.hasJiraConnectionConfig(),
       configStore.hasJiraApiConfig()
     );
+    if (resolved.mode === 'file' && configStore.getPlanFilePath().trim().length === 0) {
+      return { ...resolved, configured: false };
+    }
+    if (resolved.mode === 'livefolder' && configStore.getLiveFolderPath().trim().length === 0) {
+      return { ...resolved, configured: false };
+    }
+    return resolved;
+  };
   const JIRA_API_SCOPE_MIGRATION_KEY = 'ticketManager.jiraApiEpicIssueScopeMigrated';
   const initialModeContext = getModeContextState();
   await vscode.commands.executeCommand(
@@ -3369,6 +3433,16 @@ export async function activate(
     const modeContext = getModeContextState();
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
     await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
+  }
+
+  async function revealSetupView(): Promise<void> {
+    setupSidebarViewProvider.resetToModeSelection();
+    try {
+      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
+      await vscode.commands.executeCommand('ticketManager.setup.focus');
+    } catch (error) {
+      reportError(error, 'reveal-setup');
+    }
   }
 
   async function ensureJiraApiIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
@@ -3593,11 +3667,17 @@ export async function activate(
       return;
     }
 
-    const modeContext = getModeContextState();
+    let modeContext = getModeContextState();
     await setModeContext();
 
-    if (modeContext.mode === 'file' && modeContext.configured) {
+    if (modeContext.mode === 'file') {
       await ensureFilePlanConfigured(true);
+      modeContext = getModeContextState();
+      await setModeContext();
+    }
+
+    if (!modeContext.configured) {
+      await revealSetupView();
     }
   }
 
@@ -3607,6 +3687,7 @@ export async function activate(
   ): Promise<void> {
     await filterStore.setLastSelectedIssueKey(issue?.key);
     await detailsProvider.setIssue(issue);
+    updateCommentPlaceholders();
     boardPanelManager.setSelectedIssueKey(issue?.key);
     issuesSidebarViewProvider.setSelectedIssueKey(issue?.key);
     epicsSidebarViewProvider.setSelectedIssueKey(issue?.key);
@@ -3989,7 +4070,7 @@ export async function activate(
 
   async function addCommentAndRefresh(issueKey: string, body: string): Promise<void> {
     await backendService.addComment(issueKey, body);
-    const copilotRequest = extractCopilotRequest(body, configStore.getAiMentionName());
+    const copilotRequest = extractCopilotRequest(body, buildCommentMentionNames(issueKey));
     if (copilotRequest) {
       if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
@@ -4011,7 +4092,7 @@ export async function activate(
 
   context.subscriptions.push(
     backendService.onDidReceiveExternalComment(async event => {
-      const copilotRequest = extractCopilotRequest(event.body, configStore.getAiMentionName());
+      const copilotRequest = extractCopilotRequest(event.body, buildCommentMentionNames(event.issueKey));
       if (!copilotRequest) {
         return;
       }
@@ -4040,7 +4121,7 @@ export async function activate(
       ...registeredAgents.map(agent => ({
         provider: agent.provider,
         label: agent.name,
-        description: AI_PROVIDER_LABELS[agent.provider] ?? agent.provider,
+        description: getProviderAgentDisplayName(agent.provider),
         agentName: agent.name,
         credential: agent.apiKey
       })),
@@ -4048,7 +4129,7 @@ export async function activate(
         .filter(provider => !configuredProviders.has(provider))
         .map(provider => ({
           provider,
-          label: AI_PROVIDER_LABELS[provider] ?? provider,
+          label: getProviderAgentDisplayName(provider),
           description: provider
         }))
     ];
@@ -4128,6 +4209,7 @@ export async function activate(
       if (activeIssue) {
         activeIssue.aiAssignment = aiSessionManager.getSession(issueKey);
         await detailsProvider.setIssue(activeIssue);
+        updateCommentPlaceholders();
       }
     }
     await issueDetailPanelManager.refreshIfShowing(issueKey);
@@ -5025,6 +5107,7 @@ export async function activate(
               !event.affectsConfiguration('ticketManager.userMcpServerRef')
             ) {
               refreshAiAssignmentMenus();
+              updateCommentPlaceholders();
               void ticketManagerStatusBar.refresh().catch(error => reportError(error));
               return;
             }
@@ -5032,6 +5115,7 @@ export async function activate(
             void (async () => {
               try {
                 refreshAiAssignmentMenus();
+                updateCommentPlaceholders();
                 const modeContext = getModeContextState();
                 await setModeContext();
                 if (modeContext.mode === 'file' && modeContext.configured) {
