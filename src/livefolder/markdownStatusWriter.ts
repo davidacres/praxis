@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { readUtf8 } from './markdownPlanParser';
+import { ensureFrontMatter, type IssueType } from './markdownTemplate';
 
 /** Reverse-map plan statuses back to the emoji-prefixed markdown format. */
 export function planStatusToMarkdown(planStatus: string): string {
@@ -31,11 +32,22 @@ export async function writeStatusToMarkdownFile(
   const mdStatus = planStatusToMarkdown(newPlanStatus);
   const statusLineRe = /^(\*\*Status:\*\*\s*).+$/m;
   const match = statusLineRe.exec(content);
-  if (!match) {
-    return false;
+
+  let updated: string;
+  if (match) {
+    updated = content.replace(statusLineRe, `$1${mdStatus}`);
+  } else {
+    // No Status line found — insert one after the title
+    const normalized = content.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+    let insertIdx = 1;
+    while (insertIdx < lines.length && lines[insertIdx].trim() === '') {
+      insertIdx++;
+    }
+    lines.splice(insertIdx, 0, `**Status:** ${mdStatus}`);
+    updated = lines.join('\n');
   }
 
-  const updated = content.replace(statusLineRe, `$1${mdStatus}`);
   if (updated === content) {
     return false;
   }
@@ -192,4 +204,194 @@ export function computeFeatureRollupStatus(storyStatuses: string[]): string | un
     return 'To Do';
   }
   return undefined;
+}
+
+/**
+ * Appends a comment to the `## Comments` section of a markdown file.
+ * Creates the section if it doesn't exist.
+ */
+export async function appendCommentToMarkdownFile(
+  fileUri: vscode.Uri,
+  author: string,
+  body: string
+): Promise<void> {
+  const content = await readUtf8(fileUri);
+  const normalized = content.replace(/\r\n/g, '\n');
+  const now = new Date().toISOString();
+  const commentBlock = `**${author}** — ${now}\n${body}`;
+
+  const lines = normalized.split('\n');
+  const sectionIndex = lines.findIndex(line => /^##\s+Comments\b/i.test(line.trim()));
+
+  let updated: string;
+  if (sectionIndex >= 0) {
+    // Find the end of the Comments section (next ## heading or EOF)
+    let endIndex = sectionIndex + 1;
+    while (endIndex < lines.length && !/^## /.test(lines[endIndex])) {
+      endIndex++;
+    }
+    const nextLines = [...lines];
+    nextLines.splice(endIndex, 0, '', commentBlock);
+    updated = nextLines.join('\n');
+  } else {
+    updated = `${normalized.trimEnd()}\n\n## Comments\n\n${commentBlock}\n`;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+}
+
+/**
+ * Replaces the body of the `## Description` (or `## Summary`) section in a markdown file.
+ * Returns true if the file was modified.
+ */
+export async function writeDescriptionToMarkdownFile(
+  fileUri: vscode.Uri,
+  newDescription: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const normalized = content.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+
+  // Find ## Description or ## Summary heading
+  const headingIndex = lines.findIndex(line =>
+    /^##\s+(Description|Summary)\b/i.test(line.trim())
+  );
+  if (headingIndex < 0) {
+    return false;
+  }
+
+  // Find the end of the section (next ## heading or EOF)
+  let endIndex = headingIndex + 1;
+  while (endIndex < lines.length && !/^## /.test(lines[endIndex])) {
+    endIndex++;
+  }
+
+  const before = lines.slice(0, headingIndex + 1);
+  const after = lines.slice(endIndex);
+  const updated = [...before, '', newDescription.trim(), '', ...after].join('\n');
+
+  if (updated === normalized) {
+    return false;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+/**
+ * Updates the `**Priority:**` line in a markdown file.
+ * Returns true if the file was modified.
+ */
+export async function writePriorityToMarkdownFile(
+  fileUri: vscode.Uri,
+  newPriority: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const re = /^(\*\*Priority:\*\*\s*).+$/m;
+  if (!re.test(content)) {
+    return false;
+  }
+
+  const updated = content.replace(re, `$1${newPriority}`);
+  if (updated === content) {
+    return false;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+/**
+ * Updates the `**Model:**` line in a markdown file.
+ * If no Model line exists, inserts one after the Status line (or after the title).
+ * Returns true if the file was modified.
+ */
+export async function writeModelToMarkdownFile(
+  fileUri: vscode.Uri,
+  model: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const modelLineRe = /^(\*\*Model:\*\*\s*).+$/m;
+  const match = modelLineRe.exec(content);
+
+  let updated: string;
+  if (match) {
+    updated = content.replace(modelLineRe, `$1${model}`);
+  } else {
+    const normalized = content.replace(/\r\n/g, '\n');
+    const lines = normalized.split('\n');
+    // Insert after title + blank lines
+    let insertIdx = 1;
+    while (insertIdx < lines.length && lines[insertIdx].trim() === '') {
+      insertIdx++;
+    }
+    // Insert after Status line if present, else after title
+    const statusIdx = lines.findIndex(l => l.startsWith('**Status:**'));
+    if (statusIdx >= 0) {
+      insertIdx = statusIdx + 1;
+    }
+    lines.splice(insertIdx, 0, `**Model:** ${model}`);
+    updated = lines.join('\n');
+  }
+
+  if (updated === content) {
+    return false;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+export async function writeSeverityToMarkdownFile(
+  fileUri: vscode.Uri,
+  newSeverity: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const re = /^(\*\*Severity:\*\*\s*).+$/m;
+  if (!re.test(content)) {
+    return false;
+  }
+  const updated = content.replace(re, `$1${newSeverity}`);
+  if (updated === content) {
+    return false;
+  }
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+export async function writeReportedByToMarkdownFile(
+  fileUri: vscode.Uri,
+  newReportedBy: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const re = /^(\*\*Reported By:\*\*\s*).*$/m;
+  if (!re.test(content)) {
+    return false;
+  }
+  const updated = content.replace(re, `$1${newReportedBy}`);
+  if (updated === content) {
+    return false;
+  }
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+/**
+ * Upgrades a markdown issue file to the current template format.
+ * Adds missing header fields and sections without removing existing content.
+ * Returns true if the file was modified.
+ */
+export async function upgradeMarkdownFile(
+  fileUri: vscode.Uri,
+  issueType: string
+): Promise<boolean> {
+  const raw = await readUtf8(fileUri);
+  const updated = ensureFrontMatter(raw, issueType as IssueType);
+
+  if (updated === raw) {
+    return false;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
 }

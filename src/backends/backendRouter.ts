@@ -25,7 +25,7 @@ import { DemoService } from '../demo/demoService';
 import { FilePlanService } from '../file/filePlanService';
 import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
-import { LiveFolderService } from '../livefolder/liveFolderService';
+import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
@@ -34,6 +34,9 @@ export class BackendRouter implements IssueTrackerService {
   private activeMode?: BackendMode;
   private activeService?: IssueTrackerService;
   private readonly userWorkspaceStore: UserWorkspaceStore;
+  private readonly _onDidReceiveExternalComment = new vscode.EventEmitter<ExternalCommentEvent>();
+  public readonly onDidReceiveExternalComment = this._onDidReceiveExternalComment.event;
+  private externalCommentSub?: vscode.Disposable;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
@@ -187,6 +190,7 @@ export class BackendRouter implements IssueTrackerService {
 
   public dispose(): void {
     this.disposeActiveService();
+    this._onDidReceiveExternalComment.dispose();
   }
 
   private async getService(): Promise<IssueTrackerService> {
@@ -209,10 +213,17 @@ export class BackendRouter implements IssueTrackerService {
             : configuredMode === 'userworkspace'
               ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
               : new JiraService(this.context, this.configStore, this.output);
+    if (this.activeService instanceof LiveFolderService) {
+      this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
+        this._onDidReceiveExternalComment.fire(event)
+      );
+    }
     return this.activeService;
   }
 
   private disposeActiveService(): void {
+    this.externalCommentSub?.dispose();
+    this.externalCommentSub = undefined;
     this.activeService?.dispose();
     this.activeService = undefined;
     this.activeMode = undefined;

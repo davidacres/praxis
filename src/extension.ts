@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { AiSessionManager } from './ai/aiSessionManager';
 import { BackendRouter } from './backends/backendRouter';
 import type { IssueTrackerService } from './backends/issueTrackerService';
+import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { createPlanTemplate } from './file/planTemplate';
@@ -4008,6 +4009,29 @@ export async function activate(
     await syncIssueAfterMutation(issueKey);
   }
 
+  context.subscriptions.push(
+    backendService.onDidReceiveExternalComment(async event => {
+      const copilotRequest = extractCopilotRequest(event.body, configStore.getAiMentionName());
+      if (!copilotRequest) {
+        return;
+      }
+      outputChannel.appendLine(`[Agent] External comment detected on ${event.issueKey} by ${event.author}`);
+      if (!isCopilotSdkConfigured()) {
+        outputChannel.appendLine('[Agent] Copilot SDK not configured - skipping external comment reply.');
+        return;
+      }
+      try {
+        await postCopilotReply(event.issueKey, copilotRequest);
+        await syncIssueAfterMutation(event.issueKey);
+      } catch (error) {
+        reportError(error);
+        outputChannel.appendLine(
+          `[Agent] Could not respond to external comment on ${event.issueKey}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    })
+  );
+
   function getConfiguredAiOptions(): AiOptionPick[] {
     const registeredAgents = configStore.getConfiguredAiAgents();
     const providers = configStore.getConfiguredAiProviders();
@@ -4883,6 +4907,7 @@ export async function activate(
         reportError(error);
       }
     }),
+    registerImportCommand(context),
     ...registerCommands({
       context,
       configStore,
