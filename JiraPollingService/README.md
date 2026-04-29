@@ -1,8 +1,10 @@
 # JiraPollingService
 
-`JiraPollingService` is the Node.js polling runtime used by the extension.
+`JiraPollingService` is the Node.js polling and delivery runtime used by the extension and by standalone local debugging commands.
 
-It polls Jira every 30 seconds and reports issues in project `KAMAI` that:
+The extension can start the poller when `ticketManager.jiraPolling.enabled` is true and the active backend is Jira via MCP or Jira API. In Jira API mode, the poller also follows the linked workspace epic from `ticketManager.jiraApiEpicKey`; linked-epic tasks are synced regardless of label, while the required label controls which tasks are eligible for AI execution.
+
+In its default standalone configuration, it polls Jira every 30 seconds and reports issues in project `KAMAI` that:
 
 - have the label `syscfg`
 - are in status `To Do`
@@ -15,7 +17,7 @@ Human board reference:
 
 `https://jira.assaabloy.net/secure/RapidBoard.jspa?rapidView=9402&projectKey=KAMAI`
 
-The service does not scrape the board page. It calls the Jira REST API search endpoint with this JQL:
+The service does not scrape the board page. In standalone/default mode, it calls the Jira REST API search endpoint with this JQL:
 
 ```text
 project = "KAMAI" AND labels = "syscfg" AND status = "To Do" ORDER BY updated DESC
@@ -72,7 +74,7 @@ $env:JIRA_TOKEN = "your-jira-personal-access-token"
 node .\JiraPollingService\node\cli.js --once
 ```
 
-To test the same linked-epic path the extension uses without editing `appsettings.json`:
+To test the same linked-epic path the extension uses in Jira API mode without editing `appsettings.json`:
 
 ```powershell
 $env:JIRA_TOKEN = "your-jira-personal-access-token"
@@ -85,6 +87,28 @@ Optional runtime overrides:
 - `--linked-epic <ISSUE-123>` to supply the required epic key at runtime
 - `--required-label <label>` to override the AI gate label
 - `--required-status <status>` to override the Jira status filter
+
+## Extension Settings
+
+When launched by the extension, the poller is controlled by Ticket Manager settings:
+
+- `ticketManager.jiraPolling.enabled`
+- `ticketManager.jiraPolling.requiredLabel`
+- `ticketManager.jiraPolling.clarificationAnalysis`
+- `ticketManager.jiraApiBaseUrl`
+- `ticketManager.jiraApiToken` or `JIRA_TOKEN`
+- `ticketManager.jiraApiEpicKey`
+- `ticketManager.delivery.defaultBaseBranch`
+- `ticketManager.delivery.autoMergeSubTasks`
+- `ticketManager.ai.deliveryWorkflowEnabled`
+- `ticketManager.ai.deliveryPublishCommand`
+- `ticketManager.ai.deliveryArtifactPattern`
+- `ticketManager.ai.deliveryAgentWorkflowPath`
+- `ticketManager.ai.deliveryAgentWorkflowUrl`
+- `ticketManager.ai.deliverySummaryTemplate`
+- `ticketManager.ai.deliveryFailureTemplate`
+
+Delivery mode uses the Jira API path for comments, attachments, linked epic/sub-task data, and artifact publication. Jira MCP mode can still be used for browsing, but direct attachment upload/download is handled by Jira API support.
 
 ## Build
 
