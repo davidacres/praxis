@@ -4699,6 +4699,33 @@ export async function activate(
       },
       onAbandonSession: async issueKey => {
         await abandonAiSession(issueKey);
+      },
+      onDeleteSession: async issueKey => {
+        if (hasActiveAgentTask(issueKey)) {
+          void vscode.window.showWarningMessage(
+            `Cannot delete session for ${issueKey} because it is currently running. Stop or abandon it first.`
+          );
+          return;
+        }
+        const confirm = await vscode.window.showWarningMessage(
+          `Delete session for ${issueKey}? This removes all stored session data permanently.`,
+          { modal: true },
+          'Delete'
+        );
+        if (confirm !== 'Delete') {
+          return;
+        }
+
+        aiSessionManager.removeAgentSession(issueKey);
+        aiSessionManager.removeSession(issueKey);
+        void vscode.window.showInformationMessage(`Session for ${issueKey} deleted.`);
+        await activeSessionsSidebarViewProvider.refresh();
+        await issueDetailPanelManager.refreshIfShowing(issueKey);
+        const activeIssue = detailsProvider.getActiveIssue();
+        if (activeIssue?.key === issueKey) {
+          activeIssue.aiAssignment = undefined;
+          await detailsProvider.setIssue(activeIssue);
+        }
       }
     }
   );
