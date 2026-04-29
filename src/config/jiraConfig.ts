@@ -489,6 +489,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotCliPath', '');
   }
 
+  public getAiCopilotAgentName(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotAgentName', '');
+  }
+
   public getAiClaudeCliPath(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeCliPath', '');
   }
