@@ -5,6 +5,10 @@
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://git.tools.dev.assaabloyglobalsolutions.net/traka/software/ai/tools/ticket-manager-extension.git"
+  },
   "preview": true,
   "pricing": "Free",
   "type": "commonjs",
