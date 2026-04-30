@@ -23,7 +23,9 @@ if (-not $insidersCli) {
 if (-not $SkipPackage) {
     Push-Location $projectRoot
     try {
-        & npx @vscode/vsce package --allow-missing-repository
+        $repoUrl = "https://git.example.com/example/software/ai/tools/ticket-manager-extension"
+        $rawContentUrl = "$repoUrl/-/raw/main/"
+        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl
     }
     finally {
         Pop-Location
