@@ -87,6 +87,6 @@ suite('TicketManagerStatusBar', () => {
     assert.ok(presentation.tooltipMarkdown.includes('Active sessions: 3'));
     assert.ok(presentation.tooltipMarkdown.includes('Approval required: 1'));
     assert.ok(presentation.tooltipMarkdown.includes('Paused sessions: 2'));
-    assert.ok(presentation.tooltipMarkdown.includes('Open Active Sessions'));
+    assert.ok(presentation.tooltipMarkdown.includes('Open Sessions'));
   });
 });

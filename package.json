@@ -101,7 +101,7 @@
         },
         {
           "id": "ticketManager.activeSessions",
-          "name": "Active Sessions",
+          "name": "Sessions",
           "type": "webview",
           "when": "ticketManager.configured"
         },

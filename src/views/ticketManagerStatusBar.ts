@@ -200,7 +200,7 @@ export function buildTicketManagerStatusPresentation(
     ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
     '',
-    '[Open Active Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
+    '[Open Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
   ].filter((line): line is string => line !== undefined);
 
   const sessionAttentionSuffix = sessionAttention.shortLabel
