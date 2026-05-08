@@ -478,6 +478,39 @@ async function linkJiraApiEpicToWorkspace(deps: CommandDependencies): Promise<vo
   );
 }
 
+async function linkJiraApiBoardQueryToWorkspace(deps: CommandDependencies): Promise<void> {
+  if (!deps.configStore.hasJiraApiConfig()) {
+    await vscode.window.showErrorMessage(
+      'Configure Jira API mode first, then set a board JQL query for this workspace.'
+    );
+    return;
+  }
+
+  const jiraApiService = new JiraApiService(deps.configStore, deps.output);
+  const currentBoardJql = deps.configStore.getJiraApiBoardJql();
+  const boardJql = await vscode.window.showInputBox({
+    title: 'Linked Jira API Board JQL',
+    prompt:
+      'Enter a Jira JQL query to expose as a board in Jira API mode. Leave blank to clear the current board query.',
+    value: currentBoardJql,
+    ignoreFocusOut: true
+  });
+  if (boardJql === undefined) {
+    return;
+  }
+
+  const trimmedBoardJql = boardJql.trim();
+  if (!trimmedBoardJql) {
+    await deps.configStore.setJiraApiBoardJql(undefined);
+    await vscode.window.showInformationMessage('Cleared the linked Jira API board query for this workspace.');
+    return;
+  }
+
+  await jiraApiService.validateBoardJql(trimmedBoardJql);
+  await deps.configStore.setJiraApiBoardJql(trimmedBoardJql);
+  await vscode.window.showInformationMessage('Linked this workspace to a Jira API JQL board query.');
+}
+
 async function refreshViews(deps: CommandDependencies): Promise<void> {
   await Promise.all([deps.issuesProvider.refresh(), deps.boardsProvider.refresh()]);
   const activeIssue = deps.detailsProvider.getActiveIssue();
@@ -962,6 +995,16 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
+    vscode.commands.registerCommand('ticketManager.linkJiraApiBoardQuery', async () => {
+      try {
+        await linkJiraApiBoardQueryToWorkspace(deps);
+      } catch (error) {
+        reportCommandError(deps, 'link-jiraapi-board-query', error);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.importWorkspaceMcpConfig', async () => {
       try {
         const result = await deps.configStore.importWorkspaceMcpConfig(deps.context);
@@ -1081,7 +1124,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
         if (deps.backendService.mode === 'jiraapi') {
           await vscode.window.showWarningMessage(
-            'Creating boards is not supported in Jira API mode. Boards are derived from labeled epic work.'
+            'Creating boards is not supported in Jira API mode. Boards are derived from linked epic work and configured JQL queries.'
           );
           return;
         }
@@ -1172,7 +1215,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       const picked = await vscode.window.showQuickPick(
         [
           { label: 'scrum', picked: filters.types.includes('scrum') },
-          { label: 'kanban', picked: filters.types.includes('kanban') }
+          { label: 'kanban', picked: filters.types.includes('kanban') },
+          { label: 'epic', picked: filters.types.includes('epic') },
+          { label: 'jql', picked: filters.types.includes('jql') }
         ],
         {
           title: 'Board Types',

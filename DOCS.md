@@ -103,12 +103,16 @@ Use this mode for direct Jira Server/Data Center access.
 | `ticketManager.jiraApiBaseUrl` | Jira base URL. |
 | `ticketManager.jiraApiToken` | Personal access token; falls back to `JIRA_TOKEN` when empty. |
 | `ticketManager.jiraApiEpicKey` | Optional workspace-level epic. New Jira API issues use it as the default parent. |
+| `ticketManager.jiraApiEpicBoardName` | Optional display name for the Jira API epic board. |
+| `ticketManager.jiraApiBoardJql` | Optional workspace-level JQL query exposed as a Jira API board. |
+| `ticketManager.jiraApiBoardName` | Optional display name for the Jira API JQL board. |
 
-Jira API mode supports issue loading, metadata, comments, transitions, attachments, sub-task creation, linked-epic sync, and delivery polling. Boards are derived from Jira/epic metadata and cannot be created, edited, or deleted from the extension.
+Jira API mode supports issue loading, metadata, comments, transitions, attachments, sub-task creation, linked-epic sync, and delivery polling. Boards are derived from Jira epic scope and/or configured JQL plus Jira metadata, and cannot be created, edited, or deleted from the extension.
 
 Use:
 
 - `Ticket Manager: Link Jira API Epic`
+- `Ticket Manager: Link Jira API Board Query`
 - `Ticket Manager: Migrate Live Folder to Jira API`
 - `Ticket Manager: Start Sub-Task Delivery`
 
@@ -387,6 +391,7 @@ In Jira API mode, linked-epic tasks are synced regardless of the polling label; 
 - `ticketManager.jiraApiBaseUrl`
 - `ticketManager.jiraApiToken`
 - `ticketManager.jiraApiEpicKey`
+- `ticketManager.jiraApiBoardJql`
 - `ticketManager.workspaceMcpServerName`
 - `ticketManager.userMcpServerRef`
 

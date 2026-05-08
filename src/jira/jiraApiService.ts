@@ -750,45 +750,54 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   public async getBoards(filters: BoardFilters): Promise<Board[]> {
-    if (filters.types.length > 0 && !filters.types.includes('epic')) {
-      return [];
-    }
-
+    const boards: Board[] = [];
     const linkedEpicKey = this.getLinkedEpicKey();
-    if (!linkedEpicKey) {
-      return [];
+    const linkedBoardJql = this.getLinkedBoardJql();
+
+    if (linkedEpicKey) {
+      try {
+        const epic = await this.getIssue(linkedEpicKey);
+        boards.push({
+          id: `epic:${epic.key}`,
+          name: this.getLinkedEpicBoardName() || `${epic.key} ${epic.summary}`,
+          type: 'epic',
+          projectKey: epic.projectKey,
+          projectName: epic.projectName,
+          locationName: epic.projectName,
+          raw: { epicKey: epic.key }
+        });
+      } catch (error) {
+        this.output.appendLine(
+          `[jiraapi] Failed to load linked epic board ${linkedEpicKey}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
-    const epic = await this.getIssue(linkedEpicKey);
-    const board: Board = {
-      id: `epic:${epic.key}`,
-      name: `${epic.key} ${epic.summary}`,
-      type: 'epic',
-      projectKey: epic.projectKey,
-      projectName: epic.projectName,
-      locationName: epic.projectName,
-      raw: { epicKey: epic.key }
-    };
+    if (linkedBoardJql) {
+      boards.push({
+        id: 'jql:workspace',
+        name: this.getLinkedBoardName() || this.buildJqlBoardName(linkedBoardJql),
+        type: 'jql',
+        raw: { jql: linkedBoardJql }
+      });
+    }
 
-    const matchesProject =
-      filters.projectKeys.length === 0 ||
-      (board.projectKey ? filters.projectKeys.includes(board.projectKey) : false);
-    const matchesText =
-      filters.searchText.trim().length === 0 ||
-      `${board.name} ${board.projectName ?? ''}`
-        .toLowerCase()
-        .includes(filters.searchText.trim().toLowerCase());
-
-    return matchesProject && matchesText ? [board] : [];
+    return boards.filter(board => this.matchesBoardFilters(board, filters));
   }
 
   public async getBoardDetails(board: Board): Promise<BoardDetails> {
     const epicKey = this.parseEpicKey(board.id);
-    if (!epicKey) {
-      throw new Error('Invalid Jira API board identifier.');
+    let jql: string;
+    if (epicKey) {
+      jql = this.buildBoardJql(epicKey);
+    } else {
+      const boardJql = this.parseJqlBoardQuery(board);
+      if (!boardJql) {
+        throw new Error('Invalid Jira API board identifier.');
+      }
+      jql = this.buildBoardJqlFromQuery(boardJql);
     }
 
-    const jql = this.buildBoardJql(epicKey);
     const search = await this.searchAllIssues(
       jql,
       ['summary', 'status', 'issuetype', 'assignee', 'priority', 'updated', 'project', 'description', 'parent']
@@ -803,11 +812,71 @@ export class JiraApiService implements IssueTrackerService {
     };
   }
 
+  public async validateBoardJql(jql: string): Promise<void> {
+    const trimmedJql = jql.trim();
+    if (!trimmedJql) {
+      throw new Error('Jira board JQL cannot be empty.');
+    }
+    await this.searchIssues(
+      this.buildBoardJqlFromQuery(trimmedJql),
+      ['key'],
+      0,
+      1
+    );
+  }
+
   public async createBoard(_input: CreateBoardInput): Promise<Board> {
-    throw new Error('Creating boards is not supported in Jira API mode. Boards are derived from the linked epic.');
+    throw new Error('Creating boards is not supported in Jira API mode. Boards are derived from the linked epic or configured JQL query.');
   }
 
   public async updateBoard(_boardId: string, _input: UpdateBoardInput): Promise<Board> {
+    const inputName = _input.name?.trim();
+    const inputJql = _input.jql?.trim();
+    if (!inputName) {
+      throw new Error('Board name cannot be empty.');
+    }
+
+    if (_boardId.startsWith('epic:')) {
+      if (inputJql && inputJql.length > 0) {
+        throw new Error('Epic boards do not support a custom JQL query.');
+      }
+      const epicKey = this.parseEpicKey(_boardId);
+      if (!epicKey) {
+        throw new Error('Invalid Jira API board identifier.');
+      }
+      const epic = await this.getIssue(epicKey);
+      await this.configStore.setJiraApiEpicBoardName(inputName);
+      return {
+        id: _boardId,
+        name: inputName,
+        type: 'epic',
+        projectKey: epic.projectKey,
+        projectName: epic.projectName,
+        locationName: epic.projectName,
+        raw: { epicKey: epic.key }
+      };
+    }
+
+    if (_boardId === 'jql:workspace') {
+      const boardJql = this.getLinkedBoardJql();
+      if (!boardJql) {
+        throw new Error('Jira API board query is not configured.');
+      }
+      if (inputJql !== undefined) {
+        if (!inputJql) {
+          throw new Error('Board JQL cannot be empty.');
+        }
+        await this.configStore.setJiraApiBoardJql(inputJql);
+      }
+      await this.configStore.setJiraApiBoardName(inputName);
+      return {
+        id: _boardId,
+        name: inputName,
+        type: 'jql',
+        raw: { jql: inputJql || boardJql }
+      };
+    }
+
     throw new Error('Boards cannot be edited in Jira API mode.');
   }
 
@@ -1718,10 +1787,20 @@ export class JiraApiService implements IssueTrackerService {
     return `(parent = ${escapeJqlValue(epicKey)} OR "Epic Link" = ${escapeJqlValue(epicKey)})`;
   }
 
+  private buildBoardJqlFromQuery(jql: string): string {
+    const trimmed = jql.trim();
+    if (!trimmed) {
+      throw new Error('Jira board JQL cannot be empty.');
+    }
+
+    if (/\border\s+by\b/i.test(trimmed)) {
+      return trimmed;
+    }
+    return `${trimmed} ORDER BY updated DESC`;
+  }
+
   private buildBoardJql(epicKey: string): string {
-    const clauses: string[] = [];
-    clauses.push(this.buildLinkedEpicDescendantClause(epicKey));
-    return `${clauses.join(' AND ')} ORDER BY updated DESC`;
+    return this.buildBoardJqlFromQuery(this.buildLinkedEpicDescendantClause(epicKey));
   }
 
   private async searchIssues(
@@ -1964,8 +2043,57 @@ export class JiraApiService implements IssueTrackerService {
     return boardId.startsWith('epic:') ? boardId.slice('epic:'.length) : undefined;
   }
 
+  private getLinkedEpicBoardName(): string | undefined {
+    return this.configStore.getJiraApiEpicBoardName().trim() || undefined;
+  }
+
+  private parseJqlBoardQuery(board: Board): string | undefined {
+    if (board.id !== 'jql:workspace' || !isRecord(board.raw)) {
+      return undefined;
+    }
+    const jql = asString(board.raw.jql)?.trim();
+    return jql || undefined;
+  }
+
   private getLinkedEpicKey(): string | undefined {
     return this.configStore.getJiraApiEpicKey().trim() || undefined;
+  }
+
+  private getLinkedBoardJql(): string | undefined {
+    return this.configStore.getJiraApiBoardJql().trim() || undefined;
+  }
+
+  private getLinkedBoardName(): string | undefined {
+    return this.configStore.getJiraApiBoardName().trim() || undefined;
+  }
+
+  private buildJqlBoardName(jql: string): string {
+    const compact = jql.replace(/\s+/g, ' ').trim();
+    if (compact.length <= 56) {
+      return `JQL ${compact}`;
+    }
+    return `JQL ${compact.slice(0, 53)}...`;
+  }
+
+  private matchesBoardFilters(board: Board, filters: BoardFilters): boolean {
+    if (filters.types.length > 0 && !filters.types.includes(board.type)) {
+      return false;
+    }
+
+    if (filters.projectKeys.length > 0) {
+      const boardProjectKey = board.projectKey?.trim();
+      if (!boardProjectKey || !filters.projectKeys.includes(boardProjectKey)) {
+        return false;
+      }
+    }
+
+    if (filters.searchText.trim().length === 0) {
+      return true;
+    }
+
+    const boardQuery = this.parseJqlBoardQuery(board) ?? '';
+    const searchTarget = `${board.name} ${board.projectName ?? ''} ${boardQuery}`.toLowerCase();
+    return searchTarget.includes(filters.searchText.trim().toLowerCase());
   }
 
   private resolveProjectScope(projectKeys: string[]): string[] {

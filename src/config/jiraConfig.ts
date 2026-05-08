@@ -355,6 +355,18 @@ export class AppConfigStore {
     return this.getWorkspaceScopedConfigValue<string>('jiraApiEpicKey', '').trim();
   }
 
+  public getJiraApiEpicBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraApiEpicBoardName', '').trim();
+  }
+
+  public getJiraApiBoardJql(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraApiBoardJql', '').trim();
+  }
+
+  public getJiraApiBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraApiBoardName', '').trim();
+  }
+
   public async setJiraApiBaseUrl(value: string): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraApiBaseUrl', value, target);
@@ -370,6 +382,27 @@ export class AppConfigStore {
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
       .update('jiraApiEpicKey', value?.trim() ?? '', target);
+  }
+
+  public async setJiraApiEpicBoardName(value: string | undefined): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('jiraApiEpicBoardName', value?.trim() ?? '', target);
+  }
+
+  public async setJiraApiBoardJql(value: string | undefined): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('jiraApiBoardJql', value?.trim() ?? '', target);
+  }
+
+  public async setJiraApiBoardName(value: string | undefined): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('jiraApiBoardName', value?.trim() ?? '', target);
   }
 
   // ── GitHub settings ──────────────────────────────────────────────
@@ -882,8 +915,9 @@ export class AppConfigStore {
     if (this.getEffectiveBackendMode() === 'jiraapi') {
       const baseUrl = this.getJiraApiBaseUrl();
       const epicKey = this.getJiraApiEpicKey();
+      const boardJql = this.getJiraApiBoardJql();
       return baseUrl
-        ? `Jira API (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''})`
+        ? `Jira API (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''}${boardJql ? '; jql board configured' : ''})`
         : 'Jira API (not configured)';
     }
 

@@ -3299,6 +3299,13 @@ export async function activate(
     },
     boardColumnStore
   );
+  boardColumnConfigPanel.setBoardSettingsUpdater(async (boardId, input) => {
+    const updatedBoard = await backendService.updateBoard(boardId, input);
+    await boardsProvider.refresh();
+    if (boardPanelManager.getActiveBoard()?.id === boardId) {
+      await boardPanelManager.openBoard(updatedBoard);
+    }
+  });
   issueDetailPanelManager = new IssueDetailPanelManager(backendService, aiSessionManager, async () => {
     await Promise.all([issuesProvider.refresh(), boardsProvider.refresh()]);
     const active = detailsProvider.getActiveIssue();
@@ -3972,31 +3979,8 @@ export async function activate(
         await vscode.window.showInformationMessage('Select a board first.');
         return;
       }
-
-      const name = await vscode.window.showInputBox({
-        title: `Edit Board (${board.name})`,
-        prompt: 'Update the board name.',
-        value: board.name,
-        ignoreFocusOut: true,
-        validateInput: value => (value.trim().length === 0 ? 'Board name is required.' : undefined)
-      });
-      if (name === undefined) {
-        return;
-      }
-
-      const updatedBoard = await backendService.updateBoard(boardId, {
-        name: name.trim()
-      });
-      await boardsProvider.refresh();
-
-      if (
-        boardStore.getLastSelectedBoardId() === boardId ||
-        boardPanelManager.getActiveBoard()?.id === boardId
-      ) {
-        await boardStore.setLastSelectedBoardId(boardId);
-        boardsSidebarViewProvider.setSelectedBoardId(boardId);
-        await boardPanelManager.openBoard(updatedBoard);
-      }
+      const details = await backendService.getBoardDetails(board);
+      await boardColumnConfigPanel.open(board, details);
     } catch (error) {
       await reportActionError(error);
     }

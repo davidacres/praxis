@@ -574,6 +574,7 @@ ${connFields}`;
     const baseUrl = escapeHtml(this.setupFields.jiraApiBaseUrl ?? '');
     const token = escapeHtml(this.setupFields.jiraApiToken ?? '');
     const epicKey = escapeHtml(this.setupFields.jiraApiEpicKey ?? '');
+    const boardJql = escapeHtml(this.setupFields.jiraApiBoardJql ?? '');
     const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
     const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
 
@@ -588,7 +589,12 @@ ${connFields}`;
 <div class="form-group">
   <label>Linked Epic Key</label>
   <input type="text" data-field="jiraApiEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
-  <div class="help-text">Workspace-level epic associated with this repo. Boards and polling sync follow this epic, and Jira API issue creation uses it as the default parent.</div>
+  <div class="help-text">Workspace-level epic associated with this repo. Jira API issue creation uses it as the default parent, and an epic board is shown when set.</div>
+</div>
+<div class="form-group">
+  <label>Board JQL Query</label>
+  <input type="text" data-field="jiraApiBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
+  <div class="help-text">Optional workspace-level JQL query exposed as a Jira API board.</div>
 </div>
 <div class="settings-section">
   <label>AI execution gate</label>
@@ -641,6 +647,7 @@ ${connFields}`;
               this.setupFields.jiraApiBaseUrl = config.get<string>('jiraApiBaseUrl', '');
               this.setupFields.jiraApiToken = config.get<string>('jiraApiToken', '');
               this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+              this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
             }
           }
           this.render();
@@ -821,6 +828,7 @@ ${connFields}`;
         await updateSetting('jiraApiBaseUrl', (this.setupFields.jiraApiBaseUrl ?? '').trim());
         await updateSetting('jiraApiToken', (this.setupFields.jiraApiToken ?? '').trim());
         await updateSetting('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim());
+        await updateSetting('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim());
         await updateSetting(
           'jiraPolling.requiredLabel',
           (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'

@@ -37,7 +37,7 @@ function renderPill(label: string, token: string, inlineStyle?: string): string 
 
 function boardTypeToken(boardType: string | undefined): string {
   const normalized = boardType?.trim().toLowerCase();
-  if (normalized === 'scrum' || normalized === 'kanban') {
+  if (normalized === 'scrum' || normalized === 'kanban' || normalized === 'epic' || normalized === 'jql') {
     return normalized;
   }
   return 'board';
@@ -300,6 +300,16 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
         color: #86efac;
         background: rgba(34, 197, 94, 0.16);
         border-color: rgba(34, 197, 94, 0.28);
+      }
+      .pill--epic {
+        color: #f9a8d4;
+        background: rgba(236, 72, 153, 0.16);
+        border-color: rgba(236, 72, 153, 0.28);
+      }
+      .pill--jql {
+        color: #fde68a;
+        background: rgba(245, 158, 11, 0.16);
+        border-color: rgba(245, 158, 11, 0.28);
       }
       .pill--board,
       .pill--meta {

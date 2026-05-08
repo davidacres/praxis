@@ -206,6 +206,7 @@ export interface ParentItemQueryOptions {
 
 export interface UpdateBoardInput {
   name?: string;
+  jql?: string;
 }
 
 export interface CreateBoardInput {

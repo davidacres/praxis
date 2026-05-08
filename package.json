@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "publisher": "local-dev",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -65,7 +65,8 @@
     "install:vsix": "node ./scripts/install-vsix.cjs",
     "install:code": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode.ps1",
     "install:insiders": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode-insiders.ps1",
-    "install:cursor": "powershell -ExecutionPolicy Bypass -File ./scripts/install-cursor-extension.ps1"
+    "install:cursor": "powershell -ExecutionPolicy Bypass -File ./scripts/install-cursor-extension.ps1",
+    "open:ticket-manager": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-ticket-manager-vscode.ps1"
   },
   "contributes": {
     "viewsContainers": {
@@ -241,6 +242,12 @@
         "title": "Link Jira API Epic",
         "category": "Ticket Manager",
         "icon": "$(link)"
+      },
+      {
+        "command": "ticketManager.linkJiraApiBoardQuery",
+        "title": "Link Jira API Board Query",
+        "category": "Ticket Manager",
+        "icon": "$(list-filter)"
       },
       {
         "command": "ticketManager.newProject",
@@ -764,6 +771,24 @@
           "default": "",
           "scope": "window",
           "description": "Optional Jira Epic key associated with this workspace in Jira API mode. Boards and polling sync follow this epic, and Jira API issue creation uses it as the default parent epic."
+        },
+        "ticketManager.jiraApiEpicBoardName": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Optional display name for the Jira API epic board in this workspace."
+        },
+        "ticketManager.jiraApiBoardJql": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Optional Jira JQL query associated with this workspace in Jira API mode. When set, a JQL board is shown in addition to any linked epic board."
+        },
+        "ticketManager.jiraApiBoardName": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Optional display name for the Jira API JQL board in this workspace."
         },
         "ticketManager.planFilePath": {
           "type": "string",
