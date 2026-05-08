@@ -24,6 +24,18 @@ npm run compile
 
 Press `F5` in VS Code to launch the extension development host.
 
+To open a shell-like VS Code window (no folder) with your normal signed-in profile, focused on Ticket Manager:
+
+```powershell
+npm run open:ticket-manager
+```
+
+Optionally pass a path to include in the shell workspace:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\launch-ticket-manager-vscode.ps1 -OpenPath C:\path\to\workspace
+```
+
 ## Testing
 
 ```powershell
@@ -54,14 +66,18 @@ Jira API mode connects directly to Jira Server/Data Center:
 - `ticketManager.jiraApiBaseUrl`
 - `ticketManager.jiraApiToken` or `JIRA_TOKEN`
 - `ticketManager.jiraApiEpicKey`
+- `ticketManager.jiraApiEpicBoardName`
+- `ticketManager.jiraApiBoardJql`
+- `ticketManager.jiraApiBoardName`
 
 Use:
 
 - `Ticket Manager: Link Jira API Epic` to associate the workspace with an epic.
+- `Ticket Manager: Link Jira API Board Query` to associate the workspace with a JQL-backed board.
 - `Ticket Manager: Migrate Live Folder to Jira API` to migrate the current Live Folder feature into Jira API.
 - `Ticket Manager: Start Sub-Task Delivery` to start the polling/delivery workflow for Jira sub-tasks.
 
-Jira API boards are derived from linked-epic work and Jira board/status metadata; board creation/edit/delete is not supported in this mode.
+Jira API boards are derived from linked-epic work and/or a configured JQL query plus Jira board/status metadata; board creation/edit/delete is not supported in this mode.
 
 ### Jira via MCP
 

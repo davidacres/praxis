@@ -69,6 +69,7 @@ interface SetupState {
   jiraApiBaseUrl: string;
   jiraApiToken: string;
   jiraApiEpicKey: string;
+  jiraApiBoardJql: string;
 }
 
 function createInitialState(): SetupState {
@@ -97,6 +98,7 @@ function createInitialState(): SetupState {
     jiraApiBaseUrl: '',
     jiraApiToken: '',
     jiraApiEpicKey: '',
+    jiraApiBoardJql: '',
   };
 }
 
@@ -217,6 +219,7 @@ export class SetupWizardPanel {
               this.state.jiraApiBaseUrl = config.get<string>('jiraApiBaseUrl', '');
               this.state.jiraApiToken = config.get<string>('jiraApiToken', '');
               this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+              this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
             }
           }
           this.state.step = 1;
@@ -370,6 +373,7 @@ export class SetupWizardPanel {
         await config.update('jiraApiBaseUrl', this.state.jiraApiBaseUrl.trim(), target);
         await config.update('jiraApiToken', this.state.jiraApiToken.trim(), target);
         await config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target);
+        await config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target);
         await config.update(
           'jiraPolling.requiredLabel',
           this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
@@ -750,8 +754,9 @@ export class SetupWizardPanel {
 
   private renderJiraApiForm(): string {
     const epicKey = esc(this.state.jiraApiEpicKey);
+    const boardJql = esc(this.state.jiraApiBoardJql);
     return `
-      <p class="form-help">Jira API mode connects directly to Jira Server/Data Center and syncs this repo against the linked epic. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
+      <p class="form-help">Jira API mode connects directly to Jira Server/Data Center. You can expose boards from a linked epic and/or a custom JQL query. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
       <div class="field-group">
         <label class="field-label">Jira Base URL</label>
         <input type="text" class="field-input"
@@ -769,10 +774,18 @@ export class SetupWizardPanel {
             <div class="field-group">
          <label class="field-label">Linked Epic Key</label>
          <input type="text" class="field-input"
-           data-field="jiraApiEpicKey"
-           value="${epicKey}"
-           placeholder="Optional: e.g. KAMAI-123" />
-         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira API issue creation will use it as the default parent.</p>
+            data-field="jiraApiEpicKey"
+            value="${epicKey}"
+            placeholder="Optional: e.g. KAMAI-123" />
+         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira API issue creation will use it as the default parent, and an epic board is shown when set.</p>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Board JQL Query</label>
+        <input type="text" class="field-input"
+               data-field="jiraApiBoardJql"
+               value="${boardJql}"
+               placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
+        <p class="field-hint polling-hint">Optional workspace-level JQL query exposed as a Jira API board.</p>
       </div>
       <div class="polling-section">
         <div class="field-label">AI execution gate</div>
