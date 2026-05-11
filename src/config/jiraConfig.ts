@@ -24,14 +24,7 @@ const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
 const SECRET_WORKSPACE_INPUTS_KEY = 'ticketManager.workspaceMcpInputs';
 const WORKSPACE_SERVER_KEY = 'workspaceMcpServerName';
 const USER_SERVER_KEY = 'userMcpServerRef';
-const PLAN_FILE_KEY = 'planFilePath';
 const USER_MCP_PATHS_ENV = 'JIRA_MINI_USER_MCP_PATHS';
-const DEFAULT_PLAN_FILE_NAMES = [
-  'ticket-plan.jsonc',
-  'ticket-plan.json',
-  '.vscode/ticket-plan.jsonc',
-  '.vscode/ticket-plan.json'
-];
 const POLLING_CONFIG_PATH = path.resolve(__dirname, '..', '..', 'JiraPollingService', 'appsettings.json');
 
 interface JiraPollingDefaults {
@@ -54,6 +47,13 @@ interface WorkspaceMcpFileContext {
   workspaceFolder?: vscode.WorkspaceFolder;
   sourcePath: string;
   inputs: Record<string, WorkspaceInputDefinition>;
+}
+
+interface ConfigureConnectionChoice {
+  label: string;
+  description: string;
+  mode: 'manual' | 'workspace' | 'user';
+  value?: ConnectionType;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -166,6 +166,58 @@ function buildServerRef(sourcePath: string, serverName: string): string {
   return `${sourcePath}::${serverName}`;
 }
 
+export function buildJiraConnectionChoices(
+  hasWorkspaceCandidates: boolean,
+  hasUserCandidates: boolean
+): ConfigureConnectionChoice[] {
+  const workspaceChoice: ConfigureConnectionChoice = {
+    label: 'Use Workspace MCP Configuration',
+    description: 'Reuse a Jira server from .vscode/mcp.json in this workspace.',
+    mode: 'workspace'
+  };
+  const userChoice: ConfigureConnectionChoice = {
+    label: 'Use User/Profile MCP Configuration',
+    description: 'Reuse a globally configured Jira server from Cursor or VS Code.',
+    mode: 'user'
+  };
+  const manualChoice: ConfigureConnectionChoice = {
+    label: 'Manual Setup',
+    description: 'Enter a local-process command or a remote MCP server URL yourself.',
+    mode: 'manual'
+  };
+
+  const choices: ConfigureConnectionChoice[] = [];
+  if (hasWorkspaceCandidates) {
+    choices.push(workspaceChoice);
+  }
+  if (hasUserCandidates) {
+    choices.push(userChoice);
+  }
+
+  choices.push(manualChoice);
+
+  return choices;
+}
+
+export function buildManualJiraConnectionChoices(
+  existingType: ConnectionType
+): ConfigureConnectionChoice[] {
+  const stdioChoice: ConfigureConnectionChoice = {
+    label: 'Local Process',
+    description: 'Start a Jira MCP server over stdio and enter the command yourself.',
+    mode: 'manual',
+    value: 'stdio'
+  };
+  const httpChoice: ConfigureConnectionChoice = {
+    label: 'Remote MCP Server',
+    description: 'Connect to a Jira MCP server over streamable HTTP and enter the URL yourself.',
+    mode: 'manual',
+    value: 'http'
+  };
+
+  return existingType === 'http' ? [httpChoice, stdioChoice] : [stdioChoice, httpChoice];
+}
+
 let cachedJiraPollingDefaults: JiraPollingDefaults | undefined;
 
 function loadJiraPollingDefaults(): JiraPollingDefaults {
@@ -258,45 +310,18 @@ export class AppConfigStore {
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('backendMode', mode, target);
   }
 
-  public getPlanFilePath(): string {
-    return this.getWorkspaceScopedConfigValue<string>(PLAN_FILE_KEY, '').trim();
-  }
-
-  public async setPlanFilePath(planFilePath: string | undefined): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace
-      .getConfiguration(CONFIG_ROOT)
-      .update(PLAN_FILE_KEY, planFilePath?.trim() ?? '', target);
-  }
-
-  public async getResolvedPlanFileUri(): Promise<vscode.Uri | undefined> {
-    const configuredPath = this.getPlanFilePath();
-    if (!configuredPath) {
-      return undefined;
-    }
-
-    return this.resolvePathToUri(configuredPath);
-  }
-
-  public async findWorkspacePlanCandidates(): Promise<vscode.Uri[]> {
-    const candidates: vscode.Uri[] = [];
-    for (const workspaceFolder of vscode.workspace.workspaceFolders ?? []) {
-      for (const fileName of DEFAULT_PLAN_FILE_NAMES) {
-        const candidate = vscode.Uri.joinPath(workspaceFolder.uri, fileName);
-        if (await this.pathExists(candidate)) {
-          candidates.push(candidate);
-        }
-      }
-    }
-    return candidates;
-  }
-
   public getRequestTimeoutMs(): number {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<number>('requestTimeoutMs', 30000);
   }
 
   public getDefaultPageSize(): number {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<number>('defaultPageSize', 25);
+  }
+
+  public getJiraMcpCloudId(): string | undefined {
+    const value = vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraMcpCloudId', '');
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   public isJiraStartupPollingEnabled(): boolean {
@@ -446,6 +471,16 @@ export class AppConfigStore {
 
   public getGitLabApiKey(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabApiKey', '');
+  }
+
+  public getGitLabProjectPath(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabProjectPath', '');
+  }
+
+  public getGitLabListAllAccessibleBoards(): boolean {
+    return vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .get<boolean>('gitlabListAllAccessibleBoards', false);
   }
 
   public getGitLabMcpCommand(): string {
@@ -898,11 +933,6 @@ export class AppConfigStore {
       return 'Demo mode';
     }
 
-    if (this.getEffectiveBackendMode() === 'file') {
-      const planFile = await this.getResolvedPlanFileUri();
-      return planFile ? `File mode (${planFile.fsPath})` : 'File mode (plan not configured)';
-    }
-
     if (this.getEffectiveBackendMode() === 'livefolder') {
       const folderPath = this.getLiveFolderPath();
       return folderPath ? `Live Folder (${folderPath})` : 'Live Folder (not configured)';
@@ -978,37 +1008,19 @@ export class AppConfigStore {
     const configuration = vscode.workspace.getConfiguration(CONFIG_ROOT);
     const existingType = this.getConnectionType();
     const existingSecrets = await this.getSecretValues(context);
+    const [workspaceCandidates, userCandidates] = await Promise.all([
+      this.getWorkspaceMcpCandidates(context),
+      this.getUserMcpCandidates(context)
+    ]);
 
-    const selectedType = await vscode.window.showQuickPick<
-      { label: string; description: string; mode: 'manual' | 'workspace' | 'user'; value?: ConnectionType }
-    >(
-      [
-        {
-          label: 'Local Process',
-          description: 'Connect to Jira via an MCP server over stdio.',
-          mode: 'manual',
-          value: 'stdio'
-        },
-        {
-          label: 'Remote MCP Server',
-          description: 'Connect to Jira via an MCP server over streamable HTTP.',
-          mode: 'manual',
-          value: 'http'
-        },
-        {
-          label: 'Use Workspace MCP Configuration',
-          description: 'Reuse a Jira server from .vscode/mcp.json in this workspace.',
-          mode: 'workspace'
-        },
-        {
-          label: 'Use User/Profile MCP Configuration',
-          description: 'Reuse a globally configured Jira server from Cursor or VS Code.',
-          mode: 'user'
-        }
-      ],
+    const selectedType = await vscode.window.showQuickPick<ConfigureConnectionChoice>(
+      buildJiraConnectionChoices(
+        workspaceCandidates.length > 0,
+        userCandidates.length > 0
+      ),
       {
         title: 'Ticket Manager: Jira MCP Connection Type',
-        placeHolder: existingType === 'stdio' ? 'Local Process' : 'Remote MCP Server'
+        placeHolder: 'Choose an existing Jira MCP source or configure a manual connection.'
       }
     );
 
@@ -1024,7 +1036,19 @@ export class AppConfigStore {
       return this.importUserMcpConfig(context);
     }
 
-    if (selectedType.value === 'stdio') {
+    const manualType = await vscode.window.showQuickPick<ConfigureConnectionChoice>(
+      buildManualJiraConnectionChoices(existingType),
+      {
+        title: 'Ticket Manager: Jira MCP Manual Connection',
+        placeHolder: 'Choose how you want to connect manually.'
+      }
+    );
+
+    if (!manualType?.value) {
+      return { saved: false, description: 'Cancelled' };
+    }
+
+    if (manualType.value === 'stdio') {
       const command = await vscode.window.showInputBox({
         title: 'Ticket Manager: Jira MCP stdio command',
         prompt: 'Command used to start the Jira MCP server.',

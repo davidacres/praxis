@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ConnectionConfig, ToolCallPayload, ToolDescriptor } from '../types';
+import { getMcpOAuthManager } from './oauthManager';
 
 type McpClientInstance = Client;
 
@@ -80,6 +82,7 @@ function getErrorMessage(name: string, response: unknown, textBlocks: string[]):
 
 export class McpClientWrapper implements vscode.Disposable {
   private client?: McpClientInstance;
+  private currentConfig?: ConnectionConfig;
   private connectionSignature?: string;
   private stderrListener?: (chunk: Buffer | string) => void;
 
@@ -103,6 +106,7 @@ export class McpClientWrapper implements vscode.Disposable {
     const transport =
       config.type === 'http'
         ? new StreamableHTTPClientTransport(new URL(config.url), {
+            authProvider: getMcpOAuthManager()?.createProvider(config.url),
             requestInit: {
               headers: config.headers
             }
@@ -133,7 +137,27 @@ export class McpClientWrapper implements vscode.Disposable {
     }
 
     this.output.appendLine(`[mcp] Connecting using ${config.type}.`);
-    await client.connect(transport, { timeout: config.timeoutMs });
+    try {
+      await client.connect(transport, { timeout: config.timeoutMs });
+    } catch (error) {
+      if (
+        config.type === 'http' &&
+        transport instanceof StreamableHTTPClientTransport &&
+        error instanceof UnauthorizedError
+      ) {
+        const oauthManager = getMcpOAuthManager();
+        if (!oauthManager) {
+          throw error;
+        }
+
+        this.output.appendLine('[mcp] Authorization required. Waiting for browser sign-in to complete.');
+        const authorizationCode = await oauthManager.waitForAuthorizationCode();
+        await transport.finishAuth(authorizationCode);
+        await client.connect(transport, { timeout: config.timeoutMs });
+      } else {
+        throw error;
+      }
+    }
 
     const serverVersion = client.getServerVersion();
     if (serverVersion) {
@@ -145,6 +169,7 @@ export class McpClientWrapper implements vscode.Disposable {
     }
 
     this.client = client;
+    this.currentConfig = config;
     this.connectionSignature = signature;
   }
 
@@ -160,6 +185,7 @@ export class McpClientWrapper implements vscode.Disposable {
       this.output.appendLine(`[mcp] Close error: ${(error as Error).message}`);
     } finally {
       this.client = undefined;
+      this.currentConfig = undefined;
       this.connectionSignature = undefined;
       this.stderrListener = undefined;
     }
@@ -174,7 +200,10 @@ export class McpClientWrapper implements vscode.Disposable {
       throw new Error('MCP client is not connected.');
     }
 
-    const response = await this.client.listTools(undefined, { timeout: timeoutMs });
+    const response = await this.runWithUnauthorizedReconnect(
+      () => this.client!.listTools(undefined, { timeout: timeoutMs }),
+      'list tools'
+    );
     return response.tools.map(tool => ({
       name: tool.name,
       description: tool.description,
@@ -192,9 +221,13 @@ export class McpClientWrapper implements vscode.Disposable {
     }
 
     this.output.appendLine(`[mcp] Calling tool ${name}.`);
-    const response = await this.client.callTool({ name, arguments: args }, undefined, {
-      timeout: timeoutMs
-    });
+    const response = await this.runWithUnauthorizedReconnect(
+      () =>
+        this.client!.callTool({ name, arguments: args }, undefined, {
+          timeout: timeoutMs
+        }),
+      `call tool ${name}`
+    );
     const textBlocks = extractTextBlocks(response);
 
     if (isErrorResponse(response)) {
@@ -210,5 +243,24 @@ export class McpClientWrapper implements vscode.Disposable {
 
   public dispose(): void {
     void this.disconnect();
+  }
+
+  private async runWithUnauthorizedReconnect<T>(
+    operation: () => Promise<T>,
+    label: string
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError) || this.currentConfig?.type !== 'http') {
+        throw error;
+      }
+
+      const config = this.currentConfig;
+      this.output.appendLine(`[mcp] Authorization expired while attempting to ${label}. Reconnecting.`);
+      await this.disconnect();
+      await this.connect(config);
+      return operation();
+    }
   }
 }

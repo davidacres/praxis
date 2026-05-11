@@ -16,6 +16,83 @@ export interface GitLabApiConfig {
   token: string;
 }
 
+export interface GitLabProject {
+  id: number;
+  name: string;
+  path: string;
+  pathWithNamespace: string;
+  webUrl?: string;
+}
+
+export interface GitLabUser {
+  id: number;
+  username?: string;
+  name?: string;
+  state?: string;
+}
+
+export interface GitLabBoardList {
+  id: number;
+  title: string;
+  position: number;
+  kind?: 'label' | 'assignee' | 'milestone' | 'iteration';
+  labelName?: string;
+  assigneeId?: number;
+  assigneeUsername?: string;
+  milestoneId?: number;
+  milestoneTitle?: string;
+  iterationId?: number;
+  iterationTitle?: string;
+  raw: unknown;
+}
+
+export interface GitLabBoard {
+  id: number;
+  name: string;
+  project: GitLabProject;
+  webUrl?: string;
+  hideBacklogList: boolean;
+  hideClosedList: boolean;
+  assigneeUsername?: string;
+  milestoneTitle?: string;
+  labels: string[];
+  weight?: number;
+  lists: GitLabBoardList[];
+  raw: unknown;
+}
+
+export interface GitLabIssue {
+  id: number;
+  iid: number;
+  projectId: number;
+  title: string;
+  state: string;
+  webUrl?: string;
+  authorName?: string;
+  assignees: Array<{ username?: string; name?: string }>;
+  labels: string[];
+  milestoneTitle?: string;
+  iterationTitle?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  description?: string;
+  references?: {
+    full?: string;
+    relative?: string;
+    short?: string;
+  };
+  raw: unknown;
+}
+
+export interface GitLabIssueComment {
+  id: string;
+  author?: string;
+  body: string;
+  createdAt?: string;
+  updatedAt?: string;
+  raw: unknown;
+}
+
 export interface GitLabMergeRequest {
   projectId: number;
   iid: number;
@@ -244,6 +321,196 @@ function normalizeMergeRequest(raw: Record<string, unknown>): GitLabMergeRequest
   };
 }
 
+function normalizeProject(raw: Record<string, unknown>): GitLabProject {
+  return {
+    id: Number(raw.id ?? 0),
+    name: asString(raw.name) ?? '',
+    path: asString(raw.path) ?? '',
+    pathWithNamespace: asString(raw.path_with_namespace) ?? asString(raw.path) ?? '',
+    webUrl: asString(raw.web_url)
+  };
+}
+
+function normalizeGitLabUser(raw: Record<string, unknown>): GitLabUser {
+  return {
+    id: Number(raw.id ?? 0),
+    username: asString(raw.username),
+    name: asString(raw.name),
+    state: asString(raw.state)
+  };
+}
+
+function getBoardListKind(raw: {
+  label?: Record<string, unknown>;
+  assignee?: Record<string, unknown>;
+  milestone?: Record<string, unknown>;
+  iteration?: Record<string, unknown>;
+}): GitLabBoardList['kind'] {
+  if (raw.label) {
+    return 'label';
+  }
+
+  if (raw.assignee) {
+    return 'assignee';
+  }
+
+  if (raw.milestone) {
+    return 'milestone';
+  }
+
+  if (raw.iteration) {
+    return 'iteration';
+  }
+
+  return undefined;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function normalizeBoardList(raw: Record<string, unknown>): GitLabBoardList {
+  const label = toRecord(raw.label);
+  const assignee = toRecord(raw.assignee);
+  const milestone = toRecord(raw.milestone);
+  const iteration = toRecord(raw.iteration);
+
+  const title = asString(label?.name)
+    ?? asString(assignee?.name)
+    ?? asString(milestone?.title)
+    ?? asString(iteration?.title)
+    ?? asString(raw.list_type)
+    ?? `List ${typeof raw.id === 'number' || typeof raw.id === 'string' ? String(raw.id) : 'unknown'}`;
+
+  return {
+    id: Number(raw.id ?? 0),
+    title,
+    position: Number(raw.position ?? 0),
+    kind: getBoardListKind({ label, assignee, milestone, iteration }),
+    labelName: asString(label?.name),
+    assigneeId: toOptionalNumber(assignee?.id),
+    assigneeUsername: asString(assignee?.username),
+    milestoneId: toOptionalNumber(milestone?.id),
+    milestoneTitle: asString(milestone?.title),
+    iterationId: toOptionalNumber(iteration?.id),
+    iterationTitle: asString(iteration?.title),
+    raw
+  };
+}
+
+function normalizeBoard(raw: Record<string, unknown>): GitLabBoard {
+  const rawProject = typeof raw.project === 'object' && raw.project !== null
+    ? raw.project as Record<string, unknown>
+    : {};
+  const rawAssignee = typeof raw.assignee === 'object' && raw.assignee !== null
+    ? raw.assignee as Record<string, unknown>
+    : undefined;
+  const rawMilestone = typeof raw.milestone === 'object' && raw.milestone !== null
+    ? raw.milestone as Record<string, unknown>
+    : undefined;
+  const rawLabels = Array.isArray(raw.labels)
+    ? raw.labels as Array<Record<string, unknown> | string>
+    : [];
+  const rawLists = Array.isArray(raw.lists)
+    ? raw.lists as Record<string, unknown>[]
+    : [];
+
+  return {
+    id: Number(raw.id ?? 0),
+    name: asString(raw.name) ?? '',
+    project: normalizeProject(rawProject),
+    webUrl: asString(raw.web_url) ?? asString(rawProject.web_url),
+    hideBacklogList: raw.hide_backlog_list === true,
+    hideClosedList: raw.hide_closed_list === true,
+    assigneeUsername: asString(rawAssignee?.username),
+    milestoneTitle: asString(rawMilestone?.title),
+    labels: rawLabels
+      .map(label => typeof label === 'string' ? label : asString(label.name))
+      .filter((label): label is string => Boolean(label?.trim())),
+    weight: typeof raw.weight === 'number' ? raw.weight : undefined,
+    lists: rawLists.map(normalizeBoardList).sort((left, right) => left.position - right.position),
+    raw
+  };
+}
+
+function normalizeIssue(raw: Record<string, unknown>): GitLabIssue {
+  const assignees = Array.isArray(raw.assignees)
+    ? raw.assignees as Array<Record<string, unknown>>
+    : [];
+  const milestone = typeof raw.milestone === 'object' && raw.milestone !== null
+    ? raw.milestone as Record<string, unknown>
+    : undefined;
+  const iteration = typeof raw.iteration === 'object' && raw.iteration !== null
+    ? raw.iteration as Record<string, unknown>
+    : undefined;
+  const references = typeof raw.references === 'object' && raw.references !== null
+    ? raw.references as Record<string, unknown>
+    : undefined;
+
+  return {
+    id: Number(raw.id ?? 0),
+    iid: Number(raw.iid ?? 0),
+    projectId: Number(raw.project_id ?? 0),
+    title: asString(raw.title) ?? '',
+    state: asString(raw.state) ?? '',
+    webUrl: asString(raw.web_url),
+    authorName:
+      typeof raw.author === 'object' && raw.author !== null
+        ? asString((raw.author as Record<string, unknown>).name) ?? asString((raw.author as Record<string, unknown>).username)
+        : undefined,
+    assignees: assignees.map(assignee => ({
+      username: asString(assignee.username),
+      name: asString(assignee.name)
+    })),
+    labels: Array.isArray(raw.labels)
+      ? raw.labels.map(label => asString(label)).filter((label): label is string => Boolean(label?.trim()))
+      : [],
+    milestoneTitle: asString(milestone?.title),
+    iterationTitle: asString(iteration?.title),
+    createdAt: asString(raw.created_at),
+    updatedAt: asString(raw.updated_at),
+    description: asString(raw.description),
+    references: references
+      ? {
+          full: asString(references.full),
+          relative: asString(references.relative),
+          short: asString(references.short)
+        }
+      : undefined,
+    raw
+  };
+}
+
+function normalizeIssueComment(raw: Record<string, unknown>): GitLabIssueComment {
+  const author = typeof raw.author === 'object' && raw.author !== null
+    ? raw.author as Record<string, unknown>
+    : undefined;
+
+  return {
+    id: asString(raw.id) ?? '',
+    author: asString(author?.name) ?? asString(author?.username),
+    body: asString(raw.body) ?? '',
+    createdAt: asString(raw.created_at),
+    updatedAt: asString(raw.updated_at),
+    raw
+  };
+}
+
 export class GitLabApiService {
   public constructor(
     private readonly config: GitLabApiConfig,
@@ -253,7 +520,7 @@ export class GitLabApiService {
   public async listMergeRequestsForIssue(issueKey: string): Promise<GitLabMergeRequest[]> {
     const mergeRequests = await this.requestJson<Record<string, unknown>[]>(
       'GET',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests`,
       {
         state: 'all',
         scope: 'all',
@@ -269,10 +536,197 @@ export class GitLabApiService {
       .filter(mergeRequest => mergeRequestMatchesIssueKey(mergeRequest, issueKey));
   }
 
+  public async getProject(projectRef?: string | number): Promise<GitLabProject> {
+    const project = await this.requestJson<Record<string, unknown>>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}`
+    );
+
+    return normalizeProject(project);
+  }
+
+  public async getCurrentUser(): Promise<GitLabUser> {
+    const user = await this.requestJson<Record<string, unknown>>('GET', '/api/v4/user');
+    return normalizeGitLabUser(user);
+  }
+
+  public async findUsers(searchText: string): Promise<GitLabUser[]> {
+    const trimmed = searchText.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    const exactUsers = await this.requestJson<Record<string, unknown>[]>(
+      'GET',
+      '/api/v4/users',
+      {
+        username: trimmed,
+        active: 'true'
+      }
+    );
+    if (exactUsers.length > 0) {
+      return exactUsers.map(normalizeGitLabUser);
+    }
+
+    const matchingUsers = await this.requestJson<Record<string, unknown>[]>(
+      'GET',
+      '/api/v4/users',
+      {
+        search: trimmed,
+        active: 'true',
+        per_page: '100'
+      }
+    );
+    return matchingUsers.map(normalizeGitLabUser);
+  }
+
+  public async listAccessibleProjects(searchText?: string): Promise<GitLabProject[]> {
+    const projects = await this.requestJsonPaginated<Record<string, unknown>>(
+      '/api/v4/projects',
+      {
+        membership: 'true',
+        simple: 'true',
+        archived: 'false',
+        order_by: 'last_activity_at',
+        sort: 'desc',
+        search: searchText?.trim() || undefined
+      }
+    );
+
+    return projects.map(normalizeProject);
+  }
+
+  public async listBoards(projectRef?: string | number): Promise<GitLabBoard[]> {
+    const boards = await this.requestJson<Record<string, unknown>[]>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/boards`
+    );
+
+    return boards.map(normalizeBoard);
+  }
+
+  public async getBoard(boardId: number, projectRef?: string | number): Promise<GitLabBoard> {
+    const board = await this.requestJson<Record<string, unknown>>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/boards/${boardId}`
+    );
+
+    return normalizeBoard(board);
+  }
+
+  public async listBoardLists(boardId: number, projectRef?: string | number): Promise<GitLabBoardList[]> {
+    const lists = await this.requestJson<Record<string, unknown>[]>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/boards/${boardId}/lists`
+    );
+
+    return lists.map(normalizeBoardList).sort((left, right) => left.position - right.position);
+  }
+
+  public async listIssues(
+    projectRef?: string | number,
+    filters?: {
+      state?: 'opened' | 'closed' | 'all';
+      labels?: string[];
+      assigneeUsername?: string;
+      milestoneTitle?: string;
+      iterationTitle?: string;
+      weight?: number;
+    }
+  ): Promise<GitLabIssue[]> {
+    const issues = await this.requestJsonPaginated<Record<string, unknown>>(
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues`,
+      {
+        scope: 'all',
+        state: filters?.state ?? 'all',
+        labels: filters?.labels?.length ? filters.labels.join(',') : undefined,
+        assignee_username: filters?.assigneeUsername,
+        milestone: filters?.milestoneTitle,
+        iteration_title: filters?.iterationTitle,
+        weight: typeof filters?.weight === 'number' ? String(filters.weight) : undefined,
+        with_labels_details: 'false',
+        order_by: 'updated_at',
+        sort: 'desc'
+      }
+    );
+
+    return issues.map(normalizeIssue);
+  }
+
+  public async getIssue(issueIid: number, projectRef?: string | number): Promise<GitLabIssue> {
+    const issue = await this.requestJson<Record<string, unknown>>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues/${issueIid}`
+    );
+
+    return normalizeIssue(issue);
+  }
+
+  public async listIssueComments(issueIid: number, projectRef?: string | number): Promise<GitLabIssueComment[]> {
+    const notes = await this.requestJson<Record<string, unknown>[]>(
+      'GET',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues/${issueIid}/notes`,
+      {
+        sort: 'asc',
+        order_by: 'created_at',
+        per_page: '100'
+      }
+    );
+
+    return notes.map(normalizeIssueComment);
+  }
+
+  public async addIssueComment(issueIid: number, body: string, projectRef?: string | number): Promise<void> {
+    await this.requestJson(
+      'POST',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues/${issueIid}/notes`,
+      undefined,
+      { body: body.trim() }
+    );
+  }
+
+  public async updateIssue(
+    issueIid: number,
+    input: {
+      title?: string;
+      description?: string;
+      stateEvent?: 'close' | 'reopen';
+      addLabels?: string[];
+      removeLabels?: string[];
+      assigneeIds?: number[];
+      milestoneId?: number;
+      iterationId?: number;
+    },
+    projectRef?: string | number
+  ): Promise<GitLabIssue> {
+    let assigneeIds: string | undefined;
+    if (input.assigneeIds) {
+      assigneeIds = input.assigneeIds.length > 0 ? input.assigneeIds.join(',') : '0';
+    }
+
+    const issue = await this.requestJson<Record<string, unknown>>(
+      'PUT',
+      `/api/v4/projects/${this.encodeProjectRef(projectRef)}/issues/${issueIid}`,
+      undefined,
+      {
+        title: input.title,
+        description: input.description,
+        state_event: input.stateEvent,
+        add_labels: input.addLabels?.length ? input.addLabels.join(',') : undefined,
+        remove_labels: input.removeLabels?.length ? input.removeLabels.join(',') : undefined,
+        assignee_ids: assigneeIds,
+        milestone_id: typeof input.milestoneId === 'number' ? String(input.milestoneId) : undefined,
+        iteration_id: typeof input.iterationId === 'number' ? String(input.iterationId) : undefined
+      }
+    );
+
+    return normalizeIssue(issue);
+  }
+
   public async listMergeRequestsForSourceBranch(sourceBranch: string): Promise<GitLabMergeRequest[]> {
     const mergeRequests = await this.requestJson<Record<string, unknown>[]>(
       'GET',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests`,
       {
         state: 'all',
         scope: 'all',
@@ -289,7 +743,7 @@ export class GitLabApiService {
   public async getMergeRequest(iid: number): Promise<GitLabMergeRequest> {
     const mergeRequest = await this.requestJson<Record<string, unknown>>(
       'GET',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}`
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests/${iid}`
     );
     return normalizeMergeRequest(mergeRequest);
   }
@@ -297,7 +751,7 @@ export class GitLabApiService {
   public async createMergeRequest(input: GitLabCreateMergeRequestInput): Promise<GitLabMergeRequest> {
     const mergeRequest = await this.requestJson<Record<string, unknown>>(
       'POST',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests`,
       undefined,
       {
         source_branch: input.sourceBranch,
@@ -313,7 +767,7 @@ export class GitLabApiService {
   public async listMergeRequestDiscussions(iid: number): Promise<GitLabDiscussionNote[]> {
     const discussions = await this.requestJson<unknown[]>(
       'GET',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}/discussions`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests/${iid}/discussions`,
       { per_page: '100' }
     );
 
@@ -323,7 +777,7 @@ export class GitLabApiService {
   public async addMergeRequestNote(iid: number, body: string): Promise<void> {
     await this.requestJson(
       'POST',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}/notes`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests/${iid}/notes`,
       undefined,
       { body: body.trim() }
     );
@@ -332,18 +786,54 @@ export class GitLabApiService {
   public async replyToMergeRequestDiscussion(iid: number, discussionId: string, body: string): Promise<void> {
     await this.requestJson(
       'POST',
-      `/api/v4/projects/${encodeURIComponent(this.config.projectPath)}/merge_requests/${iid}/discussions/${encodeURIComponent(discussionId)}/notes`,
+      `/api/v4/projects/${this.encodeProjectRef()}/merge_requests/${iid}/discussions/${encodeURIComponent(discussionId)}/notes`,
       undefined,
       { body: body.trim() }
     );
   }
 
-  private async requestJson<T>(
-    method: 'GET' | 'POST',
+  private encodeProjectRef(projectRef?: string | number): string {
+    const value = projectRef ?? this.config.projectPath;
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
+    const trimmed = value?.trim();
+    if (!trimmed) {
+      throw new Error('No GitLab project path is configured.');
+    }
+
+    return encodeURIComponent(trimmed);
+  }
+
+  private async requestJsonPaginated<T>(
     pathname: string,
-    query?: Record<string, string>,
+    query?: Record<string, string | undefined>
+  ): Promise<T[]> {
+    const results: T[] = [];
+    let nextPage = '1';
+
+    while (nextPage) {
+      const { data, headers } = await this.requestJsonWithHeaders<T[]>(
+        'GET',
+        pathname,
+        query
+          ? { ...query, per_page: '100', page: nextPage }
+          : { per_page: '100', page: nextPage }
+      );
+      results.push(...data);
+      nextPage = headers.get('x-next-page')?.trim() ?? '';
+    }
+
+    return results;
+  }
+
+  private async requestJsonWithHeaders<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    pathname: string,
+    query?: Record<string, string | undefined>,
     body?: Record<string, unknown>
-  ): Promise<T> {
+  ): Promise<{ data: T; headers: Headers }> {
     const url = new URL(`${this.config.baseUrl.replace(/\/+$/, '')}${pathname}`);
     for (const [key, value] of Object.entries(query ?? {})) {
       if (!value) {
@@ -377,9 +867,22 @@ export class GitLabApiService {
     }
 
     if (!responseText.trim()) {
-      return [] as T;
+      return { data: [] as T, headers: response.headers };
     }
 
-    return JSON.parse(responseText) as T;
+    return {
+      data: JSON.parse(responseText) as T,
+      headers: response.headers
+    };
+  }
+
+  private async requestJson<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    pathname: string,
+    query?: Record<string, string | undefined>,
+    body?: Record<string, unknown>
+  ): Promise<T> {
+    const { data } = await this.requestJsonWithHeaders<T>(method, pathname, query, body);
+    return data;
   }
 }

@@ -5,7 +5,6 @@ import { AppConfigStore } from '../config/jiraConfig';
 const CONFIG_SECTION = 'ticketManager';
 const SCOPED_KEYS = [
   'backendMode',
-  'planFilePath',
   'liveFolderPath',
   'liveFolderProjectKey',
   'liveFolderProjectName',
@@ -82,7 +81,7 @@ suite('AppConfigStore workspace-scoped settings', () => {
   test('workspace values override conflicting global values', async () => {
     const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
     await config.update('backendMode', 'livefolder', vscode.ConfigurationTarget.Global);
-    await config.update('backendMode', 'file', vscode.ConfigurationTarget.Workspace);
+    await config.update('backendMode', 'livefolder', vscode.ConfigurationTarget.Workspace);
     await config.update(
       'liveFolderPath',
       'C:/global-only/should-not-be-used',
@@ -104,7 +103,7 @@ suite('AppConfigStore workspace-scoped settings', () => {
       vscode.ConfigurationTarget.Workspace
     );
 
-    assert.strictEqual(store.getBackendMode(), 'file');
+    assert.strictEqual(store.getBackendMode(), 'livefolder');
     assert.strictEqual(store.getLiveFolderPath(), 'C:/workspace/plans');
     assert.strictEqual(store.getLiveFolderAllowIssueCreation(), true);
   });

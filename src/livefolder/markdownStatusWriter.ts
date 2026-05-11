@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { readUtf8 } from './markdownPlanParser';
 import { ensureFrontMatter, type IssueType } from './markdownTemplate';
+import { composeIdeaContent } from '../issues/ideaTranscript';
 
 /** Reverse-map plan statuses back to the emoji-prefixed markdown format. */
 export function planStatusToMarkdown(planStatus: string): string {
@@ -271,6 +272,46 @@ export async function writeDescriptionToMarkdownFile(
   const updated = [...before, '', newDescription.trim(), '', ...after].join('\n');
 
   if (updated === normalized) {
+    return false;
+  }
+
+  await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(updated));
+  return true;
+}
+
+export async function writeIdeaTranscriptToMarkdownFile(
+  fileUri: vscode.Uri,
+  newDescription: string,
+  newIdeaTranscript: string
+): Promise<boolean> {
+  const content = await readUtf8(fileUri);
+  const composed = composeIdeaContent(newDescription, newIdeaTranscript);
+  if (composed === undefined) {
+    return false;
+  }
+
+  const normalized = content.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  const descriptionIndex = lines.findIndex(line => /^##\s+(Description|Idea Details)\b/i.test(line.trim()));
+  const transcriptIndex = lines.findIndex(line => /^##\s+(Research Transcript|AI Research Transcript)\b/i.test(line.trim()));
+
+  if (descriptionIndex < 0 && transcriptIndex < 0) {
+    return false;
+  }
+
+  let updated = normalized;
+  if (descriptionIndex >= 0 && transcriptIndex >= 0 && transcriptIndex > descriptionIndex) {
+    const nextLines = [...lines];
+    const descriptionEnd = transcriptIndex;
+    nextLines.splice(descriptionIndex, descriptionEnd - descriptionIndex, ...composed.split('\n'));
+    updated = nextLines.join('\n');
+  } else if (descriptionIndex >= 0) {
+    updated = normalized.replace(/^(##\s+(?:Description|Idea Details)\b[\s\S]*?)(?=\n##\s|$)/i, composed);
+  } else if (transcriptIndex >= 0) {
+    updated = normalized.replace(/^(##\s+(?:Research Transcript|AI Research Transcript)\b[\s\S]*?)(?=\n##\s|$)/i, composed);
+  }
+
+  if (updated === content) {
     return false;
   }
 

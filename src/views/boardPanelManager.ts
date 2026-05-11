@@ -259,6 +259,11 @@ export class BoardPanelManager implements vscode.Disposable {
             label: 'New board',
             description: 'Create a board (Demo, File, or User Workspace mode)',
             value: 'board' as const
+          },
+          {
+            label: 'Add board',
+            description: 'Add an existing board to Ticket Manager',
+            value: 'add-board' as const
           }
         ],
         { title: 'Create' }
@@ -268,6 +273,8 @@ export class BoardPanelManager implements vscode.Disposable {
       }
       if (picked.value === 'issue') {
         await vscode.commands.executeCommand('ticketManager.createIssue', this.activeBoard);
+      } else if (picked.value === 'add-board') {
+        await vscode.commands.executeCommand('ticketManager.addBoard');
       } else {
         await vscode.commands.executeCommand('ticketManager.createBoard');
       }

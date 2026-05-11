@@ -1,9 +1,21 @@
 {
     "ticketManager.workspaceMcpServerName": "",
-    "ticketManager.backendMode": "jira",
+    "ticketManager.connectionType": "http",
+    "ticketManager.jiraPolling.requiredLabel": "syscfg",
+    "ticketManager.jiraPolling.enabled": true,
+    "ticketManager.gitlabUrl": "https://git.example.com/",
+    "ticketManager.gitlabConnectionType": "api",
+    "ticketManager.gitlabApiKey": "glpat-yeNrvgNikjWtwMkNmy_n0286MQp1OmhwCA.01.0y0qcwxzx",
     "ticketManager.liveFolderPath": "",
     "ticketManager.liveFolderAllowIssueCreation": true,
     "ticketManager.planFilePath": "",
     "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": ""
+    "ticketManager.liveFolderProjectName": "",
+    "ticketManager.backendMode": "gitlab",
+    "ticketManager.gitlabProjectPath": "example/software/ai/example-web-ai",
+    "ticketManager.gitlabListAllAccessibleBoards": false,
+    "ticketManager.gitlabSelectedBoardRefs": [
+        "example/software/ai/example-touch-ai::279",
+        "example/software/ai/example-touch-ai::278"
+    ]
 }

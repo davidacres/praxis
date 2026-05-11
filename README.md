@@ -88,6 +88,7 @@ Configure a local `stdio` server or remote `http` MCP server with:
 - `ticketManager.stdioArgs`
 - `ticketManager.stdioCwd`
 - `ticketManager.httpUrl`
+- `ticketManager.jiraMcpCloudId` for Atlassian cloud MCP servers when site discovery is unavailable or ambiguous
 
 The extension can import Jira MCP settings from workspace `.vscode\mcp.json`, VS Code user/profile MCP config, VS Code Insiders user/profile config, or Cursor MCP config.
 

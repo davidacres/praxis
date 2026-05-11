@@ -1,8 +1,8 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.22",
-  "publisher": "local-dev",
+  "version": "0.0.24",
+  "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
   "repository": {
@@ -280,6 +280,12 @@
         "icon": "$(add)"
       },
       {
+        "command": "ticketManager.createIdea",
+        "title": "Create Idea",
+        "category": "Ticket Manager",
+        "icon": "$(lightbulb)"
+      },
+      {
         "command": "ticketManager.createBoard",
         "title": "Create Board",
         "category": "Ticket Manager",
@@ -504,6 +510,11 @@
         },
         {
           "command": "ticketManager.createIssue",
+          "when": "view == ticketManager.myIssues",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ticketManager.createIdea",
           "when": "view == ticketManager.myIssues",
           "group": "navigation@2"
         },
@@ -734,7 +745,6 @@
             "jira",
             "jiraapi",
             "demo",
-            "file",
             "github",
             "gitlab",
             "livefolder",
@@ -744,14 +754,13 @@
             "Jira via MCP",
             "Jira API",
             "Demo",
-            "Plan File",
             "GitHub",
             "GitLab",
             "Live Folder",
             "User Workspace"
           ],
           "scope": "window",
-          "description": "Choose whether the app uses Jira via MCP, Jira API, Demo, File, Live Folder, or User Workspace mode."
+          "description": "Choose whether the app uses Jira via MCP, Jira API, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
         },
         "ticketManager.jiraApiBaseUrl": {
           "type": "string",
@@ -790,12 +799,6 @@
           "scope": "window",
           "description": "Optional display name for the Jira API JQL board in this workspace."
         },
-        "ticketManager.planFilePath": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Absolute or workspace-relative path to the plan file used in File mode."
-        },
         "ticketManager.stdioCommand": {
           "type": "string",
           "default": "",
@@ -819,6 +822,12 @@
           "default": "",
           "format": "uri",
           "description": "Base URL for a remote Jira MCP server that supports streamable HTTP."
+        },
+        "ticketManager.jiraMcpCloudId": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Optional Atlassian Jira site URL or cloud ID to use with Atlassian cloud Jira MCP tools when automatic site discovery is unavailable or ambiguous."
         },
         "ticketManager.enableNewProject": {
           "type": "boolean",

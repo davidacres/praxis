@@ -41,8 +41,6 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
       return 'Jira API';
     case 'demo':
       return 'Demo';
-    case 'file':
-      return 'File';
     case 'livefolder':
       return 'Live Folder';
     case 'userworkspace':

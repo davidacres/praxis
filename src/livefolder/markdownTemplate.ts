@@ -8,7 +8,7 @@
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type IssueType = 'Feature' | 'Story' | 'Task' | 'Bug';
+export type IssueType = 'Feature' | 'Idea' | 'Story' | 'Task' | 'Bug';
 
 export interface FieldRule {
   /** The bold-line field name (without `**` wrapping). */
@@ -77,6 +77,11 @@ export const SECTION_RULES: readonly SectionRule[] = [
     aliases: ['Stories'],
   },
   {
+    name: 'Research Transcript',
+    defaultBody: [''],
+    appliesTo: ['Idea'],
+  },
+  {
     name: 'Steps to Reproduce',
     defaultBody: ['1. ', ''],
     appliesTo: ['Bug'],
@@ -121,6 +126,7 @@ function sectionApplies(rule: SectionRule, issueType: IssueType): boolean {
 
 export interface GenerateOptions {
   description?: string;
+  ideaTranscript?: string;
   createdAt?: string;
   parentKey?: string;
   model?: string;
@@ -130,6 +136,8 @@ function buildDefaultDescription(issueType: IssueType): string {
   switch (issueType) {
     case 'Feature':
       return 'Describe the feature goals and scope.';
+    case 'Idea':
+      return 'Describe the idea, opportunity, and research context.';
     case 'Story':
       return 'Describe the user story and acceptance criteria.';
     case 'Task':
@@ -208,6 +216,8 @@ export function generateIssueMarkdown(
     lines.push(`## ${rule.name}`);
     if (rule.name === 'Description') {
       lines.push(opts.description?.trim() || buildDefaultDescription(issueType));
+    } else if (rule.name === 'Research Transcript') {
+      lines.push(opts.ideaTranscript?.trim() || '');
     } else {
       lines.push(...rule.defaultBody);
     }

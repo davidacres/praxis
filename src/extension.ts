@@ -7,7 +7,6 @@ import type { IssueTrackerService } from './backends/issueTrackerService';
 import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
-import { createPlanTemplate } from './file/planTemplate';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
@@ -39,6 +38,7 @@ import {
   sortAiOptionsByDefaultProvider
 } from './ai/aiProviderSetup';
 import { resolveBackendModeContextState } from './ui/backendModeContext';
+import { initializeMcpOAuthManager } from './mcp/oauthManager';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
@@ -133,6 +133,34 @@ export interface TicketManagerExtensionApi {
   configStore: AppConfigStore;
   aiSessionManager: AiSessionManager;
   outputChannel: vscode.OutputChannel;
+}
+
+const STARTUP_BACKEND_LOAD_TIMEOUT_MS = 30000;
+const STARTUP_BACKEND_LOAD_CANCELLED = 'ticket-manager-startup-load-cancelled';
+const STARTUP_BACKEND_LOAD_TIMED_OUT = 'ticket-manager-startup-load-timed-out';
+
+function rejectStartupLoadCancelled(reject: (reason?: unknown) => void): void {
+  reject(new Error(STARTUP_BACKEND_LOAD_CANCELLED));
+}
+
+function rejectStartupLoadTimedOut(reject: (reason?: unknown) => void): void {
+  reject(new Error(STARTUP_BACKEND_LOAD_TIMED_OUT));
+}
+
+function createStartupLoadCancelledPromise(token: vscode.CancellationToken): Promise<never> {
+  return new Promise((_, reject) => {
+    token.onCancellationRequested(() => rejectStartupLoadCancelled(reject));
+  });
+}
+
+function createStartupLoadTimedOutPromise(
+  timeoutMs: number
+): { promise: Promise<never>; handle: ReturnType<typeof setTimeout> } {
+  let handle!: ReturnType<typeof setTimeout>;
+  const promise = new Promise<never>((_, reject) => {
+    handle = setTimeout(() => rejectStartupLoadTimedOut(reject), timeoutMs);
+  });
+  return { promise, handle };
 }
 
 interface AiOptionPick {
@@ -536,6 +564,8 @@ export function buildPollingAnalysisSignature(issue: Pick<
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
+  initializeMcpOAuthManager(context);
+
   const handledPollingReplyStateKey = 'ticketManager.handledPollingReplyThreads';
   const handledPollingAnalysisStateKey = 'ticketManager.handledPollingAnalysis';
   const pollingStatusSnapshotStateKey = 'ticketManager.pollingStatusSnapshots';
@@ -3248,9 +3278,6 @@ export async function activate(
       configStore.hasJiraConnectionConfig(),
       configStore.hasJiraApiConfig()
     );
-    if (resolved.mode === 'file' && configStore.getPlanFilePath().trim().length === 0) {
-      return { ...resolved, configured: false };
-    }
     if (resolved.mode === 'livefolder' && configStore.getLiveFolderPath().trim().length === 0) {
       return { ...resolved, configured: false };
     }
@@ -3452,6 +3479,74 @@ export async function activate(
     }
   }
 
+  function refreshStatusBarInBackground(): void {
+    void ticketManagerStatusBar.refresh().catch(error => reportError(error, 'status-bar-refresh'));
+  }
+
+  async function clearActiveSelectionState(): Promise<void> {
+    await filterStore.setLastSelectedIssueKey(undefined);
+    await detailsProvider.setIssue(undefined);
+    issuesSidebarViewProvider.setSelectedIssueKey(undefined);
+    epicsSidebarViewProvider.setSelectedIssueKey(undefined);
+    activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
+    boardsSidebarViewProvider.setSelectedBoardId(undefined);
+    boardPanelManager.setSelectedIssueKey(undefined);
+    boardPanelManager.clear();
+    issueDetailPanelManager.clear();
+  }
+
+  async function resetToSetupAfterStartupLoadFailure(reason: 'cancelled' | 'timed-out'): Promise<void> {
+    try {
+      await backendService.reset();
+    } catch (error) {
+      reportError(error, 'startup-load-reset');
+    }
+
+    await vscode.workspace
+      .getConfiguration('ticketManager')
+      .update(
+        'backendMode',
+        undefined,
+        vscode.workspace.workspaceFolders?.length
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global
+      );
+
+    await clearActiveSelectionState();
+    await setModeContext();
+    await revealSetupView();
+
+    void vscode.window.showWarningMessage(
+      reason === 'cancelled'
+        ? 'Ticket Manager startup was cancelled. Configure Project to choose or fix the backend connection.'
+        : 'Ticket Manager startup timed out waiting for the backend. Configure Project to choose or fix the backend connection.'
+    );
+  }
+
+  async function refreshStartupSelectionWithProgress(): Promise<void> {
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Ticket Manager is connecting to the configured backend…',
+        cancellable: true
+      },
+      async (_progress, token) => {
+        const startupTimeout = createStartupLoadTimedOutPromise(
+          Math.max(STARTUP_BACKEND_LOAD_TIMEOUT_MS, configStore.getRequestTimeoutMs())
+        );
+        try {
+          await Promise.race([
+            refreshAndRestoreSelection(),
+            createStartupLoadCancelledPromise(token),
+            startupTimeout.promise
+          ]);
+        } finally {
+          clearTimeout(startupTimeout.handle);
+        }
+      }
+    );
+  }
+
   async function ensureJiraApiIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
     if (modeContext.mode !== 'jiraapi' || !modeContext.configured) {
       return;
@@ -3533,92 +3628,6 @@ export async function activate(
     void vscode.window.showInformationMessage(`Linked this repo to Jira epic ${issueKey}.`);
   }
 
-  async function ensureFilePlanConfigured(interactive: boolean): Promise<boolean> {
-    const configuredUri = await configStore.getResolvedPlanFileUri();
-    if (configuredUri) {
-      try {
-        await vscode.workspace.fs.stat(configuredUri);
-        return true;
-      } catch {
-        // fall through to discovery/prompt
-      }
-    }
-
-    const planCandidates = await configStore.findWorkspacePlanCandidates();
-    if (planCandidates.length === 1) {
-      await configStore.setPlanFilePath(planCandidates[0].fsPath);
-      return true;
-    }
-
-    if (planCandidates.length > 1 && interactive) {
-      const picked = await vscode.window.showQuickPick(
-        planCandidates.map(candidate => ({
-          label: candidate.fsPath,
-          description: candidate.path,
-          uri: candidate
-        })),
-        {
-          title: 'Choose Plan File'
-        }
-      );
-      if (picked) {
-        await configStore.setPlanFilePath(picked.uri.fsPath);
-        return true;
-      }
-    }
-
-    if (!interactive) {
-      return false;
-    }
-
-    const action = await vscode.window.showInformationMessage(
-      configuredUri
-        ? 'The configured plan file could not be found. Choose another file or create a new one.'
-        : 'File mode needs a plan file. Choose an existing file or create a new one.',
-      'Choose Existing',
-      'Create New'
-    );
-
-    if (action === 'Choose Existing') {
-      const picked = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        openLabel: 'Use Plan File',
-        filters: {
-          'Plan Files': ['jsonc', 'json']
-        },
-        defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri
-      });
-      if (picked?.[0]) {
-        await configStore.setPlanFilePath(picked[0].fsPath);
-        return true;
-      }
-      return false;
-    }
-
-    if (action === 'Create New') {
-      const saveUri = await vscode.window.showSaveDialog({
-        saveLabel: 'Create Plan File',
-        filters: {
-          'Plan Files': ['jsonc']
-        },
-        defaultUri: vscode.workspace.workspaceFolders?.[0]
-          ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ticket-plan.jsonc')
-          : undefined
-      });
-      if (saveUri) {
-        await vscode.workspace.fs.writeFile(
-          saveUri,
-          Buffer.from(createPlanTemplate(vscode.workspace.workspaceFolders?.[0]?.name), 'utf8')
-        );
-        await configStore.setPlanFilePath(saveUri.fsPath);
-        await vscode.window.showInformationMessage(`Created ${saveUri.fsPath}.`);
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
     const options: Array<{ label: string; description: string; mode: BackendMode }> = [
       {
@@ -3635,11 +3644,6 @@ export async function activate(
         label: 'Demo',
         description: 'Use built-in demo data.',
         mode: 'demo'
-      },
-      {
-        label: 'File',
-        description: 'Use a plan file from the current workspace.',
-        mode: 'file'
       },
       {
         label: 'Live Folder',
@@ -3676,12 +3680,6 @@ export async function activate(
 
     let modeContext = getModeContextState();
     await setModeContext();
-
-    if (modeContext.mode === 'file') {
-      await ensureFilePlanConfigured(true);
-      modeContext = getModeContextState();
-      await setModeContext();
-    }
 
     if (!modeContext.configured) {
       await revealSetupView();
@@ -3830,10 +3828,6 @@ export async function activate(
   }
 
   async function createEpic(): Promise<void> {
-    if (backendService.mode === 'file' && !(await ensureFilePlanConfigured(true))) {
-      return;
-    }
-
     const filters = filterStore.getFilters();
     const defaultProjectKey =
       filters.projectKeys.length === 1
@@ -4318,44 +4312,17 @@ export async function activate(
     await updateIssueAndRefresh(issueKey, { assignee: label });
   }
 
-  async function loadPlanContext(issueKey: string): Promise<string | undefined> {
-    try {
-      const planUri = await configStore.getResolvedPlanFileUri();
-      if (!planUri) {
-        return undefined;
-      }
-      const bytes = await vscode.workspace.fs.readFile(planUri);
-      const text = Buffer.from(bytes).toString('utf8');
-      // Quick extraction: find the issue key in the plan text and grab surrounding context
-      const lines = text.split('\n');
-      const matchIndex = lines.findIndex(line => line.includes(`"${issueKey}"`));
-      if (matchIndex < 0) {
-        return undefined;
-      }
-      // Grab a window of lines around the match (the plan item block)
-      const start = Math.max(0, matchIndex - 2);
-      const end = Math.min(lines.length, matchIndex + 20);
-      return lines.slice(start, end).join('\n').trim();
-    } catch {
-      return undefined;
-    }
-  }
-
   async function promptForCopilotTaskDefinition(
     issue: IssueDetails,
     previous?: AgentTaskDefinition
   ): Promise<AgentTaskDefinition | undefined> {
     const issueWorkflowAssignment = aiSessionManager.getIssueWorkflowAssignment(issue.key);
-    const planContext = await loadPlanContext(issue.key);
     const defaultGoal = previous?.goal ??
-      `${issue.summary}${issue.description ? '\\n' + issue.description.slice(0, 200) : ''}` +
-      (planContext ? `\\n\\nPlan context:\\n${planContext.slice(0, 300)}` : '');
+      `${issue.summary}${issue.description ? '\n' + issue.description.slice(0, 200) : ''}`;
 
     const goal = await vscode.window.showInputBox({
       title: 'Goal',
-      prompt: planContext
-        ? 'What should the agent accomplish? (plan context included)'
-        : 'What should the agent accomplish?',
+      prompt: 'What should the agent accomplish?',
       value: defaultGoal,
       ignoreFocusOut: true
     });
@@ -4672,6 +4639,11 @@ export async function activate(
       onDeleteIssue: async issueKey => {
         await deleteIssue(issueKey);
       },
+      onCreateIssue: async input => {
+        const createdIssue = await backendService.createIssue(input);
+        await syncIssueAfterMutation(createdIssue.key);
+        await revealIssueDetailsInSidebar({ focus: false });
+      },
       onSetSearchText: async (searchText) => {
         await filterStore.updateFilters({ searchText });
         await refreshSearchActionContexts();
@@ -4982,14 +4954,14 @@ export async function activate(
     vscode.commands.registerCommand('ticketManager.openSettings', async () => {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
-        '@ext:local-dev.ticket-manager ticketManager'
+        `@ext:${context.extension.id} ticketManager`
       );
     }),
     vscode.commands.registerCommand('ticketManager.configureAi', async () => {
       try {
         const result = await promptToConfigureDefaultAiProvider();
         refreshAiAssignmentMenus();
-        await ticketManagerStatusBar.refresh();
+        refreshStatusBarInBackground();
         if (result.status !== 'cancelled') {
           await vscode.window.showInformationMessage(describeAiConfigurationResult(result));
         }
@@ -5017,7 +4989,7 @@ export async function activate(
       boardPanelManager,
       issueDetailPanelManager,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
-      ensureFilePlanConfigured,
+      openCreateIssueForm: defaults => issuesSidebarViewProvider.openCreateIssueDialog(defaults),
       output: outputChannel,
       onConnectionCheck: result => {
         ticketManagerStatusBar.recordConnectionResult(result);
@@ -5083,7 +5055,6 @@ export async function activate(
               !event.affectsConfiguration('ticketManager.stdioCommand') &&
               !event.affectsConfiguration('ticketManager.stdioArgs') &&
               !event.affectsConfiguration('ticketManager.stdioCwd') &&
-              !event.affectsConfiguration('ticketManager.planFilePath') &&
               !event.affectsConfiguration('ticketManager.liveFolderPath') &&
               !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
               !event.affectsConfiguration('ticketManager.liveFolderProjectName') &&
@@ -5102,9 +5073,6 @@ export async function activate(
                 updateCommentPlaceholders();
                 const modeContext = getModeContextState();
                 await setModeContext();
-                if (modeContext.mode === 'file' && modeContext.configured) {
-                  await ensureFilePlanConfigured(true);
-                }
                 await filterStore.setLastSelectedIssueKey(undefined);
                 await boardStore.setLastSelectedBoardId(undefined);
                 await detailsProvider.setIssue(undefined);
@@ -5116,7 +5084,7 @@ export async function activate(
                 await backendService.reset();
                 await refreshAndRestoreSelection();
                 await startupPollingController.refresh();
-                await ticketManagerStatusBar.refresh();
+                refreshStatusBarInBackground();
               } catch (error) {
                 reportError(error);
               }
@@ -5129,10 +5097,23 @@ export async function activate(
   try {
     await ensureStartupConfiguration();
     if (getModeContextState().configured) {
-      await refreshAndRestoreSelection();
+      try {
+        await refreshStartupSelectionWithProgress();
+      } catch (error) {
+        if (error instanceof Error && error.message === STARTUP_BACKEND_LOAD_CANCELLED) {
+          await resetToSetupAfterStartupLoadFailure('cancelled');
+        } else if (
+          error instanceof Error &&
+          error.message === STARTUP_BACKEND_LOAD_TIMED_OUT
+        ) {
+          await resetToSetupAfterStartupLoadFailure('timed-out');
+        } else {
+          throw error;
+        }
+      }
     }
     await startupPollingController.refresh();
-    await ticketManagerStatusBar.refresh();
+    refreshStatusBarInBackground();
 
     // Recover in-flight delivery sessions that were interrupted by a restart.
     // The onDidChangeAgentSession listener only fires on changes, so sessions

@@ -1,5 +1,6 @@
 import * as assert from 'node:assert';
 import {
+  GitLabApiService,
   createGitLabHandledNoteState,
   diffGitLabDiscussionNotes,
   flattenGitLabDiscussionNotes,
@@ -9,6 +10,20 @@ import {
   shouldCreateMergeRequestForStatusChange,
   wrapTicketManagerManagedMergeRequestNote
 } from '../gitlab/gitLabApiService';
+
+type FetchInput = URL | Request | string;
+
+function toUrlString(input: FetchInput): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  return input.url;
+}
 
 suite('gitLabApiService', () => {
   test('parses SSH remotes into https base URLs and project paths', () => {
@@ -95,5 +110,119 @@ suite('gitLabApiService', () => {
       }),
       false
     );
+  });
+
+  test('lists GitLab boards and board lists from the API', async () => {
+    const fetchCalls: string[] = [];
+    const service = new GitLabApiService(
+      {
+        baseUrl: 'https://gitlab.example.com',
+        projectPath: 'group/project',
+        token: 'token'
+      },
+      async (input: FetchInput) => {
+        const url = toUrlString(input);
+        fetchCalls.push(url);
+        if (url.endsWith('/api/v4/projects/group%2Fproject/boards')) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 7,
+                name: 'Delivery',
+                hide_backlog_list: false,
+                hide_closed_list: true,
+                project: {
+                  id: 5,
+                  name: 'Project',
+                  path: 'project',
+                  path_with_namespace: 'group/project',
+                  web_url: 'https://gitlab.example.com/group/project'
+                },
+                lists: [
+                  {
+                    id: 12,
+                    position: 2,
+                    label: { name: 'Ready' }
+                  }
+                ]
+              }
+            ]),
+            { status: 200 }
+          );
+        }
+
+        if (url.endsWith('/api/v4/projects/group%2Fproject/boards/7/lists')) {
+          return new Response(
+            JSON.stringify([
+              { id: 21, position: 2, label: { name: 'Doing' } },
+              { id: 20, position: 1, label: { name: 'To Do' } }
+            ]),
+            { status: 200 }
+          );
+        }
+
+        return new Response('not found', { status: 404, statusText: 'Not Found' });
+      }
+    );
+
+    const boards = await service.listBoards();
+    const lists = await service.listBoardLists(7);
+
+    assert.strictEqual(boards.length, 1);
+    assert.strictEqual(boards[0].project.pathWithNamespace, 'group/project');
+    assert.deepStrictEqual(lists.map(list => list.title), ['To Do', 'Doing']);
+    assert.strictEqual(fetchCalls.length, 2);
+  });
+
+  test('lists accessible GitLab projects across paginated API responses', async () => {
+    const service = new GitLabApiService(
+      {
+        baseUrl: 'https://gitlab.example.com',
+        projectPath: '',
+        token: 'token'
+      },
+      async (input: FetchInput) => {
+        const url = new URL(toUrlString(input));
+        const page = url.searchParams.get('page');
+        if (url.pathname === '/api/v4/projects' && page === '1') {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 1,
+                name: 'First',
+                path: 'first',
+                path_with_namespace: 'group/first'
+              }
+            ]),
+            {
+              status: 200,
+              headers: { 'x-next-page': '2' }
+            }
+          );
+        }
+
+        if (url.pathname === '/api/v4/projects' && page === '2') {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 2,
+                name: 'Second',
+                path: 'second',
+                path_with_namespace: 'group/second'
+              }
+            ]),
+            {
+              status: 200,
+              headers: { 'x-next-page': '' }
+            }
+          );
+        }
+
+        return new Response('not found', { status: 404, statusText: 'Not Found' });
+      }
+    );
+
+    const projects = await service.listAccessibleProjects();
+    assert.deepStrictEqual(projects.map(project => project.pathWithNamespace), ['group/first', 'group/second']);
   });
 });

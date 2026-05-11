@@ -42,6 +42,8 @@ function pillToken(label: string | undefined): string {
       return 'epic';
     case 'feature':
       return 'feature';
+    case 'idea':
+      return 'idea';
     case 'story':
       return 'story';
     case 'subtask':
@@ -273,10 +275,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         const model = asString(message.model);
         const severity = asString(message.severity);
         const reportedBy = asString(message.reportedBy);
+        const ideaTranscript = asString(message.ideaTranscript) ?? '';
         const transitionId = asString(message.transitionId) ?? undefined;
         await this.backendService.updateIssue(this.activeIssueKey, {
           summary,
           description,
+          ideaTranscript,
           parentKey: parentKey.trim() || null,
           assignee: assignee.trim() || null,
           priority,
@@ -995,6 +999,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       background: rgba(249, 115, 22, 0.16);
       border-color: rgba(249, 115, 22, 0.28);
     }
+    .pill--idea {
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(245, 158, 11, 0.28);
+    }
     .pill--story {
       color: #93c5fd;
       background: rgba(59, 130, 246, 0.16);
@@ -1056,6 +1065,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       display: flex;
       flex-direction: column;
       gap: 8px;
+    }
+    .markdown-preview {
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--vscode-editor-background);
+    }
+    .markdown-preview.is-empty {
+      color: var(--vscode-descriptionForeground);
     }
     .comment-item,
     .comment-empty {
@@ -1187,6 +1205,8 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       const severitySelect = document.getElementById('severitySelect');
       const reportedByInput = document.getElementById('reportedByInput');
       const descriptionInput = document.getElementById('descriptionInput');
+      const ideaTranscriptInput = document.getElementById('ideaTranscriptInput');
+      const ideaTranscriptGroup = document.getElementById('ideaTranscriptGroup');
       const parentFieldGroup = document.getElementById('parentFieldGroup');
       const parentFieldLabel = document.getElementById('parentFieldLabel');
       const parentInput = document.getElementById('parentInput');
@@ -1292,6 +1312,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         }
       }
 
+      function updateIdeaTranscriptField() {
+        if (!(ideaTranscriptGroup instanceof HTMLElement)) {
+          return;
+        }
+
+        const issueType = normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '');
+        ideaTranscriptGroup.classList.toggle('is-hidden', issueType !== 'idea');
+      }
+
       function readCurrentState() {
         const parentUi = getParentUi(
           issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : ''
@@ -1306,6 +1335,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
           reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
           description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
+          ideaTranscript:
+            normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '') === 'idea' &&
+            ideaTranscriptInput instanceof HTMLTextAreaElement
+              ? ideaTranscriptInput.value
+              : '',
           parentKey:
             parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
         };
@@ -1320,11 +1354,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           currentState.assignee !== initialState.assignee ||
           currentState.priority !== initialState.priority ||
           currentState.model !== initialState.model ||
-          currentState.severity !== initialState.severity ||
-          currentState.reportedBy !== initialState.reportedBy ||
-          currentState.description !== initialState.description ||
-          currentState.parentKey !== initialState.parentKey
-        );
+            currentState.severity !== initialState.severity ||
+            currentState.reportedBy !== initialState.reportedBy ||
+            currentState.description !== initialState.description ||
+            currentState.ideaTranscript !== initialState.ideaTranscript ||
+            currentState.parentKey !== initialState.parentKey
+          );
       }
 
       function getValidationError() {
@@ -1380,6 +1415,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       function onFormInput() {
         clearStatusOverride();
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       }
 
@@ -1390,9 +1426,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       prioritySelect?.addEventListener('change', onFormInput);
       issueModelSelect?.addEventListener('change', onFormInput);
       severitySelect?.addEventListener('change', onFormInput);
-      reportedByInput?.addEventListener('input', onFormInput);
-      descriptionInput?.addEventListener('input', onFormInput);
-      parentInput?.addEventListener('input', onFormInput);
+        reportedByInput?.addEventListener('input', onFormInput);
+        descriptionInput?.addEventListener('input', onFormInput);
+        ideaTranscriptInput?.addEventListener('input', onFormInput);
+        parentInput?.addEventListener('input', onFormInput);
 
       editForm.addEventListener('submit', event => {
         event.preventDefault();
@@ -1406,17 +1443,18 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         saving = true;
         refreshActions();
         const currentState = readCurrentState();
-        const payload = {
-          type: 'saveIssueEdits',
-          issueKey: editForm.dataset.issueKey,
-          summary: currentState.summary,
-          transitionId: currentState.transitionId,
-          issueType: currentState.issueType,
-          assignee: currentState.assignee,
-          priority: currentState.priority,
-          description: currentState.description,
-          parentKey: currentState.parentKey
-        };
+          const payload = {
+            type: 'saveIssueEdits',
+            issueKey: editForm.dataset.issueKey,
+            summary: currentState.summary,
+            transitionId: currentState.transitionId,
+            issueType: currentState.issueType,
+            assignee: currentState.assignee,
+            priority: currentState.priority,
+            description: currentState.description,
+            ideaTranscript: currentState.ideaTranscript,
+            parentKey: currentState.parentKey
+          };
         if (currentState.model !== initialState.model) {
           payload.model = currentState.model;
         }
@@ -1439,9 +1477,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         if (severitySelect instanceof HTMLSelectElement) severitySelect.value = initialState.severity;
         if (reportedByInput instanceof HTMLInputElement) reportedByInput.value = initialState.reportedBy;
         if (descriptionInput instanceof HTMLTextAreaElement) descriptionInput.value = initialState.description;
+        if (ideaTranscriptInput instanceof HTMLTextAreaElement) ideaTranscriptInput.value = initialState.ideaTranscript || '';
         if (parentInput instanceof HTMLInputElement) parentInput.value = initialState.parentKey;
         clearStatusOverride();
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       });
 
@@ -1466,6 +1506,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       });
 
       updateParentField();
+      updateIdeaTranscriptField();
       refreshActions();
     })();
 
@@ -1856,11 +1897,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           )}</option>`
       )
       .join('')}`;
-    const issueTypeOptions = renderSelectOptions(d.issueType, [
-      'Epic',
-      'Feature',
-      'Story',
-      'Task',
+        const issueTypeOptions = renderSelectOptions(d.issueType, [
+          'Epic',
+          'Feature',
+          'Idea',
+          'Story',
+          'Task',
       'Subtask',
       'Bug',
       'Issue'
@@ -1887,14 +1929,17 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       'Medium',
       'Low'
     ]);
+    const isIdea = d.issueType.trim().toLowerCase() === 'idea';
     const currentAssignment = this.aiSessionManager.getSession(d.key);
     const hasPreviousAgentSession = Boolean(this.aiSessionManager.getAgentSession(d.key));
-    const sessionBtnDisabled = currentAssignment || hasPreviousAgentSession ? '' : ' disabled';
-    const sessionBtnTitle = currentAssignment
-      ? 'View active AI session'
-      : hasPreviousAgentSession
-        ? 'View previous AI session'
-        : 'Assign to AI first';
+    const sessionBtnDisabled = isIdea || currentAssignment || hasPreviousAgentSession ? '' : ' disabled';
+    const sessionBtnTitle = isIdea
+      ? 'Idea tickets do not use AI session workflows.'
+      : currentAssignment
+        ? 'View active AI session'
+        : hasPreviousAgentSession
+          ? 'View previous AI session'
+          : 'Assign to AI first';
     const comments = (d.comments ?? [])
       .map(comment => {
         const formattedDate = formatDate(comment.created ?? comment.updated);
@@ -2032,25 +2077,40 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               placeholder="Add a description"
             >${escapeHtml(d.description ?? '')}</textarea>
           </label>
+          <div class="field-group">
+            <span class="field-label">Description Preview</span>
+            <div class="markdown-preview markdown-body${d.description?.trim() ? '' : ' is-empty'}">${d.description?.trim()
+              ? markdownToHtmlSafe(d.description)
+              : '<p>No description provided.</p>'}</div>
+          </div>
+          <label class="field-group idea-group${isIdea ? '' : ' is-hidden'}" for="ideaTranscriptInput" id="ideaTranscriptGroup">
+            <span class="field-label">AI Research Transcript</span>
+            <textarea
+              id="ideaTranscriptInput"
+              class="field-textarea idea-transcript-textarea"
+              placeholder="Capture research chat and notes here"
+            >${escapeHtml(d.ideaTranscript ?? '')}</textarea>
+            <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
+          </label>
           <div class="form-actions">
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
-            <button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>
-            <button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>
+            ${isIdea ? '' : '<button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>'}
+            ${isIdea ? '' : `<button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>`}
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
       </section>
-      ${this.renderWorkflowPackSection(d.key)}
+      ${isIdea ? '' : this.renderWorkflowPackSection(d.key)}
       ${this.renderModelSection(d.key)}
       ${this.renderSubTasksSection(d.key)}
       <section class="card">
-        <h3>Comments</h3>
+        <h3>Activity</h3>
         <div class="comment-list">
           ${
             comments.length > 0
               ? comments
-              : '<div class="comment-empty">No comments yet.</div>'
+              : '<div class="comment-empty">No activity yet.</div>'
           }
         </div>
         <form id="commentForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">
