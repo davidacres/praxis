@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(grep -n \"\\\\\\\\\\\\\\\\n\" \"C:/Users/davacr/AppData/Local/Temp/copilot-panel-debug.html\")",
+      "Bash(npx vitest:*)",
+      "Bash(xargs grep:*)",
+      "Bash(git push:*)",
+      "Bash(npm run:*)",
+      "Read(//c/Users/davacr/.vscode/extensions/local-dev.ticket-manager-0.0.1/out/**)",
+      "Read(//c/Users/davacr/.vscode-insiders/extensions/local-dev.ticket-manager-0.0.1/out/**)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.activationEvents, null, 2\\)\\)\")"
+    ]
+  }
+}

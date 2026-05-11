@@ -12,10 +12,12 @@ export function resolveBackendModeContextState(
 ): BackendModeContextState {
   switch (storedMode) {
     case 'demo':
-    case 'file':
     case 'livefolder':
     case 'userworkspace':
       return { mode: storedMode, configured: true };
+    case 'github':
+    case 'gitlab':
+      return { mode: storedMode, configured: false };
     case 'jira':
       return { mode: 'jira', configured: jiraMcpConfigured };
     case 'jiraapi':

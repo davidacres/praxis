@@ -22,13 +22,141 @@ import type {
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
 import { DemoService } from '../demo/demoService';
-import { FilePlanService } from '../file/filePlanService';
 import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
+
+function buildUnsupportedBackendMessage(mode: 'github' | 'gitlab'): string {
+  const label = mode === 'github' ? 'GitHub' : 'GitLab';
+  return `${label} project mode is not implemented yet. Current ${label} support is limited to setup metadata and repository automation helpers.`;
+}
+
+class UnsupportedBackendService implements IssueTrackerService {
+  public readonly mode: BackendMode;
+  private readonly unsupportedMode: 'github' | 'gitlab';
+
+  public constructor(
+    mode: 'github' | 'gitlab',
+    private readonly defaultPageSize: number
+  ) {
+    this.unsupportedMode = mode;
+    this.mode = mode;
+  }
+
+  public getDefaultPageSize(): number {
+    return this.defaultPageSize;
+  }
+
+  public async reset(): Promise<void> {}
+
+  public async checkConnection(): Promise<ConnectionCheck> {
+    return {
+      status: 'error',
+      message: buildUnsupportedBackendMessage(this.unsupportedMode),
+      toolCount: 0
+    };
+  }
+
+  public async getProjects(): Promise<Project[]> {
+    return [];
+  }
+
+  public async getIssues(): Promise<PagedIssues> {
+    return {
+      issues: [],
+      total: 0,
+      hasMore: false
+    };
+  }
+
+  public async getFilterMetadata(): Promise<FilterMetadata> {
+    return {
+      statuses: [],
+      issueTypes: []
+    };
+  }
+
+  public async getParentItems(): Promise<IssueSummary[]> {
+    return [];
+  }
+
+  public async supportsBoards(): Promise<boolean> {
+    return false;
+  }
+
+  public async getBoards(): Promise<Board[]> {
+    return [];
+  }
+
+  public async getBoardDetails(board: Board): Promise<BoardDetails> {
+    return {
+      board,
+      columns: [],
+      issues: []
+    };
+  }
+
+  public async createBoard(): Promise<Board> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async updateBoard(): Promise<Board> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async deleteBoard(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getIssue(issueKey: string): Promise<IssueDetails> {
+    throw new Error(`Cannot load ${issueKey}. ${buildUnsupportedBackendMessage(this.unsupportedMode)}`);
+  }
+
+  public async createIssue(): Promise<IssueDetails> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async updateIssue(): Promise<IssueDetails> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async deleteIssue(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async addComment(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async attachFile(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async downloadAttachment(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getTransitions(): Promise<WorkflowTransition[]> {
+    return [];
+  }
+
+  public async transitionIssue(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getBrowseUrl(): Promise<string | undefined> {
+    return undefined;
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    return undefined;
+  }
+
+  public dispose(): void {}
+}
 
 export class BackendRouter implements IssueTrackerService {
   private activeMode?: BackendMode;
@@ -202,10 +330,10 @@ export class BackendRouter implements IssueTrackerService {
     this.disposeActiveService();
     this.activeMode = configuredMode;
     this.activeService =
-      configuredMode === 'demo'
-        ? new DemoService(this.configStore)
-        : configuredMode === 'file'
-          ? new FilePlanService(this.configStore)
+      configuredMode === 'github' || configuredMode === 'gitlab'
+        ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
+        : configuredMode === 'demo'
+          ? new DemoService(this.configStore)
           : configuredMode === 'jiraapi'
             ? new JiraApiService(this.configStore, this.output)
           : configuredMode === 'livefolder'

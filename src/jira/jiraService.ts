@@ -63,6 +63,36 @@ function toArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+interface AtlassianAccessibleResource {
+  id: string;
+  url?: string;
+  name?: string;
+  scopes: string[];
+}
+
+interface AtlassianSiteContext {
+  cloudId: string;
+  siteUrl?: string;
+  name?: string;
+}
+
+const ATLASSIAN_SEARCH_FIELDS = [
+  'summary',
+  'description',
+  'status',
+  'issuetype',
+  'priority',
+  'created',
+  'updated',
+  'project',
+  'assignee',
+  'reporter',
+  'comment',
+  'parent'
+];
+
+const ATLASSIAN_DETAIL_FIELDS = [...ATLASSIAN_SEARCH_FIELDS];
+
 function deriveBrowseUrl(selfUrl: string | undefined, key: string): string | undefined {
   if (!selfUrl) {
     return undefined;
@@ -74,6 +104,107 @@ function deriveBrowseUrl(selfUrl: string | undefined, key: string): string | und
   } catch {
     return undefined;
   }
+}
+
+function deriveSiteBrowseUrl(siteUrl: string | undefined, key: string): string | undefined {
+  if (!siteUrl) {
+    return undefined;
+  }
+
+  return `${siteUrl.replace(/\/+$/, '')}/browse/${key}`;
+}
+
+function normalizeAtlassianSitePreference(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.replace(/\/+$/, '').toLowerCase();
+}
+
+function normalizeHostname(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  try {
+    return new URL(trimmed).host.toLowerCase();
+  } catch {
+    return trimmed.toLowerCase();
+  }
+}
+
+function normalizeAccessibleResource(raw: unknown): AtlassianAccessibleResource | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const id = asString(raw.id)?.trim();
+  if (!id) {
+    return undefined;
+  }
+
+  return {
+    id,
+    url: asString(raw.url)?.trim(),
+    name: asString(raw.name)?.trim(),
+    scopes: toArray(raw.scopes)
+      .map(asString)
+      .filter((scope): scope is string => Boolean(scope))
+  };
+}
+
+function extractAccessibleResources(value: unknown): AtlassianAccessibleResource[] {
+  const list = toArray(value)
+    .map(normalizeAccessibleResource)
+    .filter((resource): resource is AtlassianAccessibleResource => Boolean(resource));
+  const deduped = new Map<string, AtlassianAccessibleResource>();
+
+  for (const resource of list) {
+    const key = `${resource.id}|${resource.url ?? ''}`;
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, resource);
+      continue;
+    }
+
+    deduped.set(key, {
+      ...existing,
+      name: existing.name ?? resource.name,
+      scopes: [...new Set([...existing.scopes, ...resource.scopes])]
+    });
+  }
+
+  return [...deduped.values()];
+}
+
+function selectAtlassianResource(
+  resources: AtlassianAccessibleResource[],
+  preference: string | undefined
+): AtlassianAccessibleResource | undefined {
+  const jiraResources = resources.filter(resource =>
+    resource.scopes.some(scope => scope.toLowerCase().includes('jira'))
+  );
+  const preferredResources = jiraResources.length > 0 ? jiraResources : resources;
+  const normalizedPreference = normalizeAtlassianSitePreference(preference);
+
+  if (normalizedPreference) {
+    const preferredHost = normalizeHostname(normalizedPreference);
+    return preferredResources.find(resource => {
+      const resourceUrl = normalizeAtlassianSitePreference(resource.url);
+      const resourceHost = normalizeHostname(resource.url);
+      return (
+        resource.id.toLowerCase() === normalizedPreference ||
+        resourceUrl === normalizedPreference ||
+        resourceHost === preferredHost ||
+        resource.name?.toLowerCase() === normalizedPreference
+      );
+    });
+  }
+
+  return preferredResources.length === 1 ? preferredResources[0] : undefined;
 }
 
 function normalizeUserDisplayName(raw: unknown): string | undefined {
@@ -319,6 +450,12 @@ function extractProjects(value: unknown): Project[] {
     return value.map(normalizeProject).filter((item): item is Project => Boolean(item));
   }
 
+  if (isRecord(value) && Array.isArray(value.values)) {
+    return value.values
+      .map(normalizeProject)
+      .filter((item): item is Project => Boolean(item));
+  }
+
   if (isRecord(value) && Array.isArray(value.projects)) {
     return value.projects
       .map(normalizeProject)
@@ -527,6 +664,12 @@ export class JiraService implements IssueTrackerService {
   private cachedProjects?: Project[];
   private capabilities?: JiraCapabilities;
   private connectionSignature?: string;
+  private connectionInitSignature?: string;
+  private connectionInitPromise?: Promise<{
+    config: ConnectionConfig;
+    capabilities: JiraCapabilities;
+  }>;
+  private atlassianSite?: AtlassianSiteContext;
   private parentFieldMode: ParentFieldMode = 'parent';
   private toolCount = 0;
 
@@ -546,6 +689,9 @@ export class JiraService implements IssueTrackerService {
     this.cachedProjects = undefined;
     this.capabilities = undefined;
     this.connectionSignature = undefined;
+    this.connectionInitSignature = undefined;
+    this.connectionInitPromise = undefined;
+    this.atlassianSite = undefined;
     this.parentFieldMode = 'parent';
     await this.client.disconnect();
   }
@@ -561,13 +707,7 @@ export class JiraService implements IssueTrackerService {
     }
 
     try {
-      await this.client.connect(connection);
-      this.cachedProjects = undefined;
-      this.parentFieldMode = 'parent';
-      this.connectionSignature = JSON.stringify(connection);
-      const tools = await this.client.listTools(connection.timeoutMs);
-      this.toolCount = tools.length;
-      this.capabilities = this.requireCapabilities(tools);
+      const { capabilities } = await this.ensureConnected(connection);
       const projects = await this.getProjects(false);
       return {
         status: projects.length === 0 ? 'warning' : 'ok',
@@ -577,7 +717,9 @@ export class JiraService implements IssueTrackerService {
             : `Connected. ${projects.length} accessible project(s) found.`,
         toolCount: this.toolCount,
         projectCount: projects.length,
-        serverName: this.client.getServerName()
+        serverName:
+          this.client.getServerName() ??
+          (capabilities.contract === 'atlassian-cloud' ? 'Atlassian MCP' : undefined)
       };
     } catch (error) {
       return {
@@ -595,11 +737,51 @@ export class JiraService implements IssueTrackerService {
     }
 
     const { config, capabilities } = await this.ensureConnected();
-    const response = await this.client.callTool(
-      capabilities.getProjects,
-      { include_archived: false },
-      config.timeoutMs
-    );
+    if (capabilities.contract === 'atlassian-cloud') {
+      const site = await this.ensureAtlassianSite(config, capabilities);
+      const projects: Project[] = [];
+      const seenKeys = new Set<string>();
+      let startAt = 0;
+
+      while (true) {
+        const response = await this.client.callTool(
+          capabilities.getProjects,
+          {
+            cloudId: site.cloudId,
+            searchString: '',
+            action: 'browse',
+            startAt,
+            maxResults: 50,
+            expandIssueTypes: false
+          },
+          config.timeoutMs
+        );
+        const pageProjects = extractProjects(response.value);
+        for (const project of pageProjects) {
+          if (seenKeys.has(project.key)) {
+            continue;
+          }
+
+          seenKeys.add(project.key);
+          projects.push(project);
+        }
+
+        const hasMore =
+          isRecord(response.value) &&
+          ((typeof response.value.isLast === 'boolean' && !response.value.isLast) ||
+            typeof response.value.nextPage === 'string');
+        if (!hasMore || pageProjects.length === 0) {
+          break;
+        }
+
+        startAt += pageProjects.length;
+      }
+
+      this.cachedProjects = projects;
+      return this.cachedProjects;
+    }
+
+    const response = await this.client.callTool(capabilities.getProjects, { include_archived: false }, config.timeoutMs);
 
     this.cachedProjects = extractProjects(response.value);
     return this.cachedProjects;
@@ -611,6 +793,10 @@ export class JiraService implements IssueTrackerService {
     pageSize: number
   ): Promise<PagedIssues> {
     const { config, capabilities } = await this.ensureConnected();
+    if (capabilities.contract === 'atlassian-cloud') {
+      return this.getAtlassianIssues(config, capabilities, filters, startAt, pageSize);
+    }
+
     const attemptModes: ParentFieldMode[] =
       filters.parentKey && this.parentFieldMode === 'parent'
         ? ['parent', 'parentEpic']
@@ -699,6 +885,11 @@ export class JiraService implements IssueTrackerService {
     }
 
     const jql = buildParentItemsJql(filters.projectKeys, filters.statuses, searchText, allowedParentTypes);
+    if (capabilities.contract === 'atlassian-cloud') {
+      const response = await this.callAtlassianIssueSearch(config, capabilities, jql, 50, '');
+      return extractIssues(response.value).issues;
+    }
+
     const response = await this.client.callTool(
       capabilities.searchIssues,
       {
@@ -716,6 +907,10 @@ export class JiraService implements IssueTrackerService {
   public async supportsBoards(): Promise<boolean> {
     try {
       const { capabilities } = await this.ensureConnected();
+      if (capabilities.contract === 'atlassian-cloud') {
+        return false;
+      }
+
       return Boolean(capabilities.getAgileBoards && capabilities.getBoardIssues);
     } catch {
       return false;
@@ -814,19 +1009,27 @@ export class JiraService implements IssueTrackerService {
 
   public async getIssue(issueKey: string): Promise<IssueDetails> {
     const { config, capabilities } = await this.ensureConnected();
-    const response = await this.client.callTool(
-      capabilities.getIssue,
-      {
-        issue_key: issueKey,
-        fields: 'summary,status,issuetype,assignee,priority,created,updated,project,description,parent,comment',
-        comment_limit: 50
-      },
-      config.timeoutMs
-    );
+    const response =
+      capabilities.contract === 'atlassian-cloud'
+        ? await this.callAtlassianIssueGet(config, capabilities, issueKey)
+        : await this.client.callTool(
+            capabilities.getIssue,
+            {
+              issue_key: issueKey,
+              fields: 'summary,status,issuetype,assignee,priority,created,updated,project,description,parent,comment',
+              comment_limit: 50
+            },
+            config.timeoutMs
+          );
 
     const issue = normalizeIssue(response.value);
     if (!issue) {
       throw new Error(`Unable to load details for ${issueKey}.`);
+    }
+
+    if (capabilities.contract === 'atlassian-cloud') {
+      const site = await this.ensureAtlassianSite(config, capabilities);
+      issue.browseUrl = deriveSiteBrowseUrl(site.siteUrl, issue.key) ?? issue.browseUrl;
     }
 
     return {
@@ -862,17 +1065,28 @@ export class JiraService implements IssueTrackerService {
       Object.keys(additionalFieldsPayload).length > 0
         ? JSON.stringify(additionalFieldsPayload)
         : undefined;
-    const response = await this.client.callTool(
-      capabilities.createIssue,
-      {
-        project_key: input.projectKey,
-        summary: input.summary,
-        issue_type: issueType,
-        description: input.description,
-        additional_fields: additionalFields
-      },
-      config.timeoutMs
-    );
+    const response =
+      capabilities.contract === 'atlassian-cloud'
+        ? await this.callAtlassianCreateIssue(
+            config,
+            capabilities,
+            input.projectKey,
+            issueType,
+            input.summary,
+            input.description,
+            parentKey
+          )
+        : await this.client.callTool(
+            capabilities.createIssue,
+            {
+              project_key: input.projectKey,
+              summary: input.summary,
+              issue_type: issueType,
+              description: input.description,
+              additional_fields: additionalFields
+            },
+            config.timeoutMs
+          );
 
     const issueKey = normalizeIssue(response.value)?.key ?? extractCreatedIssueKey(response.value);
     if (!issueKey) {
@@ -942,16 +1156,30 @@ export class JiraService implements IssueTrackerService {
       additionalFields.issuetype = { name: issueType };
     }
 
-    await this.client.callTool(
-      capabilities.updateIssue,
-      {
-        issue_key: issueKey,
-        fields: JSON.stringify(fieldsPayload),
-        additional_fields:
-          Object.keys(additionalFields).length > 0 ? JSON.stringify(additionalFields) : undefined
-      },
-      config.timeoutMs
-    );
+    if (capabilities.contract === 'atlassian-cloud') {
+      await this.callAtlassianUpdateIssue(
+        config,
+        capabilities,
+        issueKey,
+        fieldsPayload,
+        additionalFields,
+        nextParentKey,
+        nextIssueType,
+        typeof input.priority === 'string' ? input.priority.trim() : undefined,
+        Object.prototype.hasOwnProperty.call(input, 'assignee') ? input.assignee?.trim() || null : undefined
+      );
+    } else {
+      await this.client.callTool(
+        capabilities.updateIssue,
+        {
+          issue_key: issueKey,
+          fields: JSON.stringify(fieldsPayload),
+          additional_fields:
+            Object.keys(additionalFields).length > 0 ? JSON.stringify(additionalFields) : undefined
+        },
+        config.timeoutMs
+      );
+    }
 
     return this.getIssue(issueKey);
   }
@@ -962,6 +1190,11 @@ export class JiraService implements IssueTrackerService {
       throw new Error(
         'The Jira MCP server does not expose issue deletion. Expected a delete issue capability.'
       );
+    }
+
+    if (capabilities.contract === 'atlassian-cloud') {
+      await this.callAtlassianDeleteIssue(config, capabilities, issueKey);
+      return;
     }
 
     await this.client.callTool(
@@ -984,6 +1217,11 @@ export class JiraService implements IssueTrackerService {
     const commentBody = body.trim();
     if (commentBody.length === 0) {
       throw new Error('Comment cannot be empty.');
+    }
+
+    if (capabilities.contract === 'atlassian-cloud') {
+      await this.callAtlassianAddComment(config, capabilities, issueKey, commentBody);
+      return;
     }
 
     await this.client.callTool(
@@ -1010,19 +1248,28 @@ export class JiraService implements IssueTrackerService {
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     const { config, capabilities } = await this.ensureConnected();
-    const response = await this.client.callTool(
-      capabilities.getTransitions,
-      {
-        issue_key: issueKey
-      },
-      config.timeoutMs
-    );
+    const response =
+      capabilities.contract === 'atlassian-cloud'
+        ? await this.callAtlassianTransitions(config, capabilities, issueKey)
+        : await this.client.callTool(
+            capabilities.getTransitions,
+            {
+              issue_key: issueKey
+            },
+            config.timeoutMs
+          );
 
     return extractTransitions(response.value);
   }
 
   public async transitionIssue(issueKey: string, transitionId: string): Promise<void> {
     const { config, capabilities } = await this.ensureConnected();
+    if (!capabilities.transitionIssue) {
+      throw new Error(
+        'The Jira MCP server does not expose issue status transitions. Expected a transition issue capability.'
+      );
+    }
+
     await this.client.callTool(
       capabilities.transitionIssue,
       {
@@ -1034,8 +1281,18 @@ export class JiraService implements IssueTrackerService {
   }
 
   public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
-    if (issue.browseUrl) {
+    if (issue.browseUrl && !issue.browseUrl.includes('/ex/jira/')) {
       return issue.browseUrl;
+    }
+
+    try {
+      const { config, capabilities } = await this.ensureConnected();
+      if (capabilities.contract === 'atlassian-cloud') {
+        const site = await this.ensureAtlassianSite(config, capabilities);
+        return deriveSiteBrowseUrl(site.siteUrl, issue.key) ?? issue.browseUrl;
+      }
+    } catch {
+      // Fall back to the detail lookup below.
     }
 
     const details = await this.getIssue(issue.key);
@@ -1059,10 +1316,39 @@ export class JiraService implements IssueTrackerService {
     }
 
     const signature = JSON.stringify(config);
+    if (
+      this.connectionInitPromise &&
+      this.connectionInitSignature === signature
+    ) {
+      return this.connectionInitPromise;
+    }
+
+    const initialization = this.initializeConnection(config, signature);
+    this.connectionInitSignature = signature;
+    this.connectionInitPromise = initialization;
+
+    try {
+      return await initialization;
+    } finally {
+      if (this.connectionInitPromise === initialization) {
+        this.connectionInitPromise = undefined;
+        this.connectionInitSignature = undefined;
+      }
+    }
+  }
+
+  private async initializeConnection(
+    config: ConnectionConfig,
+    signature: string
+  ): Promise<{
+    config: ConnectionConfig;
+    capabilities: JiraCapabilities;
+  }> {
     if (this.connectionSignature !== signature) {
       this.cachedProjects = undefined;
       this.capabilities = undefined;
       this.connectionSignature = signature;
+      this.atlassianSite = undefined;
       this.parentFieldMode = 'parent';
     }
 
@@ -1095,6 +1381,10 @@ export class JiraService implements IssueTrackerService {
     getAgileBoards: string;
     getBoardIssues: string;
   } {
+    if (capabilities.contract === 'atlassian-cloud') {
+      throw new Error('Boards are not supported by the configured Atlassian Jira MCP contract.');
+    }
+
     if (!capabilities.getAgileBoards || !capabilities.getBoardIssues) {
       throw new Error(
         'The Jira MCP server does not expose board tools. Expected agile board and board issue capabilities.'
@@ -1104,6 +1394,304 @@ export class JiraService implements IssueTrackerService {
     return {
       getAgileBoards: capabilities.getAgileBoards,
       getBoardIssues: capabilities.getBoardIssues
+    };
+  }
+
+  private async ensureAtlassianSite(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities
+  ): Promise<AtlassianSiteContext> {
+    if (this.atlassianSite) {
+      return this.atlassianSite;
+    }
+
+    const configuredSite = this.configStore.getJiraMcpCloudId();
+    if (capabilities.accessibleResources) {
+      const response = await this.client.callTool(capabilities.accessibleResources, {}, config.timeoutMs);
+      const resources = extractAccessibleResources(response.value);
+      const selected = selectAtlassianResource(resources, configuredSite);
+      if (!selected) {
+        if (configuredSite) {
+          throw new Error(
+            `The configured Jira MCP cloud/site "${configuredSite}" was not found in the accessible Atlassian resources.`
+          );
+        }
+
+        throw new Error(
+          'Multiple Atlassian Jira sites are accessible. Set "ticketManager.jiraMcpCloudId" to the Atlassian site URL or cloud ID to use.'
+        );
+      }
+
+      this.atlassianSite = {
+        cloudId: selected.id,
+        siteUrl: selected.url,
+        name: selected.name
+      };
+      return this.atlassianSite;
+    }
+
+    if (!configuredSite) {
+      throw new Error(
+        'The Atlassian Jira MCP server requires a site selection. Set "ticketManager.jiraMcpCloudId" to the Atlassian site URL or cloud ID for your Jira site.'
+      );
+    }
+
+    this.atlassianSite = {
+      cloudId: configuredSite,
+      siteUrl: configuredSite.startsWith('http') ? configuredSite : undefined
+    };
+    return this.atlassianSite;
+  }
+
+  private async callAtlassianIssueSearch(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    jql: string,
+    maxResults: number,
+    nextPageToken: string
+  ) {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    return this.client.callTool(
+      capabilities.searchIssues,
+      {
+        cloudId: site.cloudId,
+        jql,
+        maxResults,
+        fields: ATLASSIAN_SEARCH_FIELDS,
+        nextPageToken,
+        responseContentFormat: 'adf'
+      },
+      config.timeoutMs
+    );
+  }
+
+  private async callAtlassianIssueGet(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    issueKey: string
+  ) {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    return this.client.callTool(
+      capabilities.getIssue,
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        fields: ATLASSIAN_DETAIL_FIELDS,
+        fieldsByKeys: false,
+        expand: '',
+        properties: [],
+        updateHistory: false,
+        failFast: true,
+        responseContentFormat: 'adf'
+      },
+      config.timeoutMs
+    );
+  }
+
+  private async callAtlassianTransitions(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    issueKey: string
+  ) {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    return this.client.callTool(
+      capabilities.getTransitions,
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        expand: '',
+        transitionId: '',
+        skipRemoteOnlyCondition: false,
+        includeUnavailableTransitions: false,
+        sortByOpsBarAndStatus: false
+      },
+      config.timeoutMs
+    );
+  }
+
+  private async callAtlassianCreateIssue(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    projectKey: string,
+    issueType: string,
+    summary: string,
+    description: string | undefined,
+    parentKey: string | undefined
+  ) {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    return this.client.callTool(
+      capabilities.createIssue!,
+      {
+        cloudId: site.cloudId,
+        projectKey,
+        issueTypeName: issueType,
+        summary,
+        description,
+        parent: parentKey,
+        contentFormat: 'adf',
+        responseContentFormat: 'adf'
+      },
+      config.timeoutMs
+    );
+  }
+
+  private async callAtlassianUpdateIssue(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    issueKey: string,
+    fieldsPayload: Record<string, unknown>,
+    additionalFields: Record<string, unknown>,
+    parentKey: string | undefined,
+    issueType: string,
+    priority: string | undefined,
+    assignee: string | null | undefined
+  ): Promise<void> {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    const variants: Array<Record<string, unknown>> = [
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        summary: typeof fieldsPayload.summary === 'string' ? fieldsPayload.summary : undefined,
+        description:
+          typeof fieldsPayload.description === 'string' ? fieldsPayload.description : undefined,
+        parent: parentKey,
+        assignee,
+        assigneeAccountId: assignee,
+        priority,
+        issueTypeName: issueType,
+        contentFormat: 'adf',
+        responseContentFormat: 'adf'
+      },
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        fields: fieldsPayload,
+        additionalFields,
+        contentFormat: 'adf',
+        responseContentFormat: 'adf'
+      }
+    ];
+
+    await this.callAtlassianMutationVariants(capabilities.updateIssue!, variants, config.timeoutMs);
+  }
+
+  private async callAtlassianDeleteIssue(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    issueKey: string
+  ): Promise<void> {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    const variants: Array<Record<string, unknown>> = [
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey
+      },
+      {
+        cloudId: site.cloudId,
+        issueKey
+      }
+    ];
+
+    await this.callAtlassianMutationVariants(capabilities.deleteIssue!, variants, config.timeoutMs);
+  }
+
+  private async callAtlassianAddComment(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    issueKey: string,
+    body: string
+  ): Promise<void> {
+    const site = await this.ensureAtlassianSite(config, capabilities);
+    const variants: Array<Record<string, unknown>> = [
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        body,
+        contentFormat: 'adf',
+        responseContentFormat: 'adf'
+      },
+      {
+        cloudId: site.cloudId,
+        issueIdOrKey: issueKey,
+        commentBody: body,
+        contentFormat: 'adf',
+        responseContentFormat: 'adf'
+      },
+      {
+        cloudId: site.cloudId,
+        issueKey,
+        body
+      }
+    ];
+
+    await this.callAtlassianMutationVariants(capabilities.addComment!, variants, config.timeoutMs);
+  }
+
+  private async callAtlassianMutationVariants(
+    toolName: string,
+    variants: Array<Record<string, unknown>>,
+    timeoutMs: number
+  ): Promise<void> {
+    let lastError: unknown;
+
+    for (const variant of variants) {
+      const payload = Object.fromEntries(
+        Object.entries(variant).filter(([, value]) => value !== undefined)
+      );
+
+      try {
+        await this.client.callTool(toolName, payload, timeoutMs);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async getAtlassianIssues(
+    config: ConnectionConfig,
+    capabilities: JiraCapabilities,
+    filters: IssueFilters,
+    startAt: number,
+    pageSize: number
+  ): Promise<PagedIssues> {
+    const jql = buildIssuesJql(filters, this.parentFieldMode);
+    const issues: IssueSummary[] = [];
+    let skipped = 0;
+    let nextPageToken = '';
+    let hasMore = false;
+
+    while (issues.length < pageSize) {
+      const response = await this.callAtlassianIssueSearch(
+        config,
+        capabilities,
+        jql,
+        Math.min(100, Math.max(pageSize, startAt + pageSize - skipped)),
+        nextPageToken
+      );
+      const page = extractIssues(response.value);
+      const remainingSkip = Math.max(0, startAt - skipped);
+      const visibleIssues = remainingSkip > 0 ? page.issues.slice(remainingSkip) : page.issues;
+      skipped += page.issues.length;
+      issues.push(...visibleIssues.slice(0, pageSize - issues.length));
+      hasMore = page.hasMore;
+
+      if (!page.hasMore) {
+        break;
+      }
+
+      nextPageToken = isRecord(response.value) ? asString(response.value.nextPageToken) ?? '' : '';
+      if (!nextPageToken) {
+        break;
+      }
+    }
+
+    return {
+      issues,
+      total: undefined,
+      hasMore: hasMore && issues.length >= pageSize
     };
   }
 

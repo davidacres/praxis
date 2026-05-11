@@ -58,7 +58,7 @@ interface CommandDependencies {
   setupSidebarViewProvider: SetupSidebarViewProvider;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
-  ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
+  openCreateIssueForm?: (defaults?: Partial<CreateIssueInput>) => Promise<boolean>;
   output: vscode.OutputChannel;
   reportError?: (error: unknown, scope?: string) => void;
   onConnectionCheck?: (
@@ -200,33 +200,31 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
   }
 
   const saveUri = await vscode.window.showSaveDialog({
-    saveLabel: 'Save imported plan',
-    filters: { 'Plan files': ['jsonc', 'json'] },
-    defaultUri: vscode.Uri.joinPath(folders[0].uri, 'ticket-plan.imported.jsonc')
+    saveLabel: 'Save imported ticket data',
+    filters: { 'Ticket data files': ['jsonc', 'json'] },
+    defaultUri: vscode.Uri.joinPath(folders[0].uri, 'ticket-data.imported.jsonc')
   });
   if (!saveUri) {
     return;
   }
 
   await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(result.jsonc));
-  await deps.configStore.setPlanFilePath(saveUri.fsPath);
   deps.output.appendLine(
     `[import] ${result.stats.featuresImported} features, ${result.stats.storiesImported} stories → ${saveUri.fsPath}`
   );
 
   const goFile = await vscode.window.showInformationMessage(
     `Imported ${result.stats.featuresImported} features and ${result.stats.storiesImported} stories from markdown into ${saveUri.fsPath}.`,
-    'Switch to File mode'
+    'Open Folder'
   );
 
-  if (goFile === 'Switch to File mode') {
-    await setBackendMode(deps, 'file');
-    await vscode.window.showInformationMessage('Backend mode is now File. The imported plan is active.');
-  } else {
-    await deps.backendService.reset();
-    await clearUiSelection(deps);
-    await refreshViews(deps);
+  if (goFile === 'Open Folder') {
+    await vscode.commands.executeCommand('revealFileInOS', saveUri);
   }
+
+  await deps.backendService.reset();
+  await clearUiSelection(deps);
+  await refreshViews(deps);
 }
 
 async function loadAllIssuesForMigration(
@@ -548,9 +546,6 @@ async function setBackendMode(
   mode: BackendMode
 ): Promise<void> {
   await deps.configStore.setBackendMode(mode);
-  if (mode === 'file') {
-    await deps.ensureFilePlanConfigured(true);
-  }
   await deps.backendService.reset();
   await clearUiSelection(deps);
   await refreshViews(deps);
@@ -643,14 +638,13 @@ function toTransitionQuickPickItems(
 }
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jira: ['Epic', 'Story', 'Task', 'Subtask', 'Bug'],
-  jiraapi: ['Epic', 'Story', 'Task', 'Subtask', 'Bug'],
-  demo: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  livefolder: ['Feature', 'Story', 'Task', 'Bug'],
-  userworkspace: ['Feature', 'Story', 'Task', 'Bug']
+  jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  jiraapi: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  gitlab: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  livefolder: ['Feature', 'Idea', 'Story', 'Task', 'Bug'],
+  userworkspace: ['Feature', 'Idea', 'Story', 'Task', 'Bug']
 };
 
 function suggestUserWorkspaceProjectName(folderPath: string): string {
@@ -829,6 +823,10 @@ async function promptForCreateIssueInput(
   deps: CommandDependencies,
   arg?: unknown
 ): Promise<CreateIssueInput | undefined> {
+  const argumentRecord = arg && typeof arg === 'object' ? (arg as Record<string, unknown>) : undefined;
+  const defaultIssueType = typeof argumentRecord?.issueType === 'string'
+    ? argumentRecord.issueType.trim()
+    : undefined;
   const board = resolveCreateBoard(deps, arg);
   const selectedIssue = resolveIssue(deps.detailsProvider, arg);
   const filters = deps.filterStore.getFilters();
@@ -838,32 +836,39 @@ async function promptForCreateIssueInput(
     return undefined;
   }
 
-  const project = await pickCreateProject(
-    projects,
+  const contextProjectKey =
     board?.projectKey ??
-      selectedIssue?.projectKey ??
-      (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined)
-  );
-  if (!project) {
-    return undefined;
-  }
+    selectedIssue?.projectKey ??
+    (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined);
+  const contextProject = contextProjectKey
+    ? projects.find(project => project.key === contextProjectKey)
+    : undefined;
+  const issueTypeProjectKey =
+    contextProject?.key ??
+    (projects.length === 1 ? projects[0].key : undefined);
 
-  const knownIssueTypes = await getKnownIssueTypes(deps, project.key);
+  const knownIssueTypes = issueTypeProjectKey
+    ? await getKnownIssueTypes(deps, issueTypeProjectKey)
+    : unique([...DEFAULT_CREATABLE_TYPES[deps.backendService.mode]]);
   if (knownIssueTypes.length === 0) {
     await vscode.window.showWarningMessage(
-      `No issue types are available for ${project.key}.`
+      issueTypeProjectKey
+        ? `No issue types are available for ${issueTypeProjectKey}.`
+        : 'No issue types are available.'
     );
     return undefined;
   }
 
-  const pickedType = await vscode.window.showQuickPick(
-    knownIssueTypes.map(issueType => ({
-      label: issueType
-    })),
-    {
-      title: 'Issue Type'
-    }
-  );
+  const pickedType = defaultIssueType && knownIssueTypes.includes(defaultIssueType)
+    ? { label: defaultIssueType }
+    : await vscode.window.showQuickPick(
+      knownIssueTypes.map(issueType => ({
+        label: issueType
+      })),
+      {
+        title: 'Issue Type'
+      }
+    );
   if (!pickedType) {
     return undefined;
   }
@@ -884,6 +889,14 @@ async function promptForCreateIssueInput(
     ignoreFocusOut: true
   });
   if (description === undefined) {
+    return undefined;
+  }
+
+  const project = await pickCreateProject(
+    projects,
+    contextProject?.key ?? (projects.length === 1 ? projects[0].key : undefined)
+  );
+  if (!project) {
     return undefined;
   }
 
@@ -1074,7 +1087,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.createIssue', async (arg?: unknown) => {
       try {
-        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
+        if (await deps.openCreateIssueForm?.()) {
           return;
         }
 
@@ -1097,6 +1110,20 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       } catch (error) {
         reportCommandError(deps, 'create-issue', error);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.createIdea', async () => {
+      try {
+        if (await deps.openCreateIssueForm?.({ issueType: 'Idea' })) {
+          return;
+        }
+
+        await vscode.commands.executeCommand('ticketManager.createIssue', { issueType: 'Idea' });
+      } catch (error) {
+        reportCommandError(deps, 'create-idea', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -1133,10 +1160,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           await vscode.window.showWarningMessage(
             'Creating boards is not supported in Live Folder mode. Use Create User Workspace for multiple plan-folder boards.'
           );
-          return;
-        }
-
-        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
           return;
         }
 

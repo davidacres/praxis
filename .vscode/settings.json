@@ -1,9 +1,21 @@
 {
     "ticketManager.workspaceMcpServerName": "",
-    "ticketManager.backendMode": "jira",
+    "ticketManager.connectionType": "http",
+    "ticketManager.jiraPolling.requiredLabel": "syscfg",
+    "ticketManager.jiraPolling.enabled": true,
+    "ticketManager.gitlabUrl": "https://git.tools.dev.assaabloyglobalsolutions.net/",
+    "ticketManager.gitlabConnectionType": "api",
+    "ticketManager.gitlabApiKey": "glpat-yeNrvgNikjWtwMkNmy_n0286MQp1OmhwCA.01.0y0qcwxzx",
     "ticketManager.liveFolderPath": "",
     "ticketManager.liveFolderAllowIssueCreation": true,
     "ticketManager.planFilePath": "",
     "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": ""
+    "ticketManager.liveFolderProjectName": "",
+    "ticketManager.backendMode": "gitlab",
+    "ticketManager.gitlabProjectPath": "traka/software/ai/traka-web-ai",
+    "ticketManager.gitlabListAllAccessibleBoards": false,
+    "ticketManager.gitlabSelectedBoardRefs": [
+        "traka/software/ai/traka-touch-ai::279",
+        "traka/software/ai/traka-touch-ai::278"
+    ]
 }

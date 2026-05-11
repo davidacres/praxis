@@ -3,7 +3,6 @@ export type BackendMode =
   | 'jira'
   | 'jiraapi'
   | 'demo'
-  | 'file'
   | 'github'
   | 'gitlab'
   | 'livefolder'
@@ -160,6 +159,7 @@ export interface IssueSummary {
   selfUrl?: string;
   browseUrl?: string;
   description?: string;
+  ideaTranscript?: string;
   /** Issue keys this ticket depends on (same plan); used for execution ordering and links. */
   dependsOn?: string[];
   /** Git branch name for this work item when known (e.g. from import or tooling). */
@@ -184,6 +184,7 @@ export interface CreateIssueInput {
   issueType: string;
   summary: string;
   description?: string;
+  ideaTranscript?: string;
   parentKey?: string;
   boardId?: string;
 }
@@ -191,6 +192,7 @@ export interface CreateIssueInput {
 export interface UpdateIssueInput {
   summary?: string;
   description?: string;
+  ideaTranscript?: string;
   parentKey?: string | null;
   assignee?: string | null;
   priority?: string;
@@ -255,23 +257,41 @@ export interface PagedIssues {
   hasMore: boolean;
 }
 
+export type JiraMcpContract = 'legacy' | 'atlassian-cloud';
+
+export type JiraCapabilityName =
+  | 'getProjects'
+  | 'searchIssues'
+  | 'getIssue'
+  | 'getTransitions'
+  | 'transitionIssue'
+  | 'createIssue'
+  | 'updateIssue'
+  | 'deleteIssue'
+  | 'addComment'
+  | 'getAgileBoards'
+  | 'getBoardIssues'
+  | 'accessibleResources';
+
 export interface JiraCapabilities {
+  contract: JiraMcpContract;
   getProjects: string;
   searchIssues: string;
   getIssue: string;
   getTransitions: string;
-  transitionIssue: string;
+  transitionIssue?: string;
   createIssue?: string;
   updateIssue?: string;
   deleteIssue?: string;
   addComment?: string;
   getAgileBoards?: string;
   getBoardIssues?: string;
+  accessibleResources?: string;
 }
 
 export interface CapabilityResolution {
   capabilities?: JiraCapabilities;
-  missing: Array<keyof JiraCapabilities>;
+  missing: JiraCapabilityName[];
 }
 
 export interface ConnectionCheck {

@@ -32,6 +32,10 @@ export function isParentIssueType(issueType: string | undefined): boolean {
   return normalized === 'epic' || normalized === 'feature';
 }
 
+export function isIdeaIssueType(issueType: string | undefined): boolean {
+  return normalizeLoose(issueType) === 'idea';
+}
+
 export function isSubtaskIssueType(issueType: string | undefined): boolean {
   return normalizeLoose(issueType) === 'subtask';
 }

@@ -49,6 +49,8 @@ function pillToken(label: string | undefined): string {
       return 'epic';
     case 'feature':
       return 'feature';
+    case 'idea':
+      return 'idea';
     case 'story':
       return 'story';
     case 'subtask':
@@ -217,9 +219,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const priority = asString(message.priority);
       const issueType = asString(message.issueType);
       const model = asString(message.model);
-      const severity = asString(message.severity);
-      const reportedBy = asString(message.reportedBy);
-      const transitionId = asString(message.transitionId) ?? undefined;
+        const severity = asString(message.severity);
+        const reportedBy = asString(message.reportedBy);
+        const ideaTranscript = asString(message.ideaTranscript) ?? '';
+        const transitionId = asString(message.transitionId) ?? undefined;
 
       try {
         await this.callbacks.onSaveIssueEdits(issueKey, {
@@ -231,7 +234,8 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           issueType,
           model,
           severity,
-          reportedBy
+          reportedBy,
+          ideaTranscript
         }, transitionId);
         await this.view.webview.postMessage({
           type: 'saveIssueEditsResult',
@@ -383,6 +387,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         const issueTypeOptions = renderSelectOptions(issue.issueType, [
           'Epic',
           'Feature',
+          'Idea',
           'Story',
           'Task',
           'Subtask',
@@ -511,6 +516,12 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             <div class="detail-label">Complexity</div>
             <div class="detail-value detail-value--wrap">${escapeHtml(issue.complexity || '—')}</div>
           </div>
+          <div class="field-group">
+            <span class="field-label">Description Preview</span>
+            <div class="markdown-preview markdown-body${issue.description?.trim() ? '' : ' is-empty'}">${issue.description?.trim()
+              ? markdownToHtmlSafe(issue.description)
+              : '<p>No description provided.</p>'}</div>
+          </div>
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
@@ -546,22 +557,31 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               placeholder="Add a description"
             >${escapeHtml(issue.description ?? '')}</textarea>
           </label>
+          <label class="field-group${issue.issueType.trim().toLowerCase() === 'idea' ? '' : ' is-hidden'}" for="ideaTranscriptInput" id="ideaTranscriptGroup">
+            <span class="field-label">AI Research Transcript</span>
+            <textarea
+              id="ideaTranscriptInput"
+              class="field-textarea"
+              placeholder="Capture research chat and notes here"
+            >${escapeHtml(issue.ideaTranscript ?? '')}</textarea>
+            <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
+          </label>
           <div class="form-actions">
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
-        ${this.renderAiAssignmentSection(issue.key, agentNames)}
-        ${this.renderWorkflowPackSection(issue.key)}
-        ${this.renderCopilotAgentSection(issue.key)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderAiAssignmentSection(issue.key, agentNames)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderWorkflowPackSection(issue.key)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderCopilotAgentSection(issue.key)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
-          <div class="section-title">Comments</div>
+          <div class="section-title">Activity</div>
           <div class="comment-list">
             ${
               comments.length > 0
                 ? comments
-                : '<div class="comment-empty">No comments yet.</div>'
+                : '<div class="comment-empty">No activity yet.</div>'
             }
           </div>
           <label class="field-group" for="commentInput">
@@ -705,6 +725,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
         line-height: 1.45;
       }
+      .markdown-preview {
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: var(--vscode-editor-background);
+      }
+      .markdown-preview.is-empty {
+        color: var(--vscode-descriptionForeground);
+      }
       .comment-textarea {
         min-height: 76px;
       }
@@ -813,6 +842,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         color: #fdba74;
         background: rgba(249, 115, 22, 0.16);
         border-color: rgba(249, 115, 22, 0.28);
+      }
+      .pill--idea {
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.16);
+        border-color: rgba(245, 158, 11, 0.28);
       }
       .pill--story {
         color: #93c5fd;
@@ -929,6 +963,8 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         const severitySelect = document.getElementById('severitySelect');
         const reportedByInput = document.getElementById('reportedByInput');
         const descriptionInput = document.getElementById('descriptionInput');
+        const ideaTranscriptInput = document.getElementById('ideaTranscriptInput');
+        const ideaTranscriptGroup = document.getElementById('ideaTranscriptGroup');
         const parentFieldGroup = document.getElementById('parentFieldGroup');
         const parentFieldLabel = document.getElementById('parentFieldLabel');
         const parentInput = document.getElementById('parentInput');
@@ -1034,6 +1070,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           }
         }
 
+        function updateIdeaTranscriptField() {
+          if (!(ideaTranscriptGroup instanceof HTMLElement)) {
+            return;
+          }
+
+          const issueType = normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '');
+          ideaTranscriptGroup.classList.toggle('is-hidden', issueType !== 'idea');
+        }
+
         function readCurrentState() {
           const parentUi = getParentUi(
             issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : ''
@@ -1048,6 +1093,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
             reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
             description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
+            ideaTranscript:
+              normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '') === 'idea' &&
+              ideaTranscriptInput instanceof HTMLTextAreaElement
+                ? ideaTranscriptInput.value
+                : '',
             parentKey:
               parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
           };
@@ -1065,6 +1115,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             currentState.severity !== initialState.severity ||
             currentState.reportedBy !== initialState.reportedBy ||
             currentState.description !== initialState.description ||
+            currentState.ideaTranscript !== initialState.ideaTranscript ||
             currentState.parentKey !== initialState.parentKey
           );
         }
@@ -1129,6 +1180,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         function onFormInput() {
           clearStatusOverride();
           updateParentField();
+          updateIdeaTranscriptField();
           refreshActions();
         }
 
@@ -1141,6 +1193,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         severitySelect?.addEventListener('change', onFormInput);
         reportedByInput?.addEventListener('input', onFormInput);
         descriptionInput?.addEventListener('input', onFormInput);
+        ideaTranscriptInput?.addEventListener('input', onFormInput);
         parentInput?.addEventListener('input', onFormInput);
 
         editForm.addEventListener('submit', event => {
@@ -1168,6 +1221,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             assignee: currentState.assignee,
             priority: currentState.priority,
             description: currentState.description,
+            ideaTranscript: currentState.ideaTranscript,
             parentKey: currentState.parentKey
           };
           if (currentState.model !== initialState.model) {
@@ -1210,11 +1264,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           if (descriptionInput instanceof HTMLTextAreaElement) {
             descriptionInput.value = initialState.description;
           }
+          if (ideaTranscriptInput instanceof HTMLTextAreaElement) {
+            ideaTranscriptInput.value = initialState.ideaTranscript || '';
+          }
           if (parentInput instanceof HTMLInputElement) {
             parentInput.value = initialState.parentKey;
           }
           clearStatusOverride();
           updateParentField();
+          updateIdeaTranscriptField();
           refreshActions();
         });
 
@@ -1237,6 +1295,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         };
 
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       }
 

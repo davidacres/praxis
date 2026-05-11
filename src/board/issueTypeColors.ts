@@ -6,6 +6,7 @@ const KNOWN_HEX: Record<string, string> = {
   task: '#58a6ff',
   epic: '#a371f7',
   feature: '#3fbccd',
+  idea: '#f59e0b',
   subtask: '#8b949e',
   'sub-task': '#8b949e',
   improvement: '#79c0ff',

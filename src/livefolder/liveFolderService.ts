@@ -50,9 +50,11 @@ import {
   writePriorityToMarkdownFile,
   writeReportedByToMarkdownFile,
   writeSeverityToMarkdownFile,
-  writeStatusToMarkdownFile
+  writeStatusToMarkdownFile,
+  writeIdeaTranscriptToMarkdownFile
 } from './markdownStatusWriter';
 import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
+import { composeIdeaContent, splitIdeaContent } from '../issues/ideaTranscript';
 
 // ── Workflow ────────────────────────────────────────────────────────
 
@@ -68,9 +70,10 @@ const STATUS_NAMES = STATUSES.map(s => s.name);
 const LIVE_FOLDER_CREATION_DISABLED_ERROR =
   'Live Folder issue creation is disabled. Enable ticketManager.liveFolderAllowIssueCreation to create markdown issues.';
 
-type CreatableLiveFolderIssueType = 'Feature' | 'Story' | 'Task' | 'Bug';
+type CreatableLiveFolderIssueType = 'Feature' | 'Idea' | 'Story' | 'Task' | 'Bug';
 
 const CHILD_FILE_PREFIX_BY_TYPE: Record<Exclude<CreatableLiveFolderIssueType, 'Feature'>, string> = {
+  Idea: 'idea',
   Story: 'story',
   Task: 'task',
   Bug: 'bug'
@@ -93,6 +96,8 @@ function normalizeLiveFolderIssueType(value: string): CreatableLiveFolderIssueTy
     case 'epic':
     case 'feature':
       return 'Feature';
+    case 'idea':
+      return 'Idea';
     case 'story':
       return 'Story';
     case 'task':
@@ -135,12 +140,14 @@ function buildIssueMarkdown(
   issueType: CreatableLiveFolderIssueType,
   title: string,
   description: string | undefined,
+  ideaTranscript: string | undefined,
   createdAtIso: string,
   parentKey?: string,
   model?: string
 ): string {
   return generateIssueMarkdown(issueType as IssueType, title, {
     description,
+    ideaTranscript,
     createdAt: createdAtIso,
     parentKey,
     model
@@ -431,6 +438,7 @@ export class LiveFolderService implements IssueTrackerService {
       throw new Error('Summary cannot be empty.');
     }
     const description = input.description?.trim() || undefined;
+    const ideaTranscript = input.ideaTranscript?.trim() || undefined;
     const createdAt = new Date().toISOString();
     const defaultModel = this.configStore.getAiDefaultModel() || undefined;
 
@@ -448,7 +456,15 @@ export class LiveFolderService implements IssueTrackerService {
       await vscode.workspace.fs.createDirectory(featureDirUri);
       await this.writeManagedFile(
         featureFileUri,
-        buildIssueMarkdown(issueType, summary, description, createdAt, undefined, defaultModel)
+        buildIssueMarkdown(
+          issueType,
+          summary,
+          description,
+          undefined,
+          createdAt,
+          undefined,
+          defaultModel
+        )
       );
 
       await this.loadFromDisk();
@@ -465,7 +481,15 @@ export class LiveFolderService implements IssueTrackerService {
 
     await this.writeManagedFile(
       childFileUri,
-      buildIssueMarkdown(issueType, summary, description, createdAt, parentFeature.key, defaultModel)
+      buildIssueMarkdown(
+        issueType,
+        summary,
+        description,
+        issueType === 'Idea' ? ideaTranscript : undefined,
+        createdAt,
+        parentFeature.key,
+        defaultModel
+      )
     );
     await this.writeFeatureItemTableRow(
       parentFeature,
@@ -490,8 +514,29 @@ export class LiveFolderService implements IssueTrackerService {
       issue.assignee = input.assignee ?? undefined;
     }
 
-    // Persist description changes to markdown file
-    if (input.description !== undefined && input.description !== null) {
+    const updatesNeedIdeaTranscript =
+      issue.issueType === 'Idea' &&
+      (input.description !== undefined || input.ideaTranscript !== undefined);
+    if (updatesNeedIdeaTranscript) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const nextDescription = input.description !== undefined ? input.description : issue.description ?? '';
+        const nextTranscript =
+          input.ideaTranscript !== undefined ? input.ideaTranscript : issue.ideaTranscript ?? '';
+        const written = await writeIdeaTranscriptToMarkdownFile(
+          issue.sourceUri,
+          nextDescription,
+          nextTranscript
+        );
+        if (!written && (issue.description ?? '') !== nextDescription) {
+          throw new Error(`Could not update description in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.description = nextDescription;
+        issue.ideaTranscript = nextTranscript;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    } else if (input.description !== undefined && input.description !== null) {
       this.recentWrites.add(issue.sourceUri.toString());
       try {
         const written = await writeDescriptionToMarkdownFile(issue.sourceUri, input.description);
@@ -573,7 +618,7 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   public async deleteIssue(_issueKey: string): Promise<void> {
-    throw new Error('Live Folder mode does not support deleting issues. Remove plan files directly.');
+    throw new Error('Live Folder mode does not support deleting issues. Remove the markdown files directly.');
   }
 
   public async addComment(issueKey: string, body: string): Promise<void> {

@@ -19,6 +19,21 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export function hasConfiguredJiraMcpConnection(
+  config: Pick<vscode.WorkspaceConfiguration, 'get'>
+): boolean {
+  const workspaceServerName = config.get<string>('workspaceMcpServerName', '').trim();
+  const userServerRef = config.get<string>('userMcpServerRef', '').trim();
+  if (workspaceServerName || userServerRef) {
+    return true;
+  }
+
+  const connectionType = config.get<'stdio' | 'http'>('connectionType', 'stdio');
+  return connectionType === 'http'
+    ? config.get<string>('httpUrl', '').trim().length > 0
+    : config.get<string>('stdioCommand', '').trim().length > 0;
+}
+
 export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewId = 'ticketManager.setup';
 
@@ -341,10 +356,9 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
   private renderStepZero(): string {
     const modes: Array<{ mode: string; emoji: string; title: string; desc: string }> = [
-      { mode: 'file', emoji: '🗂️', title: 'Plan File', desc: 'Manage tickets from a local JSON plan file' },
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
-      { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Connect to GitHub repositories and issues' },
-      { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Connect to a GitLab instance for issues and boards' },
+      { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
+      { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
       { mode: 'jira', emoji: '🔗', title: 'Jira via MCP', desc: 'Connect to Jira through an MCP server' },
       { mode: 'jiraapi', emoji: '📡', title: 'Jira API', desc: 'Connect directly to Jira Server/Data Center' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
@@ -382,9 +396,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     let fields = '';
 
     switch (this.setupMode) {
-      case 'file':
-        fields = this.renderFileFields();
-        break;
       case 'livefolder':
         fields = this.renderLiveFolderFields();
         break;
@@ -417,15 +428,6 @@ ${fields}
 <div class="footer">
   <button class="btn btn-secondary" data-action="back">\u2190 Back</button>
   <button class="btn btn-primary" data-action="save">Save &amp; Connect</button>
-</div>`;
-  }
-
-  private renderFileFields(): string {
-    const value = escapeHtml(this.setupFields.planFilePath ?? '');
-    return `<div class="form-group">
-  <label>Plan File Path</label>
-  <input type="text" data-field="planFilePath" value="${value}" />
-  <button class="btn-browse" data-action="browse">Browse\u2026</button>
 </div>`;
   }
 
@@ -522,6 +524,7 @@ ${connFields}
 
     let connFields = '';
     if (connType === 'stdio') {
+
       const cmd = escapeHtml(this.setupFields.jiraStdioCommand ?? '');
       const args = escapeHtml(this.setupFields.jiraStdioArgs ?? '');
       const cwd = escapeHtml(this.setupFields.jiraCwd ?? '');
@@ -696,21 +699,6 @@ ${connFields}`;
               );
             }
           }
-        } else {
-          const uris = await vscode.window.showOpenDialog({
-            canSelectFiles: true,
-            canSelectFolders: false,
-            canSelectMany: false,
-            filters: { 'JSON files': ['json', 'jsonc'], 'All files': ['*'] },
-            title: 'Select Plan File'
-          });
-          if (uris?.[0]) {
-            const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            this.setupFields.planFilePath = wsFolder
-              ? vscode.workspace.asRelativePath(uris[0], false)
-              : uris[0].fsPath;
-            this.render();
-          }
         }
         return;
       }
@@ -751,11 +739,6 @@ ${connFields}`;
     await updateSetting('backendMode', this.setupMode);
 
     switch (this.setupMode) {
-      case 'file':
-        if (this.setupFields.planFilePath) {
-          await updateSetting('planFilePath', this.setupFields.planFilePath);
-        }
-        break;
       case 'livefolder':
         await updateSetting('liveFolderPath', this.setupFields.liveFolderPath);
         if (this.setupFields.liveFolderProjectKey) {
@@ -847,8 +830,6 @@ ${connFields}`;
           ? 'Live Folder'
           : savedMode === 'userworkspace'
             ? 'User Workspace'
-          : savedMode === 'file'
-            ? 'File'
             : savedMode.toUpperCase()
       } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );

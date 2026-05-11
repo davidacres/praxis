@@ -32,18 +32,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Extended backend mode that includes all wizard options.
- * When `BackendMode` in types.ts is updated to include 'github' | 'gitlab',
- * this alias can be replaced with the canonical type.
- */
 type SetupBackendMode = BackendMode | 'github' | 'gitlab';
 
 interface SetupState {
   step: 0 | 1;
   selectedMode: SetupBackendMode | undefined;
-  // Plan File
-  planFilePath: string;
   // Live Folder
   liveFolderPath: string;
   liveFolderProjectKey: string;
@@ -76,7 +69,6 @@ function createInitialState(): SetupState {
   return {
     step: 0,
     selectedMode: undefined,
-    planFilePath: '',
     liveFolderPath: '',
     liveFolderProjectKey: '',
     liveFolderProjectName: '',
@@ -114,10 +106,9 @@ interface ModeOption {
 }
 
 const MODE_OPTIONS: ModeOption[] = [
-  { mode: 'file', icon: '🗂️', title: 'Plan File', description: 'Manage tickets from a local JSON plan file' },
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
-  { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Connect to GitHub repositories and issues' },
-  { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Connect to a GitLab instance for issues and boards' },
+  { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
+  { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
   { mode: 'jira', icon: '🔗', title: 'Jira via MCP', description: 'Connect to Jira through an MCP server' },
   { mode: 'jiraapi', icon: '📡', title: 'Jira API', description: 'Connect directly to Jira Server/Data Center' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
@@ -129,14 +120,13 @@ function getModeOptions(): ModeOption[] {
   }
   return [
     MODE_OPTIONS[0],
-    MODE_OPTIONS[1],
     {
       mode: 'userworkspace',
       icon: '🧰',
       title: 'Create User Workspace',
       description: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later'
     },
-    ...MODE_OPTIONS.slice(2)
+    ...MODE_OPTIONS.slice(1)
   ];
 }
 
@@ -270,16 +260,6 @@ export class SetupWizardPanel {
               );
             }
           }
-        } else {
-          const uris = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            filters: { 'JSON files': ['json'], 'All files': ['*'] },
-            openLabel: 'Select Plan File',
-          });
-          if (uris && uris.length > 0) {
-            this.state.planFilePath = uris[0].fsPath;
-            this.rerender();
-          }
         }
         break;
       }
@@ -322,10 +302,6 @@ export class SetupWizardPanel {
     await config.update('backendMode', this.state.selectedMode, target);
 
     switch (this.state.selectedMode) {
-      case 'file':
-        await config.update('planFilePath', this.state.planFilePath, target);
-        break;
-
       case 'livefolder':
         await config.update('liveFolderPath', this.state.liveFolderPath, target);
         await config.update('liveFolderProjectKey', this.state.liveFolderProjectKey, target);
@@ -396,8 +372,6 @@ export class SetupWizardPanel {
           ? 'Live Folder'
           : savedMode === 'userworkspace'
             ? 'User Workspace'
-          : savedMode === 'file'
-            ? 'File'
             : savedMode.toUpperCase()
       } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
@@ -489,9 +463,6 @@ export class SetupWizardPanel {
 
     let formHtml = '';
     switch (mode) {
-      case 'file':
-        formHtml = this.renderFileForm();
-        break;
       case 'livefolder':
         formHtml = this.renderLiveFolderForm();
         break;
@@ -523,23 +494,6 @@ export class SetupWizardPanel {
       <div class="button-row">
         <button class="btn btn-secondary" data-action="back">← Back</button>
         <button class="btn btn-primary" data-action="save">Save &amp; Connect</button>
-      </div>`;
-  }
-
-  /* -- File form --------------------------------------------------- */
-
-  private renderFileForm(): string {
-    return `
-      <p class="form-help">Enter the path to your ticket plan JSON file, or browse to select one.</p>
-      <div class="field-group">
-        <label class="field-label">File Path</label>
-        <div class="input-row">
-          <input type="text" class="field-input input-flex"
-                 data-field="planFilePath"
-                 value="${esc(this.state.planFilePath)}"
-                 placeholder="/path/to/plan.json" />
-          <button class="btn btn-secondary" data-action="browse">Browse…</button>
-        </div>
       </div>`;
   }
 

@@ -33,6 +33,7 @@ export interface ParsedStoryFile {
   title: string;
   planStatus: string;
   description: string;
+  ideaTranscript?: string;
   relativePath: string;
   storyMdUri: vscode.Uri;
   depTokens: string[];
@@ -44,10 +45,11 @@ export interface ParsedChildFile {
   featureId: number | undefined;
   sequence: number;
   filename: string;
-  issueType: 'Story' | 'Task' | 'Bug';
+  issueType: 'Story' | 'Task' | 'Bug' | 'Idea';
   title: string;
   planStatus: string;
   description: string;
+  ideaTranscript?: string;
   relativePath: string;
   fileUri: vscode.Uri;
   depTokens: string[];
@@ -223,11 +225,12 @@ const FEATURE_DIR = /^feature-(\d+)-/i;
 const CHILD_FILE_PREFIX_TO_ISSUE_TYPE = {
   story: 'Story',
   task: 'Task',
-  bug: 'Bug'
+  bug: 'Bug',
+  idea: 'Idea'
 } as const;
 
 /** Normalize a `**Type:**` front matter value to a canonical child issue type, or undefined. */
-function normalizeChildIssueType(raw: string | undefined): 'Story' | 'Task' | 'Bug' | undefined {
+function normalizeChildIssueType(raw: string | undefined): 'Story' | 'Task' | 'Bug' | 'Idea' | undefined {
   const trimmed = raw?.trim().toLowerCase();
   if (!trimmed) {
     return undefined;
@@ -235,6 +238,7 @@ function normalizeChildIssueType(raw: string | undefined): 'Story' | 'Task' | 'B
   if (trimmed === 'story') { return 'Story'; }
   if (trimmed === 'task') { return 'Task'; }
   if (trimmed === 'bug') { return 'Bug'; }
+  if (trimmed === 'idea') { return 'Idea'; }
   return undefined;
 }
 const MAX_PLAN_SEARCH_DEPTH = 6;
@@ -259,7 +263,7 @@ const SEARCH_SKIP_DIRS = new Set([
 interface ParsedChildFileName {
   featureId: number | undefined;
   sequence: number;
-  issueType: 'Story' | 'Task' | 'Bug';
+  issueType: 'Story' | 'Task' | 'Bug' | 'Idea';
 }
 
 /**
@@ -272,7 +276,7 @@ interface ParsedChildFileName {
  */
 function parseChildFileName(name: string): ParsedChildFileName | undefined {
   // Strict format: type-featureId-sequence-slug.md
-  const strict = name.match(/^(story|task|bug)-(\d+)-(\d+)-.+\.md$/i);
+  const strict = name.match(/^(story|task|bug|idea)-(\d+)-(\d+)-.+\.md$/i);
   if (strict) {
     const prefix = strict[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
     return {
@@ -283,7 +287,7 @@ function parseChildFileName(name: string): ParsedChildFileName | undefined {
   }
 
   // Loose format: type-sequence-ref-slug.md (ref contains letters)
-  const loose = name.match(/^(story|task|bug)-(\d+)-[a-z]\w*-.+\.md$/i);
+  const loose = name.match(/^(story|task|bug|idea)-(\d+)-[a-z]\w*-.+\.md$/i);
   if (loose) {
     const prefix = loose[1].toLowerCase() as keyof typeof CHILD_FILE_PREFIX_TO_ISSUE_TYPE;
     return {
@@ -330,7 +334,7 @@ function scanDependencyTokens(text: string): string[] {
   while ((m = featureDir.exec(text))) {
     out.add(m[1]);
   }
-  const childRef = /\b((?:story|task|bug)-\d+-\d+(?:-[a-z0-9]+)*)\b/gi;
+  const childRef = /\b((?:story|task|bug|idea)-\d+-\d+(?:-[a-z0-9]+)*)\b/gi;
   while ((m = childRef.exec(text))) {
     out.add(m[1]);
   }
@@ -767,7 +771,7 @@ export async function parsePlanFolder(
 
       // Try filename-based parsing first, then fall back to front matter **Type:**
       const parsed = parseChildFileName(fname);
-      let issueType: 'Story' | 'Task' | 'Bug';
+      let issueType: 'Story' | 'Task' | 'Bug' | 'Idea';
       let resolvedFeatureId: number;
       let sequence: number;
 
@@ -801,6 +805,7 @@ export async function parsePlanFolder(
         title: extractMainHeading(scontent),
         planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
         description: buildDescription(scontent),
+        ideaTranscript: extractSectionBody(scontent, 'Research Transcript'),
         relativePath: `${folder.dirName}/${fname}`,
         fileUri,
         depTokens: collectDependencyTokens(scontent),
@@ -820,6 +825,7 @@ export async function parsePlanFolder(
           title: extractMainHeading(scontent),
           planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
           description: buildDescription(scontent),
+          ideaTranscript: extractSectionBody(scontent, 'Research Transcript'),
           relativePath: `${folder.dirName}/${fname}`,
           storyMdUri: fileUri,
           depTokens: collectDependencyTokens(scontent),
@@ -885,7 +891,7 @@ export async function parsePlanFolder(
 
       // Try filename-based parsing first, then fall back to front matter **Type:**
       const parsed = parseChildFileName(fname);
-      let issueType: 'Story' | 'Task' | 'Bug';
+      let issueType: 'Story' | 'Task' | 'Bug' | 'Idea';
       let resolvedFeatureId: number | undefined;
       let sequence: number;
 
@@ -918,6 +924,7 @@ export async function parsePlanFolder(
         title: extractMainHeading(scontent),
         planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
         description: buildDescription(scontent),
+        ideaTranscript: extractSectionBody(scontent, 'Research Transcript'),
         relativePath: fname,
         fileUri,
         depTokens: collectDependencyTokens(scontent),
@@ -937,6 +944,7 @@ export async function parsePlanFolder(
           title: extractMainHeading(scontent),
           planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(scontent)),
           description: buildDescription(scontent),
+          ideaTranscript: extractSectionBody(scontent, 'Research Transcript'),
           relativePath: fname,
           storyMdUri: fileUri,
           depTokens: collectDependencyTokens(scontent),
