@@ -358,6 +358,10 @@ export class JiraCloudOAuthService implements vscode.Disposable {
   }
 
   private async getClientSecret(): Promise<string | undefined> {
+    const configured = this.configStore.getJiraOAuthClientSecret().trim();
+    if (configured.length > 0) {
+      return configured;
+    }
     return (await this.context.secrets.get(CLIENT_SECRET_KEY))?.trim() || undefined;
   }
 

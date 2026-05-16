@@ -362,6 +362,10 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraOAuthClientId', '').trim();
   }
 
+  public getJiraOAuthClientSecret(): string {
+    return '';
+  }
+
   public getJiraOAuthScopes(): string[] {
     const configured = vscode.workspace
       .getConfiguration(CONFIG_ROOT)

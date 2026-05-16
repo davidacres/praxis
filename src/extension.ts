@@ -7,6 +7,7 @@ import type { IssueTrackerService } from './backends/issueTrackerService';
 import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
+import { ConnectionStore } from './config/connectionStore';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
@@ -51,6 +52,7 @@ import { LocalPeerReviewPanel } from './views/localPeerReviewPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { WorkModeBoardsSidebarViewProvider } from './views/workModeBoardsSidebarViewProvider';
 import { SetupWizardPanel } from './views/setupWizardPanel';
+import { ConnectionsManagerPanel } from './views/connectionsManagerPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
@@ -256,6 +258,8 @@ interface PollingIssueSnapshot {
 }
 
 interface PollingSyncEvent {
+  /** Stable id of the connection (or `__global__` for legacy fallback) that emitted this event. */
+  connectionId?: string;
   issues: PollingIssueSnapshot[];
   newKeys: string[];
   removedKeys: string[];
@@ -586,26 +590,45 @@ export async function activate(
     await configStore.setGitLabApiKey('');
   }
   const aiSessionManager = new AiSessionManager(context.workspaceState);
+  const connectionStore = new ConnectionStore(context);
   const startupPollingController = new StartupPollingController(
     context,
     configStore,
     outputChannel,
     async event => {
-      await processPollingClarificationRequests(event);
-      await processPollingClarificationReplies(event);
-      await processPollingAgentInputReplies(event);
-      await processPollingMergeRequestAutomation(event);
-
-      if (
-        event.newKeys.length === 0 &&
-        event.removedKeys.length === 0 &&
-        event.changedKeys.length === 0
-      ) {
-        return;
+      // Pin backend routing to the originating connection so any
+      // workflow kicked off by this event hits the correct backend
+      // even if the user has selected a different board in the sidebar.
+      const previousActiveConnection = backendService.getActiveConnectionId();
+      const shouldPin =
+        event.connectionId !== undefined &&
+        event.connectionId !== '__global__' &&
+        connectionStore.getConnection(event.connectionId) !== undefined;
+      if (shouldPin) {
+        backendService.setActiveConnection(event.connectionId);
       }
+      try {
+        await processPollingClarificationRequests(event);
+        await processPollingClarificationReplies(event);
+        await processPollingAgentInputReplies(event);
+        await processPollingMergeRequestAutomation(event);
 
-      await refreshAndRestoreSelection();
-    }
+        if (
+          event.newKeys.length === 0 &&
+          event.removedKeys.length === 0 &&
+          event.changedKeys.length === 0
+        ) {
+          return;
+        }
+
+        await refreshAndRestoreSelection();
+      } finally {
+        if (shouldPin) {
+          backendService.setActiveConnection(previousActiveConnection);
+        }
+      }
+    },
+    connectionStore
   );
   const copilotAgentLogger: CopilotAgentLogger = {
     appendLine(message: string): void {
@@ -673,11 +696,62 @@ export async function activate(
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider(context);
   const workModeSetupSidebarViewProvider = new SetupSidebarViewProvider(context);
-  const backendService = new BackendRouter(context, configStore, outputChannel);
+  context.subscriptions.push(connectionStore);
+  const backendService = new BackendRouter(context, configStore, outputChannel, connectionStore);
+  const connectionsManagerPanel = new ConnectionsManagerPanel(
+    context,
+    connectionStore,
+    backendService
+  );
+  context.subscriptions.push(connectionsManagerPanel);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ticketManager.openConnectionsManager', () => {
+      connectionsManagerPanel.open();
+    }),
+    vscode.commands.registerCommand('ticketManager.addConnection', () => {
+      connectionsManagerPanel.open({ kind: 'addConnection' });
+    }),
+    vscode.commands.registerCommand('ticketManager.addBoard', async (connectionId?: string) => {
+      let targetId = connectionId;
+      if (!targetId) {
+        const connections = connectionStore.getConnections();
+        if (connections.length === 0) {
+          connectionsManagerPanel.open({ kind: 'addConnection' });
+          return;
+        }
+        if (connections.length === 1) {
+          targetId = connections[0].id;
+        } else {
+          const pick = await vscode.window.showQuickPick(
+            connections.map(c => ({ label: c.name, description: c.id, id: c.id })),
+            { placeHolder: 'Pick a connection to add a board to' }
+          );
+          if (!pick) {
+            return;
+          }
+          targetId = pick.id;
+        }
+      }
+      connectionsManagerPanel.open({ kind: 'addBoard', connectionId: targetId });
+    })
+  );
+  // First-run: auto-open the manager if no connections exist yet.
+  if (!connectionStore.hasConnections()) {
+    connectionsManagerPanel.open({ kind: 'addConnection' });
+  }
+  // Initialise active-connection routing from persisted last-selected board.
+  {
+    const initialTrackedRef = boardStore.getLastSelectedTrackedBoard();
+    if (initialTrackedRef) {
+      backendService.setActiveConnection(initialTrackedRef.connectionId);
+    }
+  }
   const ticketManagerStatusBar = new TicketManagerStatusBar(
     configStore,
     backendService,
-    aiSessionManager
+    aiSessionManager,
+    connectionStore,
+    backendService
   );
   const workingDirectory = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const gitWorktreeManager = workingDirectory ? new GitWorktreeManager(outputChannel) : undefined;
@@ -3318,7 +3392,7 @@ export async function activate(
   await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
 
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
-  const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
+  const boardsProvider = new BoardsTreeProvider(backendService, boardStore, connectionStore, backendService);
   const detailsProvider = new DetailsViewProvider(backendService);
   let issuesSidebarViewProvider: IssuesSidebarViewProvider;
   let epicsSidebarViewProvider: EpicsSidebarViewProvider;
@@ -3753,6 +3827,7 @@ export async function activate(
   async function selectBoard(board: Board | undefined): Promise<void> {
     if (!board) {
       await boardStore.setLastSelectedBoardId(undefined);
+      await boardStore.setLastSelectedTrackedBoard(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
       workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
       boardPanelManager.clear();
@@ -3760,6 +3835,26 @@ export async function activate(
     }
 
     await boardStore.setLastSelectedBoardId(board.id);
+    // Resolve the connection for this board so per-connection routing kicks
+    // in. Prefer the board's own connectionId (set by the boards loader);
+    // otherwise fall back to a tracked-board match on the active connection.
+    let resolvedConnectionId: string | undefined = board.connectionId;
+    if (!resolvedConnectionId) {
+      const tracked = connectionStore.getTrackedBoards().filter(t => t.boardId === board.id);
+      if (tracked.length > 0) {
+        const activeId = backendService.getActiveConnectionId();
+        resolvedConnectionId = (tracked.find(t => t.connectionId === activeId) ?? tracked[0]).connectionId;
+      }
+    }
+    if (resolvedConnectionId) {
+      await boardStore.setLastSelectedTrackedBoard({
+        connectionId: resolvedConnectionId,
+        boardId: board.id
+      });
+      if (backendService.getActiveConnectionId() !== resolvedConnectionId) {
+        backendService.setActiveConnection(resolvedConnectionId);
+      }
+    }
     boardsSidebarViewProvider.setSelectedBoardId(board.id);
     workModeBoardsSidebarViewProvider.setSelectedBoardId(board.id);
     await boardPanelManager.openBoard(board);
@@ -4879,7 +4974,8 @@ export async function activate(
       onDeleteBoard: async boardId => {
         await deleteBoard(boardId);
       }
-    }
+    },
+    connectionStore
   );
   workModeBoardsSidebarViewProvider = new WorkModeBoardsSidebarViewProvider(
     backendService,
@@ -4907,7 +5003,8 @@ export async function activate(
         activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
         copilotSessionPanelManager.open(issueKey);
       }
-    }
+    },
+    connectionStore
   );
   issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(
     backendService,
@@ -5273,7 +5370,18 @@ export async function activate(
       void refreshSearchActionContexts().catch(error => reportError(error));
       boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
       workModeBoardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
+      // Keep the BackendRouter's active connection in sync with the
+      // currently-selected tracked board so all existing backendService.X()
+      // calls automatically route to the right connection.
+      const trackedRef = boardStore.getLastSelectedTrackedBoard();
+      backendService.setActiveConnection(trackedRef?.connectionId);
+      ticketManagerStatusBar.resync();
       void boardsProvider.refresh().catch(error => reportError(error));
+    }),
+    connectionStore.onDidChange(() => {
+      ticketManagerStatusBar.resync();
+      void boardsProvider.refresh().catch(error => reportError(error));
+      void startupPollingController.refresh().catch(error => reportError(error));
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Test
       ? [

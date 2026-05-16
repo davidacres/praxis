@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { BackendRouter } from '../backends/backendRouter';
+import type { ConnectionStore } from '../config/connectionStore';
 import { BoardStore } from '../state/boardStore';
 import type { Board } from '../types';
 
@@ -34,12 +36,15 @@ export class BoardNode extends BaseNode {
 
 type TreeNode = BoardNode | MessageNode;
 
-function getBoardDescription(board: Board): string {
+function getBoardDescription(board: Board, connectionName?: string): string {
   const parts = [board.type.toUpperCase()];
   if (board.projectKey) {
     parts.push(board.projectKey);
   } else if (board.locationName) {
     parts.push(board.locationName);
+  }
+  if (connectionName) {
+    parts.push(connectionName);
   }
   return parts.join(' • ');
 }
@@ -55,7 +60,9 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public constructor(
     private readonly backendService: IssueTrackerService,
-    private readonly boardStore: BoardStore
+    private readonly boardStore: BoardStore,
+    private readonly connectionStore?: ConnectionStore,
+    private readonly backendRouter?: BackendRouter
   ) {}
 
   public getTreeItem(element: TreeNode): vscode.TreeItem {
@@ -75,19 +82,43 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     const item = new vscode.TreeItem(element.board.name, vscode.TreeItemCollapsibleState.None);
     item.id = element.id;
     item.contextValue = element.contextValue;
-    item.description = getBoardDescription(element.board);
+    const connectionName = this.resolveConnectionName(element.board.connectionId);
+    const showConnectionInDescription =
+      connectionName !== undefined && this.hasMultipleConnectionsWithBoards();
+    item.description = getBoardDescription(
+      element.board,
+      showConnectionInDescription ? connectionName : undefined
+    );
     item.tooltip = [
       element.board.name,
       `Type: ${element.board.type}`,
       element.board.projectKey
         ? `Project: ${element.board.projectName ? `${element.board.projectKey} • ${element.board.projectName}` : element.board.projectKey}`
         : undefined,
-      element.board.locationName ? `Location: ${element.board.locationName}` : undefined
+      element.board.locationName ? `Location: ${element.board.locationName}` : undefined,
+      connectionName ? `Connection: ${connectionName}` : undefined
     ]
       .filter((line): line is string => Boolean(line))
       .join('\n');
     item.iconPath = new vscode.ThemeIcon('project');
     return item;
+  }
+
+  private resolveConnectionName(connectionId: string | undefined): string | undefined {
+    if (!connectionId || !this.connectionStore) {
+      return undefined;
+    }
+    return this.connectionStore.getConnection(connectionId)?.name;
+  }
+
+  private hasMultipleConnectionsWithBoards(): boolean {
+    const ids = new Set<string>();
+    for (const b of this.boards) {
+      if (b.connectionId) {
+        ids.add(b.connectionId);
+      }
+    }
+    return ids.size > 1;
   }
 
   public async getChildren(): Promise<TreeNode[]> {
@@ -124,7 +155,7 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     this.onDidChangeTreeDataEmitter.fire(undefined);
 
     try {
-      this.boards = await this.backendService.getBoards(this.boardStore.getFilters());
+      this.boards = await this.loadBoards();
 
       if (generation !== this.requestGeneration) {
         return;
@@ -149,6 +180,58 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public getCurrentBoards(): Board[] {
     return [...this.boards];
+  }
+
+  /**
+   * In single-backend (legacy) mode, returns boards from the global service.
+   * When tracked boards exist across one or more connections, fetches each
+   * connection's boards in parallel, filters to those the user has tracked,
+   * and tags each returned `Board` with its `connectionId`.
+   */
+  private async loadBoards(): Promise<Board[]> {
+    const filters = this.boardStore.getFilters();
+    if (!this.connectionStore || !this.backendRouter) {
+      return this.backendService.getBoards(filters);
+    }
+    const tracked = this.connectionStore.getTrackedBoards();
+    if (tracked.length === 0) {
+      return this.backendService.getBoards(filters);
+    }
+
+    const byConnection = new Map<string, Set<string>>();
+    for (const t of tracked) {
+      let set = byConnection.get(t.connectionId);
+      if (!set) {
+        set = new Set<string>();
+        byConnection.set(t.connectionId, set);
+      }
+      set.add(t.boardId);
+    }
+
+    const results = await Promise.all(
+      Array.from(byConnection.entries()).map(async ([connectionId, trackedIds]) => {
+        try {
+          const service = await this.backendRouter!.serviceFor(connectionId);
+          const boards = await service.getBoards(filters);
+          return boards
+            .filter(b => trackedIds.has(b.id))
+            .map(b => ({ ...b, connectionId }));
+        } catch {
+          // Fall back to synthesizing minimal boards from tracked entries so
+          // a single failing connection doesn't hide the rest.
+          const tb = this.connectionStore!.getTrackedBoardsForConnection(connectionId);
+          return tb
+            .filter(t => trackedIds.has(t.boardId))
+            .map(t => ({
+              id: t.boardId,
+              name: t.displayName ?? t.boardId,
+              type: 'unknown',
+              connectionId
+            } satisfies Board));
+        }
+      })
+    );
+    return results.flat();
   }
 
   public getSnapshot(): BoardsProviderSnapshot {

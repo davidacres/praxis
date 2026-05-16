@@ -89,6 +89,8 @@ export interface Board {
   projectKey?: string;
   projectName?: string;
   locationName?: string;
+  /** Optional id of the connection this board came from (multi-connection mode). */
+  connectionId?: string;
   raw?: unknown;
 }
 
@@ -250,6 +252,34 @@ export interface PersistedBoardFilterState {
   types: string[];
   searchText: string;
   lastSelectedBoardId?: string;
+  lastSelectedConnectionId?: string;
+}
+
+/**
+ * A named backend connection. Each connection is one configured backend
+ * instance (e.g. one Jira server, one GitLab host, one Live Folder root).
+ * `settings` is mode-specific; see ConnectionStore for the per-mode shape.
+ */
+export interface Connection {
+  id: string;
+  name: string;
+  mode: BackendMode;
+  settings: Record<string, unknown>;
+}
+
+/**
+ * A board the user has explicitly chosen to track. References a Connection
+ * by id and a board id native to that connection's backend.
+ */
+export interface TrackedBoard {
+  connectionId: string;
+  boardId: string;
+  displayName?: string;
+}
+
+export interface TrackedBoardRef {
+  connectionId: string;
+  boardId: string;
 }
 
 export interface PagedIssues {

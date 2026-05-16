@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import type { AgentSessionRecord } from '../ai/agentTypes';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { ConnectionStore } from '../config/connectionStore';
 import { BoardStore } from '../state/boardStore';
 import type { AiAssignment, AiProvider, BackendMode, Board, BoardDetails } from '../types';
 import { boardListModeIconSvg } from './boardModeIcon';
@@ -226,7 +227,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     private readonly boardsProvider: BoardsTreeProvider,
     private readonly aiSessionManager: AiSessionManager,
     private readonly getBackendMode: () => BackendMode,
-    private readonly callbacks: WorkModeBoardsSidebarCallbacks
+    private readonly callbacks: WorkModeBoardsSidebarCallbacks,
+    private readonly connectionStore?: ConnectionStore
   ) {
     this.disposables.push(
       this.boardsProvider.onDidChangeTreeData(() => {
@@ -646,9 +648,17 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
   }
 
   private renderBoards(boards: Board[]): string {
-    const backendMode = this.getBackendMode();
-    const removalLabel = boardRemovalLabel(backendMode);
-    const modeIconMarkup = boardListModeIconSvg(backendMode);
+    const fallbackMode = this.getBackendMode();
+    const resolveBoardMode = (connectionId: string | undefined): BackendMode => {
+      if (connectionId && this.connectionStore) {
+        const conn = this.connectionStore.getConnection(connectionId);
+        if (conn) {
+          return conn.mode;
+        }
+      }
+      return fallbackMode;
+    };
+    const fallbackModeIconMarkup = boardListModeIconSvg(fallbackMode);
     const statusIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M2 8h2.4l1.2-3.2L8 11.2 10 5.8l1.1 2.2H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const activityIcon = '<svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="4.5" width="11" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 4V3a2 2 0 1 1 4 0v1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
     const menuDotsIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.25" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.75" cy="8" r="1.25"/></svg>';
@@ -658,17 +668,24 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
     const removeAllIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 4.5h9M6 4.5V3.4c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.1M5 6.5v5m3-5v5m3-5v5M4.5 4.5l.5 8.1c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9l.5-8.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const resetConfigIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 .8-2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 4.5V8h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const resetConfigBtn = backendMode === 'gitlab'
+    const hasGitLabBoard = boards.some(b => resolveBoardMode(b.connectionId) === 'gitlab');
+    const resetConfigBtn = hasGitLabBoard
       ? `<button class="work-board-reset-config" type="button" id="resetGitLabConfig">${resetConfigIcon}<span>Reset config</span></button>`
       : '';
-    const icons: BoardRenderIcons = { modeIcon: modeIconMarkup, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
+    const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
     return `<div>
       <div class="work-board-list-header">
         ${resetConfigBtn}
         <button class="work-board-remove-all" type="button" id="removeAllBoards">${removeAllIcon}<span>Remove all</span></button>
       </div>
       <div class="work-board-list">
-        ${boards.map(board => this.renderBoard(board, icons, removalLabel)).join('')}
+        ${boards
+          .map(board => {
+            const boardMode = resolveBoardMode(board.connectionId);
+            const perBoardIcons: BoardRenderIcons = { ...icons, modeIcon: boardListModeIconSvg(boardMode) };
+            return this.renderBoard(board, perBoardIcons, boardRemovalLabel(boardMode));
+          })
+          .join('')}
       </div>
     </div>`;
   }

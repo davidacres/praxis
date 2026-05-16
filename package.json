@@ -140,7 +140,7 @@
     "viewsWelcome": [
       {
         "view": "ticketManager.myIssues",
-        "contents": "Welcome to Ticket Manager!\\nConfigure a project to get started.\\n[$(gear) Configure Project](command:ticketManager.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
+        "contents": "Welcome to Ticket Manager!\\nConfigure a project to get started.\\n[$(plug) Connections & Boards](command:ticketManager.openConnectionsManager)\\n[$(gear) Configure Project (legacy)](command:ticketManager.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
       },
       {
         "view": "ticketManager.activeSessions",
@@ -197,6 +197,24 @@
         "title": "Configure Project",
         "category": "Ticket Manager",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ticketManager.openConnectionsManager",
+        "title": "Open Connections & Boards",
+        "category": "Ticket Manager",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "ticketManager.addConnection",
+        "title": "Add Connection",
+        "category": "Ticket Manager",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ticketManager.addBoard",
+        "title": "Add Tracked Board",
+        "category": "Ticket Manager",
+        "icon": "$(add)"
       },
       {
         "command": "ticketManager.startSubTaskDelivery",
@@ -788,6 +806,67 @@
           ],
           "scope": "window",
           "description": "Choose whether the app uses Jira via MCP, Jira API, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
+        },
+        "ticketManager.connections": {
+          "type": "array",
+          "scope": "window",
+          "default": [],
+          "description": "Named backend connections. Each entry is one configured backend instance (Jira server, GitLab host, Live Folder root, etc.). Use the Ticket Manager: Connections command to manage these via the UI.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "mode"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable identifier for this connection. Used to reference it from tracked boards and secrets."
+              },
+              "name": {
+                "type": "string",
+                "description": "User-visible name."
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "jira",
+                  "jiraapi",
+                  "demo",
+                  "github",
+                  "gitlab",
+                  "livefolder",
+                  "userworkspace"
+                ],
+                "description": "Backend mode for this connection."
+              },
+              "settings": {
+                "type": "object",
+                "description": "Mode-specific settings (URL, project key, MCP command, folder path, etc.). Secrets are stored separately in VS Code SecretStorage."
+              }
+            }
+          }
+        },
+        "ticketManager.boards": {
+          "type": "array",
+          "scope": "window",
+          "default": [],
+          "description": "Boards the user has explicitly chosen to track. Each entry references a connection by id and a board id native to that backend.",
+          "items": {
+            "type": "object",
+            "required": ["connectionId", "boardId"],
+            "properties": {
+              "connectionId": {
+                "type": "string",
+                "description": "Id of the connection this board belongs to (must match an entry in ticketManager.connections)."
+              },
+              "boardId": {
+                "type": "string",
+                "description": "Backend-native board identifier."
+              },
+              "displayName": {
+                "type": "string",
+                "description": "Optional override for the board's display name in the sidebar."
+              }
+            }
+          }
         },
         "ticketManager.jiraApiBaseUrl": {
           "type": "string",

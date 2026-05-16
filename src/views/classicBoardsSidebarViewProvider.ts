@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { ConnectionStore } from '../config/connectionStore';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import { BoardStore } from '../state/boardStore';
@@ -58,7 +59,8 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
     private readonly boardsProvider: BoardsTreeProvider,
     private readonly boardColumnStore: BoardColumnStore,
     private readonly getBackendMode: () => BackendMode,
-    private readonly callbacks: ClassicBoardsSidebarCallbacks
+    private readonly callbacks: ClassicBoardsSidebarCallbacks,
+    private readonly connectionStore?: ConnectionStore
   ) {
     this.disposables.push(
       this.boardsProvider.onDidChangeTreeData(() => {
@@ -132,10 +134,16 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
     const snapshot = this.boardsProvider.getSnapshot();
     const filters = this.boardStore.getFilters();
     const nonce = createNonce();
-    const backendMode = this.getBackendMode();
-    const removalLabel = boardRemovalLabel(backendMode);
-    const modeIconColor = resolveBackendModeBoardIconColor(backendMode);
-    const modeIconMarkup = boardListModeIconSvg(backendMode);
+    const fallbackMode = this.getBackendMode();
+    const resolveBoardMode = (connectionId: string | undefined): BackendMode => {
+      if (connectionId && this.connectionStore) {
+        const conn = this.connectionStore.getConnection(connectionId);
+        if (conn) {
+          return conn.mode;
+        }
+      }
+      return fallbackMode;
+    };
 
     let content = '';
     if (snapshot.status === 'error') {
@@ -164,6 +172,10 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
                 : board.projectKey ?? board.locationName ?? '';
             const prefs = this.boardColumnStore.getPreferences(board.id);
             const metaPillStyle = buildMetaPillInlineStyle(prefs.projectPillColor);
+            const boardMode = resolveBoardMode(board.connectionId);
+            const modeIconColor = resolveBackendModeBoardIconColor(boardMode);
+            const modeIconMarkup = boardListModeIconSvg(boardMode);
+            const removalLabel = boardRemovalLabel(boardMode);
             return `<div class="${classes}" data-board-id="${escapeHtml(board.id)}" title="${escapeHtml(board.name)}">
               <div class="row-main">
                 <div class="row-left">
