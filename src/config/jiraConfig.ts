@@ -299,6 +299,9 @@ export class AppConfigStore {
   }
 
   public hasJiraApiConfig(): boolean {
+    if (this.getJiraCloudId().length > 0) {
+      return true;
+    }
     return (
       this.getJiraApiBaseUrl().trim().length > 0 &&
       this.getJiraApiToken().trim().length > 0
@@ -322,6 +325,76 @@ export class AppConfigStore {
     const value = vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraMcpCloudId', '');
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  public getJiraCloudId(): string {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const explicitCloudId = config.get<string>('jiraCloudId', '').trim();
+    if (explicitCloudId) {
+      return explicitCloudId;
+    }
+
+    const mcpCloudId = this.getJiraMcpCloudId();
+    if (mcpCloudId && !/^https?:\/\//i.test(mcpCloudId)) {
+      return mcpCloudId;
+    }
+
+    return '';
+  }
+
+  public getJiraCloudSiteUrl(): string {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const configured = config.get<string>('jiraCloudSiteUrl', '').trim();
+    if (configured) {
+      return configured;
+    }
+
+    const mcpCloudId = this.getJiraMcpCloudId();
+    if (mcpCloudId && /^https?:\/\//i.test(mcpCloudId)) {
+      return mcpCloudId;
+    }
+
+    return '';
+  }
+
+  public getJiraOAuthClientId(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraOAuthClientId', '').trim();
+  }
+
+  public getJiraOAuthScopes(): string[] {
+    const configured = vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .get<string[]>('jiraOAuthScopes', [])
+      .map(scope => scope.trim())
+      .filter(scope => scope.length > 0);
+    if (configured.length > 0) {
+      return configured;
+    }
+
+    return ['offline_access', 'read:jira-work', 'write:jira-work', 'read:me'];
+  }
+
+  public async setJiraCloudSite(
+    site:
+      | {
+          id: string;
+          name: string;
+          url: string;
+        }
+      | undefined
+  ): Promise<void> {
+    const target = this.configTarget();
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const cloudId = site?.id.trim() ?? '';
+    const cloudName = site?.name.trim() ?? '';
+    const cloudUrl = site?.url.trim() ?? '';
+
+    await Promise.all([
+      config.update('jiraCloudId', cloudId, target),
+      config.update('jiraCloudSiteName', cloudName, target),
+      config.update('jiraCloudSiteUrl', cloudUrl, target),
+      config.update('jiraMcpCloudId', cloudId || cloudUrl, target)
+    ]);
   }
 
   public isJiraStartupPollingEnabled(): boolean {
@@ -481,6 +554,17 @@ export class AppConfigStore {
     return vscode.workspace
       .getConfiguration(CONFIG_ROOT)
       .get<boolean>('gitlabListAllAccessibleBoards', false);
+  }
+
+  public getGitLabSelectedBoardRefs(): string[] {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string[]>('gitlabSelectedBoardRefs', []);
+  }
+
+  public async setGitLabSelectedBoardRefs(values: string[]): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('gitlabSelectedBoardRefs', values, target);
   }
 
   public getGitLabMcpCommand(): string {
@@ -931,6 +1015,24 @@ export class AppConfigStore {
   public async describeConnection(context: vscode.ExtensionContext): Promise<string> {
     if (this.getEffectiveBackendMode() === 'demo') {
       return 'Demo mode';
+    }
+
+    if (this.getEffectiveBackendMode() === 'gitlab') {
+      const baseUrl = this.getGitLabUrl().trim();
+      const projectPath = this.getGitLabProjectPath().trim();
+      if (projectPath) {
+        return baseUrl ? `GitLab (${projectPath} @ ${baseUrl})` : `GitLab (${projectPath})`;
+      }
+      return baseUrl ? `GitLab (${baseUrl})` : 'GitLab';
+    }
+
+    if (this.getEffectiveBackendMode() === 'github') {
+      const owner = this.getGitHubOwner().trim();
+      const baseUrl = this.getGitHubUrl().trim();
+      if (owner) {
+        return baseUrl ? `GitHub (${owner} @ ${baseUrl})` : `GitHub (${owner})`;
+      }
+      return baseUrl ? `GitHub (${baseUrl})` : 'GitHub';
     }
 
     if (this.getEffectiveBackendMode() === 'livefolder') {

@@ -1235,7 +1235,7 @@ export class JiraService implements IssueTrackerService {
   }
 
   public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
-    throw new Error('Attachments are not supported in Jira MCP mode. Use Jira API mode for delivery artifacts.');
+    throw new Error('Attachments are not supported in Jira MCP mode. Use Jira Cloud mode for delivery artifacts.');
   }
 
   public async downloadAttachment(
@@ -1243,7 +1243,7 @@ export class JiraService implements IssueTrackerService {
     _attachment: IssueAttachment,
     _targetFilePath: string
   ): Promise<void> {
-    throw new Error('Attachment downloads are not supported in Jira MCP mode. Use Jira API mode when attachment context is required.');
+    throw new Error('Attachment downloads are not supported in Jira MCP mode. Use Jira Cloud mode when attachment context is required.');
   }
 
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {

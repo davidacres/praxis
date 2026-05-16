@@ -12,6 +12,7 @@ import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from './state/filterStore';
 import { StartupPollingController } from './jira/startupPollingController';
+import { initializeJiraCloudOAuthService } from './jira/jiraCloudOAuthService';
 import type {
   AiProvider,
   BackendMode,
@@ -41,13 +42,14 @@ import { resolveBackendModeContextState } from './ui/backendModeContext';
 import { initializeMcpOAuthManager } from './mcp/oauthManager';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
-import { BoardsSidebarViewProvider } from './views/boardsSidebarViewProvider';
+import { ClassicBoardsSidebarViewProvider } from './views/classicBoardsSidebarViewProvider';
 import { BoardsTreeProvider } from './views/boardsTreeProvider';
 import { DetailsViewProvider } from './views/detailsViewProvider';
 import { EpicsSidebarViewProvider } from './views/epicsSidebarViewProvider';
 import { IssueDetailPanelManager } from './views/issueDetailPanelManager';
 import { LocalPeerReviewPanel } from './views/localPeerReviewPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
+import { WorkModeBoardsSidebarViewProvider } from './views/workModeBoardsSidebarViewProvider';
 import { SetupWizardPanel } from './views/setupWizardPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
@@ -664,6 +666,7 @@ export async function activate(
   const newProjectWizardPanel = new NewProjectWizardPanel();
   const setupWizardPanel = new SetupWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider();
+  const workModeSetupSidebarViewProvider = new SetupSidebarViewProvider();
   const backendService = new BackendRouter(context, configStore, outputChannel);
   const ticketManagerStatusBar = new TicketManagerStatusBar(
     configStore,
@@ -3293,13 +3296,28 @@ export async function activate(
     'setContext', 'ticketManager.configured',
     initialModeContext.configured
   );
+  type BoardsSidebarMode = 'classic' | 'work';
+  const getBoardsSidebarMode = (): BoardsSidebarMode =>
+    vscode.workspace.getConfiguration('ticketManager').get<string>('boardsSidebarPreviewMode') === 'work'
+      ? 'work'
+      : 'classic';
+
+  const getBoardsContainerCommand = (): string =>
+    getBoardsSidebarMode() === 'work'
+      ? 'workbench.view.extension.ticketManagerWorkMode'
+      : 'workbench.view.extension.ticketManager';
+
+  const getSetupViewId = (): string =>
+    getBoardsSidebarMode() === 'work' ? 'ticketManager.workModeSetup' : 'ticketManager.setup';
+  await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
 
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore);
   const detailsProvider = new DetailsViewProvider(backendService);
   let issuesSidebarViewProvider: IssuesSidebarViewProvider;
   let epicsSidebarViewProvider: EpicsSidebarViewProvider;
-  let boardsSidebarViewProvider: BoardsSidebarViewProvider;
+  let boardsSidebarViewProvider: ClassicBoardsSidebarViewProvider;
+  let workModeBoardsSidebarViewProvider: WorkModeBoardsSidebarViewProvider;
   let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
   let activeSessionsSidebarViewProvider: ActiveSessionsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
@@ -3467,15 +3485,29 @@ export async function activate(
     const modeContext = getModeContextState();
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
     await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
+    await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
   }
 
   async function revealSetupView(): Promise<void> {
     setupSidebarViewProvider.resetToModeSelection();
+    workModeSetupSidebarViewProvider.resetToModeSelection();
     try {
-      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
-      await vscode.commands.executeCommand('ticketManager.setup.focus');
+      await vscode.commands.executeCommand(getBoardsContainerCommand());
+      await vscode.commands.executeCommand(`${getSetupViewId()}.focus`);
     } catch (error) {
       reportError(error, 'reveal-setup');
+    }
+  }
+
+  async function ensureBoardsContainerVisibleOnStartup(): Promise<void> {
+    if (getBoardsSidebarMode() !== 'work') {
+      return;
+    }
+
+    try {
+      await vscode.commands.executeCommand(getBoardsContainerCommand());
+    } catch (error) {
+      reportError(error, 'reveal-workmode-startup');
     }
   }
 
@@ -3490,6 +3522,7 @@ export async function activate(
     epicsSidebarViewProvider.setSelectedIssueKey(undefined);
     activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
     boardsSidebarViewProvider.setSelectedBoardId(undefined);
+    workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
     boardPanelManager.setSelectedIssueKey(undefined);
     boardPanelManager.clear();
     issueDetailPanelManager.clear();
@@ -3715,12 +3748,14 @@ export async function activate(
     if (!board) {
       await boardStore.setLastSelectedBoardId(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
+      workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
       boardPanelManager.clear();
       return;
     }
 
     await boardStore.setLastSelectedBoardId(board.id);
     boardsSidebarViewProvider.setSelectedBoardId(board.id);
+    workModeBoardsSidebarViewProvider.setSelectedBoardId(board.id);
     await boardPanelManager.openBoard(board);
   }
 
@@ -3980,6 +4015,57 @@ export async function activate(
     }
   }
 
+  function boardRemovalActionLabel(): 'Delete' | 'Close' {
+    return backendService.mode === 'demo' || backendService.mode === 'userworkspace' ? 'Delete' : 'Close';
+  }
+
+  async function closeGitLabBoard(board: Board): Promise<void> {
+    const currentRefs = configStore.getGitLabSelectedBoardRefs().map(value => value.trim()).filter(Boolean);
+    const nextRefs = currentRefs.filter(value => value !== board.id.trim());
+    if (nextRefs.length === currentRefs.length) {
+      await vscode.window.showInformationMessage(
+        `"${board.name}" is auto-discovered from the GitLab project listing and cannot be removed individually. Use the board filter settings to limit which boards appear.`
+      );
+      return;
+    }
+
+    await configStore.setGitLabSelectedBoardRefs(nextRefs);
+  }
+
+  async function closeJiraApiBoard(board: Board): Promise<void> {
+    if (board.id.startsWith('epic:')) {
+      const epicKey = board.id.slice('epic:'.length).trim();
+      if (!epicKey || configStore.getJiraApiEpicKey() !== epicKey) {
+        throw new Error('This Jira API epic board is not linked through Ticket Manager settings.');
+      }
+
+      await configStore.setJiraApiEpicKey(undefined);
+      await configStore.setJiraApiEpicBoardName(undefined);
+      return;
+    }
+
+    if (board.id === 'jql:workspace') {
+      await configStore.setJiraApiBoardJql(undefined);
+      await configStore.setJiraApiBoardName(undefined);
+      return;
+    }
+
+    throw new Error('This Jira API board cannot be closed individually.');
+  }
+
+  async function removeBoardFromTicketManager(board: Board): Promise<void> {
+    switch (backendService.mode) {
+      case 'gitlab':
+        await closeGitLabBoard(board);
+        return;
+      case 'jiraapi':
+        await closeJiraApiBoard(board);
+        return;
+      default:
+        await backendService.deleteBoard(board.id);
+    }
+  }
+
   async function deleteBoard(boardId: string): Promise<void> {
     try {
       const board = await resolveBoardById(boardId);
@@ -3988,26 +4074,90 @@ export async function activate(
         return;
       }
 
-      const confirmed = await vscode.window.showWarningMessage(
-        `Delete board ${board.name}?`,
-        { modal: true },
-        'Delete'
-      );
-      if (confirmed !== 'Delete') {
-        return;
-      }
-
-      await backendService.deleteBoard(boardId);
+      await removeBoardFromTicketManager(board);
       if (
         boardStore.getLastSelectedBoardId() === boardId ||
         boardPanelManager.getActiveBoard()?.id === boardId
       ) {
         await boardStore.setLastSelectedBoardId(undefined);
         boardsSidebarViewProvider.setSelectedBoardId(undefined);
+        workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
         boardPanelManager.clear();
       }
 
       await boardsProvider.refresh();
+    } catch (error) {
+      await reportActionError(error);
+    }
+  }
+
+  async function removeAllBoards(): Promise<void> {
+    try {
+      const snapshot = boardsProvider.getSnapshot();
+      if (snapshot.boards.length === 0) {
+        return;
+      }
+
+      switch (backendService.mode) {
+        case 'gitlab':
+          await configStore.setGitLabSelectedBoardRefs([]);
+          break;
+        case 'jiraapi':
+          await Promise.all([
+            configStore.setJiraApiBoardJql(undefined),
+            configStore.setJiraApiBoardName(undefined),
+            configStore.setJiraApiEpicKey(undefined),
+            configStore.setJiraApiEpicBoardName(undefined)
+          ]);
+          break;
+        default:
+          await Promise.all(snapshot.boards.map(board => backendService.deleteBoard(board.id)));
+      }
+
+      await boardStore.setLastSelectedBoardId(undefined);
+      boardsSidebarViewProvider.setSelectedBoardId(undefined);
+      workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
+      boardPanelManager.clear();
+      await boardsProvider.refresh();
+    } catch (error) {
+      await reportActionError(error);
+    }
+  }
+
+  async function resetGitLabConfig(): Promise<void> {
+    const confirm = await vscode.window.showWarningMessage(
+      'Reset all GitLab configuration? This clears the URL, API key, project path, and selected boards.',
+      { modal: true },
+      'Reset'
+    );
+    if (confirm !== 'Reset') {
+      return;
+    }
+    try {
+      const config = vscode.workspace.getConfiguration('ticketManager');
+      const target = vscode.workspace.workspaceFolders?.length
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
+      await Promise.all([
+        config.update('gitlabUrl', undefined, target),
+        config.update('gitlabConnectionType', undefined, target),
+        config.update('gitlabApiKey', undefined, target),
+        config.update('gitlabProjectPath', undefined, target),
+        config.update('gitlabListAllAccessibleBoards', undefined, target),
+        config.update('gitlabSelectedBoardRefs', undefined, target),
+        config.update('gitlabMcpCommand', undefined, target),
+        config.update('gitlabMcpArgs', undefined, target),
+        config.update('backendMode', undefined, target)
+      ]);
+      await boardStore.setLastSelectedBoardId(undefined);
+      boardsSidebarViewProvider.setSelectedBoardId(undefined);
+      workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
+      boardPanelManager.clear();
+      await backendService.reset();
+      await boardsProvider.refresh();
+      setupSidebarViewProvider.resetToModeSelection();
+      workModeSetupSidebarViewProvider.resetToModeSelection();
+      void vscode.window.showInformationMessage('GitLab configuration has been reset.');
     } catch (error) {
       await reportActionError(error);
     }
@@ -4173,10 +4323,22 @@ export async function activate(
         option
       })),
       {
-        title: `Assign ${issueKey} to AI Agent`
+        title: `Delegate ${issueKey} to AI Agent`
       }
     );
     return picked?.option;
+  }
+
+  async function ensureIssueCanBeDelegated(issueKey: string): Promise<boolean> {
+    const issue = await backendService.getIssue(issueKey);
+    if (issue.assignee?.trim()) {
+      return true;
+    }
+
+    await vscode.window.showWarningMessage(
+      `${issueKey} must have an assignee before it can be delegated to AI.`
+    );
+    return false;
   }
 
   async function refreshIssueAiPresentation(issueKey: string): Promise<void> {
@@ -4246,6 +4408,10 @@ export async function activate(
   }
 
   async function assignIssueToAi(issueKey: string, chosen: AiOptionPick): Promise<void> {
+    if (!(await ensureIssueCanBeDelegated(issueKey))) {
+      return;
+    }
+
     const existing = aiSessionManager.getSession(issueKey);
     const existingAgentRecord = aiSessionManager.getAgentSession(issueKey);
     const existingStatus =
@@ -4264,7 +4430,7 @@ export async function activate(
       await abandonAiSession(issueKey, { showMessage: false, clearAssignee: false });
     }
 
-    const assignment = aiSessionManager.createSession(issueKey, chosen.provider, chosen.label);
+    const assignment = aiSessionManager.createSession(issueKey, chosen.provider, chosen.label, boardStore.getLastSelectedBoardId());
     const activeIssue = detailsProvider.getActiveIssue();
     if (activeIssue?.key === issueKey) {
       activeIssue.aiAssignment = assignment;
@@ -4272,7 +4438,11 @@ export async function activate(
 
     try {
       const transitionId = await findTransitionIdForStatus(issueKey, 'In Progress');
-      await updateIssueAndRefresh(issueKey, { assignee: chosen.label }, transitionId);
+      if (transitionId) {
+        await updateIssueAndRefresh(issueKey, {}, transitionId);
+      } else {
+        await refreshIssueAiPresentation(issueKey);
+      }
       await refreshIssueAiPresentation(issueKey);
     } catch (error) {
       aiSessionManager.removeSession(issueKey);
@@ -4284,7 +4454,7 @@ export async function activate(
     }
 
     void vscode.window.showInformationMessage(
-      `${issueKey} assigned to ${chosen.label} (session: ${assignment.sessionId.slice(0, 8)})`
+      `${issueKey} delegated to ${chosen.label} (session: ${assignment.sessionId.slice(0, 8)})`
     );
   }
 
@@ -4579,6 +4749,7 @@ export async function activate(
       epicsSidebarViewProvider.setSelectedIssueKey(undefined);
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
+      workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
       return;
     }
 
@@ -4614,6 +4785,7 @@ export async function activate(
     }
 
     boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
+    workModeBoardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
 
     await boardPanelManager.refresh();
   };
@@ -4685,7 +4857,8 @@ export async function activate(
       }
     }
   );
-  boardsSidebarViewProvider = new BoardsSidebarViewProvider(
+  boardsSidebarViewProvider = new ClassicBoardsSidebarViewProvider(
+    backendService,
     boardStore,
     boardsProvider,
     boardColumnStore,
@@ -4699,6 +4872,34 @@ export async function activate(
       },
       onDeleteBoard: async boardId => {
         await deleteBoard(boardId);
+      }
+    }
+  );
+  workModeBoardsSidebarViewProvider = new WorkModeBoardsSidebarViewProvider(
+    backendService,
+    boardStore,
+    boardsProvider,
+    aiSessionManager,
+    () => backendService.mode,
+    {
+      onSelectBoard: async boardId => {
+        await selectBoard(boardsProvider.getBoardById(boardId));
+      },
+      onEditBoard: async boardId => {
+        await editBoard(boardId);
+      },
+      onDeleteBoard: async boardId => {
+        await deleteBoard(boardId);
+      },
+      onRemoveAllBoards: async () => {
+        await removeAllBoards();
+      },
+      onResetGitLabConfig: async () => {
+        await resetGitLabConfig();
+      },
+      onOpenSession: async issueKey => {
+        activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
+        copilotSessionPanelManager.open(issueKey);
       }
     }
   );
@@ -4951,6 +5152,28 @@ export async function activate(
         );
       }
     }),
+    vscode.commands.registerCommand('ticketManager.connectJiraCloud', async () => {
+      try {
+        const oauthService = initializeJiraCloudOAuthService(context, configStore);
+        const resource = await oauthService.connect();
+        void vscode.window.showInformationMessage(`Connected to ${resource.name}.`);
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Jira Cloud connection failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.disconnectJiraCloud', async () => {
+      try {
+        const oauthService = initializeJiraCloudOAuthService(context, configStore);
+        await oauthService.disconnect();
+        void vscode.window.showInformationMessage('Disconnected from Jira Cloud.');
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.openSettings', async () => {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
@@ -4989,6 +5212,7 @@ export async function activate(
       boardPanelManager,
       issueDetailPanelManager,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
+      revealSetupView,
       openCreateIssueForm: defaults => issuesSidebarViewProvider.openCreateIssueDialog(defaults),
       output: outputChannel,
       onConnectionCheck: result => {
@@ -5002,13 +5226,17 @@ export async function activate(
     vscode.window.registerWebviewViewProvider('ticketManager.myIssues', issuesSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.boards', boardsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.workModeBoards', workModeBoardsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.activeSessions', activeSessionsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.issueDetails', issueDetailsSidebarViewProvider),
     vscode.window.registerWebviewViewProvider('ticketManager.setup', setupSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('ticketManager.workModeSetup', workModeSetupSidebarViewProvider),
     setupSidebarViewProvider,
+    workModeSetupSidebarViewProvider,
     issuesSidebarViewProvider,
     epicsSidebarViewProvider,
     boardsSidebarViewProvider,
+    workModeBoardsSidebarViewProvider,
     activeSessionsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
     ticketManagerStatusBar,
@@ -5038,6 +5266,7 @@ export async function activate(
     boardStore.onDidChange(() => {
       void refreshSearchActionContexts().catch(error => reportError(error));
       boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
+      workModeBoardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
       void boardsProvider.refresh().catch(error => reportError(error));
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Test
@@ -5071,12 +5300,13 @@ export async function activate(
               try {
                 refreshAiAssignmentMenus();
                 updateCommentPlaceholders();
-                const modeContext = getModeContextState();
+                const boardsModeChanged = event.affectsConfiguration('ticketManager.boardsSidebarPreviewMode');
                 await setModeContext();
                 await filterStore.setLastSelectedIssueKey(undefined);
                 await boardStore.setLastSelectedBoardId(undefined);
                 await detailsProvider.setIssue(undefined);
                 boardsSidebarViewProvider.setSelectedBoardId(undefined);
+                workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
                 await epicsSidebarViewProvider.setSearchText('');
                 await refreshSearchActionContexts();
                 boardPanelManager.clear();
@@ -5084,6 +5314,9 @@ export async function activate(
                 await backendService.reset();
                 await refreshAndRestoreSelection();
                 await startupPollingController.refresh();
+                if (boardsModeChanged && getModeContextState().configured) {
+                  await vscode.commands.executeCommand(getBoardsContainerCommand());
+                }
                 refreshStatusBarInBackground();
               } catch (error) {
                 reportError(error);
@@ -5096,6 +5329,7 @@ export async function activate(
 
   try {
     await ensureStartupConfiguration();
+    await ensureBoardsContainerVisibleOnStartup();
     if (getModeContextState().configured) {
       try {
         await refreshStartupSelectionWithProgress();

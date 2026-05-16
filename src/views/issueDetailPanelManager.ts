@@ -1940,6 +1940,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         : hasPreviousAgentSession
           ? 'View previous AI session'
           : 'Assign to AI first';
+    const hasDelegationAssignee = Boolean(d.assignee?.trim());
+    const delegateDisabledAttr = hasDelegationAssignee ? '' : ' disabled';
+    const delegateDisabledHelp = hasDelegationAssignee
+      ? ''
+      : '<div class="field-help">Set the assignee first, then delegate the work to AI.</div>';
     const comments = (d.comments ?? [])
       .map(comment => {
         const formattedDate = formatDate(comment.created ?? comment.updated);
@@ -1993,11 +1998,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               <button type="button" class="assign-btn" id="assignToMeBtn">Assign to Me</button>
               ${this.aiAssignOptions.length > 0
                 ? this.aiAssignOptions.map(
-                    option => `<button type="button" class="assign-btn assign-ai-provider-btn" data-provider="${escapeHtml(option.provider)}">Assign to ${escapeHtml(option.label)}</button>`
+                    option => `<button type="button" class="assign-btn assign-ai-provider-btn" data-provider="${escapeHtml(option.provider)}"${delegateDisabledAttr}>Delegate to ${escapeHtml(option.label)}</button>`
                   ).join('')
-                : '<button type="button" class="assign-btn" id="assignToAiBtn">Assign to AI</button>'
+                : `<button type="button" class="assign-btn" id="assignToAiBtn"${delegateDisabledAttr}>Delegate to AI</button>`
               }
             </div>
+            ${delegateDisabledHelp}
           </label>
           <label class="field-group" for="prioritySelect">
             <span class="field-label">Priority</span>

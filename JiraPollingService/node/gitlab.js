@@ -25,7 +25,8 @@ function normalizeGitLabBaseUrl(value) {
   return String(value ?? '').trim().replace(/\/+$/, '');
 }
 
-function validateGitLabConfig(config) {
+function validateGitLabConfig(config, options = {}) {
+  const requireToken = options.requireToken !== false;
   const baseUrl = normalizeGitLabBaseUrl(config.BaseUrl);
   if (!baseUrl) {
     throw new Error('StandaloneJiraMrPolling:GitLabUrl is required or must be inferable from --repo-path.');
@@ -46,7 +47,7 @@ function validateGitLabConfig(config) {
     throw new Error('StandaloneJiraMrPolling:GitLabProject is required or must be inferable from --repo-path.');
   }
 
-  if (typeof config.Token !== 'string' || config.Token.trim().length === 0) {
+  if (requireToken && (typeof config.Token !== 'string' || config.Token.trim().length === 0)) {
     throw new Error('GITLAB_TOKEN must be supplied via environment variable or StandaloneJiraMrPolling:GitLabToken.');
   }
 

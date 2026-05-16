@@ -574,7 +574,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         </form>
         ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderAiAssignmentSection(issue.key, agentNames)}
         ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderWorkflowPackSection(issue.key)}
-        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderCopilotAgentSection(issue.key)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderCopilotAgentSection(issue)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Activity</div>
           <div class="comment-list">
@@ -1591,8 +1591,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </div>`;
   }
 
-  private renderCopilotAgentSection(issueKey: string): string {
+  private renderCopilotAgentSection(issue: { key: string; assignee?: string }): string {
+    const issueKey = issue.key;
     const record = this.aiSessionManager.getAgentSession(issueKey);
+    const hasAssignee = Boolean(issue.assignee?.trim());
 
     const stateTokenMap: Record<string, { token: string; label: string }> = {
       'not_started': { token: 'status', label: 'Not Started' },
@@ -1615,13 +1617,19 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const delegateLabel = this.aiAssignOptions.length === 1
         ? `Delegate to ${escapeHtml(this.aiAssignOptions[0].label)}`
         : 'Delegate to AI';
+      const delegateDisabled = !hasAssignee;
+      const delegateDisabledAttr = delegateDisabled ? ' disabled' : '';
+      const delegateDisabledHelp = delegateDisabled
+        ? '<div class="field-help">Set the assignee first, then delegate the work to AI.</div>'
+        : '';
       return `<div class="card">
         <div class="section-title">AI Agent</div>
         <div class="comment-empty">No agent session.</div>
         <div class="form-actions">
           ${providerSelect}
-          <button class="secondary-button" id="delegateToAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}"${this.aiAssignOptions.length === 1 ? ` data-provider="${escapeHtml(this.aiAssignOptions[0].provider)}"` : ''}>${delegateLabel}</button>
+          <button class="secondary-button" id="delegateToAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}"${this.aiAssignOptions.length === 1 ? ` data-provider="${escapeHtml(this.aiAssignOptions[0].provider)}"` : ''}${delegateDisabledAttr}>${delegateLabel}</button>
         </div>
+        ${delegateDisabledHelp}
       </div>`;
     }
 

@@ -5,6 +5,50 @@ import {
 } from '../ai/aiProviderSetup';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
+import type { Board } from '../types';
+
+interface GitLabSetupValues {
+  gitlabUrl: string;
+  gitlabConnectionType: 'api' | 'mcp';
+  gitlabApiKey: string;
+  gitlabProjectPath: string;
+  gitlabListAllAccessibleBoards: boolean;
+  gitlabMcpCommand: string;
+  gitlabMcpArgs: string;
+}
+
+interface GitLabSetupFieldInput {
+  gitlabUrl?: string;
+  gitlabConnectionType?: string;
+  gitlabApiKey?: string;
+  gitlabProjectPath?: string;
+  gitlabListAllAccessibleBoards?: string;
+  gitlabMcpCommand?: string;
+  gitlabMcpArgs?: string;
+}
+
+interface GitLabSetupUpdate {
+  key: string;
+  value: unknown;
+}
+
+interface GitLabBoardProjectSummary {
+  id: number;
+  name: string;
+  path: string;
+  pathWithNamespace: string;
+}
+
+interface GitLabBoardSummary {
+  id: number;
+  name: string;
+  hideBacklogList: boolean;
+  hideClosedList: boolean;
+  project: GitLabBoardProjectSummary;
+  labels: unknown[];
+  lists: unknown[];
+  raw?: unknown;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -32,6 +76,84 @@ export function hasConfiguredJiraMcpConnection(
   return connectionType === 'http'
     ? config.get<string>('httpUrl', '').trim().length > 0
     : config.get<string>('stdioCommand', '').trim().length > 0;
+}
+
+export function getGitLabSetupValues(
+  config: Pick<vscode.WorkspaceConfiguration, 'get'>
+): GitLabSetupValues {
+  return {
+    gitlabUrl: config.get<string>('gitlabUrl', '').trim(),
+    gitlabConnectionType: config.get<'api' | 'mcp'>('gitlabConnectionType', 'api'),
+    gitlabApiKey: config.get<string>('gitlabApiKey', '').trim(),
+    gitlabProjectPath: config.get<string>('gitlabProjectPath', '').trim(),
+    gitlabListAllAccessibleBoards: config.get<boolean>('gitlabListAllAccessibleBoards', false),
+    gitlabMcpCommand: config.get<string>('gitlabMcpCommand', '').trim(),
+    gitlabMcpArgs: config.get<string[]>('gitlabMcpArgs', []).join(' ')
+  };
+}
+
+export function buildGitLabSetupUpdates(fields: GitLabSetupFieldInput): GitLabSetupUpdate[] {
+  const connectionType = fields.gitlabConnectionType === 'mcp' ? 'mcp' : 'api';
+  const updates: GitLabSetupUpdate[] = [
+    { key: 'gitlabConnectionType', value: connectionType }
+  ];
+  const projectPath = fields.gitlabProjectPath?.trim();
+  if (projectPath) {
+    updates.push({ key: 'gitlabProjectPath', value: projectPath });
+  }
+
+  if (fields.gitlabListAllAccessibleBoards != null) {
+    updates.push({
+      key: 'gitlabListAllAccessibleBoards',
+      value: fields.gitlabListAllAccessibleBoards === 'true'
+    });
+  }
+
+  const gitlabUrl = fields.gitlabUrl?.trim();
+  if (gitlabUrl) {
+    updates.push({ key: 'gitlabUrl', value: gitlabUrl });
+  }
+
+  if (connectionType === 'api') {
+    const apiKey = fields.gitlabApiKey?.trim();
+    if (apiKey) {
+      updates.push({ key: 'gitlabApiKey', value: apiKey });
+    }
+  } else {
+    const mcpCommand = fields.gitlabMcpCommand?.trim();
+    if (mcpCommand) {
+      updates.push({ key: 'gitlabMcpCommand', value: mcpCommand });
+    }
+    const mcpArgs = fields.gitlabMcpArgs?.trim();
+    if (mcpArgs) {
+      updates.push({ key: 'gitlabMcpArgs', value: mcpArgs.split(' ').filter(Boolean) });
+    }
+  }
+
+  return updates;
+}
+
+export function canPromptForGitLabBoardSelection(fields: GitLabSetupFieldInput): boolean {
+  const connectionType = fields.gitlabConnectionType === 'mcp' ? 'mcp' : 'api';
+  return connectionType === 'api'
+    && (fields.gitlabUrl?.trim().length ?? 0) > 0
+    && (fields.gitlabApiKey?.trim().length ?? 0) > 0;
+}
+
+export function createGitLabBoardSelectionSummary(
+  board: GitLabBoardSummary,
+  project: GitLabBoardProjectSummary,
+  baseUrl: string
+): Board {
+  return {
+    id: `gitlab:${project.id}:${board.id}`,
+    name: board.name,
+    type: 'issue-board',
+    projectKey: project.pathWithNamespace,
+    projectName: project.name,
+    locationName: baseUrl.trim().replace(/\/+$/, ''),
+    raw: board
+  };
 }
 
 export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -312,6 +434,31 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       .btn-browse:hover {
         background: var(--vscode-button-secondaryHoverBackground);
       }
+      .danger-zone {
+        margin-top: 20px;
+        padding-top: 12px;
+        border-top: 1px solid var(--vscode-widget-border, transparent);
+        display: flex;
+        justify-content: center;
+      }
+      .btn-danger-link {
+        flex: none;
+        height: auto;
+        width: auto;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        font-size: 11px;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-errorForeground, #f44747);
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+        opacity: 0.8;
+      }
+      .btn-danger-link:hover {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
@@ -333,6 +480,12 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           vscodeApi.postMessage({ type: 'save' });
         } else if (action === 'browse') {
           vscodeApi.postMessage({ type: 'browse' });
+        } else if (action === 'connectJiraCloud') {
+          vscodeApi.postMessage({ type: 'connectJiraCloud' });
+        } else if (action === 'disconnectJiraCloud') {
+          vscodeApi.postMessage({ type: 'disconnectJiraCloud' });
+        } else if (action === 'resetGitLab') {
+          vscodeApi.postMessage({ type: 'resetGitLab' });
         }
       });
 
@@ -360,7 +513,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
       { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
       { mode: 'jira', emoji: '🔗', title: 'Jira via MCP', desc: 'Connect to Jira through an MCP server' },
-      { mode: 'jiraapi', emoji: '📡', title: 'Jira API', desc: 'Connect directly to Jira Server/Data Center' },
+      { mode: 'jiraapi', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
     if (!vscode.workspace.workspaceFolders?.length) {
@@ -512,7 +665,10 @@ ${fields}
   </div>
 </div>
 ${connFields}
-<div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>`;
+<div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>
+<div class="danger-zone">
+  <button class="btn btn-danger-link" data-action="resetGitLab">Reset GitLab configuration…</button>
+</div>`;
   }
 
   private renderJiraFields(): string {
@@ -557,7 +713,7 @@ ${connFields}
 </div>
 <div class="settings-section">
   <label>JIRA polling</label>
-  <div class="info-text">Polls the Jira API every 30 seconds to get tickets with the specified label.</div>
+  <div class="info-text">Polls Jira Cloud every 30 seconds to get tickets with the specified label.</div>
   <div class="form-group">
     <label>Label</label>
     <input type="text" data-field="jiraPollingRequiredLabel" value="${pollingLabel}" placeholder="syscfg" />
@@ -574,30 +730,39 @@ ${connFields}`;
   }
 
   private renderJiraApiFields(): string {
-    const baseUrl = escapeHtml(this.setupFields.jiraApiBaseUrl ?? '');
-    const token = escapeHtml(this.setupFields.jiraApiToken ?? '');
+    const clientId = escapeHtml(this.setupFields.jiraOAuthClientId ?? '');
+    const siteName = escapeHtml(this.setupFields.jiraCloudSiteName ?? '');
+    const siteUrl = escapeHtml(this.setupFields.jiraCloudSiteUrl ?? '');
     const epicKey = escapeHtml(this.setupFields.jiraApiEpicKey ?? '');
     const boardJql = escapeHtml(this.setupFields.jiraApiBoardJql ?? '');
     const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
     const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
+    const connectedSiteLabel = siteName || siteUrl;
+    const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
+    const connectionStatus = siteUrl
+      ? `<div class="info-text">Connected to <strong>${connectedSiteLabel}</strong>${connectedSiteDetail}.</div>`
+      : '<div class="info-text">Not connected. Configure the Ticket Manager Atlassian OAuth app client ID, then connect with Atlassian.</div>';
 
     return `<div class="form-group">
-  <label>Jira Base URL</label>
-  <input type="text" data-field="jiraApiBaseUrl" value="${baseUrl}" placeholder="Defaults to the polling service Jira base URL" />
+  <label>Atlassian OAuth Client ID</label>
+  <input type="text" data-field="jiraOAuthClientId" value="${clientId}" placeholder="Client ID from the Ticket Manager Atlassian app" />
+  <div class="help-text">The client secret is requested once during connection and stored in VS Code secret storage.</div>
 </div>
-<div class="form-group">
-  <label>Personal Access Token</label>
-  <input type="password" data-field="jiraApiToken" value="${token}" placeholder="Leave blank to use JIRA_TOKEN" />
+<div class="settings-section">
+  <label>Jira Cloud connection</label>
+  ${connectionStatus}
+  <button class="btn btn-primary" data-action="connectJiraCloud">Connect with Atlassian</button>
+  ${siteUrl ? '<button class="btn btn-secondary" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
 </div>
 <div class="form-group">
   <label>Linked Epic Key</label>
   <input type="text" data-field="jiraApiEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
-  <div class="help-text">Workspace-level epic associated with this repo. Jira API issue creation uses it as the default parent, and an epic board is shown when set.</div>
+  <div class="help-text">Workspace-level epic associated with this repo. Jira Cloud issue creation uses it as the default parent, and an epic board is shown when set.</div>
 </div>
 <div class="form-group">
   <label>Board JQL Query</label>
   <input type="text" data-field="jiraApiBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
-  <div class="help-text">Optional workspace-level JQL query exposed as a Jira API board.</div>
+  <div class="help-text">Optional workspace-level JQL query exposed as a Jira Cloud board.</div>
 </div>
 <div class="settings-section">
   <label>AI execution gate</label>
@@ -647,8 +812,9 @@ ${connFields}`;
               this.setupFields.jiraConnectionType = 'stdio';
             }
             if (mode === 'jiraapi') {
-              this.setupFields.jiraApiBaseUrl = config.get<string>('jiraApiBaseUrl', '');
-              this.setupFields.jiraApiToken = config.get<string>('jiraApiToken', '');
+              this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+              this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+              this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
               this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
               this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
             }
@@ -702,6 +868,25 @@ ${connFields}`;
         }
         return;
       }
+      case 'connectJiraCloud':
+        try {
+          await this.saveJiraCloudSetupFields();
+          await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.render();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud connect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return;
+      case 'disconnectJiraCloud':
+        try {
+          await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.render();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return;
       case 'save':
         try {
           await this.saveSetupConfiguration();
@@ -709,6 +894,37 @@ ${connFields}`;
           void vscode.window.showErrorMessage(`Failed to save configuration: ${error instanceof Error ? error.message : String(error)}`);
         }
         return;
+      case 'resetGitLab': {
+        const confirm = await vscode.window.showWarningMessage(
+          'Reset all GitLab configuration? This clears the URL, API key, project path, and selected boards.',
+          { modal: true },
+          'Reset'
+        );
+        if (confirm !== 'Reset') {
+          return;
+        }
+        const config = vscode.workspace.getConfiguration('ticketManager');
+        const target = vscode.workspace.workspaceFolders?.length
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
+        await Promise.all([
+          config.update('gitlabUrl', undefined, target),
+          config.update('gitlabConnectionType', undefined, target),
+          config.update('gitlabApiKey', undefined, target),
+          config.update('gitlabProjectPath', undefined, target),
+          config.update('gitlabListAllAccessibleBoards', undefined, target),
+          config.update('gitlabSelectedBoardRefs', undefined, target),
+          config.update('gitlabMcpCommand', undefined, target),
+          config.update('gitlabMcpArgs', undefined, target),
+          config.update('backendMode', undefined, target)
+        ]);
+        this.setupStep = 0;
+        this.setupMode = undefined;
+        this.setupFields = {};
+        this.render();
+        void vscode.window.showInformationMessage('GitLab configuration has been reset.');
+        return;
+      }
     }
   }
 
@@ -808,8 +1024,7 @@ ${connFields}`;
         break;
       }
       case 'jiraapi':
-        await updateSetting('jiraApiBaseUrl', (this.setupFields.jiraApiBaseUrl ?? '').trim());
-        await updateSetting('jiraApiToken', (this.setupFields.jiraApiToken ?? '').trim());
+        await updateSetting('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim());
         await updateSetting('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim());
         await updateSetting('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim());
         await updateSetting(
@@ -855,5 +1070,29 @@ ${connFields}`;
       resolvedPath,
       changed: resolvedPath !== toStoredFolderPath(originalPath)
     };
+  }
+
+  private async saveJiraCloudSetupFields(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await Promise.all([
+      config.update('backendMode', 'jiraapi', target),
+      config.update('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim(), target),
+      config.update('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim(), target),
+      config.update('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim(), target),
+      config.update('jiraPolling.requiredLabel', (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg', target),
+      config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false', target)
+    ]);
+  }
+
+  private reloadJiraCloudSetupFields(): void {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+    this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+    this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+    this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+    this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
   }
 }

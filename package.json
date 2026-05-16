@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
@@ -75,6 +75,11 @@
           "id": "ticketManager",
           "title": "Tickets",
           "icon": "media/activitybar-ticket.svg"
+        },
+        {
+          "id": "ticketManagerWorkMode",
+          "title": "Work Mode",
+          "icon": "media/activitybar-ticket.svg"
         }
       ]
     },
@@ -84,37 +89,51 @@
           "id": "ticketManager.setup",
           "name": "Configure Project",
           "type": "webview",
-          "when": "!ticketManager.configured"
+          "when": "!ticketManager.configured && ticketManager.boardsSidebarMode == classic"
         },
         {
           "id": "ticketManager.boards",
           "name": "Boards",
           "type": "webview",
-          "when": "ticketManager.configured"
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
         },
         {
           "id": "ticketManager.epics",
           "name": "EPICs",
           "type": "webview",
-          "when": "ticketManager.configured"
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
         },
         {
           "id": "ticketManager.myIssues",
           "name": "My Issues",
           "type": "webview",
-          "when": "ticketManager.configured"
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
         },
         {
           "id": "ticketManager.activeSessions",
           "name": "Sessions",
           "type": "webview",
-          "when": "ticketManager.configured"
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
         },
         {
           "id": "ticketManager.issueDetails",
           "name": "Issue Details",
           "type": "webview",
-          "when": "ticketManager.configured"
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+        }
+      ],
+      "ticketManagerWorkMode": [
+        {
+          "id": "ticketManager.workModeSetup",
+          "name": "Configure Project",
+          "type": "webview",
+          "when": "!ticketManager.configured && ticketManager.boardsSidebarMode == work"
+        },
+        {
+          "id": "ticketManager.workModeBoards",
+          "name": "Work Mode",
+          "type": "webview",
+          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == work"
         }
       ]
     },
@@ -137,7 +156,15 @@
       },
       {
         "view": "ticketManager.boards",
-        "contents": "Browse boards and open a board tab.\\n[Set Board Search](command:ticketManager.setBoardSearchText)\\n[Set Board Projects](command:ticketManager.setBoardProjects)\\n[Set Board Types](command:ticketManager.setBoardTypes)"
+        "contents": "Browse boards and open a board tab.\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+      },
+      {
+        "view": "ticketManager.workModeBoards",
+        "contents": "Browse boards in Work Mode and open a board tab.\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+      },
+      {
+        "view": "ticketManager.workModeSetup",
+        "contents": "Welcome to Ticket Manager!\nConfigure a project to get started.\n[$(gear) Configure Project](command:ticketManager.openSetup)\n\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
       }
     ],
     "commands": [
@@ -799,6 +826,37 @@
           "scope": "window",
           "description": "Optional display name for the Jira API JQL board in this workspace."
         },
+        "ticketManager.jiraOAuthClientId": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Client ID of the Atlassian OAuth 2.0 app used to connect Jira Cloud."
+        },
+        "ticketManager.jiraOAuthScopes": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "scope": "window",
+          "description": "OAuth scopes requested when connecting Jira Cloud. Defaults to offline_access, read:jira-work, write:jira-work, and read:me."
+        },
+        "ticketManager.jiraCloudId": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Atlassian Cloud ID of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
+        },
+        "ticketManager.jiraCloudSiteName": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Display name of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
+        },
+        "ticketManager.jiraCloudSiteUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "URL of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
+        },
         "ticketManager.stdioCommand": {
           "type": "string",
           "default": "",
@@ -834,6 +892,23 @@
           "default": false,
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
+          "tags": [
+            "preview"
+          ]
+        },
+        "ticketManager.boardsSidebarPreviewMode": {
+          "type": "string",
+          "default": "classic",
+          "enum": [
+            "classic",
+            "work"
+          ],
+          "enumItemLabels": [
+            "Classic",
+            "Work Mode"
+          ],
+          "scope": "window",
+          "markdownDescription": "Preview layout for the **Boards** side panel. **Work Mode** shows boards as cards and nests agent sessions under the owning board.",
           "tags": [
             "preview"
           ]

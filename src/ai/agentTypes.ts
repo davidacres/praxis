@@ -199,6 +199,7 @@ export interface AgentSessionRecord {
   stepCount: number;
   startedAt: string;
   completedAt?: string;
+  boardId?: string;
 }
 
 /** Default guardrail limits. */

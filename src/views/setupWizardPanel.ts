@@ -59,8 +59,9 @@ interface SetupState {
   jiraHttpUrl: string;
   jiraPollingRequiredLabel: string;
   jiraPollingEnabled: boolean;
-  jiraApiBaseUrl: string;
-  jiraApiToken: string;
+  jiraOAuthClientId: string;
+  jiraCloudSiteName: string;
+  jiraCloudSiteUrl: string;
   jiraApiEpicKey: string;
   jiraApiBoardJql: string;
 }
@@ -87,8 +88,9 @@ function createInitialState(): SetupState {
     jiraHttpUrl: '',
     jiraPollingRequiredLabel: 'syscfg',
     jiraPollingEnabled: true,
-    jiraApiBaseUrl: '',
-    jiraApiToken: '',
+    jiraOAuthClientId: '',
+    jiraCloudSiteName: '',
+    jiraCloudSiteUrl: '',
     jiraApiEpicKey: '',
     jiraApiBoardJql: '',
   };
@@ -110,7 +112,7 @@ const MODE_OPTIONS: ModeOption[] = [
   { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
   { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
   { mode: 'jira', icon: '🔗', title: 'Jira via MCP', description: 'Connect to Jira through an MCP server' },
-  { mode: 'jiraapi', icon: '📡', title: 'Jira API', description: 'Connect directly to Jira Server/Data Center' },
+  { mode: 'jiraapi', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
 
@@ -206,8 +208,9 @@ export class SetupWizardPanel {
             this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
             this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', true);
             if (mode === 'jiraapi') {
-              this.state.jiraApiBaseUrl = config.get<string>('jiraApiBaseUrl', '');
-              this.state.jiraApiToken = config.get<string>('jiraApiToken', '');
+              this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+              this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+              this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
               this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
               this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
             }
@@ -263,6 +266,27 @@ export class SetupWizardPanel {
         }
         break;
       }
+
+      case 'connectJiraCloud':
+        try {
+          await this.saveJiraCloudSetupFields();
+          await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.rerender();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud connect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        break;
+
+      case 'disconnectJiraCloud':
+        try {
+          await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.rerender();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        break;
 
       case 'save':
         try {
@@ -346,8 +370,7 @@ export class SetupWizardPanel {
         break;
 
       case 'jiraapi':
-        await config.update('jiraApiBaseUrl', this.state.jiraApiBaseUrl.trim(), target);
-        await config.update('jiraApiToken', this.state.jiraApiToken.trim(), target);
+        await config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target);
         await config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target);
         await config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target);
         await config.update(
@@ -401,6 +424,30 @@ export class SetupWizardPanel {
       resolvedPath,
       changed: resolvedPath !== toStoredFolderPath(originalPath)
     };
+  }
+
+  private async saveJiraCloudSetupFields(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await Promise.all([
+      config.update('backendMode', 'jiraapi', target),
+      config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target),
+      config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target),
+      config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target),
+      config.update('jiraPolling.requiredLabel', this.state.jiraPollingRequiredLabel.trim() || 'syscfg', target),
+      config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target)
+    ]);
+  }
+
+  private reloadJiraCloudSetupFields(): void {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+    this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+    this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+    this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+    this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
   }
 
   /* ---------------------------------------------------------------- */
@@ -683,7 +730,7 @@ export class SetupWizardPanel {
       </div>
       <div class="polling-section">
         <div class="field-label">JIRA polling</div>
-        <p class="field-hint polling-hint">Polls the Jira API every 30 seconds to get tickets with the specified label.</p>
+        <p class="field-hint polling-hint">Polls Jira Cloud every 30 seconds to get tickets with the specified label.</p>
         <div class="field-group">
           <label class="field-label">Label</label>
           <input type="text" class="field-input"
@@ -707,31 +754,39 @@ export class SetupWizardPanel {
   }
 
   private renderJiraApiForm(): string {
+    const clientId = esc(this.state.jiraOAuthClientId);
+    const siteName = esc(this.state.jiraCloudSiteName);
+    const siteUrl = esc(this.state.jiraCloudSiteUrl);
     const epicKey = esc(this.state.jiraApiEpicKey);
     const boardJql = esc(this.state.jiraApiBoardJql);
+    const connectedSiteLabel = siteName || siteUrl;
+    const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
+    const connectionStatus = siteUrl
+      ? `<p class="form-help">Connected to <strong>${connectedSiteLabel}</strong>${connectedSiteDetail}.</p>`
+      : '<p class="form-help">Not connected. Configure the Ticket Manager Atlassian OAuth app client ID, then connect with Atlassian.</p>';
     return `
-      <p class="form-help">Jira API mode connects directly to Jira Server/Data Center. You can expose boards from a linked epic and/or a custom JQL query. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
+      <p class="form-help">Jira Cloud mode connects through Atlassian OAuth. You can expose boards from a linked epic and/or a custom JQL query. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
       <div class="field-group">
-        <label class="field-label">Jira Base URL</label>
+        <label class="field-label">Atlassian OAuth Client ID</label>
         <input type="text" class="field-input"
-               data-field="jiraApiBaseUrl"
-               value="${esc(this.state.jiraApiBaseUrl)}"
-               placeholder="Defaults to the polling service Jira base URL" />
+               data-field="jiraOAuthClientId"
+               value="${clientId}"
+               placeholder="Client ID from the Ticket Manager Atlassian app" />
+        <p class="field-hint polling-hint">The client secret is requested once during connection and stored in VS Code secret storage.</p>
       </div>
       <div class="field-group">
-        <label class="field-label">Personal Access Token</label>
-        <input type="password" class="field-input"
-               data-field="jiraApiToken"
-               value="${esc(this.state.jiraApiToken)}"
-               placeholder="Leave blank to use JIRA_TOKEN" />
-            </div>
+        <label class="field-label">Jira Cloud Connection</label>
+        ${connectionStatus}
+        <button class="btn btn-primary" data-action="connectJiraCloud">Connect with Atlassian</button>
+        ${siteUrl ? '<button class="btn btn-secondary" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
+      </div>
             <div class="field-group">
          <label class="field-label">Linked Epic Key</label>
          <input type="text" class="field-input"
             data-field="jiraApiEpicKey"
             value="${epicKey}"
             placeholder="Optional: e.g. KAMAI-123" />
-         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira API issue creation will use it as the default parent, and an epic board is shown when set.</p>
+         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira Cloud issue creation will use it as the default parent, and an epic board is shown when set.</p>
       </div>
       <div class="field-group">
         <label class="field-label">Board JQL Query</label>
@@ -739,7 +794,7 @@ export class SetupWizardPanel {
                data-field="jiraApiBoardJql"
                value="${boardJql}"
                placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
-        <p class="field-hint polling-hint">Optional workspace-level JQL query exposed as a Jira API board.</p>
+        <p class="field-hint polling-hint">Optional workspace-level JQL query exposed as a Jira Cloud board.</p>
       </div>
       <div class="polling-section">
         <div class="field-label">AI execution gate</div>
@@ -1072,6 +1127,10 @@ export class SetupWizardPanel {
           vscode.postMessage({ command: 'save' });
         } else if (action === 'browse') {
           vscode.postMessage({ command: 'browse' });
+        } else if (action === 'connectJiraCloud') {
+          vscode.postMessage({ command: 'connectJiraCloud' });
+        } else if (action === 'disconnectJiraCloud') {
+          vscode.postMessage({ command: 'disconnectJiraCloud' });
         }
       });
 

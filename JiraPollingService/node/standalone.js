@@ -84,7 +84,7 @@ async function loadStandaloneConfig(configPath, overrides = {}) {
     Project: standaloneConfig.GitLabProject,
     Token: standaloneConfig.GitLabToken
   });
-  validateGitLabConfig(gitLabConfig);
+  validateGitLabConfig(gitLabConfig, { requireToken: false });
 
   let jiraConfig;
   if (standaloneConfig.TrackedIssueKeys.length === 0) {

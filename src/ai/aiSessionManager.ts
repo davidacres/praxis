@@ -54,13 +54,14 @@ export class AiSessionManager {
   }
 
   /** Create a new AI session for the given issue and provider. */
-  public createSession(issueKey: string, provider: AiProvider, label?: string): AiAssignment {
+  public createSession(issueKey: string, provider: AiProvider, label?: string, boardId?: string): AiAssignment {
     const assignment: AiAssignment = {
       provider,
       label: label?.trim() || undefined,
       sessionId: this.generateSessionId(),
       assignedAt: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
+      boardId: boardId || undefined
     };
     this.sessions.set(issueKey, assignment);
     void this.persistSessions();
@@ -128,7 +129,8 @@ export class AiSessionManager {
       taskDefinition,
       events: [],
       stepCount: 0,
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      boardId: this.sessions.get(issueKey)?.boardId
     };
     this.agentSessions.set(issueKey, record);
     void this.persistAgentSessions();
