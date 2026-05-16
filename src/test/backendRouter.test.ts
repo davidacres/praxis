@@ -23,11 +23,12 @@ function createRouter(mode: 'github' | 'gitlab'): BackendRouter {
 }
 
 suite('backendRouter', () => {
-  test('routes GitLab mode to a board-capable backend instead of the unsupported placeholder', async () => {
+  test('reports GitLab mode as unsupported instead of falling back to Jira', async () => {
     const router = createRouter('gitlab');
     try {
-      const supportsBoards = await router.supportsBoards();
-      assert.strictEqual(supportsBoards, true);
+      const result = await router.checkConnection();
+      assert.strictEqual(result.status, 'error');
+      assert.match(result.message, /GitLab project mode is not implemented yet/i);
     } finally {
       router.dispose();
     }
