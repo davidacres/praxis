@@ -30,14 +30,14 @@ suite('backend mode context', () => {
     });
   });
 
-  test('treats explicit hosted modes as configured for UI routing', () => {
+  test('keeps explicit hosted modes visible but unconfigured', () => {
     assert.deepStrictEqual(resolveBackendModeContextState('gitlab', false, false), {
       mode: 'gitlab',
-      configured: true
+      configured: false
     });
     assert.deepStrictEqual(resolveBackendModeContextState('github', false, false), {
       mode: 'github',
-      configured: true
+      configured: false
     });
   });
 });
