@@ -38,7 +38,7 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
     case 'jira':
       return 'Jira via MCP';
     case 'jiraapi':
-      return 'Jira API';
+      return 'Jira Cloud';
     case 'demo':
       return 'Demo';
     case 'livefolder':

@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
+import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import { BoardStore } from '../state/boardStore';
 import type { BackendMode } from '../types';
-import { buildMetaPillInlineStyle, parseHexRgb } from '../ui/hexColor';
+import { buildMetaPillInlineStyle } from '../ui/hexColor';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { BoardsTreeProvider } from './boardsTreeProvider';
-
 import { renderIconButton } from './webviewToolbarIcons';
 
-interface BoardsSidebarCallbacks {
+interface ClassicBoardsSidebarCallbacks {
   onSelectBoard: (boardId: string) => Promise<void>;
   onEditBoard: (boardId: string) => Promise<void>;
   onDeleteBoard: (boardId: string) => Promise<void>;
@@ -43,17 +43,22 @@ function boardTypeToken(boardType: string | undefined): string {
   return 'board';
 }
 
-export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
+function boardRemovalLabel(mode: BackendMode): string {
+  return mode === 'demo' || mode === 'userworkspace' ? 'Delete board' : 'Close board';
+}
+
+export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private selectedBoardId?: string;
   private readonly disposables: vscode.Disposable[] = [];
 
   public constructor(
+    private readonly _backendService: IssueTrackerService,
     private readonly boardStore: BoardStore,
     private readonly boardsProvider: BoardsTreeProvider,
     private readonly boardColumnStore: BoardColumnStore,
     private readonly getBackendMode: () => BackendMode,
-    private readonly callbacks: BoardsSidebarCallbacks
+    private readonly callbacks: ClassicBoardsSidebarCallbacks
   ) {
     this.disposables.push(
       this.boardsProvider.onDidChangeTreeData(() => {
@@ -106,24 +111,16 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
     }
 
     const payload = message as Record<string, unknown>;
-    switch (payload.type) {
-      case 'selectBoard':
-        if (typeof payload.boardId === 'string') {
-          await this.callbacks.onSelectBoard(payload.boardId);
-        }
-        return;
-      case 'editBoard':
-        if (typeof payload.boardId === 'string') {
-          await this.callbacks.onEditBoard(payload.boardId);
-        }
-        return;
-      case 'deleteBoard':
-        if (typeof payload.boardId === 'string') {
-          await this.callbacks.onDeleteBoard(payload.boardId);
-        }
-        return;
-      default:
-        return;
+    if (payload.type === 'selectBoard' && typeof payload.boardId === 'string') {
+      await this.callbacks.onSelectBoard(payload.boardId);
+      return;
+    }
+    if (payload.type === 'editBoard' && typeof payload.boardId === 'string') {
+      await this.callbacks.onEditBoard(payload.boardId);
+      return;
+    }
+    if (payload.type === 'deleteBoard' && typeof payload.boardId === 'string') {
+      await this.callbacks.onDeleteBoard(payload.boardId);
     }
   }
 
@@ -135,6 +132,10 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const snapshot = this.boardsProvider.getSnapshot();
     const filters = this.boardStore.getFilters();
     const nonce = createNonce();
+    const backendMode = this.getBackendMode();
+    const removalLabel = boardRemovalLabel(backendMode);
+    const modeIconColor = resolveBackendModeBoardIconColor(backendMode);
+    const modeIconMarkup = boardListModeIconSvg(backendMode);
 
     let content = '';
     if (snapshot.status === 'error') {
@@ -142,23 +143,19 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
     } else if ((snapshot.status === 'idle' || snapshot.status === 'loading') && snapshot.boards.length === 0) {
       content = '<div class="message">Loading boards...</div>';
     } else if (snapshot.boards.length === 0) {
-      content =
-        filters.searchText.trim().length > 0
-          ? `<div class="message">No boards match "${escapeHtml(filters.searchText.trim())}".</div>`
-          : filters.projectKeys.length > 0 || filters.types.length > 0
-            ? '<div class="message">No boards match the current board filters.</div>'
-            : '<div class="message">No boards are available.</div>';
+      const trimmedSearch = filters.searchText.trim();
+      if (trimmedSearch.length > 0) {
+        content = `<div class="message">No boards match "${escapeHtml(trimmedSearch)}".</div>`;
+      } else if (filters.projectKeys.length > 0 || filters.types.length > 0) {
+        content = '<div class="message">No boards match the current board filters.</div>';
+      } else {
+        content = '<div class="message">No boards are available.</div>';
+      }
     } else {
-      const backendMode = this.getBackendMode();
-      const modeIconColor = resolveBackendModeBoardIconColor(backendMode);
-      const modeIconMarkup = boardListModeIconSvg(backendMode);
       content = `<div class="item-list">
         ${snapshot.boards
           .map(board => {
-            const classes = [
-              'board-row',
-              this.selectedBoardId === board.id ? 'selected' : ''
-            ]
+            const classes = ['board-row', this.selectedBoardId === board.id ? 'selected' : '']
               .filter(Boolean)
               .join(' ');
             const projectOrLocation =
@@ -181,7 +178,7 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
                       'id="editBoard-' + board.id + '"',
                       `id="editBoard-${board.id}" data-edit-board-id="${escapeHtml(board.id)}"`
                     )}
-                    ${renderIconButton(`deleteBoard-${board.id}`, 'Delete board', 'delete').replace(
+                    ${renderIconButton(`deleteBoard-${board.id}`, removalLabel, 'delete').replace(
                       'id="deleteBoard-' + board.id + '"',
                       `id="deleteBoard-${board.id}" data-delete-board-id="${escapeHtml(board.id)}"`
                     )}
@@ -195,10 +192,8 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
     }
 
     this.view.title = undefined;
-    const boardCount = snapshot.boards.length;
-    this.view.description = String(boardCount);
+    this.view.description = String(snapshot.boards.length);
     this.view.badge = undefined;
-
     this.view.webview.html = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -342,15 +337,6 @@ export class BoardsSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .icon-button:hover {
         border-color: var(--vscode-widget-border, transparent);
         background: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground));
-      }
-      .icon-button svg {
-        width: 14px;
-        height: 14px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.6;
-        stroke-linecap: round;
-        stroke-linejoin: round;
       }
       .message {
         padding: 10px 0;

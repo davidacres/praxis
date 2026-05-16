@@ -3,19 +3,21 @@
     "ticketManager.connectionType": "http",
     "ticketManager.jiraPolling.requiredLabel": "syscfg",
     "ticketManager.jiraPolling.enabled": true,
+    "ticketManager.planFilePath": "",
+    "ticketManager.liveFolderPath": "",
+    "ticketManager.liveFolderAllowIssueCreation": true,
+    "ticketManager.liveFolderProjectKey": "",
+    "ticketManager.liveFolderProjectName": "",
+    "ticketManager.backendMode": "jiraapi",
     "ticketManager.gitlabUrl": "https://git.tools.dev.assaabloyglobalsolutions.net/",
     "ticketManager.gitlabConnectionType": "api",
     "ticketManager.gitlabApiKey": "glpat-yeNrvgNikjWtwMkNmy_n0286MQp1OmhwCA.01.0y0qcwxzx",
-    "ticketManager.liveFolderPath": "",
-    "ticketManager.liveFolderAllowIssueCreation": true,
-    "ticketManager.planFilePath": "",
-    "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": "",
-    "ticketManager.backendMode": "gitlab",
-    "ticketManager.gitlabProjectPath": "traka/software/ai/traka-web-ai",
-    "ticketManager.gitlabListAllAccessibleBoards": false,
-    "ticketManager.gitlabSelectedBoardRefs": [
-        "traka/software/ai/traka-touch-ai::279",
-        "traka/software/ai/traka-touch-ai::278"
-    ]
+    "ticketManager.jiraApiEpicKey": "",
+    "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
+    "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+    "ticketManager.jiraCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
+    "ticketManager.jiraCloudSiteName": "aags-assaabloy",
+    "ticketManager.jiraCloudSiteUrl": "https://aags-assaabloy.atlassian.net",
+    "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
+    "ticketManager.jiraApiBoardName": "KAMAI"
 }

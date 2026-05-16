@@ -17,6 +17,7 @@ export interface AiAssignment {
   sessionId: string;
   assignedAt: string; // ISO timestamp
   status: 'active' | 'completed' | 'failed';
+  boardId?: string;
 }
 
 export interface AiAgentRegistration {

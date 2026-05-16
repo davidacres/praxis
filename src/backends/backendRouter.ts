@@ -22,6 +22,7 @@ import type {
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
 import { DemoService } from '../demo/demoService';
+import { GitLabBoardService } from '../gitlab/gitLabBoardService';
 import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
@@ -330,17 +331,19 @@ export class BackendRouter implements IssueTrackerService {
     this.disposeActiveService();
     this.activeMode = configuredMode;
     this.activeService =
-      configuredMode === 'github' || configuredMode === 'gitlab'
+      configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
+        : configuredMode === 'gitlab'
+          ? new GitLabBoardService(this.configStore, this.output)
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiraapi'
-            ? new JiraApiService(this.configStore, this.output)
+            ? new JiraApiService(this.context, this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
-            : configuredMode === 'userworkspace'
-              ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-              : new JiraService(this.context, this.configStore, this.output);
+          : configuredMode === 'userworkspace'
+            ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
+            : new JiraService(this.context, this.configStore, this.output);
     if (this.activeService instanceof LiveFolderService) {
       this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
         this._onDidReceiveExternalComment.fire(event)

@@ -7,6 +7,7 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { AppConfigStore } from '../config/jiraConfig';
+import { initializeJiraCloudOAuthService, type JiraCloudOAuthService } from './jiraCloudOAuthService';
 import type {
   BackendMode,
   Board,
@@ -83,6 +84,7 @@ interface JiraApiSearchResult {
   issues: IssueSummary[];
   total: number;
   rawIssues: Array<Record<string, unknown>>;
+  nextPageToken?: string;
 }
 
 interface JiraAgileBoardColumnStatus {
@@ -606,11 +608,15 @@ export class JiraApiService implements IssueTrackerService {
   private cachedProjects?: Project[];
   private fieldIds?: JiraApiFieldIds;
   private currentUser?: JiraApiUser;
+  private readonly oauthService: JiraCloudOAuthService;
 
   public constructor(
+    context: vscode.ExtensionContext,
     private readonly configStore: AppConfigStore,
     private readonly output: vscode.OutputChannel
-  ) {}
+  ) {
+    this.oauthService = initializeJiraCloudOAuthService(context, configStore);
+  }
 
   public getDefaultPageSize(): number {
     return this.configStore.getDefaultPageSize();
@@ -626,7 +632,7 @@ export class JiraApiService implements IssueTrackerService {
     if (!this.configStore.hasJiraApiConfig()) {
       return {
         status: 'error',
-        message: 'No Jira API connection is configured.',
+        message: 'No Jira Cloud connection is configured.',
         toolCount: 0
       };
     }
@@ -793,7 +799,7 @@ export class JiraApiService implements IssueTrackerService {
     } else {
       const boardJql = this.parseJqlBoardQuery(board);
       if (!boardJql) {
-        throw new Error('Invalid Jira API board identifier.');
+        throw new Error('Invalid Jira Cloud board identifier.');
       }
       jql = this.buildBoardJqlFromQuery(boardJql);
     }
@@ -826,7 +832,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   public async createBoard(_input: CreateBoardInput): Promise<Board> {
-    throw new Error('Creating boards is not supported in Jira API mode. Boards are derived from the linked epic or configured JQL query.');
+    throw new Error('Creating boards is not supported in Jira Cloud mode. Boards are derived from the linked epic or configured JQL query.');
   }
 
   public async updateBoard(_boardId: string, _input: UpdateBoardInput): Promise<Board> {
@@ -842,7 +848,7 @@ export class JiraApiService implements IssueTrackerService {
       }
       const epicKey = this.parseEpicKey(_boardId);
       if (!epicKey) {
-        throw new Error('Invalid Jira API board identifier.');
+        throw new Error('Invalid Jira Cloud board identifier.');
       }
       const epic = await this.getIssue(epicKey);
       await this.configStore.setJiraApiEpicBoardName(inputName);
@@ -860,7 +866,7 @@ export class JiraApiService implements IssueTrackerService {
     if (_boardId === 'jql:workspace') {
       const boardJql = this.getLinkedBoardJql();
       if (!boardJql) {
-        throw new Error('Jira API board query is not configured.');
+        throw new Error('Jira Cloud board query is not configured.');
       }
       if (inputJql !== undefined) {
         if (!inputJql) {
@@ -877,11 +883,11 @@ export class JiraApiService implements IssueTrackerService {
       };
     }
 
-    throw new Error('Boards cannot be edited in Jira API mode.');
+    throw new Error('Boards cannot be edited in Jira Cloud mode.');
   }
 
   public async deleteBoard(_boardId: string): Promise<void> {
-    throw new Error('Boards cannot be deleted in Jira API mode.');
+    throw new Error('Boards cannot be deleted in Jira Cloud mode.');
   }
 
   public async getIssue(issueKey: string): Promise<IssueDetails> {
@@ -907,7 +913,7 @@ export class JiraApiService implements IssueTrackerService {
       'GET',
       `/rest/api/2/issue/${encodeURIComponent(issueKey)}?fields=${encodeURIComponent(fields.join(','))}`
     );
-    const issue = normalizeIssue(response, this.getBaseUrl());
+    const issue = normalizeIssue(response, this.getBrowseBaseUrl());
     if (!issue) {
       throw new Error(`Unable to load details for ${issueKey}.`);
     }
@@ -952,7 +958,7 @@ export class JiraApiService implements IssueTrackerService {
         fields.parent = { key: parentKey };
       } else {
         if (!fieldIds.epicLinkFieldId) {
-          throw new Error('Epic Link field was not found in Jira. Child issues cannot be attached to an epic in Jira API mode.');
+          throw new Error('Epic Link field was not found in Jira. Child issues cannot be attached to an epic in Jira Cloud mode.');
         }
         fields[fieldIds.epicLinkFieldId] = parentKey;
       }
@@ -1084,7 +1090,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> {
-    return issue.browseUrl ?? deriveBrowseUrl(this.getBaseUrl(), issue.key);
+    return issue.browseUrl ?? deriveBrowseUrl(this.getBrowseBaseUrl(), issue.key);
   }
 
   public async getSelfAssigneeLabel(): Promise<string | undefined> {
@@ -1098,10 +1104,10 @@ export class JiraApiService implements IssueTrackerService {
    */
   public async getSubTasks(parentKey: string): Promise<SubTaskSummary[]> {
     const jql = `parent = ${parentKey} ORDER BY rank ASC, key ASC`;
-    const fields = 'summary,status,issuetype,assignee';
     const response = await this.requestJson(
-      'GET',
-      `/rest/api/2/search?jql=${encodeURIComponent(jql)}&fields=${encodeURIComponent(fields)}&maxResults=100`
+      'POST',
+      '/rest/api/3/search/jql',
+      { jql, maxResults: 100, fields: ['summary', 'status', 'issuetype', 'assignee'] }
     );
     if (!isRecord(response)) {
       return [];
@@ -1161,12 +1167,30 @@ export class JiraApiService implements IssueTrackerService {
     void this.reset();
   }
 
-  private getBaseUrl(): string {
-    const value = this.configStore.getJiraApiBaseUrl().trim();
+  private getBrowseBaseUrl(): string {
+    const value = this.configStore.getJiraCloudSiteUrl().trim();
     if (!value) {
-      throw new Error('No Jira API base URL is configured.');
+      throw new Error('No Jira Cloud site is selected.');
     }
     return value.replace(/\/$/, '');
+  }
+
+  private getCloudApiBaseUrl(): string {
+    return this.oauthService.getCloudApiBaseUrl().replace(/\/$/, '');
+  }
+
+  private async getCloudAuthHeaders(): Promise<Record<string, string>> {
+    return {
+      ...(await this.getCloudBaseAuthHeaders()),
+      'Content-Type': 'application/json'
+    };
+  }
+
+  private async getCloudBaseAuthHeaders(): Promise<Record<string, string>> {
+    return {
+      Authorization: `Bearer ${await this.oauthService.getAccessToken()}`,
+      Accept: 'application/json'
+    };
   }
 
   private getAuthHeaders(): Record<string, string> {
@@ -1177,14 +1201,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private getBaseAuthHeaders(): Record<string, string> {
-    const token = this.configStore.getJiraApiToken().trim();
-    if (!token) {
-      throw new Error('No Jira API token is configured.');
-    }
-    return {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json'
-    };
+    throw new Error('Internal Jira routing is not used for Jira Cloud.');
   }
 
   private shouldUseInternalRouting(baseUrl: URL): boolean {
@@ -1207,7 +1224,7 @@ export class JiraApiService implements IssueTrackerService {
     try {
       const response = await fetch(url, {
         method,
-        headers: this.getAuthHeaders(),
+        headers: await this.getCloudAuthHeaders(),
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal
       });
@@ -1227,7 +1244,7 @@ export class JiraApiService implements IssueTrackerService {
       return parsed;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Jira API request timed out.');
+        throw new Error('Jira Cloud request timed out.');
       }
       throw error;
     } finally {
@@ -1247,7 +1264,7 @@ export class JiraApiService implements IssueTrackerService {
       const response = await fetch(url, {
         method,
         headers: {
-          ...this.getBaseAuthHeaders(),
+          ...(await this.getCloudBaseAuthHeaders()),
           'X-Atlassian-Token': 'no-check',
           'Content-Type': contentType
         },
@@ -1270,7 +1287,7 @@ export class JiraApiService implements IssueTrackerService {
       return parsed;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Jira API request timed out.');
+        throw new Error('Jira Cloud request timed out.');
       }
       throw error;
     } finally {
@@ -1284,7 +1301,7 @@ export class JiraApiService implements IssueTrackerService {
     try {
       const response = await fetch(url, {
         method,
-        headers: this.getBaseAuthHeaders(),
+        headers: await this.getCloudBaseAuthHeaders(),
         signal: controller.signal
       });
       const body = Buffer.from(await response.arrayBuffer());
@@ -1299,7 +1316,7 @@ export class JiraApiService implements IssueTrackerService {
       return body;
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Jira API request timed out.');
+        throw new Error('Jira Cloud request timed out.');
       }
       throw error;
     } finally {
@@ -1362,7 +1379,7 @@ export class JiraApiService implements IssueTrackerService {
 
       request.on('timeout', () => {
         const timeoutError = markConnectionError(
-          new Error(`Jira API request to ${candidateIp} timed out after ${timeoutMs} ms.`)
+          new Error(`Jira Cloud request to ${candidateIp} timed out after ${timeoutMs} ms.`)
         );
         timeoutError.code = 'ETIMEDOUT';
         request.destroy(timeoutError);
@@ -1436,7 +1453,7 @@ export class JiraApiService implements IssueTrackerService {
 
       request.on('timeout', () => {
         const timeoutError = markConnectionError(
-          new Error(`Jira API request to ${candidateIp} timed out after ${timeoutMs} ms.`)
+          new Error(`Jira Cloud request to ${candidateIp} timed out after ${timeoutMs} ms.`)
         );
         timeoutError.code = 'ETIMEDOUT';
         request.destroy(timeoutError);
@@ -1502,7 +1519,7 @@ export class JiraApiService implements IssueTrackerService {
 
       request.on('timeout', () => {
         const timeoutError = markConnectionError(
-          new Error(`Jira API request to ${candidateIp} timed out after ${timeoutMs} ms.`)
+          new Error(`Jira Cloud request to ${candidateIp} timed out after ${timeoutMs} ms.`)
         );
         timeoutError.code = 'ETIMEDOUT';
         request.destroy(timeoutError);
@@ -1665,12 +1682,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private async requestJson(method: string, requestPath: string, body?: unknown): Promise<unknown> {
-    const baseUrl = new URL(this.getBaseUrl());
-    if (this.shouldUseInternalRouting(baseUrl)) {
-      return this.requestJsonViaInternalRouting(method, baseUrl, requestPath, body);
-    }
-
-    return this.requestJsonDirect(method, `${baseUrl.toString().replace(/\/$/, '')}${requestPath}`, body);
+    return this.requestJsonDirect(method, `${this.getCloudApiBaseUrl()}${requestPath}`, body);
   }
 
   private async requestMultipart(method: string, requestPath: string, formData: FormData): Promise<unknown> {
@@ -1684,14 +1696,9 @@ export class JiraApiService implements IssueTrackerService {
       throw new Error('Could not build Jira attachment request body.');
     }
 
-    const baseUrl = new URL(this.getBaseUrl());
-    if (this.shouldUseInternalRouting(baseUrl)) {
-      return this.requestMultipartViaInternalRouting(method, baseUrl, requestPath, body, contentType);
-    }
-
     return this.requestMultipartDirect(
       method,
-      `${baseUrl.toString().replace(/\/$/, '')}${requestPath}`,
+      `${this.getCloudApiBaseUrl()}${requestPath}`,
       body,
       contentType
     );
@@ -1699,14 +1706,12 @@ export class JiraApiService implements IssueTrackerService {
 
   private async requestBinary(urlValue: string): Promise<Buffer> {
     const downloadUrl = new URL(urlValue);
-    const baseUrl = new URL(this.getBaseUrl());
-    const requestPath = `${downloadUrl.pathname}${downloadUrl.search}`;
-
-    if (
-      this.shouldUseInternalRouting(baseUrl) &&
-      downloadUrl.hostname.toLowerCase() === baseUrl.hostname.toLowerCase()
-    ) {
-      return this.requestBinaryViaInternalRouting('GET', baseUrl, requestPath);
+    const siteUrl = new URL(this.getBrowseBaseUrl());
+    if (downloadUrl.hostname.toLowerCase() === siteUrl.hostname.toLowerCase()) {
+      return this.requestBinaryDirect(
+        'GET',
+        `${this.getCloudApiBaseUrl()}${downloadUrl.pathname}${downloadUrl.search}`
+      );
     }
 
     return this.requestBinaryDirect('GET', downloadUrl.toString());
@@ -1803,48 +1808,68 @@ export class JiraApiService implements IssueTrackerService {
     return this.buildBoardJqlFromQuery(this.buildLinkedEpicDescendantClause(epicKey));
   }
 
+  // Cache of nextPageToken values keyed by `${jql}|${maxResults}|${startAt}` to support
+  // offset-based callers while the Jira Cloud API uses cursor-based pagination.
+  private readonly searchCursorCache = new Map<string, string>();
+
   private async searchIssues(
     jql: string,
     fields: string[],
     startAt: number,
     maxResults: number
   ): Promise<JiraApiSearchResult> {
-    const response = await this.requestJson(
-      'POST',
-      '/rest/api/2/search',
-      {
-        jql,
-        startAt,
-        maxResults,
-        fields
-      }
-    );
+    const cacheKey = `${jql}|${maxResults}|${startAt}`;
+    const cursorToken = startAt === 0 ? undefined : this.searchCursorCache.get(cacheKey);
+
+    const body: Record<string, unknown> = { jql, maxResults, fields };
+    if (cursorToken) {
+      body.nextPageToken = cursorToken;
+    }
+
+    const response = await this.requestJson('POST', '/rest/api/3/search/jql', body);
     const payload = isRecord(response) ? response : {};
-    const total = Number(payload.total ?? 0) || 0;
     const rawIssues = toArray(payload.issues).filter(isRecord);
     const issues = rawIssues
-      .map(issue => normalizeIssue(issue, this.getBaseUrl()))
+      .map(issue => normalizeIssue(issue, this.getBrowseBaseUrl()))
       .filter((item): item is IssueSummary => Boolean(item));
-    return { issues, total, rawIssues };
+
+    // Cache the next page token for sequential offset-based callers.
+    const responseNextToken = asString(payload.nextPageToken ?? '') || undefined;
+    if (responseNextToken) {
+      const nextStartAt = startAt + issues.length;
+      this.searchCursorCache.set(`${jql}|${maxResults}|${nextStartAt}`, responseNextToken);
+    }
+
+    // total is not returned by /rest/api/3/search/jql; synthesise a value that
+    // lets callers derive hasMore = (startAt + issues.length < total) correctly.
+    const total = startAt + issues.length + (responseNextToken ? 1 : 0);
+    return { issues, total, rawIssues, nextPageToken: responseNextToken };
   }
 
   private async searchAllIssues(jql: string, fields: string[]): Promise<JiraApiSearchResult> {
     const pageSize = 100;
     const allIssues: IssueSummary[] = [];
     const allRawIssues: Array<Record<string, unknown>> = [];
-    let startAt = 0;
-    let total = 0;
+    let nextPageToken: string | undefined;
     while (true) {
-      const page = await this.searchIssues(jql, fields, startAt, pageSize);
-      total = page.total;
-      allIssues.push(...page.issues);
-      allRawIssues.push(...page.rawIssues);
-      if (startAt + page.issues.length >= page.total || page.issues.length === 0) {
+      const body: Record<string, unknown> = { jql, maxResults: pageSize, fields };
+      if (nextPageToken) {
+        body.nextPageToken = nextPageToken;
+      }
+      const response = await this.requestJson('POST', '/rest/api/3/search/jql', body);
+      const payload = isRecord(response) ? response : {};
+      const rawIssues = toArray(payload.issues).filter(isRecord);
+      const issues = rawIssues
+        .map(issue => normalizeIssue(issue, this.getBrowseBaseUrl()))
+        .filter((item): item is IssueSummary => Boolean(item));
+      allIssues.push(...issues);
+      allRawIssues.push(...rawIssues);
+      nextPageToken = asString(payload.nextPageToken ?? '') || undefined;
+      if (!nextPageToken || issues.length === 0) {
         break;
       }
-      startAt += page.issues.length;
     }
-    return { issues: allIssues, total, rawIssues: allRawIssues };
+    return { issues: allIssues, total: allIssues.length, rawIssues: allRawIssues };
   }
 
   private async fetchBoardWorkflowStatuses(

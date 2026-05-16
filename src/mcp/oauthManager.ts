@@ -13,6 +13,8 @@ import type {
 const OAUTH_CALLBACK_PATH = '/mcp-auth-callback';
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 
+type ExternalUriHandler = (uri: vscode.Uri) => boolean | void;
+
 type PendingAuthorization = {
   promise: Promise<string>;
   resolve: (code: string) => void;
@@ -131,11 +133,17 @@ class VsCodeMcpOAuthProvider implements OAuthClientProvider {
 
 export class McpOAuthManager implements vscode.UriHandler, vscode.Disposable {
   private pendingAuthorization: PendingAuthorization | undefined;
+  private readonly externalHandlers = new Set<ExternalUriHandler>();
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
 
   public createProvider(serverUrl: string): OAuthClientProvider {
     return new VsCodeMcpOAuthProvider(this.context, this, serverUrl);
+  }
+
+  public registerExternalHandler(handler: ExternalUriHandler): vscode.Disposable {
+    this.externalHandlers.add(handler);
+    return new vscode.Disposable(() => this.externalHandlers.delete(handler));
   }
 
   public async startAuthorization(authorizationUrl: URL): Promise<void> {
@@ -151,6 +159,12 @@ export class McpOAuthManager implements vscode.UriHandler, vscode.Disposable {
   }
 
   public handleUri(uri: vscode.Uri): void {
+    for (const handler of this.externalHandlers) {
+      if (handler(uri) === true) {
+        return;
+      }
+    }
+
     if (uri.path !== OAUTH_CALLBACK_PATH) {
       return;
     }
