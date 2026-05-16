@@ -8,10 +8,10 @@
     "ticketManager.liveFolderAllowIssueCreation": true,
     "ticketManager.liveFolderProjectKey": "",
     "ticketManager.liveFolderProjectName": "",
-    "ticketManager.backendMode": "gitlab",
+    "ticketManager.backendMode": "jiraapi",
     "ticketManager.gitlabUrl": "https://git.example.com/",
     "ticketManager.gitlabConnectionType": "api",
-    "ticketManager.jiraApiEpicKey": "",,
+    "ticketManager.jiraApiEpicKey": "",
     "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
     "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
     "ticketManager.jiraCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
@@ -19,5 +19,16 @@
     "ticketManager.jiraCloudSiteUrl": "https://aags-example.atlassian.net",
     "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
     "ticketManager.jiraApiBoardName": "KAMAI",
-    "ticketManager.gitlabListAllAccessibleBoards": true
+    "ticketManager.gitlabListAllAccessibleBoards": true,
+    "ticketManager.connections": [
+        {
+            "id": "jira-cloud",
+            "name": "Jira Cloud",
+            "mode": "jira",
+            "settings": {
+                "clientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+                "url": "https://aags-example.atlassian.net/"
+            }
+        }
+    ]
 }

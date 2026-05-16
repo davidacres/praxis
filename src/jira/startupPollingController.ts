@@ -3,6 +3,8 @@ import * as path from 'node:path';
 import * as util from 'node:util';
 import * as vscode from 'vscode';
 import { AppConfigStore } from '../config/jiraConfig';
+import type { ConnectionStore } from '../config/connectionStore';
+import type { Connection } from '../types';
 
 const execFile = util.promisify(execFileCallback);
 const JIRA_POLLING_PREFIX = '[Jira Polling]';
@@ -13,6 +15,7 @@ interface PollingLogger {
 }
 
 interface PollingConfig {
+  BaseUrl?: string;
   Token?: string;
   LinkedEpicKey?: string;
   RequiredLabel?: string;
@@ -20,6 +23,8 @@ interface PollingConfig {
 }
 
 interface PollingSyncEvent {
+  /** Stable id of the connection (or `__global__` for legacy fallback) that emitted this event. */
+  connectionId?: string;
   issues: Array<{
     key: string;
     fields?: {
@@ -84,80 +89,142 @@ async function readWindowsUserEnvironmentVariable(name: string): Promise<string 
 }
 
 export class StartupPollingController implements vscode.Disposable {
-  private abortController: AbortController | undefined;
-  private runPromise: Promise<void> | undefined;
-  private activeRuntimeKey: string | undefined;
+  private readonly runs = new Map<string, RunState>();
   private hasShownSuccessNotification = false;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly configStore: AppConfigStore,
     private readonly outputChannel: vscode.OutputChannel,
-    private readonly onSync?: (event: PollingSyncEvent) => Promise<void>
+    private readonly onSync?: (event: PollingSyncEvent) => Promise<void>,
+    private readonly connectionStore?: ConnectionStore
   ) {}
 
   public async refresh(): Promise<void> {
-    const shouldRun = this.shouldRun();
-    if (!shouldRun) {
+    if (this.context.extensionMode === vscode.ExtensionMode.Test) {
+      await this.stop();
+      return;
+    }
+    if (!this.configStore.isJiraStartupPollingEnabled()) {
       await this.stop();
       return;
     }
 
-    const runtimeKey = this.buildRuntimeKey();
+    const targets = this.resolveTargets();
+    const desiredIds = new Set(targets.map(t => t.id));
 
-    if (this.runPromise !== undefined && this.activeRuntimeKey === runtimeKey) {
-      return;
+    // Stop runs whose target is gone or whose mode is no longer jiraapi.
+    for (const [id, state] of this.runs) {
+      if (!desiredIds.has(id)) {
+        await this.stopRun(id, state);
+      }
     }
 
-    if (this.runPromise !== undefined) {
-      await this.stop();
+    // Start/restart targets.
+    for (const target of targets) {
+      const runtimeKey = this.buildRuntimeKey(target);
+      const existing = this.runs.get(target.id);
+      if (existing?.runtimeKey === runtimeKey) {
+        continue;
+      }
+      if (existing) {
+        await this.stopRun(target.id, existing);
+      }
+      await this.startRun(target, runtimeKey);
     }
-
-    await this.start(runtimeKey);
   }
 
   public async stop(): Promise<void> {
-    const controller = this.abortController;
-    const runPromise = this.runPromise;
-    if (controller === undefined || runPromise === undefined) {
-      return;
-    }
-
-    controller.abort();
-    await runPromise;
+    const entries = [...this.runs.entries()];
+    await Promise.all(entries.map(([id, state]) => this.stopRun(id, state)));
   }
 
   public dispose(): void {
     void this.stop();
   }
 
-  private shouldRun(): boolean {
-    return (
-      this.context.extensionMode !== vscode.ExtensionMode.Test &&
-      this.configStore.isJiraStartupPollingEnabled() &&
-      this.configStore.getEffectiveBackendMode() === 'jiraapi' &&
-      this.configStore.getJiraApiEpicKey().trim().length > 0
-    );
+  /**
+   * Resolve which jiraapi connections (if any) should be polled. When no
+   * connections are configured, fall back to the legacy global jiraapi
+   * settings so existing single-mode setups keep working.
+   */
+  private resolveTargets(): PollingTarget[] {
+    const connections = this.connectionStore?.getConnections() ?? [];
+    const jiraApi = connections.filter(c => c.mode === 'jiraapi');
+    if (jiraApi.length > 0) {
+      return jiraApi
+        .map(c => this.connectionToTarget(c))
+        .filter((t): t is PollingTarget => t !== undefined);
+    }
+
+    // Legacy fallback: single global config.
+    if (
+      this.configStore.getEffectiveBackendMode() !== 'jiraapi' ||
+      this.configStore.getJiraApiEpicKey().trim().length === 0
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: '__global__',
+        label: 'global jiraapi config',
+        baseUrl: this.configStore.getJiraApiBaseUrl(),
+        token: this.configStore.getJiraApiToken(),
+        epicKey: this.configStore.getJiraApiEpicKey()
+      }
+    ];
   }
 
-  private buildRuntimeKey(): string {
+  private connectionToTarget(connection: Connection): PollingTarget | undefined {
+    const settings: Record<string, unknown> = connection.settings ?? {};
+    const epicKey = typeof settings.epicKey === 'string' ? settings.epicKey.trim() : '';
+    if (epicKey.length === 0) {
+      return undefined;
+    }
+    const baseUrl = typeof settings.baseUrl === 'string' ? settings.baseUrl.trim() : undefined;
+    const inlineToken = typeof settings.token === 'string' ? settings.token : undefined;
+    return {
+      id: connection.id,
+      label: `${connection.name} (${connection.id})`,
+      baseUrl: baseUrl && baseUrl.length > 0 ? baseUrl : undefined,
+      // Token may be resolved later from SecretStorage; the resolveToken()
+      // call also falls back to env vars.
+      token: inlineToken,
+      epicKey,
+      connection
+    };
+  }
+
+  private buildRuntimeKey(target: PollingTarget): string {
     return JSON.stringify({
-      backendMode: this.configStore.getEffectiveBackendMode(),
+      id: target.id,
       enabled: this.configStore.isJiraStartupPollingEnabled(),
-      linkedEpicKey: this.configStore.getJiraApiEpicKey(),
+      baseUrl: target.baseUrl,
+      linkedEpicKey: target.epicKey,
       requiredLabel: this.configStore.getJiraPollingRequiredLabel()
     });
   }
 
-  private async start(runtimeKey: string): Promise<void> {
+  private async stopRun(id: string, state: RunState): Promise<void> {
+    state.abortController.abort();
+    await state.runPromise;
+    this.runs.delete(id);
+  }
+
+  private async startRun(target: PollingTarget, runtimeKey: string): Promise<void> {
     try {
       const pollingModule = this.loadPollingModule();
       const configPath = this.context.asAbsolutePath(path.join('JiraPollingService', 'appsettings.json'));
-      const config = pollingModule.loadPollingConfig(configPath, {
-        LinkedEpicKey: this.configStore.getJiraApiEpicKey(),
+      const overrides: PollingConfig = {
+        LinkedEpicKey: target.epicKey,
         RequiredLabel: this.configStore.getJiraPollingRequiredLabel()
-      });
-      const resolvedToken = await this.resolveToken();
+      };
+      if (target.baseUrl) {
+        overrides.BaseUrl = target.baseUrl;
+      }
+      const config = pollingModule.loadPollingConfig(configPath, overrides);
+
+      const resolvedToken = await this.resolveToken(target);
       if (resolvedToken.value) {
         config.Token = resolvedToken.value;
       }
@@ -165,17 +232,17 @@ export class StartupPollingController implements vscode.Disposable {
       try {
         pollingModule.getTokenOrThrow(config);
       } catch (error) {
-        this.appendLine(`Startup polling skipped: ${formatError(error)}`);
+        this.appendLine(`[${target.label}] Startup polling skipped: ${formatError(error)}`);
         return;
       }
 
       this.appendLine(
-        `Starting integrated poller using ${resolvedToken.source} for epic "${config.LinkedEpicKey}" with AI gate label "${config.RequiredLabel}" and status "${config.RequiredStatus}".`
+        `[${target.label}] Starting integrated poller using ${resolvedToken.source} for epic "${config.LinkedEpicKey}" with AI gate label "${config.RequiredLabel}" and status "${config.RequiredStatus}".`
       );
 
       const logger: PollingLogger = {
         info: (message, ...args) => {
-          this.appendLine(util.format(message, ...args));
+          this.appendLine(`[${target.label}] ${util.format(message, ...args)}`);
           if (
             !this.hasShownSuccessNotification &&
             message === 'Poll complete. %d synced issue(s) currently found on epic %s. %d eligible for AI execution.' &&
@@ -186,34 +253,35 @@ export class StartupPollingController implements vscode.Disposable {
           }
         },
         error: (message, ...args) => {
-          this.appendLine(util.format(message, ...args));
+          this.appendLine(`[${target.label}] ${util.format(message, ...args)}`);
         }
       };
 
       const service = new pollingModule.JiraPollingService(config, {
         logger,
         onSync: async event => {
-          this.logSyncEvent(event);
-          await this.onSync?.(event);
+          this.logSyncEvent(target, event);
+          await this.onSync?.({ ...event, connectionId: target.id });
         }
       });
-      this.activeRuntimeKey = runtimeKey;
-      this.abortController = new AbortController();
-      this.runPromise = service
-        .start({ signal: this.abortController.signal })
+      const abortController = new AbortController();
+      const runPromise = service
+        .start({ signal: abortController.signal })
         .catch(error => {
           if (!isAbortError(error)) {
-            this.appendLine(`Polling stopped unexpectedly: ${formatError(error)}`);
+            this.appendLine(`[${target.label}] Polling stopped unexpectedly: ${formatError(error)}`);
           }
         })
         .finally(() => {
-          this.abortController = undefined;
-          this.runPromise = undefined;
-          this.activeRuntimeKey = undefined;
+          // If this is still the active runner for this id, clear it.
+          const current = this.runs.get(target.id);
+          if (current?.abortController === abortController) {
+            this.runs.delete(target.id);
+          }
         });
+      this.runs.set(target.id, { runtimeKey, abortController, runPromise });
     } catch (error) {
-      this.activeRuntimeKey = undefined;
-      this.appendLine(`Failed to start integrated poller: ${formatError(error)}`);
+      this.appendLine(`[${target.label}] Failed to start integrated poller: ${formatError(error)}`);
     }
   }
 
@@ -221,25 +289,26 @@ export class StartupPollingController implements vscode.Disposable {
     this.outputChannel.appendLine(`${JIRA_POLLING_PREFIX} ${message}`);
   }
 
-  private logSyncEvent(event: PollingSyncEvent): void {
+  private logSyncEvent(target: PollingTarget, event: PollingSyncEvent): void {
+    const prefix = `[${target.label}]`;
     this.appendLine(
-      `Sync summary: ${event.issues.length} linked-epic issue(s), ${event.newKeys.length} new, ${event.changedKeys.length} changed, ${event.removedKeys.length} removed, ${event.eligibleIssueKeys.length} AI-eligible.`
+      `${prefix} Sync summary: ${event.issues.length} linked-epic issue(s), ${event.newKeys.length} new, ${event.changedKeys.length} changed, ${event.removedKeys.length} removed, ${event.eligibleIssueKeys.length} AI-eligible.`
     );
 
     if (event.newKeys.length > 0) {
-      this.appendLine(`New issues: ${formatIssueKeyList(event.newKeys)}`);
+      this.appendLine(`${prefix} New issues: ${formatIssueKeyList(event.newKeys)}`);
     }
 
     if (event.changedKeys.length > 0) {
-      this.appendLine(`Changed issues: ${formatIssueKeyList(event.changedKeys)}`);
+      this.appendLine(`${prefix} Changed issues: ${formatIssueKeyList(event.changedKeys)}`);
     }
 
     if (event.removedKeys.length > 0) {
-      this.appendLine(`Removed issues: ${formatIssueKeyList(event.removedKeys)}`);
+      this.appendLine(`${prefix} Removed issues: ${formatIssueKeyList(event.removedKeys)}`);
     }
 
     if (event.eligibleIssueKeys.length > 0) {
-      this.appendLine(`AI-eligible issues: ${formatIssueKeyList(event.eligibleIssueKeys)}`);
+      this.appendLine(`${prefix} AI-eligible issues: ${formatIssueKeyList(event.eligibleIssueKeys)}`);
     }
   }
 
@@ -248,7 +317,20 @@ export class StartupPollingController implements vscode.Disposable {
     return require(modulePath) as PollingModule;
   }
 
-  private async resolveToken(): Promise<ResolvedToken> {
+  private async resolveToken(target: PollingTarget): Promise<ResolvedToken> {
+    // Per-connection secret token wins when available.
+    if (target.connection && this.connectionStore) {
+      const secretToken = await this.connectionStore
+        .getSecret(target.connection.id, 'jiraApiToken')
+        .catch(() => undefined);
+      if (secretToken && secretToken.trim().length > 0) {
+        return { source: 'config', value: secretToken.trim() };
+      }
+    }
+    if (target.token && target.token.trim().length > 0) {
+      return { source: 'config', value: target.token.trim() };
+    }
+
     const processToken = process.env.JIRA_TOKEN?.trim();
     const userToken =
       process.platform === 'win32'
@@ -284,4 +366,20 @@ export class StartupPollingController implements vscode.Disposable {
       this.outputChannel.show(true);
     }
   }
+}
+
+interface PollingTarget {
+  /** Stable id for the runner — connection id, or `__global__` for legacy. */
+  id: string;
+  label: string;
+  baseUrl?: string;
+  token?: string;
+  epicKey: string;
+  connection?: Connection;
+}
+
+interface RunState {
+  runtimeKey: string;
+  abortController: AbortController;
+  runPromise: Promise<void>;
 }

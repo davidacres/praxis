@@ -21,9 +21,9 @@ import type {
   WorkflowTransition
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
+import type { ConnectionStore } from '../config/connectionStore';
+import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../config/connectionScopedConfigStore';
 import { DemoService } from '../demo/demoService';
-import { GitLabBoardService } from '../gitlab/gitLabBoardService';
-import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
 import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
@@ -167,11 +167,14 @@ export class BackendRouter implements IssueTrackerService {
   private readonly _onDidReceiveExternalComment = new vscode.EventEmitter<ExternalCommentEvent>();
   public readonly onDidReceiveExternalComment = this._onDidReceiveExternalComment.event;
   private externalCommentSub?: vscode.Disposable;
+  private readonly perConnectionServices = new Map<string, IssueTrackerService>();
+  private activeConnectionId?: string;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly configStore: AppConfigStore,
-    private readonly output: vscode.OutputChannel
+    private readonly output: vscode.OutputChannel,
+    private readonly connectionStore?: ConnectionStore
   ) {
     this.userWorkspaceStore = new UserWorkspaceStore(context.globalState);
   }
@@ -318,8 +321,83 @@ export class BackendRouter implements IssueTrackerService {
     throw new Error('Sub-task creation is not supported by the current backend.');
   }
 
+  /**
+   * Set the active connection for subsequent per-connection service lookups.
+   * This is called when a board is selected to ensure the right connection's
+   * credentials and settings are used.
+   */
+  public setActiveConnection(connectionId: string | undefined): void {
+    this.activeConnectionId = connectionId;
+  }
+
+  /**
+   * Get the ID of the currently active connection.
+   */
+  public getActiveConnectionId(): string | undefined {
+    return this.activeConnectionId;
+  }
+
+  /**
+   * Get a service scoped to a specific connection.
+   * This creates the appropriate service instance (JiraService, JiraApiService, etc.)
+   * using the connection's stored settings and secrets.
+   */
+  public async serviceFor(connectionId: string): Promise<IssueTrackerService> {
+    // Return cached service for this connection if available
+    const cached = this.perConnectionServices.get(connectionId);
+    if (cached) {
+      return cached;
+    }
+
+    // Load connection from store
+    if (!this.connectionStore) {
+      throw new Error('ConnectionStore not provided to BackendRouter');
+    }
+
+    const connections = await this.connectionStore.getConnections();
+    const connection = connections.find(c => c.id === connectionId);
+    if (!connection) {
+      throw new Error(`Connection not found: ${connectionId}`);
+    }
+
+    // Load connection secrets
+    const secrets = await loadConnectionSecrets(this.context, connection);
+
+    // Create connection-scoped config store
+    const scopedConfigStore = createConnectionScopedConfigStore(
+      this.configStore,
+      connection,
+      secrets
+    );
+
+    // Instantiate service based on connection mode
+    let service: IssueTrackerService;
+    const mode = connection.mode;
+
+    if (mode === 'github' || mode === 'gitlab') {
+      service = new UnsupportedBackendService(mode, scopedConfigStore.getDefaultPageSize());
+    } else if (mode === 'demo') {
+      service = new DemoService(scopedConfigStore);
+    } else if (mode === 'jiraapi') {
+      service = new JiraApiService(this.context, scopedConfigStore, this.output);
+    } else if (mode === 'livefolder') {
+      service = new LiveFolderService(scopedConfigStore);
+    } else if (mode === 'userworkspace') {
+      service = new UserWorkspaceService(scopedConfigStore, this.userWorkspaceStore);
+    } else {
+      // 'jira' mode (OAuth)
+      service = new JiraService(this.context, scopedConfigStore, this.output);
+    }
+
+    // Cache the service
+    this.perConnectionServices.set(connectionId, service);
+    return service;
+  }
+
   public dispose(): void {
     this.disposeActiveService();
+    this.perConnectionServices.forEach(service => service.dispose());
+    this.perConnectionServices.clear();
     this._onDidReceiveExternalComment.dispose();
   }
 
@@ -332,19 +410,17 @@ export class BackendRouter implements IssueTrackerService {
     this.disposeActiveService();
     this.activeMode = configuredMode;
     this.activeService =
-      configuredMode === 'github'
+      configuredMode === 'github' || configuredMode === 'gitlab'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
-        : configuredMode === 'gitlab'
-          ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiraapi'
             ? new JiraApiService(this.context, this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
-          : configuredMode === 'userworkspace'
-            ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-            : new JiraService(this.context, this.configStore, this.output);
+            : configuredMode === 'userworkspace'
+              ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
+              : new JiraService(this.context, this.configStore, this.output);
     if (this.activeService instanceof LiveFolderService) {
       this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
         this._onDidReceiveExternalComment.fire(event)
