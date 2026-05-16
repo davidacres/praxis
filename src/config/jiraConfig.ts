@@ -19,6 +19,7 @@ import type {
 } from '../types';
 
 const CONFIG_ROOT = 'ticketManager';
+const GITLAB_API_KEY_SECRET = 'ticketManager.gitlabApiKey';
 const SECRET_ENV_KEY = 'ticketManager.secretEnv';
 const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
 const SECRET_WORKSPACE_INPUTS_KEY = 'ticketManager.workspaceMcpInputs';
@@ -542,8 +543,26 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<'api' | 'mcp'>('gitlabConnectionType', 'api');
   }
 
+  // Only retained for one-time migration from settings to SecretStorage.
   public getGitLabApiKey(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabApiKey', '');
+  }
+
+  public async getGitLabApiKeyFromSecrets(context: vscode.ExtensionContext): Promise<string> {
+    const fromSecrets = await context.secrets.get(GITLAB_API_KEY_SECRET);
+    if (fromSecrets !== undefined) {
+      return fromSecrets.trim();
+    }
+    // Fallback to legacy settings value during migration
+    return this.getGitLabApiKey().trim();
+  }
+
+  public async storeGitLabApiKey(context: vscode.ExtensionContext, value: string): Promise<void> {
+    await context.secrets.store(GITLAB_API_KEY_SECRET, value);
+  }
+
+  public async deleteGitLabApiKeySecret(context: vscode.ExtensionContext): Promise<void> {
+    await context.secrets.delete(GITLAB_API_KEY_SECRET);
   }
 
   public getGitLabProjectPath(): string {
@@ -585,6 +604,7 @@ export class AppConfigStore {
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabConnectionType', value, target);
   }
 
+  // Use storeGitLabApiKey/deleteGitLabApiKeySecret for new code. Kept only to clear legacy settings value.
   public async setGitLabApiKey(value: string): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabApiKey', value, target);

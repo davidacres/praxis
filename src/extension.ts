@@ -579,6 +579,12 @@ export async function activate(
     context.workspaceState.get<Record<string, string>>(pollingStatusSnapshotStateKey) ?? {};
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
+  // One-time migration: move GitLab API key from settings into SecretStorage
+  const legacyGitLabKey = configStore.getGitLabApiKey().trim();
+  if (legacyGitLabKey) {
+    await configStore.storeGitLabApiKey(context, legacyGitLabKey);
+    await configStore.setGitLabApiKey('');
+  }
   const aiSessionManager = new AiSessionManager(context.workspaceState);
   const startupPollingController = new StartupPollingController(
     context,
@@ -665,8 +671,8 @@ export async function activate(
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
   const newProjectWizardPanel = new NewProjectWizardPanel();
   const setupWizardPanel = new SetupWizardPanel();
-  const setupSidebarViewProvider = new SetupSidebarViewProvider();
-  const workModeSetupSidebarViewProvider = new SetupSidebarViewProvider();
+  const setupSidebarViewProvider = new SetupSidebarViewProvider(context);
+  const workModeSetupSidebarViewProvider = new SetupSidebarViewProvider(context);
   const backendService = new BackendRouter(context, configStore, outputChannel);
   const ticketManagerStatusBar = new TicketManagerStatusBar(
     configStore,
@@ -2959,9 +2965,9 @@ export async function activate(
     }
 
     const baseUrl = configStore.getGitLabUrl().trim() || inferredRemote.baseUrl;
-    const token = configStore.getGitLabApiKey().trim() || process.env.GITLAB_TOKEN?.trim() || '';
+    const token = (await configStore.getGitLabApiKeyFromSecrets(context)).trim() || process.env.GITLAB_TOKEN?.trim() || '';
     if (!token) {
-      skipReason = 'GitLab MR automation skipped: configure ticketManager.gitlabApiKey or set GITLAB_TOKEN.';
+      skipReason = 'GitLab MR automation skipped: configure a GitLab API key via Setup or set GITLAB_TOKEN.';
       if (skipReason !== lastGitLabAutomationSkipReason) {
         outputChannel.appendLine(`[GitLab MR] ${skipReason}`);
         lastGitLabAutomationSkipReason = skipReason;

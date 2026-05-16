@@ -957,7 +957,8 @@
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "GitLab Personal Access Token for direct API access."
+          "markdownDeprecationMessage": "**Deprecated**: The GitLab API key is now stored securely in the OS keychain via VS Code SecretStorage. This setting is read once on startup for migration and then cleared automatically. Use the Setup panel to re-enter your key.",
+          "description": "Deprecated. GitLab Personal Access Token — migrated to SecretStorage on first load."
         },
         "ticketManager.gitlabMcpCommand": {
           "type": "string",

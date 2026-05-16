@@ -163,7 +163,10 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private setupStep: 0 | 1 = 0;
   private setupMode: string | undefined;
   private setupFields: Record<string, string> = {};
+  private hasGitLabApiKeySecret = false;
   private readonly disposables: vscode.Disposable[] = [];
+
+  public constructor(private readonly context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -636,9 +639,12 @@ ${fields}
     let connFields = '';
     if (connType === 'api') {
       const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
+      const keyPlaceholder = (!apiKey && this.hasGitLabApiKeySecret)
+        ? '(configured — leave blank to keep)'
+        : 'API key or personal access token';
       connFields = `<div class="form-group">
   <label>API Key</label>
-  <input type="password" data-field="gitlabApiKey" value="${apiKey}" />
+  <input type="password" data-field="gitlabApiKey" value="${apiKey}" placeholder="${keyPlaceholder}" />
 </div>`;
     } else {
       const cmd = escapeHtml(this.setupFields.gitlabMcpCommand ?? '');
@@ -804,6 +810,9 @@ ${connFields}`;
           if (mode === 'gitlab' && !this.setupFields.gitlabConnectionType) {
             this.setupFields.gitlabConnectionType = 'api';
           }
+          if (mode === 'gitlab') {
+            this.hasGitLabApiKeySecret = !!(await this.context.secrets.get('ticketManager.gitlabApiKey'));
+          }
           if (mode === 'jira' || mode === 'jiraapi') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
@@ -916,8 +925,10 @@ ${connFields}`;
           config.update('gitlabSelectedBoardRefs', undefined, target),
           config.update('gitlabMcpCommand', undefined, target),
           config.update('gitlabMcpArgs', undefined, target),
-          config.update('backendMode', undefined, target)
+          config.update('backendMode', undefined, target),
+          this.context.secrets.delete('ticketManager.gitlabApiKey')
         ]);
+        this.hasGitLabApiKeySecret = false;
         this.setupStep = 0;
         this.setupMode = undefined;
         this.setupFields = {};
@@ -983,8 +994,9 @@ ${connFields}`;
         }
         const glConn = this.setupFields.gitlabConnectionType || 'api';
         await updateSetting('gitlabConnectionType', glConn);
-        if (glConn === 'api' && this.setupFields.gitlabApiKey) {
-          await updateSetting('gitlabApiKey', this.setupFields.gitlabApiKey);
+        if (glConn === 'api' && this.setupFields.gitlabApiKey?.trim()) {
+          await this.context.secrets.store('ticketManager.gitlabApiKey', this.setupFields.gitlabApiKey.trim());
+          this.hasGitLabApiKeySecret = true;
         } else if (glConn === 'mcp') {
           if (this.setupFields.gitlabMcpCommand) {
             await updateSetting('gitlabMcpCommand', this.setupFields.gitlabMcpCommand);

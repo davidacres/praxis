@@ -371,7 +371,8 @@ export class GitLabBoardService implements IssueTrackerService {
     private readonly configStore: AppConfigStore,
     private readonly output: vscode.OutputChannel,
     private readonly fetchImpl: typeof fetch = globalThis.fetch,
-    private readonly inferProjectRemote: (repoPath: string) => Promise<GitLabProjectRemote> = inferGitLabProjectFromRepo
+    private readonly inferProjectRemote: (repoPath: string) => Promise<GitLabProjectRemote> = inferGitLabProjectFromRepo,
+    private readonly context?: vscode.ExtensionContext
   ) {}
 
   public getDefaultPageSize(): number {
@@ -697,7 +698,10 @@ export class GitLabBoardService implements IssueTrackerService {
     if (this.configStore.getGitLabConnectionType() !== 'api') {
       throw new Error('GitLab boards currently support direct GitLab API connections only.');
     }
-    const token = this.configStore.getGitLabApiKey().trim() || process.env.GITLAB_TOKEN?.trim() || '';
+    const token = (this.context
+      ? await this.configStore.getGitLabApiKeyFromSecrets(this.context)
+      : this.configStore.getGitLabApiKey().trim()
+    ) || process.env.GITLAB_TOKEN?.trim() || '';
     if (!token) {
       throw new Error('No GitLab API key is configured.');
     }

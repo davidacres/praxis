@@ -23,6 +23,7 @@ import type {
 import { AppConfigStore } from '../config/jiraConfig';
 import { DemoService } from '../demo/demoService';
 import { GitLabBoardService } from '../gitlab/gitLabBoardService';
+import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
 import { JiraApiService } from '../jira/jiraApiService';
 import { JiraService } from '../jira/jiraService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
@@ -334,7 +335,7 @@ export class BackendRouter implements IssueTrackerService {
       configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
         : configuredMode === 'gitlab'
-          ? new GitLabBoardService(this.configStore, this.output)
+          ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiraapi'
