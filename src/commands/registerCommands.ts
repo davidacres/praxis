@@ -1168,6 +1168,52 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           return;
         }
 
+        if (deps.backendService.mode === 'gitlab') {
+          const projects = await deps.backendService.getProjects();
+          if (projects.length === 0) {
+            await vscode.window.showWarningMessage('No accessible GitLab projects found.');
+            return;
+          }
+
+          const pickedProject = await vscode.window.showQuickPick(
+            projects.map(p => ({ label: p.key, description: p.name, project: p })),
+            { title: 'Select GitLab Project', ignoreFocusOut: true }
+          );
+          if (!pickedProject) { return; }
+
+          const boards = await deps.backendService.getBoards({
+            projectKeys: [pickedProject.project.key],
+            types: [],
+            searchText: ''
+          });
+          if (boards.length === 0) {
+            await vscode.window.showWarningMessage(`No boards found in ${pickedProject.project.key}.`);
+            return;
+          }
+
+          const pickedBoard = await vscode.window.showQuickPick(
+            boards.map(b => ({ label: b.name, description: b.projectKey ?? '', board: b })),
+            { title: `Boards in ${pickedProject.project.key}`, ignoreFocusOut: true }
+          );
+          if (!pickedBoard) { return; }
+
+          // Board ID format: "gitlab:{projectId}:{boardId}"
+          const boardNumericId = Number.parseInt(pickedBoard.board.id.split(':')[2] ?? '');
+          if (Number.isNaN(boardNumericId)) {
+            await vscode.window.showErrorMessage('Could not parse board ID.');
+            return;
+          }
+
+          const ref = `${pickedBoard.board.projectKey}::${boardNumericId}`;
+          const currentRefs = deps.configStore.getGitLabSelectedBoardRefs();
+          if (!currentRefs.includes(ref)) {
+            await deps.configStore.setGitLabSelectedBoardRefs([...currentRefs, ref]);
+          }
+          await refreshViews(deps);
+          await vscode.window.showInformationMessage(`Added board "${pickedBoard.board.name}".`);
+          return;
+        }
+
         const projects = await deps.backendService.getProjects();
         if (projects.length === 0) {
           await vscode.window.showWarningMessage('No projects are available.');
