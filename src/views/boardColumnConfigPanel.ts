@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DEFAULT_MAX_AGE_WEEKS } from '../board/boardIssueFilters';
 import { defaultStatusDotHex, sanitizeStatusColors } from '../board/statusColors';
 import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
 import type { BoardColumnStore } from '../state/boardColumnStore';
@@ -21,6 +22,13 @@ function createNonce(): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
+
+type BoardNameUpdater = (boardId: string, name: string) => Promise<void>;
+type BoardQueryUpdater = (boardId: string, jql: string) => Promise<void>;
+type BoardSettingsUpdater = (
+  boardId: string,
+  input: { name: string; jql?: string }
+) => Promise<void>;
 
 function normalizeStatuses(statuses: string[]): string[] {
   const unique: string[] = [];
@@ -69,13 +77,29 @@ function buildColumnRows(
 
 export class BoardColumnConfigPanel implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
+  private boardNameUpdater?: BoardNameUpdater;
+  private boardQueryUpdater?: BoardQueryUpdater;
+  private boardSettingsUpdater?: BoardSettingsUpdater;
 
   public constructor(private readonly columnStore: BoardColumnStore) {}
 
+  public setBoardNameUpdater(updater: BoardNameUpdater): void {
+    this.boardNameUpdater = updater;
+  }
+
+  public setBoardQueryUpdater(updater: BoardQueryUpdater): void {
+    this.boardQueryUpdater = updater;
+  }
+
+  public setBoardSettingsUpdater(updater: BoardSettingsUpdater): void {
+    this.boardSettingsUpdater = updater;
+  }
+
   public async open(board: Board, details: BoardDetails): Promise<void> {
     this.ensurePanel();
-    const prefs = this.columnStore.getPreferences(board.id);
     const defaultWorkflow = getDefaultStatusColumnOrder(details);
+    await this.columnStore.normalizeLegacyPreferences(board.id, defaultWorkflow);
+    const prefs = this.columnStore.getPreferences(board.id);
     const workflowRows = buildWorkflowRows(prefs, defaultWorkflow);
     const columnRows = buildColumnRows(prefs, workflowRows);
 
@@ -90,6 +114,8 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     const payload = {
       boardId: board.id,
       boardName: board.name,
+      boardType: board.type,
+      boardQuery: isRecord(board.raw) && typeof board.raw.jql === 'string' ? board.raw.jql : '',
       defaultWorkflow,
       useCustomWorkflow: prefs.workflowStatuses.length > 0,
       useCustomColumns: prefs.orderedStatuses.length > 0,
@@ -100,6 +126,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       issueFilterAssignee: prefs.issueFilterAssignee ?? '',
       issueFilterEpicKey: prefs.issueFilterEpicKey ?? '',
       issueFilterStatuses: prefs.issueFilterStatuses ?? [],
+      maxAgeWeeks: prefs.maxAgeWeeks ?? DEFAULT_MAX_AGE_WEEKS,
       defaultStatusHex,
       statusColorsState
     };
@@ -148,6 +175,13 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
 
     if (type === 'save') {
       const boardId = typeof message.boardId === 'string' ? message.boardId : '';
+      const boardName = typeof message.boardName === 'string' ? message.boardName.trim() : '';
+      const originalBoardName =
+        typeof message.originalBoardName === 'string' ? message.originalBoardName.trim() : '';
+      const boardQuery = typeof message.boardQuery === 'string' ? message.boardQuery.trim() : '';
+      const originalBoardQuery =
+        typeof message.originalBoardQuery === 'string' ? message.originalBoardQuery.trim() : '';
+      const boardType = typeof message.boardType === 'string' ? message.boardType : '';
       const useCustomWorkflow = Boolean(message.useCustomWorkflow);
       const useCustomColumns = Boolean(message.useCustomColumns);
       const defaultWorkflow = Array.isArray(message.defaultWorkflow)
@@ -199,6 +233,28 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         return;
       }
 
+      if (!boardName) {
+        void vscode.window.showWarningMessage('Board name is required.');
+        return;
+      }
+
+      if (
+        this.boardSettingsUpdater &&
+        (boardName !== originalBoardName || (boardType === 'jql' && boardQuery !== originalBoardQuery))
+      ) {
+        try {
+          await this.boardSettingsUpdater(boardId, {
+            name: boardName,
+            jql: boardType === 'jql' ? boardQuery : undefined
+          });
+        } catch (error) {
+          void vscode.window.showErrorMessage(
+            error instanceof Error ? error.message : String(error)
+          );
+          return;
+        }
+      }
+
       const nextPrefs: BoardColumnPreferences = {
         workflowStatuses:
           useCustomWorkflow && !arraysEqual(workflowStatuses, defaultWorkflow) ? workflowStatuses : [],
@@ -219,6 +275,13 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       if (issueFilterStatuses.length > 0) {
         nextPrefs.issueFilterStatuses = issueFilterStatuses;
       }
+      const maxAgeWeeks =
+        typeof message.maxAgeWeeks === 'number' && Number.isFinite(message.maxAgeWeeks)
+          ? Math.max(0, Math.floor(message.maxAgeWeeks))
+          : DEFAULT_MAX_AGE_WEEKS;
+      if (maxAgeWeeks !== DEFAULT_MAX_AGE_WEEKS) {
+        nextPrefs.maxAgeWeeks = maxAgeWeeks;
+      }
       if (statusColorsOut) {
         nextPrefs.statusColors = statusColorsOut;
       }
@@ -229,6 +292,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         Boolean(nextPrefs.issueFilterAssignee) ||
         Boolean(nextPrefs.issueFilterEpicKey) ||
         (nextPrefs.issueFilterStatuses && nextPrefs.issueFilterStatuses.length > 0) ||
+        nextPrefs.maxAgeWeeks !== undefined ||
         Boolean(nextPrefs.statusColors && Object.keys(nextPrefs.statusColors).length > 0);
 
       if (
@@ -254,6 +318,8 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   private getHtml(payload: {
     boardId: string;
     boardName: string;
+    boardType: string;
+    boardQuery: string;
     defaultWorkflow: string[];
     useCustomWorkflow: boolean;
     useCustomColumns: boolean;
@@ -264,6 +330,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     issueFilterAssignee: string;
     issueFilterEpicKey: string;
     issueFilterStatuses: string[];
+    maxAgeWeeks: number;
     defaultStatusHex: Record<string, string>;
     statusColorsState: Record<string, string>;
   }): string {
@@ -456,7 +523,13 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     }
   </style>
 </head>
-<body>
+  <body>
+  <label class="field-label" for="boardName">Board name</label>
+  <input type="text" id="boardName" class="field-input" value="${escapeHtml(payload.boardName)}" />
+  ${payload.boardType === 'jql' ? `
+  <label class="field-label" for="boardQuery">Board JQL</label>
+  <input type="text" id="boardQuery" class="field-input" value="${escapeHtml(payload.boardQuery)}" placeholder="project = KAMAI AND issuetype in (Story, Task)" />
+  <p class="helper">This JQL defines which issues appear on the board.</p>` : ''}
   <h1>${escapeHtml(payload.boardName)}</h1>
   <p>Set this board's workflow statuses and the columns you want to see. The workflow order becomes the default board layout; column customization can then hide or reorder those statuses locally.</p>
 
@@ -495,6 +568,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     <input type="text" id="issueFilterEpicKey" class="field-input" value="${escapeHtml(
       payload.issueFilterEpicKey
     )}" placeholder="e.g. APP-100 or summary text" />
+    <label class="field-label" for="maxAgeWeeks">Hide tickets not updated within (weeks)</label>
+    <input type="number" id="maxAgeWeeks" class="field-input" style="max-width:120px;" min="0" step="1" value="${payload.maxAgeWeeks}" placeholder="0 = show all" />
+    <span class="helper">0 = show all tickets regardless of age</span>
     <p class="helper" style="margin-top:12px;">Include tickets in these statuses</p>
     <div id="filterStatusList" class="list"></div>
   </section>
@@ -870,6 +946,10 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     document.getElementById('resetBtn').addEventListener('click', () => {
       useCustomWorkflowEl.checked = false;
       useCustomColumnsEl.checked = false;
+      document.getElementById('boardName').value = initial.boardName;
+      if (document.getElementById('boardQuery')) {
+        document.getElementById('boardQuery').value = initial.boardQuery || '';
+      }
       workflowRows = initial.defaultWorkflow.slice();
       columnRows = workflowRows.map(status => ({ status, checked: true }));
       projectPillHexEl.value = '';
@@ -891,6 +971,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     });
 
     document.getElementById('saveBtn').addEventListener('click', () => {
+      const boardName = String(document.getElementById('boardName').value || '').trim();
+      const boardQueryInput = document.getElementById('boardQuery');
+      const boardQuery = boardQueryInput ? String(boardQueryInput.value || '').trim() : '';
       const workflowStatuses = normalizeStatuses(workflowRows);
       if (useCustomWorkflowEl.checked && workflowStatuses.length === 0) {
         alert('Add at least one workflow status, or turn off workflow customization.');
@@ -919,6 +1002,11 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       vscodeApi.postMessage({
         type: 'save',
         boardId: initial.boardId,
+        boardName,
+        originalBoardName: initial.boardName,
+        boardType: initial.boardType,
+        boardQuery,
+        originalBoardQuery: initial.boardQuery,
         defaultWorkflow: initial.defaultWorkflow,
         useCustomWorkflow: useCustomWorkflowEl.checked,
         useCustomColumns: useCustomColumnsEl.checked,
@@ -928,6 +1016,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         swimLaneGroupBy: document.getElementById('swimLaneSelect').value,
         issueFilterAssignee: document.getElementById('issueFilterAssignee').value.trim(),
         issueFilterEpicKey: document.getElementById('issueFilterEpicKey').value.trim(),
+        maxAgeWeeks: parseInt(document.getElementById('maxAgeWeeks').value, 10) || 0,
         issueFilterStatuses: issueFilterStatusesPayload,
         statusColors: statusColorsMap
       });

@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { AI_PROVIDER_LABELS } from '../ai/aiProviderSetup';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { BackendRouter } from '../backends/backendRouter';
+import type { ConnectionStore } from '../config/connectionStore';
 import { AppConfigStore } from '../config/jiraConfig';
 import type { AiProvider, BackendMode, ConnectionCheck } from '../types';
 
@@ -9,6 +11,8 @@ type StatusTone = 'ok' | 'warning' | 'error' | 'loading';
 
 export interface TicketManagerStatusSnapshot {
   backendMode?: BackendMode;
+  /** Human-readable label of the active connection (when multi-connection mode is active). */
+  connectionLabel?: string;
   connection?: ConnectionCheck;
   aiProviders: AiProvider[];
   defaultProvider: AiProvider | 'none';
@@ -36,11 +40,11 @@ function toErrorMessage(error: unknown): string {
 export function getBackendModeLabel(mode: BackendMode | undefined): string {
   switch (mode) {
     case 'jira':
-      return 'Jira';
+      return 'Jira Cloud';
+    case 'jiraapi':
+      return 'Jira Cloud';
     case 'demo':
       return 'Demo';
-    case 'file':
-      return 'File';
     case 'livefolder':
       return 'Live Folder';
     case 'userworkspace':
@@ -147,7 +151,7 @@ function getSessionAttentionSummary(snapshot: TicketManagerStatusSnapshot): {
 export function buildTicketManagerStatusPresentation(
   snapshot: TicketManagerStatusSnapshot
 ): TicketManagerStatusPresentation {
-  const backendLabel = getBackendModeLabel(snapshot.backendMode);
+  const backendLabel = snapshot.connectionLabel ?? getBackendModeLabel(snapshot.backendMode);
   const aiSummary = getAiSummary(snapshot);
   const sessionAttention = getSessionAttentionSummary(snapshot);
 
@@ -198,7 +202,7 @@ export function buildTicketManagerStatusPresentation(
     ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
     '',
-    '[Open Active Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
+    '[Open Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
   ].filter((line): line is string => line !== undefined);
 
   const sessionAttentionSuffix = sessionAttention.shortLabel
@@ -225,7 +229,9 @@ export class TicketManagerStatusBar implements vscode.Disposable {
   public constructor(
     private readonly configStore: AppConfigStore,
     private readonly backendService: IssueTrackerService,
-    private readonly aiSessionManager?: AiSessionManager
+    private readonly aiSessionManager?: AiSessionManager,
+    private readonly connectionStore?: ConnectionStore,
+    private readonly backendRouter?: BackendRouter
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.name = 'Ticket Manager Status';
@@ -299,6 +305,12 @@ export class TicketManagerStatusBar implements vscode.Disposable {
     this.render();
   }
 
+  /** Re-pull static state (active connection, backend mode, AI providers) and re-render without network I/O. */
+  public resync(): void {
+    this.syncStaticState();
+    this.render();
+  }
+
   public dispose(): void {
     for (const disposable of this.disposables) {
       disposable.dispose();
@@ -308,9 +320,25 @@ export class TicketManagerStatusBar implements vscode.Disposable {
 
   private syncStaticState(): void {
     this.snapshot.backendMode = this.configStore.getBackendMode();
+    this.snapshot.connectionLabel = this.resolveActiveConnectionLabel();
     this.snapshot.aiProviders = this.configStore.getConfiguredAiProviders();
     this.snapshot.defaultProvider = this.configStore.getAiDefaultProvider();
     this.syncSessionState();
+  }
+
+  private resolveActiveConnectionLabel(): string | undefined {
+    const activeId = this.backendRouter?.getActiveConnectionId();
+    if (!activeId || !this.connectionStore) {
+      return undefined;
+    }
+    const connection = this.connectionStore.getConnection(activeId);
+    if (!connection) {
+      return undefined;
+    }
+    // Also update backendMode so other UI bits (icon tone, etc.) reflect
+    // the active connection's backend rather than the legacy global mode.
+    this.snapshot.backendMode = connection.mode;
+    return connection.name;
   }
 
   private syncSessionState(): void {

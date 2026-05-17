@@ -4,7 +4,7 @@ import type { AiProvider } from '../types';
 const CONFIG_ROOT = 'ticketManager';
 const AI_SETTINGS_TARGET = vscode.ConfigurationTarget.Global;
 
-export type ConfigurableAiProvider = AiProvider | 'none';
+export type ConfigurableAiProvider = AiProvider | 'claude-cli' | 'none';
 
 export interface AiConfigurationPromptResult {
   status: 'configured' | 'skipped' | 'cancelled';
@@ -18,11 +18,12 @@ export interface AiProviderSetupOption {
   detail?: string;
 }
 
-export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
+export const AI_PROVIDER_LABELS: Record<Exclude<ConfigurableAiProvider, 'none'>, string> = {
   openai: 'OpenAI',
   claude: 'Claude (Anthropic)',
   'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK'
+  'copilot-cli': 'GitHub Copilot SDK',
+  'claude-cli': 'Claude Code CLI'
 };
 
 export function buildAiProviderSetupOptions(): AiProviderSetupOption[] {
@@ -50,6 +51,12 @@ export function buildAiProviderSetupOptions(): AiProviderSetupOption[] {
       label: AI_PROVIDER_LABELS['copilot-cli'],
       description: 'Use the GitHub Copilot SDK',
       detail: 'Uses your existing GitHub Copilot authentication on this machine for reviews, @copilot replies, and agent tasks.'
+    },
+    {
+      provider: 'claude-cli',
+      label: AI_PROVIDER_LABELS['claude-cli'],
+      description: 'Use the Claude Code CLI for agent tasks',
+      detail: 'Uses Claude Code CLI on this machine for agent tasks with your Anthropic API key.'
     },
     {
       provider: 'none',
@@ -214,6 +221,23 @@ export async function promptToConfigureDefaultAiProvider(): Promise<AiConfigurat
         currentAgentName || AI_PROVIDER_LABELS.claude,
         AI_SETTINGS_TARGET
       ),
+      configuration.update('ai.defaultProvider', provider, AI_SETTINGS_TARGET)
+    ]);
+    return { status: 'configured', provider };
+  }
+
+  if (provider === 'claude-cli') {
+    const cliPath = await promptForPathValue(
+      'ai.claudeCliPath',
+      'Ticket Manager: Claude Code CLI Path',
+      'Enter the path to the Claude Code CLI executable to use for AI tasks.'
+    );
+    if (cliPath === undefined) {
+      return { status: 'cancelled', provider };
+    }
+
+    await Promise.all([
+      configuration.update('ai.claudeCliPath', cliPath, AI_SETTINGS_TARGET),
       configuration.update('ai.defaultProvider', provider, AI_SETTINGS_TARGET)
     ]);
     return { status: 'configured', provider };

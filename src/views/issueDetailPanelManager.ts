@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
+import type { AiSessionManager } from '../ai/aiSessionManager';
+import {
+  discoverWorkspaceAgentWorkflows
+} from '../ai/agentWorkflowCatalog';
+import type { AgentWorkflowReference, FeatureSubTaskRecord } from '../ai/agentTypes';
+import type { AiProvider, IssueDetails, IssueSummary, SubTaskSummary, WorkflowTransition } from '../types';
 import {
   formatParentReference,
   getParentRule,
@@ -37,6 +42,8 @@ function pillToken(label: string | undefined): string {
       return 'epic';
     case 'feature':
       return 'feature';
+    case 'idea':
+      return 'idea';
     case 'story':
       return 'story';
     case 'subtask':
@@ -101,6 +108,11 @@ function renderSelectOptions(current: string | undefined, defaults: string[]): s
     .join('');
 }
 
+interface DetailAiAssignOption {
+  provider: AiProvider;
+  label: string;
+}
+
 export class IssueDetailPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private panelIssueKey?: string;
@@ -108,20 +120,38 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private details?: IssueDetails;
   private transitions: WorkflowTransition[] = [];
   private parentItems: IssueSummary[] = [];
+  private availableWorkflows: AgentWorkflowReference[] = [];
+  private subTasks: SubTaskSummary[] = [];
+  private featureSubTaskRecords: FeatureSubTaskRecord[] = [];
   private parentItemsError?: string;
   private loading = false;
   private errorMessage?: string;
   private requestGeneration = 0;
+  private readonly disposables: vscode.Disposable[] = [];
+  private aiAssignOptions: DetailAiAssignOption[] = [];
 
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
   public constructor(
     private readonly backendService: IssueTrackerService,
+    private readonly aiSessionManager: AiSessionManager,
     private readonly onAfterTransition: () => Promise<void>
-  ) {}
+  ) {
+    this.disposables.push(
+      this.aiSessionManager.onDidChangeWorkflowAssignment(({ issueKey }) => {
+        if (this.activeIssueKey === issueKey && this.panel) {
+          void this.refreshIfShowing(issueKey);
+        }
+      })
+    );
+  }
 
   public setCommentPlaceholder(text: string): void {
     this.commentPlaceholder = text;
+  }
+
+  public setAiAssignOptions(options: DetailAiAssignOption[]): void {
+    this.aiAssignOptions = [...options];
   }
 
   public async open(issueKey: string): Promise<void> {
@@ -167,6 +197,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.details = undefined;
     this.transitions = [];
     this.parentItems = [];
+    this.availableWorkflows = [];
+    this.subTasks = [];
+    this.featureSubTaskRecords = [];
     this.parentItemsError = undefined;
     this.loading = false;
     this.errorMessage = undefined;
@@ -177,6 +210,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   }
 
   public dispose(): void {
+    for (const disposable of this.disposables) {
+      disposable.dispose();
+    }
     const panel = this.panel;
     this.resetPanelState();
     panel?.dispose();
@@ -205,7 +241,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
 
     if (type === 'assignToAi') {
-      await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+      const provider = asString(message.provider) as AiProvider | undefined;
+      if (provider) {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey, provider);
+      } else {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+      }
       return;
     }
 
@@ -231,14 +272,22 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         const assignee = asString(message.assignee) ?? '';
         const priority = asString(message.priority);
         const issueType = asString(message.issueType);
+        const model = asString(message.model);
+        const severity = asString(message.severity);
+        const reportedBy = asString(message.reportedBy);
+        const ideaTranscript = asString(message.ideaTranscript) ?? '';
         const transitionId = asString(message.transitionId) ?? undefined;
         await this.backendService.updateIssue(this.activeIssueKey, {
           summary,
           description,
+          ideaTranscript,
           parentKey: parentKey.trim() || null,
           assignee: assignee.trim() || null,
           priority,
-          issueType
+          issueType,
+          model,
+          severity,
+          reportedBy
         });
         if (transitionId) {
           await this.backendService.transitionIssue(this.activeIssueKey, transitionId);
@@ -255,6 +304,122 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           error: error instanceof Error ? error.message : String(error)
         });
       }
+      return;
+    }
+
+    if (type === 'setWorkflowPack') {
+      try {
+        const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
+        if (!workflowInstructionsPath) {
+          const assignment = this.aiSessionManager.setIssueWorkflowAssignment(this.activeIssueKey, undefined, {
+            source: 'manual',
+            reason: 'User explicitly selected "No workflow pack".'
+          });
+          await this.panel?.webview.postMessage({
+            type: 'setWorkflowPackResult',
+            ok: true,
+            assignment: {
+              name: 'No workflow pack',
+              source: this.formatWorkflowAssignmentSource(assignment.source),
+              reason: assignment.reason ?? ''
+            }
+          });
+          return;
+        }
+
+        const workflow = this.findWorkflowChoice(this.activeIssueKey, workflowInstructionsPath);
+        if (!workflow) {
+          throw new Error('The selected workflow pack is no longer available. Refresh the issue details and try again.');
+        }
+
+        const assignment = this.aiSessionManager.setIssueWorkflowAssignment(this.activeIssueKey, workflow, {
+          source: 'manual'
+        });
+        await this.panel?.webview.postMessage({
+          type: 'setWorkflowPackResult',
+          ok: true,
+          assignment: {
+            name: assignment.workflow?.name ?? 'No workflow pack',
+            source: this.formatWorkflowAssignmentSource(assignment.source),
+            reason: assignment.reason ?? ''
+          }
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'setWorkflowPackResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    if (type === 'setModel') {
+      try {
+        const model = asString(message.model)?.trim() ?? '';
+        if (model) {
+          this.aiSessionManager.setIssueModelOverride(this.activeIssueKey, model);
+        } else {
+          this.aiSessionManager.removeIssueModelOverride(this.activeIssueKey);
+        }
+        await this.panel?.webview.postMessage({
+          type: 'setModelResult',
+          ok: true,
+          model
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'setModelResult',
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    if (type === 'assignSubTaskWorkflow') {
+      const subTaskKey = asString(message.subTaskKey)?.trim();
+      const workflowInstructionsPath = asString(message.workflowInstructionsPath)?.trim() ?? '';
+      if (!subTaskKey) {
+        return;
+      }
+
+      try {
+        if (!workflowInstructionsPath) {
+          this.aiSessionManager.setIssueWorkflowAssignment(subTaskKey, undefined, {
+            source: 'manual',
+            reason: 'User explicitly selected "No workflow pack" for sub-task.'
+          });
+        } else {
+          const workflow = this.findWorkflowChoice(subTaskKey, workflowInstructionsPath);
+          if (workflow) {
+            this.aiSessionManager.setIssueWorkflowAssignment(subTaskKey, workflow, {
+              source: 'manual'
+            });
+          }
+        }
+        await this.panel?.webview.postMessage({
+          type: 'assignSubTaskWorkflowResult',
+          ok: true,
+          subTaskKey
+        });
+      } catch (error) {
+        await this.panel?.webview.postMessage({
+          type: 'assignSubTaskWorkflowResult',
+          ok: false,
+          subTaskKey,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      return;
+    }
+
+    if (type === 'startSubTaskDelivery') {
+      const subTaskKey = asString(message.subTaskKey)?.trim();
+      if (!subTaskKey) {
+        return;
+      }
+      await vscode.commands.executeCommand('ticketManager.startSubTaskDelivery', this.activeIssueKey, subTaskKey);
       return;
     }
 
@@ -289,9 +454,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.errorMessage = undefined;
 
     try {
-      const [issue, transitions] = await Promise.all([
+      const [issue, transitions, availableWorkflows] = await Promise.all([
         this.backendService.getIssue(issueKey),
-        this.backendService.getTransitions(issueKey)
+        this.backendService.getTransitions(issueKey),
+        discoverWorkspaceAgentWorkflows(this.getWorkspaceRoot())
       ]);
 
       let parentItems: IssueSummary[] = [];
@@ -321,9 +487,26 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         return;
       }
 
-      this.details = { ...issue, transitions };
+      // Fetch sub-tasks if the backend supports it
+      let subTasks: SubTaskSummary[] = [];
+      if (this.backendService.getSubTasks) {
+        try {
+          subTasks = await this.backendService.getSubTasks(issueKey);
+        } catch {
+          subTasks = [];
+        }
+      }
+
+      // Get feature decomposition records from session manager
+      const agentSession = this.aiSessionManager.getAgentSession(issueKey);
+      const featureSubTaskRecords = agentSession?.delivery?.featureDecomposition?.subTasks ?? [];
+
+      this.details = { ...issue, transitions, subTasks };
       this.transitions = transitions;
       this.parentItems = parentItems;
+      this.availableWorkflows = availableWorkflows;
+      this.subTasks = subTasks;
+      this.featureSubTaskRecords = featureSubTaskRecords;
       this.parentItemsError = parentItemsError;
       this.loading = false;
     } catch (error) {
@@ -336,8 +519,155 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       this.details = undefined;
       this.transitions = [];
       this.parentItems = [];
+      this.availableWorkflows = [];
+      this.subTasks = [];
+      this.featureSubTaskRecords = [];
       this.parentItemsError = undefined;
     }
+  }
+
+  private getWorkspaceRoot(): string | undefined {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  }
+
+  private getWorkflowChoices(issueKey: string): AgentWorkflowReference[] {
+    const choices = [...this.availableWorkflows];
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    if (
+      assignment?.workflow &&
+      !choices.some(
+        workflow =>
+          workflow.instructionsPath === assignment.workflow!.instructionsPath ||
+          workflow.id === assignment.workflow!.id
+      )
+    ) {
+      choices.unshift(assignment.workflow);
+    }
+    return choices;
+  }
+
+  private findWorkflowChoice(issueKey: string, workflowInstructionsPath: string): AgentWorkflowReference | undefined {
+    return this.getWorkflowChoices(issueKey).find(
+      workflow =>
+        workflow.instructionsPath === workflowInstructionsPath || workflow.id === workflowInstructionsPath
+    );
+  }
+
+  private formatWorkflowAssignmentSource(source: 'manual' | 'automatic' | 'analysis'): string {
+    if (source === 'automatic') {
+      return 'Automatic';
+    }
+    if (source === 'analysis') {
+      return 'Analysis';
+    }
+    return 'Manual';
+  }
+
+  private renderWorkflowSelectOptions(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    const selectedValue = assignment?.workflow?.instructionsPath ?? '';
+    const workflowOptions = this.getWorkflowChoices(issueKey)
+      .map(
+        workflow => `<option value="${escapeHtml(workflow.instructionsPath)}" ${workflow.instructionsPath === selectedValue ? 'selected' : ''}>${escapeHtml(workflow.name)}</option>`
+      )
+      .join('');
+
+    return `<option value="" ${selectedValue ? '' : 'selected'}>No workflow pack</option>${workflowOptions}`;
+  }
+
+  private renderWorkflowPackSection(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    const hasWorkflowChoices = this.getWorkflowChoices(issueKey).length > 0 || Boolean(assignment);
+
+    return `
+      <section class="card">
+        <h3>Workflow Pack</h3>
+        <label class="field-group" for="workflowSelect">
+          <span class="field-label">Workflow</span>
+          <select
+            id="workflowSelect"
+            class="field-select"
+            data-issue-key="${escapeHtml(issueKey)}"
+            ${hasWorkflowChoices ? '' : 'disabled'}
+          >
+            ${this.renderWorkflowSelectOptions(issueKey)}
+          </select>
+          <div class="field-help">
+            ${hasWorkflowChoices
+              ? 'This workflow is used for Copilot delegation and Jira polling for this issue.'
+              : 'No workflow packs were found in .github/skills for this workspace.'}
+          </div>
+        </label>
+        <div class="detail-row${assignment ? '' : ' is-hidden'}" id="workflowSourceRow">
+          <div class="detail-label">Source</div>
+          <div class="detail-value" id="workflowSourceValue">${escapeHtml(
+            assignment ? this.formatWorkflowAssignmentSource(assignment.source) : ''
+          )}</div>
+        </div>
+        <div class="detail-row${assignment?.reason ? '' : ' is-hidden'}" id="workflowReasonRow">
+          <div class="detail-label">Reason</div>
+          <div class="detail-value detail-value--wrap" id="workflowReasonValue">${escapeHtml(
+            assignment?.reason ?? ''
+          )}</div>
+        </div>
+        <div class="form-status" id="workflowStatus" aria-live="polite"></div>
+      </section>
+    `;
+  }
+
+  private static readonly KNOWN_MODELS: Array<{ id: string; label: string }> = [
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'claude-haiku-3-5', label: 'Claude Haiku 3.5' },
+    { id: 'gpt-5.4', label: 'GPT 5.4' },
+    { id: 'o3', label: 'o3' },
+  ];
+
+  private renderModelSection(issueKey: string): string {
+    const currentModel = this.aiSessionManager.getIssueModelOverride(issueKey) ?? '';
+    const isKnown = !currentModel || IssueDetailPanelManager.KNOWN_MODELS.some(m => m.id === currentModel);
+
+    const modelOptions = IssueDetailPanelManager.KNOWN_MODELS.map(
+      m => `<option value="${escapeHtml(m.id)}" ${m.id === currentModel ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
+    ).join('');
+
+    // If the current model is a custom value not in the known list, add it as an option
+    const customOption = (!isKnown && currentModel)
+      ? `<option value="${escapeHtml(currentModel)}" selected>${escapeHtml(currentModel)}</option>`
+      : '';
+
+    return `
+      <section class="card">
+        <h3>Model</h3>
+        <label class="field-group" for="modelSelect">
+          <span class="field-label">AI Model</span>
+          <select
+            id="modelSelect"
+            class="field-select"
+            data-issue-key="${escapeHtml(issueKey)}"
+          >
+            <option value="" ${!currentModel ? 'selected' : ''}>Default</option>
+            ${modelOptions}
+            ${customOption}
+            <option value="__custom__">Custom…</option>
+          </select>
+          <div class="field-help">
+            Override the AI model for this issue. You can also add <code>Model: opus-4.6</code> in the Jira description.
+          </div>
+        </label>
+        <div class="field-group${currentModel && !isKnown ? '' : ' is-hidden'}" id="customModelGroup">
+          <span class="field-label">Custom Model ID</span>
+          <input
+            id="customModelInput"
+            class="field-input"
+            type="text"
+            value="${escapeHtml(isKnown ? '' : currentModel)}"
+            placeholder="e.g. claude-opus-4-6"
+          />
+        </div>
+        <div class="form-status" id="modelStatus" aria-live="polite"></div>
+      </section>
+    `;
   }
 
   private createPanelWithHtml(issueKey: string): void {
@@ -669,6 +999,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       background: rgba(249, 115, 22, 0.16);
       border-color: rgba(249, 115, 22, 0.28);
     }
+    .pill--idea {
+      color: #fbbf24;
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(245, 158, 11, 0.28);
+    }
     .pill--story {
       color: #93c5fd;
       background: rgba(59, 130, 246, 0.16);
@@ -731,6 +1066,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       flex-direction: column;
       gap: 8px;
     }
+    .markdown-preview {
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--vscode-editor-background);
+    }
+    .markdown-preview.is-empty {
+      color: var(--vscode-descriptionForeground);
+    }
     .comment-item,
     .comment-empty {
       padding: 10px 12px;
@@ -763,6 +1107,60 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       color: var(--vscode-editor-foreground);
     }
     .empty-state.error { color: var(--vscode-errorForeground); }
+    .subtask-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .subtask-row {
+      padding: 10px 12px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+    }
+    .subtask-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .subtask-state-icon {
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .subtask-key {
+      font-weight: 600;
+      color: var(--vscode-textLink-foreground);
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .subtask-summary {
+      font-size: 13px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .subtask-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .subtask-workflow-select {
+      flex: 1;
+      min-width: 0;
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 4px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font-size: 12px;
+    }
+    .subtask-start-btn {
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -803,7 +1201,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       const issueTypeSelect = document.getElementById('issueTypeSelect');
       const assigneeInput = document.getElementById('assigneeInput');
       const prioritySelect = document.getElementById('prioritySelect');
+      const issueModelSelect = document.getElementById('issueModelSelect');
+      const severitySelect = document.getElementById('severitySelect');
+      const reportedByInput = document.getElementById('reportedByInput');
       const descriptionInput = document.getElementById('descriptionInput');
+      const ideaTranscriptInput = document.getElementById('ideaTranscriptInput');
+      const ideaTranscriptGroup = document.getElementById('ideaTranscriptGroup');
       const parentFieldGroup = document.getElementById('parentFieldGroup');
       const parentFieldLabel = document.getElementById('parentFieldLabel');
       const parentInput = document.getElementById('parentInput');
@@ -851,6 +1254,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           label: 'Epic',
           helper:
             mode === 'jira'
+              || mode === 'jiraapi'
               ? 'This item can only belong to an Epic.'
               : 'This item can only belong to an Epic/Feature.',
           emptyText: 'No epic selected.',
@@ -908,6 +1312,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         }
       }
 
+      function updateIdeaTranscriptField() {
+        if (!(ideaTranscriptGroup instanceof HTMLElement)) {
+          return;
+        }
+
+        const issueType = normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '');
+        ideaTranscriptGroup.classList.toggle('is-hidden', issueType !== 'idea');
+      }
+
       function readCurrentState() {
         const parentUi = getParentUi(
           issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : ''
@@ -918,7 +1331,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           issueType: issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '',
           assignee: assigneeInput instanceof HTMLInputElement ? assigneeInput.value : '',
           priority: prioritySelect instanceof HTMLSelectElement ? prioritySelect.value : '',
+          model: issueModelSelect instanceof HTMLSelectElement ? issueModelSelect.value : '',
+          severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
+          reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
           description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
+          ideaTranscript:
+            normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '') === 'idea' &&
+            ideaTranscriptInput instanceof HTMLTextAreaElement
+              ? ideaTranscriptInput.value
+              : '',
           parentKey:
             parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
         };
@@ -932,9 +1353,13 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           currentState.issueType !== initialState.issueType ||
           currentState.assignee !== initialState.assignee ||
           currentState.priority !== initialState.priority ||
-          currentState.description !== initialState.description ||
-          currentState.parentKey !== initialState.parentKey
-        );
+          currentState.model !== initialState.model ||
+            currentState.severity !== initialState.severity ||
+            currentState.reportedBy !== initialState.reportedBy ||
+            currentState.description !== initialState.description ||
+            currentState.ideaTranscript !== initialState.ideaTranscript ||
+            currentState.parentKey !== initialState.parentKey
+          );
       }
 
       function getValidationError() {
@@ -990,6 +1415,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       function onFormInput() {
         clearStatusOverride();
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       }
 
@@ -998,8 +1424,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       issueTypeSelect?.addEventListener('change', onFormInput);
       assigneeInput?.addEventListener('input', onFormInput);
       prioritySelect?.addEventListener('change', onFormInput);
-      descriptionInput?.addEventListener('input', onFormInput);
-      parentInput?.addEventListener('input', onFormInput);
+      issueModelSelect?.addEventListener('change', onFormInput);
+      severitySelect?.addEventListener('change', onFormInput);
+        reportedByInput?.addEventListener('input', onFormInput);
+        descriptionInput?.addEventListener('input', onFormInput);
+        ideaTranscriptInput?.addEventListener('input', onFormInput);
+        parentInput?.addEventListener('input', onFormInput);
 
       editForm.addEventListener('submit', event => {
         event.preventDefault();
@@ -1013,17 +1443,28 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         saving = true;
         refreshActions();
         const currentState = readCurrentState();
-        vscode.postMessage({
-          type: 'saveIssueEdits',
-          issueKey: editForm.dataset.issueKey,
-          summary: currentState.summary,
-          transitionId: currentState.transitionId,
-          issueType: currentState.issueType,
-          assignee: currentState.assignee,
-          priority: currentState.priority,
-          description: currentState.description,
-          parentKey: currentState.parentKey
-        });
+          const payload = {
+            type: 'saveIssueEdits',
+            issueKey: editForm.dataset.issueKey,
+            summary: currentState.summary,
+            transitionId: currentState.transitionId,
+            issueType: currentState.issueType,
+            assignee: currentState.assignee,
+            priority: currentState.priority,
+            description: currentState.description,
+            ideaTranscript: currentState.ideaTranscript,
+            parentKey: currentState.parentKey
+          };
+        if (currentState.model !== initialState.model) {
+          payload.model = currentState.model;
+        }
+        if (currentState.severity !== initialState.severity) {
+          payload.severity = currentState.severity;
+        }
+        if (currentState.reportedBy !== initialState.reportedBy) {
+          payload.reportedBy = currentState.reportedBy;
+        }
+        vscode.postMessage(payload);
       });
 
       resetButton?.addEventListener('click', () => {
@@ -1032,10 +1473,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         if (issueTypeSelect instanceof HTMLSelectElement) issueTypeSelect.value = initialState.issueType;
         if (assigneeInput instanceof HTMLInputElement) assigneeInput.value = initialState.assignee;
         if (prioritySelect instanceof HTMLSelectElement) prioritySelect.value = initialState.priority;
+        if (issueModelSelect instanceof HTMLSelectElement) issueModelSelect.value = initialState.model;
+        if (severitySelect instanceof HTMLSelectElement) severitySelect.value = initialState.severity;
+        if (reportedByInput instanceof HTMLInputElement) reportedByInput.value = initialState.reportedBy;
         if (descriptionInput instanceof HTMLTextAreaElement) descriptionInput.value = initialState.description;
+        if (ideaTranscriptInput instanceof HTMLTextAreaElement) ideaTranscriptInput.value = initialState.ideaTranscript || '';
         if (parentInput instanceof HTMLInputElement) parentInput.value = initialState.parentKey;
         clearStatusOverride();
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       });
 
@@ -1060,6 +1506,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       });
 
       updateParentField();
+      updateIdeaTranscriptField();
       refreshActions();
     })();
 
@@ -1135,15 +1582,291 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     document.getElementById('assignToAiBtn')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'assignToAi' });
     });
+    document.querySelectorAll('.assign-ai-provider-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const provider = btn.getAttribute('data-provider');
+        vscode.postMessage({ type: 'assignToAi', provider });
+      });
+    });
     document.getElementById('lprButton')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'localPeerReview' });
     });
     document.getElementById('viewAiSessionBtn')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'viewAiSession' });
     });
+
+    // --- Workflow selector ---
+    (function () {
+      const workflowSelect = document.getElementById('workflowSelect');
+      const workflowStatus = document.getElementById('workflowStatus');
+      const workflowSourceRow = document.getElementById('workflowSourceRow');
+      const workflowSourceValue = document.getElementById('workflowSourceValue');
+      const workflowReasonRow = document.getElementById('workflowReasonRow');
+      const workflowReasonValue = document.getElementById('workflowReasonValue');
+
+      if (!(workflowSelect instanceof HTMLSelectElement)) return;
+
+      let saving = false;
+      let initialValue = workflowSelect.value;
+      let statusOverride = undefined;
+
+      function updateAssignmentUi(assignment) {
+        const source = typeof assignment?.source === 'string' ? assignment.source : '';
+        const reason = typeof assignment?.reason === 'string' ? assignment.reason : '';
+
+        if (workflowSourceValue instanceof HTMLElement) {
+          workflowSourceValue.textContent = source;
+        }
+        if (workflowSourceRow instanceof HTMLElement) {
+          workflowSourceRow.classList.toggle('is-hidden', !source);
+        }
+        if (workflowReasonValue instanceof HTMLElement) {
+          workflowReasonValue.textContent = reason;
+        }
+        if (workflowReasonRow instanceof HTMLElement) {
+          workflowReasonRow.classList.toggle('is-hidden', !reason);
+        }
+      }
+
+      function renderWorkflowStatus() {
+        if (statusOverride) {
+          setStatusMessage(workflowStatus, statusOverride.text, statusOverride.kind);
+          return;
+        }
+        if (saving) {
+          setStatusMessage(workflowStatus, 'Updating workflow pack...', '');
+          return;
+        }
+        setStatusMessage(workflowStatus, '', '');
+      }
+
+      function refreshWorkflowActions() {
+        workflowSelect.disabled = saving || workflowSelect.options.length === 0;
+        renderWorkflowStatus();
+      }
+
+      workflowSelect.addEventListener('change', () => {
+        if (saving || workflowSelect.value === initialValue) {
+          return;
+        }
+
+        statusOverride = undefined;
+        saving = true;
+        refreshWorkflowActions();
+        vscode.postMessage({
+          type: 'setWorkflowPack',
+          issueKey: workflowSelect.dataset.issueKey,
+          workflowInstructionsPath: workflowSelect.value
+        });
+      });
+
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'setWorkflowPackResult') {
+          saving = false;
+          if (msg.ok) {
+            initialValue = workflowSelect.value;
+            updateAssignmentUi(msg.assignment);
+            statusOverride = {
+              text: 'Workflow pack updated.',
+              kind: 'success'
+            };
+          } else {
+            workflowSelect.value = initialValue;
+            statusOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to update workflow pack.',
+              kind: 'error'
+            };
+          }
+          refreshWorkflowActions();
+        }
+      });
+
+      refreshWorkflowActions();
+
+      // ── Sub-task workflow assignment and delivery start ──
+      document.querySelectorAll('.subtask-workflow-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const subTaskKey = select.getAttribute('data-subtask-key');
+          const workflowInstructionsPath = select.value;
+          if (subTaskKey) {
+            vscode.postMessage({
+              type: 'assignSubTaskWorkflow',
+              subTaskKey,
+              workflowInstructionsPath
+            });
+          }
+        });
+      });
+      document.querySelectorAll('.subtask-start-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const subTaskKey = btn.getAttribute('data-subtask-key');
+          if (subTaskKey) {
+            vscode.postMessage({
+              type: 'startSubTaskDelivery',
+              subTaskKey
+            });
+          }
+        });
+      });
+    })();
+
+    // --- Model selector ---
+    (function () {
+      const modelSelect = document.getElementById('modelSelect');
+      const modelStatus = document.getElementById('modelStatus');
+      const customModelGroup = document.getElementById('customModelGroup');
+      const customModelInput = document.getElementById('customModelInput');
+
+      if (!(modelSelect instanceof HTMLSelectElement)) return;
+
+      let saving = false;
+      let initialValue = modelSelect.value;
+      let statusOverride = undefined;
+
+      function showCustomInput(show) {
+        if (customModelGroup instanceof HTMLElement) {
+          customModelGroup.classList.toggle('is-hidden', !show);
+        }
+      }
+
+      function renderModelStatus() {
+        if (statusOverride) {
+          setStatusMessage(modelStatus, statusOverride.text, statusOverride.kind);
+          return;
+        }
+        if (saving) {
+          setStatusMessage(modelStatus, 'Updating model...', '');
+          return;
+        }
+        setStatusMessage(modelStatus, '', '');
+      }
+
+      function refreshModelActions() {
+        modelSelect.disabled = saving;
+        renderModelStatus();
+      }
+
+      function sendModelUpdate(model) {
+        statusOverride = undefined;
+        saving = true;
+        refreshModelActions();
+        vscode.postMessage({
+          type: 'setModel',
+          issueKey: modelSelect.dataset.issueKey,
+          model: model
+        });
+      }
+
+      modelSelect.addEventListener('change', () => {
+        if (saving) return;
+        const value = modelSelect.value;
+        if (value === '__custom__') {
+          showCustomInput(true);
+          if (customModelInput instanceof HTMLInputElement) {
+            customModelInput.focus();
+          }
+          return;
+        }
+        showCustomInput(false);
+        if (value === initialValue) return;
+        sendModelUpdate(value);
+      });
+
+      if (customModelInput instanceof HTMLInputElement) {
+        customModelInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const value = customModelInput.value.trim();
+            if (value) {
+              sendModelUpdate(value);
+            }
+          }
+        });
+      }
+
+      window.addEventListener('message', event => {
+        const msg = event.data;
+        if (!msg || typeof msg.type !== 'string') return;
+        if (msg.type === 'setModelResult') {
+          saving = false;
+          if (msg.ok) {
+            initialValue = typeof msg.model === 'string' ? msg.model : '';
+            statusOverride = {
+              text: initialValue ? 'Model updated to ' + initialValue + '.' : 'Model reset to default.',
+              kind: 'success'
+            };
+          } else {
+            modelSelect.value = initialValue;
+            statusOverride = {
+              text: typeof msg.error === 'string' ? msg.error : 'Unable to update model.',
+              kind: 'error'
+            };
+          }
+          refreshModelActions();
+        }
+      });
+
+      refreshModelActions();
+    })();
   </script>
 </body>
 </html>`;
+  }
+
+  private renderSubTasksSection(issueKey: string): string {
+    if (this.subTasks.length === 0 && this.featureSubTaskRecords.length === 0) {
+      return '';
+    }
+
+    const workflowOptions = this.getWorkflowChoices(issueKey);
+    const subTaskRows = this.subTasks.map(subTask => {
+      const featureRecord = this.featureSubTaskRecords.find(r => r.issueKey === subTask.key);
+      const assignment = this.aiSessionManager.getIssueWorkflowAssignment(subTask.key);
+      const selectedWorkflowPath = assignment?.workflow?.instructionsPath ?? '';
+      const deliveryState = featureRecord?.deliveryState ?? 'pending';
+
+      const workflowSelectHtml = workflowOptions.length > 0
+        ? `<select class="subtask-workflow-select" data-subtask-key="${escapeHtml(subTask.key)}">
+            <option value="" ${selectedWorkflowPath ? '' : 'selected'}>No workflow</option>
+            ${workflowOptions.map(w =>
+              `<option value="${escapeHtml(w.instructionsPath)}" ${w.instructionsPath === selectedWorkflowPath ? 'selected' : ''}>${escapeHtml(w.name)}</option>`
+            ).join('')}
+          </select>`
+        : '<span class="field-help">No workflows available</span>';
+
+      const stateIcon = deliveryState === 'completed' ? '✅'
+        : deliveryState === 'in-progress' ? '🔄'
+        : deliveryState === 'failed' ? '❌'
+        : '⏳';
+
+      const startBtnHtml = deliveryState === 'pending' || deliveryState === 'failed'
+        ? `<button type="button" class="subtask-start-btn assign-btn" data-subtask-key="${escapeHtml(subTask.key)}">Start</button>`
+        : '';
+
+      return `<div class="subtask-row">
+        <div class="subtask-header">
+          <span class="subtask-state-icon">${stateIcon}</span>
+          <span class="subtask-key">${escapeHtml(subTask.key)}</span>
+          <span class="subtask-summary">${escapeHtml(subTask.summary)}</span>
+          ${renderPill(subTask.status)}
+        </div>
+        <div class="subtask-actions">
+          ${workflowSelectHtml}
+          ${startBtnHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `
+      <section class="card">
+        <h3>Sub-Tasks</h3>
+        <div class="subtask-list">
+          ${subTaskRows || '<div class="comment-empty">No sub-tasks.</div>'}
+        </div>
+      </section>
+    `;
   }
 
   private buildIssueBodyHtml(d: IssueDetails): string {
@@ -1174,11 +1897,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           )}</option>`
       )
       .join('')}`;
-    const issueTypeOptions = renderSelectOptions(d.issueType, [
-      'Epic',
-      'Feature',
-      'Story',
-      'Task',
+        const issueTypeOptions = renderSelectOptions(d.issueType, [
+          'Epic',
+          'Feature',
+          'Idea',
+          'Story',
+          'Task',
       'Subtask',
       'Bug',
       'Issue'
@@ -1191,6 +1915,36 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       'Low',
       'Lowest'
     ]);
+    const metadataModelOptions = renderSelectOptions(d.model, [
+      'claude-sonnet-4-20250514',
+      'claude-opus-4-20250514',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'o3',
+      'o4-mini'
+    ]);
+    const severityOptions = renderSelectOptions(d.severity, [
+      'Critical',
+      'High',
+      'Medium',
+      'Low'
+    ]);
+    const isIdea = d.issueType.trim().toLowerCase() === 'idea';
+    const currentAssignment = this.aiSessionManager.getSession(d.key);
+    const hasPreviousAgentSession = Boolean(this.aiSessionManager.getAgentSession(d.key));
+    const sessionBtnDisabled = isIdea || currentAssignment || hasPreviousAgentSession ? '' : ' disabled';
+    const sessionBtnTitle = isIdea
+      ? 'Idea tickets do not use AI session workflows.'
+      : currentAssignment
+        ? 'View active AI session'
+        : hasPreviousAgentSession
+          ? 'View previous AI session'
+          : 'Assign to AI first';
+    const hasDelegationAssignee = Boolean(d.assignee?.trim());
+    const delegateDisabledAttr = hasDelegationAssignee ? '' : ' disabled';
+    const delegateDisabledHelp = hasDelegationAssignee
+      ? ''
+      : '<div class="field-help">Set the assignee first, then delegate the work to AI.</div>';
     const comments = (d.comments ?? [])
       .map(comment => {
         const formattedDate = formatDate(comment.created ?? comment.updated);
@@ -1242,8 +1996,14 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             />
             <div class="assign-actions">
               <button type="button" class="assign-btn" id="assignToMeBtn">Assign to Me</button>
-              <button type="button" class="assign-btn" id="assignToAiBtn">Assign to AI</button>
+              ${this.aiAssignOptions.length > 0
+                ? this.aiAssignOptions.map(
+                    option => `<button type="button" class="assign-btn assign-ai-provider-btn" data-provider="${escapeHtml(option.provider)}"${delegateDisabledAttr}>Delegate to ${escapeHtml(option.label)}</button>`
+                  ).join('')
+                : `<button type="button" class="assign-btn" id="assignToAiBtn"${delegateDisabledAttr}>Delegate to AI</button>`
+              }
             </div>
+            ${delegateDisabledHelp}
           </label>
           <label class="field-group" for="prioritySelect">
             <span class="field-label">Priority</span>
@@ -1251,6 +2011,38 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               ${priorityOptions}
             </select>
           </label>
+          <label class="field-group" for="issueModelSelect">
+            <span class="field-label">Requested Model</span>
+            <select id="issueModelSelect" class="field-select">
+              <option value="">— Use default —</option>
+              ${metadataModelOptions}
+            </select>
+          </label>
+          <label class="field-group" for="severitySelect">
+            <span class="field-label">Severity</span>
+            <select id="severitySelect" class="field-select">
+              <option value="">— None —</option>
+              ${severityOptions}
+            </select>
+          </label>
+          <label class="field-group" for="reportedByInput">
+            <span class="field-label">Reported By</span>
+            <input
+              id="reportedByInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(d.reportedBy ?? '')}"
+              placeholder="Source or reporter"
+            />
+          </label>
+          <div class="detail-row">
+            <div class="detail-label">Branch</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(d.branch || '—')}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Complexity</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(d.complexity || '—')}</div>
+          </div>
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
@@ -1291,22 +2083,40 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               placeholder="Add a description"
             >${escapeHtml(d.description ?? '')}</textarea>
           </label>
+          <div class="field-group">
+            <span class="field-label">Description Preview</span>
+            <div class="markdown-preview markdown-body${d.description?.trim() ? '' : ' is-empty'}">${d.description?.trim()
+              ? markdownToHtmlSafe(d.description)
+              : '<p>No description provided.</p>'}</div>
+          </div>
+          <label class="field-group idea-group${isIdea ? '' : ' is-hidden'}" for="ideaTranscriptInput" id="ideaTranscriptGroup">
+            <span class="field-label">AI Research Transcript</span>
+            <textarea
+              id="ideaTranscriptInput"
+              class="field-textarea idea-transcript-textarea"
+              placeholder="Capture research chat and notes here"
+            >${escapeHtml(d.ideaTranscript ?? '')}</textarea>
+            <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
+          </label>
           <div class="form-actions">
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
-            <button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>
-            <button class="secondary-button" id="viewAiSessionBtn" type="button">AI Session</button>
+            ${isIdea ? '' : '<button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>'}
+            ${isIdea ? '' : `<button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>`}
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
       </section>
+      ${isIdea ? '' : this.renderWorkflowPackSection(d.key)}
+      ${this.renderModelSection(d.key)}
+      ${this.renderSubTasksSection(d.key)}
       <section class="card">
-        <h3>Comments</h3>
+        <h3>Activity</h3>
         <div class="comment-list">
           ${
             comments.length > 0
               ? comments
-              : '<div class="comment-empty">No comments yet.</div>'
+              : '<div class="comment-empty">No activity yet.</div>'
           }
         </div>
         <form id="commentForm" data-issue-key="${escapeHtml(d.key)}" class="panel-form">

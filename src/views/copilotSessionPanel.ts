@@ -1,8 +1,20 @@
 import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { CopilotAgentService, PermissionInfo } from '../ai/copilotAgentService';
+import type { PermissionInfo } from '../ai/copilotAgentService';
 import { AGENT_DEFAULTS, type AgentSessionRecord, type AgentEventSummary } from '../ai/agentTypes';
 import type { AiAssignment, AiProvider } from '../types';
+
+export interface AgentSessionController {
+  onDidChangeActiveTask(listener: (issueKey: string) => void): () => void;
+  respondToInput(issueKey: string, response: string): void;
+  respondToPermission(
+    issueKey: string,
+    decision: 'allow_once' | 'allow_always' | 'deny'
+  ): void;
+  hasActiveTask(issueKey: string): boolean;
+  getPendingPermissionDescriptions(issueKey: string): string[];
+  getPendingPermissions(issueKey: string): PermissionInfo[];
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -40,7 +52,8 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
   openai: 'OpenAI',
   claude: 'Claude',
   'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK'
+  'copilot-cli': 'GitHub Copilot SDK',
+  'claude-cli': 'Claude Code CLI'
 };
 
 const STATE_LABELS: Record<string, { label: string; icon: string }> = {
@@ -85,6 +98,9 @@ function resolveAssignmentLabel(
   }
   if (assignment) {
     return PROVIDER_LABELS[assignment.provider] ?? assignment.provider;
+  }
+  if (record?.provider) {
+    return PROVIDER_LABELS[record.provider] ?? record.provider;
   }
   if (record) {
     return PROVIDER_LABELS['copilot-cli'];
@@ -189,7 +205,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 
   public constructor(
     private readonly sessionManager: AiSessionManager,
-    private readonly agentService: CopilotAgentService,
+    private readonly agentService: AgentSessionController,
     private readonly onAbandonSession: (issueKey: string) => Promise<void>,
     private readonly onResumeSession: (issueKey: string) => Promise<void>,
     private readonly onStartNewSession: (issueKey: string) => Promise<void>
@@ -392,7 +408,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const sessionId = assignment?.sessionId ?? record?.sessionId ?? issueKey;
     const startedAt = assignment?.assignedAt ?? record?.startedAt;
     const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
-    const supportsCopilotSession = Boolean(record) || assignment?.provider === 'copilot-cli';
+    const supportsAgentSession = Boolean(record) || assignment?.provider === 'copilot-cli' || assignment?.provider === 'claude-cli';
     const maxSteps = Number(task?.maxSteps ?? AGENT_DEFAULTS.maxSteps);
     const isTerminal = record ? this.isTerminal(record.state) : assignment?.status !== 'active';
     const badgeVariant = this.resolveBadgeVariant(record?.state ?? assignment?.status);
@@ -471,6 +487,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         <div class="feed-section">
           <div class="feed-header">
             <h3>Activity Feed</h3>
+            <label class="auto-scroll-toggle"><input type="checkbox" id="auto-scroll-toggle" checked /> Auto-scroll</label>
             <div class="feed-filters">
               <button class="filter-btn active" data-filter="message">Messages</button>
               <button class="filter-btn" data-filter="error">Errors</button>
@@ -492,12 +509,12 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     } else {
       const noSessionMessage = !assignment && !record
         ? 'No AI session has been started for this ticket yet. Start a new session to begin.'
-        : supportsCopilotSession
+        : supportsAgentSession
           ? 'This ticket is assigned to AI, but no live session is currently attached. Start a new session to see real-time details here.'
-          : `This ticket is assigned to ${escapeHtml(assignmentLabel)}, but live streaming session details are currently available only for GitHub Copilot SDK sessions.`;
+          : `This ticket is assigned to ${escapeHtml(assignmentLabel)}, but live streaming session details are currently available only for CLI-backed agent sessions.`;
       liveTabContent = `
         <div class="card">
-          <h3>${!assignment && !record ? 'No AI session' : supportsCopilotSession ? 'No live agent activity yet' : 'Assignment-only session'}</h3>
+          <h3>${!assignment && !record ? 'No AI session' : supportsAgentSession ? 'No live agent activity yet' : 'Assignment-only session'}</h3>
           <div class="field">${noSessionMessage}</div>
           <div class="btn-row"><button id="empty-start-new-btn" class="btn btn-primary" title="Start New Session"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Start New Session</button></div>
         </div>`;
@@ -826,6 +843,20 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
       margin-bottom: 8px;
     }
     .feed-header h3 { margin: 0; }
+    .auto-scroll-toggle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .auto-scroll-toggle input {
+      cursor: pointer;
+      accent-color: var(--accent, #007acc);
+    }
     .feed-filters {
       display: flex;
       gap: 4px;
@@ -1208,7 +1239,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     <span id="step-counter" class="step-counter">${hasLiveAgentSession ? `Steps: ${stepCount}/${maxSteps}` : `Assigned: ${escapeHtml(formatDate(startedAt))}`}</span>
     <div class="header-actions">
       ${record && !hasLiveAgentSession && !isTerminal ? `<button id="resume-btn" class="icon-btn icon-btn--success" title="Resume Session"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>` : ''}
-      ${supportsCopilotSession ? `<button id="start-new-btn" class="icon-btn icon-btn--primary" title="Start New Session"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>` : ''}
+      ${supportsAgentSession ? `<button id="start-new-btn" class="icon-btn icon-btn--primary" title="Start New Session"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>` : ''}
       <button id="abort-btn" class="icon-btn icon-btn--danger" ${isTerminal ? 'disabled' : ''} title="Abandon Session"><svg viewBox="0 0 24 24"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
     </div>
   </div>
@@ -1272,6 +1303,11 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     let knownEventCount = ${Number(record?.events.length ?? 0)};
     let permissionSignature = ${JSON.stringify(pendingPermissionDescriptions.join('\n')).replace(/</g, '\\u003c')};
     let currentFilter = 'message';
+    let autoScroll = true;
+    var autoScrollToggle = document.getElementById('auto-scroll-toggle');
+    if (autoScrollToggle) {
+      autoScrollToggle.addEventListener('change', function() { autoScroll = this.checked; });
+    }
     const verboseMode = ${verboseFeed ? 'true' : 'false'};
     const verboseCategories = { tool: true, system: true };
 
@@ -1503,7 +1539,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
         var newEvents = msg.events.slice(knownEventCount);
         feedEl.insertAdjacentHTML('beforeend', newEvents.map(renderEventRow).join(''));
         knownEventCount = msg.events.length;
-        feedEl.scrollTop = feedEl.scrollHeight;
+        if (autoScroll) { feedEl.scrollTop = feedEl.scrollHeight; }
         if (activeTab !== 'live') showTabDot('live');
       }
 
@@ -1626,6 +1662,20 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
 
     if (feedEl) {
       feedEl.scrollTop = feedEl.scrollHeight;
+    }
+
+    // Pause auto-scroll when user scrolls up manually
+    if (feedEl && autoScrollToggle) {
+      feedEl.addEventListener('scroll', function() {
+        var atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
+        if (!atBottom && autoScroll) {
+          autoScroll = false;
+          autoScrollToggle.checked = false;
+        } else if (atBottom && !autoScroll) {
+          autoScroll = true;
+          autoScrollToggle.checked = true;
+        }
+      });
     }
   </script>
 </body>

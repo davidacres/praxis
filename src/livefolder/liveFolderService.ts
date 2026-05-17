@@ -15,6 +15,7 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentIssueReference,
@@ -31,6 +32,7 @@ import {
   type ParsedFeatureFolder,
   type ParsedPlanFolder,
   extractComments,
+  extractModelRaw,
   parsePlanFolder,
   readUtf8,
   stableChildKey,
@@ -42,8 +44,17 @@ import {
   appendFeatureItemTableRow,
   computeFeatureRollupStatus,
   updateFeatureStoryTable,
-  writeStatusToMarkdownFile
+  upgradeMarkdownFile,
+  writeDescriptionToMarkdownFile,
+  writeModelToMarkdownFile,
+  writePriorityToMarkdownFile,
+  writeReportedByToMarkdownFile,
+  writeSeverityToMarkdownFile,
+  writeStatusToMarkdownFile,
+  writeIdeaTranscriptToMarkdownFile
 } from './markdownStatusWriter';
+import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
+import { composeIdeaContent, splitIdeaContent } from '../issues/ideaTranscript';
 
 // ── Workflow ────────────────────────────────────────────────────────
 
@@ -59,9 +70,10 @@ const STATUS_NAMES = STATUSES.map(s => s.name);
 const LIVE_FOLDER_CREATION_DISABLED_ERROR =
   'Live Folder issue creation is disabled. Enable ticketManager.liveFolderAllowIssueCreation to create markdown issues.';
 
-type CreatableLiveFolderIssueType = 'Feature' | 'Story' | 'Task' | 'Bug';
+type CreatableLiveFolderIssueType = 'Feature' | 'Idea' | 'Story' | 'Task' | 'Bug';
 
 const CHILD_FILE_PREFIX_BY_TYPE: Record<Exclude<CreatableLiveFolderIssueType, 'Feature'>, string> = {
+  Idea: 'idea',
   Story: 'story',
   Task: 'task',
   Bug: 'bug'
@@ -84,6 +96,8 @@ function normalizeLiveFolderIssueType(value: string): CreatableLiveFolderIssueTy
     case 'epic':
     case 'feature':
       return 'Feature';
+    case 'idea':
+      return 'Idea';
     case 'story':
       return 'Story';
     case 'task':
@@ -122,45 +136,22 @@ function buildChildFileName(
   return `${CHILD_FILE_PREFIX_BY_TYPE[issueType]}-${padFeatureId(featureId)}-${childSeq}-${slugifyPathSegment(summary)}.md`;
 }
 
-function buildDefaultDescription(issueType: CreatableLiveFolderIssueType): string {
-  return `Add details for this ${issueType.toLowerCase()}.`;
-}
-
 function buildIssueMarkdown(
   issueType: CreatableLiveFolderIssueType,
   title: string,
   description: string | undefined,
+  ideaTranscript: string | undefined,
   createdAtIso: string,
-  parentKey?: string
+  parentKey?: string,
+  model?: string
 ): string {
-  const lines = [
-    `# ${title}`,
-    '',
-    '**Status:** 📋 Proposed',
-    `**Created:** ${createdAtIso}`,
-    `**Type:** ${issueType}`
-  ];
-  if (parentKey) {
-    lines.push(`**Parent:** ${parentKey}`);
-  }
-  lines.push(
-    '',
-    '## Summary',
-    description?.trim() || buildDefaultDescription(issueType),
-    ''
-  );
-  if (issueType === 'Feature') {
-    lines.push(
-      '## Items',
-      '',
-      '| Ref | Type | Name | Status |',
-      '| --- | --- | --- | --- |',
-      ''
-    );
-  } else {
-    lines.push('## Dependencies', '', '');
-  }
-  return lines.join('\n');
+  return generateIssueMarkdown(issueType as IssueType, title, {
+    description,
+    ideaTranscript,
+    createdAt: createdAtIso,
+    parentKey,
+    model
+  });
 }
 
 function toParentIssueReference(issue: LiveIssue | undefined): ParentIssueReference | undefined {
@@ -190,9 +181,17 @@ export interface LiveFolderConfigProvider {
   getLiveFolderProjectKey(): string;
   getLiveFolderProjectName(): string;
   getLiveFolderAllowIssueCreation(): boolean;
+  getAiDefaultModel(): string;
 }
 
 // ── Service ─────────────────────────────────────────────────────────
+
+/** Fired when an external file edit adds a new comment to a ticket. */
+export interface ExternalCommentEvent {
+  issueKey: string;
+  author: string;
+  body: string;
+}
 
 export class LiveFolderService implements IssueTrackerService {
   public readonly mode: BackendMode = 'livefolder';
@@ -208,6 +207,12 @@ export class LiveFolderService implements IssueTrackerService {
   private debounceTimer?: ReturnType<typeof setTimeout>;
   /** Track URIs we just wrote to, so we can skip the watcher callback. */
   private recentWrites = new Set<string>();
+
+  /** Snapshot of comment counts per issue key, used to detect new external comments. */
+  private commentCountSnapshot = new Map<string, number>();
+
+  private readonly _onDidReceiveExternalComment = new vscode.EventEmitter<ExternalCommentEvent>();
+  public readonly onDidReceiveExternalComment = this._onDidReceiveExternalComment.event;
 
   public constructor(private readonly configStore: LiveFolderConfigProvider) {}
 
@@ -226,6 +231,7 @@ export class LiveFolderService implements IssueTrackerService {
   public dispose(): void {
     this.watcher?.dispose();
     this.watcher = undefined;
+    this._onDidReceiveExternalComment.dispose();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -432,7 +438,9 @@ export class LiveFolderService implements IssueTrackerService {
       throw new Error('Summary cannot be empty.');
     }
     const description = input.description?.trim() || undefined;
+    const ideaTranscript = input.ideaTranscript?.trim() || undefined;
     const createdAt = new Date().toISOString();
+    const defaultModel = this.configStore.getAiDefaultModel() || undefined;
 
     if (issueType === 'Feature') {
       if (input.parentKey?.trim()) {
@@ -448,7 +456,15 @@ export class LiveFolderService implements IssueTrackerService {
       await vscode.workspace.fs.createDirectory(featureDirUri);
       await this.writeManagedFile(
         featureFileUri,
-        buildIssueMarkdown(issueType, summary, description, createdAt)
+        buildIssueMarkdown(
+          issueType,
+          summary,
+          description,
+          undefined,
+          createdAt,
+          undefined,
+          defaultModel
+        )
       );
 
       await this.loadFromDisk();
@@ -465,7 +481,15 @@ export class LiveFolderService implements IssueTrackerService {
 
     await this.writeManagedFile(
       childFileUri,
-      buildIssueMarkdown(issueType, summary, description, createdAt, parentFeature.key)
+      buildIssueMarkdown(
+        issueType,
+        summary,
+        description,
+        issueType === 'Idea' ? ideaTranscript : undefined,
+        createdAt,
+        parentFeature.key,
+        defaultModel
+      )
     );
     await this.writeFeatureItemTableRow(
       parentFeature,
@@ -485,10 +509,102 @@ export class LiveFolderService implements IssueTrackerService {
     if (!issue) {
       throw new Error(`Issue ${issueKey} not found`);
     }
-    // Only assignee updates are supported in-memory (not persisted to markdown)
+
     if (input.assignee !== undefined) {
       issue.assignee = input.assignee ?? undefined;
     }
+
+    const updatesNeedIdeaTranscript =
+      issue.issueType === 'Idea' &&
+      (input.description !== undefined || input.ideaTranscript !== undefined);
+    if (updatesNeedIdeaTranscript) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const nextDescription = input.description !== undefined ? input.description : issue.description ?? '';
+        const nextTranscript =
+          input.ideaTranscript !== undefined ? input.ideaTranscript : issue.ideaTranscript ?? '';
+        const written = await writeIdeaTranscriptToMarkdownFile(
+          issue.sourceUri,
+          nextDescription,
+          nextTranscript
+        );
+        if (!written && (issue.description ?? '') !== nextDescription) {
+          throw new Error(`Could not update description in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.description = nextDescription;
+        issue.ideaTranscript = nextTranscript;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    } else if (input.description !== undefined && input.description !== null) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const written = await writeDescriptionToMarkdownFile(issue.sourceUri, input.description);
+        if (!written && (issue.description ?? '') !== input.description) {
+          throw new Error(`Could not update description in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.description = input.description;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    }
+
+    // Persist priority changes to markdown file
+    if (input.priority !== undefined && input.priority !== null) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const written = await writePriorityToMarkdownFile(issue.sourceUri, input.priority);
+        if (!written && issue.priority !== input.priority) {
+          throw new Error(`Could not update priority in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.priority = input.priority;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    }
+
+    // Persist model changes to markdown file
+    if (input.model !== undefined) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const written = await writeModelToMarkdownFile(issue.sourceUri, input.model);
+        if (!written && issue.model !== input.model) {
+          throw new Error(`Could not update model in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.model = input.model;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    }
+
+    // Persist severity changes to markdown file
+    if (input.severity !== undefined) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const written = await writeSeverityToMarkdownFile(issue.sourceUri, input.severity);
+        if (!written && issue.severity !== input.severity) {
+          throw new Error(`Could not update severity in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.severity = input.severity;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    }
+
+    // Persist reportedBy changes to markdown file
+    if (input.reportedBy !== undefined) {
+      this.recentWrites.add(issue.sourceUri.toString());
+      try {
+        const written = await writeReportedByToMarkdownFile(issue.sourceUri, input.reportedBy);
+        if (!written && issue.reportedBy !== input.reportedBy) {
+          throw new Error(`Could not update reported by in ${issue.sourceUri.fsPath}.`);
+        }
+        issue.reportedBy = input.reportedBy;
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+      }
+    }
+
     const parentIssue = issue.parentKey
       ? this.issues.find(candidate => candidate.key === issue.parentKey)
       : undefined;
@@ -502,7 +618,7 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   public async deleteIssue(_issueKey: string): Promise<void> {
-    throw new Error('Live Folder mode does not support deleting issues. Remove plan files directly.');
+    throw new Error('Live Folder mode does not support deleting issues. Remove the markdown files directly.');
   }
 
   public async addComment(issueKey: string, body: string): Promise<void> {
@@ -515,13 +631,28 @@ export class LiveFolderService implements IssueTrackerService {
     if (!issue) {
       throw new Error(`Issue ${issueKey} not found`);
     }
-    const author = 'Me';
+    const author = issue.assignee || issue.key;
     this.recentWrites.add(issue.sourceUri.toString());
     try {
       await appendCommentToMarkdownFile(issue.sourceUri, author, commentBody);
+      // Update snapshot so the watcher doesn't treat this as an external comment
+      const prev = this.commentCountSnapshot.get(issueKey) ?? 0;
+      this.commentCountSnapshot.set(issueKey, prev + 1);
     } finally {
       setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
     }
+  }
+
+  public async attachFile(_issueKey: string, _filePath: string, _fileName?: string): Promise<void> {
+    throw new Error('Live Folder mode does not support attachments.');
+  }
+
+  public async downloadAttachment(
+    _issueKey: string,
+    _attachment: IssueAttachment,
+    _targetFilePath: string
+  ): Promise<void> {
+    throw new Error('Live Folder mode does not support attachment downloads.');
   }
 
   // ── Transitions ─────────────────────────────────────────────────
@@ -553,11 +684,19 @@ export class LiveFolderService implements IssueTrackerService {
 
     // Write status to the markdown file
     this.recentWrites.add(issue.sourceUri.toString());
+    let written: boolean;
     try {
-      await writeStatusToMarkdownFile(issue.sourceUri, newStatus);
+      written = await writeStatusToMarkdownFile(issue.sourceUri, newStatus);
     } finally {
       // Clear after a short delay to allow the watcher to see and skip it
       setTimeout(() => this.recentWrites.delete(issue.sourceUri.toString()), 2000);
+    }
+
+    if (!written) {
+      throw new Error(
+        `Could not update status in ${issue.sourceUri.fsPath}. ` +
+        `The file status is already set to the target value.`
+      );
     }
 
     // Update in-memory model
@@ -661,6 +800,7 @@ export class LiveFolderService implements IssueTrackerService {
     this.plansRootUri = undefined;
 
     await this.loadFromDisk(folderPath);
+    await this.snapshotCommentCounts();
     this.setupWatcher();
     this.loaded = true;
   }
@@ -671,10 +811,44 @@ export class LiveFolderService implements IssueTrackerService {
       return;
     }
 
-    const parsed = await parsePlanFolder(folderPath);
+    let parsed = await parsePlanFolder(folderPath);
     this.plansRootUri = parsed.plansRootUri;
     this.featuresRootUri = parsed.featuresRootUri;
+
+    // Upgrade existing files to current template format
+    const anyUpgraded = await this.upgradeExistingFiles(parsed);
+
+    // Re-parse if any files were upgraded so the model reflects new fields
+    if (anyUpgraded) {
+      parsed = await parsePlanFolder(folderPath);
+      this.plansRootUri = parsed.plansRootUri;
+      this.featuresRootUri = parsed.featuresRootUri;
+    }
+
     this.issues = this.buildIssueModel(parsed);
+  }
+
+  private async upgradeExistingFiles(parsed: ParsedPlanFolder): Promise<boolean> {
+    let anyUpgraded = false;
+    for (const f of parsed.features) {
+      this.recentWrites.add(f.featureMdUri.toString());
+      try {
+        const upgraded = await upgradeMarkdownFile(f.featureMdUri, 'Feature');
+        if (upgraded) { anyUpgraded = true; }
+      } finally {
+        setTimeout(() => this.recentWrites.delete(f.featureMdUri.toString()), 2000);
+      }
+    }
+    for (const child of parsed.childItems) {
+      this.recentWrites.add(child.fileUri.toString());
+      try {
+        const upgraded = await upgradeMarkdownFile(child.fileUri, child.issueType);
+        if (upgraded) { anyUpgraded = true; }
+      } finally {
+        setTimeout(() => this.recentWrites.delete(child.fileUri.toString()), 2000);
+      }
+    }
+    return anyUpgraded;
   }
 
   private buildIssueModel(parsed: ParsedPlanFolder): LiveIssue[] {
@@ -694,7 +868,9 @@ export class LiveFolderService implements IssueTrackerService {
         issueType: 'Feature',
         projectKey: pk,
         projectName: pn,
-        priority: 'Medium',
+        priority: f.priority ?? 'Medium',
+        complexity: f.complexity,
+        model: f.model,
         created: f.planningDates.created ?? now,
         updated: f.planningDates.completed ?? now,
         description: f.description,
@@ -729,7 +905,11 @@ export class LiveFolderService implements IssueTrackerService {
         projectKey: pk,
         projectName: pn,
         parentKey,
-        priority: 'Medium',
+        priority: child.priority ?? 'Medium',
+        severity: child.severity,
+        reportedBy: child.reportedBy,
+        complexity: child.complexity,
+        model: child.model,
         created: child.planningDates.created ?? now,
         updated: child.planningDates.completed ?? now,
         description: child.description,
@@ -882,11 +1062,11 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   private setupWatcher(): void {
-    if (this.watcher || !this.featuresRootUri) {
+    if (this.watcher || !this.plansRootUri) {
       return;
     }
 
-    const pattern = new vscode.RelativePattern(this.featuresRootUri, '*/**/*.md');
+    const pattern = new vscode.RelativePattern(this.plansRootUri, '**/*.md');
     this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
     const handleChange = (uri: vscode.Uri) => {
@@ -911,8 +1091,49 @@ export class LiveFolderService implements IssueTrackerService {
   private async reloadFromDisk(): Promise<void> {
     try {
       await this.loadFromDisk();
+      await this.detectNewExternalComments();
     } catch {
       // Silently ignore reload errors — folder may be temporarily invalid
+    }
+  }
+
+  /** Snapshot comment counts for all loaded issues. Called after internal writes. */
+  private async snapshotCommentCounts(): Promise<void> {
+    for (const issue of this.issues) {
+      try {
+        const content = await readUtf8(issue.sourceUri);
+        const comments = extractComments(content);
+        this.commentCountSnapshot.set(issue.key, comments.length);
+      } catch {
+        // ignore read errors
+      }
+    }
+  }
+
+  /**
+   * Compare current comment counts against snapshot and fire events for new external comments.
+   * Updates the snapshot after detection.
+   */
+  private async detectNewExternalComments(): Promise<void> {
+    for (const issue of this.issues) {
+      try {
+        const content = await readUtf8(issue.sourceUri);
+        const comments = extractComments(content);
+        const previousCount = this.commentCountSnapshot.get(issue.key) ?? 0;
+        if (comments.length > previousCount) {
+          // Fire events for each new comment
+          for (let i = previousCount; i < comments.length; i++) {
+            this._onDidReceiveExternalComment.fire({
+              issueKey: issue.key,
+              author: comments[i].author,
+              body: comments[i].body
+            });
+          }
+        }
+        this.commentCountSnapshot.set(issue.key, comments.length);
+      } catch {
+        // ignore read errors
+      }
     }
   }
 }

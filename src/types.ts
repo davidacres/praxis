@@ -1,15 +1,15 @@
 export type ConnectionType = 'stdio' | 'http';
 export type BackendMode =
   | 'jira'
+  | 'jiraapi'
   | 'demo'
-  | 'file'
   | 'github'
   | 'gitlab'
   | 'livefolder'
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli';
+export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli' | 'claude-cli';
 
 export interface AiAssignment {
   provider: AiProvider;
@@ -17,12 +17,23 @@ export interface AiAssignment {
   sessionId: string;
   assignedAt: string; // ISO timestamp
   status: 'active' | 'completed' | 'failed';
+  boardId?: string;
 }
 
 export interface AiAgentRegistration {
   name: string;
   provider: AiProvider;
   apiKey: string;
+}
+
+export interface DeliveryWorkflowSettings {
+  enabled: boolean;
+  publishCommand: string;
+  artifactPattern: string;
+  agentWorkflowPath?: string;
+  agentWorkflowUrl?: string;
+  summaryTemplate?: string;
+  failureTemplate?: string;
 }
 
 export interface SecretConnectionValues {
@@ -78,6 +89,8 @@ export interface Board {
   projectKey?: string;
   projectName?: string;
   locationName?: string;
+  /** Optional id of the connection this board came from (multi-connection mode). */
+  connectionId?: string;
   raw?: unknown;
 }
 
@@ -97,11 +110,32 @@ export interface IssueComment {
   raw?: unknown;
 }
 
+export interface IssueAttachment {
+  id?: string;
+  fileName: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  contentUrl?: string;
+  thumbnailUrl?: string;
+  created?: string;
+  author?: string;
+  raw?: unknown;
+}
+
 export interface ParentIssueReference {
   key: string;
   summary?: string;
   issueType?: string;
   description?: string;
+}
+
+export interface SubTaskSummary {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory?: string;
+  issueType: string;
+  assignee?: string;
 }
 
 export interface IssueSummary {
@@ -116,20 +150,30 @@ export interface IssueSummary {
   parentKey?: string;
   parentIssue?: ParentIssueReference;
   assignee?: string;
+  reporter?: string;
+  reporterMention?: string;
   priority?: string;
+  severity?: string;
+  reportedBy?: string;
+  complexity?: string;
+  model?: string;
   created?: string;
   updated?: string;
   selfUrl?: string;
   browseUrl?: string;
   description?: string;
+  ideaTranscript?: string;
   /** Issue keys this ticket depends on (same plan); used for execution ordering and links. */
   dependsOn?: string[];
   /** Git branch name for this work item when known (e.g. from import or tooling). */
   branch?: string;
   /** When the work was completed (distinct from `updated`). */
   completed?: string;
+  attachments?: IssueAttachment[];
   /** AI agent assignment tracking for this issue. */
   aiAssignment?: AiAssignment;
+  /** Sub-tasks linked to this issue (populated for feature requests). */
+  subTasks?: SubTaskSummary[];
   raw?: unknown;
 }
 
@@ -143,6 +187,7 @@ export interface CreateIssueInput {
   issueType: string;
   summary: string;
   description?: string;
+  ideaTranscript?: string;
   parentKey?: string;
   boardId?: string;
 }
@@ -150,9 +195,13 @@ export interface CreateIssueInput {
 export interface UpdateIssueInput {
   summary?: string;
   description?: string;
+  ideaTranscript?: string;
   parentKey?: string | null;
   assignee?: string | null;
   priority?: string;
+  severity?: string;
+  reportedBy?: string;
+  model?: string;
   issueType?: string;
 }
 
@@ -162,6 +211,7 @@ export interface ParentItemQueryOptions {
 
 export interface UpdateBoardInput {
   name?: string;
+  jql?: string;
 }
 
 export interface CreateBoardInput {
@@ -202,31 +252,40 @@ export interface PersistedBoardFilterState {
   types: string[];
   searchText: string;
   lastSelectedBoardId?: string;
+  lastSelectedConnectionId?: string;
+}
+
+/**
+ * A named backend connection. Each connection is one configured backend
+ * instance (e.g. one Jira server, one GitLab host, one Live Folder root).
+ * `settings` is mode-specific; see ConnectionStore for the per-mode shape.
+ */
+export interface Connection {
+  id: string;
+  name: string;
+  mode: BackendMode;
+  settings: Record<string, unknown>;
+}
+
+/**
+ * A board the user has explicitly chosen to track. References a Connection
+ * by id and a board id native to that connection's backend.
+ */
+export interface TrackedBoard {
+  connectionId: string;
+  boardId: string;
+  displayName?: string;
+}
+
+export interface TrackedBoardRef {
+  connectionId: string;
+  boardId: string;
 }
 
 export interface PagedIssues {
   issues: IssueSummary[];
   total?: number;
   hasMore: boolean;
-}
-
-export interface JiraCapabilities {
-  getProjects: string;
-  searchIssues: string;
-  getIssue: string;
-  getTransitions: string;
-  transitionIssue: string;
-  createIssue?: string;
-  updateIssue?: string;
-  deleteIssue?: string;
-  addComment?: string;
-  getAgileBoards?: string;
-  getBoardIssues?: string;
-}
-
-export interface CapabilityResolution {
-  capabilities?: JiraCapabilities;
-  missing: Array<keyof JiraCapabilities>;
 }
 
 export interface ConnectionCheck {
@@ -276,8 +335,12 @@ export interface BoardColumnPreferences {
   issueFilterStatuses?: string[];
   /** Per-status column dot color; key is exact status name as on the board. */
   statusColors?: Record<string, string>;
-  /** Board panel layout: Kanban columns vs execution sequence flow. */
-  viewMode?: 'columns' | 'sequence';
+  /** Board panel layout: Kanban columns or grouped list view. */
+  viewMode?: 'board' | 'list';
+  /** List-view group order by exact status name. */
+  listGroupOrder?: string[];
+  /** Hide issues not updated within this many weeks; 0 shows all issues regardless of age. */
+  maxAgeWeeks?: number;
   /** Per-column card order for visual priority; key is status name, value is ordered issue keys. */
   issueOrder?: Record<string, string[]>;
 }

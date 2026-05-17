@@ -14,16 +14,42 @@ if (-not (Test-Path $packageJsonPath)) {
 
 $packageJson = Get-Content -Raw -Path $packageJsonPath | ConvertFrom-Json
 $vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version).vsix"
+$extensionId = "$($packageJson.publisher).$($packageJson.name)"
+$quotedVsixPath = '"' + $vsixPath + '"'
 
-$codeCli = Get-Command code -ErrorAction SilentlyContinue
-if (-not $codeCli) {
-    throw 'VS Code CLI (code) was not found on PATH. Open VS Code and run "Shell Command: Install code command in PATH".'
+function Get-StableVsCodeCliPath {
+    $candidatePaths = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code.cmd'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft VS Code\bin\code'),
+        (Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code.cmd'),
+        (Join-Path $env:ProgramFiles 'Microsoft VS Code\bin\code'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft VS Code\bin\code.cmd'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Microsoft VS Code\bin\code')
+    )
+
+    foreach ($candidate in $candidatePaths) {
+        if ($candidate -and (Test-Path $candidate)) {
+            return $candidate
+        }
+    }
+
+    $codeCommand = Get-Command code -ErrorAction SilentlyContinue
+    if ($codeCommand -and $codeCommand.Source -match 'Microsoft VS Code') {
+        return $codeCommand.Source
+    }
+
+    throw 'Stable VS Code CLI was not found. Install VS Code or add the stable VS Code shell command to PATH.'
 }
+
+$codeCliPath = Get-StableVsCodeCliPath
+$quotedCodeCliPath = '"' + $codeCliPath + '"'
 
 if (-not $SkipPackage) {
     Push-Location $projectRoot
     try {
-        & npx @vscode/vsce package --allow-missing-repository
+        $repoUrl = "https://git.example.com/example/software/ai/tools/ticket-manager-extension"
+        $rawContentUrl = "$repoUrl/-/raw/main/"
+        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl
     }
     finally {
         Pop-Location
@@ -34,5 +60,12 @@ if (-not (Test-Path $vsixPath)) {
     throw "VSIX not found at $vsixPath"
 }
 
+Write-Host "Removing existing $extensionId from VS Code"
+& cmd.exe /d /c "$quotedCodeCliPath --uninstall-extension $extensionId >nul 2>nul"
+
 Write-Host "Installing $vsixPath into VS Code"
-& code --install-extension $vsixPath
+& cmd.exe /d /c "$quotedCodeCliPath --install-extension $quotedVsixPath --force"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "VS Code failed to install $vsixPath (exit code $LASTEXITCODE)."
+}

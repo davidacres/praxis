@@ -169,7 +169,7 @@ export async function generateTicketPlanFromMarkdownFeatures(
         type: 'plan',
         projectKey,
         projectName,
-        locationName: 'Imported Plan',
+        locationName: 'Imported Ticket Data',
         issueKeys: boardIssueKeys,
         columnStatusOrder: ['Backlog', 'To Do', 'In Progress', 'Blocked', 'Done']
       }

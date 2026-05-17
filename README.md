@@ -1,169 +1,181 @@
 # Ticket Manager
 
-Ticket Manager is a VS Code extension for working with issues and boards through a generic app surface. It supports four runtime modes:
+Ticket Manager is a VS Code extension that provides a unified workflow for issue tracking, board management, and AI-assisted delivery from a single sidebar experience.
 
-- `jira`: Jira Connected mode through a Jira MCP server
-- `demo`: built-in sample data with no external service
-- `file`: a workspace plan file containing features, stories, tasks, bugs, statuses, and boards
-- `livefolder`: a markdown plans folder that is read live from disk
+Current extension version: 0.0.26
 
-## Features
+## What It Does
 
-- Activity Bar container for issues, boards, and details
-- Issue list with filters for projects, statuses, item types, text, assignee scope, and parent item scope
-- Boards view with configurable filters and per-board column customization
-- Board editor tab with drag-and-drop status transitions
-- Issue details sidebar plus a full issue details tab
-- File mode with auto-discovery or creation of a `ticket-plan.jsonc` plan file
-- Live Folder mode with discovery of markdown plans plus optional markdown issue creation
-- Injectable backend service layer so the UI can switch between connected, demo, and file-backed implementations
-- Diagnostics for missing configuration, missing capabilities, and empty access
+- Adds a Tickets Activity Bar container with setup, board, issue, EPIC, session, and details views.
+- Supports multi-connection setup through Connections & Boards, where users add connections and explicitly track boards.
+- Routes issue and board actions through the currently selected tracked board connection.
+- Includes AI assignment, AI session management, local peer review, delivery workflow automation, and Jira polling hooks.
+
+## Core Views
+
+- Configure Project
+- Boards (classic mode)
+- Work Mode (preview board-centric mode)
+- EPICs
+- My Issues
+- Sessions
+- Issue Details
+
+## Backend Modes
+
+Configured with ticketManager.backendMode (and per-connection mode in ticketManager.connections).
+
+| Mode | Value | Status |
+| --- | --- | --- |
+| Jira Cloud / Jira API | jiraapi | Primary Jira mode. Supports Jira Cloud OAuth site connection fields plus direct Jira API settings and board/issue operations. |
+| Demo | demo | Built-in sample data. |
+| GitHub | github | Configuration is available; full issue/board parity is not implemented yet. |
+| GitLab | gitlab | Configuration plus GitLab delivery/MR helpers exist; issue/board behavior differs from Jira mode. |
+| Live Folder | livefolder | Reads markdown feature plans from disk (optional write support). |
+| User Workspace | userworkspace | Local workspace/user-backed issue storage. |
+
+Notes:
+
+- Legacy/internal paths still reference additional historical modes (for compatibility), but the supported configuration modes above are the active ones exposed in settings.
+- Boards shown in the main Boards views are based on tracked boards from Connections & Boards.
+
+## Jira Configuration
+
+### Jira OAuth and site metadata
+
+- ticketManager.jiraOAuthClientId
+- ticketManager.jiraOAuthScopes
+- ticketManager.jiraCloudId
+- ticketManager.jiraCloudSiteName
+- ticketManager.jiraCloudSiteUrl
+
+### Jira API settings
+
+- ticketManager.jiraApiBaseUrl
+- ticketManager.jiraApiToken
+- ticketManager.jiraApiEpicKey
+- ticketManager.jiraApiEpicBoardName
+- ticketManager.jiraApiBoardJql
+- ticketManager.jiraApiBoardName
+
+### Jira polling and delivery settings
+
+- ticketManager.jiraPolling.enabled
+- ticketManager.jiraPolling.requiredLabel
+- ticketManager.jiraPolling.clarificationAnalysis
+- ticketManager.delivery.defaultBaseBranch
+- ticketManager.delivery.autoMergeSubTasks
+- ticketManager.ai.deliveryWorkflowEnabled
+- ticketManager.ai.deliveryPublishCommand
+- ticketManager.ai.deliveryArtifactPattern
+- ticketManager.ai.deliveryAgentWorkflowPath
+- ticketManager.ai.deliveryAgentWorkflowUrl
+- ticketManager.ai.deliverySummaryTemplate
+- ticketManager.ai.deliveryFailureTemplate
+
+Useful commands:
+
+- Ticket Manager: Open Connections & Boards
+- Ticket Manager: Add Connection
+- Ticket Manager: Add Tracked Board
+- Ticket Manager: Disconnect Jira Cloud
+- Ticket Manager: Link Jira API Epic
+- Ticket Manager: Link Jira API Board Query
+- Ticket Manager: Start Sub-Task Delivery
+
+## Live Folder Markdown Format
+
+Live Folder mode reads markdown issue files from a plans/features style tree.
+
+Expected layout:
+
+- plans/features/feature-NN-name/feature.md
+- plans/features/feature-NN-name/story-NN-M-name.md
+- plans/features/feature-NN-name/task-NN-M-name.md
+- plans/features/feature-NN-name/bug-NN-M-name.md
+
+Supported issue types:
+
+- Feature
+- Story
+- Task
+- Bug
+
+Common fields/sections include Status, Created, Type, Priority, Description, Dependencies, Comments, and bug-specific reproduction/expected/actual behavior sections.
+
+## Boards and Issue UX
+
+- Board search and filter commands
+- Project/type board filters
+- Board column configuration
+- Status color mapping and priority color bars
+- Issue card interactions (status changes, assignment actions)
+- Issue details with comments, transitions, parent linkage, and attachments where supported by backend
+
+## AI and Sessions
+
+AI providers supported by settings and workflows:
+
+- openai
+- claude
+- cursor-cli
+- copilot-cli
+- claude-cli
+
+AI-related commands include:
+
+- Ticket Manager: Configure AI
+- Ticket Manager: Delegate to Copilot Agent
+- Ticket Manager: Start Claude Code Session
+- Ticket Manager: Assign Workflow Pack
+- Ticket Manager: View AI Session
+- Ticket Manager: Abort Agent Session
+- Ticket Manager: Review Ticket with AI
+- Ticket Manager: Local Peer Review
 
 ## Development
 
-```sh
+### Build
+
+```powershell
 npm install
 npm run compile
 ```
 
-Press `F5` in VS Code to launch the extension development host.
+Press F5 in VS Code to open the Extension Development Host.
 
-## Testing
+### Tests
 
-```sh
+```powershell
 npm test
 ```
 
-The integration suite launches the extension in an Extension Development Host and verifies:
+### Package
 
-- extension activation and command registration
-- connected backend loading through the fake MCP server
-- demo mode loading
-- file mode loading and persisted status transitions
-- board loading, board filters, and board panel rendering
-- parent item scoping
-- successful and rejected transitions
-- capability validation
+```powershell
+npm run package
+```
 
-## Backend Modes
+or
 
-Ticket Manager starts by asking which mode to use when no mode is configured yet.
-
-Switch between modes with:
-
-- `Ticket Manager: Set Backend Mode`
-- `ticketManager.backendMode`
-
-### Jira Connected
-
-When Jira Connected mode is active, configure either:
-
-- a local `stdio` Jira MCP server
-- a remote `http` Jira MCP server
-
-Ticket Manager can also reuse Jira MCP servers from existing editor config in this order when no manual connected configuration is set:
-
-- workspace `.vscode/mcp.json`
-- VS Code user config at `%APPDATA%\Code\User\mcp.json`
-- VS Code profile configs under `%APPDATA%\Code\User\profiles\*\mcp.json`
-- VS Code Insiders user config at `%APPDATA%\Code - Insiders\User\mcp.json`
-- VS Code Insiders profile configs under `%APPDATA%\Code - Insiders\User\profiles\*\mcp.json`
-- Cursor global config at `~/.cursor/mcp.json`
-
-Useful commands:
-
-- `Ticket Manager: Configure Connection`
-- `Ticket Manager: Use Workspace MCP Configuration`
-- `Ticket Manager: Use User/Profile MCP Configuration`
-- `Ticket Manager: Check Connection`
-
-### File Mode
-
-File mode looks for a plan file in the workspace. It currently auto-discovers:
-
-- `ticket-plan.jsonc`
-- `ticket-plan.json`
-- `.vscode/ticket-plan.jsonc`
-- `.vscode/ticket-plan.json`
-
-If no file exists, the extension can prompt you to:
-
-- choose an existing plan file
-- create a new starter `ticket-plan.jsonc`
-
-The starter plan models:
-
-- `Feature`
-- `Story`
-- `Task`
-- `Bug`
-
-along with workflow statuses, boards, parent-child relationships, and persisted status changes.
-
-### Live Folder Mode
-
-Live Folder mode reads a markdown plans tree directly from disk. Ticket Manager can start from the `plans` folder itself, the `features` folder, or a parent folder and will search for the plans tree automatically.
-
-Expected structure:
-
-- `plans/features/feature-NN-name/feature.md`
-- `plans/features/feature-NN-name/story-NN-M-name.md`
-- `plans/features/feature-NN-name/task-NN-M-name.md`
-- `plans/features/feature-NN-name/bug-NN-M-name.md`
-
-When issue creation is enabled, Ticket Manager follows the same layout:
-
-- Creating a `Feature` creates a new `feature-NN-name/feature.md` folder pair.
-- Creating a `Story`, `Task`, or `Bug` requires a parent `Feature` and writes a markdown file inside that feature folder.
-- New child issues are also added to the parent feature's `feature.md` item table so later status changes stay in sync.
-
-Use `ticketManager.liveFolderAllowIssueCreation` to disable markdown issue creation and keep Live Folder mode read-only from the extension.
-
-## Boards
-
-Use the `Boards` view to browse available boards, then open a board in the editor area. The board tab groups issues into status columns, supports per-board column configuration, and keeps enabled columns visible even when they are empty.
-
-Board filters are available through:
-
-- `Ticket Manager: Set Board Projects`
-- `Ticket Manager: Set Board Types`
-- `Ticket Manager: Set Board Search Text`
-- `Ticket Manager: Clear Board Filters`
-
-## Settings
-
-- `ticketManager.connectionType`
-- `ticketManager.backendMode`
-- `ticketManager.planFilePath`
-- `ticketManager.liveFolderPath`
-- `ticketManager.liveFolderProjectKey`
-- `ticketManager.liveFolderProjectName`
-- `ticketManager.liveFolderAllowIssueCreation`
-- `ticketManager.stdioCommand`
-- `ticketManager.stdioArgs`
-- `ticketManager.stdioCwd`
-- `ticketManager.httpUrl`
-- `ticketManager.requestTimeoutMs`
-- `ticketManager.defaultPageSize`
-- `ticketManager.workspaceMcpServerName`
-- `ticketManager.userMcpServerRef`
-
-## Windows Smoke Checklist
-
-1. Run `npm run compile`.
-2. Press `F5` to open the Extension Development Host.
-3. Run `Ticket Manager: Set Backend Mode` and choose `Jira Connected`, `Demo`, `File`, or `Live Folder`.
-4. Confirm the Activity Bar icon appears and opens the `Tickets` container.
-5. If using Jira Connected mode, run `Ticket Manager: Configure Connection` and then `Ticket Manager: Check Connection`.
-6. Verify `My Issues` loads, filters update the list, parent item scoping narrows results, and `Change Status` refreshes the selected issue.
-7. Verify `Boards` loads, board filters work, selecting a board opens a tab, and selecting a board issue updates `Issue Details`.
-8. If using File mode, confirm a plan file is discovered or created and that changing a status updates the plan file on disk.
-9. If using Live Folder mode, confirm the plans folder is detected, existing markdown issues load, and new `Feature`/`Story`/`Task`/`Bug` items create markdown files when `ticketManager.liveFolderAllowIssueCreation` is enabled.
-
-## Packaging
-
-```sh
+```powershell
 npx @vscode/vsce package
 ```
 
-This creates a `.vsix` package that can be installed locally with VS Code's `Install from VSIX...` command.
+## Local utility scripts
+
+- npm run open:ticket-manager
+- npm run install:vsix
+- npm run install:code
+- npm run install:insiders
+- npm run install:cursor
+
+## Migration documentation
+
+See docs/migrations/live-folder-to-jira-gitlab-github.md for the migration plan.
+
+## Known limitations
+
+- GitHub backend is configuration-first and not yet full issue/board parity.
+- GitLab issue/board behavior is not the same as Jira model behavior.
+- Some advanced delivery and automation flows require Jira/GitLab settings, credentials, and workflow alignment to be configured correctly.

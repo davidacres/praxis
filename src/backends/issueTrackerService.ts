@@ -7,12 +7,14 @@ import type {
   ConnectionCheck,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
+  SubTaskSummary,
   CreateBoardInput,
   UpdateBoardInput,
   UpdateIssueInput,
@@ -44,10 +46,22 @@ export interface IssueTrackerService extends vscode.Disposable {
   updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails>;
   deleteIssue(issueKey: string): Promise<void>;
   addComment(issueKey: string, body: string): Promise<void>;
+  attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void>;
+  downloadAttachment(issueKey: string, attachment: IssueAttachment, targetFilePath: string): Promise<void>;
   getTransitions(issueKey: string): Promise<WorkflowTransition[]>;
   transitionIssue(issueKey: string, transitionId: string): Promise<void>;
   getBrowseUrl(issue: IssueSummary): Promise<string | undefined>;
 
   /** Display name to assign when using "Assign to me"; undefined if not known for this backend. */
   getSelfAssigneeLabel(): Promise<string | undefined>;
+
+  /** Fetch sub-tasks for a parent issue. Only supported for Jira API backend. */
+  getSubTasks?(parentKey: string): Promise<SubTaskSummary[]>;
+
+  /** Create sub-tasks linked to a parent issue. Only supported for Jira API backend. */
+  createSubTasks?(
+    parentKey: string,
+    projectKey: string,
+    subTasks: Array<{ summary: string; description: string; issueType?: string }>
+  ): Promise<string[]>;
 }

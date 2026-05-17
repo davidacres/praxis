@@ -1,3 +1,5 @@
+import type { AiProvider } from '../types';
+
 // ── Agent Task State Machine ─────────────────────────────────────────────
 //
 //  NotStarted → Planning → AwaitingApproval → Executing ⇄ AwaitingInput
@@ -15,16 +17,144 @@ export type AgentTaskState =
   | 'failed'
   | 'aborted';
 
+export interface AgentWorkflowReference {
+  id: string;
+  name: string;
+  description?: string;
+  /** Repo-relative when possible so the same path works from a worktree. */
+  instructionsPath: string;
+  link?: string;
+}
+
+export type WorkflowAssignmentSource = 'manual' | 'automatic' | 'analysis';
+
+export interface IssueWorkflowAssignment {
+  /**
+   * The chosen workflow pack. `undefined` means the user (or analysis) explicitly
+   * selected "No workflow pack" for this issue — delivery should still proceed
+   * but without a workflow directive. Compare to absence of an assignment
+   * record, which means the user has not yet made a choice.
+   */
+  workflow?: AgentWorkflowReference;
+  source: WorkflowAssignmentSource;
+  assignedAt: string;
+  reason?: string;
+}
+
+export interface AgentTaskAttachment {
+  fileName: string;
+  localPath: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  sourceUrl?: string;
+}
+
 /** What the agent should do, with explicit guardrail boundaries. */
 export interface AgentTaskDefinition {
+  kind?: 'general' | 'jira-delivery';
   goal: string;
   scope: string;
   definitionOfDone: string;
+  workflow?: AgentWorkflowReference;
+  attachments?: AgentTaskAttachment[];
   nonGoals?: string[];
+  completionContract?: string;
   /** Hard limit on tool invocations before the session is stopped. Default: 200. */
   maxSteps?: number;
-  /** Hard timeout in ms for the entire task. Default: 1 800 000 (30 min). */
+  /** Hard timeout in ms for the entire task. Default: 10 800 000 (3 h). */
   timeoutMs?: number;
+}
+
+export interface DeliveryTaskResult {
+  status: 'success' | 'failure';
+  summary: string;
+  branch: string;
+  commitHash?: string;
+  pushedRef?: string;
+  buildIdentifier?: string;
+  artifactPaths: string[];
+  failureReason?: string;
+}
+
+export interface DeliveryMergeRequestNoteSnapshot {
+  id: string;
+  discussionId?: string;
+  author: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DeliveryMergeRequestFeedbackContext {
+  triggeredAt: string;
+  notes: DeliveryMergeRequestNoteSnapshot[];
+}
+
+export interface DeliveryMergeRequestMetadata {
+  iid: number;
+  webUrl: string;
+  title: string;
+  sourceBranch: string;
+  targetBranch: string;
+  state: string;
+  createdAt?: string;
+  updatedAt?: string;
+  mergeCommitSha?: string;
+  handledNotes?: Record<string, string>;
+  lastSeenAt?: string;
+  pendingFeedback?: DeliveryMergeRequestFeedbackContext;
+  buildRequiredOnMerge?: boolean;
+}
+
+export interface FeatureSubTaskRecord {
+  /** Jira issue key of the created sub-task. */
+  issueKey: string;
+  summary: string;
+  order: number;
+  /** Workflow pack assigned to this sub-task (if any). */
+  workflow?: AgentWorkflowReference;
+  /** Agent session state for the sub-task delivery. */
+  deliveryState?: 'pending' | 'in-progress' | 'completed' | 'failed';
+  /** Worktree branch name when a delivery session is active. */
+  worktreeBranch?: string;
+}
+
+export interface FeatureDecompositionMetadata {
+  /** The parent feature request issue key. */
+  parentIssueKey: string;
+  /** The feature branch all sub-task MRs merge into. */
+  featureBranch: string;
+  /** The base branch the feature branch was created from. */
+  baseBranch: string;
+  /** Sub-tasks created from the decomposition. */
+  subTasks: FeatureSubTaskRecord[];
+  /** Summary from the decomposition agent. */
+  decompositionSummary?: string;
+}
+
+export interface DeliverySessionMetadata {
+  source: 'jira-polling';
+  phase: 'analysis' | 'implementation' | 'merge-request-feedback' | 'feature-decomposition';
+  baseBranch: string;
+  worktreeName: string;
+  worktreePath: string;
+  createdBranch: string;
+  publishCommand: string;
+  artifactPattern: string;
+  mergeRequest?: DeliveryMergeRequestMetadata;
+  analysisSummary?: string;
+  analysisPlan?: string;
+  summaryTemplate?: string;
+  failureTemplate?: string;
+  finalizationState: 'pending' | 'completed' | 'failed';
+  finalizationMessage?: string;
+  result?: DeliveryTaskResult;
+  /** Artifact names already uploaded to Jira — used to avoid duplicates on recovery. */
+  uploadedArtifactNames?: string[];
+  /** When this is a sub-task delivery, the parent feature request issue key. */
+  parentFeatureIssueKey?: string;
+  /** Present when this is a feature request decomposition workflow. */
+  featureDecomposition?: FeatureDecompositionMetadata;
 }
 
 /** Compact event record for display and persistence (not the raw SDK event). */
@@ -58,8 +188,10 @@ export type AgentEventType =
 export interface AgentSessionRecord {
   issueKey: string;
   sessionId: string;
+  provider?: Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
+  delivery?: DeliverySessionMetadata;
   events: AgentEventSummary[];
   planText?: string;
   reasoningText?: string;
@@ -67,10 +199,11 @@ export interface AgentSessionRecord {
   stepCount: number;
   startedAt: string;
   completedAt?: string;
+  boardId?: string;
 }
 
 /** Default guardrail limits. */
 export const AGENT_DEFAULTS = {
   maxSteps: 500,
-  timeoutMs: 30 * 60 * 1000 // 30 minutes
+  timeoutMs: 3 * 60 * 60 * 1000 // 3 hours — delivery workflows can run E2E suites, long builds, and iterative reviews
 } as const;

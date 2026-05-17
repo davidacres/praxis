@@ -159,7 +159,6 @@ Resolve the timeout when refreshing tokens.
     const fixture = await createLiveFolderFixture('root-level-children');
     fixtureRoots.push(fixture.rootUri);
 
-    // Place a bug file directly in the features/ root (not inside a feature dir)
     await writeTextFile(
       vscode.Uri.joinPath(fixture.featuresRootUri, 'bug-01-1-root-level-crash.md'),
       `# Root level crash
@@ -185,7 +184,6 @@ A bug filed at the features root, not inside a feature folder.
     const fixture = await createLiveFolderFixture('bugs-loose');
     fixtureRoots.push(fixture.rootUri);
 
-    // Place a bug file with loose naming: bug-001-s107-slug.md
     const bugsDirUri = vscode.Uri.joinPath(fixture.plansRootUri, 'bugs');
     await writeTextFile(
       vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
@@ -210,12 +208,13 @@ NullReferenceException in ISyncResultBuilder when sync completes.
   });
 
   test('parsePlanFolder works with only plans/bugs/ and no feature folders', async () => {
-    // Create a minimal fixture manually — no features
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder);
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const rootUri = vscode.Uri.joinPath(
-      workspaceFolder!.uri, '.ticket-manager-test', `bugs-only-${uniqueSuffix}`
+      workspaceFolder!.uri,
+      '.ticket-manager-test',
+      `bugs-only-${uniqueSuffix}`
     );
     fixtureRoots.push(rootUri);
     const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
@@ -253,33 +252,50 @@ Sync manager times out after 30s.
     assert.strictEqual(bug2!.issueType, 'Bug');
   });
 
-  test('parsePlanFolder discovers bugs alongside features (user folder structure)', async () => {
-    // Mimics: plans/bugs/*.md + plans/features/feature-01-xxx/feature.md
+  test('parsePlanFolder discovers bugs alongside features', async () => {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     assert.ok(workspaceFolder);
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const rootUri = vscode.Uri.joinPath(
-      workspaceFolder!.uri, '.ticket-manager-test', `mixed-${uniqueSuffix}`
+      workspaceFolder!.uri,
+      '.ticket-manager-test',
+      `mixed-${uniqueSuffix}`
     );
     fixtureRoots.push(rootUri);
     const plansUri = vscode.Uri.joinPath(rootUri, 'plans');
 
-    // Create a feature
     const featureDirUri = vscode.Uri.joinPath(plansUri, 'features', 'feature-01-his-connectivity');
     await writeTextFile(
       vscode.Uri.joinPath(featureDirUri, 'feature.md'),
-      `# HIS Connectivity\n\n**Status:** Done\n\n## Summary\nConnect to HIS.\n`
+      `# HIS Connectivity
+
+**Status:** Done
+
+## Summary
+Connect to HIS.
+`
     );
 
-    // Create bugs in plans/bugs/ with loose naming
     const bugsDirUri = vscode.Uri.joinPath(plansUri, 'bugs');
     await writeTextFile(
       vscode.Uri.joinPath(bugsDirUri, 'bug-001-s107-isyncresultbuilder.md'),
-      `# ISyncResultBuilder null ref\n\n**Status:** In Progress\n\n## Summary\nNull ref.\n`
+      `# ISyncResultBuilder null ref
+
+**Status:** In Progress
+
+## Summary
+Null ref.
+`
     );
     await writeTextFile(
       vscode.Uri.joinPath(bugsDirUri, 'bug-004-s3776-syncmanager-106.md'),
-      `# SyncManager 106\n\n**Status:** Backlog\n\n## Summary\nSync issue.\n`
+      `# SyncManager 106
+
+**Status:** Backlog
+
+## Summary
+Sync issue.
+`
     );
 
     const parsed = await parsePlanFolder(rootUri);

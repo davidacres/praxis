@@ -1,5 +1,77 @@
 {
     "ticketManager.workspaceMcpServerName": "",
-    "ticketManager.backendMode": "jira",
-    "ticketManager.planFilePath": ""
+    "ticketManager.connectionType": "http",
+    "ticketManager.jiraPolling.requiredLabel": "syscfg",
+    "ticketManager.jiraPolling.enabled": true,
+    "ticketManager.planFilePath": "",
+    "ticketManager.liveFolderPath": "",
+    "ticketManager.liveFolderAllowIssueCreation": true,
+    "ticketManager.liveFolderProjectKey": "",
+    "ticketManager.liveFolderProjectName": "",
+    "ticketManager.gitlabUrl": "https://git.example.com/",
+    "ticketManager.jiraApiEpicKey": "",
+    "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
+    "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+    "ticketManager.jiraCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
+    "ticketManager.jiraCloudSiteName": "aags-example",
+    "ticketManager.jiraCloudSiteUrl": "https://aags-example.atlassian.net",
+    "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
+    "ticketManager.jiraApiBoardName": "KAMAI",
+    "ticketManager.gitlabListAllAccessibleBoards": true,
+    "ticketManager.connections": [
+        {
+            "id": "jira-cloud",
+            "name": "Jira Cloud",
+            "mode": "jira",
+            "settings": {
+                "clientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+                "url": "https://aags-example.atlassian.net/"
+            }
+        },
+        {
+            "id": "gitlab",
+            "name": "GitLab",
+            "mode": "gitlab",
+            "settings": {
+                "url": "https://git.example.com/"
+            }
+        },
+        {
+            "id": "hid",
+            "name": "HID",
+            "mode": "livefolder",
+            "settings": {
+                "path": "C:\\dev-ai\\ExampleHIS\\example-his-integration",
+                "projectName": "Example HID",
+                "allowIssueCreation": true
+            }
+        }
+    ],
+    "ticketManager.boards": [
+        {
+            "connectionId": "jira-cloud",
+            "boardId": "jql:workspace",
+            "displayName": "KAMAI"
+        },
+        {
+            "connectionId": "gitlab",
+            "boardId": "gitlab:3668:279",
+            "displayName": "KAMAI"
+        },
+        {
+            "connectionId": "hid",
+            "boardId": "hid",
+            "displayName": "HID"
+        },
+        {
+            "connectionId": "hid",
+            "boardId": "livefolder-live",
+            "displayName": "Example HID (Live)"
+        },
+        {
+            "connectionId": "jira-cloud",
+            "boardId": "agile:620",
+            "displayName": "Presales Configurator"
+        }
+    ]
 }
