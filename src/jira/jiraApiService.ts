@@ -144,6 +144,8 @@ function isBacklogStatusName(statusName: string | undefined): boolean {
   return normalizeFieldName(statusName) === 'backlog';
 }
 
+const CUSTOM_JQL_BOARD_PREFIX = 'jql:custom:';
+
 export function resolveBoardWorkflowStatusOrder(
   boardConfiguredStatuses: string[],
   workflowStatuses: string[],
@@ -757,6 +759,14 @@ export class JiraApiService implements IssueTrackerService {
 
   public async getBoards(filters: BoardFilters): Promise<Board[]> {
     const boards: Board[] = [];
+    let agileLoadError: string | undefined;
+    try {
+      boards.push(...(await this.fetchAgileBoards()));
+    } catch (error) {
+      agileLoadError = error instanceof Error ? error.message : String(error);
+      this.output.appendLine(`[jiraapi] Failed to load Jira Cloud boards: ${agileLoadError}`);
+    }
+
     const linkedEpicKey = this.getLinkedEpicKey();
     const linkedBoardJql = this.getLinkedBoardJql();
 
@@ -788,10 +798,28 @@ export class JiraApiService implements IssueTrackerService {
       });
     }
 
+    if (agileLoadError) {
+      throw new Error(
+        `Could not load Jira Cloud Agile boards: ${agileLoadError}. Ensure your OAuth token includes scope 'read:board-scope:jira-software'. You can still use linked epic/JQL boards or add custom JQL boards.`
+      );
+    }
+
     return boards.filter(board => this.matchesBoardFilters(board, filters));
   }
 
   public async getBoardDetails(board: Board): Promise<BoardDetails> {
+    const agileBoardId = this.parseAgileBoardId(board);
+    if (agileBoardId) {
+      const issues = sortIssuesByUpdated(await this.fetchAgileBoardIssues(agileBoardId));
+      const columnStatusOrder = await this.fetchBoardWorkflowStatuses(board, issues);
+      return {
+        board,
+        issues,
+        columns: buildBoardColumns(issues),
+        columnStatusOrder
+      };
+    }
+
     const epicKey = this.parseEpicKey(board.id);
     let jql: string;
     if (epicKey) {
@@ -2073,11 +2101,28 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private parseJqlBoardQuery(board: Board): string | undefined {
-    if (board.id !== 'jql:workspace' || !isRecord(board.raw)) {
-      return undefined;
+    if (board.id === 'jql:workspace') {
+      if (!isRecord(board.raw)) {
+        return undefined;
+      }
+      const jql = asString(board.raw.jql)?.trim();
+      return jql || undefined;
     }
-    const jql = asString(board.raw.jql)?.trim();
-    return jql || undefined;
+
+    if (board.id.startsWith(CUSTOM_JQL_BOARD_PREFIX)) {
+      const encoded = board.id.slice(CUSTOM_JQL_BOARD_PREFIX.length);
+      if (!encoded) {
+        return undefined;
+      }
+      try {
+        const decoded = decodeURIComponent(encoded).trim();
+        return decoded || undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    return undefined;
   }
 
   private getLinkedEpicKey(): string | undefined {
@@ -2098,6 +2143,124 @@ export class JiraApiService implements IssueTrackerService {
       return `JQL ${compact}`;
     }
     return `JQL ${compact.slice(0, 53)}...`;
+  }
+
+  private parseAgileBoardId(board: Board): string | undefined {
+    if (isRecord(board.raw)) {
+      const rawId = asString(board.raw.agileBoardId)?.trim();
+      if (rawId) {
+        return rawId;
+      }
+    }
+
+    if (board.id.startsWith('agile:')) {
+      const id = board.id.slice('agile:'.length).trim();
+      return id || undefined;
+    }
+
+    return undefined;
+  }
+
+  private async fetchAgileBoards(): Promise<Board[]> {
+    const boards: Board[] = [];
+    const seen = new Set<string>();
+    let startAt = 0;
+    const maxResults = 50;
+
+    while (true) {
+      const response = await this.requestJson(
+        'GET',
+        `/rest/agile/1.0/board?startAt=${startAt}&maxResults=${maxResults}`
+      );
+      const payload = isRecord(response) ? response : {};
+      const values = toArray(payload.values).filter(isRecord);
+
+      for (const rawBoard of values) {
+        const rawId = asString(rawBoard.id)?.trim();
+        if (!rawId || seen.has(rawId)) {
+          continue;
+        }
+        seen.add(rawId);
+
+        const location = isRecord(rawBoard.location) ? rawBoard.location : undefined;
+        const locationProject = location && isRecord(location.project) ? location.project : undefined;
+
+        const projectKey =
+          asString(locationProject?.key)?.trim() ?? asString(location?.projectKey)?.trim();
+        const projectName =
+          asString(locationProject?.name)?.trim() ?? asString(location?.name)?.trim();
+        const locationName =
+          asString(location?.displayName)?.trim() ?? projectName;
+
+        boards.push({
+          id: `agile:${rawId}`,
+          name: asString(rawBoard.name)?.trim() || `Board ${rawId}`,
+          type: asString(rawBoard.type)?.trim().toLowerCase() || 'board',
+          projectKey,
+          projectName,
+          locationName,
+          raw: { agileBoardId: rawId }
+        });
+      }
+
+      const isLast = payload.isLast === true;
+      const total =
+        typeof payload.total === 'number' && Number.isFinite(payload.total) ? payload.total : undefined;
+      if (isLast || values.length === 0) {
+        break;
+      }
+
+      startAt += values.length;
+      if (typeof total === 'number' && startAt >= total) {
+        break;
+      }
+    }
+
+    return boards;
+  }
+
+  private async fetchAgileBoardIssues(boardId: string): Promise<IssueSummary[]> {
+    const issues: IssueSummary[] = [];
+    let startAt = 0;
+    const maxResults = 100;
+    const fields = [
+      'summary',
+      'status',
+      'issuetype',
+      'assignee',
+      'priority',
+      'updated',
+      'project',
+      'description',
+      'parent'
+    ];
+
+    while (true) {
+      const response = await this.requestJson(
+        'GET',
+        `/rest/agile/1.0/board/${encodeURIComponent(boardId)}/issue?startAt=${startAt}&maxResults=${maxResults}&fields=${encodeURIComponent(fields.join(','))}`
+      );
+      const payload = isRecord(response) ? response : {};
+      const rawIssues = toArray(payload.issues).filter(isRecord);
+      const normalized = rawIssues
+        .map(issue => normalizeIssue(issue, this.getBrowseBaseUrl()))
+        .filter((item): item is IssueSummary => Boolean(item));
+      issues.push(...normalized);
+
+      const isLast = payload.isLast === true;
+      const total =
+        typeof payload.total === 'number' && Number.isFinite(payload.total) ? payload.total : undefined;
+      if (isLast || rawIssues.length === 0) {
+        break;
+      }
+
+      startAt += rawIssues.length;
+      if (typeof total === 'number' && startAt >= total) {
+        break;
+      }
+    }
+
+    return issues;
   }
 
   private matchesBoardFilters(board: Board, filters: BoardFilters): boolean {

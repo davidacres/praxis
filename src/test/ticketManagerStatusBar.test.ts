@@ -23,7 +23,7 @@ suite('TicketManagerStatusBar', () => {
 
   test('shows default AI provider in healthy state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jira',
+      backendMode: 'jiraapi',
       connection: {
         status: 'ok',
         message: 'Connected. 3 accessible project(s) found.',
@@ -37,7 +37,7 @@ suite('TicketManagerStatusBar', () => {
       isChecking: false
     });
 
-    assert.strictEqual(getBackendModeLabel('jira'), 'Jira via MCP');
+    assert.strictEqual(getBackendModeLabel('jira'), 'Jira Cloud');
     assert.strictEqual(presentation.tone, 'ok');
     assert.ok(presentation.text.includes('AI OpenAI'));
     assert.ok(presentation.tooltipMarkdown.includes('Default provider: OpenAI'));
@@ -65,7 +65,7 @@ suite('TicketManagerStatusBar', () => {
 
   test('surfaces paused sessions and pending approvals as attention state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jira',
+      backendMode: 'jiraapi',
       connection: {
         status: 'ok',
         message: 'Connected.',

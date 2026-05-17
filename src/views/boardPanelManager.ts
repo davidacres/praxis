@@ -76,6 +76,7 @@ interface BoardRenderPrefs {
 export class BoardPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private activeBoard?: Board;
+  private activeBoardService?: IssueTrackerService;
   private boardDetails?: BoardDetails;
   private loading = false;
   private errorMessage?: string;
@@ -88,7 +89,8 @@ export class BoardPanelManager implements vscode.Disposable {
     private readonly backendService: IssueTrackerService,
     private readonly onIssueSelected: (issue: IssueSummary) => Promise<void>,
     private readonly onAfterBoardTransition: (() => Promise<void>) | undefined,
-    private readonly boardColumnStore: BoardColumnStore
+    private readonly boardColumnStore: BoardColumnStore,
+    private readonly resolveBoardService?: (board: Board) => Promise<IssueTrackerService>
   ) {}
 
   /** Wired from activation after issue edit/delete helpers exist. */
@@ -111,6 +113,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public async openBoard(board: Board): Promise<void> {
     this.activeBoard = board;
+    this.activeBoardService = await this.getActiveBoardService(board);
     this.ensurePanel();
     this.panel?.reveal(vscode.ViewColumn.Active, false);
     await this.refresh();
@@ -127,7 +130,8 @@ export class BoardPanelManager implements vscode.Disposable {
     this.render();
 
     try {
-      const boardDetails = await this.backendService.getBoardDetails(this.activeBoard);
+      const boardService = await this.getActiveBoardService();
+      const boardDetails = await boardService.getBoardDetails(this.activeBoard);
       if (generation !== this.requestGeneration) {
         return;
       }
@@ -146,7 +150,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
       if (
         this.selectedIssueKey &&
-        !boardDetails.issues.some(issue => issue.key === this.selectedIssueKey)
+        !boardDetails.issues.some((issue: IssueSummary) => issue.key === this.selectedIssueKey)
       ) {
         this.selectedIssueKey = undefined;
       }
@@ -176,6 +180,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public clear(): void {
     this.activeBoard = undefined;
+    this.activeBoardService = undefined;
     this.boardDetails = undefined;
     this.loading = false;
     this.errorMessage = undefined;
@@ -422,13 +427,14 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     try {
-      const transitions = await this.backendService.getTransitions(issueKey);
+      const boardService = await this.getActiveBoardService();
+      const transitions = await boardService.getTransitions(issueKey);
       const transition = findTransitionToTargetStatus(transitions, targetStatus);
       if (!transition) {
         const hint =
           transitions.length > 0
             ? ` Available transitions: ${transitions
-                .map(t => (t.toStatus ? `${t.name} → ${t.toStatus}` : t.name))
+                .map((t: (typeof transitions)[number]) => (t.toStatus ? `${t.name} → ${t.toStatus}` : t.name))
                 .join('; ')}`
             : '';
         void vscode.window.showWarningMessage(
@@ -437,7 +443,7 @@ export class BoardPanelManager implements vscode.Disposable {
         return;
       }
 
-      await this.backendService.transitionIssue(issueKey, transition.id);
+      await boardService.transitionIssue(issueKey, transition.id);
       await this.refresh();
       await this.onAfterBoardTransition?.();
     } catch (error) {
@@ -497,6 +503,18 @@ export class BoardPanelManager implements vscode.Disposable {
       ? { ...prefs, orderedStatuses: [] as string[] }
       : prefs;
     return applyBoardColumnPreferences(filtered, effectivePrefs);
+  }
+
+  private async getActiveBoardService(board?: Board): Promise<IssueTrackerService> {
+    const targetBoard = board ?? this.activeBoard;
+    if (targetBoard?.connectionId && this.resolveBoardService) {
+      const service = await this.resolveBoardService(targetBoard);
+      this.activeBoardService = service;
+      return service;
+    }
+
+    this.activeBoardService = this.backendService;
+    return this.backendService;
   }
 
   private renderBoardColumnsHtml(columns: BoardColumn[], prefs: BoardRenderPrefs): string {
@@ -601,8 +619,8 @@ export class BoardPanelManager implements vscode.Disposable {
     const headerTitle = board ? escapeHtml(board.name) : 'No board selected';
     const headerTitleHtml = board
       ? `<span class="header-title-with-icon"><span class="board-header-icon" style="color: ${escapeHtml(
-          resolveBackendModeBoardIconColor(this.backendService.mode)
-        )}">${boardListModeIconSvg(this.backendService.mode)}</span><span>${escapeHtml(board.name)}</span></span>`
+          resolveBackendModeBoardIconColor(this.activeBoardService?.mode ?? this.backendService.mode)
+        )}">${boardListModeIconSvg(this.activeBoardService?.mode ?? this.backendService.mode)}</span><span>${escapeHtml(board.name)}</span></span>`
       : headerTitle;
     const headerMeta = board
       ? [

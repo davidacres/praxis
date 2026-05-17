@@ -82,12 +82,8 @@ export function createConnectionScopedConfigStore(
     getBackendMode: () => connection.mode,
     getEffectiveBackendMode: () => connection.mode,
 
-    // ── Jira via MCP ─────────────────────────────────────────────────
+    // ── Jira Cloud ───────────────────────────────────────────────────
     getConnectionType: () => getString(settings, 'connectionType') ?? base.getConnectionType(),
-    getJiraMcpCloudId: () => {
-      const cloudId = getString(settings, 'cloudId')?.trim();
-      return cloudId && cloudId.length > 0 ? cloudId : base.getJiraMcpCloudId();
-    },
     getJiraCloudId: () => {
       const cloudId = getString(settings, 'cloudId')?.trim();
       return cloudId && cloudId.length > 0 ? cloudId : base.getJiraCloudId();
@@ -129,10 +125,6 @@ export function createConnectionScopedConfigStore(
 
     // ── GitLab ───────────────────────────────────────────────────────
     getGitLabUrl: () => getString(settings, 'url')?.trim() ?? base.getGitLabUrl(),
-    getGitLabConnectionType: () => {
-      const value = getString(settings, 'connectionType');
-      return value === 'mcp' || value === 'api' ? value : base.getGitLabConnectionType();
-    },
     getGitLabApiKey: () => getString(settings, 'apiKey') ?? base.getGitLabApiKey(),
     getGitLabApiKeyFromSecrets: async (..._args: unknown[]): Promise<string> => {
       if (secrets.gitlabApiKey && secrets.gitlabApiKey.trim().length > 0) {
@@ -141,9 +133,6 @@ export function createConnectionScopedConfigStore(
       const inline = getString(settings, 'apiKey')?.trim();
       return inline && inline.length > 0 ? inline : '';
     },
-    getGitLabMcpCommand: () =>
-      getString(settings, 'mcpCommand') ?? base.getGitLabMcpCommand(),
-    getGitLabMcpArgs: () => getStringArray(settings, 'mcpArgs') ?? base.getGitLabMcpArgs(),
     getGitLabProjectPath: () =>
       getString(settings, 'projectPath') ?? base.getGitLabProjectPath(),
     getGitLabListAllAccessibleBoards: () =>

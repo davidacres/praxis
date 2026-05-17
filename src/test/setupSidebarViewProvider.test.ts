@@ -4,8 +4,7 @@ import {
   buildGitLabSetupUpdates,
   canPromptForGitLabBoardSelection,
   createGitLabBoardSelectionSummary,
-  getGitLabSetupValues,
-  hasConfiguredJiraMcpConnection
+  getGitLabSetupValues
 } from '../views/setupSidebarViewProvider';
 
 function createConfig(values: Record<string, unknown>): vscode.WorkspaceConfiguration {
@@ -17,82 +16,33 @@ function createConfig(values: Record<string, unknown>): vscode.WorkspaceConfigur
 }
 
 suite('setupSidebarViewProvider', () => {
-  test('treats imported workspace or user Jira MCP references as configured', () => {
-    const config = createConfig({
-      workspaceMcpServerName: 'jira-workspace-server'
-    });
-
-    assert.strictEqual(hasConfiguredJiraMcpConnection(config), true);
-    assert.strictEqual(
-      hasConfiguredJiraMcpConnection(
-        createConfig({
-          userMcpServerRef: 'C:/Users/me/AppData/Roaming/Code/User/mcp.json::jira'
-        })
-      ),
-      true
-    );
-  });
-
-  test('treats manual Jira MCP connection settings as configured', () => {
-    assert.strictEqual(
-      hasConfiguredJiraMcpConnection(
-        createConfig({
-          connectionType: 'stdio',
-          stdioCommand: 'node'
-        })
-      ),
-      true
-    );
-    assert.strictEqual(
-      hasConfiguredJiraMcpConnection(
-        createConfig({
-          connectionType: 'http',
-          httpUrl: 'https://mcp.example.test'
-        })
-      ),
-      true
-    );
-  });
-
-  test('returns false when no Jira MCP connection is configured', () => {
-    assert.strictEqual(hasConfiguredJiraMcpConnection(createConfig({})), false);
-  });
-
   test('loads stored GitLab setup values including project path settings', () => {
     const values = getGitLabSetupValues(
       createConfig({
         gitlabUrl: 'https://gitlab.example.com',
-        gitlabConnectionType: 'api',
         gitlabApiKey: 'token',
         gitlabProjectPath: 'group/project',
-        gitlabListAllAccessibleBoards: true,
-        gitlabMcpCommand: 'node',
-        gitlabMcpArgs: ['server.js', '--flag']
+        gitlabListAllAccessibleBoards: true
       })
     );
 
     assert.deepStrictEqual(values, {
       gitlabUrl: 'https://gitlab.example.com',
-      gitlabConnectionType: 'api',
       gitlabApiKey: 'token',
       gitlabProjectPath: 'group/project',
-      gitlabListAllAccessibleBoards: true,
-      gitlabMcpCommand: 'node',
-      gitlabMcpArgs: 'server.js --flag'
+      gitlabListAllAccessibleBoards: true
     });
   });
 
   test('builds GitLab setup updates including project path and board scope', () => {
     const updates = buildGitLabSetupUpdates({
       gitlabUrl: 'https://gitlab.example.com',
-      gitlabConnectionType: 'api',
       gitlabApiKey: 'token',
       gitlabProjectPath: 'group/project',
       gitlabListAllAccessibleBoards: 'true'
     });
 
     assert.deepStrictEqual(updates, [
-      { key: 'gitlabConnectionType', value: 'api' },
       { key: 'gitlabProjectPath', value: 'group/project' },
       { key: 'gitlabListAllAccessibleBoards', value: true },
       { key: 'gitlabUrl', value: 'https://gitlab.example.com' },
@@ -100,10 +50,9 @@ suite('setupSidebarViewProvider', () => {
     ]);
   });
 
-  test('only prompts for GitLab project and board selection in API mode with credentials', () => {
+  test('only prompts for GitLab project and board selection when URL and credentials are present', () => {
     assert.strictEqual(
       canPromptForGitLabBoardSelection({
-        gitlabConnectionType: 'api',
         gitlabUrl: 'https://gitlab.example.com',
         gitlabApiKey: 'token'
       }),
@@ -112,9 +61,8 @@ suite('setupSidebarViewProvider', () => {
 
     assert.strictEqual(
       canPromptForGitLabBoardSelection({
-        gitlabConnectionType: 'mcp',
         gitlabUrl: 'https://gitlab.example.com',
-        gitlabApiKey: 'token'
+        gitlabApiKey: ''
       }),
       false
     );

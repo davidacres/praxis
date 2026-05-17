@@ -695,9 +695,6 @@ export class GitLabBoardService implements IssueTrackerService {
       return this.cachedApiConfig;
     }
 
-    if (this.configStore.getGitLabConnectionType() !== 'api') {
-      throw new Error('GitLab boards currently support direct GitLab API connections only.');
-    }
     const token = (this.context
       ? await this.configStore.getGitLabApiKeyFromSecrets(this.context)
       : this.configStore.getGitLabApiKey().trim()

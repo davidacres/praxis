@@ -184,7 +184,7 @@ async function writeUserMcpOverride(contents: string): Promise<void> {
 async function resetConnectionState(api: TicketManagerExtensionApi): Promise<void> {
   const config = vscode.workspace.getConfiguration('ticketManager');
   await Promise.all([
-    config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderPath', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectKey', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectName', '', vscode.ConfigurationTarget.Workspace),
@@ -201,10 +201,7 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
     config.update('stdioCommand', '', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [], vscode.ConfigurationTarget.Global),
     config.update('stdioCwd', '', vscode.ConfigurationTarget.Global),
-    config.update('httpUrl', '', vscode.ConfigurationTarget.Global),
-    config.update('jiraMcpCloudId', '', vscode.ConfigurationTarget.Global),
-    config.update('workspaceMcpServerName', '', vscode.ConfigurationTarget.Workspace),
-    config.update('userMcpServerRef', '', vscode.ConfigurationTarget.Global)
+    config.update('httpUrl', '', vscode.ConfigurationTarget.Global)
   ]);
 
   await clearUserMcpOverride();
@@ -227,14 +224,12 @@ async function configureScenario(
   const config = vscode.workspace.getConfiguration('ticketManager');
 
   await Promise.all([
-    config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
     config.update('connectionType', 'stdio', vscode.ConfigurationTarget.Global),
     config.update('stdioCommand', 'node', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [serverPath, `--scenario=${scenario}`], vscode.ConfigurationTarget.Global),
     config.update('stdioCwd', getExtensionPath(), vscode.ConfigurationTarget.Global),
     config.update('httpUrl', '', vscode.ConfigurationTarget.Global),
-    config.update('workspaceMcpServerName', '', vscode.ConfigurationTarget.Workspace),
-    config.update('userMcpServerRef', '', vscode.ConfigurationTarget.Global),
     config.update('requestTimeoutMs', 10000, vscode.ConfigurationTarget.Global),
     config.update('defaultPageSize', 25, vscode.ConfigurationTarget.Global)
   ]);
@@ -344,8 +339,6 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.refresh'));
     assert.ok(commands.includes('ticketManager.checkConnection'));
     assert.ok(commands.includes('ticketManager.changeStatus'));
-    assert.ok(commands.includes('ticketManager.importWorkspaceMcpConfig'));
-    assert.ok(commands.includes('ticketManager.importUserMcpConfig'));
     assert.ok(commands.includes('ticketManager.setBackendMode'));
     assert.ok(commands.includes('ticketManager.openSettings'));
     assert.ok(commands.includes('ticketManager.configureAi'));
@@ -407,7 +400,7 @@ suite('Ticket Manager Extension', () => {
     assert.ok(keys.includes('APP-103'));
   });
 
-  test('loads issues from the Atlassian cloud Jira MCP contract', async () => {
+  test('loads issues from the Atlassian cloud Jira contract', async () => {
     const api = await getApi();
     await configureScenario(api, 'atlassian');
 
@@ -563,7 +556,7 @@ suite('Ticket Manager Extension', () => {
     assert.strictEqual(issue.comments?.[0]?.body, 'Connected comment from the integration test.');
   });
 
-  test('updates and deletes issues through the Atlassian cloud Jira MCP contract', async () => {
+  test('updates and deletes issues through the Atlassian cloud Jira contract', async () => {
     const api = await getApi();
     await configureScenario(api, 'atlassian');
 
@@ -598,7 +591,7 @@ suite('Ticket Manager Extension', () => {
     assert.strictEqual(reassignedIssue.parentKey, undefined);
   });
 
-  test('adds comments through the Atlassian cloud Jira MCP contract', async () => {
+  test('adds comments through the Atlassian cloud Jira contract', async () => {
     const api = await getApi();
     await configureScenario(api, 'atlassian');
 

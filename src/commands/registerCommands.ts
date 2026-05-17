@@ -1023,42 +1023,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.importWorkspaceMcpConfig', async () => {
-      try {
-        const result = await deps.configStore.importWorkspaceMcpConfig(deps.context);
-        if (!result.saved) {
-          return;
-        }
-
-        await deps.backendService.reset();
-        await clearUiSelection(deps);
-        await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Using ${result.description}.`);
-      } catch (error) {
-        reportCommandError(deps, 'workspace-mcp', error);
-        await vscode.window.showErrorMessage(
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    }),
-    vscode.commands.registerCommand('ticketManager.importUserMcpConfig', async () => {
-      try {
-        const result = await deps.configStore.importUserMcpConfig(deps.context);
-        if (!result.saved) {
-          return;
-        }
-
-        await deps.backendService.reset();
-        await clearUiSelection(deps);
-        await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Using ${result.description}.`);
-      } catch (error) {
-        reportCommandError(deps, 'user-mcp', error);
-        await vscode.window.showErrorMessage(
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    }),
     vscode.commands.registerCommand('ticketManager.configureBoardColumns', async (arg?: unknown) => {
       const board =
         resolveBoard(deps.boardsProvider, arg, deps.boardStore) ??

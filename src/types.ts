@@ -288,43 +288,6 @@ export interface PagedIssues {
   hasMore: boolean;
 }
 
-export type JiraMcpContract = 'legacy' | 'atlassian-cloud';
-
-export type JiraCapabilityName =
-  | 'getProjects'
-  | 'searchIssues'
-  | 'getIssue'
-  | 'getTransitions'
-  | 'transitionIssue'
-  | 'createIssue'
-  | 'updateIssue'
-  | 'deleteIssue'
-  | 'addComment'
-  | 'getAgileBoards'
-  | 'getBoardIssues'
-  | 'accessibleResources';
-
-export interface JiraCapabilities {
-  contract: JiraMcpContract;
-  getProjects: string;
-  searchIssues: string;
-  getIssue: string;
-  getTransitions: string;
-  transitionIssue?: string;
-  createIssue?: string;
-  updateIssue?: string;
-  deleteIssue?: string;
-  addComment?: string;
-  getAgileBoards?: string;
-  getBoardIssues?: string;
-  accessibleResources?: string;
-}
-
-export interface CapabilityResolution {
-  capabilities?: JiraCapabilities;
-  missing: JiraCapabilityName[];
-}
-
 export interface ConnectionCheck {
   status: 'ok' | 'warning' | 'error';
   message: string;

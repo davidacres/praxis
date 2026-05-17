@@ -47,10 +47,7 @@ interface SetupState {
   githubOwner: string;
   // GitLab
   gitlabUrl: string;
-  gitlabConnectionType: 'api' | 'mcp';
   gitlabApiKey: string;
-  gitlabMcpCommand: string;
-  gitlabMcpArgs: string;
   // Jira
   jiraConnectionType: 'stdio' | 'http';
   jiraStdioCommand: string;
@@ -77,10 +74,7 @@ function createInitialState(): SetupState {
     githubPat: '',
     githubOwner: '',
     gitlabUrl: '',
-    gitlabConnectionType: 'api',
     gitlabApiKey: '',
-    gitlabMcpCommand: '',
-    gitlabMcpArgs: '',
     jiraConnectionType: 'stdio',
     jiraStdioCommand: '',
     jiraStdioArgs: '',
@@ -111,7 +105,6 @@ const MODE_OPTIONS: ModeOption[] = [
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
   { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
   { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
-  { mode: 'jira', icon: '🔗', title: 'Jira via MCP', description: 'Connect to Jira through an MCP server' },
   { mode: 'jiraapi', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
@@ -203,17 +196,15 @@ export class SetupWizardPanel {
         const mode = typeof message.mode === 'string' ? message.mode as SetupBackendMode : undefined;
         if (mode) {
           this.state.selectedMode = mode;
-          if (mode === 'jira' || mode === 'jiraapi') {
+          if (mode === 'jiraapi') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
             this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', true);
-            if (mode === 'jiraapi') {
-              this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
-              this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
-              this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-              this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-              this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
-            }
+            this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+            this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+            this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+            this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+            this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
           }
           this.state.step = 1;
           this.rerender();
@@ -343,30 +334,7 @@ export class SetupWizardPanel {
 
       case 'gitlab':
         await config.update('gitlabUrl', this.state.gitlabUrl, target);
-        await config.update('gitlabConnectionType', this.state.gitlabConnectionType, target);
-        if (this.state.gitlabConnectionType === 'api') {
-          await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
-        } else {
-          await config.update('gitlabMcpCommand', this.state.gitlabMcpCommand, target);
-          await config.update('gitlabMcpArgs', this.state.gitlabMcpArgs.split(' ').filter(Boolean), target);
-        }
-        break;
-
-      case 'jira':
-        await config.update('connectionType', this.state.jiraConnectionType, target);
-        await config.update(
-          'jiraPolling.requiredLabel',
-          this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
-          target
-        );
-        await config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target);
-        if (this.state.jiraConnectionType === 'stdio') {
-          await config.update('stdioCommand', this.state.jiraStdioCommand, target);
-          await config.update('stdioArgs', this.state.jiraStdioArgs.split(' ').filter(Boolean), target);
-          await config.update('stdioCwd', this.state.jiraCwd, target);
-        } else {
-          await config.update('httpUrl', this.state.jiraHttpUrl, target);
-        }
+        await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
         break;
 
       case 'jiraapi':
@@ -522,9 +490,6 @@ export class SetupWizardPanel {
       case 'gitlab':
         formHtml = this.renderGitlabForm();
         break;
-      case 'jira':
-        formHtml = this.renderJiraForm();
-        break;
       case 'jiraapi':
         formHtml = this.renderJiraApiForm();
         break;
@@ -613,35 +578,6 @@ export class SetupWizardPanel {
   /* -- GitLab form ------------------------------------------------- */
 
   private renderGitlabForm(): string {
-    const isApi = this.state.gitlabConnectionType === 'api';
-    const isMcp = this.state.gitlabConnectionType === 'mcp';
-
-    const apiFields = isApi ? `
-      <div class="field-group">
-        <label class="field-label">API Key</label>
-        <input type="password" class="field-input"
-               data-field="gitlabApiKey"
-               value="${esc(this.state.gitlabApiKey)}"
-               placeholder="glpat-…" />
-        <p class="field-hint">Need a token? Create one in GitLab → Settings → Access Tokens</p>
-      </div>` : '';
-
-    const mcpFields = isMcp ? `
-      <div class="field-group">
-        <label class="field-label">MCP Command</label>
-        <input type="text" class="field-input"
-               data-field="gitlabMcpCommand"
-               value="${esc(this.state.gitlabMcpCommand)}"
-               placeholder="npx gitlab-mcp-server" />
-      </div>
-      <div class="field-group">
-        <label class="field-label">MCP Args</label>
-        <input type="text" class="field-input"
-               data-field="gitlabMcpArgs"
-               value="${esc(this.state.gitlabMcpArgs)}"
-               placeholder="--token XXX" />
-      </div>` : '';
-
     return `
       <div class="field-group">
         <label class="field-label">GitLab URL</label>
@@ -651,24 +587,14 @@ export class SetupWizardPanel {
                placeholder="https://gitlab.com" />
       </div>
       <div class="field-group">
-        <label class="field-label">Connection Type</label>
-        <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" name="gitlabConnectionType"
-                   data-field="gitlabConnectionType"
-                   value="api" ${isApi ? 'checked' : ''} />
-            API Key
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="gitlabConnectionType"
-                   data-field="gitlabConnectionType"
-                   value="mcp" ${isMcp ? 'checked' : ''} />
-            GitLab MCP Server
-          </label>
-        </div>
+        <label class="field-label">Personal Access Token</label>
+        <input type="password" class="field-input"
+               data-field="gitlabApiKey"
+               value="${esc(this.state.gitlabApiKey)}"
+               placeholder="glpat-…" />
+        <p class="field-hint">Need a token? Create one in GitLab → Settings → Access Tokens</p>
       </div>
-      ${apiFields}
-      ${mcpFields}`;
+      `;
   }
 
   /* -- Jira form --------------------------------------------------- */
@@ -710,7 +636,7 @@ export class SetupWizardPanel {
       </div>` : '';
 
     return `
-      <p class="form-help">This Jira mode uses MCP. Configure the connection to your Jira MCP server.</p>
+      <p class="form-help">This Jira connection configures a remote Jira server.</p>
       <div class="field-group">
         <label class="field-label">Connection Type</label>
         <div class="radio-group">
@@ -718,13 +644,13 @@ export class SetupWizardPanel {
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="stdio" ${isStdio ? 'checked' : ''} />
-            Jira MCP via stdio
+            Jira via stdio
           </label>
           <label class="radio-label">
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="http" ${isHttp ? 'checked' : ''} />
-            Jira MCP via HTTP
+            Jira via HTTP
           </label>
         </div>
       </div>
