@@ -733,6 +733,44 @@ suite('Ticket Manager Extension', () => {
     assert.strictEqual(api.boardPanelManager.getSnapshot().selectedIssueKey, 'APP-101');
   });
 
+  test('keeps cached board details visible while switching back to a previously loaded board', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
+    const appBoard = api.boardsProvider.getCurrentBoards().find(candidate => candidate.name === 'Application Board');
+    const opsBoard = api.boardsProvider.getCurrentBoards().find(candidate => candidate.name === 'Operations Board');
+
+    assert.ok(appBoard, 'Application Board should be available');
+    assert.ok(opsBoard, 'Operations Board should be available');
+
+    if (!appBoard || !opsBoard) {
+      throw new Error('Required boards were not available.');
+    }
+
+    await api.boardPanelManager.openBoard(appBoard);
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === appBoard.id && !api.boardPanelManager.getSnapshot().loading);
+    const cachedAppSnapshot = api.boardPanelManager.getSnapshot();
+
+    await api.boardPanelManager.openBoard(opsBoard);
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === opsBoard.id && !api.boardPanelManager.getSnapshot().loading);
+
+    const switchBackPromise = api.boardPanelManager.openBoard(appBoard);
+    const inFlightSnapshot = api.boardPanelManager.getSnapshot();
+
+    assert.strictEqual(inFlightSnapshot.boardId, appBoard.id);
+    assert.strictEqual(inFlightSnapshot.loading, true);
+    assert.strictEqual(inFlightSnapshot.issueCount, cachedAppSnapshot.issueCount);
+    assert.deepStrictEqual(inFlightSnapshot.columnNames, cachedAppSnapshot.columnNames);
+
+    await switchBackPromise;
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === appBoard.id && !api.boardPanelManager.getSnapshot().loading);
+
+    const refreshedSnapshot = api.boardPanelManager.getSnapshot();
+    assert.strictEqual(refreshedSnapshot.issueCount, cachedAppSnapshot.issueCount);
+    assert.deepStrictEqual(refreshedSnapshot.columnNames, cachedAppSnapshot.columnNames);
+  });
+
   test('applies saved board workflow overrides before column customization', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');

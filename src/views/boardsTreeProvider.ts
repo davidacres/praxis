@@ -3,7 +3,7 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BackendRouter } from '../backends/backendRouter';
 import type { ConnectionStore } from '../config/connectionStore';
 import { BoardStore } from '../state/boardStore';
-import type { Board } from '../types';
+import type { Board, BoardFilters } from '../types';
 
 export interface BoardsProviderSnapshot {
   boards: Board[];
@@ -185,9 +185,7 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   /**
    * In single-backend (legacy) mode, returns boards from the global service.
    * In connections mode, returns only boards explicitly tracked in
-   * Connections & Boards. It fetches each tracked connection in parallel,
-   * filters to tracked ids, and tags each returned `Board` with its
-   * `connectionId`.
+   * Connections & Boards.
    */
   private async loadBoards(): Promise<Board[]> {
     const filters = this.boardStore.getFilters();
@@ -201,40 +199,18 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       return [];
     }
 
-    const byConnection = new Map<string, Set<string>>();
-    for (const t of tracked) {
-      let set = byConnection.get(t.connectionId);
-      if (!set) {
-        set = new Set<string>();
-        byConnection.set(t.connectionId, set);
-      }
-      set.add(t.boardId);
-    }
+    const boards = normalizeTrackedBoards(tracked, this.connectionStore).map(t => {
+      const connection = this.connectionStore!.getConnection(t.connectionId);
+      return {
+        id: t.boardId,
+        name: t.displayName ?? t.boardId,
+        type: inferBoardType(t.boardId, connection?.mode),
+        locationName: connection?.name,
+        connectionId: t.connectionId
+      } satisfies Board;
+    });
 
-    const results = await Promise.all(
-      Array.from(byConnection.entries()).map(async ([connectionId, trackedIds]) => {
-        try {
-          const service = await this.backendRouter!.serviceFor(connectionId);
-          const boards = await service.getBoards(filters);
-          return boards
-            .filter(b => trackedIds.has(b.id))
-            .map(b => ({ ...b, connectionId }));
-        } catch {
-          // Fall back to synthesizing minimal boards from tracked entries so
-          // a single failing connection doesn't hide the rest.
-          const tb = this.connectionStore!.getTrackedBoardsForConnection(connectionId);
-          return tb
-            .filter(t => trackedIds.has(t.boardId))
-            .map(t => ({
-              id: t.boardId,
-              name: t.displayName ?? t.boardId,
-              type: 'unknown',
-              connectionId
-            } satisfies Board));
-        }
-      })
-    );
-    return results.flat();
+    return boards.filter(board => this.matchesBoardFilters(board, filters));
   }
 
   public getSnapshot(): BoardsProviderSnapshot {
@@ -247,6 +223,27 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public getBoardById(boardId: string): Board | undefined {
     return this.boards.find(board => board.id === boardId);
+  }
+
+  private matchesBoardFilters(board: Board, filters: BoardFilters): boolean {
+    if (filters.types.length > 0 && !filters.types.includes(board.type)) {
+      return false;
+    }
+
+    if (filters.projectKeys.length > 0) {
+      const boardProjectKey = board.projectKey?.trim();
+      if (!boardProjectKey || !filters.projectKeys.includes(boardProjectKey)) {
+        return false;
+      }
+    }
+
+    const searchText = filters.searchText.trim().toLowerCase();
+    if (!searchText) {
+      return true;
+    }
+
+    const target = `${board.name} ${board.projectKey ?? ''} ${board.projectName ?? ''} ${board.locationName ?? ''}`.toLowerCase();
+    return target.includes(searchText);
   }
 
   public dispose(): void {
@@ -269,4 +266,51 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
     return new MessageNode('empty', 'No boards are available.', 'warning');
   }
+}
+
+function inferBoardType(boardId: string, mode: string | undefined): string {
+  if (boardId.startsWith('epic:')) {
+    return 'epic';
+  }
+  if (boardId.startsWith('jql:') || boardId.startsWith('jql-custom:')) {
+    return 'jql';
+  }
+  if (boardId.startsWith('gitlab:') || mode === 'gitlab') {
+    return 'issue-board';
+  }
+  if (boardId.startsWith('agile:')) {
+    return 'board';
+  }
+  return 'board';
+}
+
+function normalizeTrackedBoards(tracked: Array<{ connectionId: string; boardId: string; displayName?: string }>, connectionStore: ConnectionStore): Array<{ connectionId: string; boardId: string; displayName?: string }> {
+  const byConnection = new Map<string, Array<{ connectionId: string; boardId: string; displayName?: string }>>();
+  for (const board of tracked) {
+    const list = byConnection.get(board.connectionId) ?? [];
+    list.push(board);
+    byConnection.set(board.connectionId, list);
+  }
+
+  const normalized: Array<{ connectionId: string; boardId: string; displayName?: string }> = [];
+  for (const [connectionId, boards] of byConnection.entries()) {
+    const connection = connectionStore.getConnection(connectionId);
+    if (connection?.mode === 'livefolder') {
+      const projectKey = getConnectionStringSetting(connection.settings?.projectKey) || 'LIVE';
+      const projectName = getConnectionStringSetting(connection.settings?.projectName) || 'Live Folder';
+      normalized.push({
+        connectionId,
+        boardId: `livefolder-${projectKey.toLowerCase()}`,
+        displayName: `${projectName} (Live)`
+      });
+      continue;
+    }
+    normalized.push(...boards);
+  }
+
+  return normalized;
+}
+
+function getConnectionStringSetting(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }

@@ -3590,6 +3590,21 @@ export async function activate(
     void ticketManagerStatusBar.refresh().catch(error => reportError(error, 'status-bar-refresh'));
   }
 
+  function refreshBoardsInBackgroundAfterStartup(): void {
+    if (!getModeContextState().configured) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        await boardsProvider.refresh();
+        await boardPanelManager.refresh();
+      } catch (error) {
+        reportError(error, 'startup-board-refresh');
+      }
+    })();
+  }
+
   async function clearActiveSelectionState(): Promise<void> {
     await filterStore.setLastSelectedIssueKey(undefined);
     await detailsProvider.setIssue(undefined);
@@ -3644,7 +3659,7 @@ export async function activate(
         );
         try {
           await Promise.race([
-            refreshAndRestoreSelection(),
+            refreshAndRestoreSelection({ skipBoards: true }),
             createStartupLoadCancelledPromise(token),
             startupTimeout.promise
           ]);
@@ -3915,9 +3930,79 @@ export async function activate(
     await vscode.window.showErrorMessage(error instanceof Error ? error.message : String(error));
   }
 
+  function getConnectionStringSetting(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+  }
+
+  function inferTrackedBoardType(boardId: string, mode: string | undefined): string {
+    if (boardId.startsWith('epic:')) {
+      return 'epic';
+    }
+    if (boardId.startsWith('jql:') || boardId.startsWith('jql-custom:')) {
+      return 'jql';
+    }
+    if (boardId.startsWith('gitlab:') || mode === 'gitlab') {
+      return 'issue-board';
+    }
+    if (boardId.startsWith('agile:')) {
+      return 'board';
+    }
+    return 'board';
+  }
+
+  function resolveTrackedBoardById(boardId: string): Board | undefined {
+    const directMatch = connectionStore.getTrackedBoards().find(candidate => candidate.boardId === boardId);
+    if (directMatch) {
+      const connection = connectionStore.getConnection(directMatch.connectionId);
+      return {
+        id: boardId,
+        name: directMatch.displayName ?? boardId,
+        type: inferTrackedBoardType(boardId, connection?.mode),
+        locationName: connection?.name,
+        connectionId: directMatch.connectionId
+      } satisfies Board;
+    }
+
+    for (const connection of connectionStore.getConnections()) {
+      if (connection.mode !== 'livefolder') {
+        continue;
+      }
+
+      const projectKey = getConnectionStringSetting(connection.settings?.projectKey) || 'LIVE';
+      const normalizedBoardId = `livefolder-${projectKey.toLowerCase()}`;
+      if (normalizedBoardId !== boardId) {
+        continue;
+      }
+
+      const projectName = getConnectionStringSetting(connection.settings?.projectName) || 'Live Folder';
+      return {
+        id: normalizedBoardId,
+        name: `${projectName} (Live)`,
+        type: 'board',
+        locationName: connection.name,
+        projectKey,
+        projectName,
+        connectionId: connection.id
+      } satisfies Board;
+    }
+
+    return undefined;
+  }
+
   async function resolveBoardById(boardId: string): Promise<Board | undefined> {
+    const trackedRef = boardStore.getLastSelectedTrackedBoard();
+    if (trackedRef?.boardId === boardId) {
+      const trackedMatch = boardsProvider
+        .getCurrentBoards()
+        .find(candidate => candidate.id === boardId && candidate.connectionId === trackedRef.connectionId);
+      if (trackedMatch) {
+        return trackedMatch;
+      }
+    }
+
     return (
       boardsProvider.getBoardById(boardId) ??
+      resolveTrackedBoardById(boardId) ??
       (await backendService.getBoards(boardStore.getFilters())).find(candidate => candidate.id === boardId)
     );
   }
@@ -4826,7 +4911,7 @@ export async function activate(
     deleteIssue
   });
 
-  const refreshAndRestoreSelection = async (): Promise<void> => {
+  const refreshAndRestoreSelection = async (options?: { skipBoards?: boolean }): Promise<void> => {
     const modeContext = getModeContextState();
     await setModeContext();
     await ensureJiraApiIssueScopeVisibility(modeContext);
@@ -4843,7 +4928,7 @@ export async function activate(
 
     await Promise.all([
       issuesProvider.refresh(),
-      boardsProvider.refresh(),
+      options?.skipBoards ? Promise.resolve() : boardsProvider.refresh(),
       activeSessionsSidebarViewProvider?.isViewVisible()
         ? activeSessionsSidebarViewProvider.refresh()
         : Promise.resolve()
@@ -4877,7 +4962,9 @@ export async function activate(
     boardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
     workModeBoardsSidebarViewProvider.setSelectedBoardId(boardStore.getLastSelectedBoardId());
 
-    await boardPanelManager.refresh();
+    if (!options?.skipBoards) {
+      await boardPanelManager.refresh();
+    }
   };
 
   issuesSidebarViewProvider = new IssuesSidebarViewProvider(
@@ -4955,7 +5042,7 @@ export async function activate(
     () => backendService.mode,
     {
       onSelectBoard: async boardId => {
-        await selectBoard(boardsProvider.getBoardById(boardId));
+        await selectBoard(await resolveBoardById(boardId));
       },
       onEditBoard: async boardId => {
         await editBoard(boardId);
@@ -4974,7 +5061,7 @@ export async function activate(
     () => backendService.mode,
     {
       onSelectBoard: async boardId => {
-        await selectBoard(boardsProvider.getBoardById(boardId));
+        await selectBoard(await resolveBoardById(boardId));
       },
       onEditBoard: async boardId => {
         await editBoard(boardId);
@@ -4989,11 +5076,18 @@ export async function activate(
         await resetGitLabConfig();
       },
       onOpenSession: async issueKey => {
+        const sessionBoardId =
+          aiSessionManager.getAgentSession(issueKey)?.boardId ??
+          aiSessionManager.getSession(issueKey)?.boardId;
+        if (sessionBoardId) {
+          await selectBoard(await resolveBoardById(sessionBoardId));
+        }
         activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
         copilotSessionPanelManager.open(issueKey);
       }
     },
-    connectionStore
+    connectionStore,
+    async board => (board.connectionId ? backendService.serviceFor(board.connectionId) : backendService)
   );
   issueDetailsSidebarViewProvider = new IssueDetailsSidebarViewProvider(
     backendService,
@@ -5019,6 +5113,12 @@ export async function activate(
     issueKey => copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey),
     {
       onOpenSession: async issueKey => {
+        const sessionBoardId =
+          aiSessionManager.getAgentSession(issueKey)?.boardId ??
+          aiSessionManager.getSession(issueKey)?.boardId;
+        if (sessionBoardId) {
+          await selectBoard(await resolveBoardById(sessionBoardId));
+        }
         activeSessionsSidebarViewProvider.setSelectedIssueKey(issueKey);
         copilotSessionPanelManager.open(issueKey);
       },
@@ -5450,6 +5550,7 @@ export async function activate(
     // Start polling in the background so activation is not blocked by
     // per-connection startup checks.
     void startupPollingController.refresh().catch(error => reportError(error, 'startup-polling'));
+    refreshBoardsInBackgroundAfterStartup();
     refreshStatusBarInBackground();
 
     // Recover in-flight delivery sessions that were interrupted by a restart.
