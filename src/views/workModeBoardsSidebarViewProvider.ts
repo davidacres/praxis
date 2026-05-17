@@ -450,18 +450,20 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-board-toggle.expanded { background: rgba(99,102,241,0.12); color: var(--vscode-textLink-foreground, #818cf8); border-color: rgba(99,102,241,0.3); box-shadow: none; }
       .work-board-toggle svg { width: 12px; height: 12px; display: block; transition: transform 160ms ease; }
       .work-board-toggle.expanded svg { transform: rotate(180deg); }
-      .work-board-stack-wrapper { display: grid; grid-template-rows: 0fr; width: calc(100% - 40px); margin: -14px auto 0; z-index: 1; transition: grid-template-rows 380ms cubic-bezier(0.16, 1, 0.3, 1); }
+      .work-board-stack-wrapper { display: grid; grid-template-rows: 0fr; width: calc(100% - 14px); margin: -6px auto 0; z-index: 1; transition: grid-template-rows 280ms cubic-bezier(0.16, 1, 0.3, 1); }
       .work-board-stack-wrapper.stack-visible { grid-template-rows: 1fr; }
+      .work-board-stack-wrapper.closing { pointer-events: none; }
       .work-board-stack-wrapper.no-anim { transition: none !important; }
-      .work-board-stack { min-height: 0; overflow: hidden; padding: 20px 0 10px; box-sizing: border-box; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-top: 0; border-radius: 0 0 18px 18px; background: color-mix(in srgb, var(--vscode-sideBar-background) 60%, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 40%); }
-      .work-board-activity { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; padding: 0 10px; }
-      .work-board-activity svg { width: 12px; height: 12px; display: block; color: var(--vscode-textLink-foreground, #818cf8); }
-      .work-board-activity-label { color: var(--vscode-descriptionForeground); font-size: 9px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
-      .work-board-activity-line { height: 1px; flex: 1; background: var(--vscode-panel-border, rgba(128,128,128,0.3)); }
-      .work-session-list-container { margin: 0 10px; }
+      .work-board-stack { position: relative; min-height: 0; overflow: hidden; padding: 14px 0 9px; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.3)) 84%, transparent); border-top: 0; border-radius: 0 0 16px 16px; background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 89%, var(--vscode-sideBar-background) 11%); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.3)) 45%, transparent), 0 4px 12px rgba(0,0,0,0.14); }
+      .work-board-stack::before { content: ''; position: absolute; top: 0; left: 14px; right: 14px; height: 1px; background: color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.3)) 45%, transparent); opacity: 0.55; }
+      .work-board-activity { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 0 16px; }
+      .work-board-activity svg { width: 11px; height: 11px; display: block; color: color-mix(in srgb, var(--vscode-descriptionForeground) 74%, transparent); }
+      .work-board-activity-label { color: var(--vscode-descriptionForeground); font-size: 8px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.58; }
+      .work-board-activity-line { height: 1px; flex: 1; background: color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.3)) 72%, transparent); }
+      .work-session-list-container { margin: 0 11px; }
       .work-session-list { display: flex; flex-direction: column; gap: 8px; padding: 0; }
-      .work-session-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 11px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-radius: 12px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; text-align: left; }
-      .work-session-row:hover { border-color: var(--vscode-focusBorder, rgba(99,102,241,0.5)); background: var(--vscode-list-hoverBackground, color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 85%, white 15%)); }
+      .work-session-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.3)) 82%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 94%, transparent); box-shadow: 0 1px 4px rgba(0,0,0,0.14); cursor: pointer; text-align: left; }
+      .work-session-row:hover { border-color: color-mix(in srgb, var(--vscode-focusBorder, rgba(99,102,241,0.5)) 58%, var(--vscode-panel-border, rgba(128,128,128,0.3)) 42%); background: color-mix(in srgb, var(--vscode-list-hoverBackground, rgba(128,128,128,0.08)) 60%, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 40%); }
       .work-session-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
       .work-session-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.14)); color: var(--vscode-descriptionForeground); flex-shrink: 0; }
       .work-session-icon svg { width: 12px; height: 12px; display: block; }
@@ -470,9 +472,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-session-copy { min-width: 0; flex: 1; }
       .work-session-headline { display: flex; align-items: center; gap: 6px; min-width: 0; }
       .work-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 11px; font-weight: 800; }
-      .work-session-subtitle { margin-top: 3px; color: var(--vscode-descriptionForeground); font-size: 9px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .work-session-chevron { width: 12px; height: 12px; color: var(--vscode-panel-border, rgba(128,128,128,0.5)); flex-shrink: 0; }
-      .work-board-add-agent { width: 100%; padding: 10px 12px; border: 1px dashed var(--vscode-panel-border, rgba(128,128,128,0.4)); border-radius: 12px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; cursor: default; }
+      .work-session-subtitle { margin-top: 2px; color: var(--vscode-descriptionForeground); font-size: 9px; line-height: 1.2; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .work-session-chevron { width: 12px; height: 12px; color: color-mix(in srgb, var(--vscode-descriptionForeground) 52%, transparent); flex-shrink: 0; }
       .work-board-list-header { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 10px 8px; }
       .work-board-remove-all { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-errorForeground, #f87171); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
       .work-board-remove-all:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 10%, transparent); border-color: var(--vscode-errorForeground, #f87171); }
@@ -517,10 +518,33 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
           vscodeApi.postMessage({ type: 'selectBoard', boardId: row.getAttribute('data-board-id') });
         });
       }
+      function postToggleBoardSessions(boardId) {
+        vscodeApi.postMessage({ type: 'toggleBoardSessions', boardId });
+      }
       for (const button of document.querySelectorAll('[data-toggle-board-id]')) {
         button.addEventListener('click', event => {
           event.stopPropagation();
-          vscodeApi.postMessage({ type: 'toggleBoardSessions', boardId: button.getAttribute('data-toggle-board-id') });
+          const boardId = button.getAttribute('data-toggle-board-id');
+          if (!boardId) {
+            return;
+          }
+          const isExpanded = button.classList.contains('expanded');
+          if (!isExpanded) {
+            postToggleBoardSessions(boardId);
+            return;
+          }
+
+          const stack = document.querySelector('[data-board-stack-id="' + boardId + '"]');
+          if (!(stack instanceof HTMLElement)) {
+            postToggleBoardSessions(boardId);
+            return;
+          }
+
+          stack.classList.remove('no-anim');
+          stack.classList.add('closing');
+          void stack.offsetHeight;
+          stack.classList.remove('stack-visible');
+          window.setTimeout(() => postToggleBoardSessions(boardId), 220);
         });
       }
       for (const button of document.querySelectorAll('[data-open-session-issue-key]')) {
@@ -813,7 +837,6 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       : `<div class="work-session-list-container">
         <div class="work-session-list">
           ${sessions.map(session => this.renderSession(session)).join('')}
-          <button class="work-board-add-agent" type="button" disabled title="Start agent sessions from issue actions inside the board or issue details.">+ Add Agent</button>
         </div>
       </div>`;
     return `<div class="work-board-stack-wrapper" data-board-stack-id="${escapeHtml(boardId)}">
