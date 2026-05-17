@@ -67,7 +67,7 @@ suite('IssueDetailsSidebarViewProvider', () => {
     });
 
     const provider = new IssueDetailsSidebarViewProvider(
-      { mode: 'jira' } as unknown as IssueTrackerService,
+      { mode: 'jiraapi' } as unknown as IssueTrackerService,
       detailsProvider as unknown as DetailsViewProvider,
       {
         getSession: () => undefined,

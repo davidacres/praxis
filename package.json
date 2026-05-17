@@ -1,9 +1,9 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "publisher": "kam-ai-team",
-  "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
+  "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -176,7 +176,7 @@
       },
       {
         "command": "ticketManager.configureConnection",
-        "title": "Configure Jira MCP Connection",
+        "title": "Configure Jira Cloud Connection",
         "category": "Ticket Manager",
         "icon": "$(plug)"
       },
@@ -185,6 +185,12 @@
         "title": "Check Connection",
         "category": "Ticket Manager",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "ticketManager.disconnectJiraCloud",
+        "title": "Disconnect Jira Cloud",
+        "category": "Ticket Manager",
+        "icon": "$(debug-disconnect)"
       },
       {
         "command": "ticketManager.setBackendMode",
@@ -299,18 +305,6 @@
         "title": "New Project",
         "category": "Ticket Manager",
         "icon": "$(rocket)"
-      },
-      {
-        "command": "ticketManager.importWorkspaceMcpConfig",
-        "title": "Use Workspace MCP Configuration",
-        "category": "Ticket Manager",
-        "icon": "$(folder-library)"
-      },
-      {
-        "command": "ticketManager.importUserMcpConfig",
-        "title": "Use User/Profile MCP Configuration",
-        "category": "Ticket Manager",
-        "icon": "$(account)"
       },
       {
         "command": "ticketManager.openBoard",
@@ -644,14 +638,6 @@
           "when": "view == ticketManager.myIssues"
         },
         {
-          "command": "ticketManager.importWorkspaceMcpConfig",
-          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
-        },
-        {
-          "command": "ticketManager.importUserMcpConfig",
-          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
-        },
-        {
           "command": "ticketManager.setStatuses",
           "when": "view == ticketManager.myIssues"
         },
@@ -771,23 +757,9 @@
     "configuration": {
       "title": "Ticket Manager",
       "properties": {
-        "ticketManager.connectionType": {
-          "type": "string",
-          "default": "stdio",
-          "enum": [
-            "stdio",
-            "http"
-          ],
-          "enumItemLabels": [
-            "Local Process (stdio)",
-            "Remote MCP (HTTP)"
-          ],
-          "description": "Select how the app connects to the Jira MCP server when Jira via MCP mode is active."
-        },
         "ticketManager.backendMode": {
           "type": "string",
           "enum": [
-            "jira",
             "jiraapi",
             "demo",
             "github",
@@ -796,8 +768,7 @@
             "userworkspace"
           ],
           "enumItemLabels": [
-            "Jira via MCP",
-            "Jira API",
+            "Jira Cloud",
             "Demo",
             "GitHub",
             "GitLab",
@@ -805,7 +776,7 @@
             "User Workspace"
           ],
           "scope": "window",
-          "description": "Choose whether the app uses Jira via MCP, Jira API, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
+          "description": "Choose whether the app uses Jira Cloud, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
         },
         "ticketManager.connections": {
           "type": "array",
@@ -827,7 +798,6 @@
               "mode": {
                 "type": "string",
                 "enum": [
-                  "jira",
                   "jiraapi",
                   "demo",
                   "github",
@@ -936,36 +906,6 @@
           "scope": "window",
           "description": "URL of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
         },
-        "ticketManager.stdioCommand": {
-          "type": "string",
-          "default": "",
-          "description": "Command used to start a local Jira MCP server."
-        },
-        "ticketManager.stdioArgs": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "description": "Arguments passed to the local Jira MCP command."
-        },
-        "ticketManager.stdioCwd": {
-          "type": "string",
-          "default": "",
-          "description": "Optional working directory for the local Jira MCP command."
-        },
-        "ticketManager.httpUrl": {
-          "type": "string",
-          "default": "",
-          "format": "uri",
-          "description": "Base URL for a remote Jira MCP server that supports streamable HTTP."
-        },
-        "ticketManager.jiraMcpCloudId": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Optional Atlassian Jira site URL or cloud ID to use with Atlassian cloud Jira MCP tools when automatic site discovery is unavailable or ambiguous."
-        },
         "ticketManager.enableNewProject": {
           "type": "boolean",
           "default": false,
@@ -1018,41 +958,12 @@
           "scope": "window",
           "description": "GitLab instance URL (e.g. https://gitlab.com or https://gitlab.example.com)."
         },
-        "ticketManager.gitlabConnectionType": {
-          "type": "string",
-          "default": "api",
-          "enum": [
-            "api",
-            "mcp"
-          ],
-          "enumItemLabels": [
-            "API Key",
-            "GitLab MCP Server"
-          ],
-          "scope": "window",
-          "description": "How to connect to GitLab: direct API key or through a GitLab MCP server."
-        },
         "ticketManager.gitlabApiKey": {
           "type": "string",
           "default": "",
           "scope": "window",
           "markdownDeprecationMessage": "**Deprecated**: The GitLab API key is now stored securely in the OS keychain via VS Code SecretStorage. This setting is read once on startup for migration and then cleared automatically. Use the Setup panel to re-enter your key.",
           "description": "Deprecated. GitLab Personal Access Token — migrated to SecretStorage on first load."
-        },
-        "ticketManager.gitlabMcpCommand": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Command to start the GitLab MCP server (when using MCP connection type)."
-        },
-        "ticketManager.gitlabMcpArgs": {
-          "type": "array",
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "scope": "window",
-          "description": "Arguments for the GitLab MCP server command."
         },
         "ticketManager.requestTimeoutMs": {
           "type": "number",

@@ -2,16 +2,16 @@ import * as assert from 'assert';
 import { resolveBackendModeContextState } from '../ui/backendModeContext';
 
 suite('backend mode context', () => {
-  test('treats configured Jira connections as configured without a stored workspace mode', () => {
-    assert.deepStrictEqual(resolveBackendModeContextState(undefined, true, false), {
-      mode: 'jira',
+  test('treats configured Jira Cloud connections as configured without a stored workspace mode', () => {
+    assert.deepStrictEqual(resolveBackendModeContextState(undefined, false, true), {
+      mode: 'jiraapi',
       configured: true
     });
   });
 
-  test('keeps Jira unconfigured when no connection details exist', () => {
-    assert.deepStrictEqual(resolveBackendModeContextState('jira', false, false), {
-      mode: 'jira',
+  test('keeps Jira Cloud unconfigured when no connection details exist', () => {
+    assert.deepStrictEqual(resolveBackendModeContextState('jiraapi', false, false), {
+      mode: 'jiraapi',
       configured: false
     });
   });

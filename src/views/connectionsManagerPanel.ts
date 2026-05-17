@@ -128,8 +128,10 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     saveConnection: () => this.handleSaveConnection(),
     toggleBoardSelection: m => this.handleToggleBoardSelection(m),
     searchBoards: m => this.handleSearchBoards(m),
+    addCustomJqlBoard: () => this.handleAddCustomJqlBoard(),
     saveBoardSelection: () => this.handleSaveBoardSelection(),
-    refreshBoardPicker: () => this.handleRefreshBoardPicker()
+    refreshBoardPicker: () => this.handleRefreshBoardPicker(),
+    disconnectJiraCloud: async () => this.handleDisconnectJiraCloud()
   };
 
   private handleNavigateList(): void {
@@ -143,6 +145,20 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     this.state.view = 'connection';
     this.state.connectionForm = createNewConnectionForm();
     this.rerender();
+  }
+
+  private async handleDisconnectJiraCloud(): Promise<void> {
+    try {
+      await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
+      this.state.view = 'list';
+      this.state.connectionForm = undefined;
+      this.state.boardPicker = undefined;
+      this.rerender();
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Failed to disconnect Jira Cloud: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   private async handleEditConnection(message: Record<string, unknown>): Promise<void> {
@@ -186,8 +202,13 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     }
     const field = stringField(message, 'field');
     if (field) {
+      const previousMode = this.state.connectionForm.mode;
       this.applyConnectionFormUpdate(field, message.value);
-      this.rerender();
+      // Avoid full webview replacement on every keystroke. Only rerender when
+      // the mode changes because that swaps the dynamic field set.
+      if (field === 'mode' && this.state.connectionForm.mode !== previousMode) {
+        this.rerender();
+      }
     }
   }
 
@@ -221,7 +242,67 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   private handleSearchBoards(message: Record<string, unknown>): void {
     if (this.state.boardPicker) {
       this.state.boardPicker.search = typeof message.value === 'string' ? message.value : '';
+    }
+  }
+
+  private async handleAddCustomJqlBoard(): Promise<void> {
+    const picker = this.state.boardPicker;
+    if (!picker) {
+      return;
+    }
+
+    try {
+      const boardName = await vscode.window.showInputBox({
+        title: 'Custom Jira Cloud Board',
+        prompt: 'Display name for this local JQL board',
+        value: 'Custom JQL Board',
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length > 0 ? undefined : 'Board name is required.')
+      });
+      if (boardName === undefined) {
+        return;
+      }
+
+      const jql = await vscode.window.showInputBox({
+        title: 'Custom Jira Cloud Board',
+        prompt: 'Enter the Jira JQL query for this local board',
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length > 0 ? undefined : 'JQL is required.')
+      });
+      if (jql === undefined) {
+        return;
+      }
+
+      const trimmedName = boardName.trim();
+      const trimmedJql = jql.trim();
+      const boardId = `jql:custom:${encodeURIComponent(trimmedJql)}`;
+
+      const service = await this.backendRouter.serviceFor(picker.connectionId);
+      const jqlValidator = service as unknown as { validateBoardJql?: (query: string) => Promise<void> };
+      if (typeof jqlValidator.validateBoardJql === 'function') {
+        await jqlValidator.validateBoardJql(trimmedJql);
+      }
+
+      const existing = picker.boards.find(board => board.id === boardId);
+      if (existing) {
+        existing.name = trimmedName;
+        const rawPayload = isRecord(existing.raw) ? existing.raw : {};
+        existing.raw = { ...rawPayload, jql: trimmedJql, custom: true };
+      } else {
+        picker.boards.unshift({
+          id: boardId,
+          name: trimmedName,
+          type: 'jql',
+          raw: { jql: trimmedJql, custom: true }
+        });
+      }
+
+      picker.selectedBoardIds.add(boardId);
       this.rerender();
+    } catch (error) {
+      await vscode.window.showErrorMessage(
+        error instanceof Error ? error.message : String(error)
+      );
     }
   }
 
@@ -565,7 +646,17 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     const rows = connections
       .map(connection => this.renderConnectionRow(connection, tracked))
       .join('');
+    
+    const jiraCloudConnection = connections.find(c => c.mode === 'jira');
+    const jiraCloudActionHtml = jiraCloudConnection
+      ? `<div class="jira-cloud-action">
+           <button class="danger" data-action="disconnectJiraCloud">Disconnect Jira Cloud</button>
+           <p class="subtle">Clears your OAuth token and requires reconnecting to refresh permissions.</p>
+         </div>`
+      : '';
+    
     return `${headerHtml}
+      ${jiraCloudActionHtml}
       <section class="connection-list">${rows}</section>
     `;
   }
@@ -692,10 +783,8 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       case 'gitlab':
         return [
           textField(form, 'url', 'GitLab base URL', 'https://gitlab.com'),
-          textField(form, 'connectionType', 'Connection type (mcp | api)', 'api'),
           secretField(form, 'apiKey', 'API key (Personal Access Token)'),
-          textField(form, 'projectPath', 'Project path (optional)', 'group/project'),
-          textField(form, 'mcpCommand', 'MCP command (optional)', '')
+          textField(form, 'projectPath', 'Project path (optional)', 'group/project')
         ].join('');
       case 'livefolder':
         return [
@@ -773,6 +862,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <section class="form">
         ${content}
         <div class="form-actions">
+          <button data-action="addCustomJqlBoard">+ Add Custom JQL Board</button>
           <button data-action="navigateList">Cancel</button>
           <button class="primary" data-action="saveBoardSelection">Save selection</button>
         </div>
@@ -820,7 +910,6 @@ export type InitialAction =
   | { kind: 'addBoard'; connectionId: string };
 
 const SUPPORTED_MODES: readonly BackendMode[] = [
-  'jira',
   'jiraapi',
   'gitlab',
   'livefolder',
@@ -834,7 +923,7 @@ function createInitialState(): PanelState {
 
 function createNewConnectionForm(): ConnectionFormState {
   return {
-    mode: 'jira',
+    mode: 'jiraapi',
     isEditing: false,
     name: '',
     settings: {},
@@ -998,6 +1087,8 @@ function getCss(): string {
     .board-picker-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; padding: 6px 8px; align-items: center; cursor: pointer; }
     .board-picker-row:hover { background: var(--vscode-list-hoverBackground); }
     .empty-state-inline { color: var(--vscode-descriptionForeground); padding: 12px 0; }
+    .jira-cloud-action { background: rgba(100, 150, 200, 0.08); border: 1px solid rgba(100, 150, 200, 0.25); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
+    .jira-cloud-action button { margin: 0; }
   `;
 }
 
@@ -1005,6 +1096,14 @@ function getScript(): string {
   return `
     const vscode = acquireVsCodeApi();
     function post(message) { vscode.postMessage(message); }
+    function applyBoardSearchFilter(query) {
+      const q = String(query || '').toLowerCase().trim();
+      const rows = document.querySelectorAll('.board-picker-row');
+      for (const row of rows) {
+        const text = (row.textContent || '').toLowerCase();
+        row.style.display = !q || text.includes(q) ? '' : 'none';
+      }
+    }
     document.addEventListener('click', event => {
       const target = event.target.closest('[data-action]');
       if (!target) return;
@@ -1018,6 +1117,7 @@ function getScript(): string {
       const field = el.dataset?.field;
       if (!field) return;
       if (field === 'boardSearch') {
+        applyBoardSearchFilter(el.value);
         post({ command: 'searchBoards', value: el.value });
         return;
       }
@@ -1026,6 +1126,11 @@ function getScript(): string {
     });
     document.addEventListener('change', event => {
       const el = event.target;
+      const field = el.dataset?.field;
+      if (field && field !== 'boardSearch') {
+        const value = el.type === 'checkbox' ? el.checked : el.value;
+        post({ command: 'updateConnectionField', field, value });
+      }
       if (el.type === 'checkbox' && el.dataset.boardId) {
         post({ command: 'toggleBoardSelection', boardId: el.dataset.boardId });
       }

@@ -10,7 +10,6 @@
     "ticketManager.liveFolderProjectName": "",
     "ticketManager.backendMode": "jiraapi",
     "ticketManager.gitlabUrl": "https://git.example.com/",
-    "ticketManager.gitlabConnectionType": "api",
     "ticketManager.jiraApiEpicKey": "",
     "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
     "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
@@ -29,6 +28,26 @@
                 "clientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
                 "url": "https://aags-example.atlassian.net/"
             }
+        },
+        {
+            "id": "gitlab",
+            "name": "GitLab",
+            "mode": "gitlab",
+            "settings": {
+                "url": "https://git.example.com/"
+            }
+        }
+    ],
+    "ticketManager.boards": [
+        {
+            "connectionId": "jira-cloud",
+            "boardId": "jql:workspace",
+            "displayName": "KAMAI"
+        },
+        {
+            "connectionId": "gitlab",
+            "boardId": "gitlab:3668:279",
+            "displayName": "KAMAI"
         }
     ]
 }

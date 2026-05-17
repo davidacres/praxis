@@ -91,7 +91,7 @@ class VsCodeMcpOAuthProvider implements OAuthClientProvider {
 
     const stored = await this.context.secrets.get(this.secretKey('verifier'));
     if (!stored) {
-      throw new Error('No OAuth code verifier is available for this MCP session.');
+      throw new Error('No OAuth code verifier is available for this authorization session.');
     }
 
     this.codeVerifierValue = stored;
@@ -149,9 +149,7 @@ export class McpOAuthManager implements vscode.UriHandler, vscode.Disposable {
   public async startAuthorization(authorizationUrl: URL): Promise<void> {
     this.ensurePendingAuthorization();
     await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl.toString()));
-    void vscode.window.showInformationMessage(
-      'Complete Jira MCP sign-in in your browser, then return to VS Code.'
-    );
+    void vscode.window.showInformationMessage('Complete sign-in in your browser, then return to VS Code.');
   }
 
   public async waitForAuthorizationCode(): Promise<string> {
@@ -221,7 +219,7 @@ export class McpOAuthManager implements vscode.UriHandler, vscode.Disposable {
         return;
       }
       this.pendingAuthorization = undefined;
-      rejectPromise(new Error('Timed out waiting for MCP OAuth sign-in to complete.'));
+      rejectPromise(new Error('Timed out waiting for OAuth sign-in to complete.'));
     }, AUTH_TIMEOUT_MS);
 
     this.pendingAuthorization = {

@@ -196,6 +196,10 @@ export class ActiveSessionsSidebarViewProvider
     this.render();
   }
 
+  public isViewVisible(): boolean {
+    return this.view?.visible === true;
+  }
+
   public async refresh(): Promise<void> {
     const generation = ++this.generation;
     // Only show the "Loading..." placeholder on the very first load.

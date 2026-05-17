@@ -24,7 +24,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => '',
@@ -95,7 +94,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => '',
@@ -189,7 +187,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => 'group/project',
@@ -321,7 +318,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => 'group/project',
@@ -433,7 +429,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => 'group/project',
@@ -531,7 +526,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => 'group/project',
@@ -635,7 +629,6 @@ suite('gitLabBoardService', () => {
 
     const configStore = {
       getDefaultPageSize: () => 25,
-      getGitLabConnectionType: () => 'api' as const,
       getGitLabApiKey: () => 'token',
       getGitLabUrl: () => 'https://gitlab.example.com',
       getGitLabProjectPath: () => 'group/project',

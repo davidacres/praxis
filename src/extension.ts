@@ -719,18 +719,14 @@ export async function activate(
           connectionsManagerPanel.open({ kind: 'addConnection' });
           return;
         }
-        if (connections.length === 1) {
-          targetId = connections[0].id;
-        } else {
-          const pick = await vscode.window.showQuickPick(
-            connections.map(c => ({ label: c.name, description: c.id, id: c.id })),
-            { placeHolder: 'Pick a connection to add a board to' }
-          );
-          if (!pick) {
-            return;
-          }
-          targetId = pick.id;
+        const pick = await vscode.window.showQuickPick(
+          connections.map(c => ({ label: c.name, description: c.id, id: c.id })),
+          { placeHolder: 'Pick a connection for the new board' }
+        );
+        if (!pick) {
+          return;
         }
+        targetId = pick.id;
       }
       connectionsManagerPanel.open({ kind: 'addBoard', connectionId: targetId });
     })
@@ -3014,8 +3010,6 @@ export async function activate(
 
     if (!workingDirectory) {
       skipReason = 'GitLab MR automation skipped: open the repository workspace first.';
-    } else if (configStore.getGitLabConnectionType() !== 'api') {
-      skipReason = 'GitLab MR automation skipped: only direct GitLab API mode is supported for automated MR handling.';
     }
 
     if (skipReason) {
@@ -3422,7 +3416,8 @@ export async function activate(
         detailsProvider.getActiveIssue()?.key ?? ''
       );
     },
-    boardColumnStore
+    boardColumnStore,
+    async board => (board.connectionId ? backendService.serviceFor(board.connectionId) : backendService)
   );
   boardColumnConfigPanel.setBoardSettingsUpdater(async (boardId, input) => {
     const updatedBoard = await backendService.updateBoard(boardId, input);
@@ -3744,13 +3739,8 @@ export async function activate(
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
     const options: Array<{ label: string; description: string; mode: BackendMode }> = [
       {
-        label: 'Jira via MCP',
-        description: 'Connect to Jira through a configured MCP server.',
-        mode: 'jira'
-      },
-      {
-        label: 'Jira API',
-        description: 'Connect directly to Jira Server/Data Center over REST.',
+        label: 'Jira Cloud',
+        description: 'Connect directly to Jira Cloud over OAuth.',
         mode: 'jiraapi'
       },
       {
@@ -4241,13 +4231,10 @@ export async function activate(
         : vscode.ConfigurationTarget.Global;
       await Promise.all([
         config.update('gitlabUrl', undefined, target),
-        config.update('gitlabConnectionType', undefined, target),
         config.update('gitlabApiKey', undefined, target),
         config.update('gitlabProjectPath', undefined, target),
         config.update('gitlabListAllAccessibleBoards', undefined, target),
         config.update('gitlabSelectedBoardRefs', undefined, target),
-        config.update('gitlabMcpCommand', undefined, target),
-        config.update('gitlabMcpArgs', undefined, target),
         config.update('backendMode', undefined, target)
       ]);
       await boardStore.setLastSelectedBoardId(undefined);
@@ -4857,7 +4844,9 @@ export async function activate(
     await Promise.all([
       issuesProvider.refresh(),
       boardsProvider.refresh(),
-      activeSessionsSidebarViewProvider?.refresh() ?? Promise.resolve()
+      activeSessionsSidebarViewProvider?.isViewVisible()
+        ? activeSessionsSidebarViewProvider.refresh()
+        : Promise.resolve()
     ]);
     const lastSelectedKey = filterStore.getLastSelectedIssueKey();
     if (lastSelectedKey) {
@@ -5400,9 +5389,7 @@ export async function activate(
               !event.affectsConfiguration('ticketManager.stdioCwd') &&
               !event.affectsConfiguration('ticketManager.liveFolderPath') &&
               !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
-              !event.affectsConfiguration('ticketManager.liveFolderProjectName') &&
-              !event.affectsConfiguration('ticketManager.workspaceMcpServerName') &&
-              !event.affectsConfiguration('ticketManager.userMcpServerRef')
+              !event.affectsConfiguration('ticketManager.liveFolderProjectName')
             ) {
               refreshAiAssignmentMenus();
               updateCommentPlaceholders();
@@ -5460,13 +5447,15 @@ export async function activate(
         }
       }
     }
-    await startupPollingController.refresh();
+    // Start polling in the background so activation is not blocked by
+    // per-connection startup checks.
+    void startupPollingController.refresh().catch(error => reportError(error, 'startup-polling'));
     refreshStatusBarInBackground();
 
     // Recover in-flight delivery sessions that were interrupted by a restart.
     // The onDidChangeAgentSession listener only fires on changes, so sessions
     // that were already pending finalization at shutdown must be re-triggered.
-    await recoverPendingDeliverySessions();
+    void recoverPendingDeliverySessions().catch(error => reportError(error, 'startup-recovery'));
   } catch (error) {
     reportError(error);
   }

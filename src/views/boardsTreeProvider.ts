@@ -184,18 +184,21 @@ export class BoardsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   /**
    * In single-backend (legacy) mode, returns boards from the global service.
-   * When tracked boards exist across one or more connections, fetches each
-   * connection's boards in parallel, filters to those the user has tracked,
-   * and tags each returned `Board` with its `connectionId`.
+   * In connections mode, returns only boards explicitly tracked in
+   * Connections & Boards. It fetches each tracked connection in parallel,
+   * filters to tracked ids, and tags each returned `Board` with its
+   * `connectionId`.
    */
   private async loadBoards(): Promise<Board[]> {
     const filters = this.boardStore.getFilters();
     if (!this.connectionStore || !this.backendRouter) {
       return this.backendService.getBoards(filters);
     }
+
     const tracked = this.connectionStore.getTrackedBoards();
     if (tracked.length === 0) {
-      return this.backendService.getBoards(filters);
+      // In connections mode, only tracked boards are shown.
+      return [];
     }
 
     const byConnection = new Map<string, Set<string>>();

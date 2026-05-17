@@ -24,24 +24,25 @@ import { AppConfigStore } from '../config/jiraConfig';
 import type { ConnectionStore } from '../config/connectionStore';
 import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../config/connectionScopedConfigStore';
 import { DemoService } from '../demo/demoService';
+import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
+import { GitLabBoardService } from '../gitlab/gitLabBoardService';
 import { JiraApiService } from '../jira/jiraApiService';
-import { JiraService } from '../jira/jiraService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
 
-function buildUnsupportedBackendMessage(mode: 'github' | 'gitlab'): string {
-  const label = mode === 'github' ? 'GitHub' : 'GitLab';
+function buildUnsupportedBackendMessage(mode: 'github'): string {
+  const label = 'GitHub';
   return `${label} project mode is not implemented yet. Current ${label} support is limited to setup metadata and repository automation helpers.`;
 }
 
 class UnsupportedBackendService implements IssueTrackerService {
   public readonly mode: BackendMode;
-  private readonly unsupportedMode: 'github' | 'gitlab';
+  private readonly unsupportedMode: 'github';
 
   public constructor(
-    mode: 'github' | 'gitlab',
+    mode: 'github',
     private readonly defaultPageSize: number
   ) {
     this.unsupportedMode = mode;
@@ -339,7 +340,7 @@ export class BackendRouter implements IssueTrackerService {
 
   /**
    * Get a service scoped to a specific connection.
-   * This creates the appropriate service instance (JiraService, JiraApiService, etc.)
+  * This creates the appropriate service instance (JiraApiService, LiveFolderService, etc.)
    * using the connection's stored settings and secrets.
    */
   public async serviceFor(connectionId: string): Promise<IssueTrackerService> {
@@ -374,8 +375,10 @@ export class BackendRouter implements IssueTrackerService {
     let service: IssueTrackerService;
     const mode = connection.mode;
 
-    if (mode === 'github' || mode === 'gitlab') {
+    if (mode === 'github') {
       service = new UnsupportedBackendService(mode, scopedConfigStore.getDefaultPageSize());
+    } else if (mode === 'gitlab') {
+      service = new GitLabBoardService(scopedConfigStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context);
     } else if (mode === 'demo') {
       service = new DemoService(scopedConfigStore);
     } else if (mode === 'jiraapi') {
@@ -385,8 +388,8 @@ export class BackendRouter implements IssueTrackerService {
     } else if (mode === 'userworkspace') {
       service = new UserWorkspaceService(scopedConfigStore, this.userWorkspaceStore);
     } else {
-      // 'jira' mode (OAuth)
-      service = new JiraService(this.context, scopedConfigStore, this.output);
+      // Treat any remaining legacy Jira mode as Jira Cloud.
+      service = new JiraApiService(this.context, scopedConfigStore, this.output);
     }
 
     // Cache the service
@@ -410,8 +413,10 @@ export class BackendRouter implements IssueTrackerService {
     this.disposeActiveService();
     this.activeMode = configuredMode;
     this.activeService =
-      configuredMode === 'github' || configuredMode === 'gitlab'
+      configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
+        : configuredMode === 'gitlab'
+          ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiraapi'
@@ -420,7 +425,7 @@ export class BackendRouter implements IssueTrackerService {
             ? new LiveFolderService(this.configStore)
             : configuredMode === 'userworkspace'
               ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-              : new JiraService(this.context, this.configStore, this.output);
+              : new JiraApiService(this.context, this.configStore, this.output);
     if (this.activeService instanceof LiveFolderService) {
       this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
         this._onDidReceiveExternalComment.fire(event)

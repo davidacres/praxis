@@ -44,6 +44,12 @@ interface AtlassianTokenResponse {
   error_description?: string;
 }
 
+const REQUIRED_JIRA_CLOUD_SCOPES = [
+  'read:board-scope:jira-software',
+  'read:project:jira',
+  'read:issue-details:jira'
+] as const;
+
 function parseJsonValue<T>(value: string | undefined): T | undefined {
   if (!value) {
     return undefined;
@@ -128,11 +134,12 @@ export class JiraCloudOAuthService implements vscode.Disposable {
     }
 
     const clientSecret = await this.getOrPromptClientSecret();
+    const requestedScopes = this.configStore.getJiraOAuthScopes();
     const pending = this.createPendingAuthorization();
     const authorizeUrl = new URL(ATLASSIAN_AUTHORIZE_URL);
     authorizeUrl.searchParams.set('audience', 'api.atlassian.com');
     authorizeUrl.searchParams.set('client_id', clientId);
-    authorizeUrl.searchParams.set('scope', this.configStore.getJiraOAuthScopes().join(' '));
+    authorizeUrl.searchParams.set('scope', requestedScopes.join(' '));
     authorizeUrl.searchParams.set('redirect_uri', this.redirectUri);
     authorizeUrl.searchParams.set('state', pending.state);
     authorizeUrl.searchParams.set('response_type', 'code');
@@ -142,7 +149,7 @@ export class JiraCloudOAuthService implements vscode.Disposable {
     void vscode.window.showInformationMessage('Complete Jira Cloud authorization in your browser, then return to VS Code.');
 
     const code = await pending.promise;
-    const tokens = await this.exchangeAuthorizationCode(clientId, clientSecret, code);
+    const tokens = await this.exchangeAuthorizationCode(clientId, clientSecret, code, requestedScopes);
     await this.saveTokens(tokens);
 
     const resources = await this.listAccessibleResources();
@@ -151,6 +158,7 @@ export class JiraCloudOAuthService implements vscode.Disposable {
     }
 
     const selected = resources.length === 1 ? resources[0] : await this.pickResource(resources);
+    this.ensureRequiredScopes(selected);
     await this.configStore.setJiraCloudSite(selected);
     return selected;
   }
@@ -287,14 +295,16 @@ export class JiraCloudOAuthService implements vscode.Disposable {
   private async exchangeAuthorizationCode(
     clientId: string,
     clientSecret: string,
-    code: string
+    code: string,
+    scopes: string[]
   ): Promise<JiraOAuthTokens> {
     return this.requestToken({
       grant_type: 'authorization_code',
       client_id: clientId,
       client_secret: clientSecret,
       code,
-      redirect_uri: this.redirectUri
+      redirect_uri: this.redirectUri,
+      scope: scopes.join(' ')
     });
   }
 
@@ -307,12 +317,26 @@ export class JiraCloudOAuthService implements vscode.Disposable {
       grant_type: 'refresh_token',
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: refreshToken
+      refresh_token: refreshToken,
+      scope: this.configStore.getJiraOAuthScopes().join(' ')
     });
     return {
       ...refreshed,
       refreshToken: refreshed.refreshToken ?? refreshToken
     };
+  }
+
+  private ensureRequiredScopes(resource: JiraCloudResource): void {
+    const grantedScopes = new Set(resource.scopes.map(scope => scope.trim()));
+    const missing = REQUIRED_JIRA_CLOUD_SCOPES.filter(scope => !grantedScopes.has(scope));
+    if (missing.length === 0) {
+      return;
+    }
+
+    throw new Error(
+      `Connected Jira site '${resource.name}' is missing required OAuth scope(s): ${missing.join(', ')}. ` +
+      `Granted scopes: ${resource.scopes.join(', ') || '(none)'}. Update Atlassian app permissions and reconnect Jira Cloud.`
+    );
   }
 
   private async requestToken(body: Record<string, string>): Promise<JiraOAuthTokens> {

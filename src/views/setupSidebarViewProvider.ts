@@ -9,22 +9,16 @@ import type { Board } from '../types';
 
 interface GitLabSetupValues {
   gitlabUrl: string;
-  gitlabConnectionType: 'api' | 'mcp';
   gitlabApiKey: string;
   gitlabProjectPath: string;
   gitlabListAllAccessibleBoards: boolean;
-  gitlabMcpCommand: string;
-  gitlabMcpArgs: string;
 }
 
 interface GitLabSetupFieldInput {
   gitlabUrl?: string;
-  gitlabConnectionType?: string;
   gitlabApiKey?: string;
   gitlabProjectPath?: string;
   gitlabListAllAccessibleBoards?: string;
-  gitlabMcpCommand?: string;
-  gitlabMcpArgs?: string;
 }
 
 interface GitLabSetupUpdate {
@@ -63,40 +57,19 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function hasConfiguredJiraMcpConnection(
-  config: Pick<vscode.WorkspaceConfiguration, 'get'>
-): boolean {
-  const workspaceServerName = config.get<string>('workspaceMcpServerName', '').trim();
-  const userServerRef = config.get<string>('userMcpServerRef', '').trim();
-  if (workspaceServerName || userServerRef) {
-    return true;
-  }
-
-  const connectionType = config.get<'stdio' | 'http'>('connectionType', 'stdio');
-  return connectionType === 'http'
-    ? config.get<string>('httpUrl', '').trim().length > 0
-    : config.get<string>('stdioCommand', '').trim().length > 0;
-}
-
 export function getGitLabSetupValues(
   config: Pick<vscode.WorkspaceConfiguration, 'get'>
 ): GitLabSetupValues {
   return {
     gitlabUrl: config.get<string>('gitlabUrl', '').trim(),
-    gitlabConnectionType: config.get<'api' | 'mcp'>('gitlabConnectionType', 'api'),
     gitlabApiKey: config.get<string>('gitlabApiKey', '').trim(),
     gitlabProjectPath: config.get<string>('gitlabProjectPath', '').trim(),
-    gitlabListAllAccessibleBoards: config.get<boolean>('gitlabListAllAccessibleBoards', false),
-    gitlabMcpCommand: config.get<string>('gitlabMcpCommand', '').trim(),
-    gitlabMcpArgs: config.get<string[]>('gitlabMcpArgs', []).join(' ')
+    gitlabListAllAccessibleBoards: config.get<boolean>('gitlabListAllAccessibleBoards', false)
   };
 }
 
 export function buildGitLabSetupUpdates(fields: GitLabSetupFieldInput): GitLabSetupUpdate[] {
-  const connectionType = fields.gitlabConnectionType === 'mcp' ? 'mcp' : 'api';
-  const updates: GitLabSetupUpdate[] = [
-    { key: 'gitlabConnectionType', value: connectionType }
-  ];
+  const updates: GitLabSetupUpdate[] = [];
   const projectPath = fields.gitlabProjectPath?.trim();
   if (projectPath) {
     updates.push({ key: 'gitlabProjectPath', value: projectPath });
@@ -114,29 +87,16 @@ export function buildGitLabSetupUpdates(fields: GitLabSetupFieldInput): GitLabSe
     updates.push({ key: 'gitlabUrl', value: gitlabUrl });
   }
 
-  if (connectionType === 'api') {
-    const apiKey = fields.gitlabApiKey?.trim();
-    if (apiKey) {
-      updates.push({ key: 'gitlabApiKey', value: apiKey });
-    }
-  } else {
-    const mcpCommand = fields.gitlabMcpCommand?.trim();
-    if (mcpCommand) {
-      updates.push({ key: 'gitlabMcpCommand', value: mcpCommand });
-    }
-    const mcpArgs = fields.gitlabMcpArgs?.trim();
-    if (mcpArgs) {
-      updates.push({ key: 'gitlabMcpArgs', value: mcpArgs.split(' ').filter(Boolean) });
-    }
+  const apiKey = fields.gitlabApiKey?.trim();
+  if (apiKey) {
+    updates.push({ key: 'gitlabApiKey', value: apiKey });
   }
 
   return updates;
 }
 
 export function canPromptForGitLabBoardSelection(fields: GitLabSetupFieldInput): boolean {
-  const connectionType = fields.gitlabConnectionType === 'mcp' ? 'mcp' : 'api';
-  return connectionType === 'api'
-    && (fields.gitlabUrl?.trim().length ?? 0) > 0
+  return (fields.gitlabUrl?.trim().length ?? 0) > 0
     && (fields.gitlabApiKey?.trim().length ?? 0) > 0;
 }
 
@@ -515,7 +475,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
       { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
       { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
-      { mode: 'jira', emoji: '🔗', title: 'Jira via MCP', desc: 'Connect to Jira through an MCP server' },
       { mode: 'jiraapi', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
@@ -632,45 +591,19 @@ ${fields}
 
   private renderGitLabFields(): string {
     const url = escapeHtml(this.setupFields.gitlabUrl ?? '');
-    const connType = this.setupFields.gitlabConnectionType ?? 'api';
-    const apiChecked = connType === 'api' ? ' checked' : '';
-    const mcpChecked = connType === 'mcp' ? ' checked' : '';
-
-    let connFields = '';
-    if (connType === 'api') {
-      const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
-      const keyPlaceholder = (!apiKey && this.hasGitLabApiKeySecret)
-        ? '(configured — leave blank to keep)'
-        : 'API key or personal access token';
-      connFields = `<div class="form-group">
-  <label>API Key</label>
-  <input type="password" data-field="gitlabApiKey" value="${apiKey}" placeholder="${keyPlaceholder}" />
-</div>`;
-    } else {
-      const cmd = escapeHtml(this.setupFields.gitlabMcpCommand ?? '');
-      const args = escapeHtml(this.setupFields.gitlabMcpArgs ?? '');
-      connFields = `<div class="form-group">
-  <label>MCP Command</label>
-  <input type="text" data-field="gitlabMcpCommand" value="${cmd}" />
-</div>
-<div class="form-group">
-  <label>Arguments</label>
-  <input type="text" data-field="gitlabMcpArgs" value="${args}" />
-</div>`;
-    }
+    const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
+    const keyPlaceholder = (!apiKey && this.hasGitLabApiKeySecret)
+      ? '(configured — leave blank to keep)'
+      : 'API key or personal access token';
 
     return `<div class="form-group">
   <label>GitLab URL</label>
   <input type="text" data-field="gitlabUrl" value="${url}" placeholder="https://gitlab.com" />
 </div>
 <div class="form-group">
-  <label>Connection Type</label>
-  <div class="radio-group">
-    <label><input type="radio" name="gitlabConnectionType" data-field="gitlabConnectionType" value="api"${apiChecked} /> API Key</label>
-    <label><input type="radio" name="gitlabConnectionType" data-field="gitlabConnectionType" value="mcp"${mcpChecked} /> MCP Server</label>
-  </div>
+  <label>Personal Access Token</label>
+  <input type="password" data-field="gitlabApiKey" value="${apiKey}" placeholder="${keyPlaceholder}" />
 </div>
-${connFields}
 <div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>
 <div class="danger-zone">
   <button class="btn btn-danger-link" data-action="resetGitLab">Reset GitLab configuration…</button>
@@ -713,8 +646,8 @@ ${connFields}
     return `<div class="form-group">
   <label>Connection Type</label>
   <div class="radio-group">
-    <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="stdio"${stdioChecked} /> Jira MCP via stdio</label>
-    <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="http"${httpChecked} /> Jira MCP via HTTP</label>
+      <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="stdio"${stdioChecked} /> Jira via stdio</label>
+      <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="http"${httpChecked} /> Jira via HTTP</label>
   </div>
 </div>
 <div class="settings-section">
@@ -807,26 +740,18 @@ ${connFields}`;
           if (mode === 'github' && !this.setupFields.githubUrl) {
             this.setupFields.githubUrl = 'https://api.github.com';
           }
-          if (mode === 'gitlab' && !this.setupFields.gitlabConnectionType) {
-            this.setupFields.gitlabConnectionType = 'api';
-          }
           if (mode === 'gitlab') {
             this.hasGitLabApiKeySecret = !!(await this.context.secrets.get('ticketManager.gitlabApiKey'));
           }
-          if (mode === 'jira' || mode === 'jiraapi') {
+          if (mode === 'jiraapi') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
             this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', true));
-            if (mode === 'jira' && !this.setupFields.jiraConnectionType) {
-              this.setupFields.jiraConnectionType = 'stdio';
-            }
-            if (mode === 'jiraapi') {
-              this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
-              this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
-              this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-              this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-              this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
-            }
+            this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+            this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+            this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+            this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+            this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
           }
           this.render();
         }
@@ -846,7 +771,7 @@ ${connFields}`;
               : '';
         if (field) {
           this.setupFields[field] = value;
-          if (field === 'gitlabConnectionType' || field === 'jiraConnectionType') {
+          if (field === 'jiraConnectionType') {
             this.render();
           }
         }
@@ -918,13 +843,10 @@ ${connFields}`;
           : vscode.ConfigurationTarget.Global;
         await Promise.all([
           config.update('gitlabUrl', undefined, target),
-          config.update('gitlabConnectionType', undefined, target),
           config.update('gitlabApiKey', undefined, target),
           config.update('gitlabProjectPath', undefined, target),
           config.update('gitlabListAllAccessibleBoards', undefined, target),
           config.update('gitlabSelectedBoardRefs', undefined, target),
-          config.update('gitlabMcpCommand', undefined, target),
-          config.update('gitlabMcpArgs', undefined, target),
           config.update('backendMode', undefined, target),
           this.context.secrets.delete('ticketManager.gitlabApiKey')
         ]);
@@ -992,18 +914,9 @@ ${connFields}`;
         if (this.setupFields.gitlabUrl) {
           await updateSetting('gitlabUrl', this.setupFields.gitlabUrl);
         }
-        const glConn = this.setupFields.gitlabConnectionType || 'api';
-        await updateSetting('gitlabConnectionType', glConn);
-        if (glConn === 'api' && this.setupFields.gitlabApiKey?.trim()) {
+        if (this.setupFields.gitlabApiKey?.trim()) {
           await this.context.secrets.store('ticketManager.gitlabApiKey', this.setupFields.gitlabApiKey.trim());
           this.hasGitLabApiKeySecret = true;
-        } else if (glConn === 'mcp') {
-          if (this.setupFields.gitlabMcpCommand) {
-            await updateSetting('gitlabMcpCommand', this.setupFields.gitlabMcpCommand);
-          }
-          if (this.setupFields.gitlabMcpArgs) {
-            await updateSetting('gitlabMcpArgs', this.setupFields.gitlabMcpArgs.split(' ').filter(Boolean));
-          }
         }
         break;
       }

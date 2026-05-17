@@ -19,14 +19,12 @@ export function resolveBackendModeContextState(
     case 'gitlab':
       return { mode: storedMode, configured: false };
     case 'jira':
-      return { mode: 'jira', configured: jiraMcpConfigured };
+      return { mode: 'jiraapi', configured: jiraApiConfigured };
     case 'jiraapi':
       return { mode: 'jiraapi', configured: jiraApiConfigured };
     default:
-      return jiraMcpConfigured
-        ? { mode: 'jira', configured: true }
-        : jiraApiConfigured
-          ? { mode: 'jiraapi', configured: true }
-          : { mode: undefined, configured: false };
+      return jiraApiConfigured
+        ? { mode: 'jiraapi', configured: true }
+        : { mode: undefined, configured: false };
   }
 }
