@@ -5,7 +5,8 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { ConnectionStore } from '../config/connectionStore';
 import { BoardStore } from '../state/boardStore';
 import type { AiAssignment, AiProvider, BackendMode, Board, BoardDetails } from '../types';
-import { boardListModeIconSvg } from './boardModeIcon';
+import { parseHexRgb } from '../ui/hexColor';
+import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { BoardsTreeProvider } from './boardsTreeProvider';
 
 interface WorkModeBoardsSidebarCallbacks {
@@ -57,6 +58,7 @@ function escapeHtml(value: string): string {
 
 interface BoardRenderIcons {
   modeIcon: string;
+  modeIconColor: string;
   statusIcon: string;
   activityIcon: string;
   menuDotsIcon: string;
@@ -211,6 +213,31 @@ function buildInitials(value: string): string {
     .map(part => part[0]?.toUpperCase() ?? '')
     .join('');
   return initials || 'TM';
+}
+
+function resolveBoardMetaLabel(board: Board): string {
+  return board.id.startsWith('jql:') ? board.name : board.id;
+}
+
+function resolveIconShellStyle(color: string): string {
+  const rgb = parseHexRgb(color);
+  if (!rgb) {
+    return `color: ${color}; border-color: ${color};`;
+  }
+
+  const { r, g, b } = rgb;
+  return `color: ${color}; border-color: rgba(${r}, ${g}, ${b}, 0.34); background: rgba(${r}, ${g}, ${b}, 0.08); box-shadow: inset 0 0 0 1px rgba(${r}, ${g}, ${b}, 0.08), 0 0 18px rgba(${r}, ${g}, ${b}, 0.18);`;
+}
+
+function resolvePriorityTokenStyle(priority: string, priorityColors: Record<string, string>): string {
+  const color = priorityColors[priority];
+  const rgb = parseHexRgb(color);
+  if (!rgb) {
+    return '';
+  }
+
+  const { r, g, b } = rgb;
+  return `color: ${color}; background: rgba(${r}, ${g}, ${b}, 0.12); border-color: rgba(${r}, ${g}, ${b}, 0.28);`;
 }
 
 export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -384,68 +411,68 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .page { box-sizing: border-box; min-height: 100%; padding: 8px 10px 12px; }
       .message { padding: 10px 12px; border: 1px dashed var(--vscode-panel-border); border-radius: 8px; color: var(--vscode-descriptionForeground); font-size: 12px; }
       .message.error { color: var(--vscode-errorForeground); }
-      .work-board-list { display: flex; flex-direction: column; gap: 12px; padding: 0; }
+      .work-board-list { display: flex; flex-direction: column; gap: 10px; padding: 0; }
       .work-board { position: relative; display: flex; flex-direction: column; gap: 0; }
-      .work-board-card { position: relative; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 29px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); box-shadow: 0 4px 16px rgba(0,0,0,0.28); overflow: visible; cursor: pointer; z-index: 2; }
+      .work-board-card { position: relative; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 18px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); box-shadow: 0 4px 16px rgba(0,0,0,0.28); overflow: visible; cursor: pointer; z-index: 2; }
       .work-board-card:hover { border-color: color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.35)) 50%, var(--vscode-focusBorder, #6366f1) 50%); }
       .work-board-card.selected { border-color: var(--vscode-focusBorder, rgba(99,102,241,0.7)); box-shadow: 0 4px 16px rgba(0,0,0,0.32), 0 0 0 1px var(--vscode-focusBorder, rgba(99,102,241,0.3)); }
-      .work-board-shell { padding: 16px 18px 14px; }
-      .work-board-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-      .work-board-head-left { display: flex; align-items: flex-start; gap: 14px; min-width: 0; flex: 1; }
-      .work-board-icon { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 12px; color: #ffffff; background: linear-gradient(180deg, #5b56f0 0%, #4f46e5 100%); box-shadow: 0 4px 14px rgba(79,70,229,0.4); flex-shrink: 0; }
-      .work-board-icon svg { width: 16px; height: 16px; display: block; }
+      .work-board-shell { padding: 13px 14px 12px; }
+      .work-board-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+      .work-board-head-left { display: flex; align-items: flex-start; gap: 11px; min-width: 0; flex: 1; }
+      .work-board-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 9px; color: var(--vscode-textLink-foreground, var(--vscode-icon-foreground, var(--vscode-editor-foreground))); background: transparent; flex-shrink: 0; }
+      .work-board-icon svg { width: 14px; height: 14px; display: block; }
       .work-board-title-wrap { min-width: 0; flex: 1; }
-      .work-board-eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 800; line-height: 1; letter-spacing: 0.02em; }
+      .work-board-eyebrow { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; min-width: 0; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 800; line-height: 1; letter-spacing: 0.03em; }
       .work-board-id { color: var(--vscode-descriptionForeground); opacity: 0.8; }
-      .work-board-priority { color: #f59e0b; text-transform: uppercase; }
+      .work-board-priority { display: inline-flex; align-items: center; padding: 1px 6px; border: 1px solid transparent; border-radius: 999px; color: var(--vscode-descriptionForeground); text-transform: uppercase; }
       .work-board-dot { width: 4px; height: 4px; border-radius: 999px; background: var(--vscode-panel-border, rgba(128,128,128,0.5)); flex-shrink: 0; }
-      .work-board-title { margin: 0 0 6px; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 22px; font-weight: 800; line-height: 1.18; letter-spacing: -0.03em; }
-      .work-board-summary { margin: 0; color: var(--vscode-descriptionForeground); font-size: 12px; line-height: 1.45; max-width: 94%; }
+      .work-board-title { margin: 0 0 4px; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 17px; font-weight: 780; line-height: 1.18; letter-spacing: -0.02em; }
+      .work-board-summary { margin: 0; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.34; max-width: 100%; }
       .work-board-menu { position: relative; flex-shrink: 0; }
-      .work-board-menu-trigger { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--vscode-descriptionForeground); cursor: pointer; }
+      .work-board-menu-trigger { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--vscode-descriptionForeground); cursor: pointer; }
       .work-board-menu-trigger:hover, .work-board-menu-trigger[aria-expanded="true"] { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.12)); color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); }
-      .work-board-menu-trigger svg { width: 15px; height: 15px; display: block; }
+      .work-board-menu-trigger svg { width: 14px; height: 14px; display: block; }
       .work-board-menu-panel { position: absolute; top: calc(100% + 8px); right: 0; min-width: 148px; padding: 6px; border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); border-radius: 14px; background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--vscode-editor-background))); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 4; }
       .work-board-menu-panel[hidden] { display: none; }
       .work-board-menu-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--vscode-menu-foreground, var(--vscode-sideBar-foreground, var(--vscode-editor-foreground))); font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
       .work-board-menu-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1)); }
       .work-board-menu-item.danger { color: var(--vscode-errorForeground, #f87171); }
       .work-board-menu-item svg { width: 14px; height: 14px; display: block; flex-shrink: 0; }
-      .work-board-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
-      .work-board-meta { display: flex; align-items: center; gap: 16px; min-width: 0; flex-wrap: wrap; }
-      .work-board-status { display: inline-flex; align-items: center; gap: 8px; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; }
-      .work-board-status svg { width: 14px; height: 14px; display: block; color: var(--vscode-textLink-foreground, #818cf8); }
-      .work-board-owner { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; }
+      .work-board-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
+      .work-board-meta { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; color: color-mix(in srgb, var(--vscode-descriptionForeground) 88%, transparent); }
+      .work-board-status { display: inline-flex; align-items: center; gap: 5px; color: inherit; font-size: 10px; font-weight: 600; opacity: 0.92; }
+      .work-board-status svg { width: 12px; height: 12px; display: block; color: color-mix(in srgb, var(--vscode-descriptionForeground) 72%, transparent); }
+      .work-board-owner { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; font-size: 10px; font-weight: 600; opacity: 0.88; }
       .work-board-owner-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .work-board-assignee-badge { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 999px; background: var(--vscode-badge-background, #5b56f0); color: var(--vscode-badge-foreground, #ffffff); font-size: 9px; font-weight: 800; flex-shrink: 0; }
-      .work-board-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border: 1px solid transparent; border-radius: 12px; background: var(--vscode-button-background, #5b56f0); color: var(--vscode-button-foreground, #ffffff); font-size: 12px; font-weight: 800; line-height: 1; cursor: pointer; }
+      .work-board-assignee-badge { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; background: color-mix(in srgb, var(--vscode-badge-background, var(--vscode-panel-border)) 20%, transparent); border: 1px solid color-mix(in srgb, var(--vscode-panel-border, rgba(128,128,128,0.35)) 75%, transparent); color: var(--vscode-descriptionForeground); font-size: 7px; font-weight: 800; flex-shrink: 0; }
+      .work-board-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; border: 1px solid transparent; border-radius: 10px; background: var(--vscode-button-background, #5b56f0); color: var(--vscode-button-foreground, #ffffff); font-size: 11px; font-weight: 800; line-height: 1; cursor: pointer; }
       .work-board-toggle:hover { background: var(--vscode-button-hoverBackground, #4f46e5); }
       .work-board-toggle.expanded { background: rgba(99,102,241,0.12); color: var(--vscode-textLink-foreground, #818cf8); border-color: rgba(99,102,241,0.3); box-shadow: none; }
-      .work-board-toggle svg { width: 14px; height: 14px; display: block; transition: transform 160ms ease; }
+      .work-board-toggle svg { width: 12px; height: 12px; display: block; transition: transform 160ms ease; }
       .work-board-toggle.expanded svg { transform: rotate(180deg); }
       .work-board-stack-wrapper { display: grid; grid-template-rows: 0fr; width: calc(100% - 40px); margin: -14px auto 0; z-index: 1; transition: grid-template-rows 380ms cubic-bezier(0.16, 1, 0.3, 1); }
       .work-board-stack-wrapper.stack-visible { grid-template-rows: 1fr; }
       .work-board-stack-wrapper.no-anim { transition: none !important; }
-      .work-board-stack { min-height: 0; overflow: hidden; padding: 26px 0 12px; box-sizing: border-box; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-top: 0; border-radius: 0 0 26px 26px; background: color-mix(in srgb, var(--vscode-sideBar-background) 60%, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 40%); }
-      .work-board-activity { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 0 10px; }
+      .work-board-stack { min-height: 0; overflow: hidden; padding: 20px 0 10px; box-sizing: border-box; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-top: 0; border-radius: 0 0 18px 18px; background: color-mix(in srgb, var(--vscode-sideBar-background) 60%, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 40%); }
+      .work-board-activity { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; padding: 0 10px; }
       .work-board-activity svg { width: 12px; height: 12px; display: block; color: var(--vscode-textLink-foreground, #818cf8); }
-      .work-board-activity-label { color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
+      .work-board-activity-label { color: var(--vscode-descriptionForeground); font-size: 9px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7; }
       .work-board-activity-line { height: 1px; flex: 1; background: var(--vscode-panel-border, rgba(128,128,128,0.3)); }
       .work-session-list-container { margin: 0 10px; }
-      .work-session-list { display: flex; flex-direction: column; gap: 10px; padding: 0; }
-      .work-session-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-radius: 16px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; text-align: left; }
+      .work-session-list { display: flex; flex-direction: column; gap: 8px; padding: 0; }
+      .work-session-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 11px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); border-radius: 12px; background: var(--vscode-editorWidget-background, var(--vscode-editor-background)); box-shadow: 0 2px 8px rgba(0,0,0,0.25); cursor: pointer; text-align: left; }
       .work-session-row:hover { border-color: var(--vscode-focusBorder, rgba(99,102,241,0.5)); background: var(--vscode-list-hoverBackground, color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-editor-background)) 85%, white 15%)); }
-      .work-session-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
-      .work-session-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 11px; background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.14)); color: var(--vscode-descriptionForeground); flex-shrink: 0; }
-      .work-session-icon svg { width: 14px; height: 14px; display: block; }
+      .work-session-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+      .work-session-icon { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.14)); color: var(--vscode-descriptionForeground); flex-shrink: 0; }
+      .work-session-icon svg { width: 12px; height: 12px; display: block; }
       .work-session-indicator { position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 999px; border: 2px solid var(--vscode-editorWidget-background, var(--vscode-editor-background)); background: var(--vscode-panel-border, rgba(128,128,128,0.5)); }
       .work-session-indicator.active { background: #10b981; }
       .work-session-copy { min-width: 0; flex: 1; }
       .work-session-headline { display: flex; align-items: center; gap: 6px; min-width: 0; }
-      .work-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 12px; font-weight: 800; }
-      .work-session-subtitle { margin-top: 4px; color: var(--vscode-descriptionForeground); font-size: 10px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .work-session-chevron { width: 14px; height: 14px; color: var(--vscode-panel-border, rgba(128,128,128,0.5)); flex-shrink: 0; }
-      .work-board-add-agent { width: 100%; padding: 12px 14px; border: 1px dashed var(--vscode-panel-border, rgba(128,128,128,0.4)); border-radius: 16px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; cursor: default; }
+      .work-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 11px; font-weight: 800; }
+      .work-session-subtitle { margin-top: 3px; color: var(--vscode-descriptionForeground); font-size: 9px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .work-session-chevron { width: 12px; height: 12px; color: var(--vscode-panel-border, rgba(128,128,128,0.5)); flex-shrink: 0; }
+      .work-board-add-agent { width: 100%; padding: 10px 12px; border: 1px dashed var(--vscode-panel-border, rgba(128,128,128,0.4)); border-radius: 12px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 10px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.55; cursor: default; }
       .work-board-list-header { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 10px 8px; }
       .work-board-remove-all { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-errorForeground, #f87171); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
       .work-board-remove-all:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 10%, transparent); border-color: var(--vscode-errorForeground, #f87171); }
@@ -453,12 +480,12 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-board-reset-config { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
       .work-board-reset-config:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
       .work-board-reset-config svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
-      .pill { display: inline-flex; align-items: center; flex-shrink: 0; padding: 1px 6px; border: 1px solid transparent; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 1.4; }
+      .pill { display: inline-flex; align-items: center; flex-shrink: 0; padding: 1px 5px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 600; line-height: 1.35; }
       .pill--progress { color: #6ee7b7; background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); }
       .pill--done { color: #93c5fd; background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); }
       .pill--blocked { color: #fca5a5; background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); }
       .pill--status { color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-badge-background, transparent) 65%, transparent); border-color: transparent; }
-      .work-board-empty, .work-board-loading, .work-board-error { margin-top: 12px; padding: 10px 12px; border-radius: 16px; font-size: 11px; line-height: 1.4; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); }
+      .work-board-empty, .work-board-loading, .work-board-error { margin-top: 12px; padding: 10px 12px; border-radius: 12px; font-size: 11px; line-height: 1.4; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.3)); }
       .work-board-loading, .work-board-empty { color: var(--vscode-descriptionForeground); background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--vscode-sideBar-background)) 92%, transparent); }
       .work-board-error { color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-inputValidation-errorBackground, transparent) 55%, transparent); }
 
@@ -659,6 +686,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
   private renderBoards(boards: Board[]): string {
     const fallbackMode = this.getBackendMode();
+    const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
     const resolveBoardMode = (connectionId: string | undefined): BackendMode => {
       if (connectionId && this.connectionStore) {
         const conn = this.connectionStore.getConnection(connectionId);
@@ -669,6 +697,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       return fallbackMode;
     };
     const fallbackModeIconMarkup = boardListModeIconSvg(fallbackMode);
+    const fallbackModeIconColor = resolveBackendModeBoardIconColor(fallbackMode);
     const statusIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M2 8h2.4l1.2-3.2L8 11.2 10 5.8l1.1 2.2H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const activityIcon = '<svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="4.5" width="11" height="7" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 4V3a2 2 0 1 1 4 0v1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
     const menuDotsIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.25" cy="8" r="1.25"/><circle cx="8" cy="8" r="1.25"/><circle cx="12.75" cy="8" r="1.25"/></svg>';
@@ -682,7 +711,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     const resetConfigBtn = hasGitLabBoard
       ? `<button class="work-board-reset-config" type="button" id="resetGitLabConfig">${resetConfigIcon}<span>Reset config</span></button>`
       : '';
-    const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
+    const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, modeIconColor: fallbackModeIconColor, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
     return `<div>
       <div class="work-board-list-header">
         ${resetConfigBtn}
@@ -692,15 +721,24 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         ${boards
           .map(board => {
             const boardMode = resolveBoardMode(board.connectionId);
-            const perBoardIcons: BoardRenderIcons = { ...icons, modeIcon: boardListModeIconSvg(boardMode) };
-            return this.renderBoard(board, perBoardIcons, boardRemovalLabel(boardMode));
+            const perBoardIcons: BoardRenderIcons = {
+              ...icons,
+              modeIcon: boardListModeIconSvg(boardMode),
+              modeIconColor: resolveBackendModeBoardIconColor(boardMode)
+            };
+            return this.renderBoard(board, perBoardIcons, boardRemovalLabel(boardMode), priorityColors);
           })
           .join('')}
       </div>
     </div>`;
   }
 
-  private renderBoard(board: Board, icons: BoardRenderIcons, removalLabel: string): string {
+  private renderBoard(
+    board: Board,
+    icons: BoardRenderIcons,
+    removalLabel: string,
+    priorityColors: Record<string, string>
+  ): string {
     const state = this.boardStates.get(board.id) ?? { board, loading: true };
     const issueCount = state.details?.issues.length ?? 0;
     const sessions = this.getSessions(board.id, state.details);
@@ -709,9 +747,11 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     const activeCount = sessions.filter(session => session.isActive).length;
     const boardStatus = getBoardStatus(activeCount, hasSessions, issueCount);
     const projectOrLocation = this.resolveProjectOrLocation(board);
+    const boardMetaLabel = resolveBoardMetaLabel(board);
     const description = getBoardDescription(sessions, issueCount);
     const initials = buildInitials(projectOrLocation);
     const boardPriority = getBoardPriority(activeCount, hasSessions);
+    const boardPriorityStyle = resolvePriorityTokenStyle(boardPriority, priorityColors);
     const selectedClass = this.selectedBoardId === board.id ? 'selected' : '';
     const loadingMarkup = state.loading && !isExpanded ? '<div class="work-board-loading">Loading board activity...</div>' : '';
     const errorMarkup = state.errorMessage ? `<div class="work-board-error">${escapeHtml(state.errorMessage)}</div>` : '';
@@ -729,12 +769,12 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         <div class="work-board-shell">
           <div class="work-board-head">
             <div class="work-board-head-left">
-              <span class="work-board-icon">${icons.modeIcon}</span>
+              <span class="work-board-icon" style="${escapeHtml(resolveIconShellStyle(icons.modeIconColor))}">${icons.modeIcon}</span>
               <div class="work-board-title-wrap">
                 <div class="work-board-eyebrow">
-                  <span class="work-board-id">${escapeHtml(board.id)}</span>
+                  <span class="work-board-id">${escapeHtml(boardMetaLabel)}</span>
                   <span class="work-board-dot"></span>
-                  <span class="work-board-priority">${escapeHtml(boardPriority)}</span>
+                  <span class="work-board-priority" style="${escapeHtml(boardPriorityStyle)}">${escapeHtml(boardPriority)}</span>
                 </div>
                 <h2 class="work-board-title">${escapeHtml(board.name)}</h2>
                 <p class="work-board-summary">${escapeHtml(description)}</p>
