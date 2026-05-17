@@ -2103,10 +2103,10 @@ export class JiraApiService implements IssueTrackerService {
   private parseJqlBoardQuery(board: Board): string | undefined {
     if (board.id === 'jql:workspace') {
       if (!isRecord(board.raw)) {
-        return undefined;
+        return this.getLinkedBoardJql();
       }
       const jql = asString(board.raw.jql)?.trim();
-      return jql || undefined;
+      return jql || this.getLinkedBoardJql();
     }
 
     if (board.id.startsWith(CUSTOM_JQL_BOARD_PREFIX)) {

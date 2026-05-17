@@ -8,7 +8,6 @@
     "ticketManager.liveFolderAllowIssueCreation": true,
     "ticketManager.liveFolderProjectKey": "",
     "ticketManager.liveFolderProjectName": "",
-    "ticketManager.backendMode": "jiraapi",
     "ticketManager.gitlabUrl": "https://git.tools.dev.assaabloyglobalsolutions.net/",
     "ticketManager.jiraApiEpicKey": "",
     "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
@@ -36,6 +35,16 @@
             "settings": {
                 "url": "https://git.tools.dev.assaabloyglobalsolutions.net/"
             }
+        },
+        {
+            "id": "hid",
+            "name": "HID",
+            "mode": "livefolder",
+            "settings": {
+                "path": "C:\\dev-ai\\TrakaHIS\\traka-his-integration",
+                "projectName": "Traka HID",
+                "allowIssueCreation": true
+            }
         }
     ],
     "ticketManager.boards": [
@@ -48,6 +57,21 @@
             "connectionId": "gitlab",
             "boardId": "gitlab:3668:279",
             "displayName": "KAMAI"
+        },
+        {
+            "connectionId": "hid",
+            "boardId": "hid",
+            "displayName": "HID"
+        },
+        {
+            "connectionId": "hid",
+            "boardId": "livefolder-live",
+            "displayName": "Traka HID (Live)"
+        },
+        {
+            "connectionId": "jira-cloud",
+            "boardId": "agile:620",
+            "displayName": "Presales Configurator"
         }
     ]
 }

@@ -90,7 +90,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     }
     if (action.kind === 'addBoard') {
       const connection = this.connectionStore.getConnection(action.connectionId);
-      if (connection) {
+      if (connection && supportsManualBoardSelection(connection.mode)) {
         this.state.view = 'boards';
         this.state.boardPicker = {
           connectionId: connection.id,
@@ -182,6 +182,10 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   private handleAddBoardCommand(message: Record<string, unknown>): void {
     const id = stringField(message, 'connectionId');
     if (id) {
+      const connection = this.connectionStore.getConnection(id);
+      if (!connection || !supportsManualBoardSelection(connection.mode)) {
+        return;
+      }
       this.applyInitialAction({ kind: 'addBoard', connectionId: id });
       this.rerender();
     }
@@ -248,6 +252,10 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   private async handleAddCustomJqlBoard(): Promise<void> {
     const picker = this.state.boardPicker;
     if (!picker) {
+      return;
+    }
+    const connection = this.connectionStore.getConnection(picker.connectionId);
+    if (!connection || (connection.mode !== 'jiraapi' && connection.mode !== 'jira')) {
       return;
     }
 
@@ -424,13 +432,27 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       // Auto-synthesize one board for modes without discoverable boards so
       // the explicit-assignment flow stays uniform.
       if (autoSynthesizesBoard(connection.mode)) {
-        const existing = this.connectionStore.getTrackedBoardsForConnection(connection.id);
-        if (existing.length === 0) {
-          await this.connectionStore.addTrackedBoard({
-            connectionId: connection.id,
-            boardId: connection.id,
-            displayName: connection.name
-          });
+        const canonicalBoard = createSynthesizedTrackedBoard(connection);
+        if (canonicalBoard) {
+          const existing = this.connectionStore.getTrackedBoardsForConnection(connection.id);
+          const existingCanonical = existing.find(board => board.boardId === canonicalBoard.boardId);
+
+          if (existingCanonical) {
+            if (existingCanonical.displayName !== canonicalBoard.displayName) {
+              await this.connectionStore.updateTrackedBoard(canonicalBoard);
+            }
+          } else {
+            await this.connectionStore.addTrackedBoard(canonicalBoard);
+          }
+
+          for (const board of existing) {
+            if (board.boardId !== canonicalBoard.boardId) {
+              await this.connectionStore.removeTrackedBoard({
+                connectionId: connection.id,
+                boardId: board.boardId
+              });
+            }
+          }
         }
         this.state.view = 'list';
         this.state.connectionForm = undefined;
@@ -662,7 +684,8 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   }
 
   private renderConnectionRow(connection: Connection, tracked: TrackedBoard[]): string {
-    const boards = tracked.filter(b => b.connectionId === connection.id);
+    const boards = getDisplayedTrackedBoards(connection, tracked.filter(b => b.connectionId === connection.id));
+    const canAddBoard = supportsManualBoardSelection(connection.mode);
     const boardsHtml = boards.length === 0
       ? `<div class="boards-empty">No tracked boards yet.</div>`
       : boards
@@ -688,7 +711,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
             <span class="connection-id">${esc(connection.id)}</span>
           </div>
           <div class="actions">
-            <button data-action="addBoard" data-connection-id="${esc(connection.id)}">+ Add Board</button>
+            ${canAddBoard ? `<button data-action="addBoard" data-connection-id="${esc(connection.id)}">+ Add Board</button>` : ''}
             <button data-action="editConnection" data-connection-id="${esc(connection.id)}">Edit</button>
             <button class="danger" data-action="removeConnection" data-connection-id="${esc(connection.id)}">Remove</button>
           </div>
@@ -862,7 +885,9 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <section class="form">
         ${content}
         <div class="form-actions">
-          <button data-action="addCustomJqlBoard">+ Add Custom JQL Board</button>
+          ${connection && (connection.mode === 'jiraapi' || connection.mode === 'jira')
+            ? '<button data-action="addCustomJqlBoard">+ Add Custom JQL Board</button>'
+            : ''}
           <button data-action="navigateList">Cancel</button>
           <button class="primary" data-action="saveBoardSelection">Save selection</button>
         </div>
@@ -956,6 +981,50 @@ function modeLabel(mode: BackendMode): string {
 
 function autoSynthesizesBoard(mode: BackendMode): boolean {
   return mode === 'livefolder' || mode === 'userworkspace' || mode === 'demo';
+}
+
+function supportsManualBoardSelection(mode: BackendMode): boolean {
+  return mode !== 'livefolder';
+}
+
+function getDisplayedTrackedBoards(connection: Connection, boards: TrackedBoard[]): TrackedBoard[] {
+  if (connection.mode !== 'livefolder') {
+    return boards;
+  }
+
+  const canonical = createSynthesizedTrackedBoard(connection);
+  if (!canonical) {
+    return boards;
+  }
+
+  return boards.length > 0 ? [canonical] : [];
+}
+
+function createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | undefined {
+  if (connection.mode === 'livefolder') {
+    const projectKey = getConnectionStringSetting(connection, 'projectKey') || 'LIVE';
+    const projectName = getConnectionStringSetting(connection, 'projectName') || 'Live Folder';
+    return {
+      connectionId: connection.id,
+      boardId: `livefolder-${projectKey.toLowerCase()}`,
+      displayName: `${projectName} (Live)`
+    };
+  }
+
+  if (connection.mode === 'userworkspace' || connection.mode === 'demo') {
+    return {
+      connectionId: connection.id,
+      boardId: connection.id,
+      displayName: connection.name
+    };
+  }
+
+  return undefined;
+}
+
+function getConnectionStringSetting(connection: Connection, key: string): string | undefined {
+  const value = connection.settings?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function secretNamesForMode(mode: BackendMode): readonly string[] {

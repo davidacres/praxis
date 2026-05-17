@@ -98,7 +98,21 @@ function resolveBoard(
   }
 
   const selectedBoardId = boardStore.getLastSelectedBoardId();
-  return selectedBoardId ? boardsProvider.getBoardById(selectedBoardId) : undefined;
+  if (!selectedBoardId) {
+    return undefined;
+  }
+
+  const trackedRef = boardStore.getLastSelectedTrackedBoard();
+  if (trackedRef?.boardId === selectedBoardId) {
+    const trackedMatch = boardsProvider
+      .getCurrentBoards()
+      .find(board => board.id === selectedBoardId && board.connectionId === trackedRef.connectionId);
+    if (trackedMatch) {
+      return trackedMatch;
+    }
+  }
+
+  return boardsProvider.getBoardById(selectedBoardId);
 }
 
 async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<void> {

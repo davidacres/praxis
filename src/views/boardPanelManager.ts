@@ -77,6 +77,7 @@ export class BoardPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private activeBoard?: Board;
   private activeBoardService?: IssueTrackerService;
+  private readonly boardDetailsCache = new Map<string, BoardDetails>();
   private boardDetails?: BoardDetails;
   private loading = false;
   private errorMessage?: string;
@@ -113,14 +114,19 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public async openBoard(board: Board): Promise<void> {
     this.activeBoard = board;
-    this.activeBoardService = await this.getActiveBoardService(board);
+    this.boardDetails = this.boardDetailsCache.get(board.id);
+    this.loading = true;
+    this.errorMessage = undefined;
+    this.activeBoardService = undefined;
     this.ensurePanel();
     this.panel?.reveal(vscode.ViewColumn.Active, false);
+    this.render();
     await this.refresh();
   }
 
   public async refresh(): Promise<void> {
-    if (!this.activeBoard) {
+    const activeBoard = this.activeBoard;
+    if (!activeBoard) {
       return;
     }
 
@@ -130,20 +136,21 @@ export class BoardPanelManager implements vscode.Disposable {
     this.render();
 
     try {
-      const boardService = await this.getActiveBoardService();
-      const boardDetails = await boardService.getBoardDetails(this.activeBoard);
+      const boardService = await this.getActiveBoardService(activeBoard);
+      const boardDetails = await boardService.getBoardDetails(activeBoard);
       if (generation !== this.requestGeneration) {
         return;
       }
 
       await this.boardColumnStore.normalizeLegacyPreferences(
-        this.activeBoard.id,
+        activeBoard.id,
         getDefaultStatusColumnOrder(boardDetails)
       );
       if (generation !== this.requestGeneration) {
         return;
       }
 
+      this.boardDetailsCache.set(activeBoard.id, boardDetails);
       this.boardDetails = boardDetails;
       this.loading = false;
       this.errorMessage = undefined;
@@ -161,7 +168,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
       this.loading = false;
       this.errorMessage = error instanceof Error ? error.message : String(error);
-      this.boardDetails = undefined;
+      this.boardDetails = this.boardDetailsCache.get(activeBoard.id);
     } finally {
       if (generation === this.requestGeneration) {
         this.render();
@@ -636,6 +643,27 @@ export class BoardPanelManager implements vscode.Disposable {
 
     const prefs = board ? this.boardColumnStore.getPreferences(board.id) : undefined;
     const viewMode = prefs?.viewMode ?? 'board';
+    const display = this.getDisplayBoardDetails() ?? this.boardDetails;
+    const hasDisplay = Boolean(display);
+
+    let statusNotice = '';
+    if (board && hasDisplay) {
+      if (this.loading) {
+        statusNotice = `
+          <div class="status-notice">
+            <strong>Refreshing board...</strong>
+            <span>Showing the last loaded view while new data is fetched.</span>
+          </div>
+        `;
+      } else if (this.errorMessage) {
+        statusNotice = `
+          <div class="status-notice error">
+            <strong>Refresh failed.</strong>
+            <span>${escapeHtml(this.errorMessage)}</span>
+          </div>
+        `;
+      }
+    }
 
     let body = `
       <section class="empty-state">
@@ -645,22 +673,21 @@ export class BoardPanelManager implements vscode.Disposable {
     `;
 
     if (board) {
-      if (this.loading) {
+      if (this.loading && !hasDisplay) {
         body = `
           <section class="empty-state">
             <h2>Loading ${escapeHtml(board.name)}...</h2>
             <p>Fetching issues for the selected board.</p>
           </section>
         `;
-      } else if (this.errorMessage) {
+      } else if (this.errorMessage && !hasDisplay) {
         body = `
           <section class="empty-state error">
             <h2>Unable to load board</h2>
             <p>${escapeHtml(this.errorMessage)}</p>
           </section>
         `;
-      } else if (this.boardDetails) {
-        const display = this.getDisplayBoardDetails() ?? this.boardDetails;
+      } else if (display) {
         const columnPrefs = this.boardColumnStore.getPreferences(board.id);
         const swim = columnPrefs.swimLaneGroupBy;
         const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
@@ -850,9 +877,37 @@ export class BoardPanelManager implements vscode.Disposable {
       .content {
         display: flex;
         flex: 1;
+        flex-direction: column;
+        gap: 12px;
         min-height: 0;
         padding: 16px;
         overflow: auto;
+      }
+
+      .status-notice {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+      }
+
+      .status-notice strong {
+        color: var(--vscode-editor-foreground);
+      }
+
+      .status-notice.error {
+        border-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
+      }
+
+      .status-notice.error strong {
+        color: var(--vscode-errorForeground);
       }
 
       .swim-board {
@@ -1293,7 +1348,7 @@ export class BoardPanelManager implements vscode.Disposable {
             ${renderIconButton('refreshButton', 'Refresh', 'refresh')}
           </div>
         </header>
-        <main class="content">${body}</main>
+        <main class="content">${statusNotice}${body}</main>
       </div>
     </div>
     <div id="boardCardMenu" class="board-card-menu" hidden role="menu" aria-label="Issue actions">

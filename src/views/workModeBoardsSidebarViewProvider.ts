@@ -228,7 +228,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     private readonly aiSessionManager: AiSessionManager,
     private readonly getBackendMode: () => BackendMode,
     private readonly callbacks: WorkModeBoardsSidebarCallbacks,
-    private readonly connectionStore?: ConnectionStore
+    private readonly connectionStore?: ConnectionStore,
+    private readonly resolveBoardService?: (board: Board) => Promise<IssueTrackerService>
   ) {
     this.disposables.push(
       this.boardsProvider.onDidChangeTreeData(() => {
@@ -587,7 +588,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     void Promise.all(
       missingBoards.map(async board => {
         try {
-          const details = await this.backendService.getBoardDetails(board);
+          const details = await this.getBoardService(board).then(service => service.getBoardDetails(board));
           return { boardId: board.id, state: { board, details, loading: false } satisfies WorkModeBoardState };
         } catch (error) {
           return {
@@ -625,7 +626,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
     const generation = ++this.generation;
     this.boardStates.set(boardId, { board: state.board, details: state.details, loading: true });
-    void this.backendService.getBoardDetails(state.board)
+    void this.getBoardService(state.board)
+      .then(service => service.getBoardDetails(state.board))
       .then(details => {
         if (generation !== this.generation) {
           return;
@@ -645,6 +647,14 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         });
         this.render();
       });
+  }
+
+  private async getBoardService(board: Board): Promise<IssueTrackerService> {
+    if (board.connectionId && this.resolveBoardService) {
+      return this.resolveBoardService(board);
+    }
+
+    return this.backendService;
   }
 
   private renderBoards(boards: Board[]): string {
