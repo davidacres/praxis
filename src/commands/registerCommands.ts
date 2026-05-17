@@ -9,6 +9,7 @@ import type {
   BackendMode,
   Board,
   CreateIssueInput,
+  IssueFilters,
   Project,
   IssueSummary,
   WorkflowTransition
@@ -26,6 +27,7 @@ import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
+import { JiraApiService } from '../jira/jiraApiService';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
 import {
@@ -34,6 +36,8 @@ import {
 } from '../issues/issueHierarchy';
 import type { CopilotAgentService } from '../ai/copilotAgentService';
 import { resolveCopilotCliOverride } from '../ai/copilotSdkRuntime';
+import { promptForAgentWorkflowSelection } from '../ai/agentWorkflowCatalog';
+import { stageIssueAttachments } from '../ai/issueAttachmentContext';
 import type { CopilotSessionPanelManager } from '../views/copilotSessionPanel';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 
@@ -52,9 +56,10 @@ interface CommandDependencies {
   newProjectWizardPanel: NewProjectWizardPanel;
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
+  revealSetupView?: () => Promise<void>;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
-  ensureFilePlanConfigured: (interactive: boolean) => Promise<boolean>;
+  openCreateIssueForm?: (defaults?: Partial<CreateIssueInput>) => Promise<boolean>;
   output: vscode.OutputChannel;
   reportError?: (error: unknown, scope?: string) => void;
   onConnectionCheck?: (
@@ -93,7 +98,21 @@ function resolveBoard(
   }
 
   const selectedBoardId = boardStore.getLastSelectedBoardId();
-  return selectedBoardId ? boardsProvider.getBoardById(selectedBoardId) : undefined;
+  if (!selectedBoardId) {
+    return undefined;
+  }
+
+  const trackedRef = boardStore.getLastSelectedTrackedBoard();
+  if (trackedRef?.boardId === selectedBoardId) {
+    const trackedMatch = boardsProvider
+      .getCurrentBoards()
+      .find(board => board.id === selectedBoardId && board.connectionId === trackedRef.connectionId);
+    if (trackedMatch) {
+      return trackedMatch;
+    }
+  }
+
+  return boardsProvider.getBoardById(selectedBoardId);
 }
 
 async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<void> {
@@ -196,16 +215,15 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
   }
 
   const saveUri = await vscode.window.showSaveDialog({
-    saveLabel: 'Save imported plan',
-    filters: { 'Plan files': ['jsonc', 'json'] },
-    defaultUri: vscode.Uri.joinPath(folders[0].uri, 'ticket-plan.imported.jsonc')
+    saveLabel: 'Save imported ticket data',
+    filters: { 'Ticket data files': ['jsonc', 'json'] },
+    defaultUri: vscode.Uri.joinPath(folders[0].uri, 'ticket-data.imported.jsonc')
   });
   if (!saveUri) {
     return;
   }
 
   await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(result.jsonc));
-  await deps.configStore.setPlanFilePath(saveUri.fsPath);
   const { featuresImported, storiesImported, tasksImported, bugsImported } = result.stats;
   const importParts = [`${featuresImported} features`, `${storiesImported} stories`];
   if (tasksImported > 0) {
@@ -221,26 +239,313 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
 
   const goFile = await vscode.window.showInformationMessage(
     `Imported ${importSummary} from markdown into ${saveUri.fsPath}.`,
-    'Switch to File mode'
+    'Open Folder'
   );
 
-  if (goFile === 'Switch to File mode') {
-    await setBackendMode(deps, 'file');
-    await vscode.window.showInformationMessage('Backend mode is now File. The imported plan is active.');
-  } else {
-    await deps.backendService.reset();
-    await clearUiSelection(deps);
-    await refreshViews(deps);
+  if (goFile === 'Open Folder') {
+    await vscode.commands.executeCommand('revealFileInOS', saveUri);
   }
+
+  await deps.backendService.reset();
+  await clearUiSelection(deps);
+  await refreshViews(deps);
+}
+
+async function loadAllIssuesForMigration(
+  service: IssueTrackerService,
+  pageSize: number
+): Promise<IssueSummary[]> {
+  const filters: IssueFilters = {
+    projectKeys: [],
+    statuses: [],
+    issueTypes: [],
+    searchText: '',
+    assigneeMode: 'all',
+    parentKey: undefined,
+    grouping: 'none'
+  };
+
+  const issues: IssueSummary[] = [];
+  let startAt = 0;
+  while (true) {
+    const page = await service.getIssues(filters, startAt, pageSize);
+    issues.push(...page.issues);
+    if (!page.hasMore || page.issues.length === 0) {
+      break;
+    }
+    startAt += page.issues.length;
+  }
+
+  return issues;
+}
+
+async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promise<void> {
+  if (deps.backendService.mode !== 'livefolder') {
+    await vscode.window.showWarningMessage(
+      'Switch to Live Folder mode before running Live Folder to Jira Cloud migration.'
+    );
+    return;
+  }
+
+  if (!deps.configStore.hasJiraApiConfig()) {
+    await vscode.window.showErrorMessage(
+      'Configure Jira Cloud mode first, then run the migration again.'
+    );
+    return;
+  }
+
+  const allIssues = await loadAllIssuesForMigration(deps.backendService, deps.backendService.getDefaultPageSize());
+  const features = allIssues
+    .filter(issue => issue.issueType === 'Feature')
+    .sort((left, right) => left.summary.localeCompare(right.summary));
+
+  if (features.length === 0) {
+    await vscode.window.showWarningMessage('No Live Folder features were found to migrate.');
+    return;
+  }
+
+  const selectedIssue = deps.detailsProvider.getActiveIssue();
+  const defaultFeature =
+    selectedIssue?.issueType === 'Feature'
+      ? features.find(feature => feature.key === selectedIssue.key)
+      : undefined;
+
+  const feature =
+    defaultFeature ??
+    (features.length === 1
+      ? features[0]
+      : (
+          await vscode.window.showQuickPick(
+            features.map(candidate => ({
+              label: candidate.summary,
+              description: candidate.key,
+              detail: candidate.description,
+              feature: candidate
+            })),
+            {
+              title: 'Feature to migrate'
+            }
+          )
+        )?.feature);
+
+  if (!feature) {
+    return;
+  }
+
+  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
+  const projects = await jiraApiService.getProjects();
+  if (projects.length === 0) {
+    await vscode.window.showWarningMessage('No Jira projects are available in Jira Cloud mode.');
+    return;
+  }
+
+  const targetProject = await pickCreateProject(projects, feature.projectKey);
+  if (!targetProject) {
+    return;
+  }
+
+  const epicMode = await vscode.window.showQuickPick(
+    [
+      {
+        label: 'Create new epic',
+        description: 'Create a Jira Epic from this Live Folder feature.',
+        value: 'new'
+      },
+      {
+        label: 'Attach to existing epic',
+        description: 'Enter an existing Jira Epic key and create child issues under it.',
+        value: 'existing'
+      }
+    ],
+    {
+      title: 'Epic target'
+    }
+  );
+  if (!epicMode) {
+    return;
+  }
+
+  let epicKey: string | undefined;
+  if (epicMode.value === 'new') {
+    const epicSummary = (
+      await vscode.window.showInputBox({
+        title: 'Epic summary',
+        prompt: 'Summary for the Jira Epic created from this feature.',
+        value: feature.summary,
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length > 0 ? undefined : 'Epic summary is required.')
+      })
+    )?.trim();
+    if (!epicSummary) {
+      return;
+    }
+    const createdEpic = await jiraApiService.createIssue({
+      projectKey: targetProject.key,
+      issueType: 'Epic',
+      summary: epicSummary,
+      description: feature.description
+    });
+    epicKey = createdEpic.key;
+  } else {
+    epicKey = (
+      await vscode.window.showInputBox({
+        title: 'Existing Epic key',
+        prompt: 'Enter the Jira Epic key to attach the migrated issues to.',
+        ignoreFocusOut: true,
+        validateInput: value => (value.trim().length > 0 ? undefined : 'Epic key is required.')
+      })
+    )?.trim();
+    if (!epicKey) {
+      return;
+    }
+    await jiraApiService.getIssue(epicKey);
+  }
+
+  await deps.configStore.setJiraApiEpicKey(epicKey);
+
+  const childIssues = allIssues
+    .filter(issue => issue.parentKey === feature.key)
+    .filter(issue => issue.issueType !== 'Feature');
+
+  let createdCount = 0;
+  const failures: string[] = [];
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: `Migrating ${feature.key} to Jira Cloud`,
+      cancellable: false
+    },
+    async progress => {
+      for (let index = 0; index < childIssues.length; index += 1) {
+        const issue = childIssues[index];
+        progress.report({
+          message: `Creating ${issue.issueType} ${index + 1}/${childIssues.length}`,
+          increment: childIssues.length > 0 ? 100 / childIssues.length : 100
+        });
+        try {
+          await jiraApiService.createIssue({
+            projectKey: targetProject.key,
+            issueType: issue.issueType,
+            summary: issue.summary,
+            description: issue.description,
+            parentKey: epicKey
+          });
+          createdCount += 1;
+        } catch (error) {
+          failures.push(
+            `${issue.key}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+    }
+  );
+
+  deps.output.appendLine(
+    `[migration] Feature ${feature.key} -> epic ${epicKey}; created ${createdCount}/${childIssues.length} child issues.`
+  );
+  for (const failure of failures) {
+    deps.output.appendLine(`[migration] ${failure}`);
+  }
+
+  const switchChoice = await vscode.window.showInformationMessage(
+    failures.length === 0
+      ? `Migrated ${feature.key} to ${epicKey}. Created ${createdCount} child issues.`
+      : `Migrated ${feature.key} to ${epicKey} with ${failures.length} issue creation failure(s). See Ticket Manager output for details.`,
+    'Switch to Jira Cloud',
+    'Stay on Live Folder'
+  );
+
+  if (switchChoice === 'Switch to Jira Cloud') {
+    await setBackendMode(deps, 'jiraapi');
+    await vscode.window.showInformationMessage('Backend mode is now Jira Cloud.');
+  }
+}
+
+async function linkJiraApiEpicToWorkspace(deps: CommandDependencies): Promise<void> {
+  if (!deps.configStore.hasJiraApiConfig()) {
+    await vscode.window.showErrorMessage(
+      'Configure Jira Cloud mode first, then link an epic to this workspace.'
+    );
+    return;
+  }
+
+  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
+  const currentEpicKey = deps.configStore.getJiraApiEpicKey();
+  const epicKey = await vscode.window.showInputBox({
+    title: 'Linked Jira Cloud Epic Key',
+    prompt:
+      'Enter the Jira Epic key to associate with this workspace. Leave blank to clear the current link.',
+    value: currentEpicKey,
+    ignoreFocusOut: true
+  });
+  if (epicKey === undefined) {
+    return;
+  }
+
+  const trimmedEpicKey = epicKey.trim();
+  if (!trimmedEpicKey) {
+    await deps.configStore.setJiraApiEpicKey(undefined);
+    await vscode.window.showInformationMessage('Cleared the linked Jira Cloud epic for this workspace.');
+    return;
+  }
+
+  const epic = await jiraApiService.getIssue(trimmedEpicKey);
+  if (epic.issueType !== 'Epic') {
+    throw new Error(`${trimmedEpicKey} is a ${epic.issueType}, not an Epic.`);
+  }
+
+  await deps.configStore.setJiraApiEpicKey(trimmedEpicKey);
+  await vscode.window.showInformationMessage(
+    `Linked this workspace to Jira epic ${trimmedEpicKey}.`
+  );
+}
+
+async function linkJiraApiBoardQueryToWorkspace(deps: CommandDependencies): Promise<void> {
+  if (!deps.configStore.hasJiraApiConfig()) {
+    await vscode.window.showErrorMessage(
+      'Configure Jira Cloud mode first, then set a board JQL query for this workspace.'
+    );
+    return;
+  }
+
+  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
+  const currentBoardJql = deps.configStore.getJiraApiBoardJql();
+  const boardJql = await vscode.window.showInputBox({
+    title: 'Linked Jira Cloud Board JQL',
+    prompt:
+      'Enter a Jira JQL query to expose as a board in Jira Cloud mode. Leave blank to clear the current board query.',
+    value: currentBoardJql,
+    ignoreFocusOut: true
+  });
+  if (boardJql === undefined) {
+    return;
+  }
+
+  const trimmedBoardJql = boardJql.trim();
+  if (!trimmedBoardJql) {
+    await deps.configStore.setJiraApiBoardJql(undefined);
+    await vscode.window.showInformationMessage('Cleared the linked Jira Cloud board query for this workspace.');
+    return;
+  }
+
+  await jiraApiService.validateBoardJql(trimmedBoardJql);
+  await deps.configStore.setJiraApiBoardJql(trimmedBoardJql);
+  await vscode.window.showInformationMessage('Linked this workspace to a Jira Cloud JQL board query.');
 }
 
 async function refreshViews(deps: CommandDependencies): Promise<void> {
   await Promise.all([deps.issuesProvider.refresh(), deps.boardsProvider.refresh()]);
   const activeIssue = deps.detailsProvider.getActiveIssue();
   if (activeIssue) {
-    const refreshedIssue = deps.issuesProvider.getIssueByKey(activeIssue.key) ?? activeIssue;
-    await deps.detailsProvider.setIssue(refreshedIssue);
-    deps.boardPanelManager.setSelectedIssueKey(refreshedIssue.key);
+    const refreshedIssue = deps.issuesProvider.getIssueByKey(activeIssue.key);
+    if (refreshedIssue) {
+      await deps.detailsProvider.setIssue(refreshedIssue);
+      deps.boardPanelManager.setSelectedIssueKey(refreshedIssue.key);
+    } else {
+      await deps.detailsProvider.setIssue(undefined);
+      deps.boardPanelManager.setSelectedIssueKey(undefined);
+      deps.issueDetailPanelManager.clear();
+    }
   } else {
     await deps.detailsProvider.refresh();
     deps.boardPanelManager.setSelectedIssueKey(undefined);
@@ -265,9 +570,6 @@ async function setBackendMode(
   mode: BackendMode
 ): Promise<void> {
   await deps.configStore.setBackendMode(mode);
-  if (mode === 'file') {
-    await deps.ensureFilePlanConfigured(true);
-  }
   await deps.backendService.reset();
   await clearUiSelection(deps);
   await refreshViews(deps);
@@ -360,13 +662,13 @@ function toTransitionQuickPickItems(
 }
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jira: ['Epic', 'Story', 'Task', 'Subtask', 'Bug'],
-  demo: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  file: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  github: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  gitlab: ['Feature', 'Story', 'Task', 'Subtask', 'Bug'],
-  livefolder: ['Feature', 'Story', 'Task', 'Bug'],
-  userworkspace: ['Feature', 'Story', 'Task', 'Bug']
+  jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  jiraapi: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  gitlab: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  livefolder: ['Feature', 'Idea', 'Story', 'Task', 'Bug'],
+  userworkspace: ['Feature', 'Idea', 'Story', 'Task', 'Bug']
 };
 
 function suggestUserWorkspaceProjectName(folderPath: string): string {
@@ -545,6 +847,10 @@ async function promptForCreateIssueInput(
   deps: CommandDependencies,
   arg?: unknown
 ): Promise<CreateIssueInput | undefined> {
+  const argumentRecord = arg && typeof arg === 'object' ? (arg as Record<string, unknown>) : undefined;
+  const defaultIssueType = typeof argumentRecord?.issueType === 'string'
+    ? argumentRecord.issueType.trim()
+    : undefined;
   const board = resolveCreateBoard(deps, arg);
   const selectedIssue = resolveIssue(deps.detailsProvider, arg);
   const filters = deps.filterStore.getFilters();
@@ -554,32 +860,39 @@ async function promptForCreateIssueInput(
     return undefined;
   }
 
-  const project = await pickCreateProject(
-    projects,
+  const contextProjectKey =
     board?.projectKey ??
-      selectedIssue?.projectKey ??
-      (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined)
-  );
-  if (!project) {
-    return undefined;
-  }
+    selectedIssue?.projectKey ??
+    (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined);
+  const contextProject = contextProjectKey
+    ? projects.find(project => project.key === contextProjectKey)
+    : undefined;
+  const issueTypeProjectKey =
+    contextProject?.key ??
+    (projects.length === 1 ? projects[0].key : undefined);
 
-  const knownIssueTypes = await getKnownIssueTypes(deps, project.key);
+  const knownIssueTypes = issueTypeProjectKey
+    ? await getKnownIssueTypes(deps, issueTypeProjectKey)
+    : unique([...DEFAULT_CREATABLE_TYPES[deps.backendService.mode]]);
   if (knownIssueTypes.length === 0) {
     await vscode.window.showWarningMessage(
-      `No issue types are available for ${project.key}.`
+      issueTypeProjectKey
+        ? `No issue types are available for ${issueTypeProjectKey}.`
+        : 'No issue types are available.'
     );
     return undefined;
   }
 
-  const pickedType = await vscode.window.showQuickPick(
-    knownIssueTypes.map(issueType => ({
-      label: issueType
-    })),
-    {
-      title: 'Issue Type'
-    }
-  );
+  const pickedType = defaultIssueType && knownIssueTypes.includes(defaultIssueType)
+    ? { label: defaultIssueType }
+    : await vscode.window.showQuickPick(
+      knownIssueTypes.map(issueType => ({
+        label: issueType
+      })),
+      {
+        title: 'Issue Type'
+      }
+    );
   if (!pickedType) {
     return undefined;
   }
@@ -603,13 +916,25 @@ async function promptForCreateIssueInput(
     return undefined;
   }
 
+  const project = await pickCreateProject(
+    projects,
+    contextProject?.key ?? (projects.length === 1 ? projects[0].key : undefined)
+  );
+  if (!project) {
+    return undefined;
+  }
+
   const parentRule = getParentRule(pickedType.label, deps.backendService.mode);
+  const linkedEpicKey =
+    deps.backendService.mode === 'jiraapi' && parentRule.allowedParentTypes.includes('Epic')
+      ? deps.configStore.getJiraApiEpicKey()
+      : undefined;
   const defaultParentKey =
     selectedIssue &&
     selectedIssue.projectKey === project.key &&
     isAllowedParentType(selectedIssue.issueType, pickedType.label, deps.backendService.mode)
       ? selectedIssue.key
-      : undefined;
+      : linkedEpicKey || undefined;
 
   let parentKey: string | undefined;
   if (parentRule.canHaveParent) {
@@ -681,43 +1006,41 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       await vscode.commands.executeCommand('setContext', 'ticketManager.configured', false);
       await vscode.commands.executeCommand('setContext', 'ticketManager.mode', 'unconfigured');
       deps.setupSidebarViewProvider.resetToModeSelection();
-      // Reveal the setup view in the sidebar
+      // Reveal the setup view in the active sidebar mode
+      if (deps.revealSetupView) {
+        await deps.revealSetupView();
+        return;
+      }
       await vscode.commands.executeCommand('ticketManager.setup.focus');
     }),
     vscode.commands.registerCommand('ticketManager.importMarkdownFeaturePlan', async () => {
       await runMarkdownFeaturePlanImport(deps);
     }),
-    vscode.commands.registerCommand('ticketManager.importWorkspaceMcpConfig', async () => {
+    vscode.commands.registerCommand('ticketManager.migrateLiveFolderToJiraApi', async () => {
       try {
-        const result = await deps.configStore.importWorkspaceMcpConfig(deps.context);
-        if (!result.saved) {
-          return;
-        }
-
-        await deps.backendService.reset();
-        await clearUiSelection(deps);
-        await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Using ${result.description}.`);
+        await runLiveFolderToJiraApiMigration(deps);
       } catch (error) {
-        reportCommandError(deps, 'workspace-mcp', error);
+        reportCommandError(deps, 'livefolder-jiraapi-migration', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.importUserMcpConfig', async () => {
+    vscode.commands.registerCommand('ticketManager.linkJiraApiEpic', async () => {
       try {
-        const result = await deps.configStore.importUserMcpConfig(deps.context);
-        if (!result.saved) {
-          return;
-        }
-
-        await deps.backendService.reset();
-        await clearUiSelection(deps);
-        await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Using ${result.description}.`);
+        await linkJiraApiEpicToWorkspace(deps);
       } catch (error) {
-        reportCommandError(deps, 'user-mcp', error);
+        reportCommandError(deps, 'link-jiraapi-epic', error);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.linkJiraApiBoardQuery', async () => {
+      try {
+        await linkJiraApiBoardQueryToWorkspace(deps);
+      } catch (error) {
+        reportCommandError(deps, 'link-jiraapi-board-query', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -756,7 +1079,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.createIssue', async (arg?: unknown) => {
       try {
-        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
+        if (await deps.openCreateIssueForm?.()) {
           return;
         }
 
@@ -784,6 +1107,20 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
+    vscode.commands.registerCommand('ticketManager.createIdea', async () => {
+      try {
+        if (await deps.openCreateIssueForm?.({ issueType: 'Idea' })) {
+          return;
+        }
+
+        await vscode.commands.executeCommand('ticketManager.createIssue', { issueType: 'Idea' });
+      } catch (error) {
+        reportCommandError(deps, 'create-idea', error);
+        await vscode.window.showErrorMessage(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.createBoard', async () => {
       try {
         if (deps.backendService.mode === 'userworkspace') {
@@ -797,58 +1134,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
           return;
         }
 
-        if (deps.backendService.mode === 'jira') {
-          await vscode.window.showWarningMessage(
-            'Creating boards is not supported in Jira Connected mode.'
-          );
-          return;
-        }
-
-        if (deps.backendService.mode === 'livefolder') {
-          await vscode.window.showWarningMessage(
-            'Creating boards is not supported in Live Folder mode. Use Create User Workspace for multiple plan-folder boards.'
-          );
-          return;
-        }
-
-        if (deps.backendService.mode === 'file' && !(await deps.ensureFilePlanConfigured(true))) {
-          return;
-        }
-
-        const projects = await deps.backendService.getProjects();
-        if (projects.length === 0) {
-          await vscode.window.showWarningMessage('No projects are available.');
-          return;
-        }
-
-        const picked = await vscode.window.showQuickPick(
-          projects.map(project => ({
-            label: project.key,
-            description: project.name,
-            project
-          })),
-          { title: 'Project for new board', ignoreFocusOut: true }
-        );
-        if (!picked) {
-          return;
-        }
-
-        const name = await vscode.window.showInputBox({
-          title: 'Board name',
-          prompt: 'Enter a name for the new board.',
-          ignoreFocusOut: true,
-          validateInput: value => (value.trim().length > 0 ? undefined : 'Board name is required.')
-        });
-        if (name === undefined) {
-          return;
-        }
-
-        await deps.backendService.createBoard({
-          name: name.trim(),
-          projectKey: picked.project.key
-        });
-        await refreshViews(deps);
-        await vscode.window.showInformationMessage(`Created board "${name.trim()}".`);
+        // Boards are tracked locally in the extension against a connection —
+        // not created on the remote system. Delegate to the board picker which
+        // handles per-connection board selection and local tracking.
+        await vscode.commands.executeCommand('ticketManager.addBoard');
       } catch (error) {
         reportCommandError(deps, 'create-board', error);
         await vscode.window.showErrorMessage(
@@ -890,7 +1179,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       const picked = await vscode.window.showQuickPick(
         [
           { label: 'scrum', picked: filters.types.includes('scrum') },
-          { label: 'kanban', picked: filters.types.includes('kanban') }
+          { label: 'kanban', picked: filters.types.includes('kanban') },
+          { label: 'epic', picked: filters.types.includes('epic') },
+          { label: 'jql', picked: filters.types.includes('jql') }
         ],
         {
           title: 'Board Types',
@@ -1227,6 +1518,47 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       void deps.setupWizardPanel.open();
     }),
 
+    vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {
+      if (!deps.aiSessionManager) {
+        vscode.window.showWarningMessage('Workflow assignment is not configured.');
+        return;
+      }
+
+      const issueKey = resolveIssueKey(deps.detailsProvider, arg);
+      if (!issueKey) {
+        vscode.window.showWarningMessage('Select an issue first.');
+        return;
+      }
+
+      const workingDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const existingAssignment = deps.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+      const workflow = await promptForAgentWorkflowSelection({
+        workspaceRoot: workingDir,
+        previous: existingAssignment?.workflow,
+        title: 'Assign Workflow Pack',
+        placeHolder: 'Select the workflow pack to use for this issue'
+      });
+      if (workflow === null) {
+        return;
+      }
+
+      if (!workflow) {
+        deps.aiSessionManager.setIssueWorkflowAssignment(issueKey, undefined, {
+          source: 'manual',
+          reason: 'User explicitly selected "No workflow pack".'
+        });
+        vscode.window.showInformationMessage(
+          `Recorded explicit "no workflow pack" choice for ${issueKey}. Delivery will proceed without a workflow directive.`
+        );
+        return;
+      }
+
+      deps.aiSessionManager.setIssueWorkflowAssignment(issueKey, workflow, {
+        source: 'manual'
+      });
+      vscode.window.showInformationMessage(`Assigned workflow pack ${workflow.name} to ${issueKey}.`);
+    }),
+
     // ── Copilot Agent Delegation Commands ──────────────────────
 
     vscode.commands.registerCommand('ticketManager.delegateToCopilot', async (arg?: unknown) => {
@@ -1289,6 +1621,18 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         return;
       }
 
+      const workingDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const issueWorkflowAssignment = deps.aiSessionManager.getIssueWorkflowAssignment(issue.key);
+      const workflow = await promptForAgentWorkflowSelection({
+        workspaceRoot: workingDir,
+        previous: issueWorkflowAssignment?.workflow,
+        title: 'Workflow Pack',
+        placeHolder: 'Select an optional workflow pack for this Copilot task'
+      });
+      if (workflow === null) {
+        return;
+      }
+
       const cliPath = getCopilotCliPathOverride(deps, { showWarning: true });
       if (!deps.configStore.getConfiguredAiProviders().includes('copilot-cli')) {
         vscode.window.showErrorMessage(
@@ -1299,13 +1643,19 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
       try {
         const details = await deps.backendService.getIssue(issue.key);
+        const attachments = await stageIssueAttachments({
+          issue: details,
+          backendService: deps.backendService,
+          logger: deps.output
+        });
         const taskDef = {
           goal,
           scope: scope || 'This issue and related files',
-          definitionOfDone: definitionOfDone || 'Task complete'
+          definitionOfDone: definitionOfDone || 'Task complete',
+          workflow,
+          attachments: attachments.length > 0 ? attachments : undefined
         };
 
-        const workingDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         await deps.copilotAgentService.startTask(details, taskDef, {
           cliPath,
           workingDirectory: workingDir

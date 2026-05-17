@@ -5,6 +5,44 @@ import {
 } from '../ai/aiProviderSetup';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
+import type { Board } from '../types';
+
+interface GitLabSetupValues {
+  gitlabUrl: string;
+  gitlabApiKey: string;
+  gitlabProjectPath: string;
+  gitlabListAllAccessibleBoards: boolean;
+}
+
+interface GitLabSetupFieldInput {
+  gitlabUrl?: string;
+  gitlabApiKey?: string;
+  gitlabProjectPath?: string;
+  gitlabListAllAccessibleBoards?: string;
+}
+
+interface GitLabSetupUpdate {
+  key: string;
+  value: unknown;
+}
+
+interface GitLabBoardProjectSummary {
+  id: number;
+  name: string;
+  path: string;
+  pathWithNamespace: string;
+}
+
+interface GitLabBoardSummary {
+  id: number;
+  name: string;
+  hideBacklogList: boolean;
+  hideClosedList: boolean;
+  project: GitLabBoardProjectSummary;
+  labels: unknown[];
+  lists: unknown[];
+  raw?: unknown;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -19,6 +57,65 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export function getGitLabSetupValues(
+  config: Pick<vscode.WorkspaceConfiguration, 'get'>
+): GitLabSetupValues {
+  return {
+    gitlabUrl: config.get<string>('gitlabUrl', '').trim(),
+    gitlabApiKey: config.get<string>('gitlabApiKey', '').trim(),
+    gitlabProjectPath: config.get<string>('gitlabProjectPath', '').trim(),
+    gitlabListAllAccessibleBoards: config.get<boolean>('gitlabListAllAccessibleBoards', false)
+  };
+}
+
+export function buildGitLabSetupUpdates(fields: GitLabSetupFieldInput): GitLabSetupUpdate[] {
+  const updates: GitLabSetupUpdate[] = [];
+  const projectPath = fields.gitlabProjectPath?.trim();
+  if (projectPath) {
+    updates.push({ key: 'gitlabProjectPath', value: projectPath });
+  }
+
+  if (fields.gitlabListAllAccessibleBoards != null) {
+    updates.push({
+      key: 'gitlabListAllAccessibleBoards',
+      value: fields.gitlabListAllAccessibleBoards === 'true'
+    });
+  }
+
+  const gitlabUrl = fields.gitlabUrl?.trim();
+  if (gitlabUrl) {
+    updates.push({ key: 'gitlabUrl', value: gitlabUrl });
+  }
+
+  const apiKey = fields.gitlabApiKey?.trim();
+  if (apiKey) {
+    updates.push({ key: 'gitlabApiKey', value: apiKey });
+  }
+
+  return updates;
+}
+
+export function canPromptForGitLabBoardSelection(fields: GitLabSetupFieldInput): boolean {
+  return (fields.gitlabUrl?.trim().length ?? 0) > 0
+    && (fields.gitlabApiKey?.trim().length ?? 0) > 0;
+}
+
+export function createGitLabBoardSelectionSummary(
+  board: GitLabBoardSummary,
+  project: GitLabBoardProjectSummary,
+  baseUrl: string
+): Board {
+  return {
+    id: `gitlab:${project.id}:${board.id}`,
+    name: board.name,
+    type: 'issue-board',
+    projectKey: project.pathWithNamespace,
+    projectName: project.name,
+    locationName: baseUrl.trim().replace(/\/+$/, ''),
+    raw: board
+  };
+}
+
 export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewId = 'ticketManager.setup';
 
@@ -26,7 +123,10 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private setupStep: 0 | 1 = 0;
   private setupMode: string | undefined;
   private setupFields: Record<string, string> = {};
+  private hasGitLabApiKeySecret = false;
   private readonly disposables: vscode.Disposable[] = [];
+
+  public constructor(private readonly context: vscode.ExtensionContext) {}
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
@@ -208,6 +308,66 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         color: var(--vscode-descriptionForeground);
         margin-bottom: 12px;
       }
+      .settings-section {
+        margin: 16px 0;
+        padding: 12px;
+        border: 1px solid var(--vscode-widget-border, transparent);
+        border-radius: 6px;
+        background: var(--vscode-editorWidget-background, transparent);
+      }
+      .toggle-switch {
+        position: relative;
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: center;
+        column-gap: 10px;
+        width: 100%;
+        cursor: pointer;
+        user-select: none;
+      }
+      .toggle-switch input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .toggle-slider {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex: 0 0 40px;
+        border-radius: 999px;
+        background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.35));
+        transition: background 0.15s ease;
+      }
+      .toggle-label {
+        min-width: 0;
+        margin-bottom: 0;
+        line-height: 1.35;
+        white-space: normal;
+      }
+      .toggle-slider::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--vscode-input-foreground, #fff);
+        transition: transform 0.15s ease;
+      }
+      .toggle-switch input:checked + .toggle-slider {
+        background: var(--vscode-button-background);
+      }
+      .toggle-switch input:checked + .toggle-slider::after {
+        transform: translateX(18px);
+      }
+      .toggle-switch input:focus-visible + .toggle-slider {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
 
       /* Buttons */
       .footer {
@@ -254,6 +414,31 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       .btn-browse:hover {
         background: var(--vscode-button-secondaryHoverBackground);
       }
+      .danger-zone {
+        margin-top: 20px;
+        padding-top: 12px;
+        border-top: 1px solid var(--vscode-widget-border, transparent);
+        display: flex;
+        justify-content: center;
+      }
+      .btn-danger-link {
+        flex: none;
+        height: auto;
+        width: auto;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        font-size: 11px;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-errorForeground, #f44747);
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+        opacity: 0.8;
+      }
+      .btn-danger-link:hover {
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
@@ -275,18 +460,26 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           vscodeApi.postMessage({ type: 'save' });
         } else if (action === 'browse') {
           vscodeApi.postMessage({ type: 'browse' });
+        } else if (action === 'connectJiraCloud') {
+          vscodeApi.postMessage({ type: 'connectJiraCloud' });
+        } else if (action === 'disconnectJiraCloud') {
+          vscodeApi.postMessage({ type: 'disconnectJiraCloud' });
+        } else if (action === 'resetGitLab') {
+          vscodeApi.postMessage({ type: 'resetGitLab' });
         }
       });
 
       document.addEventListener('input', e => {
         if (e.target.dataset.field) {
-          vscodeApi.postMessage({ type: 'updateField', field: e.target.dataset.field, value: e.target.value });
+          const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+          vscodeApi.postMessage({ type: 'updateField', field: e.target.dataset.field, value });
         }
       });
 
       document.addEventListener('change', e => {
         if (e.target.dataset.field) {
-          vscodeApi.postMessage({ type: 'updateField', field: e.target.dataset.field, value: e.target.value });
+          const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+          vscodeApi.postMessage({ type: 'updateField', field: e.target.dataset.field, value });
         }
       });
     </script>
@@ -296,11 +489,10 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
   private renderStepZero(): string {
     const modes: Array<{ mode: string; emoji: string; title: string; desc: string }> = [
-      { mode: 'file', emoji: '🗂️', title: 'Plan File', desc: 'Manage tickets from a local JSON plan file' },
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
-      { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Connect to GitHub repositories and issues' },
-      { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Connect to a GitLab instance for issues and boards' },
-      { mode: 'jira', emoji: '🔗', title: 'Jira', desc: 'Connect to Jira via MCP server' },
+      { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
+      { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
+      { mode: 'jiraapi', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
     if (!vscode.workspace.workspaceFolders?.length) {
@@ -336,9 +528,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     let fields = '';
 
     switch (this.setupMode) {
-      case 'file':
-        fields = this.renderFileFields();
-        break;
       case 'livefolder':
         fields = this.renderLiveFolderFields();
         break;
@@ -354,6 +543,9 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       case 'jira':
         fields = this.renderJiraFields();
         break;
+      case 'jiraapi':
+        fields = this.renderJiraApiFields();
+        break;
       case 'demo':
         fields = '<p class="info-text">Demo mode uses sample data — no additional configuration needed.</p>';
         break;
@@ -368,15 +560,6 @@ ${fields}
 <div class="footer">
   <button class="btn btn-secondary" data-action="back">\u2190 Back</button>
   <button class="btn btn-primary" data-action="save">Save &amp; Connect</button>
-</div>`;
-  }
-
-  private renderFileFields(): string {
-    const value = escapeHtml(this.setupFields.planFilePath ?? '');
-    return `<div class="form-group">
-  <label>Plan File Path</label>
-  <input type="text" data-field="planFilePath" value="${value}" />
-  <button class="btn-browse" data-action="browse">Browse\u2026</button>
 </div>`;
   }
 
@@ -425,52 +608,35 @@ ${fields}
 
   private renderGitLabFields(): string {
     const url = escapeHtml(this.setupFields.gitlabUrl ?? '');
-    const connType = this.setupFields.gitlabConnectionType ?? 'api';
-    const apiChecked = connType === 'api' ? ' checked' : '';
-    const mcpChecked = connType === 'mcp' ? ' checked' : '';
-
-    let connFields = '';
-    if (connType === 'api') {
-      const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
-      connFields = `<div class="form-group">
-  <label>API Key</label>
-  <input type="password" data-field="gitlabApiKey" value="${apiKey}" />
-</div>`;
-    } else {
-      const cmd = escapeHtml(this.setupFields.gitlabMcpCommand ?? '');
-      const args = escapeHtml(this.setupFields.gitlabMcpArgs ?? '');
-      connFields = `<div class="form-group">
-  <label>MCP Command</label>
-  <input type="text" data-field="gitlabMcpCommand" value="${cmd}" />
-</div>
-<div class="form-group">
-  <label>Arguments</label>
-  <input type="text" data-field="gitlabMcpArgs" value="${args}" />
-</div>`;
-    }
+    const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
+    const keyPlaceholder = (!apiKey && this.hasGitLabApiKeySecret)
+      ? '(configured — leave blank to keep)'
+      : 'API key or personal access token';
 
     return `<div class="form-group">
   <label>GitLab URL</label>
   <input type="text" data-field="gitlabUrl" value="${url}" placeholder="https://gitlab.com" />
 </div>
 <div class="form-group">
-  <label>Connection Type</label>
-  <div class="radio-group">
-    <label><input type="radio" name="gitlabConnectionType" data-field="gitlabConnectionType" value="api"${apiChecked} /> API Key</label>
-    <label><input type="radio" name="gitlabConnectionType" data-field="gitlabConnectionType" value="mcp"${mcpChecked} /> MCP Server</label>
-  </div>
+  <label>Personal Access Token</label>
+  <input type="password" data-field="gitlabApiKey" value="${apiKey}" placeholder="${keyPlaceholder}" />
 </div>
-${connFields}
-<div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>`;
+<div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>
+<div class="danger-zone">
+  <button class="btn btn-danger-link" data-action="resetGitLab">Reset GitLab configuration…</button>
+</div>`;
   }
 
   private renderJiraFields(): string {
     const connType = this.setupFields.jiraConnectionType ?? 'stdio';
     const stdioChecked = connType === 'stdio' ? ' checked' : '';
     const httpChecked = connType === 'http' ? ' checked' : '';
+    const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
+    const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
 
     let connFields = '';
     if (connType === 'stdio') {
+
       const cmd = escapeHtml(this.setupFields.jiraStdioCommand ?? '');
       const args = escapeHtml(this.setupFields.jiraStdioArgs ?? '');
       const cwd = escapeHtml(this.setupFields.jiraCwd ?? '');
@@ -497,11 +663,78 @@ ${connFields}
     return `<div class="form-group">
   <label>Connection Type</label>
   <div class="radio-group">
-    <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="stdio"${stdioChecked} /> Local MCP (stdio)</label>
-    <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="http"${httpChecked} /> Remote MCP (HTTP)</label>
+      <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="stdio"${stdioChecked} /> Jira via stdio</label>
+      <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="http"${httpChecked} /> Jira via HTTP</label>
+  </div>
+</div>
+<div class="settings-section">
+  <label>JIRA polling</label>
+  <div class="info-text">Polls Jira Cloud every 30 seconds to get tickets with the specified label.</div>
+  <div class="form-group">
+    <label>Label</label>
+    <input type="text" data-field="jiraPollingRequiredLabel" value="${pollingLabel}" placeholder="syscfg" />
+  </div>
+  <div class="form-group">
+    <label class="toggle-switch">
+      <input type="checkbox" data-field="jiraPollingEnabled" ${pollingEnabled ? 'checked' : ''} />
+      <span class="toggle-slider" aria-hidden="true"></span>
+      <span class="toggle-label">Enable JIRA polling</span>
+    </label>
   </div>
 </div>
 ${connFields}`;
+  }
+
+  private renderJiraApiFields(): string {
+    const clientId = escapeHtml(this.setupFields.jiraOAuthClientId ?? '');
+    const siteName = escapeHtml(this.setupFields.jiraCloudSiteName ?? '');
+    const siteUrl = escapeHtml(this.setupFields.jiraCloudSiteUrl ?? '');
+    const epicKey = escapeHtml(this.setupFields.jiraApiEpicKey ?? '');
+    const boardJql = escapeHtml(this.setupFields.jiraApiBoardJql ?? '');
+    const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
+    const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
+    const connectedSiteLabel = siteName || siteUrl;
+    const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
+    const connectionStatus = siteUrl
+      ? `<div class="info-text">Connected to <strong>${connectedSiteLabel}</strong>${connectedSiteDetail}.</div>`
+      : '<div class="info-text">Not connected. Configure the Ticket Manager Atlassian OAuth app client ID, then connect with Atlassian.</div>';
+
+    return `<div class="form-group">
+  <label>Atlassian OAuth Client ID</label>
+  <input type="text" data-field="jiraOAuthClientId" value="${clientId}" placeholder="Client ID from the Ticket Manager Atlassian app" />
+  <div class="help-text">The client secret is requested once during connection and stored in VS Code secret storage.</div>
+</div>
+<div class="settings-section">
+  <label>Jira Cloud connection</label>
+  ${connectionStatus}
+  <button class="btn btn-primary" data-action="connectJiraCloud">Connect with Atlassian</button>
+  ${siteUrl ? '<button class="btn btn-secondary" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
+</div>
+<div class="form-group">
+  <label>Linked Epic Key</label>
+  <input type="text" data-field="jiraApiEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
+  <div class="help-text">Workspace-level epic associated with this repo. Jira Cloud issue creation uses it as the default parent, and an epic board is shown when set.</div>
+</div>
+<div class="form-group">
+  <label>Board JQL Query</label>
+  <input type="text" data-field="jiraApiBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
+  <div class="help-text">Optional workspace-level JQL query exposed as a Jira Cloud board.</div>
+</div>
+<div class="settings-section">
+  <label>AI execution gate</label>
+  <div class="info-text">The poller syncs all tasks linked to the epic. Only linked-epic tasks with this label and the configured todo-stage status are eligible for AI execution.</div>
+  <div class="form-group">
+    <label>Label</label>
+    <input type="text" data-field="jiraPollingRequiredLabel" value="${pollingLabel}" placeholder="syscfg" />
+  </div>
+  <div class="form-group">
+    <label class="toggle-switch">
+      <input type="checkbox" data-field="jiraPollingEnabled" ${pollingEnabled ? 'checked' : ''} />
+      <span class="toggle-slider" aria-hidden="true"></span>
+      <span class="toggle-label">Enable JIRA polling</span>
+    </label>
+  </div>
+</div>`;
   }
 
   private async handleMessage(message: unknown): Promise<void> {
@@ -524,11 +757,18 @@ ${connFields}`;
           if (mode === 'github' && !this.setupFields.githubUrl) {
             this.setupFields.githubUrl = 'https://api.github.com';
           }
-          if (mode === 'gitlab' && !this.setupFields.gitlabConnectionType) {
-            this.setupFields.gitlabConnectionType = 'api';
+          if (mode === 'gitlab') {
+            this.hasGitLabApiKeySecret = !!(await this.context.secrets.get('ticketManager.gitlabApiKey'));
           }
-          if (mode === 'jira' && !this.setupFields.jiraConnectionType) {
-            this.setupFields.jiraConnectionType = 'stdio';
+          if (mode === 'jiraapi') {
+            const config = vscode.workspace.getConfiguration('ticketManager');
+            this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
+            this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', true));
+            this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+            this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+            this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+            this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+            this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
           }
           this.render();
         }
@@ -540,10 +780,15 @@ ${connFields}`;
         return;
       case 'updateField': {
         const field = typeof payload.field === 'string' ? payload.field : undefined;
-        const value = typeof payload.value === 'string' ? payload.value : '';
+        const value =
+          typeof payload.value === 'boolean'
+            ? String(payload.value)
+            : typeof payload.value === 'string'
+              ? payload.value
+              : '';
         if (field) {
           this.setupFields[field] = value;
-          if (field === 'gitlabConnectionType' || field === 'jiraConnectionType') {
+          if (field === 'jiraConnectionType') {
             this.render();
           }
         }
@@ -571,24 +816,28 @@ ${connFields}`;
               );
             }
           }
-        } else {
-          const uris = await vscode.window.showOpenDialog({
-            canSelectFiles: true,
-            canSelectFolders: false,
-            canSelectMany: false,
-            filters: { 'JSON files': ['json', 'jsonc'], 'All files': ['*'] },
-            title: 'Select Plan File'
-          });
-          if (uris?.[0]) {
-            const wsFolder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            this.setupFields.planFilePath = wsFolder
-              ? vscode.workspace.asRelativePath(uris[0], false)
-              : uris[0].fsPath;
-            this.render();
-          }
         }
         return;
       }
+      case 'connectJiraCloud':
+        try {
+          await this.saveJiraCloudSetupFields();
+          await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.render();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud connect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return;
+      case 'disconnectJiraCloud':
+        try {
+          await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.render();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        return;
       case 'save':
         try {
           await this.saveSetupConfiguration();
@@ -596,6 +845,36 @@ ${connFields}`;
           void vscode.window.showErrorMessage(`Failed to save configuration: ${error instanceof Error ? error.message : String(error)}`);
         }
         return;
+      case 'resetGitLab': {
+        const confirm = await vscode.window.showWarningMessage(
+          'Reset all GitLab configuration? This clears the URL, API key, project path, and selected boards.',
+          { modal: true },
+          'Reset'
+        );
+        if (confirm !== 'Reset') {
+          return;
+        }
+        const config = vscode.workspace.getConfiguration('ticketManager');
+        const target = vscode.workspace.workspaceFolders?.length
+          ? vscode.ConfigurationTarget.Workspace
+          : vscode.ConfigurationTarget.Global;
+        await Promise.all([
+          config.update('gitlabUrl', undefined, target),
+          config.update('gitlabApiKey', undefined, target),
+          config.update('gitlabProjectPath', undefined, target),
+          config.update('gitlabListAllAccessibleBoards', undefined, target),
+          config.update('gitlabSelectedBoardRefs', undefined, target),
+          config.update('backendMode', undefined, target),
+          this.context.secrets.delete('ticketManager.gitlabApiKey')
+        ]);
+        this.hasGitLabApiKeySecret = false;
+        this.setupStep = 0;
+        this.setupMode = undefined;
+        this.setupFields = {};
+        this.render();
+        void vscode.window.showInformationMessage('GitLab configuration has been reset.');
+        return;
+      }
     }
   }
 
@@ -626,11 +905,6 @@ ${connFields}`;
     await updateSetting('backendMode', this.setupMode);
 
     switch (this.setupMode) {
-      case 'file':
-        if (this.setupFields.planFilePath) {
-          await updateSetting('planFilePath', this.setupFields.planFilePath);
-        }
-        break;
       case 'livefolder':
         await updateSetting('liveFolderPath', this.setupFields.liveFolderPath);
         if (this.setupFields.liveFolderProjectKey) {
@@ -657,23 +931,23 @@ ${connFields}`;
         if (this.setupFields.gitlabUrl) {
           await updateSetting('gitlabUrl', this.setupFields.gitlabUrl);
         }
-        const glConn = this.setupFields.gitlabConnectionType || 'api';
-        await updateSetting('gitlabConnectionType', glConn);
-        if (glConn === 'api' && this.setupFields.gitlabApiKey) {
-          await updateSetting('gitlabApiKey', this.setupFields.gitlabApiKey);
-        } else if (glConn === 'mcp') {
-          if (this.setupFields.gitlabMcpCommand) {
-            await updateSetting('gitlabMcpCommand', this.setupFields.gitlabMcpCommand);
-          }
-          if (this.setupFields.gitlabMcpArgs) {
-            await updateSetting('gitlabMcpArgs', this.setupFields.gitlabMcpArgs.split(' ').filter(Boolean));
-          }
+        if (this.setupFields.gitlabApiKey?.trim()) {
+          await this.context.secrets.store('ticketManager.gitlabApiKey', this.setupFields.gitlabApiKey.trim());
+          this.hasGitLabApiKeySecret = true;
         }
         break;
       }
       case 'jira': {
         const conn = this.setupFields.jiraConnectionType || 'stdio';
         await updateSetting('connectionType', conn);
+        await updateSetting(
+          'jiraPolling.requiredLabel',
+          (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'
+        );
+        await updateSetting(
+          'jiraPolling.enabled',
+          (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false'
+        );
         if (conn === 'stdio') {
           if (this.setupFields.jiraStdioCommand) {
             await updateSetting('stdioCommand', this.setupFields.jiraStdioCommand);
@@ -691,6 +965,19 @@ ${connFields}`;
         }
         break;
       }
+      case 'jiraapi':
+        await updateSetting('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim());
+        await updateSetting('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim());
+        await updateSetting('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim());
+        await updateSetting(
+          'jiraPolling.requiredLabel',
+          (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'
+        );
+        await updateSetting(
+          'jiraPolling.enabled',
+          (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false'
+        );
+        break;
     }
 
     const aiResult = await promptToConfigureDefaultAiProvider();
@@ -700,8 +987,6 @@ ${connFields}`;
           ? 'Live Folder'
           : savedMode === 'userworkspace'
             ? 'User Workspace'
-          : savedMode === 'file'
-            ? 'File'
             : savedMode.toUpperCase()
       } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
@@ -726,5 +1011,29 @@ ${connFields}`;
       resolvedPath,
       changed: resolvedPath !== toStoredFolderPath(originalPath)
     };
+  }
+
+  private async saveJiraCloudSetupFields(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await Promise.all([
+      config.update('backendMode', 'jiraapi', target),
+      config.update('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim(), target),
+      config.update('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim(), target),
+      config.update('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim(), target),
+      config.update('jiraPolling.requiredLabel', (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg', target),
+      config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false', target)
+    ]);
+  }
+
+  private reloadJiraCloudSetupFields(): void {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+    this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+    this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+    this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+    this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
   }
 }

@@ -1,18 +1,28 @@
 import * as vscode from 'vscode';
 import type { AiAssignment, AiProvider } from '../types';
 import type {
+  DeliverySessionMetadata,
   AgentEventSummary,
   AgentSessionRecord,
   AgentTaskDefinition,
-  AgentTaskState
+  AgentTaskState,
+  AgentWorkflowReference,
+  IssueWorkflowAssignment,
+  WorkflowAssignmentSource
 } from './agentTypes';
 
 const STORAGE_KEY = 'ticketManager.aiSessions';
 const AGENT_STORAGE_KEY = 'ticketManager.agentSessions';
+const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'ticketManager.issueWorkflowAssignments';
+const MODEL_OVERRIDE_STORAGE_KEY = 'ticketManager.issueModelOverrides';
+
+type AgentRuntimeProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
 
 export class AiSessionManager {
   private sessions: Map<string, AiAssignment>;
   private agentSessions: Map<string, AgentSessionRecord>;
+  private workflowAssignments: Map<string, IssueWorkflowAssignment>;
+  private modelOverrides: Map<string, string>;
 
   private readonly _onDidChangeSession = new vscode.EventEmitter<{
     issueKey: string;
@@ -23,20 +33,35 @@ export class AiSessionManager {
   private readonly _onDidChangeAgentSession = new vscode.EventEmitter<AgentSessionRecord>();
   /** Fires when any agent session's state or events change. */
   public readonly onDidChangeAgentSession = this._onDidChangeAgentSession.event;
+  private readonly _onDidChangeWorkflowAssignment = new vscode.EventEmitter<{
+    issueKey: string;
+    assignment?: IssueWorkflowAssignment;
+  }>();
+  /** Fires when an issue-level workflow assignment changes. */
+  public readonly onDidChangeWorkflowAssignment = this._onDidChangeWorkflowAssignment.event;
+  private readonly _onDidChangeModelOverride = new vscode.EventEmitter<{
+    issueKey: string;
+    model?: string;
+  }>();
+  /** Fires when an issue-level model override changes. */
+  public readonly onDidChangeModelOverride = this._onDidChangeModelOverride.event;
 
   public constructor(private readonly workspaceState: vscode.Memento) {
     this.sessions = this.loadSessions();
     this.agentSessions = this.loadAgentSessions();
+    this.workflowAssignments = this.loadWorkflowAssignments();
+    this.modelOverrides = this.loadModelOverrides();
   }
 
   /** Create a new AI session for the given issue and provider. */
-  public createSession(issueKey: string, provider: AiProvider, label?: string): AiAssignment {
+  public createSession(issueKey: string, provider: AiProvider, label?: string, boardId?: string): AiAssignment {
     const assignment: AiAssignment = {
       provider,
       label: label?.trim() || undefined,
       sessionId: this.generateSessionId(),
       assignedAt: new Date().toISOString(),
-      status: 'active'
+      status: 'active',
+      boardId: boardId || undefined
     };
     this.sessions.set(issueKey, assignment);
     void this.persistSessions();
@@ -93,16 +118,19 @@ export class AiSessionManager {
   public createAgentSession(
     issueKey: string,
     sessionId: string,
-    taskDefinition: AgentTaskDefinition
+    taskDefinition: AgentTaskDefinition,
+    provider?: AgentRuntimeProvider
   ): AgentSessionRecord {
     const record: AgentSessionRecord = {
       issueKey,
       sessionId,
+      provider,
       state: 'not_started',
       taskDefinition,
       events: [],
       stepCount: 0,
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      boardId: this.sessions.get(issueKey)?.boardId
     };
     this.agentSessions.set(issueKey, record);
     void this.persistAgentSessions();
@@ -208,6 +236,36 @@ export class AiSessionManager {
     this._onDidChangeAgentSession.fire(record);
   }
 
+  public updateAgentDelivery(
+    issueKey: string,
+    delivery: Partial<DeliverySessionMetadata> | undefined,
+    options?: {
+      persist?: boolean;
+      replace?: boolean;
+    }
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+
+    if (delivery === undefined) {
+      record.delivery = undefined;
+    } else if (options?.replace || !record.delivery) {
+      record.delivery = delivery as DeliverySessionMetadata;
+    } else {
+      record.delivery = {
+        ...record.delivery,
+        ...delivery
+      };
+    }
+
+    if (options?.persist ?? true) {
+      void this.persistAgentSessions();
+    }
+    this._onDidChangeAgentSession.fire(record);
+  }
+
   /** Remove agent session for an issue. */
   public removeAgentSession(issueKey: string): void {
     const record = this.agentSessions.get(issueKey);
@@ -217,9 +275,71 @@ export class AiSessionManager {
     }
   }
 
+  public getIssueWorkflowAssignment(issueKey: string): IssueWorkflowAssignment | undefined {
+    return this.workflowAssignments.get(issueKey);
+  }
+
+  public getAllIssueWorkflowAssignments(): Map<string, IssueWorkflowAssignment> {
+    return new Map(this.workflowAssignments);
+  }
+
+  public setIssueWorkflowAssignment(
+    issueKey: string,
+    workflow: AgentWorkflowReference | undefined,
+    options?: {
+      source?: WorkflowAssignmentSource;
+      assignedAt?: string;
+      reason?: string;
+    }
+  ): IssueWorkflowAssignment {
+    const assignment: IssueWorkflowAssignment = {
+      workflow,
+      source: options?.source ?? 'manual',
+      assignedAt: options?.assignedAt ?? new Date().toISOString(),
+      reason: options?.reason?.trim() || undefined
+    };
+    this.workflowAssignments.set(issueKey, assignment);
+    void this.persistWorkflowAssignments();
+    this._onDidChangeWorkflowAssignment.fire({ issueKey, assignment });
+    return assignment;
+  }
+
+  public removeIssueWorkflowAssignment(issueKey: string): void {
+    if (this.workflowAssignments.delete(issueKey)) {
+      void this.persistWorkflowAssignments();
+      this._onDidChangeWorkflowAssignment.fire({ issueKey, assignment: undefined });
+    }
+  }
+
+  // ── Model Override Management ──────────────────────────────────
+
+  public getIssueModelOverride(issueKey: string): string | undefined {
+    return this.modelOverrides.get(issueKey);
+  }
+
+  public setIssueModelOverride(issueKey: string, model: string): void {
+    const trimmed = model.trim();
+    if (!trimmed) {
+      this.removeIssueModelOverride(issueKey);
+      return;
+    }
+    this.modelOverrides.set(issueKey, trimmed);
+    void this.persistModelOverrides();
+    this._onDidChangeModelOverride.fire({ issueKey, model: trimmed });
+  }
+
+  public removeIssueModelOverride(issueKey: string): void {
+    if (this.modelOverrides.delete(issueKey)) {
+      void this.persistModelOverrides();
+      this._onDidChangeModelOverride.fire({ issueKey, model: undefined });
+    }
+  }
+
   public dispose(): void {
     this._onDidChangeSession.dispose();
     this._onDidChangeAgentSession.dispose();
+    this._onDidChangeWorkflowAssignment.dispose();
+    this._onDidChangeModelOverride.dispose();
   }
 
   // ── Internals ──────────────────────────────────────────────────
@@ -283,5 +403,70 @@ export class AiSessionManager {
       record[key] = session;
     }
     await this.workspaceState.update(AGENT_STORAGE_KEY, record);
+  }
+
+  private loadWorkflowAssignments(): Map<string, IssueWorkflowAssignment> {
+    const stored = this.workspaceState.get<Record<string, IssueWorkflowAssignment>>(
+      WORKFLOW_ASSIGNMENT_STORAGE_KEY
+    );
+    if (!stored || typeof stored !== 'object') {
+      return new Map();
+    }
+
+    const result = new Map<string, IssueWorkflowAssignment>();
+    for (const [key, value] of Object.entries(stored)) {
+      if (
+        !value ||
+        typeof value.assignedAt !== 'string' ||
+        (value.source !== 'manual' && value.source !== 'automatic' && value.source !== 'analysis')
+      ) {
+        continue;
+      }
+      // workflow is optional: `undefined` represents an explicit "No workflow pack" choice.
+      const hasValidWorkflow =
+        value.workflow &&
+        typeof value.workflow.id === 'string' &&
+        typeof value.workflow.name === 'string' &&
+        typeof value.workflow.instructionsPath === 'string';
+      if (value.workflow && !hasValidWorkflow) {
+        continue;
+      }
+      result.set(key, {
+        ...value,
+        workflow: hasValidWorkflow ? value.workflow : undefined
+      });
+    }
+
+    return result;
+  }
+
+  private async persistWorkflowAssignments(): Promise<void> {
+    const record: Record<string, IssueWorkflowAssignment> = {};
+    for (const [key, assignment] of this.workflowAssignments) {
+      record[key] = assignment;
+    }
+    await this.workspaceState.update(WORKFLOW_ASSIGNMENT_STORAGE_KEY, record);
+  }
+
+  private loadModelOverrides(): Map<string, string> {
+    const stored = this.workspaceState.get<Record<string, string>>(MODEL_OVERRIDE_STORAGE_KEY);
+    if (!stored || typeof stored !== 'object') {
+      return new Map();
+    }
+    const result = new Map<string, string>();
+    for (const [key, value] of Object.entries(stored)) {
+      if (typeof value === 'string' && value.trim()) {
+        result.set(key, value.trim());
+      }
+    }
+    return result;
+  }
+
+  private async persistModelOverrides(): Promise<void> {
+    const record: Record<string, string> = {};
+    for (const [key, model] of this.modelOverrides) {
+      record[key] = model;
+    }
+    await this.workspaceState.update(MODEL_OVERRIDE_STORAGE_KEY, record);
   }
 }

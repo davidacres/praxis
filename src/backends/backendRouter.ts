@@ -8,34 +8,174 @@ import type {
   CreateBoardInput,
   CreateIssueInput,
   FilterMetadata,
+  IssueAttachment,
   IssueDetails,
   IssueFilters,
   ParentItemQueryOptions,
   IssueSummary,
   PagedIssues,
   Project,
+  SubTaskSummary,
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
+import type { ConnectionStore } from '../config/connectionStore';
+import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../config/connectionScopedConfigStore';
 import { DemoService } from '../demo/demoService';
-import { FilePlanService } from '../file/filePlanService';
-import { JiraService } from '../jira/jiraService';
-import { LiveFolderService } from '../livefolder/liveFolderService';
+import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
+import { GitLabBoardService } from '../gitlab/gitLabBoardService';
+import { JiraApiService } from '../jira/jiraApiService';
+import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
+
+function buildUnsupportedBackendMessage(mode: 'github'): string {
+  const label = 'GitHub';
+  return `${label} project mode is not implemented yet. Current ${label} support is limited to setup metadata and repository automation helpers.`;
+}
+
+class UnsupportedBackendService implements IssueTrackerService {
+  public readonly mode: BackendMode;
+  private readonly unsupportedMode: 'github';
+
+  public constructor(
+    mode: 'github',
+    private readonly defaultPageSize: number
+  ) {
+    this.unsupportedMode = mode;
+    this.mode = mode;
+  }
+
+  public getDefaultPageSize(): number {
+    return this.defaultPageSize;
+  }
+
+  public async reset(): Promise<void> {}
+
+  public async checkConnection(): Promise<ConnectionCheck> {
+    return {
+      status: 'error',
+      message: buildUnsupportedBackendMessage(this.unsupportedMode),
+      toolCount: 0
+    };
+  }
+
+  public async getProjects(): Promise<Project[]> {
+    return [];
+  }
+
+  public async getIssues(): Promise<PagedIssues> {
+    return {
+      issues: [],
+      total: 0,
+      hasMore: false
+    };
+  }
+
+  public async getFilterMetadata(): Promise<FilterMetadata> {
+    return {
+      statuses: [],
+      issueTypes: []
+    };
+  }
+
+  public async getParentItems(): Promise<IssueSummary[]> {
+    return [];
+  }
+
+  public async supportsBoards(): Promise<boolean> {
+    return false;
+  }
+
+  public async getBoards(): Promise<Board[]> {
+    return [];
+  }
+
+  public async getBoardDetails(board: Board): Promise<BoardDetails> {
+    return {
+      board,
+      columns: [],
+      issues: []
+    };
+  }
+
+  public async createBoard(): Promise<Board> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async updateBoard(): Promise<Board> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async deleteBoard(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getIssue(issueKey: string): Promise<IssueDetails> {
+    throw new Error(`Cannot load ${issueKey}. ${buildUnsupportedBackendMessage(this.unsupportedMode)}`);
+  }
+
+  public async createIssue(): Promise<IssueDetails> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async updateIssue(): Promise<IssueDetails> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async deleteIssue(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async addComment(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async attachFile(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async downloadAttachment(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getTransitions(): Promise<WorkflowTransition[]> {
+    return [];
+  }
+
+  public async transitionIssue(): Promise<void> {
+    throw new Error(buildUnsupportedBackendMessage(this.unsupportedMode));
+  }
+
+  public async getBrowseUrl(): Promise<string | undefined> {
+    return undefined;
+  }
+
+  public async getSelfAssigneeLabel(): Promise<string | undefined> {
+    return undefined;
+  }
+
+  public dispose(): void {}
+}
 
 export class BackendRouter implements IssueTrackerService {
   private activeMode?: BackendMode;
   private activeService?: IssueTrackerService;
   private readonly userWorkspaceStore: UserWorkspaceStore;
+  private readonly _onDidReceiveExternalComment = new vscode.EventEmitter<ExternalCommentEvent>();
+  public readonly onDidReceiveExternalComment = this._onDidReceiveExternalComment.event;
+  private externalCommentSub?: vscode.Disposable;
+  private readonly perConnectionServices = new Map<string, IssueTrackerService>();
+  private activeConnectionId?: string;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly configStore: AppConfigStore,
-    private readonly output: vscode.OutputChannel
+    private readonly output: vscode.OutputChannel,
+    private readonly connectionStore?: ConnectionStore
   ) {
     this.userWorkspaceStore = new UserWorkspaceStore(context.globalState);
   }
@@ -134,6 +274,18 @@ export class BackendRouter implements IssueTrackerService {
     return (await this.getService()).addComment(issueKey, body);
   }
 
+  public async attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void> {
+    return (await this.getService()).attachFile(issueKey, filePath, fileName);
+  }
+
+  public async downloadAttachment(
+    issueKey: string,
+    attachment: IssueAttachment,
+    targetFilePath: string
+  ): Promise<void> {
+    return (await this.getService()).downloadAttachment(issueKey, attachment, targetFilePath);
+  }
+
   public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> {
     return (await this.getService()).getTransitions(issueKey);
   }
@@ -150,8 +302,106 @@ export class BackendRouter implements IssueTrackerService {
     return (await this.getService()).getSelfAssigneeLabel();
   }
 
+  public async getSubTasks(parentKey: string): Promise<SubTaskSummary[]> {
+    const service = await this.getService();
+    if (service.getSubTasks) {
+      return service.getSubTasks(parentKey);
+    }
+    return [];
+  }
+
+  public async createSubTasks(
+    parentKey: string,
+    projectKey: string,
+    subTasks: Array<{ summary: string; description: string; issueType?: string }>
+  ): Promise<string[]> {
+    const service = await this.getService();
+    if (service.createSubTasks) {
+      return service.createSubTasks(parentKey, projectKey, subTasks);
+    }
+    throw new Error('Sub-task creation is not supported by the current backend.');
+  }
+
+  /**
+   * Set the active connection for subsequent per-connection service lookups.
+   * This is called when a board is selected to ensure the right connection's
+   * credentials and settings are used.
+   */
+  public setActiveConnection(connectionId: string | undefined): void {
+    this.activeConnectionId = connectionId;
+  }
+
+  /**
+   * Get the ID of the currently active connection.
+   */
+  public getActiveConnectionId(): string | undefined {
+    return this.activeConnectionId;
+  }
+
+  /**
+   * Get a service scoped to a specific connection.
+  * This creates the appropriate service instance (JiraApiService, LiveFolderService, etc.)
+   * using the connection's stored settings and secrets.
+   */
+  public async serviceFor(connectionId: string): Promise<IssueTrackerService> {
+    // Return cached service for this connection if available
+    const cached = this.perConnectionServices.get(connectionId);
+    if (cached) {
+      return cached;
+    }
+
+    // Load connection from store
+    if (!this.connectionStore) {
+      throw new Error('ConnectionStore not provided to BackendRouter');
+    }
+
+    const connections = await this.connectionStore.getConnections();
+    const connection = connections.find(c => c.id === connectionId);
+    if (!connection) {
+      throw new Error(`Connection not found: ${connectionId}`);
+    }
+
+    // Load connection secrets
+    const secrets = await loadConnectionSecrets(this.context, connection);
+
+    // Create connection-scoped config store
+    const scopedConfigStore = createConnectionScopedConfigStore(
+      this.configStore,
+      connection,
+      secrets
+    );
+
+    // Instantiate service based on connection mode
+    let service: IssueTrackerService;
+    const mode = connection.mode;
+
+    if (mode === 'github') {
+      service = new UnsupportedBackendService(mode, scopedConfigStore.getDefaultPageSize());
+    } else if (mode === 'gitlab') {
+      service = new GitLabBoardService(scopedConfigStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context);
+    } else if (mode === 'demo') {
+      service = new DemoService(scopedConfigStore);
+    } else if (mode === 'jiraapi') {
+      service = new JiraApiService(this.context, scopedConfigStore, this.output);
+    } else if (mode === 'livefolder') {
+      service = new LiveFolderService(scopedConfigStore);
+    } else if (mode === 'userworkspace') {
+      service = new UserWorkspaceService(scopedConfigStore, this.userWorkspaceStore);
+    } else {
+      // Treat any remaining legacy Jira mode as Jira Cloud.
+      service = new JiraApiService(this.context, scopedConfigStore, this.output);
+    }
+
+    // Cache the service
+    this.perConnectionServices.set(connectionId, service);
+    return service;
+  }
+
   public dispose(): void {
     this.disposeActiveService();
+    this.perConnectionServices.forEach(service => service.dispose());
+    this.perConnectionServices.clear();
+    this._onDidReceiveExternalComment.dispose();
   }
 
   private async getService(): Promise<IssueTrackerService> {
@@ -163,19 +413,30 @@ export class BackendRouter implements IssueTrackerService {
     this.disposeActiveService();
     this.activeMode = configuredMode;
     this.activeService =
-      configuredMode === 'demo'
-        ? new DemoService(this.configStore)
-        : configuredMode === 'file'
-          ? new FilePlanService(this.configStore)
+      configuredMode === 'github'
+        ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
+        : configuredMode === 'gitlab'
+          ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
+        : configuredMode === 'demo'
+          ? new DemoService(this.configStore)
+          : configuredMode === 'jiraapi'
+            ? new JiraApiService(this.context, this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
             : configuredMode === 'userworkspace'
               ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-              : new JiraService(this.context, this.configStore, this.output);
+              : new JiraApiService(this.context, this.configStore, this.output);
+    if (this.activeService instanceof LiveFolderService) {
+      this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
+        this._onDidReceiveExternalComment.fire(event)
+      );
+    }
     return this.activeService;
   }
 
   private disposeActiveService(): void {
+    this.externalCommentSub?.dispose();
+    this.externalCommentSub = undefined;
     this.activeService?.dispose();
     this.activeService = undefined;
     this.activeMode = undefined;

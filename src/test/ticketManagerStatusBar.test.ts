@@ -23,7 +23,7 @@ suite('TicketManagerStatusBar', () => {
 
   test('shows default AI provider in healthy state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jira',
+      backendMode: 'jiraapi',
       connection: {
         status: 'ok',
         message: 'Connected. 3 accessible project(s) found.',
@@ -37,7 +37,7 @@ suite('TicketManagerStatusBar', () => {
       isChecking: false
     });
 
-    assert.strictEqual(getBackendModeLabel('jira'), 'Jira');
+    assert.strictEqual(getBackendModeLabel('jira'), 'Jira Cloud');
     assert.strictEqual(presentation.tone, 'ok');
     assert.ok(presentation.text.includes('AI OpenAI'));
     assert.ok(presentation.tooltipMarkdown.includes('Default provider: OpenAI'));
@@ -45,10 +45,10 @@ suite('TicketManagerStatusBar', () => {
 
   test('last error takes precedence over healthy connection state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'file',
+      backendMode: 'livefolder',
       connection: {
         status: 'ok',
-        message: 'File mode active.',
+        message: 'Live Folder active.',
         toolCount: 0,
         projectCount: 1
       },
@@ -59,13 +59,13 @@ suite('TicketManagerStatusBar', () => {
     });
 
     assert.strictEqual(presentation.tone, 'error');
-    assert.ok(presentation.text.includes('Ticket Manager: File'));
+    assert.ok(presentation.text.includes('Ticket Manager: Live Folder'));
     assert.ok(presentation.tooltipMarkdown.includes('Last error: Failed to refresh issue details\\.'));
   });
 
   test('surfaces paused sessions and pending approvals as attention state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jira',
+      backendMode: 'jiraapi',
       connection: {
         status: 'ok',
         message: 'Connected.',
@@ -87,6 +87,6 @@ suite('TicketManagerStatusBar', () => {
     assert.ok(presentation.tooltipMarkdown.includes('Active sessions: 3'));
     assert.ok(presentation.tooltipMarkdown.includes('Approval required: 1'));
     assert.ok(presentation.tooltipMarkdown.includes('Paused sessions: 2'));
-    assert.ok(presentation.tooltipMarkdown.includes('Open Active Sessions'));
+    assert.ok(presentation.tooltipMarkdown.includes('Open Sessions'));
   });
 });

@@ -1,9 +1,9 @@
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import type { Memento, ExtensionContext } from 'vscode';
-import { FilterStore } from '../state/filterStore';
+import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from '../state/filterStore';
 
 class MemoryMemento implements Memento {
-  private store = new Map<string, unknown>();
+  private readonly store = new Map<string, unknown>();
 
   get<T>(key: string, defaultValue?: T): T {
     return (this.store.get(key) as T) ?? (defaultValue as T);
@@ -34,6 +34,49 @@ function createContext(): ExtensionContext {
 }
 
 suite('FilterStore', () => {
+  test('recognizes the untouched default issue scope for Jira API epic migration', () => {
+    assert.strictEqual(
+      shouldAdoptJiraApiEpicIssueScope({
+        projectKeys: [],
+        statuses: [],
+        issueTypes: [],
+        searchText: '',
+        assigneeMode: 'me',
+        parentKey: undefined,
+        grouping: 'none'
+      }),
+      true
+    );
+  });
+
+  test('does not override an explicitly broadened or narrowed issue scope', () => {
+    assert.strictEqual(
+      shouldAdoptJiraApiEpicIssueScope({
+        projectKeys: [],
+        statuses: [],
+        issueTypes: [],
+        searchText: '',
+        assigneeMode: 'all',
+        parentKey: undefined,
+        grouping: 'none'
+      }),
+      false
+    );
+
+    assert.strictEqual(
+      shouldAdoptJiraApiEpicIssueScope({
+        projectKeys: [],
+        statuses: ['In Progress'],
+        issueTypes: [],
+        searchText: '',
+        assigneeMode: 'me',
+        parentKey: undefined,
+        grouping: 'none'
+      }),
+      false
+    );
+  });
+
   test('persists status filters across store instances', async () => {
     const context = createContext();
     const firstStore = new FilterStore(context);

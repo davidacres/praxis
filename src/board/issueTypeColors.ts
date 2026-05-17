@@ -6,6 +6,7 @@ const KNOWN_HEX: Record<string, string> = {
   task: '#58a6ff',
   epic: '#a371f7',
   feature: '#3fbccd',
+  idea: '#f59e0b',
   subtask: '#8b949e',
   'sub-task': '#8b949e',
   improvement: '#79c0ff',
@@ -22,9 +23,12 @@ function hashPick(label: string): string {
   return FALLBACK[h % FALLBACK.length];
 }
 
+export function issueTypeHex(issueType: string): string {
+  const key = issueType.trim().toLowerCase();
+  return KNOWN_HEX[key] ?? hashPick(issueType);
+}
+
 /** Inline CSS for a tinted issue-type pill (same pattern as project/meta pills). */
 export function issueTypePillInlineStyle(issueType: string): string {
-  const key = issueType.trim().toLowerCase();
-  const hex = KNOWN_HEX[key] ?? hashPick(issueType);
-  return buildMetaPillInlineStyle(hex) ?? 'color: var(--vscode-editor-foreground);';
+  return buildMetaPillInlineStyle(issueTypeHex(issueType)) ?? 'color: var(--vscode-editor-foreground);';
 }

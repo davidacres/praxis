@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as nodePath from 'node:path';
+import * as nodeFs from 'node:fs';
 import type { IssueDetails } from '../types';
 import type { AiSessionManager } from './aiSessionManager';
 import type {
@@ -8,6 +10,13 @@ import type {
 } from './agentTypes';
 import { AGENT_DEFAULTS } from './agentTypes';
 import { resolveCopilotClientOptions } from './copilotSdkRuntime';
+
+/**
+ * Default Copilot model used for every agent session created by this extension.
+ * Exposed per GitHub's model comparison (Deep reasoning / debugging tier).
+ * Can be overridden per-session if we ever add a setting for it.
+ */
+const COPILOT_DEFAULT_MODEL = 'claude-opus-4-6';
 
 interface ActiveTask {
   issueKey: string;
@@ -19,6 +28,7 @@ interface ActiveTask {
     on(handler: (event: { type: string; data?: Record<string, unknown> }) => void): () => void;
     abort(): Promise<void>;
     disconnect(): Promise<void>;
+    setModel?(model: string): Promise<unknown>;
   };
   unsubscribes: Array<() => void>;
   timeoutHandle?: ReturnType<typeof setTimeout>;
@@ -57,12 +67,21 @@ interface ActiveTask {
 const PLANNING_SYSTEM_PROMPT = `You are an autonomous Copilot-powered worker operating under strict contracts.
 
 ## Core Contract
-- Plan before acting: your FIRST response MUST be a step-by-step plan.
 - Operate within the clearly defined scope provided.
 - Respect explicit permission boundaries — never bypass permission prompts.
 - Stop deterministically when the Definition of Done is satisfied.
 - Surface progress and intent continuously.
 - You must never improvise your own lifecycle.
+
+## Analysis-First Approach (MANDATORY)
+Before writing any code or making any changes, you MUST complete a thorough analysis phase:
+1. **Understand the system**: Read and explore the codebase to build a mental model of the architecture, key modules, data flow, and conventions already in use. Identify the entry points, services, and patterns the project relies on.
+2. **Understand the requirement**: Break the task requirement down into every discrete change that needs to happen. Identify all files, functions, types, tests, and configurations that will be affected.
+3. **Identify dependencies and side-effects**: Trace how the areas you plan to change are used elsewhere. Search for all call sites, imports, and references so you do not miss downstream impacts.
+4. **Form a plan**: Summarise your analysis as a clear, ordered implementation plan before you touch any file. State which files will be created or modified and why.
+5. **Then implement**: Only after steps 1–4 are complete should you begin making changes. Implement methodically, following your plan.
+
+Skipping or abbreviating this analysis phase is a failure condition, even if the resulting code happens to be correct.
 
 ## Guardrails
 - Stopping correctly is a success condition.
@@ -71,17 +90,90 @@ const PLANNING_SYSTEM_PROMPT = `You are an autonomous Copilot-powered worker ope
 - Do not fix pre-existing issues unrelated to the task.
 `;
 
-function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+function slugifyNamingSegment(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replaceAll(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '');
+}
+
+function stripIssueKeyPrefix(value: string, issueKey: string): string {
+  const normalizedIssueKey = slugifyNamingSegment(issueKey);
+  if (!value || !normalizedIssueKey) {
+    return value;
+  }
+  if (value === normalizedIssueKey) {
+    return '';
+  }
+  if (value.startsWith(`${normalizedIssueKey}-`)) {
+    return value.slice(normalizedIssueKey.length + 1);
+  }
+  return value;
+}
+
+export function buildWorktreeName(issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>): string {
+  const source = issue.summary || issue.branch?.trim() || issue.key;
+  const normalizedSource = stripIssueKeyPrefix(slugifyNamingSegment(source), issue.key);
+  const suffix = normalizedSource.slice(0, 48).replaceAll(/-+$/g, '') || 'work-item';
+  return `${issue.key}-${suffix}`;
+}
+
+export function buildMsiVersionExample(
+  issueKey: string,
+  baseVersion = '1.0.0.1',
+  buildIdentifier = 'buildx'
+): string {
+  return `${baseVersion}-${issueKey}-${buildIdentifier}`;
+}
+
+export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+  const workflow = task.workflow
+    ? [
+        '\n## Assigned Workflow Pack',
+        `- Name: ${task.workflow.name}`,
+        `- Instructions file: ${task.workflow.instructionsPath}`,
+        task.workflow.description ? `- Description: ${task.workflow.description}` : undefined,
+        task.workflow.link ? `- Reference link: ${task.workflow.link}` : undefined,
+        '- Treat this workflow pack as the execution playbook for this task.',
+        '- Read the instructions file before taking implementation actions.',
+        '- Follow the workflow ordering, sub-agent choices, and review gates unless they conflict with explicit user instructions or this task contract.'
+      ].filter((line): line is string => Boolean(line)).join('\n')
+    : '';
+  const attachments = task.attachments?.length
+    ? [
+        '\n## Issue Attachments',
+        '- The following issue attachments were downloaded locally before execution.',
+        '- Review any relevant screenshots, mockups, specs, or supporting files before implementation.',
+        ...task.attachments.map(attachment =>
+          [
+            `- ${attachment.fileName}: ${attachment.localPath}`,
+            attachment.mediaType ? `  media type: ${attachment.mediaType}` : undefined,
+            typeof attachment.sizeBytes === 'number' ? `  size bytes: ${attachment.sizeBytes}` : undefined,
+            attachment.sourceUrl ? `  source: ${attachment.sourceUrl}` : undefined
+          ].filter((line): line is string => Boolean(line)).join('\n')
+        )
+      ].join('\n')
+    : '';
   const nonGoals = task.nonGoals?.length
     ? `\n## Non-Goals (do NOT touch)\n${task.nonGoals.map(g => `- ${g}`).join('\n')}`
     : '';
+  const completionContract = task.completionContract?.trim()
+    ? `\n## Completion Contract\n${task.completionContract.trim()}`
+    : '';
+  const worktreeName = buildWorktreeName(issue);
+  const msiVersionExample = buildMsiVersionExample(issue.key);
 
   return `${PLANNING_SYSTEM_PROMPT}
 ## Task
 **Goal:** ${task.goal}
 **Scope:** ${task.scope}
 **Definition of Done:** ${task.definitionOfDone}
+${workflow}
+${attachments}
 ${nonGoals}
+${completionContract}
 
 ## Issue Context
 - Key: ${issue.key}
@@ -89,6 +181,14 @@ ${nonGoals}
 - Type: ${issue.issueType}
 - Status: ${issue.status}
 ${issue.description ? `- Description:\n${issue.description.slice(0, 4000)}` : ''}
+
+## Execution Conventions
+- If you create a git worktree, its name MUST start with ${issue.key}.
+- Use a worktree name like: ${worktreeName}
+- If you publish a new MSI, keep the base version and append -${issue.key}-<build-id>.
+- Return that same <build-id> in DELIVERY_RESULT.buildIdentifier so the Jira upload name can match the MSI build.
+- Use an MSI version like: ${msiVersionExample}
+- Do not publish a generic MSI artifact name or version that omits the Jira issue key.
 `;
 }
 
@@ -139,13 +239,115 @@ function formatPermissionDescription(request: { kind?: string; [key: string]: un
   }
 }
 
+function normalizeShellSegment(segment: string): string {
+  return segment.replaceAll(/\s+/g, ' ').trim();
+}
+
+function isDirectoryChangeSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment).toLowerCase();
+  return normalized.startsWith('cd ') || normalized.startsWith('set-location ') || normalized.startsWith('push-location ');
+}
+
+function isSafeShellProbeSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const patterns = [
+    /^dotnet\s+--version(?:\s+2>&1)?$/i,
+    /^node\s+--version(?:\s+2>&1)?$/i,
+    /^npm\s+--version(?:\s+2>&1)?$/i,
+    /^git\s+--version(?:\s+2>&1)?$/i,
+    /^python(?:3)?\s+--version(?:\s+2>&1)?$/i,
+    /^where(?:\.exe)?\s+(?:dotnet|node|npm|git|python(?:3)?)(?:\s+2>&1)?$/i,
+    /^(?:pwd|get-location)(?:\s+2>&1)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
+function isSafeGitInspectionSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const patterns = [
+    /^git\s+(?:--no-pager\s+)?status(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?branch(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?log(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?diff(?:\s+.*)?$/i,
+    /^git\s+(?:--no-pager\s+)?show(?:\s+.*)?$/i,
+    /^git\s+rev-parse(?:\s+.*)?$/i,
+    /^git\s+symbolic-ref(?:\s+.*)?$/i,
+    /^git\s+describe(?:\s+.*)?$/i,
+    /^git\s+ls-files(?:\s+.*)?$/i,
+    /^git\s+remote\s+-v$/i,
+    /^git\s+remote\s+show(?:\s+.*)?$/i,
+    /^git\s+tag(?:\s+--list|\s+-l)?(?:\s+.*)?$/i,
+    /^git\s+stash\s+list(?:\s+.*)?$/i,
+    /^git\s+config\s+--get(?:-all)?(?:\s+.*)?$/i,
+    /^git\s+merge-base(?:\s+.*)?$/i,
+    /^git\s+submodule\s+status(?:\s+.*)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
+function isSafeBuildShellSegment(segment: string): boolean {
+  const normalized = normalizeShellSegment(segment);
+  const powershellScriptMatch = /^(?:pwsh|powershell)(?:\.exe)?\s+.+?-file\s+(?<script>[^\s]+)(?:\s+.*)?$/i.exec(normalized);
+  if (powershellScriptMatch?.groups?.script) {
+    const scriptPath = powershellScriptMatch.groups.script.replaceAll(/^['"]|['"]$/g, '').toLowerCase();
+    if (
+      scriptPath.includes('build') ||
+      scriptPath.includes('publish') ||
+      scriptPath.includes('package') ||
+      scriptPath.includes('test') ||
+      scriptPath.includes('install')
+    ) {
+      return true;
+    }
+  }
+
+  const patterns = [
+    /^dotnet\s+(?:build|publish|test|pack|restore|msbuild|clean|workload\s+restore)(?:\s+.*)?$/i,
+    /^msbuild(?:\.exe)?\s+.+$/i,
+    /^npm\s+(?:build|compile|package|pack|test|ci)(?:\s+.*)?$/i,
+    /^npm\s+run\s+(?:build|compile|package|pack|test|ci)(?:\s+.*)?$/i,
+    /^npm\s+(?:install(?::[\w:-]+)|run\s+install(?::[\w:-]+))(?:\s+.*)?$/i,
+    /^npx\s+.+$/i,
+    /^(?:candle|light|heat|wix)(?:\.exe)?\s+.+$/i,
+    /^nuget(?:\.exe)?\s+(?:restore|pack)(?:\s+.*)?$/i
+  ];
+  return patterns.some(pattern => pattern.test(normalized));
+}
+
+function shouldSilentlyApprovePermissionRequest(request: { kind?: string; [key: string]: unknown }): boolean {
+  if (asString(request.kind) === 'read') {
+    return true;
+  }
+
+  if (asString(request.kind) !== 'shell') {
+    return false;
+  }
+
+  const command = asString(request.fullCommandText)?.trim();
+  if (!command) {
+    return false;
+  }
+
+  const segments = command.split('&&').map(segment => segment.trim()).filter(segment => segment.length > 0);
+  if (segments.length === 0) {
+    return false;
+  }
+
+  return segments.every(segment =>
+    isDirectoryChangeSegment(segment) ||
+    isSafeShellProbeSegment(segment) ||
+    isSafeGitInspectionSegment(segment) ||
+    isSafeBuildShellSegment(segment)
+  );
+}
+
 export interface CopilotAgentLogger {
   appendLine(message: string): void;
 }
 
 export class CopilotAgentService {
-  private activeTasks = new Map<string, ActiveTask>();
-  private activeTaskListeners = new Set<(issueKey: string) => void>();
+  private readonly activeTasks = new Map<string, ActiveTask>();
+  private readonly activeTaskListeners = new Set<(issueKey: string) => void>();
 
   constructor(
     private readonly sessionManager: AiSessionManager,
@@ -161,13 +363,50 @@ export class CopilotAgentService {
 
   private buildClientOptions(cliPath: string | undefined): {
     cliPath?: string;
+    cliArgs?: string[];
     env?: NodeJS.ProcessEnv;
   } {
     const resolved = resolveCopilotClientOptions(cliPath);
     if (resolved.warning) {
       this.logger.appendLine(`[Copilot SDK] ${resolved.warning}`);
     }
+    this.logger.appendLine(
+      `[Copilot SDK] Autopilot mode: cliArgs=${(resolved.clientOptions.cliArgs ?? []).join(' ')}`
+    );
     return resolved.clientOptions;
+  }
+
+  /**
+   * Resolve and read the workflow instructions file so the full skill text can
+   * be inlined into the agent's initial prompt. Symlinked skill folders are
+   * followed via `realpathSync` before the file is read.
+   */
+  private loadWorkflowInstructionsForPrompt(
+    instructionsPath: string,
+    workingDirectory: string | undefined
+  ): { absolutePath: string; realPath?: string; content?: string; error?: string } {
+    let absolutePath = instructionsPath;
+    if (!nodePath.isAbsolute(absolutePath) && workingDirectory) {
+      absolutePath = nodePath.resolve(workingDirectory, absolutePath);
+    }
+    let realPath: string | undefined;
+    let readPath = absolutePath;
+    try {
+      const resolved = nodeFs.realpathSync(absolutePath);
+      if (resolved && resolved !== absolutePath) {
+        realPath = resolved;
+        readPath = resolved;
+      }
+    } catch {
+      // best-effort; fall back to absolutePath
+    }
+    try {
+      const content = nodeFs.readFileSync(readPath, 'utf8');
+      return { absolutePath, realPath, content };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { absolutePath, realPath, error: message };
+    }
   }
 
   private emitActiveTaskChange(issueKey: string): void {
@@ -189,7 +428,7 @@ export class CopilotAgentService {
   public async startTask(
     issue: IssueDetails,
     taskDefinition: AgentTaskDefinition,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<string> {
     // Abort any existing task for this issue
     if (this.activeTasks.has(issue.key)) {
@@ -225,14 +464,41 @@ export class CopilotAgentService {
     let session: ActiveTask['session'];
     try {
       const hooks = this.createInteractiveSessionHooks(issue.key);
+      const resolvedModel = options.model || COPILOT_DEFAULT_MODEL;
+      this.logger.appendLine(`[Agent] Creating Copilot session for ${issue.key} with model=${resolvedModel}`);
       session = await client.createSession({
         clientName: 'ticket-manager-agent',
         infiniteSessions: { enabled: true },
         streaming: true,
+        model: resolvedModel,
         systemMessage: { content: systemPrompt },
         workingDirectory: options.workingDirectory,
         ...hooks
       });
+      // Belt-and-braces: explicitly switch the session to the requested model.
+      // createSession({ model }) can be silently ignored by the CLI if the
+      // model ID is unknown, so we re-assert via setModel and log outcomes.
+      try {
+        await session.setModel?.(resolvedModel);
+        this.logger.appendLine(`[Agent] Session ${issue.key} model set to ${resolvedModel}.`);
+      } catch (modelErr) {
+        this.logger.appendLine(
+          `[Agent] Failed to set model '${resolvedModel}' on session for ${issue.key}: ${(modelErr as Error).message}`
+        );
+      }
+      // Log the available models once per session so we can verify the ID
+      // actually exists if users ever report a different model being used.
+      try {
+        const clientWithListModels = client as { listModels?: () => Promise<Array<{ id: string }>> };
+        const models = await clientWithListModels.listModels?.();
+        if (models && models.length > 0) {
+          this.logger.appendLine(
+            `[Agent] Available Copilot models: ${models.map(m => m.id).join(', ')}`
+          );
+        }
+      } catch {
+        // listing models is diagnostic only — never fail session creation
+      }
     } catch (err) {
       // Clean up client if session creation fails
       this.activeTasks.delete(issue.key);
@@ -261,9 +527,55 @@ export class CopilotAgentService {
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(issue.key, evt('session_start', 'Copilot agent session started'));
 
-    const initialPrompt = `Execute the task described in the system prompt. Start by producing a step-by-step plan, then execute it.
+    const workflow = taskDefinition.workflow;
+    const workflowDirective = workflow
+      ? (() => {
+          const loaded = this.loadWorkflowInstructionsForPrompt(
+            workflow.instructionsPath,
+            options.workingDirectory
+          );
+          const header = [
+            '',
+            '## CRITICAL WORKFLOW DIRECTIVE',
+            `You have been assigned the **${workflow.name}** workflow pack.`,
+            workflow.link ? `Reference link: ${workflow.link}` : undefined,
+            '',
+            'It is CRITICAL that you follow this workflow PRECISELY. Use the instructions below as the authoritative playbook for every step. Do not improvise an alternative approach. Do not deviate from the workflow ordering, sub-agent choices, or review gates.'
+          ].filter((line): line is string => line !== undefined);
+          if (loaded.content) {
+            const sourceLine = loaded.realPath
+              ? `Source: ${loaded.realPath} (symlink from ${loaded.absolutePath})`
+              : `Source: ${loaded.absolutePath}`;
+            this.logger.appendLine(
+              `[Agent] Inlined workflow instructions for ${issue.key} from ${loaded.realPath ?? loaded.absolutePath} (${loaded.content.length} chars).`
+            );
+            return [
+              ...header,
+              '',
+              sourceLine,
+              '',
+              '----- BEGIN WORKFLOW INSTRUCTIONS -----',
+              loaded.content.trimEnd(),
+              '----- END WORKFLOW INSTRUCTIONS -----'
+            ].join('\n');
+          }
+          this.logger.appendLine(
+            `[Agent] Failed to inline workflow instructions for ${issue.key} from ${loaded.absolutePath}: ${loaded.error ?? 'unknown error'}`
+          );
+          return [
+            ...header,
+            '',
+            `Instructions file (failed to inline, please read manually): ${loaded.realPath ?? loaded.absolutePath}`,
+            loaded.error ? `Read error: ${loaded.error}` : undefined
+          ].filter((line): line is string => line !== undefined).join('\n');
+        })()
+      : '';
+    const worktreeLine = options.workingDirectory
+      ? `\nWorktree (run ALL git and build commands from here): ${options.workingDirectory}`
+      : '';
+    const initialPrompt = `Execute the task described in the system prompt.
 
-Issue: ${issue.key} — ${issue.summary}`;
+Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflowDirective}`;
     this.logger.appendLine(
       `[Agent] Timers for ${issue.key}: task=${timeoutMs}ms final-wait=${sendAndWaitTimeoutMs}ms`
     );
@@ -320,7 +632,7 @@ Issue: ${issue.key} — ${issue.summary}`;
   /** Resume a previously disconnected session. */
   public async resumeTask(
     issueKey: string,
-    options: { cliPath?: string; workingDirectory?: string }
+    options: { cliPath?: string; workingDirectory?: string; model?: string }
   ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
       this.logger.appendLine(`[Agent] Session for ${issueKey} is already active.`);
@@ -346,6 +658,13 @@ Issue: ${issue.key} — ${issue.summary}`;
         streaming: true,
         workingDirectory: options.workingDirectory
       });
+      // Ensure resumed sessions run on our preferred model.
+      const resolvedResumeModel = options.model || COPILOT_DEFAULT_MODEL;
+      try {
+        await session.setModel?.(resolvedResumeModel);
+      } catch (modelErr) {
+        this.logger.appendLine(`[Agent] Failed to set model on resumed session for ${issueKey}: ${(modelErr as Error).message}`);
+      }
     } catch (error) {
       try {
         await client.stop();
@@ -534,38 +853,20 @@ Issue: ${issue.key} — ${issue.summary}`;
     }
     task.stepLimitPromptInFlight = true;
 
-    const stepIncrement = AGENT_DEFAULTS.maxSteps;
-    const choice = await vscode.window.showWarningMessage(
-      `${issueKey}: Step limit reached (${task.maxSteps}). The agent is paused.`,
-      `Continue (+${stepIncrement} steps)`,
-      'Continue (no limit)',
-      'Stop'
-    );
-
-    // Re-check task is still active after the async prompt
-    const current = this.activeTasks.get(issueKey);
-    if (!current || current !== task) {
-      return;
-    }
+    // Autopilot mode: never prompt the user when the step limit is reached.
+    // Ticket Manager agents are expected to run end-to-end without human
+    // intervention, so we transparently remove the step cap and let the
+    // overall task timeout remain the sole stop condition.
+    task.maxSteps = Number.MAX_SAFE_INTEGER;
+    task.stepLimitWarned = false;
     task.stepLimitPromptInFlight = false;
-
-    if (choice === `Continue (+${stepIncrement} steps)`) {
-      task.maxSteps += stepIncrement;
-      task.stepLimitWarned = false;
-      this.appendEvent(
-        issueKey,
-        evt('info', `Step limit extended to ${task.maxSteps}`)
-      );
-      this.logger.appendLine(`[Agent] Step limit extended to ${task.maxSteps} for ${issueKey}`);
-    } else if (choice === 'Continue (no limit)') {
-      task.maxSteps = Number.MAX_SAFE_INTEGER;
-      task.stepLimitWarned = false;
-      this.appendEvent(issueKey, evt('info', 'Step limit removed — agent will run until complete'));
-      this.logger.appendLine(`[Agent] Step limit removed for ${issueKey}`);
-    } else {
-      // "Stop" or dismissed
-      await this.failTaskForStepLimit(issueKey, task.maxSteps);
-    }
+    this.appendEvent(
+      issueKey,
+      evt('info', 'Step limit removed automatically (autopilot mode).')
+    );
+    this.logger.appendLine(
+      `[Agent] Step limit removed automatically for ${issueKey} (autopilot mode)`
+    );
   }
 
   private async stopTask(
@@ -877,32 +1178,17 @@ Issue: ${issue.key} — ${issue.summary}`;
           };
         }
 
+        // Ticket Manager agents run with full permissions by default. Every
+        // permission request is auto-approved so the delivery workflow can
+        // execute end-to-end without blocking the user for confirmations.
+        // The event is still logged to the session transcript so operators
+        // can audit what the agent did.
         const permInfo = formatPermissionDescription(request);
-        if (task.allowPermissionsForTask) {
-          this.appendEvent(issueKey, evt('permission_completed', `${permInfo.description} (auto-approved for task)`));
-          return { kind: 'approved' as const };
-        }
-
-        this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
-        this.appendEvent(issueKey, evt('permission_requested', permInfo.description));
-
-        return new Promise<
-          | { kind: 'denied-interactively-by-user' }
-          | { kind: 'approved' }
-        >(resolve => {
-          task.pendingPermissions.push({
-            description: permInfo.description,
-            kind: permInfo.kind,
-            detail: permInfo.detail,
-            resolve: (decision) => {
-              if (decision === 'deny') {
-                resolve({ kind: 'denied-interactively-by-user' as const });
-              } else {
-                resolve({ kind: 'approved' as const });
-              }
-            }
-          });
-        });
+        this.appendEvent(
+          issueKey,
+          evt('permission_completed', `${permInfo.description} (auto-approved by default policy)`)
+        );
+        return { kind: 'approved' as const };
       },
       onUserInputRequest: async (request: {
         question: string;

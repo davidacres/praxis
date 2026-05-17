@@ -67,6 +67,13 @@ suite('AiSessionManager — Agent Sessions', () => {
     assert.deepStrictEqual(record.events, []);
   });
 
+  test('createAgentSession stores the runtime provider when supplied', () => {
+    const record = manager.createAgentSession('ISSUE-CLAUDE', 'session-claude', taskDef, 'claude-cli');
+
+    assert.strictEqual(record.provider, 'claude-cli');
+    assert.strictEqual(manager.getAgentSession('ISSUE-CLAUDE')?.provider, 'claude-cli');
+  });
+
   test('getAgentSession returns created session', () => {
     manager.createAgentSession('ISSUE-1', 'sess-1', taskDef);
     const fetched = manager.getAgentSession('ISSUE-1');
@@ -214,6 +221,47 @@ suite('AiSessionManager — Agent Sessions', () => {
   test('removeAgentSession is no-op for unknown key', () => {
     // Should not throw
     manager.removeAgentSession('NOPE');
+  });
+
+  test('stores and removes issue workflow assignments', () => {
+    manager.setIssueWorkflowAssignment('ISSUE-1', {
+      id: 'add-edit-dotnet-web-api',
+      name: 'Add/Edit .NET Web API Workflow',
+      instructionsPath: '.github/skills/add-edit-dotnet-web-api/SKILL.md'
+    }, {
+      source: 'manual',
+      reason: 'Chosen by user'
+    });
+
+    const assignment = manager.getIssueWorkflowAssignment('ISSUE-1');
+    assert.ok(assignment);
+    assert.strictEqual(assignment?.workflow?.id, 'add-edit-dotnet-web-api');
+    assert.strictEqual(assignment?.source, 'manual');
+    assert.strictEqual(assignment?.reason, 'Chosen by user');
+
+    manager.removeIssueWorkflowAssignment('ISSUE-1');
+    assert.strictEqual(manager.getIssueWorkflowAssignment('ISSUE-1'), undefined);
+  });
+
+  test('fires workflow assignment change events', () => {
+    let lastIssueKey: string | undefined;
+    let lastWorkflowId: string | undefined;
+    const disposable = manager.onDidChangeWorkflowAssignment(event => {
+      lastIssueKey = event.issueKey;
+      lastWorkflowId = event.assignment?.workflow?.id;
+    });
+
+    manager.setIssueWorkflowAssignment('ISSUE-2', {
+      id: 'frontend-ui',
+      name: 'Frontend UI Workflow',
+      instructionsPath: '.github/skills/frontend-ui/SKILL.md'
+    }, {
+      source: 'automatic'
+    });
+
+    assert.strictEqual(lastIssueKey, 'ISSUE-2');
+    assert.strictEqual(lastWorkflowId, 'frontend-ui');
+    disposable.dispose();
   });
 
   test('onDidChangeAgentSession fires on create', () => {

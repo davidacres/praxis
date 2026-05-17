@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
 
-type Scenario = 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported';
+type Scenario = 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian';
 
 interface FakeTransition {
   id: string;
@@ -343,6 +343,17 @@ function boardToJiraShape(board: FakeBoard) {
       projectName: board.projectName
     }
   };
+}
+
+function buildAccessibleAtlassianResources() {
+  return [
+    {
+      id: 'test-cloud-id',
+      url: 'https://example.atlassian.net',
+      name: 'example',
+      scopes: ['read:jira-work', 'write:jira-work']
+    }
+  ];
 }
 
 function parseScenario(): Scenario {
@@ -950,6 +961,337 @@ async function main(): Promise<void> {
           ok: true,
           issueKey: issue.key,
           status: issue.status
+        });
+      }
+    );
+  }
+
+  if (scenario === 'atlassian') {
+    server.registerTool(
+      'mcp_com_atlassian_getAccessibleAtlassianResources',
+      {
+        description: 'Return accessible Atlassian resources.',
+        inputSchema: {}
+      },
+      async () => jsonResult(buildAccessibleAtlassianResources())
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_getVisibleJiraProjects',
+      {
+        description: 'Return visible Jira projects.',
+        inputSchema: {
+          cloudId: z.string(),
+          searchString: z.string().optional(),
+          action: z.string().optional(),
+          startAt: z.number().optional(),
+          maxResults: z.number().optional(),
+          expandIssueTypes: z.boolean().optional()
+        }
+      },
+      async ({ startAt = 0, maxResults = 50 }) => {
+        const allProjects = [
+          { id: '100', key: 'APP', name: 'Application Platform' },
+          { id: '200', key: 'OPS', name: 'Operations' }
+        ];
+        const values = allProjects.slice(startAt, startAt + maxResults);
+        return jsonResult({
+          values,
+          total: allProjects.length,
+          isLast: startAt + maxResults >= allProjects.length
+        });
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_searchJiraIssuesUsingJql',
+      {
+        description: 'Search Jira issues using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          jql: z.string(),
+          maxResults: z.number().optional(),
+          fields: z.array(z.string()).optional(),
+          nextPageToken: z.string().optional(),
+          responseContentFormat: z.string().optional()
+        }
+      },
+      async ({ jql, maxResults = 25, nextPageToken = '' }) => {
+        const startAt = nextPageToken ? Number.parseInt(nextPageToken, 10) || 0 : 0;
+        const matchingIssues = issues
+          .filter(issue => matchesQuery(issue, jql, 'default'))
+          .sort((a, b) => b.updated.localeCompare(a.updated));
+        const pagedIssues = matchingIssues
+          .slice(startAt, startAt + maxResults)
+          .map(issue => issueToJiraShape(issue, issues));
+
+        return jsonResult({
+          issues: pagedIssues,
+          nextPageToken:
+            startAt + maxResults < matchingIssues.length ? String(startAt + maxResults) : undefined,
+          isLast: startAt + maxResults >= matchingIssues.length
+        });
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_getJiraIssue',
+      {
+        description: 'Get a Jira issue using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          issueIdOrKey: z.string(),
+          fields: z.array(z.string()).optional(),
+          fieldsByKeys: z.boolean().optional(),
+          expand: z.string().optional(),
+          properties: z.array(z.string()).optional(),
+          updateHistory: z.boolean().optional(),
+          failFast: z.boolean().optional(),
+          responseContentFormat: z.string().optional()
+        }
+      },
+      async ({ issueIdOrKey }) => {
+        const issue = issues.find(candidate => candidate.key === issueIdOrKey);
+        if (!issue) {
+          throw new Error(`Issue ${issueIdOrKey} was not found.`);
+        }
+
+        return jsonResult(issueToJiraShape(issue, issues));
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_getTransitionsForJiraIssue',
+      {
+        description: 'Get transitions using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          issueIdOrKey: z.string(),
+          expand: z.string().optional(),
+          transitionId: z.string().optional(),
+          skipRemoteOnlyCondition: z.boolean().optional(),
+          includeUnavailableTransitions: z.boolean().optional(),
+          sortByOpsBarAndStatus: z.boolean().optional()
+        }
+      },
+      async ({ issueIdOrKey }) => {
+        const issue = issues.find(candidate => candidate.key === issueIdOrKey);
+        if (!issue) {
+          throw new Error(`Issue ${issueIdOrKey} was not found.`);
+        }
+
+        return jsonResult({
+          expand: 'transitions',
+          transitions: issue.transitions.map(transition => ({
+            id: transition.id,
+            name: transition.name,
+            to: {
+              name: transition.toStatus
+            }
+          }))
+        });
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_createJiraIssue',
+      {
+        description: 'Create a Jira issue using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          projectKey: z.string(),
+          issueTypeName: z.string(),
+          summary: z.string(),
+          description: z.string().optional(),
+          parent: z.string().optional(),
+          contentFormat: z.string().optional(),
+          responseContentFormat: z.string().optional()
+        }
+      },
+      async ({ projectKey, issueTypeName, summary, description, parent }) => {
+        validateParentSelection(projectKey, issueTypeName, parent);
+
+        const createdIssue: FakeIssue = {
+          id: String(issues.length + 1),
+          key: getNextIssueKey(projectKey),
+          summary,
+          status: 'Backlog',
+          issueType: issueTypeName,
+          projectKey,
+          projectName: getProjectName(projectKey),
+          assigneeMode: 'me',
+          assigneeDisplayName: 'Alex Agent',
+          priority: 'Medium',
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+          description: description ?? '',
+          parent,
+          comments: [],
+          transitions: transitionSet('Backlog')
+        };
+
+        issues.unshift(createdIssue);
+        attachIssueToBoard(createdIssue.key, createdIssue.projectKey);
+        return jsonResult(issueToJiraShape(createdIssue, issues));
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_updateJiraIssue',
+      {
+        description: 'Update a Jira issue using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          issueIdOrKey: z.string(),
+          summary: z.string().optional(),
+          description: z.string().optional(),
+          parent: z.string().nullable().optional(),
+          assignee: z.string().nullable().optional(),
+          assigneeAccountId: z.string().nullable().optional(),
+          priority: z.string().optional(),
+          issueTypeName: z.string().optional(),
+          fields: z.record(z.string(), z.unknown()).optional(),
+          additionalFields: z.record(z.string(), z.unknown()).optional(),
+          contentFormat: z.string().optional(),
+          responseContentFormat: z.string().optional()
+        }
+      },
+      async input => {
+        const issueKey = input.issueIdOrKey;
+        const issue = issues.find(candidate => candidate.key === issueKey);
+        if (!issue) {
+          throw new Error(`Issue ${issueKey} was not found.`);
+        }
+
+        const fieldBag = input.fields ?? {};
+        const extraFields = input.additionalFields ?? {};
+        const nextSummary = typeof input.summary === 'string'
+          ? input.summary
+          : typeof fieldBag.summary === 'string'
+            ? fieldBag.summary
+            : undefined;
+        const nextDescription = typeof input.description === 'string'
+          ? input.description
+          : typeof fieldBag.description === 'string'
+            ? fieldBag.description
+            : undefined;
+        const nextAssignee = input.assignee ?? input.assigneeAccountId ??
+          (typeof fieldBag.assignee === 'string' ? fieldBag.assignee : fieldBag.assignee === null ? null : undefined);
+        const nextPriority = typeof input.priority === 'string'
+          ? input.priority
+          : typeof extraFields.priority === 'object' && extraFields.priority !== null && typeof (extraFields.priority as { name?: unknown }).name === 'string'
+            ? (extraFields.priority as { name: string }).name
+            : undefined;
+        const nextIssueType = typeof input.issueTypeName === 'string'
+          ? input.issueTypeName
+          : typeof extraFields.issuetype === 'object' && extraFields.issuetype !== null && typeof (extraFields.issuetype as { name?: unknown }).name === 'string'
+            ? (extraFields.issuetype as { name: string }).name
+            : undefined;
+
+        let nextParent = issue.parent;
+        if (Object.prototype.hasOwnProperty.call(input, 'parent')) {
+          nextParent = input.parent ?? undefined;
+        } else if (Object.prototype.hasOwnProperty.call(extraFields, 'parent')) {
+          nextParent = typeof extraFields.parent === 'string' ? extraFields.parent : undefined;
+        } else if (Object.prototype.hasOwnProperty.call(extraFields, 'epicKey')) {
+          nextParent = typeof extraFields.epicKey === 'string' ? extraFields.epicKey : undefined;
+        }
+
+        validateParentSelection(issue.projectKey, nextIssueType ?? issue.issueType, nextParent, issue.key);
+
+        if (typeof nextSummary === 'string') {
+          issue.summary = nextSummary;
+        }
+        if (typeof nextDescription === 'string') {
+          issue.description = nextDescription;
+        }
+        if (nextAssignee === null) {
+          issue.assigneeMode = 'none';
+          issue.assigneeDisplayName = undefined;
+        } else if (typeof nextAssignee === 'string') {
+          issue.assigneeMode = nextAssignee === 'Alex Agent' ? 'me' : 'other';
+          issue.assigneeDisplayName = nextAssignee;
+        }
+        if (typeof nextPriority === 'string' && nextPriority.trim().length > 0) {
+          issue.priority = nextPriority;
+        }
+        if (typeof nextIssueType === 'string' && nextIssueType.trim().length > 0) {
+          issue.issueType = nextIssueType;
+        }
+        issue.parent = nextParent;
+        issue.updated = new Date().toISOString();
+
+        return jsonResult(issueToJiraShape(issue, issues));
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_deleteJiraIssue',
+      {
+        description: 'Delete a Jira issue using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          issueIdOrKey: z.string().optional(),
+          issueKey: z.string().optional()
+        }
+      },
+      async ({ issueIdOrKey, issueKey }) => {
+        const resolvedIssueKey = issueIdOrKey ?? issueKey;
+        const issueIndex = issues.findIndex(candidate => candidate.key === resolvedIssueKey);
+        if (issueIndex < 0 || !resolvedIssueKey) {
+          throw new Error(`Issue ${resolvedIssueKey ?? '(missing)'} was not found.`);
+        }
+
+        issues.splice(issueIndex, 1);
+        detachIssueFromBoards(resolvedIssueKey);
+        clearParentReferences(resolvedIssueKey);
+
+        return jsonResult({
+          ok: true,
+          issueKey: resolvedIssueKey
+        });
+      }
+    );
+
+    server.registerTool(
+      'mcp_com_atlassian_addCommentToJiraIssue',
+      {
+        description: 'Add a Jira comment using Atlassian cloud contract.',
+        inputSchema: {
+          cloudId: z.string(),
+          issueIdOrKey: z.string().optional(),
+          issueKey: z.string().optional(),
+          body: z.string().optional(),
+          commentBody: z.string().optional(),
+          contentFormat: z.string().optional(),
+          responseContentFormat: z.string().optional()
+        }
+      },
+      async ({ issueIdOrKey, issueKey, body, commentBody }) => {
+        const resolvedIssueKey = issueIdOrKey ?? issueKey;
+        const issue = issues.find(candidate => candidate.key === resolvedIssueKey);
+        if (!issue || !resolvedIssueKey) {
+          throw new Error(`Issue ${resolvedIssueKey ?? '(missing)'} was not found.`);
+        }
+
+        const resolvedBody = (body ?? commentBody ?? '').trim();
+        if (resolvedBody.length === 0) {
+          throw new Error('Comment cannot be empty.');
+        }
+
+        const now = new Date().toISOString();
+        issue.comments.unshift({
+          id: `${issue.key}-comment-${issue.comments.length + 1}`,
+          author: 'Alex Agent',
+          body: resolvedBody,
+          created: now,
+          updated: now
+        });
+        issue.updated = now;
+
+        return jsonResult({
+          ok: true,
+          issueKey: issue.key
         });
       }
     );

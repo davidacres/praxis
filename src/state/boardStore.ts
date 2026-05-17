@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { BoardFilters, PersistedBoardFilterState } from '../types';
+import type { BoardFilters, PersistedBoardFilterState, TrackedBoardRef } from '../types';
 
 const BOARD_FILTERS_KEY = 'ticketManager.boards.filters';
 
@@ -43,6 +43,25 @@ export class BoardStore implements vscode.Disposable {
     await this.context.workspaceState.update(BOARD_FILTERS_KEY, storedFilters);
   }
 
+  public getLastSelectedTrackedBoard(): TrackedBoardRef | undefined {
+    const stored = this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY);
+    if (!stored?.lastSelectedBoardId || !stored.lastSelectedConnectionId) {
+      return undefined;
+    }
+    return { connectionId: stored.lastSelectedConnectionId, boardId: stored.lastSelectedBoardId };
+  }
+
+  public async setLastSelectedTrackedBoard(ref: TrackedBoardRef | undefined): Promise<void> {
+    const storedFilters =
+      this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY) ?? {
+        ...DEFAULT_BOARD_FILTERS
+      };
+
+    storedFilters.lastSelectedBoardId = ref?.boardId;
+    storedFilters.lastSelectedConnectionId = ref?.connectionId;
+    await this.context.workspaceState.update(BOARD_FILTERS_KEY, storedFilters);
+  }
+
   public async updateFilters(patch: Partial<BoardFilters>): Promise<BoardFilters> {
     const current = this.getFilters();
     const next: BoardFilters = {
@@ -71,11 +90,13 @@ export class BoardStore implements vscode.Disposable {
     filters: BoardFilters,
     lastSelectedBoardId: string | undefined
   ): Promise<void> {
+    const current = this.context.workspaceState.get<PersistedBoardFilterState>(BOARD_FILTERS_KEY);
     const persisted: PersistedBoardFilterState = {
       projectKeys: filters.projectKeys,
       types: filters.types,
       searchText: filters.searchText,
-      lastSelectedBoardId
+      lastSelectedBoardId,
+      lastSelectedConnectionId: current?.lastSelectedConnectionId
     };
 
     await this.context.workspaceState.update(BOARD_FILTERS_KEY, persisted);

@@ -2,12 +2,12 @@ import * as vscode from 'vscode';
 import { filterBoardIssues } from '../board/boardIssueFilters';
 import { findTransitionToTargetStatus } from '../board/boardTransitionResolver';
 import { buildSwimLaneRows } from '../board/swimLanes';
-import { issueTypePillInlineStyle } from '../board/issueTypeColors';
+import { issueTypeHex, issueTypePillInlineStyle } from '../board/issueTypeColors';
 import { resolveStatusDotColor, statusPillInlineStyle } from '../board/statusColors';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import type { AiProvider, Board, BoardColumn, BoardDetails, IssueSummary } from '../types';
-import { applyBoardColumnPreferences } from './boardColumnLayout';
+import { applyBoardColumnPreferences, getDefaultStatusColumnOrder } from './boardColumnLayout';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { renderIconButton } from './webviewToolbarIcons';
 
@@ -59,9 +59,25 @@ function formatIssueMeta(issue: IssueSummary): string {
   return parts.join(' • ');
 }
 
+function isSafePriorityColor(value: string): boolean {
+  return /^#[0-9a-fA-F]{3,8}$/.test(value) || /^linear-gradient\([A-Za-z0-9#.,%\s-]+\)$/.test(value);
+}
+
+function resolvePriorityBarStyle(priority: string | undefined, priorityColors: Record<string, string>): string {
+  const value = priority ? priorityColors[priority] : undefined;
+  return value && isSafePriorityColor(value) ? `background: ${value};` : 'background: var(--vscode-descriptionForeground);';
+}
+
+interface BoardRenderPrefs {
+  statusColors?: Record<string, string>;
+  priorityColors: Record<string, string>;
+}
+
 export class BoardPanelManager implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private activeBoard?: Board;
+  private activeBoardService?: IssueTrackerService;
+  private readonly boardDetailsCache = new Map<string, BoardDetails>();
   private boardDetails?: BoardDetails;
   private loading = false;
   private errorMessage?: string;
@@ -74,7 +90,8 @@ export class BoardPanelManager implements vscode.Disposable {
     private readonly backendService: IssueTrackerService,
     private readonly onIssueSelected: (issue: IssueSummary) => Promise<void>,
     private readonly onAfterBoardTransition: (() => Promise<void>) | undefined,
-    private readonly boardColumnStore: BoardColumnStore
+    private readonly boardColumnStore: BoardColumnStore,
+    private readonly resolveBoardService?: (board: Board) => Promise<IssueTrackerService>
   ) {}
 
   /** Wired from activation after issue edit/delete helpers exist. */
@@ -97,13 +114,19 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public async openBoard(board: Board): Promise<void> {
     this.activeBoard = board;
+    this.boardDetails = this.boardDetailsCache.get(board.id);
+    this.loading = true;
+    this.errorMessage = undefined;
+    this.activeBoardService = undefined;
     this.ensurePanel();
     this.panel?.reveal(vscode.ViewColumn.Active, false);
+    this.render();
     await this.refresh();
   }
 
   public async refresh(): Promise<void> {
-    if (!this.activeBoard) {
+    const activeBoard = this.activeBoard;
+    if (!activeBoard) {
       return;
     }
 
@@ -113,18 +136,28 @@ export class BoardPanelManager implements vscode.Disposable {
     this.render();
 
     try {
-      const boardDetails = await this.backendService.getBoardDetails(this.activeBoard);
+      const boardService = await this.getActiveBoardService(activeBoard);
+      const boardDetails = await boardService.getBoardDetails(activeBoard);
       if (generation !== this.requestGeneration) {
         return;
       }
 
+      await this.boardColumnStore.normalizeLegacyPreferences(
+        activeBoard.id,
+        getDefaultStatusColumnOrder(boardDetails)
+      );
+      if (generation !== this.requestGeneration) {
+        return;
+      }
+
+      this.boardDetailsCache.set(activeBoard.id, boardDetails);
       this.boardDetails = boardDetails;
       this.loading = false;
       this.errorMessage = undefined;
 
       if (
         this.selectedIssueKey &&
-        !boardDetails.issues.some(issue => issue.key === this.selectedIssueKey)
+        !boardDetails.issues.some((issue: IssueSummary) => issue.key === this.selectedIssueKey)
       ) {
         this.selectedIssueKey = undefined;
       }
@@ -135,7 +168,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
       this.loading = false;
       this.errorMessage = error instanceof Error ? error.message : String(error);
-      this.boardDetails = undefined;
+      this.boardDetails = this.boardDetailsCache.get(activeBoard.id);
     } finally {
       if (generation === this.requestGeneration) {
         this.render();
@@ -154,6 +187,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
   public clear(): void {
     this.activeBoard = undefined;
+    this.activeBoardService = undefined;
     this.boardDetails = undefined;
     this.loading = false;
     this.errorMessage = undefined;
@@ -237,6 +271,11 @@ export class BoardPanelManager implements vscode.Disposable {
             label: 'New board',
             description: 'Create a board (Demo, File, or User Workspace mode)',
             value: 'board' as const
+          },
+          {
+            label: 'Add board',
+            description: 'Add an existing board to Ticket Manager',
+            value: 'add-board' as const
           }
         ],
         { title: 'Create' }
@@ -246,6 +285,8 @@ export class BoardPanelManager implements vscode.Disposable {
       }
       if (picked.value === 'issue') {
         await vscode.commands.executeCommand('ticketManager.createIssue', this.activeBoard);
+      } else if (picked.value === 'add-board') {
+        await vscode.commands.executeCommand('ticketManager.addBoard');
       } else {
         await vscode.commands.executeCommand('ticketManager.createBoard');
       }
@@ -264,6 +305,26 @@ export class BoardPanelManager implements vscode.Disposable {
       }
 
       await vscode.commands.executeCommand('ticketManager.openIssueFullDetails', issueKey);
+      return;
+    }
+
+    if (type === 'toggleViewMode') {
+      if (!this.activeBoard) {
+        return;
+      }
+      const current = this.boardColumnStore.getPreferences(this.activeBoard.id).viewMode ?? 'board';
+      await this.boardColumnStore.setViewMode(this.activeBoard.id, current === 'list' ? 'board' : 'list');
+      this.render();
+      return;
+    }
+
+    if (type === 'reorderGroups') {
+      if (!this.activeBoard || !Array.isArray(message.orderedStatuses)) {
+        return;
+      }
+      const orderedStatuses = message.orderedStatuses.filter((status): status is string => typeof status === 'string');
+      await this.boardColumnStore.setGroupOrder(this.activeBoard.id, orderedStatuses);
+      this.render();
       return;
     }
 
@@ -373,13 +434,14 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     try {
-      const transitions = await this.backendService.getTransitions(issueKey);
+      const boardService = await this.getActiveBoardService();
+      const transitions = await boardService.getTransitions(issueKey);
       const transition = findTransitionToTargetStatus(transitions, targetStatus);
       if (!transition) {
         const hint =
           transitions.length > 0
             ? ` Available transitions: ${transitions
-                .map(t => (t.toStatus ? `${t.name} → ${t.toStatus}` : t.name))
+                .map((t: (typeof transitions)[number]) => (t.toStatus ? `${t.name} → ${t.toStatus}` : t.name))
                 .join('; ')}`
             : '';
         void vscode.window.showWarningMessage(
@@ -388,7 +450,7 @@ export class BoardPanelManager implements vscode.Disposable {
         return;
       }
 
-      await this.backendService.transitionIssue(issueKey, transition.id);
+      await boardService.transitionIssue(issueKey, transition.id);
       await this.refresh();
       await this.onAfterBoardTransition?.();
     } catch (error) {
@@ -444,10 +506,25 @@ export class BoardPanelManager implements vscode.Disposable {
       ...this.boardDetails,
       issues: filterBoardIssues(this.boardDetails.issues, prefs)
     };
-    return applyBoardColumnPreferences(filtered, prefs);
+    const effectivePrefs = prefs.viewMode === 'list'
+      ? { ...prefs, orderedStatuses: [] as string[] }
+      : prefs;
+    return applyBoardColumnPreferences(filtered, effectivePrefs);
   }
 
-  private renderBoardColumnsHtml(columns: BoardColumn[], prefs: { statusColors?: Record<string, string> }): string {
+  private async getActiveBoardService(board?: Board): Promise<IssueTrackerService> {
+    const targetBoard = board ?? this.activeBoard;
+    if (targetBoard?.connectionId && this.resolveBoardService) {
+      const service = await this.resolveBoardService(targetBoard);
+      this.activeBoardService = service;
+      return service;
+    }
+
+    this.activeBoardService = this.backendService;
+    return this.backendService;
+  }
+
+  private renderBoardColumnsHtml(columns: BoardColumn[], prefs: BoardRenderPrefs): string {
     return columns
       .map(
         column => `
@@ -464,19 +541,22 @@ export class BoardPanelManager implements vscode.Disposable {
                             ${column.issues
                               .map(
                                 issue => `
-                                  <div class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" draggable="true" data-issue-key="${escapeHtml(issue.key)}">
-                                    <div class="issue-card-top">
-                                      <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
-                                      <span class="issue-type-pill" style="${escapeHtml(
-                                        issueTypePillInlineStyle(issue.issueType)
-                                      )}">${escapeHtml(issue.issueType)}</span>
-                                    </div>
-                                    <span class="issue-summary">${escapeHtml(issue.summary)}</span>
-                                    <div class="issue-card-footer">
-                                      <span class="issue-status-dot" style="background: ${escapeHtml(
-                                        resolveStatusDotColor(issue.status, prefs.statusColors)
-                                      )};" title="${escapeHtml(issue.status)}" aria-hidden="true"></span>
-                                      <span class="issue-meta">${escapeHtml(formatIssueMeta(issue))}</span>
+                                  <div class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" draggable="true" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType))}59;">
+                                    <div class="priority-bar" style="${escapeHtml(resolvePriorityBarStyle(issue.priority, prefs.priorityColors))}"></div>
+                                    <div class="issue-card-content">
+                                      <div class="issue-card-top">
+                                        <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
+                                        <span class="issue-type-pill" style="${escapeHtml(
+                                          issueTypePillInlineStyle(issue.issueType)
+                                        )}">${escapeHtml(issue.issueType)}</span>
+                                      </div>
+                                      <span class="issue-summary">${escapeHtml(issue.summary)}</span>
+                                      <div class="issue-card-footer">
+                                        <span class="issue-status-dot" style="background: ${escapeHtml(
+                                          resolveStatusDotColor(issue.status, prefs.statusColors)
+                                        )};" title="${escapeHtml(issue.status)}" aria-hidden="true"></span>
+                                        <span class="issue-meta">${escapeHtml(formatIssueMeta(issue))}</span>
+                                      </div>
                                     </div>
                                   </div>
                                 `
@@ -485,6 +565,48 @@ export class BoardPanelManager implements vscode.Disposable {
                           </div>
                         </section>
                       `
+      )
+      .join('');
+  }
+
+  private renderListViewHtml(columns: BoardColumn[], prefs: BoardRenderPrefs): string {
+    return columns
+      .map(
+        column => `
+          <section class="list-group" draggable="true" data-group-status="${escapeHtml(column.name)}">
+            <header class="list-group-header">
+              <span class="drag-handle" aria-hidden="true">⠿</span>
+              <span class="status-pill" style="${escapeHtml(
+                statusPillInlineStyle(column.name, prefs.statusColors)
+              )}">${escapeHtml(column.name)}</span>
+              <span class="column-count">${column.issues.length}</span>
+            </header>
+            <div class="list-group-body">
+              ${column.issues.length === 0
+                ? '<div class="list-empty">No issues</div>'
+                : column.issues
+                    .map(
+                      issue => `
+                        <div class="list-item${this.selectedIssueKey === issue.key ? ' selected' : ''}" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType))}59;">
+                          <div class="priority-bar" style="${escapeHtml(resolvePriorityBarStyle(issue.priority, prefs.priorityColors))}"></div>
+                          <div class="list-item-inner">
+                            <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
+                            <span class="issue-type-pill" style="${escapeHtml(
+                              issueTypePillInlineStyle(issue.issueType)
+                            )}">${escapeHtml(issue.issueType)}</span>
+                            <span class="list-item-summary">${escapeHtml(issue.summary)}</span>
+                            <span class="issue-status-dot" style="background: ${escapeHtml(
+                              resolveStatusDotColor(issue.status, prefs.statusColors)
+                            )};" title="${escapeHtml(issue.status)}" aria-hidden="true"></span>
+                            <span class="issue-meta">${escapeHtml(formatIssueMeta(issue))}</span>
+                          </div>
+                        </div>
+                      `
+                    )
+                    .join('')}
+            </div>
+          </section>
+        `
       )
       .join('');
   }
@@ -504,8 +626,8 @@ export class BoardPanelManager implements vscode.Disposable {
     const headerTitle = board ? escapeHtml(board.name) : 'No board selected';
     const headerTitleHtml = board
       ? `<span class="header-title-with-icon"><span class="board-header-icon" style="color: ${escapeHtml(
-          resolveBackendModeBoardIconColor(this.backendService.mode)
-        )}">${boardListModeIconSvg(this.backendService.mode)}</span><span>${escapeHtml(board.name)}</span></span>`
+          resolveBackendModeBoardIconColor(this.activeBoardService?.mode ?? this.backendService.mode)
+        )}">${boardListModeIconSvg(this.activeBoardService?.mode ?? this.backendService.mode)}</span><span>${escapeHtml(board.name)}</span></span>`
       : headerTitle;
     const headerMeta = board
       ? [
@@ -519,6 +641,30 @@ export class BoardPanelManager implements vscode.Disposable {
           .join(' • ')
       : 'Select a board from the sidebar.';
 
+    const prefs = board ? this.boardColumnStore.getPreferences(board.id) : undefined;
+    const viewMode = prefs?.viewMode ?? 'board';
+    const display = this.getDisplayBoardDetails() ?? this.boardDetails;
+    const hasDisplay = Boolean(display);
+
+    let statusNotice = '';
+    if (board && hasDisplay) {
+      if (this.loading) {
+        statusNotice = `
+          <div class="status-notice">
+            <strong>Refreshing board...</strong>
+            <span>Showing the last loaded view while new data is fetched.</span>
+          </div>
+        `;
+      } else if (this.errorMessage) {
+        statusNotice = `
+          <div class="status-notice error">
+            <strong>Refresh failed.</strong>
+            <span>${escapeHtml(this.errorMessage)}</span>
+          </div>
+        `;
+      }
+    }
+
     let body = `
       <section class="empty-state">
         <h2>No board selected</h2>
@@ -527,24 +673,28 @@ export class BoardPanelManager implements vscode.Disposable {
     `;
 
     if (board) {
-      if (this.loading) {
+      if (this.loading && !hasDisplay) {
         body = `
           <section class="empty-state">
             <h2>Loading ${escapeHtml(board.name)}...</h2>
             <p>Fetching issues for the selected board.</p>
           </section>
         `;
-      } else if (this.errorMessage) {
+      } else if (this.errorMessage && !hasDisplay) {
         body = `
           <section class="empty-state error">
             <h2>Unable to load board</h2>
             <p>${escapeHtml(this.errorMessage)}</p>
           </section>
         `;
-      } else if (this.boardDetails) {
-        const display = this.getDisplayBoardDetails() ?? this.boardDetails;
-        const prefs = this.boardColumnStore.getPreferences(board.id);
-        const swim = prefs.swimLaneGroupBy;
+      } else if (display) {
+        const columnPrefs = this.boardColumnStore.getPreferences(board.id);
+        const swim = columnPrefs.swimLaneGroupBy;
+        const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
+        const renderPrefs: BoardRenderPrefs = {
+          statusColors: columnPrefs.statusColors,
+          priorityColors
+        };
         if (display.columns.length === 0) {
           body = `
                 <section class="empty-state">
@@ -552,6 +702,16 @@ export class BoardPanelManager implements vscode.Disposable {
                   <p>The selected board does not currently contain any issues.</p>
                 </section>
               `;
+        } else if (viewMode === 'list') {
+          const groupOrder = prefs?.listGroupOrder;
+          const orderedColumns = groupOrder?.length
+            ? [...display.columns].sort((a, b) => {
+                const ai = groupOrder.indexOf(a.name);
+                const bi = groupOrder.indexOf(b.name);
+                return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+              })
+            : display.columns;
+          body = `<div class="list-view">${this.renderListViewHtml(orderedColumns, renderPrefs)}</div>`;
         } else if (swim === 'assignee' || swim === 'epic') {
           const lanes = buildSwimLaneRows(display, swim);
           body = `
@@ -563,10 +723,10 @@ export class BoardPanelManager implements vscode.Disposable {
                       <button type="button" class="swim-lane-header" data-swim-toggle aria-expanded="true">
                         <span class="swim-lane-chevron" aria-hidden="true">▼</span>
                         <span class="swim-lane-title-text">${escapeHtml(lane.title)}</span>
-                      </button>
-                      <div class="swim-lane-body">
-                        <div class="board-grid swim-lane-grid">
-                          ${this.renderBoardColumnsHtml(lane.columns, prefs)}
+                        </button>
+                        <div class="swim-lane-body">
+                          <div class="board-grid swim-lane-grid">
+                          ${this.renderBoardColumnsHtml(lane.columns, renderPrefs)}
                         </div>
                       </div>
                     </section>
@@ -578,7 +738,7 @@ export class BoardPanelManager implements vscode.Disposable {
         } else {
           body = `
                 <section class="board-grid">
-                  ${this.renderBoardColumnsHtml(display.columns, prefs)}
+                  ${this.renderBoardColumnsHtml(display.columns, renderPrefs)}
                 </section>
               `;
         }
@@ -717,9 +877,37 @@ export class BoardPanelManager implements vscode.Disposable {
       .content {
         display: flex;
         flex: 1;
+        flex-direction: column;
+        gap: 12px;
         min-height: 0;
         padding: 16px;
         overflow: auto;
+      }
+
+      .status-notice {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+      }
+
+      .status-notice strong {
+        color: var(--vscode-editor-foreground);
+      }
+
+      .status-notice.error {
+        border-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
+      }
+
+      .status-notice.error strong {
+        color: var(--vscode-errorForeground);
       }
 
       .swim-board {
@@ -861,10 +1049,10 @@ export class BoardPanelManager implements vscode.Disposable {
 
       .issue-card {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
+        flex-direction: row;
+        gap: 0;
         width: 100%;
-        padding: 12px;
+        flex-shrink: 0;
         text-align: left;
         border: 1px solid var(--vscode-focusBorder);
         border-radius: 8px;
@@ -873,6 +1061,24 @@ export class BoardPanelManager implements vscode.Disposable {
         cursor: grab;
         box-sizing: border-box;
         position: relative;
+        overflow: hidden;
+      }
+
+      .priority-bar {
+        width: 4px;
+        min-width: 4px;
+        flex-shrink: 0;
+        border-radius: 4px 0 0 4px;
+        align-self: stretch;
+      }
+
+      .issue-card-content {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+        padding: 12px;
       }
 
       .issue-card-top {
@@ -1019,6 +1225,112 @@ export class BoardPanelManager implements vscode.Disposable {
       .empty-state.error {
         border-color: var(--vscode-errorForeground);
       }
+
+      .list-view {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+        min-height: 0;
+        overflow-y: auto;
+      }
+
+      .list-group {
+        border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+        border-radius: 6px;
+        overflow: hidden;
+        cursor: default;
+      }
+
+      .list-group.drag-over-group {
+        border-color: var(--vscode-focusBorder);
+        box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+      }
+
+      .list-group.dragging-group {
+        opacity: 0.4;
+      }
+
+      .list-group-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+        font-weight: 600;
+        font-size: 12px;
+        user-select: none;
+      }
+
+      .drag-handle {
+        cursor: grab;
+        opacity: 0.5;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      .drag-handle:hover {
+        opacity: 1;
+      }
+
+      .list-group-body {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .list-item {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 0;
+        border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.12));
+        font-size: 12px;
+        cursor: pointer;
+        overflow: hidden;
+      }
+
+      .list-item .priority-bar {
+        border-radius: 0;
+      }
+
+      .list-item-inner {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+        padding: 5px 10px 5px 30px;
+      }
+
+      .list-item:hover {
+        background: var(--vscode-list-hoverBackground);
+      }
+
+      .list-item.selected {
+        background: var(--vscode-list-activeSelectionBackground);
+        color: var(--vscode-list-activeSelectionForeground);
+      }
+
+      .list-item-summary {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .list-empty {
+        padding: 8px 10px 8px 30px;
+        font-size: 12px;
+        opacity: 0.6;
+        font-style: italic;
+      }
+
+      .group-drop-indicator {
+        height: 3px;
+        margin: 0 4px;
+        border-radius: 2px;
+        background: var(--vscode-focusBorder);
+      }
     </style>
   </head>
   <body>
@@ -1031,11 +1343,12 @@ export class BoardPanelManager implements vscode.Disposable {
           </div>
           <div class="header-actions">
             ${renderIconButton('createMenuButton', 'Create issue or board', 'add')}
+            ${board ? renderIconButton('viewModeButton', viewMode === 'list' ? 'Switch to board view' : 'Switch to list view', viewMode === 'list' ? 'board-view' : 'list') : ''}
             ${renderIconButton('columnsButton', 'Configure board settings', 'columns')}
             ${renderIconButton('refreshButton', 'Refresh', 'refresh')}
           </div>
         </header>
-        <main class="content">${body}</main>
+        <main class="content">${statusNotice}${body}</main>
       </div>
     </div>
     <div id="boardCardMenu" class="board-card-menu" hidden role="menu" aria-label="Issue actions">
@@ -1069,6 +1382,13 @@ export class BoardPanelManager implements vscode.Disposable {
       if (refreshButton) {
         refreshButton.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'refresh' });
+        });
+      }
+
+      const viewModeButton = document.getElementById('viewModeButton');
+      if (viewModeButton) {
+        viewModeButton.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'toggleViewMode' });
         });
       }
 
@@ -1254,6 +1574,112 @@ export class BoardPanelManager implements vscode.Disposable {
             });
           }
         });
+      }
+
+      let groupDropIndicator = null;
+      let draggingGroupStatus = null;
+      function getGroupDropIndicator() {
+        if (!groupDropIndicator) {
+          groupDropIndicator = document.createElement('div');
+          groupDropIndicator.className = 'group-drop-indicator';
+        }
+        return groupDropIndicator;
+      }
+      function removeGroupDropIndicator() {
+        if (groupDropIndicator && groupDropIndicator.parentNode) {
+          groupDropIndicator.parentNode.removeChild(groupDropIndicator);
+        }
+      }
+
+      const listView = document.querySelector('.list-view');
+      if (listView) {
+        for (const group of listView.querySelectorAll('.list-group')) {
+          const handle = group.querySelector('.drag-handle');
+          let handlePointerDown = false;
+          if (handle) {
+            handle.addEventListener('mousedown', () => { handlePointerDown = true; });
+            document.addEventListener('mouseup', () => { handlePointerDown = false; });
+          }
+
+          group.addEventListener('dragstart', event => {
+            if (!handlePointerDown) {
+              event.preventDefault();
+              return;
+            }
+            const status = group.getAttribute('data-group-status') || '';
+            event.dataTransfer.setData('text/plain', status);
+            event.dataTransfer.effectAllowed = 'move';
+            draggingGroupStatus = status;
+            group.classList.add('dragging-group');
+          });
+
+          group.addEventListener('dragend', () => {
+            group.classList.remove('dragging-group');
+            draggingGroupStatus = null;
+            removeGroupDropIndicator();
+            for (const g of listView.querySelectorAll('.list-group')) {
+              g.classList.remove('drag-over-group');
+            }
+          });
+
+          group.addEventListener('dragover', event => {
+            if (!draggingGroupStatus || group.getAttribute('data-group-status') === draggingGroupStatus) {
+              return;
+            }
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const rect = group.getBoundingClientRect();
+            const indicator = getGroupDropIndicator();
+            if (event.clientY < rect.top + rect.height / 2) {
+              listView.insertBefore(indicator, group);
+            } else {
+              const next = group.nextElementSibling;
+              if (next) {
+                listView.insertBefore(indicator, next);
+              } else {
+                listView.appendChild(indicator);
+              }
+            }
+          });
+
+          group.addEventListener('dragleave', event => {
+            if (!group.contains(event.relatedTarget)) {
+              group.classList.remove('drag-over-group');
+            }
+          });
+
+          group.addEventListener('drop', event => {
+            event.preventDefault();
+            removeGroupDropIndicator();
+            if (!draggingGroupStatus) {
+              return;
+            }
+            const targetStatus = group.getAttribute('data-group-status');
+            if (targetStatus === draggingGroupStatus) {
+              return;
+            }
+            const groups = [...listView.querySelectorAll('.list-group')];
+            const currentOrder = groups.map(g => g.getAttribute('data-group-status'));
+            const filtered = currentOrder.filter(s => s !== draggingGroupStatus);
+            const targetIdx = filtered.indexOf(targetStatus);
+            if (targetIdx === -1) {
+              return;
+            }
+            const rect = group.getBoundingClientRect();
+            const insertBefore = event.clientY < rect.top + rect.height / 2;
+            filtered.splice(insertBefore ? targetIdx : targetIdx + 1, 0, draggingGroupStatus);
+            vscodeApi.postMessage({ type: 'reorderGroups', orderedStatuses: filtered });
+          });
+        }
+
+        for (const item of listView.querySelectorAll('.list-item')) {
+          item.addEventListener('click', () => {
+            vscodeApi.postMessage({
+              type: 'selectIssue',
+              issueKey: item.getAttribute('data-issue-key')
+            });
+          });
+        }
       }
     </script>
   </body>

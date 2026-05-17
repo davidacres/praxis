@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { AGENT_DEFAULTS } from '../ai/agentTypes';
-import type { UpdateIssueInput } from '../types';
+import type { UpdateIssueInput, AiProvider } from '../types';
 import {
   formatParentReference,
   getParentRule,
@@ -49,6 +49,8 @@ function pillToken(label: string | undefined): string {
       return 'epic';
     case 'feature':
       return 'feature';
+    case 'idea':
+      return 'idea';
     case 'story':
       return 'story';
     case 'subtask':
@@ -112,11 +114,17 @@ function renderSelectOptions(current: string | undefined, defaults: string[]): s
     .join('');
 }
 
+interface SidebarAiAssignOption {
+  provider: AiProvider;
+  label: string;
+}
+
 export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private readonly disposables: vscode.Disposable[] = [];
   private viewDisposables: vscode.Disposable[] = [];
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
+  private aiAssignOptions: SidebarAiAssignOption[] = [];
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -138,12 +146,21 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         if (this.detailsProvider.getActiveIssue()?.key === record.issueKey) {
           this.render();
         }
+      }),
+      this.aiSessionManager.onDidChangeWorkflowAssignment(({ issueKey }) => {
+        if (this.detailsProvider.getActiveIssue()?.key === issueKey) {
+          this.render();
+        }
       })
     );
   }
 
   public setCommentPlaceholder(text: string): void {
     this.commentPlaceholder = text;
+  }
+
+  public setAiAssignOptions(options: SidebarAiAssignOption[]): void {
+    this.aiAssignOptions = [...options];
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -184,6 +201,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       return;
     }
 
+    if (type === 'refresh') {
+      await this.detailsProvider.refresh();
+      return;
+    }
+
     if (type === 'saveIssueEdits') {
       const issueKey = asString(message.issueKey);
       const summary = asString(message.summary);
@@ -196,7 +218,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const assignee = asString(message.assignee) ?? '';
       const priority = asString(message.priority);
       const issueType = asString(message.issueType);
-      const transitionId = asString(message.transitionId) ?? undefined;
+      const model = asString(message.model);
+        const severity = asString(message.severity);
+        const reportedBy = asString(message.reportedBy);
+        const ideaTranscript = asString(message.ideaTranscript) ?? '';
+        const transitionId = asString(message.transitionId) ?? undefined;
 
       try {
         await this.callbacks.onSaveIssueEdits(issueKey, {
@@ -205,7 +231,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           parentKey: parentKey.trim() || null,
           assignee: assignee.trim() || null,
           priority,
-          issueType
+          issueType,
+          model,
+          severity,
+          reportedBy,
+          ideaTranscript
         }, transitionId);
         await this.view.webview.postMessage({
           type: 'saveIssueEditsResult',
@@ -268,7 +298,22 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     if (type === 'delegateToCopilot') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.delegateToCopilot');
+        await vscode.commands.executeCommand('ticketManager.delegateToCopilot', issueKey);
+      }
+    }
+
+    if (type === 'assignToAi') {
+      const issueKey = asString(message.issueKey);
+      const provider = asString(message.provider);
+      if (issueKey && provider) {
+        await vscode.commands.executeCommand('ticketManager.assignToAi', issueKey, provider);
+      }
+    }
+
+    if (type === 'assignWorkflowPack') {
+      const issueKey = asString(message.issueKey);
+      if (issueKey) {
+        await vscode.commands.executeCommand('ticketManager.assignWorkflowPack', issueKey);
       }
     }
 
@@ -342,6 +387,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         const issueTypeOptions = renderSelectOptions(issue.issueType, [
           'Epic',
           'Feature',
+          'Idea',
           'Story',
           'Task',
           'Subtask',
@@ -355,6 +401,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           'Medium',
           'Low',
           'Lowest'
+        ]);
+        const metadataModelOptions = renderSelectOptions(issue.model, [
+          'claude-sonnet-4-20250514',
+          'claude-opus-4-20250514',
+          'gpt-4.1',
+          'gpt-4.1-mini',
+          'o3',
+          'o4-mini'
+        ]);
+        const severityOptions = renderSelectOptions(issue.severity, [
+          'Critical',
+          'High',
+          'Medium',
+          'Low'
         ]);
 
         const comments = (issue.comments ?? [])
@@ -374,6 +434,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         <div class="issue-header" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
           <div class="header-main">
             <div class="item-key">${escapeHtml(issue.key)}</div>
+            <button class="icon-button" id="refreshBtn" type="button" title="Refresh" aria-label="Refresh issue details">Refresh</button>
           </div>
         </div>
         <form class="card edit-form" id="issueEditForm" data-issue-key="${escapeHtml(issue.key)}">
@@ -423,6 +484,44 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               ${priorityOptions}
             </select>
           </label>
+          <label class="field-group" for="issueModelSelect">
+            <span class="field-label">Requested Model</span>
+            <select id="issueModelSelect" class="field-select">
+              <option value="">— Use default —</option>
+              ${metadataModelOptions}
+            </select>
+          </label>
+          <label class="field-group" for="severitySelect">
+            <span class="field-label">Severity</span>
+            <select id="severitySelect" class="field-select">
+              <option value="">— None —</option>
+              ${severityOptions}
+            </select>
+          </label>
+          <label class="field-group" for="reportedByInput">
+            <span class="field-label">Reported By</span>
+            <input
+              id="reportedByInput"
+              class="field-input"
+              type="text"
+              value="${escapeHtml(issue.reportedBy ?? '')}"
+              placeholder="Source or reporter"
+            />
+          </label>
+          <div class="detail-row">
+            <div class="detail-label">Branch</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(issue.branch || '—')}</div>
+          </div>
+          <div class="detail-row">
+            <div class="detail-label">Complexity</div>
+            <div class="detail-value detail-value--wrap">${escapeHtml(issue.complexity || '—')}</div>
+          </div>
+          <div class="field-group">
+            <span class="field-label">Description Preview</span>
+            <div class="markdown-preview markdown-body${issue.description?.trim() ? '' : ' is-empty'}">${issue.description?.trim()
+              ? markdownToHtmlSafe(issue.description)
+              : '<p>No description provided.</p>'}</div>
+          </div>
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
@@ -458,21 +557,31 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
               placeholder="Add a description"
             >${escapeHtml(issue.description ?? '')}</textarea>
           </label>
+          <label class="field-group${issue.issueType.trim().toLowerCase() === 'idea' ? '' : ' is-hidden'}" for="ideaTranscriptInput" id="ideaTranscriptGroup">
+            <span class="field-label">AI Research Transcript</span>
+            <textarea
+              id="ideaTranscriptInput"
+              class="field-textarea"
+              placeholder="Capture research chat and notes here"
+            >${escapeHtml(issue.ideaTranscript ?? '')}</textarea>
+            <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
+          </label>
           <div class="form-actions">
             <button class="primary-button" id="saveButton" type="submit">Save</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
         </form>
-        ${this.renderAiAssignmentSection(issue.key, agentNames)}
-        ${this.renderCopilotAgentSection(issue.key)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderAiAssignmentSection(issue.key, agentNames)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderWorkflowPackSection(issue.key)}
+        ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderCopilotAgentSection(issue)}
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
-          <div class="section-title">Comments</div>
+          <div class="section-title">Activity</div>
           <div class="comment-list">
             ${
               comments.length > 0
                 ? comments
-                : '<div class="comment-empty">No comments yet.</div>'
+                : '<div class="comment-empty">No activity yet.</div>'
             }
           </div>
           <label class="field-group" for="commentInput">
@@ -528,6 +637,20 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         gap: 6px;
         flex-wrap: wrap;
         min-width: 0;
+      }
+      .icon-button {
+        margin-left: auto;
+        border: 1px solid var(--vscode-button-secondaryBorder, var(--vscode-panel-border));
+        border-radius: 4px;
+        background: var(--vscode-button-secondaryBackground, transparent);
+        color: var(--vscode-button-secondaryForeground, var(--vscode-descriptionForeground));
+        padding: 2px 6px;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .icon-button:hover {
+        background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
       }
       .item-key {
         flex-shrink: 0;
@@ -601,6 +724,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         resize: vertical;
         font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
         line-height: 1.45;
+      }
+      .markdown-preview {
+        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+        border-radius: 6px;
+        padding: 10px 12px;
+        background: var(--vscode-editor-background);
+      }
+      .markdown-preview.is-empty {
+        color: var(--vscode-descriptionForeground);
       }
       .comment-textarea {
         min-height: 76px;
@@ -711,6 +843,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         background: rgba(249, 115, 22, 0.16);
         border-color: rgba(249, 115, 22, 0.28);
       }
+      .pill--idea {
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.16);
+        border-color: rgba(245, 158, 11, 0.28);
+      }
       .pill--story {
         color: #93c5fd;
         background: rgba(59, 130, 246, 0.16);
@@ -801,6 +938,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      document.getElementById('refreshBtn')?.addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'refresh' });
+      });
+
       function setStatusMessage(target, text, kind) {
         if (!(target instanceof HTMLElement)) {
           return;
@@ -818,7 +959,12 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         const issueTypeSelect = document.getElementById('issueTypeSelect');
         const assigneeInput = document.getElementById('assigneeInput');
         const prioritySelect = document.getElementById('prioritySelect');
+        const issueModelSelect = document.getElementById('issueModelSelect');
+        const severitySelect = document.getElementById('severitySelect');
+        const reportedByInput = document.getElementById('reportedByInput');
         const descriptionInput = document.getElementById('descriptionInput');
+        const ideaTranscriptInput = document.getElementById('ideaTranscriptInput');
+        const ideaTranscriptGroup = document.getElementById('ideaTranscriptGroup');
         const parentFieldGroup = document.getElementById('parentFieldGroup');
         const parentFieldLabel = document.getElementById('parentFieldLabel');
         const parentInput = document.getElementById('parentInput');
@@ -866,6 +1012,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             label: 'Epic',
             helper:
               mode === 'jira'
+                || mode === 'jiraapi'
                 ? 'This item can only belong to an Epic.'
                 : 'This item can only belong to an Epic/Feature.',
             emptyText: 'No epic selected.',
@@ -923,6 +1070,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           }
         }
 
+        function updateIdeaTranscriptField() {
+          if (!(ideaTranscriptGroup instanceof HTMLElement)) {
+            return;
+          }
+
+          const issueType = normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '');
+          ideaTranscriptGroup.classList.toggle('is-hidden', issueType !== 'idea');
+        }
+
         function readCurrentState() {
           const parentUi = getParentUi(
             issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : ''
@@ -933,7 +1089,15 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             issueType: issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '',
             assignee: assigneeInput instanceof HTMLInputElement ? assigneeInput.value : '',
             priority: prioritySelect instanceof HTMLSelectElement ? prioritySelect.value : '',
+            model: issueModelSelect instanceof HTMLSelectElement ? issueModelSelect.value : '',
+            severity: severitySelect instanceof HTMLSelectElement ? severitySelect.value : '',
+            reportedBy: reportedByInput instanceof HTMLInputElement ? reportedByInput.value : '',
             description: descriptionInput instanceof HTMLTextAreaElement ? descriptionInput.value : '',
+            ideaTranscript:
+              normalizeIssueType(issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value : '') === 'idea' &&
+              ideaTranscriptInput instanceof HTMLTextAreaElement
+                ? ideaTranscriptInput.value
+                : '',
             parentKey:
               parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
           };
@@ -947,7 +1111,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             currentState.issueType !== initialState.issueType ||
             currentState.assignee !== initialState.assignee ||
             currentState.priority !== initialState.priority ||
+            currentState.model !== initialState.model ||
+            currentState.severity !== initialState.severity ||
+            currentState.reportedBy !== initialState.reportedBy ||
             currentState.description !== initialState.description ||
+            currentState.ideaTranscript !== initialState.ideaTranscript ||
             currentState.parentKey !== initialState.parentKey
           );
         }
@@ -1012,6 +1180,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         function onFormInput() {
           clearStatusOverride();
           updateParentField();
+          updateIdeaTranscriptField();
           refreshActions();
         }
 
@@ -1020,7 +1189,11 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         issueTypeSelect?.addEventListener('change', onFormInput);
         assigneeInput?.addEventListener('input', onFormInput);
         prioritySelect?.addEventListener('change', onFormInput);
+        issueModelSelect?.addEventListener('change', onFormInput);
+        severitySelect?.addEventListener('change', onFormInput);
+        reportedByInput?.addEventListener('input', onFormInput);
         descriptionInput?.addEventListener('input', onFormInput);
+        ideaTranscriptInput?.addEventListener('input', onFormInput);
         parentInput?.addEventListener('input', onFormInput);
 
         editForm.addEventListener('submit', event => {
@@ -1039,7 +1212,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           saving = true;
           refreshActions();
           const currentState = readCurrentState();
-          vscodeApi.postMessage({
+          const payload = {
             type: 'saveIssueEdits',
             issueKey: editForm.dataset.issueKey,
             summary: currentState.summary,
@@ -1048,8 +1221,19 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             assignee: currentState.assignee,
             priority: currentState.priority,
             description: currentState.description,
+            ideaTranscript: currentState.ideaTranscript,
             parentKey: currentState.parentKey
-          });
+          };
+          if (currentState.model !== initialState.model) {
+            payload.model = currentState.model;
+          }
+          if (currentState.severity !== initialState.severity) {
+            payload.severity = currentState.severity;
+          }
+          if (currentState.reportedBy !== initialState.reportedBy) {
+            payload.reportedBy = currentState.reportedBy;
+          }
+          vscodeApi.postMessage(payload);
         });
 
         resetButton?.addEventListener('click', () => {
@@ -1068,14 +1252,27 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
           if (prioritySelect instanceof HTMLSelectElement) {
             prioritySelect.value = initialState.priority;
           }
+          if (issueModelSelect instanceof HTMLSelectElement) {
+            issueModelSelect.value = initialState.model;
+          }
+          if (severitySelect instanceof HTMLSelectElement) {
+            severitySelect.value = initialState.severity;
+          }
+          if (reportedByInput instanceof HTMLInputElement) {
+            reportedByInput.value = initialState.reportedBy;
+          }
           if (descriptionInput instanceof HTMLTextAreaElement) {
             descriptionInput.value = initialState.description;
+          }
+          if (ideaTranscriptInput instanceof HTMLTextAreaElement) {
+            ideaTranscriptInput.value = initialState.ideaTranscript || '';
           }
           if (parentInput instanceof HTMLInputElement) {
             parentInput.value = initialState.parentKey;
           }
           clearStatusOverride();
           updateParentField();
+          updateIdeaTranscriptField();
           refreshActions();
         });
 
@@ -1098,6 +1295,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         };
 
         updateParentField();
+        updateIdeaTranscriptField();
         refreshActions();
       }
 
@@ -1198,12 +1396,29 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         });
       }
 
-      const delegateBtn = document.getElementById('delegateToCopilotButton');
+      const delegateBtn = document.getElementById('delegateToAiButton');
       if (delegateBtn) {
         delegateBtn.addEventListener('click', () => {
           const issueKey = delegateBtn.getAttribute('data-issue-key');
           if (issueKey) {
-            vscodeApi.postMessage({ type: 'delegateToCopilot', issueKey });
+            const selectEl = document.getElementById('aiProviderSelect');
+            const provider = (selectEl instanceof HTMLSelectElement ? selectEl.value : null)
+              || delegateBtn.getAttribute('data-provider');
+            if (provider) {
+              vscodeApi.postMessage({ type: 'assignToAi', issueKey, provider });
+            } else {
+              vscodeApi.postMessage({ type: 'delegateToCopilot', issueKey });
+            }
+          }
+        });
+      }
+
+      const assignWorkflowPackButton = document.getElementById('assignWorkflowPackButton');
+      if (assignWorkflowPackButton) {
+        assignWorkflowPackButton.addEventListener('click', () => {
+          const issueKey = assignWorkflowPackButton.getAttribute('data-issue-key');
+          if (issueKey) {
+            vscodeApi.postMessage({ type: 'assignWorkflowPack', issueKey });
           }
         });
       }
@@ -1322,7 +1537,8 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       'openai': 'OpenAI',
       'claude': 'Claude',
       'cursor-cli': 'Cursor CLI',
-      'copilot-cli': 'GitHub Copilot SDK'
+      'copilot-cli': 'GitHub Copilot SDK',
+      'claude-cli': 'Claude Code CLI'
     };
 
     const statusTokenMap: Record<string, string> = {
@@ -1375,8 +1591,10 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     </div>`;
   }
 
-  private renderCopilotAgentSection(issueKey: string): string {
+  private renderCopilotAgentSection(issue: { key: string; assignee?: string }): string {
+    const issueKey = issue.key;
     const record = this.aiSessionManager.getAgentSession(issueKey);
+    const hasAssignee = Boolean(issue.assignee?.trim());
 
     const stateTokenMap: Record<string, { token: string; label: string }> = {
       'not_started': { token: 'status', label: 'Not Started' },
@@ -1391,12 +1609,27 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     };
 
     if (!record) {
+      const providerSelect = this.aiAssignOptions.length > 1
+        ? `<select id="aiProviderSelect" class="field-select">
+            ${this.aiAssignOptions.map(opt => `<option value="${escapeHtml(opt.provider)}">${escapeHtml(opt.label)}</option>`).join('')}
+          </select>`
+        : '';
+      const delegateLabel = this.aiAssignOptions.length === 1
+        ? `Delegate to ${escapeHtml(this.aiAssignOptions[0].label)}`
+        : 'Delegate to AI';
+      const delegateDisabled = !hasAssignee;
+      const delegateDisabledAttr = delegateDisabled ? ' disabled' : '';
+      const delegateDisabledHelp = delegateDisabled
+        ? '<div class="field-help">Set the assignee first, then delegate the work to AI.</div>'
+        : '';
       return `<div class="card">
-        <div class="section-title">Copilot Agent</div>
-        <div class="comment-empty">No Copilot agent session.</div>
+        <div class="section-title">AI Agent</div>
+        <div class="comment-empty">No agent session.</div>
         <div class="form-actions">
-          <button class="secondary-button" id="delegateToCopilotButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Delegate to Copilot</button>
+          ${providerSelect}
+          <button class="secondary-button" id="delegateToAiButton" type="button" data-issue-key="${escapeHtml(issueKey)}"${this.aiAssignOptions.length === 1 ? ` data-provider="${escapeHtml(this.aiAssignOptions[0].provider)}"` : ''}${delegateDisabledAttr}>${delegateLabel}</button>
         </div>
+        ${delegateDisabledHelp}
       </div>`;
     }
 
@@ -1430,6 +1663,70 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       <div class="form-actions">
         <button class="secondary-button" id="viewAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">View Session</button>
         ${!isTerminal ? `<button class="secondary-button" id="abortAgentSessionButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Abort</button>` : ''}
+      </div>
+    </div>`;
+  }
+
+  private renderWorkflowPackSection(issueKey: string): string {
+    const assignment = this.aiSessionManager.getIssueWorkflowAssignment(issueKey);
+    if (!assignment) {
+      return `<div class="card">
+        <div class="section-title">Workflow Pack</div>
+        <div class="comment-empty">No workflow pack assigned.</div>
+        <div class="form-actions">
+          <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Assign Workflow Pack</button>
+        </div>
+      </div>`;
+    }
+
+    const sourceLabel = assignment.source === 'automatic'
+      ? 'Automatic'
+      : assignment.source === 'analysis'
+        ? 'Analysis'
+        : 'Manual';
+
+    if (!assignment.workflow) {
+      // Explicit "No workflow pack" choice — delivery proceeds without a directive.
+      return `<div class="card">
+        <div class="section-title">Workflow Pack</div>
+        <div class="detail-row">
+          <div class="detail-label">Name</div>
+          <div class="detail-value">No workflow pack (explicitly chosen)</div>
+        </div>
+        <div class="detail-row">
+          <div class="detail-label">Source</div>
+          <div class="detail-value">${escapeHtml(sourceLabel)}</div>
+        </div>
+        ${assignment.reason ? `<div class="detail-row">
+          <div class="detail-label">Reason</div>
+          <div class="detail-value detail-value--wrap">${escapeHtml(assignment.reason)}</div>
+        </div>` : ''}
+        <div class="form-actions">
+          <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Change Workflow Pack</button>
+        </div>
+      </div>`;
+    }
+
+    return `<div class="card">
+      <div class="section-title">Workflow Pack</div>
+      <div class="detail-row">
+        <div class="detail-label">Name</div>
+        <div class="detail-value">${escapeHtml(assignment.workflow.name)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Source</div>
+        <div class="detail-value">${escapeHtml(sourceLabel)}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">File</div>
+        <div class="detail-value detail-value--wrap">${escapeHtml(assignment.workflow.instructionsPath)}</div>
+      </div>
+      ${assignment.reason ? `<div class="detail-row">
+        <div class="detail-label">Reason</div>
+        <div class="detail-value detail-value--wrap">${escapeHtml(assignment.reason)}</div>
+      </div>` : ''}
+      <div class="form-actions">
+        <button class="secondary-button" id="assignWorkflowPackButton" type="button" data-issue-key="${escapeHtml(issueKey)}">Change Workflow Pack</button>
       </div>
     </div>`;
   }

@@ -35,3 +35,7 @@ pnpm-debug.log*
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+.playwright-mcp/
+
+.tmp/

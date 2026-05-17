@@ -1,4 +1,5 @@
 import type { IssueDetails } from '../types';
+import type { AgentWorkflowReference } from './agentTypes';
 import { resolveCopilotClientOptions } from './copilotSdkRuntime';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
@@ -47,7 +48,43 @@ Be concise, practical, and collaborative.
 Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
+const COPILOT_CLARIFICATION_SYSTEM_PROMPT = `You are GitHub Copilot reviewing a ticket before implementation starts.
+
+Workflow packs are OPTIONAL. A ticket is allowed to proceed with no workflow pack assigned.
+Never ask the user to assign a workflow pack, never suggest workflow packs, and never block
+on workflow pack selection. Do not infer or auto-pick a workflow pack from the technical
+content of the ticket.
+
+Only populate "workflowReference" when one of these is true:
+  (a) A workflow pack is already assigned in Ticket Manager — echo its id.
+  (b) The ticket description or a comment explicitly names one of the available workflow packs
+      (e.g. a line like "Workflow pack: add-edit-dotnet-web-api"). Wording such as
+      "use no workflow", "no workflow pack", or the absence of any such line means no workflow
+      pack — leave "workflowReference" blank and still return status "ready" if the rest of
+      the ticket is clear enough to implement.
+
+Return exactly one JSON code block and nothing else.
+
+Schema:
+{
+  "status": "ready" | "needs_clarification",
+  "workflowReference": "optional — only set when the ticket or Ticket Manager explicitly names a workflow pack",
+  "comment": "required when status is needs_clarification"
+}
+
+Rules:
+- status must be "ready" when the ticket is specific enough to implement safely, regardless
+  of whether a workflow pack is assigned.
+- status must be "needs_clarification" only when there are genuine missing technical or
+  scope details that would force risky assumptions during implementation. Missing workflow
+  pack assignment is NEVER by itself a reason for clarification.
+- comment must be a concise Jira-ready plain-text comment body listing the missing
+  non-workflow details. Do not mention workflow packs in the comment.
+- Do not include markdown headings, code fences outside the single JSON block, rationale,
+  tool output, or claims that work has started.`;
+
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
+const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
 
 function buildTicketContext(
   issue: IssueDetails,
@@ -86,6 +123,15 @@ function buildTicketContext(
       parts.push(`- **${author}:** ${body}`);
     }
   }
+  if (issue.attachments && issue.attachments.length > 0) {
+    parts.push(`\n**Attachments (${issue.attachments.length}):**`);
+    for (const attachment of issue.attachments) {
+      const size = typeof attachment.sizeBytes === 'number'
+        ? ` (${Math.round(attachment.sizeBytes / 1024)} KB)`
+        : '';
+      parts.push(`- ${attachment.fileName}${size}${attachment.mimeType ? ` [${attachment.mimeType}]` : ''}`);
+    }
+  }
   return parts.join('\n');
 }
 
@@ -117,6 +163,7 @@ async function runCopilotPrompt(
     cliPath?: string;
     systemPrompt: string;
     workingDirectory?: string;
+    timeoutMs?: number;
   }
 ): Promise<string> {
   const sdk = await import('@github/copilot-sdk');
@@ -125,9 +172,13 @@ async function runCopilotPrompt(
   let session:
     | {
         disconnect(): Promise<void>;
-        sendAndWait(args: { prompt: string }): Promise<{ data?: { content?: string } } | undefined>;
+        sendAndWait(
+          args: { prompt: string },
+          timeout?: number
+        ): Promise<{ data?: { content?: string } } | undefined>;
       }
     | undefined;
+  const timeoutMs = options.timeoutMs ?? COPILOT_PROMPT_TIMEOUT_MS;
   try {
     await client.start();
     session = await client.createSession({
@@ -141,7 +192,7 @@ async function runCopilotPrompt(
       workingDirectory: options.workingDirectory
     });
 
-    const response = await session.sendAndWait({ prompt });
+    const response = await session.sendAndWait({ prompt }, timeoutMs);
     const content = response?.data?.content?.trim();
     if (!content) {
       throw new Error('Copilot returned an empty response.');
@@ -154,6 +205,180 @@ async function runCopilotPrompt(
     }
     await client.stop();
   }
+}
+
+function normalizeClarificationText(text: string): string {
+  return text
+    .replaceAll('\r\n', '\n')
+    .replaceAll(/^#{1,6}\s*/gm, '')
+    .replaceAll(/\*\*(.*?)\*\*/g, '$1')
+    .replaceAll(/\*(.*?)\*/g, '$1')
+    .replaceAll(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+function buildWorkflowPromptContext(workflows: AgentWorkflowReference[]): string {
+  if (workflows.length === 0) {
+    return 'Available workflow packs: none currently discovered in the workspace.';
+  }
+
+  return [
+    'Available workflow packs:',
+    ...workflows.map(workflow => {
+      const lines = [
+        `- Name: ${workflow.name}`,
+        `  Id: ${workflow.id}`,
+        `  File: ${workflow.instructionsPath}`
+      ];
+      if (workflow.link) {
+        lines.push(`  Link: ${workflow.link}`);
+      }
+      return lines.join('\n');
+    })
+  ].join('\n');
+}
+
+function extractJsonCodeBlock(text: string): string | undefined {
+  const match = /```json\s*([\s\S]*?)```/i.exec(text);
+  return match?.[1]?.trim();
+}
+
+function normalizeClarificationComment(text: string): string | undefined {
+  const normalized = text
+    .replaceAll('\r\n', '\n')
+    .replaceAll(/^```(?:json|markdown|text)?\s*/gim, '')
+    .replaceAll(/```$/gim, '')
+    .trim();
+  return normalized || undefined;
+}
+
+export interface CopilotImplementationReadinessAssessment {
+  status: 'ready' | 'needs_clarification';
+  workflowReference?: string;
+  clarificationComment?: string;
+}
+
+export function parseCopilotImplementationReadinessAssessment(
+  text: string | undefined
+): CopilotImplementationReadinessAssessment | undefined {
+  if (!text?.trim()) {
+    return undefined;
+  }
+
+  const jsonText = extractJsonCodeBlock(text);
+  if (!jsonText) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    return undefined;
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const status = candidate.status === 'ready' || candidate.status === 'needs_clarification'
+    ? candidate.status
+    : undefined;
+  const workflowReference = typeof candidate.workflowReference === 'string'
+    ? candidate.workflowReference.trim() || undefined
+    : undefined;
+  const clarificationComment = typeof candidate.comment === 'string'
+    ? normalizeClarificationComment(candidate.comment)
+    : undefined;
+
+  if (!status) {
+    return undefined;
+  }
+  if (status === 'needs_clarification' && !clarificationComment) {
+    return undefined;
+  }
+
+  return {
+    status,
+    workflowReference,
+    clarificationComment
+  };
+}
+
+function isQuestionLikeLine(text: string): boolean {
+  return /^(who|what|when|where|why|how|which|should|could|would|can|do|does|did|is|are|am|will|may)\b/i.test(text);
+}
+
+function isClarificationMetaLine(text: string): boolean {
+  return /^(\*{0,2}this is an ai-generated message\.?\*{0,2}|copilot clarification request|questions?\s*:|analysis\s*:|reasoning\s*:|thoughts?\s*:|thinking\s*:|tool(?:\s+output|\s+call|\s+result)?\s*:|assistant\s*:|ready)$/i.test(text);
+}
+
+export function extractClarificationQuestions(text: string): string[] {
+  const normalized = normalizeClarificationText(text);
+  const lines = normalized
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  const collected: string[] = [];
+  let inQuestionSection = false;
+
+  for (const line of lines) {
+    if (/^questions?\s*:$/i.test(line)) {
+      inQuestionSection = true;
+      continue;
+    }
+
+    if (isClarificationMetaLine(line)) {
+      continue;
+    }
+
+    const cleaned = line.replace(/^(?:\d+[.)]\s*|[-•]\s*)/, '').trim();
+    if (!cleaned) {
+      continue;
+    }
+
+    if (inQuestionSection || cleaned.includes('?') || isQuestionLikeLine(cleaned)) {
+      const questionMatches = cleaned.match(/[^?]+\?/g);
+      if (questionMatches && questionMatches.length > 0) {
+        for (const match of questionMatches) {
+          collected.push(match.trim());
+        }
+        continue;
+      }
+
+      collected.push(isQuestionLikeLine(cleaned) ? `${cleaned.replace(/[.\s]+$/, '')}?` : cleaned);
+    }
+  }
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const question of collected) {
+    const cleanedQuestion = question.replace(/^questions?\s*:\s*/i, '').trim();
+    if (!cleanedQuestion) {
+      continue;
+    }
+
+    const normalizedKey = cleanedQuestion.toLowerCase();
+    if (seen.has(normalizedKey)) {
+      continue;
+    }
+
+    seen.add(normalizedKey);
+    deduped.push(cleanedQuestion);
+  }
+
+  return deduped.slice(0, 5);
+}
+
+export function normalizeClarificationCommentBody(text: string): string | undefined {
+  const questions = extractClarificationQuestions(text);
+  if (questions.length === 0) {
+    return undefined;
+  }
+
+  return questions.map((question, index) => `${index + 1}. ${question}`).join('\n');
 }
 
 export async function reviewTicketWithOpenAi(
@@ -275,6 +500,104 @@ export async function respondToCopilotComment(
   );
 
   return `## @copilot reply\n\n${content}`;
+}
+
+export async function buildCopilotClarificationComment(
+  issue: IssueDetails,
+  cliPath: string | undefined,
+  workingDirectory?: string
+): Promise<string | undefined> {
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
+  const content = await runCopilotPrompt(
+    `Assess whether this ticket is specific enough to implement without making risky assumptions. Reply READY if no clarification is needed. Otherwise draft a concise Jira comment requesting the missing details.
+
+Ticket context:
+${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
+      workingDirectory
+    }
+  );
+
+  const trimmed = content.trim();
+  if (trimmed === 'READY') {
+    return undefined;
+  }
+
+  const normalizedBody = normalizeClarificationCommentBody(trimmed);
+  if (!normalizedBody) {
+    throw new Error('Copilot clarification response did not contain any clarification questions.');
+  }
+
+  return `**THIS IS AN AI-GENERATED MESSAGE.**
+Copilot clarification request
+
+${normalizedBody}
+
+_Reply to the bot by starting your comment with \`#AIbot\` (e.g. \`#AIbot use the production cluster\`). Comments without that prefix are ignored._`;
+}
+
+export async function assessCopilotImplementationReadiness(
+  issue: IssueDetails,
+  cliPath: string | undefined,
+  options?: {
+    workingDirectory?: string;
+    availableWorkflows?: AgentWorkflowReference[];
+    assignedWorkflow?: AgentWorkflowReference;
+    stagedAttachments?: Array<{ fileName: string; localPath: string; mediaType?: string }>;
+  }
+): Promise<CopilotImplementationReadinessAssessment> {
+  const ticketContext = buildTicketContext(issue, {
+    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    newestComments: true
+  });
+  const attachmentContext = options?.stagedAttachments?.length
+    ? [
+        '\nLocally staged issue attachments (downloaded from Jira before this analysis):',
+        ...options.stagedAttachments.map(a =>
+          `- ${a.fileName}: ${a.localPath}${a.mediaType ? ` [${a.mediaType}]` : ''}`
+        ),
+        'Review these files when they are relevant to the ticket (screenshots, mockups, specs).'
+      ].join('\n')
+    : '';
+  const assignedWorkflowContext = options?.assignedWorkflow
+    ? [
+        'Currently assigned workflow pack in Ticket Manager:',
+        `- Name: ${options.assignedWorkflow.name}`,
+        `- Id: ${options.assignedWorkflow.id}`,
+        `- File: ${options.assignedWorkflow.instructionsPath}`,
+        options.assignedWorkflow.link ? `- Link: ${options.assignedWorkflow.link}` : undefined
+      ].filter((line): line is string => Boolean(line)).join('\n')
+    : 'Currently assigned workflow pack in Ticket Manager: none. (This is acceptable — workflow packs are optional.)';
+  const workflowContext = buildWorkflowPromptContext(options?.availableWorkflows ?? []);
+
+  const content = await runCopilotPrompt(
+    `Assess whether this ticket is specific enough to implement without making risky assumptions.
+
+${assignedWorkflowContext}
+
+${workflowContext}
+${attachmentContext}
+
+Ticket context:
+${ticketContext}`,
+    {
+      cliPath,
+      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
+      workingDirectory: options?.workingDirectory
+    }
+  );
+
+  const assessment = parseCopilotImplementationReadinessAssessment(content);
+  if (!assessment) {
+    throw new Error('Copilot readiness assessment did not return a valid JSON result.');
+  }
+
+  return assessment;
 }
 
 // ── Local Peer Review (LPR) ──────────────────────────────────────

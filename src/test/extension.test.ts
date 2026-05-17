@@ -2,17 +2,13 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { TicketManagerExtensionApi } from '../extension';
-import { createPlanTemplate } from '../file/planTemplate';
 
-const EXTENSION_ID = 'local-dev.ticket-manager';
+const EXTENSION_ID_CANDIDATES = ['kam-ai-team.ticket-manager', 'local-dev.ticket-manager'];
 const WORKSPACE_MCP_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'mcp.json')
   : undefined;
 const USER_MCP_OVERRIDE_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.ticket-manager-test', 'user-mcp.json')
-  : undefined;
-const PLAN_FILE_URI = vscode.workspace.workspaceFolders?.[0]
-  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, 'ticket-plan.jsonc')
   : undefined;
 const LIVE_FOLDER_TEST_ROOT_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(
@@ -49,20 +45,26 @@ async function waitFor(
 }
 
 async function getApi(): Promise<TicketManagerExtensionApi> {
-  const extension = vscode.extensions.getExtension<TicketManagerExtensionApi>(EXTENSION_ID);
+  const extension = EXTENSION_ID_CANDIDATES
+    .map(id => vscode.extensions.getExtension<TicketManagerExtensionApi>(id))
+    .find((candidate): candidate is vscode.Extension<TicketManagerExtensionApi> => Boolean(candidate));
   assert.ok(extension, 'Extension should be available');
   const api = await extension.activate();
   return api;
 }
 
 function getServerPath(): string {
-  const extension = vscode.extensions.getExtension(EXTENSION_ID);
+  const extension = EXTENSION_ID_CANDIDATES
+    .map(id => vscode.extensions.getExtension(id))
+    .find((candidate): candidate is vscode.Extension<unknown> => Boolean(candidate));
   assert.ok(extension, 'Extension should be available');
   return path.join(extension.extensionPath, 'out', 'test', 'fixtures', 'fakeJiraMcpServer.js');
 }
 
 function getExtensionPath(): string {
-  const extension = vscode.extensions.getExtension(EXTENSION_ID);
+  const extension = EXTENSION_ID_CANDIDATES
+    .map(id => vscode.extensions.getExtension(id))
+    .find((candidate): candidate is vscode.Extension<unknown> => Boolean(candidate));
   assert.ok(extension, 'Extension should be available');
   return extension.extensionPath;
 }
@@ -102,18 +104,6 @@ async function clearUserMcpOverride(): Promise<void> {
   }
 }
 
-async function clearPlanFile(): Promise<void> {
-  if (!PLAN_FILE_URI) {
-    return;
-  }
-
-  try {
-    await vscode.workspace.fs.delete(PLAN_FILE_URI);
-  } catch {
-    // Ignore missing file.
-  }
-}
-
 async function clearLiveFolderFixture(): Promise<void> {
   if (!LIVE_FOLDER_TEST_ROOT_URI) {
     return;
@@ -124,14 +114,6 @@ async function clearLiveFolderFixture(): Promise<void> {
   } catch {
     // Ignore missing file.
   }
-}
-
-async function writePlanFile(contents: string): Promise<void> {
-  if (!PLAN_FILE_URI) {
-    throw new Error('A workspace folder is required for file mode tests.');
-  }
-
-  await vscode.workspace.fs.writeFile(PLAN_FILE_URI, Buffer.from(contents, 'utf8'));
 }
 
 async function writeTextFile(uri: vscode.Uri, contents: string): Promise<void> {
@@ -208,8 +190,7 @@ async function writeUserMcpOverride(contents: string): Promise<void> {
 async function resetConnectionState(api: TicketManagerExtensionApi): Promise<void> {
   const config = vscode.workspace.getConfiguration('ticketManager');
   await Promise.all([
-    config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
-    config.update('planFilePath', '', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderPath', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectKey', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectName', '', vscode.ConfigurationTarget.Workspace),
@@ -226,13 +207,10 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
     config.update('stdioCommand', '', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [], vscode.ConfigurationTarget.Global),
     config.update('stdioCwd', '', vscode.ConfigurationTarget.Global),
-    config.update('httpUrl', '', vscode.ConfigurationTarget.Global),
-    config.update('workspaceMcpServerName', '', vscode.ConfigurationTarget.Workspace),
-    config.update('userMcpServerRef', '', vscode.ConfigurationTarget.Global)
+    config.update('httpUrl', '', vscode.ConfigurationTarget.Global)
   ]);
 
   await clearUserMcpOverride();
-  await clearPlanFile();
   await clearLiveFolderFixture();
   await api.backendService.reset();
   await api.filterStore.clearFilters();
@@ -244,7 +222,7 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
 
 async function configureScenario(
   api: TicketManagerExtensionApi,
-  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
+  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await clearWorkspaceMcpFile();
   await clearUserMcpOverride();
@@ -252,14 +230,12 @@ async function configureScenario(
   const config = vscode.workspace.getConfiguration('ticketManager');
 
   await Promise.all([
-    config.update('backendMode', 'jira', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
     config.update('connectionType', 'stdio', vscode.ConfigurationTarget.Global),
     config.update('stdioCommand', 'node', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [serverPath, `--scenario=${scenario}`], vscode.ConfigurationTarget.Global),
     config.update('stdioCwd', getExtensionPath(), vscode.ConfigurationTarget.Global),
     config.update('httpUrl', '', vscode.ConfigurationTarget.Global),
-    config.update('workspaceMcpServerName', '', vscode.ConfigurationTarget.Workspace),
-    config.update('userMcpServerRef', '', vscode.ConfigurationTarget.Global),
     config.update('requestTimeoutMs', 10000, vscode.ConfigurationTarget.Global),
     config.update('defaultPageSize', 25, vscode.ConfigurationTarget.Global)
   ]);
@@ -275,7 +251,7 @@ async function configureScenario(
 
 async function configureWorkspaceMcpScenario(
   api: TicketManagerExtensionApi,
-  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
+  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await resetConnectionState(api);
 
@@ -299,7 +275,7 @@ async function configureWorkspaceMcpScenario(
 
 async function configureUserMcpScenario(
   api: TicketManagerExtensionApi,
-  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported'
+  scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await resetConnectionState(api);
 
@@ -320,18 +296,6 @@ async function configureDemoScenario(api: TicketManagerExtensionApi): Promise<vo
   await resetConnectionState(api);
   const config = vscode.workspace.getConfiguration('ticketManager');
   await config.update('backendMode', 'demo', vscode.ConfigurationTarget.Workspace);
-  await api.backendService.reset();
-  await api.refresh();
-}
-
-async function configureFileScenario(api: TicketManagerExtensionApi): Promise<void> {
-  await resetConnectionState(api);
-  const config = vscode.workspace.getConfiguration('ticketManager');
-  await writePlanFile(createPlanTemplate(vscode.workspace.workspaceFolders?.[0]?.name));
-  await Promise.all([
-    config.update('backendMode', 'file', vscode.ConfigurationTarget.Workspace),
-    config.update('planFilePath', '', vscode.ConfigurationTarget.Workspace)
-  ]);
   await api.backendService.reset();
   await api.refresh();
 }
@@ -381,8 +345,6 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.refresh'));
     assert.ok(commands.includes('ticketManager.checkConnection'));
     assert.ok(commands.includes('ticketManager.changeStatus'));
-    assert.ok(commands.includes('ticketManager.importWorkspaceMcpConfig'));
-    assert.ok(commands.includes('ticketManager.importUserMcpConfig'));
     assert.ok(commands.includes('ticketManager.setBackendMode'));
     assert.ok(commands.includes('ticketManager.openSettings'));
     assert.ok(commands.includes('ticketManager.configureAi'));
@@ -442,6 +404,20 @@ suite('Ticket Manager Extension', () => {
     assert.ok(keys.includes('APP-100'));
     assert.ok(keys.includes('APP-101'));
     assert.ok(keys.includes('APP-103'));
+  });
+
+  test('loads issues from the Atlassian cloud Jira contract', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'atlassian');
+
+    await waitFor(() => api.issuesProvider.getCurrentIssues().length > 0);
+    const keys = api.issuesProvider.getCurrentIssues().map(issue => issue.key);
+    const result = await api.backendService.checkConnection();
+
+    assert.ok(keys.includes('APP-100'));
+    assert.ok(keys.includes('APP-101'));
+    assert.strictEqual(result.status, 'ok');
+    assert.match(result.message, /accessible project/i);
   });
 
   test('loads demo data without any connected backend when demo mode is enabled', async () => {
@@ -589,205 +565,49 @@ suite('Ticket Manager Extension', () => {
     assert.strictEqual(issue.comments?.[0]?.body, 'Connected comment from the integration test.');
   });
 
-  test('loads file-backed plan data and persists status changes', async () => {
+  test('updates and deletes issues through the Atlassian cloud Jira contract', async () => {
     const api = await getApi();
-    await configureFileScenario(api);
+    await configureScenario(api, 'atlassian');
 
-    await waitFor(() => api.issuesProvider.getCurrentIssues().length > 0);
-    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
-
-    const issueKeys = api.issuesProvider.getCurrentIssues().map(issue => issue.key);
-    const boardNames = api.boardsProvider.getCurrentBoards().map(board => board.name);
-    const transitions = await api.backendService.getTransitions('APP-101');
-    const moveToInProgress = transitions.find(transition => transition.toStatus === 'In Progress');
-    assert.ok(moveToInProgress, 'File mode should expose transitions derived from plan statuses');
-
-    assert.ok(issueKeys.includes('APP-100'));
-    assert.ok(issueKeys.includes('APP-103'));
-    assert.strictEqual(boardNames[0], `${vscode.workspace.workspaceFolders?.[0]?.name ?? 'Workspace Project'} Board`);
-
-    await api.backendService.transitionIssue('APP-101', moveToInProgress!.id);
-    await api.refresh();
-
-    const updatedIssue = api.issuesProvider.getIssueByKey('APP-101');
-    assert.strictEqual(updatedIssue?.status, 'In Progress');
-
-    if (PLAN_FILE_URI) {
-      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
-      assert.match(updatedText, /"status": "In Progress"/);
-    }
-  });
-
-  test('creates file-backed issues and persists them to the plan file', async () => {
-    const api = await getApi();
-    await configureFileScenario(api);
-
-    const board = api.boardsProvider.getCurrentBoards()[0];
-    assert.ok(board, 'File mode should expose a board for create tests');
-
-    const createdIssue = await api.backendService.createIssue({
+    const createdEpic = await api.backendService.createIssue({
       projectKey: 'APP',
-      issueType: 'Task',
-      summary: 'Persist a newly created plan item',
-      description: 'Created by the integration test.',
-      parentKey: 'APP-100',
-      boardId: board!.id
+      issueType: 'Epic',
+      summary: 'Atlassian EPIC for edit flow'
     });
-    await api.refresh();
 
-    await waitFor(() => Boolean(api.issuesProvider.getIssueByKey(createdIssue.key)));
-    const issue = api.issuesProvider.getIssueByKey(createdIssue.key);
-    assert.strictEqual(issue?.summary, 'Persist a newly created plan item');
-    assert.strictEqual(issue?.status, 'Backlog');
-
-    const boardDetails = await api.backendService.getBoardDetails(board!);
-    assert.ok(
-      boardDetails.issues.some(candidate => candidate.key === createdIssue.key),
-      'Newly created file-backed issue should appear on the target board'
-    );
-
-    if (PLAN_FILE_URI) {
-      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
-      assert.match(updatedText, new RegExp(`"key": "${createdIssue.key}"`));
-      assert.match(updatedText, /"summary": "Persist a newly created plan item"/);
-      assert.match(updatedText, /"parent": "APP-100"/);
-    }
-  });
-
-  test('supports file-backed task and subtask parent rules with parent metadata', async () => {
-    const api = await getApi();
-    await configureFileScenario(api);
-
-    const createdTask = await api.backendService.createIssue({
-      projectKey: 'APP',
-      issueType: 'Task',
-      summary: 'File task under feature',
-      parentKey: 'APP-100'
+    const updatedIssue = await api.backendService.updateIssue('APP-101', {
+      summary: 'Atlassian issue updated from integration test',
+      description: 'Updated via Atlassian cloud contract.',
+      parentKey: createdEpic.key,
+      assignee: 'Jordan Builder',
+      priority: 'Medium',
+      issueType: 'Task'
     });
-    assert.strictEqual(createdTask.parentKey, 'APP-100');
-    assert.strictEqual(createdTask.parentIssue?.issueType, 'Feature');
-    assert.strictEqual(createdTask.parentIssue?.summary, 'Define the primary feature');
 
-    const createdSubtask = await api.backendService.createIssue({
-      projectKey: 'APP',
-      issueType: 'Subtask',
-      summary: 'File subtask under story',
-      parentKey: 'APP-101'
-    });
-    assert.strictEqual(createdSubtask.parentKey, 'APP-101');
-    assert.strictEqual(createdSubtask.parentIssue?.issueType, 'Story');
-    assert.strictEqual(createdSubtask.parentIssue?.summary, 'Write the first story');
-    assert.ok(createdSubtask.parentIssue?.description);
+    assert.strictEqual(updatedIssue.summary, 'Atlassian issue updated from integration test');
+    assert.strictEqual(updatedIssue.parentKey, createdEpic.key);
+    assert.strictEqual(updatedIssue.assignee, 'Jordan Builder');
+    assert.strictEqual(updatedIssue.priority, 'Medium');
+    assert.strictEqual(updatedIssue.issueType, 'Task');
+
+    await api.backendService.deleteIssue(createdEpic.key);
 
     await assert.rejects(
-      () =>
-        api.backendService.createIssue({
-          projectKey: 'APP',
-          issueType: 'Task',
-          summary: 'Invalid file task parent',
-          parentKey: 'APP-101'
-        }),
-      /Epic|Feature/i
-    );
-    await assert.rejects(
-      () =>
-        api.backendService.createIssue({
-          projectKey: 'APP',
-          issueType: 'Subtask',
-          summary: 'Invalid file subtask parent',
-          parentKey: 'APP-100'
-        }),
-      /Story/i
-    );
-  });
-
-  test('updates and deletes file-backed issues while persisting EPIC assignment changes', async () => {
-    const api = await getApi();
-    await configureFileScenario(api);
-
-    const createdIssue = await api.backendService.createIssue({
-      projectKey: 'APP',
-      issueType: 'Task',
-      summary: 'Temporary file-backed task',
-      description: 'Temporary description',
-      parentKey: 'APP-100'
-    });
-
-    const updatedIssue = await api.backendService.updateIssue(createdIssue.key, {
-      summary: 'Updated file-backed task',
-      description: 'Updated file-backed description',
-      parentKey: null,
-      assignee: 'Taylor Planner',
-      priority: 'Low',
-      issueType: 'Bug'
-    });
-    assert.strictEqual(updatedIssue.summary, 'Updated file-backed task');
-    assert.strictEqual(updatedIssue.parentKey, undefined);
-    assert.strictEqual(updatedIssue.assignee, 'Taylor Planner');
-    assert.strictEqual(updatedIssue.priority, 'Low');
-    assert.strictEqual(updatedIssue.issueType, 'Bug');
-    assert.ok(updatedIssue.created, 'File-backed issue details should include a created timestamp');
-
-    await api.refresh();
-    assert.strictEqual(api.issuesProvider.getIssueByKey(createdIssue.key), undefined);
-
-    await api.backendService.deleteIssue(createdIssue.key);
-    await api.refresh();
-
-    assert.strictEqual(api.issuesProvider.getIssueByKey(createdIssue.key), undefined);
-    await assert.rejects(
-      () => api.backendService.getIssue(createdIssue.key),
+      () => api.backendService.getIssue(createdEpic.key),
       /was not found/i
     );
-
-    if (PLAN_FILE_URI) {
-      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
-      assert.ok(
-        !updatedText.includes(`"key": "${createdIssue.key}"`),
-        'Deleted plan item should be removed from the plan file'
-      );
-    }
+    const reassignedIssue = await api.backendService.getIssue('APP-101');
+    assert.strictEqual(reassignedIssue.parentKey, undefined);
   });
 
-  test('adds file-backed comments and persists them to the plan file', async () => {
+  test('adds comments through the Atlassian cloud Jira contract', async () => {
     const api = await getApi();
-    await configureFileScenario(api);
+    await configureScenario(api, 'atlassian');
 
-    await api.backendService.addComment('APP-101', 'Plan comment from the integration test.');
+    await api.backendService.addComment('APP-101', 'Atlassian comment from the integration test.');
     const issue = await api.backendService.getIssue('APP-101');
     assert.ok(issue.comments && issue.comments.length > 0);
-    assert.strictEqual(issue.comments?.[0]?.body, 'Plan comment from the integration test.');
-
-    if (PLAN_FILE_URI) {
-      const updatedText = Buffer.from(await vscode.workspace.fs.readFile(PLAN_FILE_URI)).toString('utf8');
-      assert.match(updatedText, /"comments": \[/);
-      assert.match(updatedText, /"body": "Plan comment from the integration test\."/);
-    }
-  });
-
-  test('assigns file-backed issues to AI, updates assignee, and moves status in progress', async () => {
-    const api = await getApi();
-    await configureFileScenario(api);
-
-    const config = vscode.workspace.getConfiguration('ticketManager');
-    await Promise.all([
-      config.update('ai.openaiApiKey', 'test-openai-key', vscode.ConfigurationTarget.Global),
-      config.update('ai.openaiAgentName', 'Planner Bot', vscode.ConfigurationTarget.Global)
-    ]);
-
-    const issue = await api.backendService.getIssue('APP-101');
-    await api.detailsProvider.setIssue(issue);
-
-    await vscode.commands.executeCommand('ticketManager.assignToAi');
-
-    const updatedIssue = await api.backendService.getIssue('APP-101');
-    const session = api.aiSessionManager.getSession('APP-101');
-
-    assert.strictEqual(updatedIssue.assignee, 'Planner Bot');
-    assert.strictEqual(updatedIssue.status, 'In Progress');
-    assert.ok(session, 'AI assignment should create a session record');
-    assert.strictEqual(session?.label, 'Planner Bot');
-    assert.strictEqual(session?.status, 'active');
+    assert.strictEqual(issue.comments?.[0]?.body, 'Atlassian comment from the integration test.');
   });
 
   test('creates live-folder features and child issues by writing markdown files', async () => {
@@ -958,6 +778,44 @@ suite('Ticket Manager Extension', () => {
     assert.strictEqual(api.boardPanelManager.getSnapshot().selectedIssueKey, 'APP-101');
   });
 
+  test('keeps cached board details visible while switching back to a previously loaded board', async () => {
+    const api = await getApi();
+    await configureScenario(api, 'default');
+
+    await waitFor(() => api.boardsProvider.getCurrentBoards().length > 0);
+    const appBoard = api.boardsProvider.getCurrentBoards().find(candidate => candidate.name === 'Application Board');
+    const opsBoard = api.boardsProvider.getCurrentBoards().find(candidate => candidate.name === 'Operations Board');
+
+    assert.ok(appBoard, 'Application Board should be available');
+    assert.ok(opsBoard, 'Operations Board should be available');
+
+    if (!appBoard || !opsBoard) {
+      throw new Error('Required boards were not available.');
+    }
+
+    await api.boardPanelManager.openBoard(appBoard);
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === appBoard.id && !api.boardPanelManager.getSnapshot().loading);
+    const cachedAppSnapshot = api.boardPanelManager.getSnapshot();
+
+    await api.boardPanelManager.openBoard(opsBoard);
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === opsBoard.id && !api.boardPanelManager.getSnapshot().loading);
+
+    const switchBackPromise = api.boardPanelManager.openBoard(appBoard);
+    const inFlightSnapshot = api.boardPanelManager.getSnapshot();
+
+    assert.strictEqual(inFlightSnapshot.boardId, appBoard.id);
+    assert.strictEqual(inFlightSnapshot.loading, true);
+    assert.strictEqual(inFlightSnapshot.issueCount, cachedAppSnapshot.issueCount);
+    assert.deepStrictEqual(inFlightSnapshot.columnNames, cachedAppSnapshot.columnNames);
+
+    await switchBackPromise;
+    await waitFor(() => api.boardPanelManager.getSnapshot().boardId === appBoard.id && !api.boardPanelManager.getSnapshot().loading);
+
+    const refreshedSnapshot = api.boardPanelManager.getSnapshot();
+    assert.strictEqual(refreshedSnapshot.issueCount, cachedAppSnapshot.issueCount);
+    assert.deepStrictEqual(refreshedSnapshot.columnNames, cachedAppSnapshot.columnNames);
+  });
+
   test('applies saved board workflow overrides before column customization', async () => {
     const api = await getApi();
     await configureScenario(api, 'default');
@@ -1050,23 +908,6 @@ suite('Ticket Manager Extension', () => {
     assert.ok(metadata.statuses.includes('Blocked'));
     assert.ok(metadata.statuses.includes('In Progress'));
     assert.ok(metadata.statuses.includes('Backlog'));
-    assert.ok(metadata.statuses.includes('Done'));
-  });
-
-  test('includes workflow-defined statuses in file filter metadata even when unused', async () => {
-    const api = await getApi();
-    await configureFileScenario(api);
-
-    const metadata = await api.backendService.getFilterMetadata({
-      ...api.filterStore.getFilters(),
-      projectKeys: ['APP'],
-      assigneeMode: 'all'
-    });
-
-    assert.ok(metadata.statuses.includes('Backlog'));
-    assert.ok(metadata.statuses.includes('To Do'));
-    assert.ok(metadata.statuses.includes('In Progress'));
-    assert.ok(metadata.statuses.includes('Blocked'));
     assert.ok(metadata.statuses.includes('Done'));
   });
 

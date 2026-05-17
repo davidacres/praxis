@@ -32,18 +32,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Extended backend mode that includes all wizard options.
- * When `BackendMode` in types.ts is updated to include 'github' | 'gitlab',
- * this alias can be replaced with the canonical type.
- */
 type SetupBackendMode = BackendMode | 'github' | 'gitlab';
 
 interface SetupState {
   step: 0 | 1;
   selectedMode: SetupBackendMode | undefined;
-  // Plan File
-  planFilePath: string;
   // Live Folder
   liveFolderPath: string;
   liveFolderProjectKey: string;
@@ -54,23 +47,26 @@ interface SetupState {
   githubOwner: string;
   // GitLab
   gitlabUrl: string;
-  gitlabConnectionType: 'api' | 'mcp';
   gitlabApiKey: string;
-  gitlabMcpCommand: string;
-  gitlabMcpArgs: string;
   // Jira
   jiraConnectionType: 'stdio' | 'http';
   jiraStdioCommand: string;
   jiraStdioArgs: string;
   jiraCwd: string;
   jiraHttpUrl: string;
+  jiraPollingRequiredLabel: string;
+  jiraPollingEnabled: boolean;
+  jiraOAuthClientId: string;
+  jiraCloudSiteName: string;
+  jiraCloudSiteUrl: string;
+  jiraApiEpicKey: string;
+  jiraApiBoardJql: string;
 }
 
 function createInitialState(): SetupState {
   return {
     step: 0,
     selectedMode: undefined,
-    planFilePath: '',
     liveFolderPath: '',
     liveFolderProjectKey: '',
     liveFolderProjectName: '',
@@ -78,15 +74,19 @@ function createInitialState(): SetupState {
     githubPat: '',
     githubOwner: '',
     gitlabUrl: '',
-    gitlabConnectionType: 'api',
     gitlabApiKey: '',
-    gitlabMcpCommand: '',
-    gitlabMcpArgs: '',
     jiraConnectionType: 'stdio',
     jiraStdioCommand: '',
     jiraStdioArgs: '',
     jiraCwd: '',
     jiraHttpUrl: '',
+    jiraPollingRequiredLabel: 'syscfg',
+    jiraPollingEnabled: true,
+    jiraOAuthClientId: '',
+    jiraCloudSiteName: '',
+    jiraCloudSiteUrl: '',
+    jiraApiEpicKey: '',
+    jiraApiBoardJql: '',
   };
 }
 
@@ -102,11 +102,10 @@ interface ModeOption {
 }
 
 const MODE_OPTIONS: ModeOption[] = [
-  { mode: 'file', icon: '🗂️', title: 'Plan File', description: 'Manage tickets from a local JSON plan file' },
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
-  { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Connect to GitHub repositories and issues' },
-  { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Connect to a GitLab instance for issues and boards' },
-  { mode: 'jira', icon: '🔗', title: 'Jira', description: 'Connect to Jira via MCP server' },
+  { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
+  { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
+  { mode: 'jiraapi', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
 
@@ -116,14 +115,13 @@ function getModeOptions(): ModeOption[] {
   }
   return [
     MODE_OPTIONS[0],
-    MODE_OPTIONS[1],
     {
       mode: 'userworkspace',
       icon: '🧰',
       title: 'Create User Workspace',
       description: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later'
     },
-    ...MODE_OPTIONS.slice(2)
+    ...MODE_OPTIONS.slice(1)
   ];
 }
 
@@ -198,6 +196,16 @@ export class SetupWizardPanel {
         const mode = typeof message.mode === 'string' ? message.mode as SetupBackendMode : undefined;
         if (mode) {
           this.state.selectedMode = mode;
+          if (mode === 'jiraapi') {
+            const config = vscode.workspace.getConfiguration('ticketManager');
+            this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
+            this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', true);
+            this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+            this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+            this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+            this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+            this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
+          }
           this.state.step = 1;
           this.rerender();
         }
@@ -211,10 +219,15 @@ export class SetupWizardPanel {
 
       case 'updateField': {
         const field = typeof message.field === 'string' ? message.field : '';
-        const value = typeof message.value === 'string' ? message.value : '';
-        if (field && field in this.state) {
-          (this.state as unknown as Record<string, unknown>)[field] = value;
+        const value = message.value;
+        if (field === 'jiraPollingEnabled') {
+          this.state.jiraPollingEnabled = value !== false;
+        } else if (field === 'jiraPollingRequiredLabel') {
+          this.state.jiraPollingRequiredLabel = typeof value === 'string' ? value : '';
+        } else if (field && field in this.state) {
+          (this.state as unknown as Record<string, unknown>)[field] = typeof value === 'string' ? value : '';
           this.rerender();
+          return;
         }
         break;
       }
@@ -241,19 +254,30 @@ export class SetupWizardPanel {
               );
             }
           }
-        } else {
-          const uris = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            filters: { 'JSON files': ['json'], 'All files': ['*'] },
-            openLabel: 'Select Plan File',
-          });
-          if (uris && uris.length > 0) {
-            this.state.planFilePath = uris[0].fsPath;
-            this.rerender();
-          }
         }
         break;
       }
+
+      case 'connectJiraCloud':
+        try {
+          await this.saveJiraCloudSetupFields();
+          await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.rerender();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud connect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        break;
+
+      case 'disconnectJiraCloud':
+        try {
+          await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
+          this.reloadJiraCloudSetupFields();
+          this.rerender();
+        } catch (error) {
+          void vscode.window.showErrorMessage(`Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        break;
 
       case 'save':
         try {
@@ -293,10 +317,6 @@ export class SetupWizardPanel {
     await config.update('backendMode', this.state.selectedMode, target);
 
     switch (this.state.selectedMode) {
-      case 'file':
-        await config.update('planFilePath', this.state.planFilePath, target);
-        break;
-
       case 'livefolder':
         await config.update('liveFolderPath', this.state.liveFolderPath, target);
         await config.update('liveFolderProjectKey', this.state.liveFolderProjectKey, target);
@@ -314,24 +334,19 @@ export class SetupWizardPanel {
 
       case 'gitlab':
         await config.update('gitlabUrl', this.state.gitlabUrl, target);
-        await config.update('gitlabConnectionType', this.state.gitlabConnectionType, target);
-        if (this.state.gitlabConnectionType === 'api') {
-          await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
-        } else {
-          await config.update('gitlabMcpCommand', this.state.gitlabMcpCommand, target);
-          await config.update('gitlabMcpArgs', this.state.gitlabMcpArgs.split(' ').filter(Boolean), target);
-        }
+        await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
         break;
 
-      case 'jira':
-        await config.update('connectionType', this.state.jiraConnectionType, target);
-        if (this.state.jiraConnectionType === 'stdio') {
-          await config.update('stdioCommand', this.state.jiraStdioCommand, target);
-          await config.update('stdioArgs', this.state.jiraStdioArgs.split(' ').filter(Boolean), target);
-          await config.update('stdioCwd', this.state.jiraCwd, target);
-        } else {
-          await config.update('httpUrl', this.state.jiraHttpUrl, target);
-        }
+      case 'jiraapi':
+        await config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target);
+        await config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target);
+        await config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target);
+        await config.update(
+          'jiraPolling.requiredLabel',
+          this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
+          target
+        );
+        await config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target);
         break;
 
       // demo needs no config
@@ -348,8 +363,6 @@ export class SetupWizardPanel {
           ? 'Live Folder'
           : savedMode === 'userworkspace'
             ? 'User Workspace'
-          : savedMode === 'file'
-            ? 'File'
             : savedMode.toUpperCase()
       } configuration saved.${savedMode === 'userworkspace' ? ' Use Create Board to add a plans folder board.' : ''} ${describeAiConfigurationResult(aiResult)}`
     );
@@ -379,6 +392,30 @@ export class SetupWizardPanel {
       resolvedPath,
       changed: resolvedPath !== toStoredFolderPath(originalPath)
     };
+  }
+
+  private async saveJiraCloudSetupFields(): Promise<void> {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await Promise.all([
+      config.update('backendMode', 'jiraapi', target),
+      config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target),
+      config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target),
+      config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target),
+      config.update('jiraPolling.requiredLabel', this.state.jiraPollingRequiredLabel.trim() || 'syscfg', target),
+      config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target)
+    ]);
+  }
+
+  private reloadJiraCloudSetupFields(): void {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
+    this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
+    this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
+    this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
+    this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
   }
 
   /* ---------------------------------------------------------------- */
@@ -441,9 +478,6 @@ export class SetupWizardPanel {
 
     let formHtml = '';
     switch (mode) {
-      case 'file':
-        formHtml = this.renderFileForm();
-        break;
       case 'livefolder':
         formHtml = this.renderLiveFolderForm();
         break;
@@ -456,8 +490,8 @@ export class SetupWizardPanel {
       case 'gitlab':
         formHtml = this.renderGitlabForm();
         break;
-      case 'jira':
-        formHtml = this.renderJiraForm();
+      case 'jiraapi':
+        formHtml = this.renderJiraApiForm();
         break;
       case 'demo':
         formHtml = this.renderDemoForm();
@@ -472,23 +506,6 @@ export class SetupWizardPanel {
       <div class="button-row">
         <button class="btn btn-secondary" data-action="back">← Back</button>
         <button class="btn btn-primary" data-action="save">Save &amp; Connect</button>
-      </div>`;
-  }
-
-  /* -- File form --------------------------------------------------- */
-
-  private renderFileForm(): string {
-    return `
-      <p class="form-help">Enter the path to your ticket plan JSON file, or browse to select one.</p>
-      <div class="field-group">
-        <label class="field-label">File Path</label>
-        <div class="input-row">
-          <input type="text" class="field-input input-flex"
-                 data-field="planFilePath"
-                 value="${esc(this.state.planFilePath)}"
-                 placeholder="/path/to/plan.json" />
-          <button class="btn btn-secondary" data-action="browse">Browse…</button>
-        </div>
       </div>`;
   }
 
@@ -561,35 +578,6 @@ export class SetupWizardPanel {
   /* -- GitLab form ------------------------------------------------- */
 
   private renderGitlabForm(): string {
-    const isApi = this.state.gitlabConnectionType === 'api';
-    const isMcp = this.state.gitlabConnectionType === 'mcp';
-
-    const apiFields = isApi ? `
-      <div class="field-group">
-        <label class="field-label">API Key</label>
-        <input type="password" class="field-input"
-               data-field="gitlabApiKey"
-               value="${esc(this.state.gitlabApiKey)}"
-               placeholder="glpat-…" />
-        <p class="field-hint">Need a token? Create one in GitLab → Settings → Access Tokens</p>
-      </div>` : '';
-
-    const mcpFields = isMcp ? `
-      <div class="field-group">
-        <label class="field-label">MCP Command</label>
-        <input type="text" class="field-input"
-               data-field="gitlabMcpCommand"
-               value="${esc(this.state.gitlabMcpCommand)}"
-               placeholder="npx gitlab-mcp-server" />
-      </div>
-      <div class="field-group">
-        <label class="field-label">MCP Args</label>
-        <input type="text" class="field-input"
-               data-field="gitlabMcpArgs"
-               value="${esc(this.state.gitlabMcpArgs)}"
-               placeholder="--token XXX" />
-      </div>` : '';
-
     return `
       <div class="field-group">
         <label class="field-label">GitLab URL</label>
@@ -599,24 +587,14 @@ export class SetupWizardPanel {
                placeholder="https://gitlab.com" />
       </div>
       <div class="field-group">
-        <label class="field-label">Connection Type</label>
-        <div class="radio-group">
-          <label class="radio-label">
-            <input type="radio" name="gitlabConnectionType"
-                   data-field="gitlabConnectionType"
-                   value="api" ${isApi ? 'checked' : ''} />
-            API Key
-          </label>
-          <label class="radio-label">
-            <input type="radio" name="gitlabConnectionType"
-                   data-field="gitlabConnectionType"
-                   value="mcp" ${isMcp ? 'checked' : ''} />
-            GitLab MCP Server
-          </label>
-        </div>
+        <label class="field-label">Personal Access Token</label>
+        <input type="password" class="field-input"
+               data-field="gitlabApiKey"
+               value="${esc(this.state.gitlabApiKey)}"
+               placeholder="glpat-…" />
+        <p class="field-hint">Need a token? Create one in GitLab → Settings → Access Tokens</p>
       </div>
-      ${apiFields}
-      ${mcpFields}`;
+      `;
   }
 
   /* -- Jira form --------------------------------------------------- */
@@ -658,7 +636,7 @@ export class SetupWizardPanel {
       </div>` : '';
 
     return `
-      <p class="form-help">Jira uses an MCP server. Configure the connection to your Jira MCP server.</p>
+      <p class="form-help">This Jira connection configures a remote Jira server.</p>
       <div class="field-group">
         <label class="field-label">Connection Type</label>
         <div class="radio-group">
@@ -666,18 +644,105 @@ export class SetupWizardPanel {
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="stdio" ${isStdio ? 'checked' : ''} />
-            Local MCP (stdio)
+            Jira via stdio
           </label>
           <label class="radio-label">
             <input type="radio" name="jiraConnectionType"
                    data-field="jiraConnectionType"
                    value="http" ${isHttp ? 'checked' : ''} />
-            Remote MCP (HTTP)
+            Jira via HTTP
+          </label>
+        </div>
+      </div>
+      <div class="polling-section">
+        <div class="field-label">JIRA polling</div>
+        <p class="field-hint polling-hint">Polls Jira Cloud every 30 seconds to get tickets with the specified label.</p>
+        <div class="field-group">
+          <label class="field-label">Label</label>
+          <input type="text" class="field-input"
+                 data-field="jiraPollingRequiredLabel"
+                 value="${esc(this.state.jiraPollingRequiredLabel)}"
+                 placeholder="syscfg" />
+        </div>
+        <div class="field-group polling-toggle-row">
+          <label class="toggle-switch" for="jiraPollingEnabled">
+            <input type="checkbox"
+                   id="jiraPollingEnabled"
+                   data-field="jiraPollingEnabled"
+                   ${this.state.jiraPollingEnabled ? 'checked' : ''} />
+            <span class="toggle-slider" aria-hidden="true"></span>
+            <span>Enable JIRA polling</span>
           </label>
         </div>
       </div>
       ${stdioFields}
       ${httpFields}`;
+  }
+
+  private renderJiraApiForm(): string {
+    const clientId = esc(this.state.jiraOAuthClientId);
+    const siteName = esc(this.state.jiraCloudSiteName);
+    const siteUrl = esc(this.state.jiraCloudSiteUrl);
+    const epicKey = esc(this.state.jiraApiEpicKey);
+    const boardJql = esc(this.state.jiraApiBoardJql);
+    const connectedSiteLabel = siteName || siteUrl;
+    const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
+    const connectionStatus = siteUrl
+      ? `<p class="form-help">Connected to <strong>${connectedSiteLabel}</strong>${connectedSiteDetail}.</p>`
+      : '<p class="form-help">Not connected. Configure the Ticket Manager Atlassian OAuth app client ID, then connect with Atlassian.</p>';
+    return `
+      <p class="form-help">Jira Cloud mode connects through Atlassian OAuth. You can expose boards from a linked epic and/or a custom JQL query. The polling label is used only to decide which linked-epic tasks are eligible for AI execution.</p>
+      <div class="field-group">
+        <label class="field-label">Atlassian OAuth Client ID</label>
+        <input type="text" class="field-input"
+               data-field="jiraOAuthClientId"
+               value="${clientId}"
+               placeholder="Client ID from the Ticket Manager Atlassian app" />
+        <p class="field-hint polling-hint">The client secret is requested once during connection and stored in VS Code secret storage.</p>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Jira Cloud Connection</label>
+        ${connectionStatus}
+        <button class="btn btn-primary" data-action="connectJiraCloud">Connect with Atlassian</button>
+        ${siteUrl ? '<button class="btn btn-secondary" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
+      </div>
+            <div class="field-group">
+         <label class="field-label">Linked Epic Key</label>
+         <input type="text" class="field-input"
+            data-field="jiraApiEpicKey"
+            value="${epicKey}"
+            placeholder="Optional: e.g. KAMAI-123" />
+         <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira Cloud issue creation will use it as the default parent, and an epic board is shown when set.</p>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Board JQL Query</label>
+        <input type="text" class="field-input"
+               data-field="jiraApiBoardJql"
+               value="${boardJql}"
+               placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
+        <p class="field-hint polling-hint">Optional workspace-level JQL query exposed as a Jira Cloud board.</p>
+      </div>
+      <div class="polling-section">
+        <div class="field-label">AI execution gate</div>
+        <p class="field-hint polling-hint">The poller syncs all tasks linked to the epic. Only linked-epic tasks with this label and the configured todo-stage status are eligible for AI execution.</p>
+        <div class="field-group">
+          <label class="field-label">Label</label>
+          <input type="text" class="field-input"
+                 data-field="jiraPollingRequiredLabel"
+                 value="${esc(this.state.jiraPollingRequiredLabel)}"
+                 placeholder="syscfg" />
+        </div>
+        <div class="field-group polling-toggle-row">
+          <label class="toggle-switch" for="jiraApiPollingEnabled">
+            <input type="checkbox"
+                   id="jiraApiPollingEnabled"
+                   data-field="jiraPollingEnabled"
+                   ${this.state.jiraPollingEnabled ? 'checked' : ''} />
+            <span class="toggle-slider" aria-hidden="true"></span>
+            <span class="toggle-label">Enable JIRA polling</span>
+          </label>
+        </div>
+      </div>`;
   }
 
   /* -- Demo form --------------------------------------------------- */
@@ -823,6 +888,18 @@ export class SetupWizardPanel {
         margin-top: 4px;
       }
 
+      .polling-section {
+        margin: 18px 0;
+        padding: 14px;
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-input-border));
+        border-radius: 8px;
+        background: var(--vscode-editorWidget-background, transparent);
+      }
+
+      .polling-hint {
+        margin-bottom: 12px;
+      }
+
       .link {
         color: var(--vscode-textLink-foreground);
         text-decoration: none;
@@ -845,6 +922,70 @@ export class SetupWizardPanel {
         align-items: center;
         gap: 6px;
         cursor: pointer;
+      }
+
+      .polling-toggle-row {
+        margin-bottom: 0;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr);
+        align-items: center;
+        column-gap: 10px;
+        width: 100%;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle-switch input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .toggle-slider {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex: 0 0 40px;
+        border-radius: 999px;
+        background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.35));
+        transition: background 0.15s ease;
+      }
+
+      .toggle-label {
+        min-width: 0;
+        line-height: 1.35;
+        white-space: normal;
+      }
+
+      .toggle-slider::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--vscode-input-foreground, #fff);
+        transition: transform 0.15s ease;
+      }
+
+      .toggle-switch input:checked + .toggle-slider {
+        background: var(--vscode-button-background);
+      }
+
+      .toggle-switch input:checked + .toggle-slider::after {
+        transform: translateX(18px);
+      }
+
+      .toggle-switch input:focus-visible + .toggle-slider {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
       }
 
       /* ---- Buttons ---- */
@@ -912,20 +1053,26 @@ export class SetupWizardPanel {
           vscode.postMessage({ command: 'save' });
         } else if (action === 'browse') {
           vscode.postMessage({ command: 'browse' });
+        } else if (action === 'connectJiraCloud') {
+          vscode.postMessage({ command: 'connectJiraCloud' });
+        } else if (action === 'disconnectJiraCloud') {
+          vscode.postMessage({ command: 'disconnectJiraCloud' });
         }
       });
 
       document.addEventListener('input', e => {
         const target = e.target;
         if (target.dataset && target.dataset.field) {
-          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value: target.value });
+          const value = target.type === 'checkbox' ? target.checked : target.value;
+          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value });
         }
       });
 
       document.addEventListener('change', e => {
         const target = e.target;
         if (target.dataset && target.dataset.field) {
-          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value: target.value });
+          const value = target.type === 'checkbox' ? target.checked : target.value;
+          vscode.postMessage({ command: 'updateField', field: target.dataset.field, value });
         }
       });
     `;

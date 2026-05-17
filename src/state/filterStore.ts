@@ -15,6 +15,17 @@ const DEFAULT_FILTERS: IssueFilters = {
   grouping: 'none'
 };
 
+export function shouldAdoptJiraApiEpicIssueScope(filters: IssueFilters): boolean {
+  return (
+    filters.assigneeMode === 'me' &&
+    filters.projectKeys.length === 0 &&
+    filters.statuses.length === 0 &&
+    filters.issueTypes.length === 0 &&
+    filters.searchText.trim().length === 0 &&
+    !filters.parentKey
+  );
+}
+
 export class FilterStore implements vscode.Disposable {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<IssueFilters>();
 

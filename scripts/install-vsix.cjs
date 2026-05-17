@@ -28,6 +28,7 @@ function main() {
   const projectRoot = join(__dirname, '..');
   const vsixName = `${pkg.name}-${pkg.version}.vsix`;
   const vsixPath = join(projectRoot, vsixName);
+  const extensionId = `${pkg.publisher}.${pkg.name}`;
 
   // Accept target from CLI arg: --target code|insiders|both (default: both)
   const targetArg = process.argv.find(a => a.startsWith('--target='));
@@ -55,7 +56,12 @@ function main() {
     }
     console.log(`📦 Installing ${vsixName} into ${name}…`);
     try {
-      run(commandFor(cli), ['--install-extension', vsixPath]);
+      try {
+        run(commandFor(cli), ['--uninstall-extension', extensionId]);
+      } catch {
+        // Ignore uninstall failures when the extension is not currently installed.
+      }
+      run(commandFor(cli), ['--install-extension', vsixPath, '--force']);
       installed++;
     } catch (error) {
       console.error(`❌ Failed to install into ${name}: ${error.message}`);
