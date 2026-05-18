@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.27",
+  "version": "0.0.28",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
@@ -204,6 +204,12 @@
         "title": "Configure Project",
         "category": "Ticket Manager",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ticketManager.openTaskDesigner",
+        "title": "Open Task Designer",
+        "category": "Ticket Manager",
+        "icon": "$(symbol-misc)"
       },
       {
         "command": "ticketManager.openConnectionsManager",

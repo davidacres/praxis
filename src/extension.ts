@@ -26,6 +26,7 @@ import type {
 } from './types';
 import {
   assessCopilotImplementationReadiness,
+  recommendTaskDesignerFlowWithCopilot,
   respondToCopilotComment,
   reviewTicketWithClaude,
   reviewTicketWithCopilot,
@@ -58,6 +59,7 @@ import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
+import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
@@ -3442,6 +3444,26 @@ export async function activate(
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
   });
   updateCommentPlaceholders();
+  const taskDesignerPanelManager = new TaskDesignerPanelManager(
+    backendService,
+    context.workspaceState,
+    async (nodes, connectors) => recommendTaskDesignerFlowWithCopilot(nodes, connectors, {
+      cliPath: getCopilotCliPathOverride(),
+      workingDirectory
+    }),
+    async () => {
+      const activeBoard = boardPanelManager.getActiveBoard();
+      if (!activeBoard) {
+        return undefined;
+      }
+
+      const displayDetails = await boardPanelManager.getActiveBoardDisplayDetails();
+      return {
+        boardName: activeBoard.name,
+        issues: displayDetails?.issues ?? []
+      };
+    }
+  );
 
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
     const options = getConfiguredAiOptions();
@@ -3482,6 +3504,7 @@ export async function activate(
     boardColumnStore,
     boardColumnConfigPanel,
     newProjectWizardPanel,
+    taskDesignerPanelManager,
     aiSessionManager.onDidChangeAgentSession(record => {
       if (
         isDeliveryTask(record) &&
@@ -5075,8 +5098,9 @@ export async function activate(
       onResetGitLabConfig: async () => {
         await resetGitLabConfig();
       },
-      onOpenSession: async issueKey => {
+      onOpenSession: async (issueKey, boardId) => {
         const sessionBoardId =
+          boardId ??
           aiSessionManager.getAgentSession(issueKey)?.boardId ??
           aiSessionManager.getSession(issueKey)?.boardId;
         if (sessionBoardId) {
@@ -5398,6 +5422,7 @@ export async function activate(
       newProjectWizardPanel,
       setupWizardPanel,
       setupSidebarViewProvider,
+      taskDesignerPanelManager,
       issuesProvider,
       boardsProvider,
       detailsProvider,

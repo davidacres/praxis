@@ -209,6 +209,26 @@ export class BoardPanelManager implements vscode.Disposable {
     };
   }
 
+  public async getActiveBoardDisplayDetails(): Promise<BoardDetails | undefined> {
+    if (!this.activeBoard) {
+      return undefined;
+    }
+
+    if (!this.boardDetails && !this.loading) {
+      await this.refresh();
+    }
+
+    const display = this.getDisplayBoardDetails() ?? this.boardDetails;
+    if (!display) {
+      if (this.errorMessage) {
+        throw new Error(this.errorMessage);
+      }
+      return undefined;
+    }
+
+    return display;
+  }
+
   public dispose(): void {
     this.panel?.dispose();
     this.panel = undefined;

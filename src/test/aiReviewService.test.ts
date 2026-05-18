@@ -2,7 +2,9 @@ import * as assert from 'node:assert';
 import {
   extractClarificationQuestions,
   normalizeClarificationCommentBody,
-  parseCopilotImplementationReadinessAssessment
+  parseCopilotImplementationReadinessAssessment,
+  parseTaskDesignerFlowRecommendation,
+  type TaskDesignerRecommendationNode
 } from '../ai/aiReviewService';
 
 suite('aiReviewService clarification comment sanitization', () => {
@@ -75,6 +77,78 @@ Questions:
       status: 'needs_clarification',
       workflowReference: undefined,
       clarificationComment: 'Please specify the workflow pack for this ticket in Ticket Manager or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api.'
+    });
+  });
+});
+
+suite('aiReviewService task designer recommendation parsing', () => {
+  const nodes: TaskDesignerRecommendationNode[] = [
+    {
+      id: 'n1',
+      issueKey: 'APP-1',
+      summary: 'First',
+      issueType: 'Story',
+      status: 'To Do',
+      projectKey: 'APP'
+    },
+    {
+      id: 'n2',
+      issueKey: 'APP-2',
+      summary: 'Second',
+      issueType: 'Story',
+      status: 'To Do',
+      projectKey: 'APP'
+    },
+    {
+      id: 'n3',
+      issueKey: 'APP-3',
+      summary: 'Third',
+      issueType: 'Story',
+      status: 'To Do',
+      projectKey: 'APP'
+    }
+  ];
+
+  test('parses valid ordered node recommendations and preserves rationale', () => {
+    const recommendation = parseTaskDesignerFlowRecommendation([
+      '```json',
+      '{',
+      '  "orderedNodeIds": ["n2", "n1", "n3"],',
+      '  "connectors": [',
+      '    { "sourceNodeId": "n2", "targetNodeId": "n1" },',
+      '    { "sourceNodeId": "n1", "targetNodeId": "n3" }',
+      '  ],',
+      '  "rationale": "Start with shared dependency setup."',
+      '}',
+      '```'
+    ].join('\n'), nodes);
+
+    assert.deepStrictEqual(recommendation, {
+      orderedNodeIds: ['n2', 'n1', 'n3'],
+      connectors: [
+        { sourceNodeId: 'n2', targetNodeId: 'n1' },
+        { sourceNodeId: 'n1', targetNodeId: 'n3' }
+      ],
+      rationale: 'Start with shared dependency setup.'
+    });
+  });
+
+  test('fills missing nodes and derives connectors when omitted', () => {
+    const recommendation = parseTaskDesignerFlowRecommendation([
+      '```json',
+      '{',
+      '  "orderedNodeIds": ["n3"]',
+      '}',
+      '```'
+    ].join('\n'), nodes);
+
+    assert.deepStrictEqual(recommendation, {
+      orderedNodeIds: ['n3', 'n1', 'n2'],
+      connectors: [
+        { sourceNodeId: 'n3', targetNodeId: 'n1' },
+        { sourceNodeId: 'n1', targetNodeId: 'n2' }
+      ],
+      rationale: undefined
     });
   });
 });

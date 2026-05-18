@@ -81,7 +81,28 @@ Rules:
 - comment must be a concise Jira-ready plain-text comment body listing the missing
   non-workflow details. Do not mention workflow packs in the comment.
 - Do not include markdown headings, code fences outside the single JSON block, rationale,
-  tool output, or claims that work has started.`;
+tool output, or claims that work has started.`;
+const COPILOT_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT = `You are an execution-planning assistant for a task designer canvas.
+Return exactly one JSON code block and nothing else.
+
+Schema:
+{
+  "orderedNodeIds": ["required ordered list of canvas node ids"],
+  "connectors": [
+    {
+      "sourceNodeId": "canvas node id",
+      "targetNodeId": "canvas node id"
+    }
+  ],
+  "rationale": "optional short explanation"
+}
+
+Rules:
+- Include every known node id exactly once in orderedNodeIds.
+- Keep connector directions forward according to orderedNodeIds.
+- Do not create self-links.
+- Prefer the minimum connectors needed for a clear start-to-finish flow.
+- Never include markdown outside the single JSON code block.`;
 
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
 const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
@@ -256,6 +277,150 @@ export interface CopilotImplementationReadinessAssessment {
   status: 'ready' | 'needs_clarification';
   workflowReference?: string;
   clarificationComment?: string;
+}
+
+export interface TaskDesignerRecommendationNode {
+  id: string;
+  issueKey: string;
+  summary: string;
+  issueType: string;
+  status: string;
+  assignee?: string;
+  priority?: string;
+  projectKey: string;
+}
+
+export interface TaskDesignerRecommendationConnector {
+  sourceNodeId: string;
+  targetNodeId: string;
+}
+
+export interface TaskDesignerFlowRecommendation {
+  orderedNodeIds: string[];
+  connectors: TaskDesignerRecommendationConnector[];
+  rationale?: string;
+}
+
+function extractJsonPayload(text: string): string | undefined {
+  const codeBlock = extractJsonCodeBlock(text);
+  if (codeBlock) {
+    return codeBlock;
+  }
+
+  const trimmed = text.trim();
+  return trimmed.startsWith('{') ? trimmed : undefined;
+}
+
+export function parseTaskDesignerFlowRecommendation(
+  text: string | undefined,
+  nodes: readonly TaskDesignerRecommendationNode[]
+): TaskDesignerFlowRecommendation | undefined {
+  if (!text?.trim()) {
+    return undefined;
+  }
+
+  const payload = extractJsonPayload(text);
+  if (!payload) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return undefined;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const originalNodeOrder = nodes.map(node => node.id);
+  const candidate = parsed as {
+    orderedNodeIds?: unknown;
+    connectors?: unknown;
+    rationale?: unknown;
+  };
+
+  const orderedNodeIds: string[] = [];
+  const seenNodeIds = new Set<string>();
+  if (Array.isArray(candidate.orderedNodeIds)) {
+    for (const nodeId of candidate.orderedNodeIds) {
+      if (typeof nodeId !== 'string') {
+        continue;
+      }
+      const normalizedNodeId = nodeId.trim();
+      if (!normalizedNodeId || seenNodeIds.has(normalizedNodeId) || !byId.has(normalizedNodeId)) {
+        continue;
+      }
+      seenNodeIds.add(normalizedNodeId);
+      orderedNodeIds.push(normalizedNodeId);
+    }
+  }
+  for (const nodeId of originalNodeOrder) {
+    if (!seenNodeIds.has(nodeId)) {
+      seenNodeIds.add(nodeId);
+      orderedNodeIds.push(nodeId);
+    }
+  }
+
+  if (orderedNodeIds.length !== nodes.length) {
+    return undefined;
+  }
+
+  const orderIndex = new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]));
+  const connectors: TaskDesignerRecommendationConnector[] = [];
+  const seenConnectors = new Set<string>();
+  if (Array.isArray(candidate.connectors)) {
+    for (const connector of candidate.connectors) {
+      if (!connector || typeof connector !== 'object' || Array.isArray(connector)) {
+        continue;
+      }
+
+      const sourceNodeId = typeof (connector as { sourceNodeId?: unknown }).sourceNodeId === 'string'
+        ? (connector as { sourceNodeId: string }).sourceNodeId.trim()
+        : '';
+      const targetNodeId = typeof (connector as { targetNodeId?: unknown }).targetNodeId === 'string'
+        ? (connector as { targetNodeId: string }).targetNodeId.trim()
+        : '';
+      if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) {
+        continue;
+      }
+      if (!orderIndex.has(sourceNodeId) || !orderIndex.has(targetNodeId)) {
+        continue;
+      }
+      if ((orderIndex.get(sourceNodeId) ?? 0) >= (orderIndex.get(targetNodeId) ?? 0)) {
+        continue;
+      }
+
+      const key = `${sourceNodeId}\u0000${targetNodeId}`;
+      if (seenConnectors.has(key)) {
+        continue;
+      }
+      seenConnectors.add(key);
+      connectors.push({ sourceNodeId, targetNodeId });
+    }
+  }
+
+  if (connectors.length === 0) {
+    for (let index = 0; index < orderedNodeIds.length - 1; index += 1) {
+      connectors.push({
+        sourceNodeId: orderedNodeIds[index],
+        targetNodeId: orderedNodeIds[index + 1]
+      });
+    }
+  }
+
+  const rationale = typeof candidate.rationale === 'string' && candidate.rationale.trim().length > 0
+    ? candidate.rationale.trim()
+    : undefined;
+
+  return {
+    orderedNodeIds,
+    connectors,
+    rationale
+  };
 }
 
 export function parseCopilotImplementationReadinessAssessment(
@@ -598,6 +763,43 @@ ${ticketContext}`,
   }
 
   return assessment;
+}
+
+export async function recommendTaskDesignerFlowWithCopilot(
+  nodes: readonly TaskDesignerRecommendationNode[],
+  connectors: readonly TaskDesignerRecommendationConnector[],
+  options?: {
+    cliPath?: string;
+    workingDirectory?: string;
+  }
+): Promise<TaskDesignerFlowRecommendation> {
+  if (nodes.length === 0) {
+    return { orderedNodeIds: [], connectors: [] };
+  }
+
+  const prompt = [
+    'Recommend a start-to-finish execution flow for this existing task-designer canvas.',
+    'Prioritize dependency-safe sequencing and practical implementation order.',
+    '',
+    'Canvas nodes (JSON):',
+    JSON.stringify(nodes, null, 2),
+    '',
+    'Existing directed connectors (JSON):',
+    JSON.stringify(connectors, null, 2)
+  ].join('\n');
+
+  const content = await runCopilotPrompt(prompt, {
+    cliPath: options?.cliPath,
+    systemPrompt: COPILOT_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT,
+    workingDirectory: options?.workingDirectory
+  });
+
+  const parsed = parseTaskDesignerFlowRecommendation(content, nodes);
+  if (!parsed) {
+    throw new Error('Copilot flow recommendation did not return a valid JSON result.');
+  }
+
+  return parsed;
 }
 
 // ── Local Peer Review (LPR) ──────────────────────────────────────
