@@ -15,7 +15,7 @@ interface WorkModeBoardsSidebarCallbacks {
   onDeleteBoard: (boardId: string) => Promise<void>;
   onRemoveAllBoards: () => Promise<void>;
   onResetGitLabConfig: () => Promise<void>;
-  onOpenSession: (issueKey: string) => Promise<void>;
+  onOpenSession: (issueKey: string, boardId?: string) => Promise<void>;
 }
 
 interface WorkModeBoardState {
@@ -26,6 +26,7 @@ interface WorkModeBoardState {
 }
 
 interface WorkModeSessionItem {
+  boardId: string;
   issueKey: string;
   summary: string;
   providerLabel: string;
@@ -343,7 +344,10 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         return;
       case 'openSession':
         if (typeof payload.issueKey === 'string') {
-          await this.callbacks.onOpenSession(payload.issueKey);
+          await this.callbacks.onOpenSession(
+            payload.issueKey,
+            typeof payload.boardId === 'string' ? payload.boardId : undefined
+          );
         }
         return;
       default:
@@ -434,10 +438,10 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-board-menu-trigger svg { width: 14px; height: 14px; display: block; }
       .work-board-menu-panel { position: absolute; top: calc(100% + 8px); right: 0; min-width: 148px; padding: 6px; border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border)); border-radius: 14px; background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--vscode-editor-background))); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 4; }
       .work-board-menu-panel[hidden] { display: none; }
-      .work-board-menu-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--vscode-menu-foreground, var(--vscode-sideBar-foreground, var(--vscode-editor-foreground))); font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
+      .work-board-menu-item { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
       .work-board-menu-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1)); }
       .work-board-menu-item.danger { color: var(--vscode-errorForeground, #f87171); }
-      .work-board-menu-item svg { width: 14px; height: 14px; display: block; flex-shrink: 0; }
+      .work-board-menu-item svg { width: 14px; height: 14px; display: block; flex-shrink: 0; color: inherit; }
       .work-board-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
       .work-board-meta { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; color: color-mix(in srgb, var(--vscode-descriptionForeground) 88%, transparent); }
       .work-board-status { display: inline-flex; align-items: center; gap: 5px; color: inherit; font-size: 10px; font-weight: 600; opacity: 0.92; }
@@ -550,7 +554,11 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       for (const button of document.querySelectorAll('[data-open-session-issue-key]')) {
         button.addEventListener('click', event => {
           event.stopPropagation();
-          vscodeApi.postMessage({ type: 'openSession', issueKey: button.getAttribute('data-open-session-issue-key') });
+          vscodeApi.postMessage({
+            type: 'openSession',
+            issueKey: button.getAttribute('data-open-session-issue-key'),
+            boardId: button.getAttribute('data-open-session-board-id')
+          });
         });
       }
       const menuPanels = new Map();
@@ -854,7 +862,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
   private renderSession(session: WorkModeSessionItem): string {
     const sessionTitle = `${session.issueKey} ${session.summary}`;
     const subtitle = `${session.issueKey} • ${session.actionLabel}`;
-    return `<button class="work-session-row" type="button" data-open-session-issue-key="${escapeHtml(session.issueKey)}" title="${escapeHtml(sessionTitle)}">
+    return `<button class="work-session-row" type="button" data-open-session-issue-key="${escapeHtml(session.issueKey)}" data-open-session-board-id="${escapeHtml(session.boardId)}" title="${escapeHtml(sessionTitle)}">
       <div class="work-session-left">
         <span class="work-session-icon">
           <svg viewBox="0 0 16 16" fill="none">
@@ -900,6 +908,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
         const state = resolveSessionState(assignment, record);
         return {
+          boardId,
           issueKey: issue.key,
           summary: issue.summary,
           providerLabel: resolveProviderLabel(assignment, record),

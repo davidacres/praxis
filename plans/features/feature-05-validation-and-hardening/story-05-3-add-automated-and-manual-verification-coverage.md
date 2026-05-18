@@ -28,3 +28,13 @@ Add targeted automated coverage and a manual verification checklist for the desi
 1. Run the available targeted checks.
 2. Execute the manual checklist.
 3. Run `npm run check-types`.
+
+## Manual Verification Checklist
+1. Open Task Designer, add at least three tickets, drag nodes, reload VS Code, and verify positions persist.
+2. Create valid connectors, then attempt a duplicate edge and a cycle; confirm both are rejected with clear feedback.
+3. Verify execution ordering updates after connector changes and remains stable across repeated reloads.
+4. Trigger AI recommendation preview, confirm no graph mutation until explicit apply, then verify persisted state includes applied changes.
+5. Repeat once with mixed backend tickets (for example Jira + GitLab/demo) and confirm recovery keeps valid nodes/connectors when persisted payload contains stale or malformed entries.
+
+## Known Validation Gaps / Environment Blockers
+1. `npm test` currently depends on launching the VS Code host and can fail if a local VS Code update lock (`vscode-updating`) is active; rerun after the lock clears.

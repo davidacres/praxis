@@ -23,6 +23,7 @@ import { IssueNode, IssuesTreeProvider, LoadMoreNode } from '../views/issuesTree
 import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
 import { SetupSidebarViewProvider } from '../views/setupSidebarViewProvider';
 import { SetupWizardPanel } from '../views/setupWizardPanel';
+import { TaskDesignerPanelManager } from '../views/taskDesignerPanelManager';
 import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
@@ -56,6 +57,7 @@ interface CommandDependencies {
   newProjectWizardPanel: NewProjectWizardPanel;
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
+  taskDesignerPanelManager: TaskDesignerPanelManager;
   revealSetupView?: () => Promise<void>;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
@@ -1516,6 +1518,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.openSetup', () => {
       void deps.setupWizardPanel.open();
+    }),
+    vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
+      deps.taskDesignerPanelManager.open();
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {

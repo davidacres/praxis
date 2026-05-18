@@ -342,6 +342,14 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
         color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
         cursor: pointer;
       }
+      .icon-button svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        stroke: currentColor;
+        fill: none;
+        color: inherit;
+      }
       .row-actions .icon-button {
         width: 24px;
         height: 24px;
