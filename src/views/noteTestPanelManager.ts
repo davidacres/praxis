@@ -594,11 +594,34 @@ export class NoteTestPanelManager {
     if (message.type === 'persist' || message.type === 'persistCanvasState') {
       const recoveredState = normalizePersistedStateWithRecovery(message.state ?? message);
       const graphError = validateConnectorGraph(recoveredState.state.connectors);
+      if (recoveredState.repaired) {
+        this.syncNextNodeIndex(recoveredState.state.nodes);
+        await this.workspaceState.update(NOTE_TEST_STATE_KEY, recoveredState.state);
+        await this.panel?.webview.postMessage({
+          type: 'persistCanvasStateResult',
+          ok: false,
+          error: recoveredState.warning ?? 'Recovered invalid canvas state while saving.',
+          state: recoveredState.state
+        });
+        return;
+      }
       if (graphError) {
+        const persistedState = this.getPersistedCanvasState().state;
+        this.syncNextNodeIndex(persistedState.nodes);
+        await this.panel?.webview.postMessage({
+          type: 'persistCanvasStateResult',
+          ok: false,
+          error: graphError.message,
+          state: persistedState
+        });
         return;
       }
       await this.workspaceState.update(NOTE_TEST_STATE_KEY, recoveredState.state);
       this.syncNextNodeIndex(recoveredState.state.nodes);
+      await this.panel?.webview.postMessage({
+        type: 'persistCanvasStateResult',
+        ok: true
+      });
       return;
     }
 
@@ -3099,6 +3122,25 @@ export class NoteTestPanelManager {
           return;
         }
         setFeedback('Master plan generated at ' + (message.outputPath || 'plans/master-plan.md') + '.');
+        return;
+      }
+
+      if (message.type === 'persistCanvasStateResult') {
+        if (!message.ok) {
+          if (message.state) {
+            state.nodes = Array.isArray(message.state.nodes)
+              ? message.state.nodes.map(node => ({ ...node }))
+              : [];
+            state.connectors = Array.isArray(message.state.connectors)
+              ? message.state.connectors.map(connector => ({ ...connector }))
+              : [];
+            uiState.nextConnectorIndex = state.connectors.length;
+            uiState.selectedNodeId = undefined;
+            uiState.selectedConnectorId = undefined;
+            renderNodes();
+          }
+          setFeedback(message.error || 'Unable to save canvas state.', true);
+        }
       }
     });
 
