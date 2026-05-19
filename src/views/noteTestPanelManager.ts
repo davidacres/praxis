@@ -122,6 +122,10 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function asOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
 function pickFirstString(...values: unknown[]): string | undefined {
   for (const value of values) {
     if (typeof value !== 'string') {
@@ -133,6 +137,48 @@ function pickFirstString(...values: unknown[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function toRecommendationConnector(value: unknown): TaskDesignerRecommendationConnector | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const sourceNodeId = asString(value.sourceNodeId);
+  const targetNodeId = asString(value.targetNodeId);
+  if (!sourceNodeId || !targetNodeId) {
+    return undefined;
+  }
+
+  return {
+    sourceNodeId,
+    targetNodeId
+  };
+}
+
+function toFlowRecommendation(value: unknown): TaskDesignerFlowRecommendation | undefined {
+  if (!isRecord(value) || !Array.isArray(value.orderedNodeIds)) {
+    return undefined;
+  }
+
+  const orderedNodeIds = value.orderedNodeIds
+    .map(candidate => asString(candidate))
+    .filter((candidate): candidate is string => Boolean(candidate));
+  if (orderedNodeIds.length === 0) {
+    return undefined;
+  }
+
+  const connectors = Array.isArray(value.connectors)
+    ? value.connectors
+      .map(toRecommendationConnector)
+      .filter((connector): connector is TaskDesignerRecommendationConnector => Boolean(connector))
+    : [];
+
+  return {
+    orderedNodeIds,
+    connectors,
+    rationale: asOptionalString(value.rationale)
+  };
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -256,6 +302,14 @@ function toDirectedConnector(value: unknown): DirectedConnector | undefined {
 
 function normalizePersistedState(rawState: unknown): NoteTestState {
   return normalizePersistedStateWithRecovery(rawState).state;
+}
+
+function isTicketNode(node: CanvasNode | undefined): node is TicketNode {
+  return Boolean(node && node.type === 'ticket');
+}
+
+function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | WebsitePreviewNode {
+  return Boolean(node && node.type !== 'ticket');
 }
 
 function normalizePersistedStateWithRecovery(rawState: unknown): NoteTestStateRecoveryResult {
@@ -526,6 +580,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'recommendCanvasFlow') {
       await this.handleRecommendCanvasFlowMessage(message);
+      return;
+    }
+
+    if (message.type === 'applyRecommendation') {
+      await this.handleApplyRecommendationMessage(message);
     }
   }
 
@@ -837,6 +896,135 @@ export class NoteTestPanelManager {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+  }
+
+  private async handleApplyRecommendationMessage(message: Record<string, unknown>): Promise<void> {
+    const recommendation = toFlowRecommendation(message.recommendation);
+    if (!recommendation) {
+      await this.panel?.webview.postMessage({
+        type: 'applyRecommendationResult',
+        ok: false,
+        error: 'No valid recommendation to apply.'
+      });
+      return;
+    }
+
+    const previewNodes = Array.isArray(message.nodes)
+      ? message.nodes.map(toTicketNode).filter((node): node is TicketNode => Boolean(node))
+      : [];
+    const currentState = normalizePersistedState(message.state);
+    const preservedNodes = currentState.nodes
+      .filter(isCustomCanvasNode)
+      .map(node => ({ ...node }));
+    const preservedNodeIds = new Set(preservedNodes.map(node => node.id));
+    const preservedConnectors = currentState.connectors.filter(
+      connector => preservedNodeIds.has(connector.sourceNodeId) || preservedNodeIds.has(connector.targetNodeId)
+    );
+
+    if (previewNodes.length < 2) {
+      await this.panel?.webview.postMessage({
+        type: 'applyRecommendationResult',
+        ok: false,
+        error: 'Recommendation preview is missing ticket nodes.'
+      });
+      return;
+    }
+
+    const byId = new Map(previewNodes.map(node => [node.id, node]));
+    const orderedNodeIds: string[] = [];
+    const seenNodeIds = new Set<string>();
+    for (const nodeId of recommendation.orderedNodeIds) {
+      if (!byId.has(nodeId) || seenNodeIds.has(nodeId)) {
+        continue;
+      }
+      seenNodeIds.add(nodeId);
+      orderedNodeIds.push(nodeId);
+    }
+    for (const node of previewNodes) {
+      if (seenNodeIds.has(node.id)) {
+        continue;
+      }
+      seenNodeIds.add(node.id);
+      orderedNodeIds.push(node.id);
+    }
+
+    if (orderedNodeIds.length < 2) {
+      await this.panel?.webview.postMessage({
+        type: 'applyRecommendationResult',
+        ok: false,
+        error: 'Recommendation must include at least two ticket nodes.'
+      });
+      return;
+    }
+
+    const orderIndex = new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]));
+    const connectors: DirectedConnector[] = [];
+    const seenConnectors = new Set<string>();
+    for (const connector of recommendation.connectors) {
+      if (!orderIndex.has(connector.sourceNodeId) || !orderIndex.has(connector.targetNodeId)) {
+        continue;
+      }
+      const sourceOrder = orderIndex.get(connector.sourceNodeId) ?? -1;
+      const targetOrder = orderIndex.get(connector.targetNodeId) ?? -1;
+      if (sourceOrder < 0 || targetOrder < 0 || sourceOrder >= targetOrder) {
+        continue;
+      }
+
+      const connectorKey = `${connector.sourceNodeId}\u0000${connector.targetNodeId}`;
+      if (seenConnectors.has(connectorKey)) {
+        continue;
+      }
+      seenConnectors.add(connectorKey);
+      connectors.push({
+        id: `connector-${connectors.length}`,
+        sourceNodeId: connector.sourceNodeId,
+        targetNodeId: connector.targetNodeId
+      });
+    }
+
+    if (connectors.length === 0) {
+      for (let index = 0; index < orderedNodeIds.length - 1; index += 1) {
+        connectors.push({
+          id: `connector-${connectors.length}`,
+          sourceNodeId: orderedNodeIds[index],
+          targetNodeId: orderedNodeIds[index + 1]
+        });
+      }
+    }
+
+    const graphError = validateConnectorGraph(connectors);
+    if (graphError) {
+      await this.panel?.webview.postMessage({
+        type: 'applyRecommendationResult',
+        ok: false,
+        error: graphError.message
+      });
+      return;
+    }
+
+    const nextState: NoteTestState = {
+      nodes: [
+        ...orderedNodeIds
+          .map(nodeId => byId.get(nodeId))
+          .filter((node): node is TicketNode => Boolean(node))
+          .map(node => ({ ...node })),
+        ...preservedNodes
+      ],
+      connectors: [...connectors, ...preservedConnectors].map((connector, index) => ({
+        ...connector,
+        id: `connector-${index}`
+      })),
+      zoom: currentState.zoom,
+      toolbarPosition: { ...currentState.toolbarPosition }
+    };
+
+    this.syncNextNodeIndex(nextState.nodes);
+    await this.workspaceState.update(NOTE_TEST_STATE_KEY, nextState);
+    await this.panel?.webview.postMessage({
+      type: 'applyRecommendationResult',
+      ok: true,
+      state: nextState
+    });
   }
 
   private getHtml(nonce: string, initialState: NoteTestState): string {
@@ -1416,10 +1604,14 @@ export class NoteTestPanelManager {
     const ticketEntryCloseButton = document.getElementById('ticket-entry-close-button');
     const deleteConnectorButton = document.getElementById('delete-connector-button');
     const recommendFlowButton = document.getElementById('recommend-flow-button');
+    const applyRecommendationButton = document.getElementById('apply-recommendation-button');
+    const rejectRecommendationButton = document.getElementById('reject-recommendation-button');
 
     const state = {
       nodes: Array.isArray(initialState.nodes) ? initialState.nodes : [],
-      connectors: Array.isArray(initialState.connectors) ? initialState.connectors : []
+      connectors: Array.isArray(initialState.connectors) ? initialState.connectors : [],
+      recommendation: undefined,
+      recommendationNodes: []
     };
 
     let feedbackTimer = undefined;
@@ -1599,6 +1791,18 @@ export class NoteTestPanelManager {
         const action = button.getAttribute('data-action');
         const isActive = action === uiState.activeTool || (action === 'ticket' && uiState.ticketEntryOpen);
         button.classList.toggle('is-active', Boolean(isActive));
+      }
+    }
+
+    function updateRecommendationActionState() {
+      const hasRecommendation = Boolean(state.recommendation);
+      if (applyRecommendationButton instanceof HTMLButtonElement) {
+        applyRecommendationButton.disabled = !hasRecommendation;
+        applyRecommendationButton.classList.toggle('is-hidden', !hasRecommendation);
+      }
+      if (rejectRecommendationButton instanceof HTMLButtonElement) {
+        rejectRecommendationButton.disabled = !hasRecommendation;
+        rejectRecommendationButton.classList.toggle('is-hidden', !hasRecommendation);
       }
     }
 
@@ -2399,6 +2603,32 @@ export class NoteTestPanelManager {
       });
     }
 
+    function requestApplyRecommendation() {
+      if (!state.recommendation) {
+        setFeedback('No recommendation to apply yet.', true);
+        return;
+      }
+      vscodeApi.postMessage({
+        type: 'applyRecommendation',
+        recommendation: state.recommendation,
+        nodes: state.recommendationNodes,
+        state: {
+          nodes: state.nodes.map(node => ({ ...node })),
+          connectors: state.connectors.map(connector => ({ ...connector })),
+          zoom: uiState.zoom,
+          toolbarPosition: { x: uiState.toolbarPosition.x, y: uiState.toolbarPosition.y }
+        }
+      });
+      setFeedback('Applying AI recommendation...');
+    }
+
+    function rejectRecommendation() {
+      state.recommendation = undefined;
+      state.recommendationNodes = [];
+      updateRecommendationActionState();
+      setFeedback('AI recommendation discarded.');
+    }
+
     function findNodeByIssueKey(issueKey) {
       if (typeof issueKey !== 'string' || !issueKey.trim()) {
         return undefined;
@@ -2578,11 +2808,11 @@ export class NoteTestPanelManager {
           return;
         }
         if (action === 'applyRecommendation') {
-          setFeedback('No recommendation to apply yet.', true);
+          requestApplyRecommendation();
           return;
         }
         if (action === 'rejectRecommendation') {
-          setFeedback('No recommendation to discard yet.', true);
+          rejectRecommendation();
           return;
         }
         if (action === 'reset') {
@@ -2703,7 +2933,39 @@ export class NoteTestPanelManager {
           setFeedback(message.error || 'Unable to generate AI recommendation.', true);
           return;
         }
-        setFeedback('AI recommendation ready. Apply/discard actions are not wired in Note Test yet.');
+        state.recommendation = message.recommendation || undefined;
+        state.recommendationNodes = state.nodes
+          .filter(node => node.type === 'ticket')
+          .map(node => ({ ...node }));
+        updateRecommendationActionState();
+        setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
+        return;
+      }
+
+      if (message.type === 'applyRecommendationResult') {
+        if (!message.ok) {
+          updateRecommendationActionState();
+          setFeedback(message.error || 'Unable to apply AI recommendation.', true);
+          return;
+        }
+        if (message.state) {
+          state.nodes = Array.isArray(message.state.nodes)
+            ? message.state.nodes.map(node => ({ ...node }))
+            : [];
+          state.connectors = Array.isArray(message.state.connectors)
+            ? message.state.connectors.map(connector => ({ ...connector }))
+            : [];
+          uiState.nextConnectorIndex = state.connectors.length;
+          uiState.selectedNodeId = undefined;
+          uiState.selectedConnectorId = undefined;
+          clearLinkPreview();
+          renderNodes();
+          persistCanvasState();
+        }
+        state.recommendation = undefined;
+        state.recommendationNodes = [];
+        updateRecommendationActionState();
+        setFeedback('AI recommendation applied.');
       }
     });
 
@@ -2785,6 +3047,7 @@ export class NoteTestPanelManager {
     syncToolbarState();
     syncFloatingLayout();
     setTicketEntryOpen(false);
+    updateRecommendationActionState();
     renderNodes();
     updateDeleteConnectorState();
 
