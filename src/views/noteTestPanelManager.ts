@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueDetails } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersistence';
 
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
 
@@ -59,6 +60,12 @@ interface NoteTestState {
     x: number;
     y: number;
   };
+}
+
+interface NoteTestStateRecoveryResult {
+  state: NoteTestState;
+  repaired: boolean;
+  warning?: string;
 }
 
 function createNonce(): string {
@@ -181,52 +188,23 @@ function toDirectedConnector(value: unknown): DirectedConnector | undefined {
 }
 
 function normalizePersistedState(rawState: unknown): NoteTestState {
-  if (!isRecord(rawState)) {
-    return {
-      nodes: [],
-      connectors: [],
-      zoom: 1,
-      toolbarPosition: { x: 16, y: 16 }
-    };
-  }
+  return normalizePersistedStateWithRecovery(rawState).state;
+}
 
-  const rawNodes = Array.isArray(rawState.nodes) ? rawState.nodes : [];
-  const nodes: CanvasNode[] = [];
-  for (const [index, candidate] of rawNodes.entries()) {
-    const node = toWebsitePreviewNode(candidate, index) ?? toNoteNode(candidate, index) ?? toTicketNode(candidate, index);
-    if (node) {
-      nodes.push(node);
-    }
-  }
-
-  const validNodeIds = new Set(nodes.map(node => node.id));
-  const rawConnectors = Array.isArray(rawState.connectors) ? rawState.connectors : [];
-  const connectors: DirectedConnector[] = [];
-  const seenEdges = new Set<string>();
-  for (const candidate of rawConnectors) {
-    const connector = toDirectedConnector(candidate);
-    if (!connector) {
-      continue;
-    }
-    if (!validNodeIds.has(connector.sourceNodeId) || !validNodeIds.has(connector.targetNodeId)) {
-      continue;
-    }
-    const edgeKey = `${connector.sourceNodeId}->${connector.targetNodeId}`;
-    if (seenEdges.has(edgeKey)) {
-      continue;
-    }
-    seenEdges.add(edgeKey);
-    connectors.push(connector);
-  }
-
+function normalizePersistedStateWithRecovery(rawState: unknown): NoteTestStateRecoveryResult {
+  const recovered = normalizeTaskDesignerPersistedState(rawState);
   return {
-    nodes,
-    connectors,
-    zoom: Math.max(0.5, Math.min(2, asNumber(rawState.zoom) ?? 1)),
-    toolbarPosition: {
-      x: asNumber((rawState.toolbarPosition as Record<string, unknown> | undefined)?.x) ?? 16,
-      y: asNumber((rawState.toolbarPosition as Record<string, unknown> | undefined)?.y) ?? 16
-    }
+    state: {
+      nodes: recovered.state.nodes as CanvasNode[],
+      connectors: recovered.state.connectors as DirectedConnector[],
+      zoom: recovered.state.zoom,
+      toolbarPosition: {
+        x: recovered.state.toolbarPosition.x,
+        y: recovered.state.toolbarPosition.y
+      }
+    },
+    repaired: recovered.repaired,
+    warning: recovered.warning?.replace('Task Designer', 'Note Test')
   };
 }
 
@@ -303,8 +281,8 @@ export class NoteTestPanelManager {
       this.panel = undefined;
     }
 
-    const rawState = this.workspaceState.get<unknown>(NOTE_TEST_STATE_KEY);
-    const state = normalizePersistedState(rawState);
+    const recoveredState = this.getPersistedCanvasState();
+    const state = recoveredState.state;
     this.syncNextNodeIndex(state.nodes);
 
     const nonce = createNonce();
@@ -318,6 +296,9 @@ export class NoteTestPanelManager {
     panel.webview.html = this.getHtml(nonce, state);
 
     this.panel = panel;
+    if (recoveredState.repaired) {
+      void this.workspaceState.update(NOTE_TEST_STATE_KEY, state);
+    }
 
     panel.onDidDispose(() => {
       this.panel = undefined;
@@ -339,9 +320,9 @@ export class NoteTestPanelManager {
     }
 
     if (message.type === 'persist' || message.type === 'persistCanvasState') {
-      const state = normalizePersistedState(message.state ?? message);
-      await this.workspaceState.update(NOTE_TEST_STATE_KEY, state);
-      this.syncNextNodeIndex(state.nodes);
+      const recoveredState = normalizePersistedStateWithRecovery(message.state ?? message);
+      await this.workspaceState.update(NOTE_TEST_STATE_KEY, recoveredState.state);
+      this.syncNextNodeIndex(recoveredState.state.nodes);
       return;
     }
 
@@ -363,6 +344,11 @@ export class NoteTestPanelManager {
       maxIndex = nodes.length - 1;
     }
     this.nextNodeIndex = maxIndex + 1;
+  }
+
+  private getPersistedCanvasState(): NoteTestStateRecoveryResult {
+    const rawState = this.workspaceState.get<unknown>(NOTE_TEST_STATE_KEY);
+    return normalizePersistedStateWithRecovery(rawState);
   }
 
   private createTicketNode(issue: IssueDetails, requestedIssueKey?: string, x?: number, y?: number): TicketNode {
