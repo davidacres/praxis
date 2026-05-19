@@ -6,6 +6,7 @@ import type {
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode
 } from '../ai/aiReviewService';
+import { issueTypeHex } from '../board/issueTypeColors';
 import {
   normalizeTaskDesignerPersistedState,
   type TaskDesignerPersistedStateRecoveryResult
@@ -19,6 +20,7 @@ const GENERATED_FEATURES_DIRECTORY_NAME = 'generated-from-designer';
 const GENERATED_STORIES_PER_FEATURE = 3;
 
 interface TicketNode {
+  type: 'ticket';
   id: string;
   issueKey: string;
   summary: string;
@@ -31,15 +33,47 @@ interface TicketNode {
   y: number;
 }
 
+interface NoteNode {
+  type: 'note';
+  id: string;
+  title: string;
+  content: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface WebsitePreviewNode {
+  type: 'website';
+  id: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type CanvasNode = TicketNode | NoteNode | WebsitePreviewNode;
+
 interface DirectedConnector {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
+  sourceDirection?: LinkHandleDirection;
+  targetDirection?: LinkHandleDirection;
 }
 
+type LinkHandleDirection = 'top' | 'right' | 'bottom' | 'left';
+
 interface PersistedTaskDesignerState {
-  nodes: TicketNode[];
+  nodes: CanvasNode[];
   connectors: DirectedConnector[];
+  zoom: number;
+  toolbarPosition: {
+    x: number;
+    y: number;
+  };
 }
 
 type PersistedTaskDesignerRecoveryResult = TaskDesignerPersistedStateRecoveryResult;
@@ -67,6 +101,8 @@ const DEFAULT_ARTIFACT_PRIORITY = 'P2';
 const DEFAULT_ARTIFACT_COMPLEXITY = 'Low';
 const DEFAULT_ARTIFACT_RISK = 'Low';
 const DEFAULT_ARTIFACT_CONFIDENCE = 'High';
+const DEFAULT_TASK_DESIGNER_TICKET_HEX = '#2563eb';
+const DEFAULT_TASK_DESIGNER_WEBSITE_HEX = '#58a6ff';
 
 type RecommendTaskDesignerFlow = (
   nodes: readonly TaskDesignerRecommendationNode[],
@@ -79,6 +115,24 @@ interface TaskDesignerBoardRecommendationSeed {
 }
 
 type ResolveTaskDesignerBoardRecommendationSeed = () => Promise<TaskDesignerBoardRecommendationSeed | undefined>;
+
+type TaskDesignerRelatedIssueRelation = 'dependsOn' | 'subTask';
+
+interface ResolvedDroppedIssueRelation {
+  relation: TaskDesignerRelatedIssueRelation;
+  sourceIssueKey: string;
+  targetIssueKey: string;
+}
+
+interface ResolvedDroppedIssuePayload {
+  mainIssue: Omit<TicketNode, 'id' | 'x' | 'y' | 'type'>;
+  relatedIssues: Array<
+    Omit<TicketNode, 'id' | 'x' | 'y' | 'type'> & {
+      relation: TaskDesignerRelatedIssueRelation;
+    }
+  >;
+  relations: ResolvedDroppedIssueRelation[];
+}
 
 type ConnectorGraphValidationCode = 'duplicate-edge' | 'cycle';
 
@@ -107,6 +161,12 @@ function asNumber(value: unknown): number | undefined {
 
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function asLinkHandleDirection(value: unknown): LinkHandleDirection | undefined {
+  return value === 'top' || value === 'right' || value === 'bottom' || value === 'left'
+    ? value
+    : undefined;
 }
 
 function pickFirstString(...values: unknown[]): string | undefined {
@@ -143,6 +203,7 @@ function normalizeIssuePayload(issue: Partial<IssueDetails>, requestedIssueKey?:
   const projectKey = pickFirstString(issue.projectKey) ?? fallbackIssueKeyProjectKey(issueKey);
 
   return {
+    type: 'ticket',
     issueKey,
     summary,
     issueType,
@@ -155,6 +216,9 @@ function normalizeIssuePayload(issue: Partial<IssueDetails>, requestedIssueKey?:
 
 function toTicketNode(value: unknown, fallbackIndex = 0): TicketNode | undefined {
   if (!isRecord(value)) {
+    return undefined;
+  }
+  if (value.type === 'note' || value.type === 'website') {
     return undefined;
   }
 
@@ -174,6 +238,7 @@ function toTicketNode(value: unknown, fallbackIndex = 0): TicketNode | undefined
   const fallbackRow = Math.floor(fallbackIndex / 4);
 
   return {
+    type: 'ticket',
     id,
     issueKey,
     summary,
@@ -184,6 +249,58 @@ function toTicketNode(value: unknown, fallbackIndex = 0): TicketNode | undefined
     projectKey,
     x: x ?? (24 + (fallbackColumn * 280)),
     y: y ?? (72 + (fallbackRow * 150))
+  };
+}
+
+function toNoteNode(value: unknown, fallbackIndex = 0): NoteNode | undefined {
+  if (!isRecord(value) || value.type !== 'note') {
+    return undefined;
+  }
+
+  const x = asNumber(value.x);
+  const y = asNumber(value.y);
+  const width = asNumber(value.width);
+  const height = asNumber(value.height);
+  const fallbackColumn = fallbackIndex % 4;
+  const fallbackRow = Math.floor(fallbackIndex / 4);
+
+  return {
+    type: 'note',
+    id: pickFirstString(value.id) ?? `note-${fallbackIndex}`,
+    title: pickFirstString(value.title) ?? 'Notes',
+    content: pickFirstString(value.content, value.summary) ?? '',
+    x: x ?? (24 + (fallbackColumn * 280)),
+    y: y ?? (72 + (fallbackRow * 150)),
+    width: width ?? 280,
+    height: height ?? 190
+  };
+}
+
+function toWebsitePreviewNode(value: unknown, fallbackIndex = 0): WebsitePreviewNode | undefined {
+  if (!isRecord(value) || value.type !== 'website') {
+    return undefined;
+  }
+
+  const url = pickFirstString(value.url);
+  if (!url) {
+    return undefined;
+  }
+
+  const x = asNumber(value.x);
+  const y = asNumber(value.y);
+  const width = asNumber(value.width);
+  const height = asNumber(value.height);
+  const fallbackColumn = fallbackIndex % 4;
+  const fallbackRow = Math.floor(fallbackIndex / 4);
+
+  return {
+    type: 'website',
+    id: pickFirstString(value.id) ?? `website-${fallbackIndex}`,
+    url,
+    x: x ?? (24 + (fallbackColumn * 300)),
+    y: y ?? (72 + (fallbackRow * 210)),
+    width: width ?? 360,
+    height: height ?? 260
   };
 }
 
@@ -203,7 +320,9 @@ function toDirectedConnector(value: unknown): DirectedConnector | undefined {
   return {
     id,
     sourceNodeId,
-    targetNodeId
+    targetNodeId,
+    sourceDirection: asLinkHandleDirection(value.sourceDirection),
+    targetDirection: asLinkHandleDirection(value.targetDirection)
   };
 }
 
@@ -255,6 +374,61 @@ function normalizePersistedStateWithRecovery(value: unknown): PersistedTaskDesig
 
 function normalizePersistedState(value: unknown): PersistedTaskDesignerState {
   return normalizePersistedStateWithRecovery(value).state;
+}
+
+function isTicketNode(node: CanvasNode | undefined): node is TicketNode {
+  return Boolean(node && node.type === 'ticket');
+}
+
+function isNoteNode(node: CanvasNode | undefined): node is NoteNode {
+  return Boolean(node && node.type === 'note');
+}
+
+function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | WebsitePreviewNode {
+  return Boolean(node && node.type !== 'ticket');
+}
+
+function normalizeWebsitePreviewUrl(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function websitePreviewTitle(url: string | undefined): string {
+  const normalized = normalizeWebsitePreviewUrl(url);
+  if (!normalized) {
+    return 'Website Preview';
+  }
+  try {
+    const parsed = new URL(normalized);
+    return parsed.hostname || 'Website Preview';
+  } catch {
+    return 'Website Preview';
+  }
+}
+
+function getCanvasNodeTitle(node: CanvasNode | undefined): string {
+  if (!node) {
+    return 'selected node';
+  }
+  if (node.type === 'ticket') {
+    return node.issueKey;
+  }
+  if (node.type === 'note') {
+    return toSingleLineText(node.title) || 'note';
+  }
+  return websitePreviewTitle(node.url);
 }
 
 function detectDuplicateConnector(connectors: readonly DirectedConnector[]): DirectedConnector | undefined {
@@ -353,6 +527,45 @@ function toSingleLineText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+function clampColorChannel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | undefined {
+  const normalized = /^#?([\da-f]{6})$/i.exec(hex.trim());
+  if (!normalized) {
+    return undefined;
+  }
+  const value = normalized[1];
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16)
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${clampColorChannel(r).toString(16).padStart(2, '0')}${clampColorChannel(g).toString(16).padStart(2, '0')}${clampColorChannel(b).toString(16).padStart(2, '0')}`;
+}
+
+function shiftHex(hex: string, delta: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+  return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
+}
+
+function taskDesignerTicketHeaderBackground(issueType: string | undefined): string {
+  const trimmed = issueType?.trim();
+  const base = trimmed ? issueTypeHex(trimmed) : DEFAULT_TASK_DESIGNER_TICKET_HEX;
+  return `linear-gradient(135deg, ${shiftHex(base, 18)} 0%, ${shiftHex(base, -14)} 100%)`;
+}
+
+function taskDesignerWebsiteHeaderBackground(): string {
+  return `linear-gradient(135deg, ${shiftHex(DEFAULT_TASK_DESIGNER_WEBSITE_HEX, 12)} 0%, ${shiftHex(DEFAULT_TASK_DESIGNER_WEBSITE_HEX, -18)} 100%)`;
+}
+
 function compareNodeIds(
   leftNodeId: string,
   rightNodeId: string,
@@ -428,6 +641,7 @@ export function computeTaskDesignerTopologicalOrder(
   connectors: readonly Pick<DirectedConnector, 'id' | 'sourceNodeId' | 'targetNodeId'>[]
 ): string[] | undefined {
   const normalizedNodes: TicketNode[] = nodes.map(node => ({
+    type: 'ticket',
     id: node.id,
     issueKey: node.id,
     summary: node.id,
@@ -744,6 +958,75 @@ function buildGeneratedStoryMarkdown(story: GeneratedStoryArtifact): string {
   return `${lines.join('\n')}\n`;
 }
 
+type TaskDesignerToolbarIcon =
+  | 'select'
+  | 'ticket'
+  | 'note'
+  | 'website'
+  | 'link'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'deleteConnector'
+  | 'generateMasterPlan'
+  | 'recommendFlow'
+  | 'recommendBoardFlow'
+  | 'confirm'
+  | 'dismiss'
+  | 'reset';
+
+function renderTaskDesignerToolbarIcon(icon: TaskDesignerToolbarIcon): string {
+  switch (icon) {
+    case 'select':
+      return '<path d="M4 3.5l8 3.6-3.6 1.3L7 12 4 3.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="currentColor" />';
+    case 'ticket':
+      return '<path d="M5 3.5h5l2 2V12.5H5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none" /><path d="M10 3.5v2h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" /><path d="M8.5 7v3M7 8.5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />';
+    case 'note':
+      return '<path d="M4 3.25h6l2 2v7.5H4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" /><path d="M10 3.25v2h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" /><path d="M6 7h4M6 9.25h4M6 11.5h2.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />';
+    case 'website':
+      return '<rect x="2.7" y="3" width="10.6" height="10" rx="1.8" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M2.7 5.8h10.6" stroke="currentColor" stroke-width="1.3" /><circle cx="4.6" cy="4.4" r="0.55" fill="currentColor" /><circle cx="6.5" cy="4.4" r="0.55" fill="currentColor" /><circle cx="8.4" cy="4.4" r="0.55" fill="currentColor" /><path d="M5.2 9.6c.9-1.4 2.2-2 3.9-1.9M5.7 11.1c1.1-1.1 2.2-1.5 3.7-1.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />';
+    case 'link':
+      return '<path d="M6.2 9.8 4.9 11a2 2 0 1 1-2.9-2.8l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" /><path d="M9.8 6.2 11.1 5a2 2 0 1 1 2.9 2.8l-1.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" /><path d="M6 10l4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />';
+    case 'zoomIn':
+      return '<circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M11.5 11.5 14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /><path d="M8 6.2v3.6M6.2 8h3.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />';
+    case 'zoomOut':
+      return '<circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M11.5 11.5 14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /><path d="M6.2 8h3.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />';
+    case 'deleteConnector':
+      return '<path d="M3.5 4.5h9M6 4.5V3.4c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.1M5 6.5v5m3-5v5m3-5v5M4.5 4.5l.5 8.1c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9l.5-8.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" />';
+    case 'generateMasterPlan':
+      return '<path d="M4 3.5h5l2 2v7H4z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" fill="none" /><path d="M9 3.5v2h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" /><path d="M8 7.5v3.5M6.5 9.5 8 11l1.5-1.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />';
+    case 'recommendFlow':
+      return '<path d="M8 2.5 9.3 5l2.7.4-2 2 .5 2.8L8 9 5.5 10.2 6 7.4 4 5.4 6.7 5 8 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" /><path d="M11.8 10.5l.6 1.2 1.3.2-.9.9.2 1.3-1.2-.6-1.1.6.2-1.3-.9-.9 1.3-.2.5-1.2z" fill="currentColor" />';
+    case 'recommendBoardFlow':
+      return '<rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M6.2 3v10" stroke="currentColor" stroke-width="1.3" /><path d="M2.5 6.3h11" stroke="currentColor" stroke-width="1.3" /><path d="M11.2 2.4l.6 1.1 1.2.2-.8.9.2 1.2-1.2-.6-1.1.6.2-1.2-.8-.9 1.2-.2.5-1.1z" fill="currentColor" />';
+    case 'confirm':
+      return '<path d="M3.5 8.5 6.5 11.5 12.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />';
+    case 'dismiss':
+      return '<path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />';
+    case 'reset':
+      return '<path d="M3.2 8A4.8 4.8 0 1 1 8 12.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3.2 4.8v3.2H6.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+  }
+}
+
+function renderTaskDesignerToolbarButton(
+  id: string,
+  action: string | undefined,
+  label: string,
+  icon: TaskDesignerToolbarIcon,
+  options?: {
+    disabled?: boolean;
+    extraClass?: string;
+    buttonType?: 'button' | 'submit';
+  }
+): string {
+  const className = ['overlay-icon-button', options?.extraClass].filter(Boolean).join(' ');
+  const actionAttribute = action ? ` data-action="${action}"` : '';
+  const disabledAttribute = options?.disabled ? ' disabled' : '';
+  const buttonType = options?.buttonType ?? 'button';
+  return `<button id="${id}" class="${className}" type="${buttonType}" title="${label}" aria-label="${label}"${actionAttribute}${disabledAttribute}>
+    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">${renderTaskDesignerToolbarIcon(icon)}</svg>
+  </button>`;
+}
+
 export class TaskDesignerPanelManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private nextNodeIndex = 0;
@@ -755,19 +1038,30 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     private readonly resolveBoardRecommendationSeed?: ResolveTaskDesignerBoardRecommendationSeed
   ) {}
 
-  public open(): void {
+  public open(boardName?: string): void {
+    const panelTitle = this.buildPanelTitle(boardName);
     if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.Active);
-      return;
+      this.panel.dispose();
+      this.panel = undefined;
     }
 
     const persistedState = this.getPersistedCanvasState();
     const initialState = persistedState.state;
     this.syncNextNodeIndex(initialState.nodes);
+    const wasEmpty = initialState.nodes.length === 0;
+    if (wasEmpty) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const traceNote = this.createNoteNode();
+      traceNote.title = 'Session Log';
+      traceNote.content = `Opened: ${dateStr} at ${timeStr}`;
+      initialState.nodes.push(traceNote);
+    }
     const nonce = createNonce();
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       'ticketManager.taskDesigner',
-      'Task Designer',
+      panelTitle,
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -775,12 +1069,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
     );
 
-    this.panel.webview.html = this.getHtml(nonce, initialState, persistedState.warning);
-    if (persistedState.repaired) {
+    panel.webview.html = this.getHtml(nonce, initialState, persistedState.warning, panelTitle);
+
+    this.panel = panel;
+    if (persistedState.repaired || wasEmpty) {
       void this.workspaceState.update(TASK_DESIGNER_STATE_KEY, initialState);
     }
 
-    this.panel.onDidDispose(
+    panel.onDidDispose(
       () => {
         this.panel = undefined;
       },
@@ -788,7 +1084,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       []
     );
 
-    this.panel.webview.onDidReceiveMessage(
+    panel.webview.onDidReceiveMessage(
       message => {
         void this.handleMessage(message);
       },
@@ -813,8 +1109,23 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'addNote') {
+      await this.handleAddNoteMessage(message);
+      return;
+    }
+
+    if (type === 'addWebsitePreview') {
+      await this.handleAddWebsitePreviewMessage(message);
+      return;
+    }
+
     if (type === 'persistCanvasState') {
       await this.handlePersistCanvasStateMessage(message);
+      return;
+    }
+
+    if (type === 'resolveDroppedIssue') {
+      await this.handleResolveDroppedIssueMessage(message);
       return;
     }
 
@@ -846,8 +1157,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
   }
 
+  private buildPanelTitle(boardName: string | undefined): string {
+    return boardName?.trim() ? `Task Designer - ${boardName.trim()}` : 'Task Designer';
+  }
+
   private async handleAddTicketMessage(message: Record<string, unknown>): Promise<void> {
     const issueKey = asString(message.issueKey)?.trim();
+    const x = asNumber(message.x);
+    const y = asNumber(message.y);
     if (!issueKey) {
       await this.panel?.webview.postMessage({
         type: 'addTicketResult',
@@ -862,11 +1179,151 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       await this.panel?.webview.postMessage({
         type: 'addTicketResult',
         ok: true,
-        node: this.createTicketNode(issue, issueKey)
+        node: this.createTicketNode(issue, issueKey, x, y)
       });
     } catch (error) {
       await this.panel?.webview.postMessage({
         type: 'addTicketResult',
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async handleAddNoteMessage(message: Record<string, unknown>): Promise<void> {
+    const x = asNumber(message.x);
+    const y = asNumber(message.y);
+    const node = this.createNoteNode();
+    if (x !== undefined) {
+      node.x = Math.round(x);
+    }
+    if (y !== undefined) {
+      node.y = Math.round(y);
+    }
+    const title = asString(message.title);
+    const content = asString(message.content);
+    if (title !== undefined) {
+      node.title = title;
+    }
+    if (content !== undefined) {
+      node.content = content;
+    }
+    await this.panel?.webview.postMessage({
+      type: 'addNoteResult',
+      ok: true,
+      node
+    });
+  }
+
+  private async handleAddWebsitePreviewMessage(message: Record<string, unknown>): Promise<void> {
+    const url = normalizeWebsitePreviewUrl(asString(message.url));
+    if (!url) {
+      await this.panel?.webview.postMessage({
+        type: 'addWebsitePreviewResult',
+        ok: false,
+        error: 'Enter a valid http or https URL before adding the website preview.'
+      });
+      return;
+    }
+
+    const x = asNumber(message.x);
+    const y = asNumber(message.y);
+    const node = this.createWebsitePreviewNode(url);
+    if (x !== undefined) {
+      node.x = Math.round(x);
+    }
+    if (y !== undefined) {
+      node.y = Math.round(y);
+    }
+    await this.panel?.webview.postMessage({
+      type: 'addWebsitePreviewResult',
+      ok: true,
+      node
+    });
+  }
+
+  private async handleResolveDroppedIssueMessage(message: Record<string, unknown>): Promise<void> {
+    const issueKey = asString(message.issueKey)?.trim();
+    const dropPoint = isRecord(message.dropPoint)
+      ? {
+          x: asNumber(message.dropPoint.x) ?? 200,
+          y: asNumber(message.dropPoint.y) ?? 120
+        }
+      : { x: 200, y: 120 };
+    if (!issueKey) {
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
+        ok: false,
+        error: 'Dropped issue key is missing.'
+      });
+      return;
+    }
+
+    try {
+      const issue = await this.backendService.getIssue(issueKey);
+      const mainIssue = normalizeIssuePayload(issue, issueKey);
+      if (!mainIssue) {
+        throw new Error(`Unable to resolve ${issueKey}.`);
+      }
+
+      const relatedIssueKeys = new Map<string, TaskDesignerRelatedIssueRelation>();
+      for (const dependencyKey of issue.dependsOn ?? []) {
+        const trimmed = dependencyKey.trim();
+        if (trimmed && trimmed !== mainIssue.issueKey) {
+          relatedIssueKeys.set(trimmed, 'dependsOn');
+        }
+      }
+      for (const subTask of issue.subTasks ?? []) {
+        const trimmed = subTask.key.trim();
+        if (trimmed && trimmed !== mainIssue.issueKey) {
+          relatedIssueKeys.set(trimmed, 'subTask');
+        }
+      }
+
+      const relatedIssues: ResolvedDroppedIssuePayload['relatedIssues'] = [];
+      const relations: ResolvedDroppedIssueRelation[] = [];
+      for (const [relatedIssueKey, relation] of relatedIssueKeys.entries()) {
+        try {
+          const relatedIssue = await this.backendService.getIssue(relatedIssueKey);
+          const normalizedRelatedIssue = normalizeIssuePayload(relatedIssue, relatedIssueKey);
+          if (!normalizedRelatedIssue) {
+            continue;
+          }
+          relatedIssues.push({
+            ...normalizedRelatedIssue,
+            relation
+          });
+          relations.push(
+            relation === 'dependsOn'
+              ? {
+                  relation,
+                  sourceIssueKey: normalizedRelatedIssue.issueKey,
+                  targetIssueKey: mainIssue.issueKey
+                }
+              : {
+                  relation,
+                  sourceIssueKey: mainIssue.issueKey,
+                  targetIssueKey: normalizedRelatedIssue.issueKey
+                }
+          );
+        } catch {
+          // Skip unresolved related issues but still allow the main drop to succeed.
+        }
+      }
+
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
+        ok: true,
+        dropPoint,
+        payload: {
+          mainIssue,
+          relatedIssues,
+          relations
+        } satisfies ResolvedDroppedIssuePayload
+      });
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
         ok: false,
         error: error instanceof Error ? error.message : String(error)
       });
@@ -909,7 +1366,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
   private async handleRecommendCanvasFlowMessage(message: Record<string, unknown>): Promise<void> {
     const currentState = normalizePersistedState(message.state);
-    if (currentState.nodes.length < 2) {
+    const ticketNodes = currentState.nodes.filter(isTicketNode);
+    const ticketNodeIds = new Set(ticketNodes.map(node => node.id));
+    const ticketConnectors = currentState.connectors.filter(
+      connector => ticketNodeIds.has(connector.sourceNodeId) && ticketNodeIds.has(connector.targetNodeId)
+    );
+    if (ticketNodes.length < 2) {
       await this.panel?.webview.postMessage({
         type: 'recommendCanvasFlowResult',
         ok: false,
@@ -929,7 +1391,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
     try {
       const recommendation = await this.recommendTaskDesignerFlow(
-        currentState.nodes.map(node => ({
+        ticketNodes.map(node => ({
           id: node.id,
           issueKey: node.issueKey,
           summary: node.summary,
@@ -939,7 +1401,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           priority: node.priority,
           projectKey: node.projectKey
         })),
-        currentState.connectors.map(connector => ({
+        ticketConnectors.map(connector => ({
           sourceNodeId: connector.sourceNodeId,
           targetNodeId: connector.targetNodeId
         }))
@@ -1047,6 +1509,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const previewNodes = Array.isArray(message.nodes)
       ? message.nodes.map(toTicketNode).filter((node): node is TicketNode => Boolean(node))
       : [];
+    const currentState = normalizePersistedState(message.state);
+    const preservedNodes = currentState.nodes
+      .filter(isCustomCanvasNode)
+      .map(node => ({ ...node }));
+    const preservedNodeIds = new Set(preservedNodes.map(node => node.id));
+    const preservedConnectors = currentState.connectors.filter(
+      connector => preservedNodeIds.has(connector.sourceNodeId) || preservedNodeIds.has(connector.targetNodeId)
+    );
     if (previewNodes.length < 2) {
       await this.panel?.webview.postMessage({
         type: 'applyRecommendationResult',
@@ -1129,11 +1599,19 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     const nextState: PersistedTaskDesignerState = {
-      nodes: orderedNodeIds
-        .map(nodeId => byId.get(nodeId))
-        .filter((node): node is TicketNode => Boolean(node))
-        .map(node => ({ ...node })),
-      connectors
+      nodes: [
+        ...orderedNodeIds
+          .map(nodeId => byId.get(nodeId))
+          .filter((node): node is TicketNode => Boolean(node))
+          .map(node => ({ ...node })),
+        ...preservedNodes
+      ],
+      connectors: [...connectors, ...preservedConnectors].map((connector, index) => ({
+        ...connector,
+        id: `connector-${index}`
+      })),
+      zoom: currentState.zoom,
+      toolbarPosition: { ...currentState.toolbarPosition }
     };
 
     this.syncNextNodeIndex(nextState.nodes);
@@ -1147,7 +1625,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
   private async handleGenerateMasterPlanMessage(message: Record<string, unknown>): Promise<void> {
     const state = normalizePersistedState(message.state);
-    if (state.nodes.length === 0) {
+    const ticketNodes = state.nodes.filter(isTicketNode);
+    const ticketNodeIds = new Set(ticketNodes.map(node => node.id));
+    const ticketConnectors = state.connectors.filter(
+      connector => ticketNodeIds.has(connector.sourceNodeId) && ticketNodeIds.has(connector.targetNodeId)
+    );
+    if (ticketNodes.length === 0) {
       await this.panel?.webview.postMessage({
         type: 'generateMasterPlanResult',
         ok: false,
@@ -1156,7 +1639,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return;
     }
 
-    const graphError = validateConnectorGraph(state.connectors);
+    const graphError = validateConnectorGraph(ticketConnectors);
     if (graphError) {
       await this.panel?.webview.postMessage({
         type: 'generateMasterPlanResult',
@@ -1183,8 +1666,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       GENERATED_FEATURES_ROOT_SEGMENT,
       GENERATED_FEATURES_DIRECTORY_NAME
     );
-    const markdown = buildMasterPlanMarkdown(state.nodes, state.connectors);
-    const featureArtifacts = buildGeneratedFeatureArtifacts(state.nodes, state.connectors);
+    const markdown = buildMasterPlanMarkdown(ticketNodes, ticketConnectors);
+    const featureArtifacts = buildGeneratedFeatureArtifacts(ticketNodes, ticketConnectors);
 
     try {
       await vscode.workspace.fs.createDirectory(plansDirectoryUri);
@@ -1244,7 +1727,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     return normalizePersistedStateWithRecovery(raw);
   }
 
-  private syncNextNodeIndex(nodes: readonly TicketNode[]): void {
+  private syncNextNodeIndex(nodes: readonly CanvasNode[]): void {
     let maxIndex = -1;
     for (const node of nodes) {
       const match = /-(\d+)$/.exec(node.id);
@@ -1259,7 +1742,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     this.nextNodeIndex = maxIndex + 1;
   }
 
-  private createTicketNode(issue: IssueDetails, requestedIssueKey?: string): TicketNode {
+  private createTicketNode(issue: IssueDetails, requestedIssueKey?: string, x?: number, y?: number): TicketNode {
     const index = this.nextNodeIndex;
     this.nextNodeIndex += 1;
     const column = index % 4;
@@ -1270,6 +1753,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     return {
+      type: 'ticket',
       id: `ticket-${normalizedIssue.issueKey}-${index}`,
       issueKey: normalizedIssue.issueKey,
       summary: normalizedIssue.summary,
@@ -1278,12 +1762,50 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       assignee: normalizedIssue.assignee,
       priority: normalizedIssue.priority,
       projectKey: normalizedIssue.projectKey,
-      x: 24 + (column * 280),
-      y: 72 + (row * 150)
+      x: x !== undefined ? Math.round(x) : (24 + (column * 280)),
+      y: y !== undefined ? Math.round(y) : (72 + (row * 150))
     };
   }
 
-  private getHtml(nonce: string, initialState: PersistedTaskDesignerState, initialWarning?: string): string {
+  private createNoteNode(): NoteNode {
+    const index = this.nextNodeIndex;
+    this.nextNodeIndex += 1;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    return {
+      type: 'note',
+      id: `note-${index}`,
+      title: 'Notes',
+      content: '',
+      x: 24 + (column * 300),
+      y: 72 + (row * 210),
+      width: 280,
+      height: 190
+    };
+  }
+
+  private createWebsitePreviewNode(url: string): WebsitePreviewNode {
+    const index = this.nextNodeIndex;
+    this.nextNodeIndex += 1;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    return {
+      type: 'website',
+      id: `website-${index}`,
+      url,
+      x: 24 + (column * 320),
+      y: 72 + (row * 240),
+      width: 360,
+      height: 260
+    };
+  }
+
+  private getHtml(
+    nonce: string,
+    initialState: PersistedTaskDesignerState,
+    initialWarning?: string,
+    panelTitle = 'Task Designer'
+  ): string {
     const initialStateLiteral = JSON.stringify(initialState)
       .replace(/</g, '\\u003c')
       .replace(/\u2028/g, '\\u2028')
@@ -1299,7 +1821,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Task Designer</title>
+  <title>${panelTitle.replace(/</g, '&lt;')}</title>
   <style>
     :root { color-scheme: light dark; }
     * { box-sizing: border-box; }
@@ -1310,175 +1832,34 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       background: var(--vscode-editor-background);
     }
     .shell {
-      display: flex;
-      flex-direction: column;
       height: 100%;
       width: 100%;
-      border: 1px solid var(--vscode-panel-border);
-    }
-    .toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px;
-      border-bottom: 1px solid var(--vscode-panel-border);
-      background: var(--vscode-editorWidget-background);
-    }
-    .toolbar-title {
-      margin-right: 8px;
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .toolbar button {
-      border: 1px solid var(--vscode-button-border, transparent);
-      background: var(--vscode-button-secondaryBackground);
-      color: var(--vscode-button-secondaryForeground);
-      border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .toolbar button:hover {
-      background: var(--vscode-button-secondaryHoverBackground);
-    }
-    .toolbar button.is-active {
-      border-color: var(--vscode-focusBorder);
-      background: color-mix(in oklab, var(--vscode-button-secondaryBackground) 70%, var(--vscode-focusBorder) 30%);
-    }
-    .toolbar button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-    .ticket-add {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-left: auto;
-      min-width: 280px;
-    }
-    .ticket-add input {
-      flex: 1;
-      min-width: 120px;
-      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-      background: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
-      border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
-    }
-    .ticket-add button {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .ticket-add button:hover {
-      background: var(--vscode-button-hoverBackground);
     }
     .toolbar-feedback {
       font-size: 12px;
-      color: var(--vscode-descriptionForeground);
-      min-height: 1.2em;
-      padding: 0 10px 6px;
-      border-bottom: 1px solid var(--vscode-panel-border);
-      background: var(--vscode-editorWidget-background);
+      color: var(--vscode-editor-foreground);
+      min-height: 0;
+      padding: 10px 14px;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 86%, transparent);
+      border-radius: 12px;
+      background: color-mix(in oklab, var(--vscode-editorWidget-background) 84%, transparent);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      opacity: 0;
+      transform: translateY(-8px);
+      pointer-events: none;
+      transition: opacity 160ms ease, transform 160ms ease;
     }
     .toolbar-feedback.error {
       color: var(--vscode-errorForeground);
+      border-color: color-mix(in oklab, var(--vscode-errorForeground) 38%, var(--vscode-panel-border));
     }
-    .execution-summary {
-      padding: 8px 10px 10px;
-      border-bottom: 1px solid var(--vscode-panel-border);
-      background: var(--vscode-editorWidget-background);
-      font-size: 12px;
-    }
-    .execution-summary-title {
-      color: var(--vscode-descriptionForeground);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 4px;
-    }
-    .execution-summary-text {
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 6px;
-      min-height: 1.2em;
-    }
-    .execution-summary-list {
-      margin: 0;
-      padding-left: 18px;
-      display: grid;
-      gap: 3px;
-    }
-    .execution-summary-item-key {
-      color: var(--vscode-editor-foreground);
-      font-weight: 600;
-    }
-    .execution-summary-item-summary {
-      color: var(--vscode-descriptionForeground);
-    }
-    .recommendation-summary {
-      padding: 8px 10px 10px;
-      border-bottom: 1px solid var(--vscode-panel-border);
-      background: var(--vscode-editorWidget-background);
-      font-size: 12px;
-    }
-    .recommendation-summary-title {
-      color: var(--vscode-descriptionForeground);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 4px;
-    }
-    .recommendation-summary-text {
-      color: var(--vscode-descriptionForeground);
-      margin-bottom: 6px;
-      min-height: 1.2em;
-    }
-    .recommendation-summary-list {
-      margin: 0;
-      padding-left: 18px;
-      display: grid;
-      gap: 3px;
-    }
-    .recommendation-summary-item-key {
-      color: var(--vscode-editor-foreground);
-      font-weight: 600;
-    }
-    .recommendation-summary-item-summary {
-      color: var(--vscode-descriptionForeground);
-    }
-    .recommendation-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .recommendation-actions button {
-      border: 1px solid var(--vscode-button-border, transparent);
-      border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    .recommendation-actions button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-    .recommendation-actions-apply {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .recommendation-actions-apply:hover:not(:disabled) {
-      background: var(--vscode-button-hoverBackground);
-    }
-    .recommendation-actions-reject {
-      background: var(--vscode-button-secondaryBackground);
-      color: var(--vscode-button-secondaryForeground);
-    }
-    .recommendation-actions-reject:hover:not(:disabled) {
-      background: var(--vscode-button-secondaryHoverBackground);
+    .toolbar-feedback.has-message {
+      opacity: 1;
+      transform: translateY(0);
     }
     .canvas-surface {
-      flex: 1;
-      min-height: 0;
+      height: 100%;
       background-color: var(--vscode-editor-background);
       background-image: radial-gradient(
         circle,
@@ -1488,6 +1869,138 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       background-size: 20px 20px;
       position: relative;
       overflow: auto;
+      isolation: isolate;
+    }
+    .canvas-toolbar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 10px 8px;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 88%, transparent);
+      border-radius: 22px;
+      background: color-mix(in oklab, var(--vscode-editorWidget-background) 86%, transparent);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+    }
+    .canvas-toolbar-handle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 22px;
+      margin: 0 auto 2px;
+      border-radius: 999px;
+      color: var(--vscode-descriptionForeground);
+      cursor: grab;
+      touch-action: none;
+    }
+    .canvas-toolbar-handle:active {
+      cursor: grabbing;
+    }
+    .canvas-toolbar-grip {
+      width: 18px;
+      height: 4px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--vscode-descriptionForeground) 72%, transparent);
+      box-shadow: 0 6px 0 color-mix(in oklab, var(--vscode-descriptionForeground) 48%, transparent);
+    }
+    .canvas-toolbar-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .canvas-toolbar-separator {
+      width: 100%;
+      height: 1px;
+      background: color-mix(in oklab, var(--vscode-panel-border) 72%, transparent);
+    }
+    .overlay-icon-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      background: transparent;
+      color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+      cursor: pointer;
+      transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+    }
+    .overlay-icon-button:hover {
+      background: color-mix(in oklab, var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground)) 78%, transparent);
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 24%, var(--vscode-panel-border));
+      transform: translateY(-1px);
+    }
+    .overlay-icon-button.is-active {
+      background: color-mix(in oklab, var(--vscode-focusBorder) 18%, var(--vscode-editorWidget-background));
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 56%, var(--vscode-panel-border));
+      color: var(--vscode-textLink-foreground, var(--vscode-focusBorder));
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--vscode-focusBorder) 18%, transparent);
+    }
+    .overlay-icon-button:disabled {
+      opacity: 0.45;
+      cursor: default;
+      transform: none;
+    }
+    .overlay-icon-button.is-hidden {
+      display: none;
+    }
+    .overlay-icon-button svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+      color: inherit;
+    }
+    .overlay-icon-button--accent {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .overlay-icon-button--accent:hover {
+      background: var(--vscode-button-hoverBackground);
+      border-color: transparent;
+    }
+    .canvas-ticket-entry {
+      position: absolute;
+      top: 16px;
+      left: 88px;
+      z-index: 4;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      width: min(336px, calc(100% - 136px));
+      padding: 10px;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 88%, transparent);
+      border-radius: 18px;
+      background: color-mix(in oklab, var(--vscode-editorWidget-background) 90%, transparent);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+    }
+    .canvas-ticket-entry.is-open {
+      display: flex;
+    }
+    .canvas-ticket-entry input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 12px;
+      padding: 9px 12px;
+      font-size: 12px;
+    }
+    .feedback-overlay {
+      position: absolute;
+      top: 16px;
+      left: 50%;
+      z-index: 5;
+      width: min(420px, calc(100% - 180px));
+      transform: translateX(-50%);
     }
     .nodes-layer {
       position: absolute;
@@ -1515,6 +2028,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       marker-end: url(#task-designer-arrowhead);
       pointer-events: none;
     }
+    .connector-preview-line {
+      fill: none;
+      stroke: var(--vscode-focusBorder);
+      stroke-width: 2.5;
+      stroke-dasharray: 7 6;
+      opacity: 0.9;
+      pointer-events: none;
+    }
     .connector-group.is-selected .connector-line {
       stroke: var(--vscode-focusBorder);
       stroke-width: 3;
@@ -1529,41 +2050,230 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       box-shadow: 0 2px 8px color-mix(in oklab, var(--vscode-editor-background) 70%, black 30%);
       user-select: none;
       cursor: grab;
+      overflow: hidden;
     }
     .ticket-node.dragging { cursor: grabbing; }
+    .ticket-node.is-selected {
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 82%, var(--vscode-panel-border));
+      box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder) 28%, transparent), 0 12px 24px rgba(0, 0, 0, 0.18);
+    }
     .ticket-node.linking-source {
       outline: 2px solid var(--vscode-focusBorder);
       outline-offset: 2px;
+    }
+    .ticket-node.is-resizing {
+      cursor: nwse-resize;
     }
     .ticket-node-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 6px;
+      margin: -10px -10px 8px;
+      padding: 6px 10px 5px;
+      color: #eff6ff;
+    }
+    .ticket-node-header--note {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+    .ticket-node-header--website {
+      background: linear-gradient(135deg, #6eb2ff 0%, #367fdd 100%);
+    }
+    .ticket-node-title-wrap {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
     }
     .ticket-node-delete {
-      border: 1px solid var(--vscode-button-border, transparent);
-      background: var(--vscode-button-secondaryBackground);
-      color: var(--vscode-button-secondaryForeground);
-      border-radius: 4px;
-      font-size: 11px;
-      line-height: 1;
-      padding: 3px 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.1);
+      color: #eff6ff;
+      border-radius: 6px;
       cursor: pointer;
     }
     .ticket-node-delete:hover {
-      background: var(--vscode-button-secondaryHoverBackground);
+      background: rgba(255, 255, 255, 0.18);
+    }
+    .ticket-node-delete svg {
+      width: 10px;
+      height: 10px;
+      display: block;
     }
     .ticket-node-key {
-      font-size: 12px;
+      font-size: 11px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: var(--vscode-descriptionForeground);
+      color: inherit;
+      opacity: 0.9;
+    }
+    .note-node-title-input {
+      width: 100%;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      outline: none;
+      padding: 0;
+    }
+    .note-node-title-input::placeholder {
+      color: rgba(239, 246, 255, 0.78);
+    }
+    .ticket-node-handle {
+      --handle-transform: translate(-50%, -50%);
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      padding: 0;
+      border: 2px solid var(--vscode-focusBorder);
+      border-radius: 999px;
+      background: var(--vscode-editorWidget-background);
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--vscode-panel-border) 72%, transparent);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 3;
+      cursor: crosshair;
+      transform: var(--handle-transform) scale(0.72);
+      transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    }
+    .ticket-node-handle--top {
+      top: 0;
+      left: 50%;
+      --handle-transform: translate(-50%, -50%);
+    }
+    .ticket-node-handle--right {
+      top: 50%;
+      right: 0;
+      --handle-transform: translate(50%, -50%);
+    }
+    .ticket-node-handle--bottom {
+      bottom: 0;
+      left: 50%;
+      --handle-transform: translate(-50%, 50%);
+    }
+    .ticket-node-handle--left {
+      top: 50%;
+      left: 0;
+      --handle-transform: translate(-50%, -50%);
+    }
+    .ticket-node.is-selected .ticket-node-handle,
+    .ticket-node.is-link-target .ticket-node-handle {
+      opacity: 1;
+      pointer-events: auto;
+      transform: var(--handle-transform) scale(1);
+    }
+    .ticket-node-handle:hover {
+      background: var(--vscode-focusBorder);
+      box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder) 24%, transparent);
     }
     .ticket-node-summary {
       margin-top: 6px;
       font-weight: 600;
       line-height: 1.35;
+    }
+    .note-node-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 110px;
+      margin-top: 6px;
+    }
+    .note-node-textarea {
+      width: 100%;
+      min-height: 110px;
+      height: 100%;
+      flex: 1;
+      resize: none;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 82%, transparent);
+      border-radius: 8px;
+      background: color-mix(in oklab, var(--vscode-editor-background) 92%, transparent);
+      color: var(--vscode-editor-foreground);
+      padding: 10px 11px;
+      font: inherit;
+      line-height: 1.45;
+      outline: none;
+    }
+    .note-node-textarea:focus {
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 72%, var(--vscode-panel-border));
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--vscode-focusBorder) 18%, transparent);
+    }
+    .note-node-resize-handle {
+      position: absolute;
+      right: 6px;
+      bottom: 6px;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      cursor: nwse-resize;
+      z-index: 2;
+    }
+    .note-node-resize-handle::before {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-right: 2px solid color-mix(in oklab, var(--vscode-descriptionForeground) 86%, transparent);
+      border-bottom: 2px solid color-mix(in oklab, var(--vscode-descriptionForeground) 86%, transparent);
+      border-bottom-right-radius: 2px;
+    }
+    .website-node-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 150px;
+      height: calc(100% - 34px);
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .website-node-url-input {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 82%, transparent);
+      border-radius: 8px;
+      background: color-mix(in oklab, var(--vscode-editor-background) 92%, transparent);
+      color: var(--vscode-input-foreground);
+      padding: 8px 10px;
+      font: inherit;
+      outline: none;
+    }
+    .website-node-url-input:focus {
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 72%, var(--vscode-panel-border));
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--vscode-focusBorder) 18%, transparent);
+    }
+    .website-node-frame-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 120px;
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 82%, transparent);
+      border-radius: 8px;
+      overflow: hidden;
+      background: color-mix(in oklab, var(--vscode-editor-background) 96%, transparent);
+    }
+    .website-node-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: white;
+    }
+    .website-node-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      text-align: center;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      line-height: 1.45;
     }
     .ticket-node-meta {
       margin-top: 8px;
@@ -1580,7 +2290,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .surface-hint {
       position: absolute;
       top: 16px;
-      left: 16px;
+      left: 88px;
       padding: 8px 10px;
       border: 1px solid var(--vscode-panel-border);
       border-radius: 6px;
@@ -1588,56 +2298,88 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       color: var(--vscode-descriptionForeground);
       font-size: 12px;
     }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    @media (max-width: 960px) {
+      .canvas-ticket-entry {
+        width: min(300px, calc(100% - 128px));
+      }
+    }
   </style>
 </head>
 <body>
   <div class="shell">
-    <header class="toolbar">
-      <span class="toolbar-title">Task Designer</span>
-      <button type="button" data-action="select">Select</button>
-      <button type="button" data-action="ticket">Add Ticket</button>
-      <button type="button" data-action="group">Add Group</button>
-      <button type="button" data-action="link">Link</button>
-      <button id="delete-connector-button" type="button" data-action="deleteConnector" disabled>Delete Link</button>
-      <button id="generate-master-plan-button" type="button" data-action="generateMasterPlan">Generate Plan</button>
-      <button id="recommend-flow-button" type="button" data-action="recommendFlow">AI Recommend</button>
-      <button id="recommend-board-flow-button" type="button" data-action="recommendBoardFlow">AI From Board</button>
-      <div class="ticket-add">
-        <input id="ticket-key-input" type="text" placeholder="Ticket number (e.g. APP-123)" aria-label="Ticket number" />
-        <button id="ticket-add-button" type="button">Add</button>
-      </div>
-    </header>
-    <div id="toolbar-feedback" class="toolbar-feedback" aria-live="polite"></div>
-    <section class="execution-summary" aria-live="polite">
-      <div class="execution-summary-title">Execution Order</div>
-      <div id="execution-summary-text" class="execution-summary-text"></div>
-      <ol id="execution-summary-list" class="execution-summary-list"></ol>
-    </section>
-    <section class="recommendation-summary" aria-live="polite">
-      <div class="recommendation-summary-title">AI Recommendation</div>
-      <div id="recommendation-summary-text" class="recommendation-summary-text"></div>
-      <ol id="recommendation-summary-list" class="recommendation-summary-list"></ol>
-      <div class="recommendation-actions">
-        <button id="apply-recommendation-button" class="recommendation-actions-apply" type="button" data-action="applyRecommendation" disabled>Apply</button>
-        <button id="reject-recommendation-button" class="recommendation-actions-reject" type="button" data-action="rejectRecommendation" disabled>Discard</button>
-      </div>
-    </section>
     <main class="canvas-surface" aria-label="Task Designer canvas">
+      <div class="canvas-toolbar" aria-label="Task Designer tools">
+        <div id="canvas-toolbar-handle" class="canvas-toolbar-handle" title="Drag toolbar" aria-label="Drag toolbar">
+          <span class="canvas-toolbar-grip" aria-hidden="true"></span>
+        </div>
+        <div class="canvas-toolbar-group">
+          ${renderTaskDesignerToolbarButton('toolbar-select-button', 'select', 'Select', 'select')}
+          ${renderTaskDesignerToolbarButton('toolbar-ticket-button', 'ticket', 'Add ticket', 'ticket')}
+          ${renderTaskDesignerToolbarButton('toolbar-note-button', 'note', 'Add note', 'note')}
+          ${renderTaskDesignerToolbarButton('toolbar-website-button', 'website', 'Add website preview', 'website')}
+          ${renderTaskDesignerToolbarButton('toolbar-link-button', 'link', 'Link tickets', 'link')}
+          ${renderTaskDesignerToolbarButton('toolbar-zoom-in-button', 'zoomIn', 'Zoom in', 'zoomIn')}
+          ${renderTaskDesignerToolbarButton('toolbar-zoom-out-button', 'zoomOut', 'Zoom out', 'zoomOut')}
+        </div>
+        <div class="canvas-toolbar-separator"></div>
+        <div class="canvas-toolbar-group">
+          ${renderTaskDesignerToolbarButton('delete-connector-button', 'deleteConnector', 'Delete selected link', 'deleteConnector', { disabled: true })}
+          ${renderTaskDesignerToolbarButton('generate-master-plan-button', 'generateMasterPlan', 'Generate master plan', 'generateMasterPlan')}
+          ${renderTaskDesignerToolbarButton('recommend-flow-button', 'recommendFlow', 'AI recommend flow', 'recommendFlow')}
+          ${renderTaskDesignerToolbarButton('recommend-board-flow-button', 'recommendBoardFlow', 'AI recommend from board', 'recommendBoardFlow')}
+          ${renderTaskDesignerToolbarButton('apply-recommendation-button', 'applyRecommendation', 'Apply AI recommendation', 'confirm', { disabled: true, extraClass: 'is-hidden' })}
+          ${renderTaskDesignerToolbarButton('reject-recommendation-button', 'rejectRecommendation', 'Discard AI recommendation', 'dismiss', { disabled: true, extraClass: 'is-hidden' })}
+        </div>
+        <div class="canvas-toolbar-separator"></div>
+        <div class="canvas-toolbar-group">
+          ${renderTaskDesignerToolbarButton('toolbar-reset-button', 'reset', 'Clear canvas', 'reset')}
+        </div>
+      </div>
+      <form id="ticket-entry-panel" class="canvas-ticket-entry" autocomplete="off">
+        <label class="sr-only" for="ticket-key-input">Ticket number</label>
+        <input id="ticket-key-input" type="text" placeholder="Ticket number (e.g. APP-123)" aria-label="Ticket number" />
+        ${renderTaskDesignerToolbarButton('ticket-add-button', undefined, 'Confirm add ticket', 'confirm', { extraClass: 'overlay-icon-button--accent' })}
+        ${renderTaskDesignerToolbarButton('ticket-entry-close-button', undefined, 'Close ticket entry', 'dismiss')}
+      </form>
+      <div class="feedback-overlay">
+        <div id="toolbar-feedback" class="toolbar-feedback" aria-live="polite"></div>
+      </div>
       <svg id="connectors-layer" class="connectors-layer" aria-hidden="true">
         <defs>
-          <marker id="task-designer-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="var(--vscode-descriptionForeground)"></polygon>
+          <marker id="task-designer-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--vscode-descriptionForeground)"></polygon>
+          </marker>
+          <marker id="task-designer-arrowhead-selected" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--vscode-focusBorder)"></polygon>
+          </marker>
+          <marker id="task-designer-arrowhead-preview" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--vscode-focusBorder)"></polygon>
           </marker>
         </defs>
       </svg>
       <div id="nodes-layer" class="nodes-layer"></div>
-      <div class="surface-hint">Enter a ticket number to create nodes on the canvas.</div>
+      <div class="surface-hint">Add tickets or notes to create nodes on the canvas.</div>
     </main>
   </div>
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
     const ticketInput = document.getElementById('ticket-key-input');
+    const ticketEntryPanel = document.getElementById('ticket-entry-panel');
     const ticketAddButton = document.getElementById('ticket-add-button');
+    const ticketEntryCloseButton = document.getElementById('ticket-entry-close-button');
+    const canvasToolbar = document.querySelector('.canvas-toolbar');
+    const canvasToolbarHandle = document.getElementById('canvas-toolbar-handle');
     const deleteConnectorButton = document.getElementById('delete-connector-button');
     const generateMasterPlanButton = document.getElementById('generate-master-plan-button');
     const recommendFlowButton = document.getElementById('recommend-flow-button');
@@ -1647,10 +2389,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const feedback = document.getElementById('toolbar-feedback');
     const connectorsLayer = document.getElementById('connectors-layer');
     const nodesLayer = document.getElementById('nodes-layer');
-    const executionSummaryText = document.getElementById('execution-summary-text');
-    const executionSummaryList = document.getElementById('execution-summary-list');
-    const recommendationSummaryText = document.getElementById('recommendation-summary-text');
-    const recommendationSummaryList = document.getElementById('recommendation-summary-list');
     const canvasSurface = document.querySelector('.canvas-surface');
     const surfaceHint = document.querySelector('.surface-hint');
     const initialState = ${initialStateLiteral};
@@ -1665,10 +2403,20 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const uiState = {
       activeTool: 'select',
       linkSourceNodeId: undefined,
+      selectedNodeId: undefined,
       selectedConnectorId: undefined,
       nextConnectorIndex: 0,
       applyingRecommendation: false,
-      generatingMasterPlan: false
+      generatingMasterPlan: false,
+      ticketEntryOpen: false,
+      toolbarPosition: initialState.toolbarPosition && typeof initialState.toolbarPosition.x === 'number' && typeof initialState.toolbarPosition.y === 'number'
+        ? { x: initialState.toolbarPosition.x, y: initialState.toolbarPosition.y }
+        : { x: 16, y: 16 },
+      zoom: typeof initialState.zoom === 'number' ? initialState.zoom : 1,
+      linkPreview: undefined,
+      hoveredLinkNodeId: undefined,
+      persistCanvasStateTimer: undefined,
+      toolbarDrag: undefined
     };
 
     function setGeneratingMasterPlan(isGenerating) {
@@ -1694,8 +2442,239 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     function setFeedback(text, isError) {
+      if (!(feedback instanceof HTMLElement)) {
+        return;
+      }
       feedback.textContent = text || '';
       feedback.classList.toggle('error', Boolean(isError));
+      feedback.classList.toggle('has-message', Boolean(text));
+    }
+
+    function clampToolbarPosition(position) {
+      if (!(canvasSurface instanceof HTMLElement) || !(canvasToolbar instanceof HTMLElement)) {
+        return position;
+      }
+
+      const minX = canvasSurface.scrollLeft + 8;
+      const minY = canvasSurface.scrollTop + 8;
+      const maxX = canvasSurface.scrollLeft + canvasSurface.clientWidth - canvasToolbar.offsetWidth - 8;
+      const maxY = canvasSurface.scrollTop + canvasSurface.clientHeight - canvasToolbar.offsetHeight - 8;
+      return {
+        x: Math.max(minX, Math.min(position.x, Math.max(minX, maxX))),
+        y: Math.max(minY, Math.min(position.y, Math.max(minY, maxY)))
+      };
+    }
+
+    function syncFloatingLayout() {
+      if (canvasToolbar instanceof HTMLElement) {
+        const position = clampToolbarPosition(uiState.toolbarPosition);
+        uiState.toolbarPosition = position;
+        canvasToolbar.style.left = position.x + 'px';
+        canvasToolbar.style.top = position.y + 'px';
+      }
+      if (ticketEntryPanel instanceof HTMLElement) {
+        ticketEntryPanel.style.left = (uiState.toolbarPosition.x + 72) + 'px';
+        ticketEntryPanel.style.top = uiState.toolbarPosition.y + 'px';
+      }
+      if (surfaceHint instanceof HTMLElement) {
+        surfaceHint.style.left = (uiState.toolbarPosition.x + 72) + 'px';
+        surfaceHint.style.top = uiState.toolbarPosition.y + 'px';
+      }
+      if (nodesLayer instanceof HTMLElement) {
+        nodesLayer.style.transformOrigin = 'top left';
+        nodesLayer.style.transform = 'scale(' + uiState.zoom + ')';
+      }
+      if (connectorsLayer instanceof SVGElement) {
+        connectorsLayer.style.transformOrigin = 'top left';
+        connectorsLayer.style.transform = 'scale(' + uiState.zoom + ')';
+      }
+    }
+
+    function clientDistanceToCanvas(distance) {
+      return distance / uiState.zoom;
+    }
+
+    function clientPointToCanvas(clientX, clientY) {
+      const nodeLayerRect = nodesLayer.getBoundingClientRect();
+      return {
+        x: clientDistanceToCanvas(clientX - nodeLayerRect.left),
+        y: clientDistanceToCanvas(clientY - nodeLayerRect.top)
+      };
+    }
+
+    function visibleCanvasPoint(offsetX, offsetY) {
+      if (!(canvasSurface instanceof HTMLElement)) {
+        return { x: offsetX, y: offsetY };
+      }
+      return {
+        x: clientDistanceToCanvas(canvasSurface.scrollLeft + offsetX),
+        y: clientDistanceToCanvas(canvasSurface.scrollTop + offsetY)
+      };
+    }
+
+    function setZoom(nextZoom) {
+      uiState.zoom = Math.max(0.5, Math.min(2, Math.round(nextZoom * 100) / 100));
+      syncFloatingLayout();
+      renderConnectors();
+      schedulePersistCanvasState();
+    }
+
+    function isLinkHandleDirection(value) {
+      return value === 'top' || value === 'right' || value === 'bottom' || value === 'left';
+    }
+
+    function getAnchorPointFromRect(nodeRect, nodeLayerRect, direction) {
+      const centerX = clientDistanceToCanvas(nodeRect.left - nodeLayerRect.left + (nodeRect.width / 2));
+      const centerY = clientDistanceToCanvas(nodeRect.top - nodeLayerRect.top + (nodeRect.height / 2));
+      switch (direction) {
+        case 'top':
+          return { x: centerX, y: clientDistanceToCanvas(nodeRect.top - nodeLayerRect.top) };
+        case 'right':
+          return { x: clientDistanceToCanvas(nodeRect.right - nodeLayerRect.left), y: centerY };
+        case 'bottom':
+          return { x: centerX, y: clientDistanceToCanvas(nodeRect.bottom - nodeLayerRect.top) };
+        case 'left':
+        default:
+          return { x: clientDistanceToCanvas(nodeRect.left - nodeLayerRect.left), y: centerY };
+      }
+    }
+
+    function resolveConnectorDirections(sourceRect, targetRect, sourceDirection, targetDirection) {
+      if (isLinkHandleDirection(sourceDirection) && isLinkHandleDirection(targetDirection)) {
+        return { sourceDirection, targetDirection };
+      }
+      const sourceCenterX = sourceRect.left + (sourceRect.width / 2);
+      const sourceCenterY = sourceRect.top + (sourceRect.height / 2);
+      const targetCenterX = targetRect.left + (targetRect.width / 2);
+      const targetCenterY = targetRect.top + (targetRect.height / 2);
+      const deltaX = targetCenterX - sourceCenterX;
+      const deltaY = targetCenterY - sourceCenterY;
+      if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+        return {
+          sourceDirection: isLinkHandleDirection(sourceDirection) ? sourceDirection : (deltaX >= 0 ? 'right' : 'left'),
+          targetDirection: isLinkHandleDirection(targetDirection) ? targetDirection : (deltaX >= 0 ? 'left' : 'right')
+        };
+      }
+      return {
+        sourceDirection: isLinkHandleDirection(sourceDirection) ? sourceDirection : (deltaY >= 0 ? 'bottom' : 'top'),
+        targetDirection: isLinkHandleDirection(targetDirection) ? targetDirection : (deltaY >= 0 ? 'top' : 'bottom')
+      };
+    }
+
+    function syncNodeInteractionClasses() {
+      for (const element of nodesLayer.querySelectorAll('.ticket-node[data-node-id]')) {
+        if (!(element instanceof HTMLElement)) {
+          continue;
+        }
+        const nodeId = element.dataset.nodeId;
+        element.classList.toggle('is-selected', Boolean(nodeId && nodeId === uiState.selectedNodeId));
+        element.classList.toggle('linking-source', Boolean(nodeId && nodeId === uiState.linkSourceNodeId));
+        element.classList.toggle('is-link-target', Boolean(nodeId && nodeId === uiState.hoveredLinkNodeId));
+      }
+    }
+
+    function setHoveredLinkNode(nodeId) {
+      const nextNodeId = typeof nodeId === 'string' && nodeId ? nodeId : undefined;
+      if (uiState.hoveredLinkNodeId === nextNodeId) {
+        return;
+      }
+      uiState.hoveredLinkNodeId = nextNodeId;
+      syncNodeInteractionClasses();
+    }
+
+    function clearLinkPreview() {
+      uiState.linkPreview = undefined;
+      uiState.linkSourceNodeId = undefined;
+      setHoveredLinkNode(undefined);
+    }
+
+    function findHandleTargetAtPoint(clientX, clientY) {
+      const targetElement = document.elementFromPoint(clientX, clientY);
+      if (!(targetElement instanceof Element)) {
+        return undefined;
+      }
+      const handleElement = targetElement.closest('.ticket-node-handle');
+      if (!(handleElement instanceof HTMLElement)) {
+        return undefined;
+      }
+      const nodeId = handleElement.dataset.nodeId;
+      const direction = handleElement.dataset.direction;
+      if (!nodeId || !isLinkHandleDirection(direction)) {
+        return undefined;
+      }
+      return { nodeId, direction };
+    }
+
+    function findNodeIdAtPoint(clientX, clientY) {
+      const targetElement = document.elementFromPoint(clientX, clientY);
+      if (!(targetElement instanceof Element)) {
+        return undefined;
+      }
+      const nodeElement = targetElement.closest('[data-node-id]');
+      return nodeElement instanceof HTMLElement ? nodeElement.dataset.nodeId : undefined;
+    }
+
+    function updateLinkPreviewFromPointer(event) {
+      if (!uiState.linkPreview) {
+        return;
+      }
+      const sourceElement = nodeElementById(uiState.linkPreview.sourceNodeId);
+      if (!(sourceElement instanceof HTMLElement)) {
+        clearLinkPreview();
+        return;
+      }
+      const nodeLayerRect = nodesLayer.getBoundingClientRect();
+      const sourceRect = sourceElement.getBoundingClientRect();
+      const sourcePoint = getAnchorPointFromRect(sourceRect, nodeLayerRect, uiState.linkPreview.sourceDirection);
+      const targetHandle = findHandleTargetAtPoint(event.clientX, event.clientY);
+      const hoveredNodeId = targetHandle && targetHandle.nodeId !== uiState.linkPreview.sourceNodeId
+        ? targetHandle.nodeId
+        : (() => {
+          const nodeId = findNodeIdAtPoint(event.clientX, event.clientY);
+          return nodeId && nodeId !== uiState.linkPreview.sourceNodeId ? nodeId : undefined;
+        })();
+
+      uiState.linkPreview.x1 = sourcePoint.x;
+      uiState.linkPreview.y1 = sourcePoint.y;
+      if (targetHandle && targetHandle.nodeId !== uiState.linkPreview.sourceNodeId) {
+        const targetElement = nodeElementById(targetHandle.nodeId);
+        if (targetElement instanceof HTMLElement) {
+          const targetRect = targetElement.getBoundingClientRect();
+          const targetPoint = getAnchorPointFromRect(targetRect, nodeLayerRect, targetHandle.direction);
+          uiState.linkPreview.x2 = targetPoint.x;
+          uiState.linkPreview.y2 = targetPoint.y;
+          uiState.linkPreview.targetDirection = targetHandle.direction;
+        }
+      } else {
+        const previewPoint = clientPointToCanvas(event.clientX, event.clientY);
+        uiState.linkPreview.x2 = previewPoint.x;
+        uiState.linkPreview.y2 = previewPoint.y;
+        uiState.linkPreview.targetDirection = undefined;
+      }
+      setHoveredLinkNode(hoveredNodeId);
+    }
+
+    function syncToolbarState() {
+      for (const button of document.querySelectorAll('button[data-action]')) {
+        const action = button.getAttribute('data-action');
+        const isActive =
+          action === uiState.activeTool ||
+          (action === 'ticket' && uiState.ticketEntryOpen);
+        button.classList.toggle('is-active', Boolean(isActive));
+      }
+    }
+
+    function setTicketEntryOpen(isOpen, options) {
+      uiState.ticketEntryOpen = Boolean(isOpen);
+      if (ticketEntryPanel instanceof HTMLElement) {
+        ticketEntryPanel.hidden = !uiState.ticketEntryOpen;
+        ticketEntryPanel.classList.toggle('is-open', uiState.ticketEntryOpen);
+      }
+      syncToolbarState();
+      syncFloatingLayout();
+      if (uiState.ticketEntryOpen && options && options.focus && ticketInput instanceof HTMLInputElement) {
+        window.requestAnimationFrame(() => ticketInput.focus());
+      }
     }
 
     function createMetaRow(label, value) {
@@ -1709,94 +2688,42 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return row;
     }
 
-    function computeExecutionOrder() {
-      const adjacency = new Map();
-      const inDegree = new Map();
-      for (const node of state.nodes) {
-        adjacency.set(node.id, []);
-        inDegree.set(node.id, 0);
-      }
-
-      for (const connector of state.connectors) {
-        if (!adjacency.has(connector.sourceNodeId) || !inDegree.has(connector.targetNodeId)) {
-          continue;
-        }
-        adjacency.get(connector.sourceNodeId).push(connector.targetNodeId);
-        inDegree.set(connector.targetNodeId, (inDegree.get(connector.targetNodeId) || 0) + 1);
-      }
-
-      const queue = state.nodes
-        .map(node => node.id)
-        .filter(nodeId => (inDegree.get(nodeId) || 0) === 0);
-      const orderedNodeIds = [];
-
-      while (queue.length > 0) {
-        const nodeId = queue.shift();
-        if (!nodeId) {
-          continue;
-        }
-        orderedNodeIds.push(nodeId);
-        for (const nextNodeId of adjacency.get(nodeId) || []) {
-          const nextInDegree = (inDegree.get(nextNodeId) || 0) - 1;
-          inDegree.set(nextNodeId, nextInDegree);
-          if (nextInDegree === 0) {
-            queue.push(nextNodeId);
-          }
-        }
-      }
-
-      if (orderedNodeIds.length !== state.nodes.length) {
-        return undefined;
-      }
-
-      const nodesById = new Map(state.nodes.map(node => [node.id, node]));
-      return orderedNodeIds
-        .map(nodeId => nodesById.get(nodeId))
-        .filter(node => Boolean(node));
-    }
-
-    function renderExecutionSummary() {
-      if (!(executionSummaryText instanceof HTMLElement) || !(executionSummaryList instanceof HTMLOListElement)) {
-        return;
-      }
-
-      executionSummaryList.textContent = '';
-      if (state.nodes.length === 0) {
-        executionSummaryText.textContent = 'No tickets in the graph yet. Add tickets to view execution order.';
-        return;
-      }
-
-      const orderedNodes = computeExecutionOrder();
-      if (!orderedNodes) {
-        executionSummaryText.textContent = 'Execution order unavailable: directed links contain a cycle.';
-        return;
-      }
-
-      executionSummaryText.textContent = state.connectors.length === 0
-        ? 'No directed links yet. Current ticket order is shown below.'
-        : 'Execution sequence derived from directed links:';
-
-      for (const node of orderedNodes) {
-        const item = document.createElement('li');
-        const key = document.createElement('span');
-        key.className = 'execution-summary-item-key';
-        key.textContent = node.issueKey;
-        const summary = document.createElement('span');
-        summary.className = 'execution-summary-item-summary';
-        summary.textContent = ' — ' + (node.summary || '(no summary)');
-        item.append(key, summary);
-        executionSummaryList.append(item);
-      }
-    }
-
     function persistCanvasState() {
       vscodeApi.postMessage({
         type: 'persistCanvasState',
         state: {
           nodes: state.nodes.map(node => ({ ...node })),
-          connectors: state.connectors.map(connector => ({ ...connector }))
+          connectors: state.connectors.map(connector => ({ ...connector })),
+          zoom: uiState.zoom,
+          toolbarPosition: {
+            x: uiState.toolbarPosition.x,
+            y: uiState.toolbarPosition.y
+          }
         }
       });
+    }
+
+    function schedulePersistCanvasState() {
+      if (uiState.persistCanvasStateTimer) {
+        window.clearTimeout(uiState.persistCanvasStateTimer);
+      }
+      uiState.persistCanvasStateTimer = window.setTimeout(() => {
+        uiState.persistCanvasStateTimer = undefined;
+        persistCanvasState();
+      }, 160);
+    }
+
+    function getNodeLabel(node) {
+      if (!node) {
+        return 'selected node';
+      }
+      if (node.type === 'note') {
+        return (typeof node.title === 'string' && node.title.trim()) ? node.title.trim() : 'note';
+      }
+      if (node.type === 'website') {
+        return websitePreviewTitle(node.url);
+      }
+      return node.issueKey || 'selected node';
     }
 
     function requestRecommendCanvasFlow() {
@@ -1854,6 +2781,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         const fallbackColumn = index % 4;
         const fallbackRow = Math.floor(index / 4);
         nodes.push({
+          type: 'ticket',
           id: typeof candidate.id === 'string' ? candidate.id : ('preview-' + issueKey + '-' + index),
           issueKey,
           summary: typeof candidate.summary === 'string' ? candidate.summary : '',
@@ -1873,9 +2801,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       const hasRecommendation = Boolean(state.recommendation);
       const isApplying = Boolean(uiState.applyingRecommendation);
       if (applyRecommendationButton instanceof HTMLButtonElement) {
+        applyRecommendationButton.classList.toggle('is-hidden', !hasRecommendation && !isApplying);
         applyRecommendationButton.disabled = !hasRecommendation || isApplying;
       }
       if (rejectRecommendationButton instanceof HTMLButtonElement) {
+        rejectRecommendationButton.classList.toggle('is-hidden', !hasRecommendation && !isApplying);
         rejectRecommendationButton.disabled = !hasRecommendation || isApplying;
       }
     }
@@ -1896,7 +2826,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       vscodeApi.postMessage({
         type: 'applyRecommendation',
         recommendation: state.recommendation,
-        nodes: recommendationNodes
+        nodes: recommendationNodes,
+        state: {
+          nodes: state.nodes.map(node => ({ ...node })),
+          connectors: state.connectors.map(connector => ({ ...connector }))
+        }
       });
     }
 
@@ -1908,45 +2842,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       state.recommendation = undefined;
       state.recommendationNodes = undefined;
       state.recommendationSource = undefined;
-      renderRecommendationSummary();
       updateRecommendationActionState();
-    }
-
-    function renderRecommendationSummary() {
-      if (!(recommendationSummaryText instanceof HTMLElement) || !(recommendationSummaryList instanceof HTMLOListElement)) {
-        return;
-      }
-
-      recommendationSummaryList.textContent = '';
-      if (!state.recommendation) {
-        recommendationSummaryText.textContent = 'No AI recommendation yet.';
-        return;
-      }
-
-      const previewNodes = Array.isArray(state.recommendationNodes) ? state.recommendationNodes : state.nodes;
-      const nodeById = new Map(previewNodes.map(node => [node.id, node]));
-      const orderedNodes = state.recommendation.orderedNodeIds
-        .map(nodeId => nodeById.get(nodeId))
-        .filter(node => Boolean(node));
-      if (orderedNodes.length === 0) {
-        recommendationSummaryText.textContent = 'AI recommendation returned no valid node order.';
-        return;
-      }
-
-      recommendationSummaryText.textContent = state.recommendation.rationale
-        ? ('Preview only: ' + state.recommendation.rationale)
-        : (state.recommendationSource ? ('Preview only: proposed execution flow from ' + state.recommendationSource + '.') : 'Preview only: proposed execution flow.');
-      for (const node of orderedNodes) {
-        const item = document.createElement('li');
-        const key = document.createElement('span');
-        key.className = 'recommendation-summary-item-key';
-        key.textContent = node.issueKey;
-        const summary = document.createElement('span');
-        summary.className = 'recommendation-summary-item-summary';
-        summary.textContent = ' — ' + (node.summary || '(no summary)');
-        item.append(key, summary);
-        recommendationSummaryList.append(item);
-      }
     }
 
     function hasNode(nodeId) {
@@ -1959,6 +2855,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
     function hasExistingConnector(sourceNodeId, targetNodeId) {
       return state.connectors.some(connector => connector.sourceNodeId === sourceNodeId && connector.targetNodeId === targetNodeId);
+    }
+
+    function findNodeByIssueKey(issueKey) {
+      return state.nodes.find(node => node.type === 'ticket' && node.issueKey === issueKey);
     }
 
     function hasDirectedPath(startNodeId, targetNodeId) {
@@ -1998,24 +2898,43 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       const hasSelection = Boolean(
         uiState.selectedConnectorId && state.connectors.some(connector => connector.id === uiState.selectedConnectorId)
       );
-      deleteConnectorButton.disabled = !hasSelection;
+      if (deleteConnectorButton instanceof HTMLButtonElement) {
+        deleteConnectorButton.disabled = !hasSelection;
+      }
     }
 
     function setActiveTool(tool) {
       uiState.activeTool = tool;
       if (tool !== 'link') {
-        uiState.linkSourceNodeId = undefined;
+        clearLinkPreview();
       }
-      for (const button of document.querySelectorAll('button[data-action="select"], button[data-action="link"]')) {
-        const action = button.getAttribute('data-action');
-        button.classList.toggle('is-active', action === tool);
-      }
+      syncToolbarState();
     }
 
     function createConnectorId() {
       const id = 'connector-' + uiState.nextConnectorIndex;
       uiState.nextConnectorIndex += 1;
       return id;
+    }
+
+    function pushConnector(sourceNodeId, targetNodeId, sourceDirection, targetDirection) {
+      if (sourceNodeId === targetNodeId) {
+        return false;
+      }
+      if (hasExistingConnector(sourceNodeId, targetNodeId)) {
+        return false;
+      }
+      if (wouldCreateCycle(sourceNodeId, targetNodeId)) {
+        return false;
+      }
+      state.connectors.push({
+        id: createConnectorId(),
+        sourceNodeId,
+        targetNodeId,
+        sourceDirection,
+        targetDirection
+      });
+      return true;
     }
 
     function deleteSelectedConnector() {
@@ -2033,16 +2952,79 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         setFeedback('Link deleted.', false);
       }
       updateDeleteConnectorState();
-      renderExecutionSummary();
+    }
+
+    function createConnectorBetweenNodes(sourceNodeId, targetNodeId, sourceDirection, targetDirection) {
+      if (sourceNodeId === targetNodeId) {
+        setFeedback('Select a different target node.', true);
+        return false;
+      }
+
+      if (hasExistingConnector(sourceNodeId, targetNodeId)) {
+        const sourceNode = findNodeById(sourceNodeId);
+        const targetNode = findNodeById(targetNodeId);
+        const sourceLabel = getNodeLabel(sourceNode);
+        const targetLabel = getNodeLabel(targetNode);
+        setFeedback('Link already exists from ' + sourceLabel + ' to ' + targetLabel + '.', true);
+        return false;
+      }
+
+      if (wouldCreateCycle(sourceNodeId, targetNodeId)) {
+        const sourceNode = findNodeById(sourceNodeId);
+        const targetNode = findNodeById(targetNodeId);
+        const sourceLabel = getNodeLabel(sourceNode);
+        const targetLabel = getNodeLabel(targetNode);
+        setFeedback('Cannot create link from ' + sourceLabel + ' to ' + targetLabel + ': it introduces a cycle.', true);
+        return false;
+      }
+
+      pushConnector(sourceNodeId, targetNodeId, sourceDirection, targetDirection);
+      clearRecommendation();
+      uiState.selectedConnectorId = state.connectors[state.connectors.length - 1] ? state.connectors[state.connectors.length - 1].id : undefined;
+      uiState.selectedNodeId = targetNodeId;
+      clearLinkPreview();
+      renderNodes();
+      persistCanvasState();
+      setFeedback('Directed link created.', false);
+      updateDeleteConnectorState();
+      return true;
     }
 
     function nodeElementById(nodeId) {
-      return nodesLayer.querySelector('[data-node-id="' + nodeId.replace(/"/g, '\\"') + '"]');
+      for (const element of nodesLayer.querySelectorAll('.ticket-node[data-node-id]')) {
+        if (element instanceof HTMLElement && element.dataset.nodeId === nodeId) {
+          return element;
+        }
+      }
+      return undefined;
+    }
+
+    function buildConnectorCurvePath(x1, y1, x2, y2, sourceDirection, targetDirection) {
+      const horizontalDelta = Math.abs(x2 - x1);
+      const verticalDelta = Math.abs(y2 - y1);
+      const controlOffset = Math.max(42, Math.min(Math.max(horizontalDelta, verticalDelta) * 0.42, 164));
+      const controlPointFromDirection = (x, y, direction) => {
+        switch (direction) {
+          case 'top':
+            return { x, y: y - controlOffset };
+          case 'right':
+            return { x: x + controlOffset, y };
+          case 'bottom':
+            return { x, y: y + controlOffset };
+          case 'left':
+            return { x: x - controlOffset, y };
+          default:
+            return { x: x + controlOffset, y };
+        }
+      };
+      const control1 = controlPointFromDirection(x1, y1, sourceDirection);
+      const control2 = controlPointFromDirection(x2, y2, targetDirection);
+      return 'M ' + x1 + ' ' + y1 + ' C ' + control1.x + ' ' + control1.y + ', ' + control2.x + ' ' + control2.y + ', ' + x2 + ' ' + y2;
     }
 
     function renderConnectors() {
-      for (const group of connectorsLayer.querySelectorAll('.connector-group')) {
-        group.remove();
+      for (const element of connectorsLayer.querySelectorAll('.connector-group, .connector-preview-line')) {
+        element.remove();
       }
       if (uiState.selectedConnectorId && !state.connectors.some(connector => connector.id === uiState.selectedConnectorId)) {
         uiState.selectedConnectorId = undefined;
@@ -2058,28 +3040,37 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
         const sourceRect = sourceEl.getBoundingClientRect();
         const targetRect = targetEl.getBoundingClientRect();
-        const x1 = sourceRect.left - nodeLayerRect.left + (sourceRect.width / 2);
-        const y1 = sourceRect.top - nodeLayerRect.top + (sourceRect.height / 2);
-        const x2 = targetRect.left - nodeLayerRect.left + (targetRect.width / 2);
-        const y2 = targetRect.top - nodeLayerRect.top + (targetRect.height / 2);
+        const directions = resolveConnectorDirections(
+          sourceRect,
+          targetRect,
+          connector.sourceDirection,
+          connector.targetDirection
+        );
+        const sourcePoint = getAnchorPointFromRect(sourceRect, nodeLayerRect, directions.sourceDirection);
+        const targetPoint = getAnchorPointFromRect(targetRect, nodeLayerRect, directions.targetDirection);
+        const x1 = sourcePoint.x;
+        const y1 = sourcePoint.y;
+        const x2 = targetPoint.x;
+        const y2 = targetPoint.y;
+        const pathData = buildConnectorCurvePath(x1, y1, x2, y2, directions.sourceDirection, directions.targetDirection);
 
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'connector-group' + (uiState.selectedConnectorId === connector.id ? ' is-selected' : ''));
         group.dataset.connectorId = connector.id;
 
-        const visibleLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const visibleLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         visibleLine.setAttribute('class', 'connector-line');
-        visibleLine.setAttribute('x1', String(x1));
-        visibleLine.setAttribute('y1', String(y1));
-        visibleLine.setAttribute('x2', String(x2));
-        visibleLine.setAttribute('y2', String(y2));
+        visibleLine.setAttribute('d', pathData);
+        visibleLine.setAttribute(
+          'marker-end',
+          uiState.selectedConnectorId === connector.id
+            ? 'url(#task-designer-arrowhead-selected)'
+            : 'url(#task-designer-arrowhead)'
+        );
 
-        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         hitArea.setAttribute('class', 'connector-hit-area');
-        hitArea.setAttribute('x1', String(x1));
-        hitArea.setAttribute('y1', String(y1));
-        hitArea.setAttribute('x2', String(x2));
-        hitArea.setAttribute('y2', String(y2));
+        hitArea.setAttribute('d', pathData);
         hitArea.addEventListener('click', event => {
           event.stopPropagation();
           uiState.selectedConnectorId = connector.id;
@@ -2090,77 +3081,108 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         group.append(visibleLine, hitArea);
         connectorsLayer.append(group);
       }
-      updateDeleteConnectorState();
-    }
 
-    function handleLinkNodeSelection(node) {
-      if (!uiState.linkSourceNodeId) {
-        uiState.linkSourceNodeId = node.id;
-        uiState.selectedConnectorId = undefined;
-        setFeedback('Source selected (' + node.issueKey + '). Select a target node.', false);
-        renderNodes();
-        return;
+      if (uiState.linkPreview) {
+        const previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        previewLine.setAttribute('class', 'connector-preview-line');
+        const previewTargetDirection = isLinkHandleDirection(uiState.linkPreview.targetDirection)
+          ? uiState.linkPreview.targetDirection
+          : (() => {
+            const deltaX = uiState.linkPreview.x2 - uiState.linkPreview.x1;
+            const deltaY = uiState.linkPreview.y2 - uiState.linkPreview.y1;
+            return Math.abs(deltaX) >= Math.abs(deltaY)
+              ? (deltaX >= 0 ? 'left' : 'right')
+              : (deltaY >= 0 ? 'top' : 'bottom');
+          })();
+        previewLine.setAttribute(
+          'd',
+          buildConnectorCurvePath(
+            uiState.linkPreview.x1,
+            uiState.linkPreview.y1,
+            uiState.linkPreview.x2,
+            uiState.linkPreview.y2,
+            uiState.linkPreview.sourceDirection,
+            previewTargetDirection
+          )
+        );
+        previewLine.setAttribute('marker-end', 'url(#task-designer-arrowhead-preview)');
+        connectorsLayer.append(previewLine);
       }
-
-      if (uiState.linkSourceNodeId === node.id) {
-        setFeedback('Select a different target node.', true);
-        return;
-      }
-
-      const sourceNodeId = uiState.linkSourceNodeId;
-      if (hasExistingConnector(sourceNodeId, node.id)) {
-        const sourceNode = findNodeById(sourceNodeId);
-        const sourceLabel = sourceNode ? sourceNode.issueKey : 'selected source node';
-        setFeedback('Link already exists from ' + sourceLabel + ' to ' + node.issueKey + '.', true);
-        return;
-      }
-
-      if (wouldCreateCycle(sourceNodeId, node.id)) {
-        const sourceNode = findNodeById(sourceNodeId);
-        const sourceLabel = sourceNode ? sourceNode.issueKey : 'selected source node';
-        setFeedback('Cannot create link from ' + sourceLabel + ' to ' + node.issueKey + ': it introduces a cycle.', true);
-        return;
-      }
-
-      state.connectors.push({
-        id: createConnectorId(),
-        sourceNodeId,
-        targetNodeId: node.id
-      });
-      clearRecommendation();
-      uiState.linkSourceNodeId = undefined;
-      uiState.selectedConnectorId = state.connectors[state.connectors.length - 1]?.id;
-      renderConnectors();
-      persistCanvasState();
-      setFeedback('Directed link created. Select another source node to continue linking.', false);
       updateDeleteConnectorState();
     }
 
     function renderNodes() {
+      if (!(nodesLayer instanceof HTMLElement) || !(canvasSurface instanceof HTMLElement)) {
+        return;
+      }
+      console.log('[TaskDesigner] renderNodes begin', { stateNodeCount: state.nodes.length, lastNode: state.nodes[state.nodes.length - 1], nodesLayerExists: nodesLayer instanceof HTMLElement, zoom: uiState.zoom });
       nodesLayer.textContent = '';
       if (surfaceHint) {
         surfaceHint.style.display = state.nodes.length > 0 ? 'none' : '';
       }
       for (const node of state.nodes) {
         const root = document.createElement('article');
-        root.className = 'ticket-node';
+        root.className = 'ticket-node ticket-node--' + node.type;
         root.style.left = node.x + 'px';
         root.style.top = node.y + 'px';
+        if (node.type === 'note' || node.type === 'website') {
+          root.style.width = node.width + 'px';
+          root.style.height = node.height + 'px';
+        }
         root.dataset.nodeId = node.id;
         root.classList.toggle('linking-source', uiState.linkSourceNodeId === node.id);
+        root.classList.toggle('is-selected', uiState.selectedNodeId === node.id);
+        root.classList.toggle('is-link-target', uiState.hoveredLinkNodeId === node.id);
 
         const header = document.createElement('div');
-        header.className = 'ticket-node-header';
+        header.className = 'ticket-node-header ticket-node-header--' + node.type;
+        if (node.type === 'ticket') {
+          header.style.background = taskDesignerTicketHeaderBackground(node.issueType);
+        } else if (node.type === 'website') {
+          header.style.background = taskDesignerWebsiteHeaderBackground();
+        }
 
-        const key = document.createElement('div');
-        key.className = 'ticket-node-key';
-        key.textContent = node.issueKey;
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'ticket-node-title-wrap';
+
+        if (node.type === 'note') {
+          const titleInput = document.createElement('input');
+          titleInput.type = 'text';
+          titleInput.className = 'note-node-title-input';
+          titleInput.value = node.title || '';
+          titleInput.placeholder = 'Notes';
+          titleInput.setAttribute('aria-label', 'Note title');
+          titleInput.addEventListener('focus', () => {
+            uiState.selectedNodeId = node.id;
+            uiState.selectedConnectorId = undefined;
+            syncNodeInteractionClasses();
+            renderConnectors();
+          });
+          titleInput.addEventListener('click', event => {
+            event.stopPropagation();
+          });
+          titleInput.addEventListener('input', () => {
+            node.title = titleInput.value;
+            schedulePersistCanvasState();
+          });
+          titleWrap.append(titleInput);
+        } else if (node.type === 'website') {
+          const key = document.createElement('div');
+          key.className = 'ticket-node-key';
+          key.textContent = websitePreviewTitle(node.url);
+          titleWrap.append(key);
+        } else {
+          const key = document.createElement('div');
+          key.className = 'ticket-node-key';
+          key.textContent = node.issueKey;
+          titleWrap.append(key);
+        }
 
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
         deleteButton.className = 'ticket-node-delete';
-        deleteButton.textContent = 'Delete';
-        deleteButton.setAttribute('aria-label', 'Delete ' + node.issueKey + ' node');
+        deleteButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        deleteButton.setAttribute('aria-label', 'Delete ' + getNodeLabel(node) + ' node');
         deleteButton.addEventListener('click', event => {
           event.stopPropagation();
           state.nodes = state.nodes.filter(item => item.id !== node.id);
@@ -2168,7 +3190,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
             connector.sourceNodeId !== node.id && connector.targetNodeId !== node.id
           );
           if (uiState.linkSourceNodeId === node.id) {
-            uiState.linkSourceNodeId = undefined;
+            clearLinkPreview();
+          }
+          if (uiState.selectedNodeId === node.id) {
+            uiState.selectedNodeId = undefined;
           }
           if (uiState.selectedConnectorId && !state.connectors.some(connector => connector.id === uiState.selectedConnectorId)) {
             uiState.selectedConnectorId = undefined;
@@ -2176,32 +3201,188 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           clearRecommendation();
           renderNodes();
           persistCanvasState();
-          setFeedback('Ticket node deleted.', false);
+          setFeedback((node.type === 'note' ? 'Note' : (node.type === 'website' ? 'Website preview' : 'Ticket node')) + ' deleted.', false);
         });
-        header.append(key, deleteButton);
+        header.append(titleWrap, deleteButton);
 
-        const summary = document.createElement('div');
-        summary.className = 'ticket-node-summary';
-        summary.textContent = node.summary || '(no summary)';
+        let resizeHandle = null;
+        if (node.type === 'note') {
+          const body = document.createElement('div');
+          body.className = 'note-node-body';
 
-        const meta = document.createElement('div');
-        meta.className = 'ticket-node-meta';
-        meta.append(
-          createMetaRow('Type', node.issueType),
-          createMetaRow('Status', node.status),
-          createMetaRow('Assignee', node.assignee),
-          createMetaRow('Priority', node.priority)
-        );
+          const textarea = document.createElement('textarea');
+          textarea.className = 'note-node-textarea';
+          textarea.placeholder = 'Add notes, context, or reminders...';
+          textarea.value = node.content || '';
+          textarea.setAttribute('aria-label', 'Note content');
+          textarea.addEventListener('focus', () => {
+            uiState.selectedNodeId = node.id;
+            uiState.selectedConnectorId = undefined;
+            syncNodeInteractionClasses();
+            renderConnectors();
+          });
+          textarea.addEventListener('click', event => {
+            event.stopPropagation();
+          });
+          textarea.addEventListener('input', () => {
+            node.content = textarea.value;
+            schedulePersistCanvasState();
+          });
+          body.append(textarea);
+
+          resizeHandle = document.createElement('button');
+          resizeHandle.type = 'button';
+          resizeHandle.className = 'note-node-resize-handle';
+          resizeHandle.setAttribute('aria-label', 'Resize note');
+
+          root.append(header, body, resizeHandle);
+        } else if (node.type === 'website') {
+          const body = document.createElement('div');
+          body.className = 'website-node-body';
+
+          const urlInput = document.createElement('input');
+          urlInput.type = 'url';
+          urlInput.className = 'website-node-url-input';
+          urlInput.value = node.url || '';
+          urlInput.placeholder = 'https://example.com';
+          urlInput.setAttribute('aria-label', 'Website preview URL');
+          urlInput.addEventListener('focus', () => {
+            uiState.selectedNodeId = node.id;
+            uiState.selectedConnectorId = undefined;
+            syncNodeInteractionClasses();
+            renderConnectors();
+          });
+          urlInput.addEventListener('click', event => {
+            event.stopPropagation();
+          });
+
+          const frameWrap = document.createElement('div');
+          frameWrap.className = 'website-node-frame-wrap';
+
+          const updateWebsitePreview = () => {
+            const normalized = normalizeWebsitePreviewUrl(urlInput.value);
+            if (!normalized) {
+              frameWrap.innerHTML = '<div class="website-node-empty">Enter a valid http or https URL to load a preview.</div>';
+              return;
+            }
+            node.url = normalized;
+            const iframe = document.createElement('iframe');
+            iframe.className = 'website-node-frame';
+            iframe.src = normalized;
+            iframe.setAttribute('title', websitePreviewTitle(normalized));
+            iframe.setAttribute('referrerpolicy', 'no-referrer');
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
+            frameWrap.replaceChildren(iframe);
+            titleWrap.textContent = '';
+            const key = document.createElement('div');
+            key.className = 'ticket-node-key';
+            key.textContent = websitePreviewTitle(normalized);
+            titleWrap.append(key);
+            schedulePersistCanvasState();
+          };
+
+          urlInput.addEventListener('change', updateWebsitePreview);
+          urlInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              updateWebsitePreview();
+            }
+          });
+          updateWebsitePreview();
+
+          body.append(urlInput, frameWrap);
+
+          resizeHandle = document.createElement('button');
+          resizeHandle.type = 'button';
+          resizeHandle.className = 'note-node-resize-handle';
+          resizeHandle.setAttribute('aria-label', 'Resize website preview');
+
+          root.append(header, body, resizeHandle);
+        } else {
+          const summary = document.createElement('div');
+          summary.className = 'ticket-node-summary';
+          summary.textContent = node.summary || '(no summary)';
+
+          const meta = document.createElement('div');
+          meta.className = 'ticket-node-meta';
+          meta.append(
+            createMetaRow('Type', node.issueType),
+            createMetaRow('Status', node.status),
+            createMetaRow('Assignee', node.assignee),
+            createMetaRow('Priority', node.priority)
+          );
+
+          root.append(header, summary, meta);
+        }
+
+        for (const direction of ['top', 'right', 'bottom', 'left']) {
+          const handle = document.createElement('button');
+          handle.type = 'button';
+          handle.className = 'ticket-node-handle ticket-node-handle--' + direction;
+          handle.dataset.nodeId = node.id;
+          handle.dataset.direction = direction;
+          handle.setAttribute('aria-label', 'Create link from ' + getNodeLabel(node) + ' ' + direction + ' connector');
+          handle.addEventListener('pointerdown', event => {
+            if (event.button !== 0) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            uiState.selectedNodeId = node.id;
+            uiState.selectedConnectorId = undefined;
+            uiState.linkSourceNodeId = node.id;
+            uiState.linkPreview = {
+              sourceNodeId: node.id,
+              sourceDirection: direction,
+              targetDirection: undefined,
+              pointerId: event.pointerId,
+              x1: 0,
+              y1: 0,
+              x2: 0,
+              y2: 0
+            };
+            root.setPointerCapture(event.pointerId);
+            updateLinkPreviewFromPointer(event);
+            syncNodeInteractionClasses();
+            renderConnectors();
+            updateDeleteConnectorState();
+            setFeedback('Drag to a connector on another component to create a link.', false);
+          });
+          root.append(handle);
+        }
 
         let dragging = null;
+        let resizing = null;
+        if (resizeHandle) {
+          resizeHandle.addEventListener('pointerdown', event => {
+            if (event.button !== 0 || (node.type !== 'note' && node.type !== 'website')) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            uiState.selectedNodeId = node.id;
+            uiState.selectedConnectorId = undefined;
+            resizing = {
+              pointerId: event.pointerId,
+              startClientX: event.clientX,
+              startClientY: event.clientY,
+              startWidth: node.width,
+              startHeight: node.height
+            };
+            root.classList.add('is-resizing');
+            root.setPointerCapture(event.pointerId);
+            syncNodeInteractionClasses();
+            renderConnectors();
+          });
+        }
         root.addEventListener('pointerdown', event => {
           if (event.button !== 0) {
             return;
           }
-          if (uiState.activeTool === 'link') {
+          if (event.target instanceof HTMLElement && event.target.closest('button')) {
             return;
           }
-          if (event.target instanceof HTMLElement && event.target.closest('button')) {
+          if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
             return;
           }
           dragging = {
@@ -2215,11 +3396,26 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           root.setPointerCapture(event.pointerId);
         });
         root.addEventListener('pointermove', event => {
+          if (uiState.linkPreview && uiState.linkPreview.pointerId === event.pointerId) {
+            updateLinkPreviewFromPointer(event);
+            renderConnectors();
+            return;
+          }
+          if (resizing && resizing.pointerId === event.pointerId && (node.type === 'note' || node.type === 'website')) {
+            const deltaX = clientDistanceToCanvas(event.clientX - resizing.startClientX);
+            const deltaY = clientDistanceToCanvas(event.clientY - resizing.startClientY);
+            node.width = Math.max(220, Math.round(resizing.startWidth + deltaX));
+            node.height = Math.max(150, Math.round(resizing.startHeight + deltaY));
+            root.style.width = node.width + 'px';
+            root.style.height = node.height + 'px';
+            renderConnectors();
+            return;
+          }
           if (!dragging || dragging.pointerId !== event.pointerId) {
             return;
           }
-          const deltaX = event.clientX - dragging.startClientX;
-          const deltaY = event.clientY - dragging.startClientY;
+          const deltaX = clientDistanceToCanvas(event.clientX - dragging.startClientX);
+          const deltaY = clientDistanceToCanvas(event.clientY - dragging.startClientY);
           node.x = Math.round(dragging.startX + deltaX);
           node.y = Math.round(dragging.startY + deltaY);
           root.style.left = node.x + 'px';
@@ -2227,6 +3423,30 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           renderConnectors();
         });
         root.addEventListener('pointerup', event => {
+          if (uiState.linkPreview && uiState.linkPreview.pointerId === event.pointerId) {
+            root.releasePointerCapture(event.pointerId);
+            const targetHandle = findHandleTargetAtPoint(event.clientX, event.clientY);
+            if (targetHandle && targetHandle.nodeId !== uiState.linkPreview.sourceNodeId) {
+              createConnectorBetweenNodes(
+                uiState.linkPreview.sourceNodeId,
+                targetHandle.nodeId,
+                uiState.linkPreview.sourceDirection,
+                targetHandle.direction
+              );
+            } else {
+              clearLinkPreview();
+              renderConnectors();
+              setFeedback('Link cancelled. Drop on a connector to create a link.', false);
+            }
+            return;
+          }
+          if (resizing && resizing.pointerId === event.pointerId) {
+            resizing = null;
+            root.classList.remove('is-resizing');
+            renderConnectors();
+            schedulePersistCanvasState();
+            return;
+          }
           if (!dragging || dragging.pointerId !== event.pointerId) {
             return;
           }
@@ -2236,6 +3456,18 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           persistCanvasState();
         });
         root.addEventListener('pointercancel', event => {
+          if (uiState.linkPreview && uiState.linkPreview.pointerId === event.pointerId) {
+            clearLinkPreview();
+            renderConnectors();
+            return;
+          }
+          if (resizing && resizing.pointerId === event.pointerId) {
+            resizing = null;
+            root.classList.remove('is-resizing');
+            renderConnectors();
+            schedulePersistCanvasState();
+            return;
+          }
           if (!dragging || dragging.pointerId !== event.pointerId) {
             return;
           }
@@ -2249,35 +3481,281 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           if (event.target instanceof HTMLElement && event.target.closest('button')) {
             return;
           }
-          if (uiState.activeTool === 'link') {
-            event.preventDefault();
-            event.stopPropagation();
-            handleLinkNodeSelection(node);
+          if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return;
           }
+          uiState.selectedNodeId = node.id;
+          uiState.selectedConnectorId = undefined;
+          if (uiState.activeTool === 'link') {
+            setFeedback('Drag from a connector on the selected component to another component connector.', false);
+          }
+          renderNodes();
         });
 
-        root.append(header, summary, meta);
         nodesLayer.append(root);
       }
-      connectorsLayer.setAttribute('width', String(canvasSurface.scrollWidth));
-      connectorsLayer.setAttribute('height', String(canvasSurface.scrollHeight));
+      if (connectorsLayer instanceof SVGElement) {
+        connectorsLayer.setAttribute('width', String(clientDistanceToCanvas(canvasSurface.scrollWidth)));
+        connectorsLayer.setAttribute('height', String(clientDistanceToCanvas(canvasSurface.scrollHeight)));
+      }
+      const renderedEls = nodesLayer.querySelectorAll('.ticket-node');
+      const lastEl = renderedEls[renderedEls.length - 1];
+      const lastRect = lastEl instanceof HTMLElement ? lastEl.getBoundingClientRect() : null;
+      const nodesLayerRect = nodesLayer instanceof HTMLElement ? nodesLayer.getBoundingClientRect() : null;
+      console.log('[TaskDesigner] renderNodes end', { renderedElementCount: renderedEls.length, lastElementRect: lastRect && { x: lastRect.x, y: lastRect.y, w: lastRect.width, h: lastRect.height }, nodesLayerRect: nodesLayerRect && { x: nodesLayerRect.x, y: nodesLayerRect.y, w: nodesLayerRect.width, h: nodesLayerRect.height }, nodesLayerTransform: nodesLayer instanceof HTMLElement ? nodesLayer.style.transform : null });
       pruneDanglingConnectors();
       renderConnectors();
       updateDeleteConnectorState();
+      syncFloatingLayout();
+    }
+
+    function createLocalTicketNode(issue, x, y) {
+      return {
+        type: 'ticket',
+        id: 'ticket-' + issue.issueKey + '-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8),
+        issueKey: issue.issueKey,
+        summary: issue.summary || issue.issueKey,
+        issueType: issue.issueType || 'Unknown',
+        status: issue.status || 'Unknown',
+        assignee: issue.assignee,
+        priority: issue.priority,
+        projectKey: issue.projectKey || 'UNKNOWN',
+        x: Math.round(x),
+        y: Math.round(y)
+      };
+    }
+
+    function ensureIssueNode(issue, x, y) {
+      const existing = findNodeByIssueKey(issue.issueKey);
+      if (existing) {
+        return existing;
+      }
+      const node = createLocalTicketNode(issue, x, y);
+      state.nodes.push(node);
+      return node;
+    }
+
+    function applyDroppedIssuePayload(payload, dropPoint) {
+      if (!payload || typeof payload !== 'object' || !payload.mainIssue || typeof payload.mainIssue.issueKey !== 'string') {
+        setFeedback('Unable to add the dropped ticket.', true);
+        return;
+      }
+
+      const relatedIssues = Array.isArray(payload.relatedIssues)
+        ? payload.relatedIssues.filter(issue => issue && typeof issue.issueKey === 'string')
+        : [];
+      const relations = Array.isArray(payload.relations)
+        ? payload.relations.filter(relation => relation && typeof relation.sourceIssueKey === 'string' && typeof relation.targetIssueKey === 'string')
+        : [];
+      const includeRelated = relatedIssues.length > 0
+        ? window.confirm('Add ' + relatedIssues.length + ' related ticket' + (relatedIssues.length === 1 ? '' : 's') + ' and connect them to the dropped ticket?')
+        : false;
+
+      const mainNode = ensureIssueNode(payload.mainIssue, dropPoint.x - 125, dropPoint.y - 56);
+      uiState.selectedNodeId = mainNode.id;
+      uiState.selectedConnectorId = undefined;
+
+      if (includeRelated) {
+        let dependencyIndex = 0;
+        let childIndex = 0;
+        for (const relatedIssue of relatedIssues) {
+          const isDependency = relatedIssue.relation === 'dependsOn';
+          const slot = isDependency ? dependencyIndex++ : childIndex++;
+          const x = isDependency ? (mainNode.x - 320) : (mainNode.x + 320);
+          const y = mainNode.y + (slot * 148) - 72;
+          ensureIssueNode(relatedIssue, x, y);
+        }
+
+        for (const relation of relations) {
+          const sourceNode = findNodeByIssueKey(relation.sourceIssueKey);
+          const targetNode = findNodeByIssueKey(relation.targetIssueKey);
+          if (!sourceNode || !targetNode) {
+            continue;
+          }
+          pushConnector(sourceNode.id, targetNode.id);
+        }
+      }
+
+      clearRecommendation();
+      renderNodes();
+      persistCanvasState();
+      setFeedback(
+        includeRelated
+          ? 'Dropped ticket added with related tickets and links.'
+          : 'Dropped ticket added to the designer.',
+        false
+      );
+    }
+
+    function requestResolveDroppedIssue(issueKey, dropPoint) {
+      vscodeApi.postMessage({
+        type: 'resolveDroppedIssue',
+        issueKey,
+        dropPoint
+      });
     }
 
     function requestAddTicket() {
-      const issueKey = ticketInput.value.trim();
-      vscodeApi.postMessage({ type: 'addTicket', issueKey });
+      const issueKey = ticketInput instanceof HTMLInputElement ? ticketInput.value.trim() : '';
+      if (!issueKey) {
+        setFeedback('Enter a ticket number before adding.', true);
+        setTicketEntryOpen(true, { focus: true });
+        return;
+      }
+      if (!(canvasSurface instanceof HTMLElement)) {
+        console.warn('[TaskDesigner] requestAddTicket aborted: canvasSurface is not HTMLElement', canvasSurface);
+        return;
+      }
+      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
+      console.log('[TaskDesigner] requestAddTicket', { issueKey, point, zoom: uiState.zoom, surface: { clientWidth: canvasSurface.clientWidth, clientHeight: canvasSurface.clientHeight, scrollLeft: canvasSurface.scrollLeft, scrollTop: canvasSurface.scrollTop } });
+      vscodeApi.postMessage({ type: 'addTicket', issueKey, x: point.x, y: point.y });
     }
 
-    ticketAddButton.addEventListener('click', requestAddTicket);
-    ticketInput.addEventListener('keydown', event => {
-      if (event.key === 'Enter') {
+    function revealNode(nodeId) {
+      window.requestAnimationFrame(() => {
+        const element = nodeElementById(nodeId);
+        if (element instanceof HTMLElement) {
+          element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      });
+    }
+
+    function requestAddNote(options) {
+      if (!(canvasSurface instanceof HTMLElement)) {
+        setFeedback('Unable to add note: canvas surface not ready.', true);
+        console.warn('[TaskDesigner] requestAddNote aborted: canvasSurface is not HTMLElement', canvasSurface);
+        return;
+      }
+      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
+      console.log('[TaskDesigner] requestAddNote', { point, zoom: uiState.zoom, surface: { clientWidth: canvasSurface.clientWidth, clientHeight: canvasSurface.clientHeight } });
+      const noteId = (options && options.id) || ('note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6));
+      const node = {
+        type: 'note',
+        id: noteId,
+        title: (options && typeof options.title === 'string') ? options.title : 'Notes',
+        content: (options && typeof options.content === 'string') ? options.content : '',
+        x: Math.round((options && typeof options.x === 'number') ? options.x : point.x),
+        y: Math.round((options && typeof options.y === 'number') ? options.y : point.y),
+        width: 280,
+        height: 190
+      };
+      state.nodes.push(node);
+      uiState.selectedNodeId = node.id;
+      uiState.selectedConnectorId = undefined;
+      clearRecommendation();
+      renderNodes();
+      persistCanvasState();
+      revealNode(node.id);
+      setFeedback('Note added.', false);
+    }
+
+    function requestAddWebsitePreview() {
+      if (!(canvasSurface instanceof HTMLElement)) {
+        return;
+      }
+      const rawUrl = window.prompt('Enter a website URL for the preview component', 'https://');
+      if (rawUrl === null) {
+        return;
+      }
+      const normalized = normalizeWebsitePreviewUrl(rawUrl);
+      if (!normalized) {
+        setFeedback('Enter a valid http or https URL for the website preview.', true);
+        return;
+      }
+      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
+      console.log('[TaskDesigner] requestAddWebsitePreview', { url: normalized, point, zoom: uiState.zoom });
+      vscodeApi.postMessage({ type: 'addWebsitePreview', url: normalized, x: point.x, y: point.y });
+    }
+
+    if (ticketAddButton instanceof HTMLElement) {
+      ticketAddButton.addEventListener('click', requestAddTicket);
+    }
+    if (ticketEntryPanel instanceof HTMLFormElement) {
+      ticketEntryPanel.addEventListener('submit', event => {
         event.preventDefault();
         requestAddTicket();
+      });
+    }
+    if (ticketEntryCloseButton instanceof HTMLElement) {
+      ticketEntryCloseButton.addEventListener('click', () => {
+        setTicketEntryOpen(false);
+      });
+    }
+    if (ticketInput instanceof HTMLInputElement) {
+      ticketInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          requestAddTicket();
+        }
+      });
+    }
+
+    canvasToolbarHandle?.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || !(canvasToolbar instanceof HTMLElement) || !(canvasSurface instanceof HTMLElement)) {
+        return;
       }
+      const toolbarRect = canvasToolbar.getBoundingClientRect();
+      uiState.toolbarDrag = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - toolbarRect.left,
+        offsetY: event.clientY - toolbarRect.top
+      };
+      canvasToolbarHandle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
     });
+
+    window.addEventListener('pointermove', event => {
+      if (!uiState.toolbarDrag || !(canvasSurface instanceof HTMLElement)) {
+        return;
+      }
+      if (event.pointerId !== uiState.toolbarDrag.pointerId) {
+        return;
+      }
+      const surfaceRect = canvasSurface.getBoundingClientRect();
+      uiState.toolbarPosition = {
+        x: canvasSurface.scrollLeft + event.clientX - surfaceRect.left - uiState.toolbarDrag.offsetX,
+        y: canvasSurface.scrollTop + event.clientY - surfaceRect.top - uiState.toolbarDrag.offsetY
+      };
+      syncFloatingLayout();
+      schedulePersistCanvasState();
+    });
+
+    window.addEventListener('pointerup', event => {
+      if (!uiState.toolbarDrag || event.pointerId !== uiState.toolbarDrag.pointerId) {
+        return;
+      }
+      uiState.toolbarDrag = undefined;
+    });
+
+    if (canvasSurface instanceof HTMLElement) {
+      canvasSurface.addEventListener('dragover', event => {
+        const types = event.dataTransfer?.types ?? [];
+        const hasIssueData = types.includes('application/x-ticket-manager-issue') || types.includes('text/plain');
+        if (!hasIssueData) {
+          return;
+        }
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = 'copy';
+        }
+      });
+
+      canvasSurface.addEventListener('drop', event => {
+        const issueKey = (event.dataTransfer?.getData('application/x-ticket-manager-issue') || event.dataTransfer?.getData('text/plain') || '').trim();
+        if (!issueKey || !(canvasSurface instanceof HTMLElement)) {
+          return;
+        }
+        event.preventDefault();
+        const surfaceRect = canvasSurface.getBoundingClientRect();
+        requestResolveDroppedIssue(issueKey, {
+          x: clientDistanceToCanvas(canvasSurface.scrollLeft + event.clientX - surfaceRect.left),
+          y: clientDistanceToCanvas(canvasSurface.scrollTop + event.clientY - surfaceRect.top)
+        });
+      });
+
+      canvasSurface.addEventListener('scroll', syncFloatingLayout);
+    }
+    window.addEventListener('resize', syncFloatingLayout);
 
     window.addEventListener('message', event => {
       const message = event.data;
@@ -2286,34 +3764,93 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
 
       if (message.type === 'addTicketResult') {
+        console.log('[TaskDesigner] addTicketResult received', { ok: message.ok, error: message.error, node: message.node });
         if (!message.ok) {
           setFeedback(message.error || 'Unable to add ticket.', true);
           return;
         }
 
-        setFeedback('Ticket node added.', false);
-        if (message.node) {
-          state.nodes.push(message.node);
-          clearRecommendation();
-          renderNodes();
-          persistCanvasState();
+        if (!message.node) {
+          setFeedback('Ticket details were loaded, but no designer node was returned.', true);
+          return;
         }
-        ticketInput.value = '';
-        ticketInput.focus();
+        state.nodes.push(message.node);
+        uiState.selectedNodeId = message.node.id;
+        uiState.selectedConnectorId = undefined;
+        clearRecommendation();
+        renderNodes();
+        persistCanvasState();
+        revealNode(message.node.id);
+        setFeedback('Ticket node added.', false);
+        if (ticketInput instanceof HTMLInputElement) {
+          ticketInput.value = '';
+        }
+        setTicketEntryOpen(false);
         return;
       }
 
-      if (message.type === 'persistCanvasStateResult' && !message.ok) {
-        if (message.state) {
-          state.nodes = Array.isArray(message.state.nodes) ? message.state.nodes.map(node => ({ ...node })) : [];
-          state.connectors = Array.isArray(message.state.connectors)
-            ? message.state.connectors.map(connector => ({ ...connector }))
-            : [];
-          syncNextConnectorIndex();
-          pruneDanglingConnectors();
-          renderNodes();
+      if (message.type === 'addNoteResult') {
+        console.log('[TaskDesigner] addNoteResult received', { ok: message.ok, error: message.error, node: message.node });
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to add note.', true);
+          return;
         }
-        setFeedback(message.error || 'Unable to save canvas state.', true);
+        if (!message.node) {
+          setFeedback('Note was created but no node data was returned.', true);
+          return;
+        }
+        state.nodes.push(message.node);
+        uiState.selectedNodeId = message.node.id;
+        uiState.selectedConnectorId = undefined;
+        clearRecommendation();
+        renderNodes();
+        persistCanvasState();
+        revealNode(message.node.id);
+        setFeedback('Note added.', false);
+        return;
+      }
+
+      if (message.type === 'addWebsitePreviewResult') {
+        console.log('[TaskDesigner] addWebsitePreviewResult received', { ok: message.ok, error: message.error, node: message.node });
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to add website preview.', true);
+          return;
+        }
+
+        if (message.node) {
+          state.nodes.push(message.node);
+          uiState.selectedNodeId = message.node.id;
+          uiState.selectedConnectorId = undefined;
+          renderNodes();
+          persistCanvasState();
+          setFeedback('Website preview added.', false);
+        }
+        return;
+      }
+
+      if (message.type === 'resolveDroppedIssueResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to resolve dropped issue.', true);
+          return;
+        }
+        applyDroppedIssuePayload(message.payload, message.dropPoint || { x: 200, y: 120 });
+        return;
+      }
+
+      if (message.type === 'persistCanvasStateResult') {
+        console.log('[TaskDesigner] persistCanvasStateResult', { ok: message.ok, error: message.error, stateNodeCount: message.state && Array.isArray(message.state.nodes) ? message.state.nodes.length : undefined });
+        if (!message.ok) {
+          if (message.state) {
+            state.nodes = Array.isArray(message.state.nodes) ? message.state.nodes.map(node => ({ ...node })) : [];
+            state.connectors = Array.isArray(message.state.connectors)
+              ? message.state.connectors.map(connector => ({ ...connector }))
+              : [];
+            syncNextConnectorIndex();
+            pruneDanglingConnectors();
+            renderNodes();
+          }
+          setFeedback(message.error || 'Unable to save canvas state.', true);
+        }
         return;
       }
 
@@ -2328,9 +3865,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         state.recommendation = message.recommendation || undefined;
         state.recommendationNodes = state.nodes.map(node => ({ ...node }));
         state.recommendationSource = 'canvas tickets';
-        renderRecommendationSummary();
         updateRecommendationActionState();
-        setFeedback('AI recommendation ready for review.', false);
+        setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.', false);
         return;
       }
 
@@ -2345,9 +3881,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         state.recommendation = message.recommendation || undefined;
         state.recommendationNodes = buildPreviewNodes(message.nodes);
         state.recommendationSource = message.boardName ? ('board "' + message.boardName + '"') : 'current board';
-        renderRecommendationSummary();
         updateRecommendationActionState();
-        setFeedback('AI board recommendation ready for review.', false);
+        setFeedback('AI board recommendation ready. Use the check or x actions in the toolbar to apply or discard it.', false);
         return;
       }
 
@@ -2367,7 +3902,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         }
         clearRecommendation();
         renderNodes();
-        renderExecutionSummary();
         setFeedback('AI recommendation applied.', false);
         return;
       }
@@ -2392,10 +3926,29 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       button.addEventListener('click', () => {
         const action = button.getAttribute('data-action');
         if (action === 'ticket') {
-          ticketInput.focus();
+          setTicketEntryOpen(true, { focus: true });
+          return;
+        }
+        if (action === 'note') {
+          setTicketEntryOpen(false);
+          requestAddNote();
+          return;
+        }
+        if (action === 'website') {
+          setTicketEntryOpen(false);
+          requestAddWebsitePreview();
+          return;
+        }
+        if (action === 'zoomIn') {
+          setZoom(uiState.zoom + 0.1);
+          return;
+        }
+        if (action === 'zoomOut') {
+          setZoom(uiState.zoom - 0.1);
           return;
         }
         if (action === 'select' || action === 'link') {
+          setTicketEntryOpen(false);
           setActiveTool(action);
           if (action === 'link') {
             setFeedback('Link mode active. Select source node, then target node.', false);
@@ -2434,6 +3987,29 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           setFeedback('AI recommendation discarded.', false);
           return;
         }
+        if (action === 'reset') {
+          if (state.nodes.length === 0 && state.connectors.length === 0) {
+            setFeedback('Canvas is already empty.', false);
+            return;
+          }
+          if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
+            return;
+          }
+          state.nodes = [];
+          state.connectors = [];
+          uiState.selectedNodeId = undefined;
+          uiState.selectedConnectorId = undefined;
+          uiState.linkSourceNodeId = undefined;
+          clearRecommendation();
+          setActiveTool('select');
+          renderNodes();
+          persistCanvasState();
+          const now = new Date();
+          const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+          const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+          requestAddNote({ title: 'Session Log', content: 'Opened: ' + dateStr + ' at ' + timeStr, x: 24, y: 72 });
+          return;
+        }
         vscodeApi.postMessage({ type: 'toolbarAction', action });
       });
     }
@@ -2442,18 +4018,42 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       if (event.target !== canvasSurface && event.target !== connectorsLayer) {
         return;
       }
+      if (uiState.ticketEntryOpen) {
+        setTicketEntryOpen(false);
+      }
       if (uiState.selectedConnectorId) {
         uiState.selectedConnectorId = undefined;
         renderConnectors();
       }
     });
 
+    window.addEventListener('keydown', event => {
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        if (event.key === 'Escape' && uiState.ticketEntryOpen) {
+          setTicketEntryOpen(false);
+        }
+        return;
+      }
+      if (event.key === 'Delete' && uiState.selectedConnectorId) {
+        event.preventDefault();
+        deleteSelectedConnector();
+        return;
+      }
+      if (event.key === 'Escape' && uiState.ticketEntryOpen) {
+        setTicketEntryOpen(false);
+      }
+    });
+
     syncNextConnectorIndex();
     pruneDanglingConnectors();
     setActiveTool('select');
+    setTicketEntryOpen(false);
     renderNodes();
-    renderExecutionSummary();
-    renderRecommendationSummary();
     updateRecommendationActionState();
     setGeneratingMasterPlan(false);
     if (initialWarning) {

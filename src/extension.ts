@@ -60,6 +60,7 @@ import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
+import { NoteTestPanelManager } from './views/noteTestPanelManager';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
@@ -3373,10 +3374,34 @@ export async function activate(
     initialModeContext.configured
   );
   type BoardsSidebarMode = 'classic' | 'work';
-  const getBoardsSidebarMode = (): BoardsSidebarMode =>
-    vscode.workspace.getConfiguration('ticketManager').get<string>('boardsSidebarPreviewMode') === 'work'
+  const getBoardsSidebarMode = (): BoardsSidebarMode => {
+    const configuration = vscode.workspace.getConfiguration('ticketManager');
+    const workModeEnabled = configuration.inspect<boolean>('workModeEnabled');
+    const explicitToggleValue =
+      workModeEnabled?.workspaceFolderValue ??
+      workModeEnabled?.workspaceValue ??
+      workModeEnabled?.globalValue;
+    if (typeof explicitToggleValue === 'boolean') {
+      return explicitToggleValue ? 'work' : 'classic';
+    }
+    return configuration.get<string>('boardsSidebarPreviewMode') === 'work'
       ? 'work'
       : 'classic';
+  };
+
+  const getBoardsSidebarSettingsTarget = (): vscode.ConfigurationTarget =>
+    vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+
+  const setBoardsSidebarMode = async (mode: BoardsSidebarMode): Promise<void> => {
+    const configuration = vscode.workspace.getConfiguration('ticketManager');
+    const target = getBoardsSidebarSettingsTarget();
+    await Promise.all([
+      configuration.update('boardsSidebarPreviewMode', mode, target),
+      configuration.update('workModeEnabled', mode === 'work', target)
+    ]);
+  };
 
   const getBoardsContainerCommand = (): string =>
     getBoardsSidebarMode() === 'work'
@@ -3464,6 +3489,8 @@ export async function activate(
       };
     }
   );
+
+  const noteTestPanelManager = new NoteTestPanelManager(context.workspaceState, backendService);
 
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
     const options = getConfiguredAiOptions();
@@ -5396,6 +5423,18 @@ export async function activate(
         `@ext:${context.extension.id} ticketManager`
       );
     }),
+    vscode.commands.registerCommand('ticketManager.toggleWorkMode', async () => {
+      try {
+        const nextMode: BoardsSidebarMode = getBoardsSidebarMode() === 'work' ? 'classic' : 'work';
+        await setBoardsSidebarMode(nextMode);
+        await vscode.commands.executeCommand(getBoardsContainerCommand());
+        void vscode.window.showInformationMessage(
+          nextMode === 'work' ? 'Ticket Manager switched to Work Mode.' : 'Ticket Manager switched to Classic mode.'
+        );
+      } catch (error) {
+        reportError(error, 'toggle-work-mode');
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.configureAi', async () => {
       try {
         const result = await promptToConfigureDefaultAiProvider();
@@ -5423,6 +5462,7 @@ export async function activate(
       setupWizardPanel,
       setupSidebarViewProvider,
       taskDesignerPanelManager,
+      noteTestPanelManager,
       issuesProvider,
       boardsProvider,
       detailsProvider,
@@ -5527,6 +5567,23 @@ export async function activate(
                 refreshAiAssignmentMenus();
                 updateCommentPlaceholders();
                 const boardsModeChanged = event.affectsConfiguration('ticketManager.boardsSidebarPreviewMode');
+                const workModeToggleChanged = event.affectsConfiguration('ticketManager.workModeEnabled');
+                if (boardsModeChanged || workModeToggleChanged) {
+                  const configuration = vscode.workspace.getConfiguration('ticketManager');
+                  const desiredMode = getBoardsSidebarMode();
+                  const currentPreviewMode = configuration.get<string>('boardsSidebarPreviewMode') === 'work'
+                    ? 'work'
+                    : 'classic';
+                  const workModeEnabledInspect = configuration.inspect<boolean>('workModeEnabled');
+                  const currentWorkModeToggle =
+                    workModeEnabledInspect?.workspaceFolderValue ??
+                    workModeEnabledInspect?.workspaceValue ??
+                    workModeEnabledInspect?.globalValue;
+                  if (currentPreviewMode !== desiredMode || currentWorkModeToggle !== (desiredMode === 'work')) {
+                    await setBoardsSidebarMode(desiredMode);
+                    return;
+                  }
+                }
                 await setModeContext();
                 await filterStore.setLastSelectedIssueKey(undefined);
                 await boardStore.setLastSelectedBoardId(undefined);
@@ -5545,7 +5602,7 @@ export async function activate(
                   await backendService.reset();
                   await refreshAndRestoreSelection();
                   await startupPollingController.refresh();
-                  if (boardsModeChanged && getModeContextState().configured) {
+                  if (boardsModeChanged || workModeToggleChanged) {
                     await vscode.commands.executeCommand(getBoardsContainerCommand());
                   }
                 } catch {

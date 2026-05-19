@@ -1,0 +1,74 @@
+# Ticket Manager Command Reference
+
+> This file is generated from `package.json` by `node ./scripts/generate-command-reference.cjs`.
+
+This document lists the user-facing commands contributed through the extension manifest.
+
+Total contributed commands: 59
+
+| Command Title | Command Id | Category | Icon |
+| --- | --- | --- | --- |
+| Abandon AI Session | `ticketManager.unassignAi` | Ticket Manager | $(close) |
+| Abort Agent Session | `ticketManager.abortAgentSession` | Ticket Manager | $(debug-stop) |
+| Add Connection | `ticketManager.addConnection` | Ticket Manager | $(add) |
+| Add Tracked Board | `ticketManager.addBoard` | Ticket Manager | $(add) |
+| Assign to AI Agent | `ticketManager.assignToAi` | Ticket Manager | $(hubot) |
+| Assign to Me | `ticketManager.assignToMe` | Ticket Manager | $(person) |
+| Assign Workflow Pack | `ticketManager.assignWorkflowPack` | Ticket Manager | $(symbol-key) |
+| Change Status | `ticketManager.changeStatus` | Ticket Manager | $(play-circle) |
+| Check Connection | `ticketManager.checkConnection` | Ticket Manager | $(debug-alt) |
+| Clear Board Filters | `ticketManager.clearBoardFilters` | Ticket Manager | $(clear-all) |
+| Clear Filters | `ticketManager.clearFilters` | Ticket Manager | $(clear-all) |
+| Clear Parent Item Scope | `ticketManager.clearParentScope` | Ticket Manager | $(close) |
+| Configure AI | `ticketManager.configureAi` | Ticket Manager | $(hubot) |
+| Configure Board Settings | `ticketManager.configureBoardColumns` | Ticket Manager | $(settings-gear) |
+| Configure Jira Cloud Connection | `ticketManager.configureConnection` | Ticket Manager | $(plug) |
+| Configure Project | `ticketManager.openSetup` | Ticket Manager | $(gear) |
+| Copy Issue Key | `ticketManager.copyKey` | Ticket Manager | $(copy) |
+| Create Board | `ticketManager.createBoard` | Ticket Manager | $(new-folder) |
+| Create EPIC | `ticketManager.createEpic` | Ticket Manager | $(add) |
+| Create Idea | `ticketManager.createIdea` | Ticket Manager | $(lightbulb) |
+| Create Issue | `ticketManager.createIssue` | Ticket Manager | $(add) |
+| Delegate to Copilot Agent | `ticketManager.delegateToCopilot` | Ticket Manager | $(hubot) |
+| Disconnect Jira Cloud | `ticketManager.disconnectJiraCloud` | Ticket Manager | $(debug-disconnect) |
+| Import Markdown Files to Template Format | `ticketManager.importMarkdownFiles` | Ticket Manager | $(file-code) |
+| Import Plan from Markdown Features | `ticketManager.importMarkdownFeaturePlan` | Ticket Manager | $(file-code) |
+| Link Jira API Board Query | `ticketManager.linkJiraApiBoardQuery` | Ticket Manager | $(list-filter) |
+| Link Jira API Epic | `ticketManager.linkJiraApiEpic` | Ticket Manager | $(link) |
+| Load More | `ticketManager.loadMore` | Ticket Manager | $(chevron-down) |
+| Local Peer Review (LPR) | `ticketManager.localPeerReview` | Ticket Manager | $(checklist) |
+| Migrate Live Folder to Jira API | `ticketManager.migrateLiveFolderToJiraApi` | Ticket Manager | $(cloud-upload) |
+| New Project | `ticketManager.newProject` | Ticket Manager | $(rocket) |
+| Open Board | `ticketManager.openBoard` | Ticket Manager | $(go-to-file) |
+| Open Connections & Boards | `ticketManager.openConnectionsManager` | Ticket Manager | $(plug) |
+| Open External Link | `ticketManager.openInBrowser` | Ticket Manager | $(link-external) |
+| Open Full Issue Details | `ticketManager.openIssueFullDetails` | Ticket Manager | $(preview) |
+| Open Settings | `ticketManager.openSettings` | Ticket Manager | $(gear) |
+| Open Task Designer | `ticketManager.openTaskDesigner` | Ticket Manager | $(symbol-misc) |
+| Refresh | `ticketManager.refresh` | Ticket Manager | $(refresh) |
+| Review Ticket with AI | `ticketManager.reviewWithAi` | Ticket Manager | $(comment-discussion) |
+| Search Boards | `ticketManager.searchBoards` | Ticket Manager | $(search) |
+| Search Boards | `ticketManager.searchBoardsActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
+| Search EPICs | `ticketManager.searchEpics` | Ticket Manager | $(search) |
+| Search EPICs | `ticketManager.searchEpicsActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
+| Search Issues | `ticketManager.searchIssues` | Ticket Manager | $(search) |
+| Search Issues | `ticketManager.searchIssuesActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
+| Set Backend Mode | `ticketManager.setBackendMode` | Ticket Manager | $(symbol-namespace) |
+| Set Board Projects | `ticketManager.setBoardProjects` | Ticket Manager | $(repo) |
+| Set Board Search Text | `ticketManager.setBoardSearchText` | Ticket Manager | $(search) |
+| Set Board Types | `ticketManager.setBoardTypes` | Ticket Manager | $(list-tree) |
+| Set Issue Type Filter | `ticketManager.setIssueTypes` | Ticket Manager | $(symbol-class) |
+| Set Parent Item Scope | `ticketManager.setParentScope` | Ticket Manager | $(milestone) |
+| Set Projects | `ticketManager.setProjects` | Ticket Manager | $(repo) |
+| Set Search Text | `ticketManager.setSearchText` | Ticket Manager | $(search) |
+| Set Status Filter | `ticketManager.setStatuses` | Ticket Manager | $(list-selection) |
+| Start Claude Code Session | `ticketManager.startClaudeSession` | Ticket Manager | $(hubot) |
+| Start Sub-Task Delivery | `ticketManager.startSubTaskDelivery` | Ticket Manager | $(play) |
+| Toggle Assignee Scope | `ticketManager.toggleAssigneeMode` | Ticket Manager | $(account) |
+| Toggle Work Mode | `ticketManager.toggleWorkMode` | Ticket Manager | $(layout-sidebar-right) |
+| View AI Session | `ticketManager.viewAgentSession` | Ticket Manager | $(eye) |
+
+## Notes
+
+- This reference only covers manifest-contributed commands.
+- Some internally registered commands and wiring helpers are intentionally not listed here.

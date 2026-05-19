@@ -73,5 +73,7 @@
             "boardId": "agile:620",
             "displayName": "Presales Configurator"
         }
-    ]
+    ],
+    "ticketManager.boardsSidebarPreviewMode": "work",
+    "ticketManager.workModeEnabled": false
 }

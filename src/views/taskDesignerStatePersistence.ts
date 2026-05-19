@@ -1,4 +1,5 @@
 export interface TaskDesignerTicketNode {
+  type: 'ticket';
   id: string;
   issueKey: string;
   summary: string;
@@ -11,15 +12,47 @@ export interface TaskDesignerTicketNode {
   y: number;
 }
 
+export interface TaskDesignerNoteNode {
+  type: 'note';
+  id: string;
+  title: string;
+  content: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface TaskDesignerWebsitePreviewNode {
+  type: 'website';
+  id: string;
+  url: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type TaskDesignerCanvasNode = TaskDesignerTicketNode | TaskDesignerNoteNode | TaskDesignerWebsitePreviewNode;
+
 export interface TaskDesignerDirectedConnector {
   id: string;
   sourceNodeId: string;
   targetNodeId: string;
+  sourceDirection?: TaskDesignerLinkHandleDirection;
+  targetDirection?: TaskDesignerLinkHandleDirection;
 }
 
+export type TaskDesignerLinkHandleDirection = 'top' | 'right' | 'bottom' | 'left';
+
 export interface TaskDesignerPersistedState {
-  nodes: TaskDesignerTicketNode[];
+  nodes: TaskDesignerCanvasNode[];
   connectors: TaskDesignerDirectedConnector[];
+  zoom: number;
+  toolbarPosition: {
+    x: number;
+    y: number;
+  };
 }
 
 export interface TaskDesignerPersistedStateRecoveryResult {
@@ -38,6 +71,12 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function asLinkHandleDirection(value: unknown): TaskDesignerLinkHandleDirection | undefined {
+  return value === 'top' || value === 'right' || value === 'bottom' || value === 'left'
+    ? value
+    : undefined;
 }
 
 function pickFirstString(...values: unknown[]): string | undefined {
@@ -66,6 +105,9 @@ function toTicketNode(value: unknown, fallbackIndex = 0): TaskDesignerTicketNode
   if (!isRecord(value)) {
     return undefined;
   }
+  if (value.type === 'note' || value.type === 'website') {
+    return undefined;
+  }
 
   const issueKey = pickFirstString(value.issueKey, value.key);
   if (!issueKey) {
@@ -83,6 +125,7 @@ function toTicketNode(value: unknown, fallbackIndex = 0): TaskDesignerTicketNode
   const fallbackRow = Math.floor(fallbackIndex / 4);
 
   return {
+    type: 'ticket',
     id,
     issueKey,
     summary,
@@ -93,6 +136,58 @@ function toTicketNode(value: unknown, fallbackIndex = 0): TaskDesignerTicketNode
     projectKey,
     x: x ?? (24 + (fallbackColumn * 280)),
     y: y ?? (72 + (fallbackRow * 150))
+  };
+}
+
+function toNoteNode(value: unknown, fallbackIndex = 0): TaskDesignerNoteNode | undefined {
+  if (!isRecord(value) || value.type !== 'note') {
+    return undefined;
+  }
+
+  const x = asNumber(value.x);
+  const y = asNumber(value.y);
+  const width = asNumber(value.width);
+  const height = asNumber(value.height);
+  const fallbackColumn = fallbackIndex % 4;
+  const fallbackRow = Math.floor(fallbackIndex / 4);
+
+  return {
+    type: 'note',
+    id: pickFirstString(value.id) ?? `note-${fallbackIndex}`,
+    title: pickFirstString(value.title) ?? 'Notes',
+    content: pickFirstString(value.content, value.summary) ?? '',
+    x: x ?? (24 + (fallbackColumn * 280)),
+    y: y ?? (72 + (fallbackRow * 150)),
+    width: width ?? 280,
+    height: height ?? 190
+  };
+}
+
+function toWebsitePreviewNode(value: unknown, fallbackIndex = 0): TaskDesignerWebsitePreviewNode | undefined {
+  if (!isRecord(value) || value.type !== 'website') {
+    return undefined;
+  }
+
+  const url = pickFirstString(value.url);
+  if (!url) {
+    return undefined;
+  }
+
+  const x = asNumber(value.x);
+  const y = asNumber(value.y);
+  const width = asNumber(value.width);
+  const height = asNumber(value.height);
+  const fallbackColumn = fallbackIndex % 4;
+  const fallbackRow = Math.floor(fallbackIndex / 4);
+
+  return {
+    type: 'website',
+    id: pickFirstString(value.id) ?? `website-${fallbackIndex}`,
+    url,
+    x: x ?? (24 + (fallbackColumn * 300)),
+    y: y ?? (72 + (fallbackRow * 210)),
+    width: width ?? 360,
+    height: height ?? 260
   };
 }
 
@@ -112,7 +207,9 @@ function toDirectedConnector(value: unknown): TaskDesignerDirectedConnector | un
   return {
     id,
     sourceNodeId,
-    targetNodeId
+    targetNodeId,
+    sourceDirection: asLinkHandleDirection(value.sourceDirection),
+    targetDirection: asLinkHandleDirection(value.targetDirection)
   };
 }
 
@@ -125,26 +222,41 @@ function warningPart(count: number, singular: string, plural: string): string | 
 
 export function normalizeTaskDesignerPersistedState(value: unknown): TaskDesignerPersistedStateRecoveryResult {
   if (value === undefined) {
-    return { state: { nodes: [], connectors: [] }, repaired: false };
+    return {
+      state: {
+        nodes: [],
+        connectors: [],
+        zoom: 1,
+        toolbarPosition: { x: 16, y: 16 }
+      },
+      repaired: false
+    };
   }
 
   if (!isRecord(value)) {
     return {
-      state: { nodes: [], connectors: [] },
+      state: {
+        nodes: [],
+        connectors: [],
+        zoom: 1,
+        toolbarPosition: { x: 16, y: 16 }
+      },
       repaired: true,
       warning: 'Recovered Task Designer state: persisted payload was invalid and was reset.'
     };
   }
 
-  const nodes: TaskDesignerTicketNode[] = [];
+  const nodes: TaskDesignerCanvasNode[] = [];
   const seenNodeIds = new Set<string>();
   let droppedNodes = 0;
   let dedupedNodeIds = 0;
   let repairedCoordinates = 0;
+  let repairedNoteDimensions = 0;
+  let repairedWebsiteDimensions = 0;
 
   const rawNodes = Array.isArray(value.nodes) ? value.nodes : [];
   for (const [index, candidateNode] of rawNodes.entries()) {
-    const node = toTicketNode(candidateNode, index);
+    const node = toWebsitePreviewNode(candidateNode, index) ?? toNoteNode(candidateNode, index) ?? toTicketNode(candidateNode, index);
     if (!node) {
       droppedNodes += 1;
       continue;
@@ -155,6 +267,12 @@ export function normalizeTaskDesignerPersistedState(value: unknown): TaskDesigne
     }
     if (isRecord(candidateNode) && (asNumber(candidateNode.x) === undefined || asNumber(candidateNode.y) === undefined)) {
       repairedCoordinates += 1;
+    }
+    if (node.type === 'note' && isRecord(candidateNode) && (asNumber(candidateNode.width) === undefined || asNumber(candidateNode.height) === undefined)) {
+      repairedNoteDimensions += 1;
+    }
+    if (node.type === 'website' && isRecord(candidateNode) && (asNumber(candidateNode.width) === undefined || asNumber(candidateNode.height) === undefined)) {
+      repairedWebsiteDimensions += 1;
     }
     seenNodeIds.add(node.id);
     nodes.push(node);
@@ -168,6 +286,15 @@ export function normalizeTaskDesignerPersistedState(value: unknown): TaskDesigne
   let selfLoopConnectors = 0;
   let duplicateConnectorIds = 0;
   let duplicateEdges = 0;
+  const zoom = asNumber(value.zoom);
+  const rawToolbarPosition = isRecord(value.toolbarPosition) ? value.toolbarPosition : undefined;
+  const toolbarX = rawToolbarPosition ? asNumber(rawToolbarPosition.x) : undefined;
+  const toolbarY = rawToolbarPosition ? asNumber(rawToolbarPosition.y) : undefined;
+  const normalizedZoom = zoom !== undefined ? Math.max(0.5, Math.min(2, Math.round(zoom * 100) / 100)) : 1;
+  const toolbarPosition = {
+    x: toolbarX ?? 16,
+    y: toolbarY ?? 16
+  };
 
   const rawConnectors = Array.isArray(value.connectors) ? value.connectors : [];
   for (const candidateConnector of rawConnectors) {
@@ -202,6 +329,8 @@ export function normalizeTaskDesignerPersistedState(value: unknown): TaskDesigne
     warningPart(droppedNodes, 'invalid node', 'invalid nodes'),
     warningPart(dedupedNodeIds, 'duplicate node id', 'duplicate node ids'),
     warningPart(repairedCoordinates, 'node with invalid coordinates', 'nodes with invalid coordinates'),
+    warningPart(repairedNoteDimensions, 'note with invalid dimensions', 'notes with invalid dimensions'),
+    warningPart(repairedWebsiteDimensions, 'website preview with invalid dimensions', 'website previews with invalid dimensions'),
     warningPart(droppedConnectors, 'invalid connector', 'invalid connectors'),
     warningPart(staleConnectors, 'stale connector', 'stale connectors'),
     warningPart(selfLoopConnectors, 'self-loop connector', 'self-loop connectors'),
@@ -211,7 +340,7 @@ export function normalizeTaskDesignerPersistedState(value: unknown): TaskDesigne
 
   const repaired = repairedParts.length > 0;
   return {
-    state: { nodes, connectors },
+    state: { nodes, connectors, zoom: normalizedZoom, toolbarPosition },
     repaired,
     warning: repaired ? `Recovered Task Designer state: removed ${repairedParts.join(', ')}.` : undefined
   };

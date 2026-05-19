@@ -347,6 +347,7 @@ suite('Ticket Manager Extension', () => {
     assert.ok(commands.includes('ticketManager.changeStatus'));
     assert.ok(commands.includes('ticketManager.setBackendMode'));
     assert.ok(commands.includes('ticketManager.openSettings'));
+    assert.ok(commands.includes('ticketManager.toggleWorkMode'));
     assert.ok(commands.includes('ticketManager.configureAi'));
     assert.ok(commands.includes('ticketManager.openBoard'));
     assert.ok(commands.includes('ticketManager.setBoardProjects'));

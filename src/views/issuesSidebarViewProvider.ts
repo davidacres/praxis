@@ -1202,6 +1202,15 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         row.addEventListener('dblclick', () => {
           vscodeApi.postMessage({ type: 'selectIssue', issueKey: row.getAttribute('data-issue-key'), openFullPanel: true });
         });
+        row.addEventListener('dragstart', event => {
+          const issueKey = row.getAttribute('data-issue-key');
+          if (!issueKey || !event.dataTransfer) {
+            return;
+          }
+          event.dataTransfer.effectAllowed = 'copy';
+          event.dataTransfer.setData('application/x-ticket-manager-issue', issueKey);
+          event.dataTransfer.setData('text/plain', issueKey);
+        });
       }
 
       const issueContextMenu = document.getElementById('issueContextMenu');
@@ -1305,7 +1314,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
           const aiBadge = aiSession
             ? `<span class="type-badge type-badge--ai" title="AI: ${escapeHtml(aiSession.provider)} (${escapeHtml(aiSession.status)})">🤖</span>`
             : '';
-          return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
+          return `<div class="${classes}" data-issue-key="${escapeHtml(issue.key)}" draggable="true" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
             <div class="row-main">
               <div class="row-left">
                 <div class="item-key">${escapeHtml(issue.key)}</div>

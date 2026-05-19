@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
@@ -67,7 +67,8 @@
     "install:code": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode.ps1",
     "install:insiders": "powershell -ExecutionPolicy Bypass -File ./scripts/install-vscode-insiders.ps1",
     "install:cursor": "powershell -ExecutionPolicy Bypass -File ./scripts/install-cursor-extension.ps1",
-    "open:ticket-manager": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-ticket-manager-vscode.ps1"
+    "open:ticket-manager": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-ticket-manager-vscode.ps1",
+    "docs:commands": "node ./scripts/generate-command-reference.cjs"
   },
   "contributes": {
     "viewsContainers": {
@@ -212,6 +213,11 @@
         "icon": "$(symbol-misc)"
       },
       {
+        "command": "ticketManager.openNoteTest",
+        "title": "Open Note Test Panel",
+        "category": "Ticket Manager"
+      },
+      {
         "command": "ticketManager.openConnectionsManager",
         "title": "Open Connections & Boards",
         "category": "Ticket Manager",
@@ -240,6 +246,12 @@
         "title": "Open Settings",
         "category": "Ticket Manager",
         "icon": "$(gear)"
+      },
+      {
+        "command": "ticketManager.toggleWorkMode",
+        "title": "Toggle Work Mode",
+        "category": "Ticket Manager",
+        "icon": "$(layout-sidebar-right)"
       },
       {
         "command": "ticketManager.configureAi",
@@ -633,6 +645,11 @@
           "when": "view == ticketManager.boards"
         },
         {
+          "command": "ticketManager.toggleWorkMode",
+          "when": "view == ticketManager.boards",
+          "group": "navigation@8"
+        },
+        {
           "command": "ticketManager.configureConnection",
           "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
         },
@@ -698,6 +715,11 @@
           "command": "ticketManager.unassignAi",
           "when": "view == ticketManager.issueDetails",
           "group": "navigation@6"
+        },
+        {
+          "command": "ticketManager.toggleWorkMode",
+          "when": "view == ticketManager.workModeBoards",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -758,6 +780,9 @@
         {
           "command": "ticketManager.newProject",
           "when": "config.ticketManager.enableNewProject"
+        },
+        {
+          "command": "ticketManager.toggleWorkMode"
         }
       ]
     },
@@ -918,6 +943,15 @@
           "default": false,
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
+          "tags": [
+            "preview"
+          ]
+        },
+        "ticketManager.workModeEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "Toggle **Work Mode** on or off for the side panel. When enabled, Ticket Manager switches from the classic multi-view sidebar to the **Work Mode** board layout.",
           "tags": [
             "preview"
           ]
