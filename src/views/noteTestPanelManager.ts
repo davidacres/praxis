@@ -2255,7 +2255,8 @@ export class NoteTestPanelManager {
       hoveredLinkNodeId: undefined,
       persistCanvasStateTimer: undefined,
       toolbarDrag: undefined,
-      generatingMasterPlan: false
+      generatingMasterPlan: false,
+      applyingRecommendation: false
     };
 
     function setGeneratingMasterPlan(isGenerating) {
@@ -2418,13 +2419,14 @@ export class NoteTestPanelManager {
 
     function updateRecommendationActionState() {
       const hasRecommendation = Boolean(state.recommendation);
+      const isApplying = Boolean(uiState.applyingRecommendation);
       if (applyRecommendationButton instanceof HTMLButtonElement) {
-        applyRecommendationButton.disabled = !hasRecommendation;
-        applyRecommendationButton.classList.toggle('is-hidden', !hasRecommendation);
+        applyRecommendationButton.disabled = !hasRecommendation || isApplying;
+        applyRecommendationButton.classList.toggle('is-hidden', !hasRecommendation && !isApplying);
       }
       if (rejectRecommendationButton instanceof HTMLButtonElement) {
-        rejectRecommendationButton.disabled = !hasRecommendation;
-        rejectRecommendationButton.classList.toggle('is-hidden', !hasRecommendation);
+        rejectRecommendationButton.disabled = !hasRecommendation || isApplying;
+        rejectRecommendationButton.classList.toggle('is-hidden', !hasRecommendation && !isApplying);
       }
     }
 
@@ -3270,6 +3272,8 @@ export class NoteTestPanelManager {
         setFeedback('No recommendation to apply yet.', true);
         return;
       }
+      uiState.applyingRecommendation = true;
+      updateRecommendationActionState();
       vscodeApi.postMessage({
         type: 'applyRecommendation',
         recommendation: state.recommendation,
@@ -3645,6 +3649,7 @@ export class NoteTestPanelManager {
       }
 
       if (message.type === 'applyRecommendationResult') {
+        uiState.applyingRecommendation = false;
         if (!message.ok) {
           updateRecommendationActionState();
           setFeedback(message.error || 'Unable to apply AI recommendation.', true);
