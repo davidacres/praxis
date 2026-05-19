@@ -1714,7 +1714,7 @@ export class NoteTestPanelManager {
         const deleteButton = document.createElement('button');
         deleteButton.type = 'button';
         deleteButton.className = 'ticket-node-delete';
-        deleteButton.setAttribute('aria-label', 'Delete ' + getNodeLabel(node));
+        deleteButton.setAttribute('aria-label', 'Delete ' + getNodeLabel(node) + ' node');
         deleteButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
         deleteButton.addEventListener('click', event => {
           event.stopPropagation();
@@ -1731,7 +1731,7 @@ export class NoteTestPanelManager {
           }
           renderNodes();
           persistCanvasState();
-          setFeedback(getNodeLabel(node) + ' deleted.');
+          setFeedback((node.type === 'note' ? 'Note' : (node.type === 'website' ? 'Website preview' : 'Ticket node')) + ' deleted.', false);
         });
 
         header.append(titleWrap, deleteButton);
