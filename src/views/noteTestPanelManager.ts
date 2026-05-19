@@ -299,8 +299,8 @@ export class NoteTestPanelManager {
 
   public open(): void {
     if (this.panel) {
-      this.panel.reveal(vscode.ViewColumn.Active);
-      return;
+      this.panel.dispose();
+      this.panel = undefined;
     }
 
     const rawState = this.workspaceState.get<unknown>(NOTE_TEST_STATE_KEY);
@@ -308,20 +308,22 @@ export class NoteTestPanelManager {
     this.syncNextNodeIndex(state.nodes);
 
     const nonce = createNonce();
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       'ticketManager.noteTest',
       'Note Test',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
 
-    this.panel.webview.html = this.getHtml(nonce, state);
+    panel.webview.html = this.getHtml(nonce, state);
 
-    this.panel.onDidDispose(() => {
+    this.panel = panel;
+
+    panel.onDidDispose(() => {
       this.panel = undefined;
     });
 
-    this.panel.webview.onDidReceiveMessage((message: unknown) => {
+    panel.webview.onDidReceiveMessage((message: unknown) => {
       void this.handleMessage(message);
     });
   }
@@ -773,15 +775,21 @@ export class NoteTestPanelManager {
       padding: 0;
       cursor: text;
     }
+    .note-node-title-input.is-readonly {
+      cursor: grab;
+      pointer-events: none;
+      user-select: none;
+    }
     .note-node-body {
       display: flex;
       flex-direction: column;
-      min-height: 110px;
+      flex: 1;
+      min-height: 0;
       margin-top: 6px;
     }
     .note-node-textarea {
       width: 100%;
-      min-height: 110px;
+      min-height: 0;
       height: 100%;
       flex: 1;
       resize: none;
@@ -794,6 +802,7 @@ export class NoteTestPanelManager {
       line-height: 1.45;
       outline: none;
       cursor: text;
+      box-sizing: border-box;
     }
 
     .website-node-body {
@@ -992,6 +1001,7 @@ export class NoteTestPanelManager {
       activeTool: 'select',
       linkSourceNodeId: undefined,
       selectedNodeId: undefined,
+      editingNoteTitleId: undefined,
       selectedConnectorId: undefined,
       nextConnectorIndex: state.connectors.length,
       ticketEntryOpen: false,
@@ -1544,12 +1554,17 @@ export class NoteTestPanelManager {
         titleWrap.className = 'ticket-node-title-wrap';
 
         if (node.type === 'note') {
+          const isTitleEditing = uiState.editingNoteTitleId === node.id;
           const titleInput = document.createElement('input');
           titleInput.type = 'text';
           titleInput.className = 'note-node-title-input';
+          if (!isTitleEditing) {
+            titleInput.classList.add('is-readonly');
+          }
           titleInput.value = node.title || '';
           titleInput.placeholder = 'Notes';
           titleInput.setAttribute('aria-label', 'Note title');
+          titleInput.readOnly = !isTitleEditing;
           titleInput.addEventListener('focus', () => {
             uiState.selectedNodeId = node.id;
             uiState.selectedConnectorId = undefined;
@@ -1559,9 +1574,33 @@ export class NoteTestPanelManager {
           titleInput.addEventListener('click', event => {
             event.stopPropagation();
           });
+          titleInput.addEventListener('blur', () => {
+            if (uiState.editingNoteTitleId === node.id) {
+              uiState.editingNoteTitleId = undefined;
+              renderNodes();
+            }
+          });
+          titleInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === 'Escape') {
+              event.preventDefault();
+              titleInput.blur();
+            }
+          });
           titleInput.addEventListener('input', () => {
             node.title = titleInput.value;
             schedulePersistCanvasState();
+          });
+          titleWrap.addEventListener('dblclick', event => {
+            event.stopPropagation();
+            uiState.editingNoteTitleId = node.id;
+            renderNodes();
+            requestAnimationFrame(() => {
+              const refreshedInput = nodesLayer.querySelector('[data-node-id="' + node.id + '"] .note-node-title-input');
+              if (refreshedInput instanceof HTMLInputElement) {
+                refreshedInput.focus();
+                refreshedInput.select();
+              }
+            });
           });
           titleWrap.append(titleInput);
         } else if (node.type === 'website') {
@@ -1583,10 +1622,13 @@ export class NoteTestPanelManager {
         deleteButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
         deleteButton.addEventListener('click', event => {
           event.stopPropagation();
-          state.nodes.splice(state.nodes.indexOf(node), 1);
+          state.nodes = state.nodes.filter(item => item.id !== node.id);
           state.connectors = state.connectors.filter(connector => connector.sourceNodeId !== node.id && connector.targetNodeId !== node.id);
           if (uiState.selectedNodeId === node.id) {
             uiState.selectedNodeId = undefined;
+          }
+          if (uiState.editingNoteTitleId === node.id) {
+            uiState.editingNoteTitleId = undefined;
           }
           if (uiState.linkSourceNodeId === node.id) {
             clearLinkPreview();
