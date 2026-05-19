@@ -2569,6 +2569,7 @@ export class NoteTestPanelManager {
         sourceDirection,
         targetDirection
       });
+      clearRecommendation();
       uiState.selectedConnectorId = state.connectors[state.connectors.length - 1]?.id;
       uiState.selectedNodeId = targetNodeId;
       clearLinkPreview();
@@ -3193,6 +3194,7 @@ export class NoteTestPanelManager {
       state.connectors = state.connectors.filter(connector => connector.id !== connectorId);
       uiState.selectedConnectorId = undefined;
       if (before !== state.connectors.length) {
+        clearRecommendation();
         renderConnectors();
         persistCanvasState();
         setFeedback('Link deleted.');
