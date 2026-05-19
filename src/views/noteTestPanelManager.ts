@@ -438,6 +438,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'addTicket') {
       await this.handleAddTicketMessage(message);
+      return;
+    }
+
+    if (message.type === 'addNote') {
+      await this.handleAddNoteMessage(message);
     }
   }
 
@@ -486,6 +491,23 @@ export class NoteTestPanelManager {
     };
   }
 
+  private createNoteNode(x?: number, y?: number): NoteNode {
+    const index = this.nextNodeIndex;
+    this.nextNodeIndex += 1;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    return {
+      type: 'note',
+      id: `note-${index}`,
+      title: 'Notes',
+      content: '',
+      x: x === undefined ? (24 + (column * 300)) : Math.round(x),
+      y: y === undefined ? (72 + (row * 220)) : Math.round(y),
+      width: 280,
+      height: 190
+    };
+  }
+
   private async handleAddTicketMessage(message: Record<string, unknown>): Promise<void> {
     const issueKey = asString(message.issueKey)?.trim();
     const x = asNumber(message.x);
@@ -514,6 +536,25 @@ export class NoteTestPanelManager {
         error: error instanceof Error ? error.message : String(error)
       });
     }
+  }
+
+  private async handleAddNoteMessage(message: Record<string, unknown>): Promise<void> {
+    const x = asNumber(message.x);
+    const y = asNumber(message.y);
+    const node = this.createNoteNode(x, y);
+    const title = asString(message.title);
+    const content = asString(message.content);
+    if (title !== undefined) {
+      node.title = title;
+    }
+    if (content !== undefined) {
+      node.content = content;
+    }
+    await this.panel?.webview.postMessage({
+      type: 'addNoteResult',
+      ok: true,
+      node
+    });
   }
 
   private getHtml(nonce: string, initialState: NoteTestState): string {
@@ -2008,22 +2049,12 @@ export class NoteTestPanelManager {
     function addNote() {
       const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
       const point = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
-      const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-      state.nodes.push({
-        type: 'note',
-        id,
-        title: 'Notes',
-        content: '',
+      vscodeApi.postMessage({
+        type: 'addNote',
         x: Math.round(point.x),
-        y: Math.round(point.y),
-        width: 280,
-        height: 190
+        y: Math.round(point.y)
       });
-      uiState.selectedNodeId = id;
-      uiState.selectedConnectorId = undefined;
-      renderNodes();
-      persistCanvasState();
-      setFeedback('Note added.');
+      setFeedback('Adding note...');
     }
 
     function addWebsitePreview() {
@@ -2163,28 +2194,48 @@ export class NoteTestPanelManager {
 
     window.addEventListener('message', event => {
       const message = event.data;
-      if (!message || typeof message !== 'object' || message.type !== 'addTicketResult') {
+      if (!message || typeof message !== 'object') {
         return;
       }
-      if (!message.ok) {
-        setFeedback(message.error || 'Unable to add ticket.', true);
-        return;
-      }
-      if (!message.node || typeof message.node !== 'object') {
-        setFeedback('Ticket payload was invalid.', true);
+      if (message.type === 'addTicketResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to add ticket.', true);
+          return;
+        }
+        if (!message.node || typeof message.node !== 'object') {
+          setFeedback('Ticket payload was invalid.', true);
+          return;
+        }
+
+        state.nodes.push(message.node);
+        uiState.selectedNodeId = message.node.id;
+        uiState.selectedConnectorId = undefined;
+        if (ticketInput instanceof HTMLInputElement) {
+          ticketInput.value = '';
+        }
+        setTicketEntryOpen(false);
+        renderNodes();
+        persistCanvasState();
+        setFeedback('Ticket ' + (message.node.issueKey || 'node') + ' added.');
         return;
       }
 
-      state.nodes.push(message.node);
-      uiState.selectedNodeId = message.node.id;
-      uiState.selectedConnectorId = undefined;
-      if (ticketInput instanceof HTMLInputElement) {
-        ticketInput.value = '';
+      if (message.type === 'addNoteResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to add note.', true);
+          return;
+        }
+        if (!message.node || typeof message.node !== 'object') {
+          setFeedback('Note payload was invalid.', true);
+          return;
+        }
+        state.nodes.push(message.node);
+        uiState.selectedNodeId = message.node.id;
+        uiState.selectedConnectorId = undefined;
+        renderNodes();
+        persistCanvasState();
+        setFeedback('Note added.');
       }
-      setTicketEntryOpen(false);
-      renderNodes();
-      persistCanvasState();
-      setFeedback('Ticket ' + (message.node.issueKey || 'node') + ' added.');
     });
 
     canvasToolbarHandle?.addEventListener('pointerdown', event => {
