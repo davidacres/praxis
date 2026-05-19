@@ -2470,6 +2470,14 @@ export class NoteTestPanelManager {
       return state.nodes.some(node => node.id === nodeId);
     }
 
+    function pruneDanglingConnectors() {
+      const before = state.connectors.length;
+      state.connectors = state.connectors.filter(connector => hasNode(connector.sourceNodeId) && hasNode(connector.targetNodeId));
+      if (before !== state.connectors.length && uiState.selectedConnectorId && !state.connectors.some(connector => connector.id === uiState.selectedConnectorId)) {
+        uiState.selectedConnectorId = undefined;
+      }
+    }
+
     function hasExistingConnector(sourceNodeId, targetNodeId) {
       return state.connectors.some(connector => connector.sourceNodeId === sourceNodeId && connector.targetNodeId === targetNodeId);
     }
@@ -3692,6 +3700,7 @@ export class NoteTestPanelManager {
             ? message.state.connectors.map(connector => ({ ...connector }))
             : [];
           syncNextConnectorIndex();
+          pruneDanglingConnectors();
           uiState.selectedNodeId = undefined;
           uiState.selectedConnectorId = undefined;
           clearLinkPreview();
@@ -3727,6 +3736,7 @@ export class NoteTestPanelManager {
               ? message.state.connectors.map(connector => ({ ...connector }))
               : [];
             syncNextConnectorIndex();
+            pruneDanglingConnectors();
             uiState.selectedNodeId = undefined;
             uiState.selectedConnectorId = undefined;
             renderNodes();
@@ -3816,6 +3826,7 @@ export class NoteTestPanelManager {
     setTicketEntryOpen(false);
     updateRecommendationActionState();
     syncNextConnectorIndex();
+    pruneDanglingConnectors();
     renderNodes();
     updateDeleteConnectorState();
 
