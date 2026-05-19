@@ -68,6 +68,24 @@ interface NoteTestStateRecoveryResult {
   warning?: string;
 }
 
+type DroppedIssueRelation = 'dependsOn' | 'subTask';
+
+interface ResolvedDroppedIssueRelation {
+  relation: DroppedIssueRelation;
+  sourceIssueKey: string;
+  targetIssueKey: string;
+}
+
+interface ResolvedDroppedIssuePayload {
+  mainIssue: Omit<TicketNode, 'id' | 'x' | 'y' | 'type'>;
+  relatedIssues: Array<
+    Omit<TicketNode, 'id' | 'x' | 'y' | 'type'> & {
+      relation: DroppedIssueRelation;
+    }
+  >;
+  relations: ResolvedDroppedIssueRelation[];
+}
+
 type ConnectorGraphValidationCode = 'duplicate-edge' | 'cycle';
 
 interface ConnectorGraphValidationError {
@@ -92,6 +110,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function pickFirstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const trimmed = value.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return undefined;
 }
 
 function asNumber(value: unknown): number | undefined {
@@ -465,6 +496,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'addWebsitePreview') {
       await this.handleAddWebsitePreviewMessage(message);
+      return;
+    }
+
+    if (message.type === 'resolveDroppedIssue') {
+      await this.handleResolveDroppedIssueMessage(message);
     }
   }
 
@@ -608,6 +644,117 @@ export class NoteTestPanelManager {
       ok: true,
       node
     });
+  }
+
+  private normalizeIssuePayload(issue: Partial<IssueDetails>, requestedIssueKey?: string): Omit<TicketNode, 'id' | 'x' | 'y' | 'type'> | undefined {
+    const issueKey = pickFirstString(issue.key, requestedIssueKey);
+    if (!issueKey) {
+      return undefined;
+    }
+
+    const summary = pickFirstString(issue.summary) ?? issueKey;
+    const issueType = pickFirstString(issue.issueType) ?? 'Unknown';
+    const status = pickFirstString(issue.status) ?? 'Unknown';
+    const projectKey = pickFirstString(issue.projectKey) ?? (/^([A-Za-z]\w+)-\d+$/.exec(issueKey)?.[1] ?? 'UNKNOWN');
+
+    return {
+      issueKey,
+      summary,
+      issueType,
+      status,
+      assignee: pickFirstString(issue.assignee),
+      priority: pickFirstString(issue.priority),
+      projectKey
+    };
+  }
+
+  private async handleResolveDroppedIssueMessage(message: Record<string, unknown>): Promise<void> {
+    const issueKey = asString(message.issueKey)?.trim();
+    const dropPoint = isRecord(message.dropPoint)
+      ? {
+          x: asNumber(message.dropPoint.x) ?? 200,
+          y: asNumber(message.dropPoint.y) ?? 120
+        }
+      : { x: 200, y: 120 };
+
+    if (!issueKey) {
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
+        ok: false,
+        error: 'Dropped issue key is missing.'
+      });
+      return;
+    }
+
+    try {
+      const issue = await this.backendService.getIssue(issueKey);
+      const mainIssue = this.normalizeIssuePayload(issue, issueKey);
+      if (!mainIssue) {
+        throw new Error(`Unable to resolve ${issueKey}.`);
+      }
+
+      const relatedIssueKeys = new Map<string, DroppedIssueRelation>();
+      for (const dependencyKey of issue.dependsOn ?? []) {
+        const trimmed = dependencyKey.trim();
+        if (trimmed && trimmed !== mainIssue.issueKey) {
+          relatedIssueKeys.set(trimmed, 'dependsOn');
+        }
+      }
+      for (const subTask of issue.subTasks ?? []) {
+        const trimmed = subTask.key.trim();
+        if (trimmed && trimmed !== mainIssue.issueKey) {
+          relatedIssueKeys.set(trimmed, 'subTask');
+        }
+      }
+
+      const relatedIssues: ResolvedDroppedIssuePayload['relatedIssues'] = [];
+      const relations: ResolvedDroppedIssueRelation[] = [];
+      for (const [relatedIssueKey, relation] of relatedIssueKeys.entries()) {
+        try {
+          const relatedIssue = await this.backendService.getIssue(relatedIssueKey);
+          const normalizedRelatedIssue = this.normalizeIssuePayload(relatedIssue, relatedIssueKey);
+          if (!normalizedRelatedIssue) {
+            continue;
+          }
+          relatedIssues.push({
+            ...normalizedRelatedIssue,
+            relation
+          });
+          relations.push(
+            relation === 'dependsOn'
+              ? {
+                  relation,
+                  sourceIssueKey: normalizedRelatedIssue.issueKey,
+                  targetIssueKey: mainIssue.issueKey
+                }
+              : {
+                  relation,
+                  sourceIssueKey: mainIssue.issueKey,
+                  targetIssueKey: normalizedRelatedIssue.issueKey
+                }
+          );
+        } catch {
+          // Skip unresolved related issues and still return the main issue.
+        }
+      }
+
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
+        ok: true,
+        dropPoint,
+        payload: {
+          mainIssue,
+          relatedIssues,
+          relations
+        } satisfies ResolvedDroppedIssuePayload
+      });
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'resolveDroppedIssueResult',
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
 
   private getHtml(nonce: string, initialState: NoteTestState): string {
