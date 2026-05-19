@@ -3490,7 +3490,14 @@ export async function activate(
     }
   );
 
-  const noteTestPanelManager = new NoteTestPanelManager(context.workspaceState, backendService);
+  const noteTestPanelManager = new NoteTestPanelManager(
+    context.workspaceState,
+    backendService,
+    async (nodes, connectors) => recommendTaskDesignerFlowWithCopilot(nodes, connectors, {
+      cliPath: getCopilotCliPathOverride(),
+      workingDirectory
+    })
+  );
 
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
     const options = getConfiguredAiOptions();

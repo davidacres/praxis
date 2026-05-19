@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { IssueDetails } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type {
+  TaskDesignerFlowRecommendation,
+  TaskDesignerRecommendationConnector,
+  TaskDesignerRecommendationNode
+} from '../ai/aiReviewService';
 import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersistence';
 
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
@@ -94,6 +99,11 @@ interface ConnectorGraphValidationError {
   targetNodeId: string;
   message: string;
 }
+
+type RecommendTaskDesignerFlow = (
+  nodes: readonly TaskDesignerRecommendationNode[],
+  connectors: readonly TaskDesignerRecommendationConnector[]
+) => Promise<TaskDesignerFlowRecommendation>;
 
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -435,7 +445,8 @@ export class NoteTestPanelManager {
 
   constructor(
     private readonly workspaceState: vscode.Memento,
-    private readonly backendService: IssueTrackerService
+    private readonly backendService: IssueTrackerService,
+    private readonly recommendTaskDesignerFlow?: RecommendTaskDesignerFlow
   ) {}
 
   public open(): void {
@@ -510,6 +521,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'resolveDroppedIssue') {
       await this.handleResolveDroppedIssueMessage(message);
+      return;
+    }
+
+    if (message.type === 'recommendCanvasFlow') {
+      await this.handleRecommendCanvasFlowMessage(message);
     }
   }
 
@@ -760,6 +776,63 @@ export class NoteTestPanelManager {
     } catch (error) {
       await this.panel?.webview.postMessage({
         type: 'resolveDroppedIssueResult',
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async handleRecommendCanvasFlowMessage(message: Record<string, unknown>): Promise<void> {
+    const currentState = normalizePersistedState(message.state);
+    const ticketNodes = currentState.nodes.filter((node): node is TicketNode => node.type === 'ticket');
+    const ticketNodeIds = new Set(ticketNodes.map(node => node.id));
+    const ticketConnectors = currentState.connectors.filter(
+      connector => ticketNodeIds.has(connector.sourceNodeId) && ticketNodeIds.has(connector.targetNodeId)
+    );
+
+    if (ticketNodes.length < 2) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendCanvasFlowResult',
+        ok: false,
+        error: 'Add at least two ticket nodes before requesting an AI recommendation.'
+      });
+      return;
+    }
+
+    if (!this.recommendTaskDesignerFlow) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendCanvasFlowResult',
+        ok: false,
+        error: 'AI recommendation is not configured.'
+      });
+      return;
+    }
+
+    try {
+      const recommendation = await this.recommendTaskDesignerFlow(
+        ticketNodes.map(node => ({
+          id: node.id,
+          issueKey: node.issueKey,
+          summary: node.summary,
+          issueType: node.issueType,
+          status: node.status,
+          assignee: node.assignee,
+          priority: node.priority,
+          projectKey: node.projectKey
+        })),
+        ticketConnectors.map(connector => ({
+          sourceNodeId: connector.sourceNodeId,
+          targetNodeId: connector.targetNodeId
+        }))
+      );
+      await this.panel?.webview.postMessage({
+        type: 'recommendCanvasFlowResult',
+        ok: true,
+        recommendation
+      });
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendCanvasFlowResult',
         ok: false,
         error: error instanceof Error ? error.message : String(error)
       });
@@ -1342,6 +1415,7 @@ export class NoteTestPanelManager {
     const ticketAddButton = document.getElementById('ticket-add-button');
     const ticketEntryCloseButton = document.getElementById('ticket-entry-close-button');
     const deleteConnectorButton = document.getElementById('delete-connector-button');
+    const recommendFlowButton = document.getElementById('recommend-flow-button');
 
     const state = {
       nodes: Array.isArray(initialState.nodes) ? initialState.nodes : [],
@@ -2311,6 +2385,20 @@ export class NoteTestPanelManager {
       setFeedback('Resolving dropped ticket ' + normalizedIssueKey + '...');
     }
 
+    function requestRecommendCanvasFlow() {
+      if (recommendFlowButton instanceof HTMLButtonElement) {
+        recommendFlowButton.disabled = true;
+      }
+      setFeedback('Requesting AI recommendation...');
+      vscodeApi.postMessage({
+        type: 'recommendCanvasFlow',
+        state: {
+          nodes: state.nodes.map(node => ({ ...node })),
+          connectors: state.connectors.map(connector => ({ ...connector }))
+        }
+      });
+    }
+
     function findNodeByIssueKey(issueKey) {
       if (typeof issueKey !== 'string' || !issueKey.trim()) {
         return undefined;
@@ -2482,7 +2570,7 @@ export class NoteTestPanelManager {
           return;
         }
         if (action === 'recommendFlow') {
-          setFeedback('AI flow recommendation is not wired in Note Test yet.', true);
+          requestRecommendCanvasFlow();
           return;
         }
         if (action === 'recommendBoardFlow') {
@@ -2604,6 +2692,18 @@ export class NoteTestPanelManager {
           return;
         }
         applyDroppedIssuePayload(message.payload, message.dropPoint || { x: 200, y: 120 });
+        return;
+      }
+
+      if (message.type === 'recommendCanvasFlowResult') {
+        if (recommendFlowButton instanceof HTMLButtonElement) {
+          recommendFlowButton.disabled = false;
+        }
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to generate AI recommendation.', true);
+          return;
+        }
+        setFeedback('AI recommendation ready. Apply/discard actions are not wired in Note Test yet.');
       }
     });
 
