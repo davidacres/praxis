@@ -9,7 +9,7 @@ suite('task designer persisted state recovery', () => {
   test('keeps empty undefined state without repair warning', () => {
     const result = normalizeTaskDesignerPersistedState(undefined);
 
-    assert.deepStrictEqual(result.state, { nodes: [], connectors: [] });
+    assert.deepStrictEqual(result.state, { nodes: [], connectors: [], zoom: 1, toolbarPosition: { x: 16, y: 16 } });
     assert.strictEqual(result.repaired, false);
     assert.strictEqual(result.warning, undefined);
   });
@@ -17,7 +17,7 @@ suite('task designer persisted state recovery', () => {
   test('recovers invalid non-object payload', () => {
     const result = normalizeTaskDesignerPersistedState('bad-payload');
 
-    assert.deepStrictEqual(result.state, { nodes: [], connectors: [] });
+    assert.deepStrictEqual(result.state, { nodes: [], connectors: [], zoom: 1, toolbarPosition: { x: 16, y: 16 } });
     assert.strictEqual(result.repaired, true);
     assert.match(result.warning ?? '', /persisted payload was invalid/i);
   });
@@ -71,13 +71,54 @@ suite('task designer persisted state recovery', () => {
     });
 
     assert.deepStrictEqual(
-      result.state.nodes.map(node => ({ id: node.id, projectKey: node.projectKey })),
+      result.state.nodes
+        .filter((node): node is typeof result.state.nodes[number] & { type: 'ticket'; projectKey: string } => node.type === 'ticket')
+        .map(node => ({ id: node.id, projectKey: node.projectKey })),
       [
         { id: 'jira', projectKey: 'APP_1' },
         { id: 'gitlab', projectKey: 'group/repo' },
         { id: 'other', projectKey: 'UNKNOWN' }
       ]
     );
+  });
+
+  test('keeps connector handle directions when present', () => {
+    const result = normalizeTaskDesignerPersistedState({
+      nodes: [
+        { id: 'n1', type: 'ticket', issueKey: 'APP-1', summary: 'one', issueType: 'Story', status: 'Open', projectKey: 'APP', x: 10, y: 20 },
+        { id: 'n2', type: 'ticket', issueKey: 'APP-2', summary: 'two', issueType: 'Task', status: 'Open', projectKey: 'APP', x: 30, y: 40 }
+      ],
+      connectors: [
+        { id: 'c1', sourceNodeId: 'n1', targetNodeId: 'n2', sourceDirection: 'right', targetDirection: 'left' }
+      ]
+    });
+
+    assert.deepStrictEqual(result.state.connectors, [
+      { id: 'c1', sourceNodeId: 'n1', targetNodeId: 'n2', sourceDirection: 'right', targetDirection: 'left' }
+    ]);
+  });
+
+  test('recovers note nodes with default dimensions', () => {
+    const result = normalizeTaskDesignerPersistedState({
+      nodes: [
+        { id: 'note-1', type: 'note', title: 'Notes', content: 'remember this', x: 25, y: 35 },
+        { id: 'ticket-1', issueKey: 'APP-1', summary: 'one', issueType: 'Story', status: 'Open', projectKey: 'APP', x: 10, y: 20 }
+      ],
+      connectors: []
+    });
+
+    assert.deepStrictEqual(result.state.nodes[0], {
+      id: 'note-1',
+      type: 'note',
+      title: 'Notes',
+      content: 'remember this',
+      x: 25,
+      y: 35,
+      width: 280,
+      height: 190
+    });
+    assert.strictEqual(result.state.nodes[1]?.type, 'ticket');
+    assert.match(result.warning ?? '', /invalid dimensions/i);
   });
 });
 

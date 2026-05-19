@@ -1,137 +1,146 @@
 # Ticket Manager
 
-Ticket Manager is a VS Code extension that provides a unified workflow for issue tracking, board management, and AI-assisted delivery from a single sidebar experience.
+Ticket Manager is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface.
 
-Current extension version: 0.0.26
+It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira Cloud/API, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
-## What It Does
+Current extension version: 0.0.29
 
-- Adds a Tickets Activity Bar container with setup, board, issue, EPIC, session, and details views.
-- Supports multi-connection setup through Connections & Boards, where users add connections and explicitly track boards.
-- Routes issue and board actions through the currently selected tracked board connection.
-- Includes AI assignment, AI session management, local peer review, delivery workflow automation, and Jira polling hooks.
+## What the extension includes
 
-## Core Views
+- Connections & Boards management for multi-connection setups.
+- Two sidebar layouts:
+	- Classic mode with Boards, EPICs, My Issues, Sessions, and Issue Details views.
+	- Work Mode with a board-centric view that nests active AI sessions under boards.
+- Board browsing, tracked-board selection, board filtering, and board display customization.
+- Issue workflows including create, edit, transition, comment, assign-to-me, assign-to-AI, and open-in-browser flows.
+- AI session management for Copilot, Claude, OpenAI, and CLI-backed agent providers.
+- Local Peer Review (LPR) for issue-focused review output.
+- Task Designer for planning execution with ticket nodes, note nodes, website preview nodes, curved connectors, zoom, AI recommendations, and master-plan generation.
+- Live Folder markdown import/migration helpers.
+- Jira polling and delivery workflow orchestration, including worktree-backed delivery flows and sub-task delivery support.
+
+## Main UI surfaces
+
+### Activity bar containers
+
+- Tickets
+- Work Mode
+
+### Classic mode views
 
 - Configure Project
-- Boards (classic mode)
-- Work Mode (preview board-centric mode)
+- Boards
 - EPICs
 - My Issues
 - Sessions
 - Issue Details
 
-## Backend Modes
+### Work Mode views
 
-Configured with ticketManager.backendMode (and per-connection mode in ticketManager.connections).
+- Configure Project
+- Work Mode
 
-| Mode | Value | Status |
+### Other panels
+
+- Connections & Boards
+- Task Designer
+- Local Peer Review
+- Full Issue Details panel
+- Copilot / AI session panel
+
+## Backend modes
+
+Configured through `ticketManager.backendMode` and, for tracked boards, through the per-connection mode stored in `ticketManager.connections`.
+
+| Mode | Value | Current support |
 | --- | --- | --- |
-| Jira Cloud / Jira API | jiraapi | Primary Jira mode. Supports Jira Cloud OAuth site connection fields plus direct Jira API settings and board/issue operations. |
-| Demo | demo | Built-in sample data. |
-| GitHub | github | Configuration is available; full issue/board parity is not implemented yet. |
-| GitLab | gitlab | Configuration plus GitLab delivery/MR helpers exist; issue/board behavior differs from Jira mode. |
-| Live Folder | livefolder | Reads markdown feature plans from disk (optional write support). |
-| User Workspace | userworkspace | Local workspace/user-backed issue storage. |
+| Jira Cloud / Jira API | `jiraapi` | Primary hosted tracker mode. Supports board and issue operations, comments, transitions, attachments, linked-epic flows, polling, and delivery automation. |
+| Demo | `demo` | Built-in sample data for extension development and demos. |
+| GitHub | `github` | Configuration surface exists, but full board/issue parity with Jira is not implemented. |
+| GitLab | `gitlab` | Connection and delivery/MR workflows exist, but the issue/board model does not match Jira parity. |
+| Live Folder | `livefolder` | Reads markdown feature plans from disk and can optionally create/update local issue files. |
+| User Workspace | `userworkspace` | Uses local workspace-backed issue storage for lightweight local workflows. |
+
+## Task Designer
+
+The Task Designer is the extension's visual planning surface.
+
+It currently supports:
+
+- Ticket nodes added from tracked issues.
+- Note nodes for free-form planning text.
+- Website preview nodes with an editable URL and a live embedded preview.
+- Drag-and-drop issue placement from the issue/board surfaces.
+- Directed curved connectors with explicit edge handles.
+- Connector selection and delete support.
+- Mixed-node persistence and recovery.
+- Zoom in and zoom out controls.
+- AI recommendation flows for ticket nodes.
+- Master plan generation from the designed execution graph.
 
 Notes:
 
-- Legacy/internal paths still reference additional historical modes (for compatibility), but the supported configuration modes above are the active ones exposed in settings.
-- Boards shown in the main Boards views are based on tracked boards from Connections & Boards.
+- Website previews depend on the target website allowing iframe embedding. Sites that block framing with their own headers or CSP may not render inside the preview component.
+- AI recommendation and master-plan flows operate on ticket nodes; note and website nodes are preserved on the canvas but are not part of the execution-plan graph.
 
-## Jira Configuration
+## AI and delivery workflows
 
-### Jira OAuth and site metadata
+Ticket Manager includes several AI-related surfaces:
 
-- ticketManager.jiraOAuthClientId
-- ticketManager.jiraOAuthScopes
-- ticketManager.jiraCloudId
-- ticketManager.jiraCloudSiteName
-- ticketManager.jiraCloudSiteUrl
+- Assigning issues to configured AI providers.
+- Viewing and managing AI sessions from the Sessions view.
+- Starting Claude Code sessions.
+- Delegating work to a Copilot agent workflow.
+- Local Peer Review for implementation-focused review output.
+- Jira polling that can trigger readiness analysis and delivery workflows.
+- Delivery workflow configuration for worktree-backed implementation, publish command execution, artifact matching, and Jira summary/failure templates.
+- Sub-task delivery initiation for feature decomposition flows.
 
-### Jira API settings
+## Commands and settings
 
-- ticketManager.jiraApiBaseUrl
-- ticketManager.jiraApiToken
-- ticketManager.jiraApiEpicKey
-- ticketManager.jiraApiEpicBoardName
-- ticketManager.jiraApiBoardJql
-- ticketManager.jiraApiBoardName
+The extension contributes a large command and settings surface. Use these docs as the authoritative references:
 
-### Jira polling and delivery settings
+- [docs/user-guide.md](docs/user-guide.md): feature walkthrough plus grouped command reference.
+- [docs/command-reference.md](docs/command-reference.md): dedicated user-facing command catalog.
+- [docs/settings-reference.md](docs/settings-reference.md): shipped settings grouped by area.
+- [docs/screenshots/README.md](docs/screenshots/README.md): screenshot asset plan and expected filenames.
 
-- ticketManager.jiraPolling.enabled
-- ticketManager.jiraPolling.requiredLabel
-- ticketManager.jiraPolling.clarificationAnalysis
-- ticketManager.delivery.defaultBaseBranch
-- ticketManager.delivery.autoMergeSubTasks
-- ticketManager.ai.deliveryWorkflowEnabled
-- ticketManager.ai.deliveryPublishCommand
-- ticketManager.ai.deliveryArtifactPattern
-- ticketManager.ai.deliveryAgentWorkflowPath
-- ticketManager.ai.deliveryAgentWorkflowUrl
-- ticketManager.ai.deliverySummaryTemplate
-- ticketManager.ai.deliveryFailureTemplate
+Important settings include:
 
-Useful commands:
+- `ticketManager.backendMode`
+- `ticketManager.workModeEnabled`
+- `ticketManager.boardsSidebarPreviewMode`
+- `ticketManager.jiraPolling.enabled`
+- `ticketManager.ai.defaultProvider`
+- `ticketManager.ai.deliveryWorkflowEnabled`
 
-- Ticket Manager: Open Connections & Boards
-- Ticket Manager: Add Connection
-- Ticket Manager: Add Tracked Board
-- Ticket Manager: Disconnect Jira Cloud
-- Ticket Manager: Link Jira API Epic
-- Ticket Manager: Link Jira API Board Query
-- Ticket Manager: Start Sub-Task Delivery
+## Getting started
 
-## Live Folder Markdown Format
+1. Open `Ticket Manager: Open Connections & Boards`.
+2. Add a connection that matches the backend you want to use.
+3. Add one or more tracked boards.
+4. Open a tracked board from the Boards or Work Mode view.
+5. Use the issue views, Issue Details, Task Designer, and AI/session tools from there.
 
-Live Folder mode reads markdown issue files from a plans/features style tree.
+If you prefer the board-centric layout, turn on `ticketManager.workModeEnabled` or run `Ticket Manager: Toggle Work Mode`.
 
-Expected layout:
+## Screenshots and walkthroughs
 
-- plans/features/feature-NN-name/feature.md
-- plans/features/feature-NN-name/story-NN-M-name.md
-- plans/features/feature-NN-name/task-NN-M-name.md
-- plans/features/feature-NN-name/bug-NN-M-name.md
+The repo does not currently include image assets for the UI. The documentation now reserves these walkthrough sections so screenshots can be dropped in without changing the doc structure.
 
-Supported issue types:
+Suggested capture set:
 
-- Feature
-- Story
-- Task
-- Bug
+- Connections & Boards setup flow
+- Classic sidebar mode
+- Work Mode board view
+- Issue Details view
+- Sessions view / AI session panel
+- Task Designer with notes, website preview nodes, and connectors
+- Task Designer AI recommendation and master-plan flow
 
-Common fields/sections include Status, Created, Type, Priority, Description, Dependencies, Comments, and bug-specific reproduction/expected/actual behavior sections.
-
-## Boards and Issue UX
-
-- Board search and filter commands
-- Project/type board filters
-- Board column configuration
-- Status color mapping and priority color bars
-- Issue card interactions (status changes, assignment actions)
-- Issue details with comments, transitions, parent linkage, and attachments where supported by backend
-
-## AI and Sessions
-
-AI providers supported by settings and workflows:
-
-- openai
-- claude
-- cursor-cli
-- copilot-cli
-- claude-cli
-
-AI-related commands include:
-
-- Ticket Manager: Configure AI
-- Ticket Manager: Delegate to Copilot Agent
-- Ticket Manager: Start Claude Code Session
-- Ticket Manager: Assign Workflow Pack
-- Ticket Manager: View AI Session
-- Ticket Manager: Abort Agent Session
-- Ticket Manager: Review Ticket with AI
-- Ticket Manager: Local Peer Review
+Detailed placeholders live in [docs/user-guide.md](docs/user-guide.md).
+Expected asset names live in [docs/screenshots/README.md](docs/screenshots/README.md).
 
 ## Development
 
@@ -142,12 +151,24 @@ npm install
 npm run compile
 ```
 
-Press F5 in VS Code to open the Extension Development Host.
+Press `F5` in VS Code to launch the Extension Development Host.
+
+### Typecheck
+
+```powershell
+npm run check-types
+```
 
 ### Tests
 
 ```powershell
 npm test
+```
+
+If test sources changed, run this first so the test output is refreshed:
+
+```powershell
+npx tsc -p ./
 ```
 
 ### Package
@@ -156,26 +177,30 @@ npm test
 npm run package
 ```
 
-or
+## Utility scripts
 
-```powershell
-npx @vscode/vsce package
-```
+- `npm run open:ticket-manager`
+- `npm run install:vsix`
+- `npm run install:code`
+- `npm run install:insiders`
+- `npm run install:cursor`
+- `npm run jira-polling`
+- `npm run jira-polling:once`
+- `npm run jira-polling:test`
+- `npm run jira-mr-polling`
+- `npm run jira-mr-polling:once`
+- `npm run jira-mr-polling:test`
 
-## Local utility scripts
+## Migration docs
 
-- npm run open:ticket-manager
-- npm run install:vsix
-- npm run install:code
-- npm run install:insiders
-- npm run install:cursor
+- [docs/migrations/live-folder-to-jira-gitlab-github.md](docs/migrations/live-folder-to-jira-gitlab-github.md)
+- [docs/migrations/live-folder-to-jira-implementation-plan.md](docs/migrations/live-folder-to-jira-implementation-plan.md)
 
-## Migration documentation
-
-See docs/migrations/live-folder-to-jira-gitlab-github.md for the migration plan.
+These migration docs are planning/implementation documents, not end-user feature guarantees.
 
 ## Known limitations
 
-- GitHub backend is configuration-first and not yet full issue/board parity.
-- GitLab issue/board behavior is not the same as Jira model behavior.
-- Some advanced delivery and automation flows require Jira/GitLab settings, credentials, and workflow alignment to be configured correctly.
+- GitHub mode is not yet a full issue/board backend with Jira-equivalent parity.
+- GitLab support is strongest around delivery/MR workflows and does not mirror Jira behavior exactly.
+- Website preview nodes only show sites that permit embedding.
+- Some automation flows depend on correct Jira/GitLab credentials, workflow settings, tracked boards, and repository setup.

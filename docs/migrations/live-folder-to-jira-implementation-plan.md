@@ -287,4 +287,4 @@ Add to `package.json` settings:
 ## Related Documents
 
 - [Live Folder Migration Goal](./live-folder-to-jira-gitlab-github.md) — High-level migration strategy
-- [Markdown Template](../DOCS.md#7-live-folder-markdown) — Work-item file format specification
+- [Live Folder mode guide](../user-guide.md#live-folder-mode) — Current markdown work-item structure and feature overview

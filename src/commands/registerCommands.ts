@@ -24,6 +24,7 @@ import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
 import { SetupSidebarViewProvider } from '../views/setupSidebarViewProvider';
 import { SetupWizardPanel } from '../views/setupWizardPanel';
 import { TaskDesignerPanelManager } from '../views/taskDesignerPanelManager';
+import { NoteTestPanelManager } from '../views/noteTestPanelManager';
 import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
@@ -58,6 +59,7 @@ interface CommandDependencies {
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
   taskDesignerPanelManager: TaskDesignerPanelManager;
+  noteTestPanelManager: NoteTestPanelManager;
   revealSetupView?: () => Promise<void>;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
@@ -95,6 +97,17 @@ function resolveBoard(
   arg: unknown,
   boardStore: BoardStore
 ) {
+  if (
+    arg &&
+    typeof arg === 'object' &&
+    'id' in arg &&
+    'name' in arg &&
+    typeof (arg as { id?: unknown }).id === 'string' &&
+    typeof (arg as { name?: unknown }).name === 'string'
+  ) {
+    return arg as Board;
+  }
+
   if (arg instanceof BoardNode) {
     return arg.board;
   }
@@ -964,7 +977,7 @@ async function promptForCreateIssueInput(
     summary: summary.trim(),
     description: description.trim() || undefined,
     parentKey,
-    boardId: board?.projectKey === project.key ? board.id : undefined
+    boardId: board && board.projectKey === project.key ? board.id : undefined
   };
 }
 
@@ -1520,7 +1533,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       void deps.setupWizardPanel.open();
     }),
     vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
-      deps.taskDesignerPanelManager.open();
+      const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
+      deps.taskDesignerPanelManager.open(board?.name);
+    }),
+
+    vscode.commands.registerCommand('ticketManager.openNoteTest', () => {
+      deps.noteTestPanelManager.open();
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {
