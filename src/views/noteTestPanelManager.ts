@@ -2225,6 +2225,7 @@ export class NoteTestPanelManager {
     const ticketAddButton = document.getElementById('ticket-add-button');
     const ticketEntryCloseButton = document.getElementById('ticket-entry-close-button');
     const deleteConnectorButton = document.getElementById('delete-connector-button');
+    const generateMasterPlanButton = document.getElementById('generate-master-plan-button');
     const recommendFlowButton = document.getElementById('recommend-flow-button');
     const recommendBoardFlowButton = document.getElementById('recommend-board-flow-button');
     const applyRecommendationButton = document.getElementById('apply-recommendation-button');
@@ -2253,8 +2254,16 @@ export class NoteTestPanelManager {
       linkPreview: undefined,
       hoveredLinkNodeId: undefined,
       persistCanvasStateTimer: undefined,
-      toolbarDrag: undefined
+      toolbarDrag: undefined,
+      generatingMasterPlan: false
     };
+
+    function setGeneratingMasterPlan(isGenerating) {
+      uiState.generatingMasterPlan = Boolean(isGenerating);
+      if (generateMasterPlanButton instanceof HTMLButtonElement) {
+        generateMasterPlanButton.disabled = uiState.generatingMasterPlan;
+      }
+    }
 
     function setFeedback(text, isError) {
       if (!(feedback instanceof HTMLElement)) {
@@ -3290,6 +3299,7 @@ export class NoteTestPanelManager {
         setFeedback('Add at least one ticket node before generating a master plan.', true);
         return;
       }
+      setGeneratingMasterPlan(true);
       setFeedback('Generating master plan artifact...');
       vscodeApi.postMessage({
         type: 'generateMasterPlan',
@@ -3665,11 +3675,17 @@ export class NoteTestPanelManager {
       }
 
       if (message.type === 'generateMasterPlanResult') {
+        setGeneratingMasterPlan(false);
         if (!message.ok) {
           setFeedback(message.error || 'Unable to generate master plan.', true);
           return;
         }
-        setFeedback('Master plan generated at ' + (message.outputPath || 'plans/master-plan.md') + '.');
+        const featureCount = typeof message.generatedFeatureCount === 'number' ? message.generatedFeatureCount : 0;
+        const storyCount = typeof message.generatedStoryCount === 'number' ? message.generatedStoryCount : 0;
+        setFeedback(
+          'Master plan generated at ' + (message.outputPath || 'plans/master-plan.md') +
+            '. Generated ' + featureCount + ' feature file set(s) and ' + storyCount + ' story file(s).'
+        );
         return;
       }
 
