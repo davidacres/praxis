@@ -11,6 +11,9 @@ import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersiste
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
 const MASTER_PLAN_DIRECTORY_NAME = 'plans';
 const MASTER_PLAN_FILE_NAME = 'master-plan.md';
+const GENERATED_FEATURES_ROOT_SEGMENT = 'features';
+const GENERATED_FEATURES_DIRECTORY_NAME = 'generated-from-designer';
+const GENERATED_STORIES_PER_FEATURE = 3;
 
 type LinkHandleDirection = 'top' | 'right' | 'bottom' | 'left';
 
@@ -75,6 +78,25 @@ interface NoteTestStateRecoveryResult {
   warning?: string;
 }
 
+interface GeneratedStoryArtifact {
+  readonly node: TicketNode;
+  readonly order: number;
+  readonly featureNumber: number;
+  readonly storyNumber: number;
+  readonly ref: string;
+  readonly slug: string;
+  readonly dependencies: readonly string[];
+}
+
+interface GeneratedFeatureArtifact {
+  readonly featureNumber: number;
+  readonly ref: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly stories: readonly GeneratedStoryArtifact[];
+  readonly dependencies: readonly string[];
+}
+
 type DroppedIssueRelation = 'dependsOn' | 'subTask';
 
 interface ResolvedDroppedIssueRelation {
@@ -113,6 +135,11 @@ interface TaskDesignerBoardRecommendationSeed {
 }
 
 type ResolveTaskDesignerBoardRecommendationSeed = () => Promise<TaskDesignerBoardRecommendationSeed | undefined>;
+
+const DEFAULT_ARTIFACT_PRIORITY = 'P2';
+const DEFAULT_ARTIFACT_COMPLEXITY = 'Low';
+const DEFAULT_ARTIFACT_RISK = 'Low';
+const DEFAULT_ARTIFACT_CONFIDENCE = 'High';
 
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -321,45 +348,380 @@ function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | We
   return Boolean(node && node.type !== 'ticket');
 }
 
-function buildMasterPlanMarkdown(nodes: readonly TicketNode[], connectors: readonly DirectedConnector[]): string {
-  const nodeById = new Map(nodes.map(node => [node.id, node]));
-  const lines: string[] = [
-    '# Master Plan',
-    '',
-    `Generated from Note Test on ${new Date().toISOString()}.`,
-    '',
-    '## Tickets',
-    ''
-  ];
+function toSingleLineText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
 
+function compareNodeIds(
+  leftNodeId: string,
+  rightNodeId: string,
+  nodeOrder: ReadonlyMap<string, number>
+): number {
+  const leftOrder = nodeOrder.get(leftNodeId) ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = nodeOrder.get(rightNodeId) ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+  return leftNodeId.localeCompare(rightNodeId);
+}
+
+function computeTopologicalNodeOrder(
+  nodes: readonly TicketNode[],
+  connectors: readonly DirectedConnector[]
+): TicketNode[] | undefined {
   if (nodes.length === 0) {
-    lines.push('1. No ticket nodes are currently defined.');
-  } else {
-    for (const [index, node] of nodes.entries()) {
-      lines.push(`${index + 1}. **${node.issueKey}** - ${node.summary || '(no summary)'}`);
+    return [];
+  }
+
+  const nodeById = new Map(nodes.map(node => [node.id, node]));
+  const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]));
+  const adjacency = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  for (const node of nodes) {
+    adjacency.set(node.id, []);
+    inDegree.set(node.id, 0);
+  }
+
+  for (const connector of connectors) {
+    if (!adjacency.has(connector.sourceNodeId) || !inDegree.has(connector.targetNodeId)) {
+      continue;
+    }
+    adjacency.get(connector.sourceNodeId)?.push(connector.targetNodeId);
+    inDegree.set(connector.targetNodeId, (inDegree.get(connector.targetNodeId) ?? 0) + 1);
+  }
+
+  for (const neighbors of adjacency.values()) {
+    neighbors.sort((left, right) => compareNodeIds(left, right, nodeOrder));
+  }
+
+  const queue = nodes
+    .map(node => node.id)
+    .filter(nodeId => (inDegree.get(nodeId) ?? 0) === 0);
+  const orderedNodeIds: string[] = [];
+  while (queue.length > 0) {
+    const nodeId = queue.shift();
+    if (!nodeId) {
+      continue;
+    }
+    orderedNodeIds.push(nodeId);
+    for (const neighborNodeId of adjacency.get(nodeId) ?? []) {
+      const nextInDegree = (inDegree.get(neighborNodeId) ?? 0) - 1;
+      inDegree.set(neighborNodeId, nextInDegree);
+      if (nextInDegree === 0) {
+        queue.push(neighborNodeId);
+      }
     }
   }
 
-  lines.push('', '## Dependencies', '');
-  if (connectors.length === 0) {
+  if (orderedNodeIds.length !== nodes.length) {
+    return undefined;
+  }
+
+  return orderedNodeIds
+    .map(nodeId => nodeById.get(nodeId))
+    .filter((node): node is TicketNode => Boolean(node));
+}
+
+function buildMasterPlanMarkdown(
+  nodes: readonly TicketNode[],
+  connectors: readonly DirectedConnector[]
+): string {
+  const orderedNodes = computeTopologicalNodeOrder(nodes, connectors) ?? [...nodes];
+  const nodeById = new Map(nodes.map(node => [node.id, node]));
+  const nodeOrder = new Map(orderedNodes.map((node, index) => [node.id, index]));
+  const dependencyRows = connectors
+    .filter(connector => nodeById.has(connector.sourceNodeId) && nodeById.has(connector.targetNodeId))
+    .slice()
+    .sort((left, right) => {
+      const bySource = compareNodeIds(left.sourceNodeId, right.sourceNodeId, nodeOrder);
+      if (bySource !== 0) {
+        return bySource;
+      }
+      const byTarget = compareNodeIds(left.targetNodeId, right.targetNodeId, nodeOrder);
+      if (byTarget !== 0) {
+        return byTarget;
+      }
+      return left.id.localeCompare(right.id);
+    });
+
+  const description = `Generated from the Note Test graph with ${orderedNodes.length} ticket node${orderedNodes.length === 1 ? '' : 's'} and ${dependencyRows.length} dependency link${dependencyRows.length === 1 ? '' : 's'}.`;
+  const goals = [
+    'Execute planned tickets in deterministic topological order.',
+    'Keep graph dependencies explicit and reviewable in markdown.',
+    'Persist a local master plan artifact under plans/.'
+  ];
+  const nonGoals = [
+    'Does not execute or mutate tickets automatically.',
+    'Does not infer extra dependencies beyond directed links.',
+    'Does not modify manually-authored plan files outside generated artifacts.'
+  ];
+
+  const lines: string[] = [
+    '# Task Designer Master Plan',
+    '',
+    '**Status:** Proposed',
+    '**Type:** Master Plan',
+    `**Priority:** ${DEFAULT_ARTIFACT_PRIORITY}`,
+    `**Dependencies:** ${dependencyRows.length > 0 ? `${dependencyRows.length} directed graph link${dependencyRows.length === 1 ? '' : 's'}` : 'None'}`,
+    `**Complexity:** ${DEFAULT_ARTIFACT_COMPLEXITY}`,
+    `**Risk:** ${DEFAULT_ARTIFACT_RISK}`,
+    `**Confidence:** ${DEFAULT_ARTIFACT_CONFIDENCE}`,
+    '',
+    '## Description',
+    description,
+    '',
+    '## Goals',
+    ...goals.map((goal, index) => `${index + 1}. ${goal}`),
+    '',
+    '## Non-Goals',
+    ...nonGoals.map((nonGoal, index) => `${index + 1}. ${nonGoal}`),
+    '',
+    '## Phase Overview'
+  ];
+
+  if (orderedNodes.length === 0) {
+    lines.push('1. No ticket nodes are currently defined.');
+  } else {
+    for (const [index, node] of orderedNodes.entries()) {
+      lines.push(`${index + 1}. **Phase ${index + 1} - ${node.issueKey}:** ${toSingleLineText(node.summary) || '(no summary)'}`);
+    }
+  }
+
+  lines.push('', '## Dependencies');
+  if (dependencyRows.length === 0) {
     lines.push('1. No explicit directed dependencies are currently defined.');
   } else {
-    let order = 1;
-    for (const connector of connectors) {
+    for (const [index, connector] of dependencyRows.entries()) {
       const source = nodeById.get(connector.sourceNodeId);
       const target = nodeById.get(connector.targetNodeId);
       if (!source || !target) {
         continue;
       }
-      lines.push(`${order}. ${source.issueKey} -> ${target.issueKey}`);
-      order += 1;
-    }
-    if (order === 1) {
-      lines.push('1. No explicit directed dependencies are currently defined.');
+      lines.push(`${index + 1}. ${source.issueKey} -> ${target.issueKey}`);
     }
   }
 
-  lines.push('', '## Verification', '', '1. Validate dependency ordering against connector graph.', '2. Run `npm run check-types`.');
+  lines.push(
+    '',
+    '## Verification',
+    '1. Generate the master plan artifact from Task Designer and confirm the metadata block includes status, type, priority, dependencies, complexity, risk, and confidence.',
+    '2. Verify each dependency row maps to an explicit connector in the graph.',
+    '3. Re-generate without changing the graph and confirm the file content is unchanged.',
+    '4. Run `npm run check-types`.'
+  );
+
+  return `${lines.join('\n')}\n`;
+}
+
+function toTwoDigitNumber(value: number): string {
+  return value.toString().padStart(2, '0');
+}
+
+function toSlug(value: string, fallback: string): string {
+  const normalized = value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 64)
+    .replace(/-$/g, '');
+  return normalized || fallback;
+}
+
+function toExecutionPriority(priority?: string): string {
+  const normalized = toSingleLineText(priority ?? '').toUpperCase();
+  if (/^P[0-4]$/.test(normalized)) {
+    return normalized;
+  }
+  return DEFAULT_ARTIFACT_PRIORITY;
+}
+
+function selectFeaturePriority(stories: readonly GeneratedStoryArtifact[]): string {
+  const rank = new Map<string, number>([
+    ['P0', 0],
+    ['P1', 1],
+    ['P2', 2],
+    ['P3', 3],
+    ['P4', 4]
+  ]);
+  const priorities = stories.map(story => toExecutionPriority(story.node.priority));
+  priorities.sort((left, right) => (rank.get(left) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right) ?? Number.MAX_SAFE_INTEGER));
+  return priorities[0] ?? DEFAULT_ARTIFACT_PRIORITY;
+}
+
+function buildGeneratedFeatureArtifacts(
+  nodes: readonly TicketNode[],
+  connectors: readonly DirectedConnector[]
+): GeneratedFeatureArtifact[] {
+  const orderedNodes = computeTopologicalNodeOrder(nodes, connectors) ?? [...nodes];
+  const nodeOrder = new Map(orderedNodes.map((node, index) => [node.id, index]));
+  const byId = new Map(orderedNodes.map(node => [node.id, node]));
+  const incomingDependencyByTarget = new Map<string, string[]>();
+  for (const connector of connectors) {
+    if (!byId.has(connector.sourceNodeId) || !byId.has(connector.targetNodeId)) {
+      continue;
+    }
+    const refs = incomingDependencyByTarget.get(connector.targetNodeId);
+    if (refs) {
+      refs.push(connector.sourceNodeId);
+    } else {
+      incomingDependencyByTarget.set(connector.targetNodeId, [connector.sourceNodeId]);
+    }
+  }
+
+  const storyArtifacts: GeneratedStoryArtifact[] = orderedNodes.map((node, index) => {
+    const featureNumber = Math.floor(index / GENERATED_STORIES_PER_FEATURE) + 1;
+    const storyNumber = (index % GENERATED_STORIES_PER_FEATURE) + 1;
+    const ref = `${toTwoDigitNumber(featureNumber)}.${storyNumber}`;
+    const dependencyIds = [...(incomingDependencyByTarget.get(node.id) ?? [])].sort((left, right) =>
+      compareNodeIds(left, right, nodeOrder)
+    );
+    const dependencies = dependencyIds.map(sourceNodeId => {
+      const sourceOrder = nodeOrder.get(sourceNodeId) ?? 0;
+      const sourceFeature = Math.floor(sourceOrder / GENERATED_STORIES_PER_FEATURE) + 1;
+      const sourceStory = (sourceOrder % GENERATED_STORIES_PER_FEATURE) + 1;
+      return `${toTwoDigitNumber(sourceFeature)}.${sourceStory}`;
+    });
+    return {
+      node,
+      order: index + 1,
+      featureNumber,
+      storyNumber,
+      ref,
+      slug: toSlug(node.summary, `story-${toTwoDigitNumber(featureNumber)}-${storyNumber}`),
+      dependencies
+    };
+  });
+
+  const featureByNumber = new Map<number, GeneratedStoryArtifact[]>();
+  for (const story of storyArtifacts) {
+    const group = featureByNumber.get(story.featureNumber);
+    if (group) {
+      group.push(story);
+    } else {
+      featureByNumber.set(story.featureNumber, [story]);
+    }
+  }
+
+  const featureArtifacts: GeneratedFeatureArtifact[] = [...featureByNumber.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([featureNumber, stories]) => {
+      const dependencies = new Set<string>();
+      for (const story of stories) {
+        for (const dependency of story.dependencies) {
+          const dependencyFeatureRef = dependency.split('.')[0];
+          if (dependencyFeatureRef !== toTwoDigitNumber(featureNumber)) {
+            dependencies.add(`Feature ${dependencyFeatureRef}`);
+          }
+        }
+      }
+
+      const firstStory = stories[0];
+      const title = `Execution Slice ${toTwoDigitNumber(featureNumber)} - ${toSingleLineText(firstStory.node.summary) || firstStory.node.issueKey}`;
+      return {
+        featureNumber,
+        ref: toTwoDigitNumber(featureNumber),
+        slug: toSlug(title, `feature-${toTwoDigitNumber(featureNumber)}`),
+        title,
+        stories,
+        dependencies: [...dependencies].sort((left, right) => left.localeCompare(right))
+      };
+    });
+
+  return featureArtifacts;
+}
+
+function buildGeneratedFeatureMarkdown(feature: GeneratedFeatureArtifact): string {
+  const priority = selectFeaturePriority(feature.stories);
+  const lines: string[] = [
+    `# Feature ${feature.ref}: ${feature.title}`,
+    '',
+    '**Status:** Proposed',
+    '**Type:** Feature',
+    `**Priority:** ${priority}`,
+    `**Dependencies:** ${feature.dependencies.length > 0 ? feature.dependencies.join(', ') : 'None'}`,
+    `**Complexity:** ${DEFAULT_ARTIFACT_COMPLEXITY}`,
+    `**Risk:** ${DEFAULT_ARTIFACT_RISK}`,
+    `**Confidence:** ${DEFAULT_ARTIFACT_CONFIDENCE}`,
+    '',
+    '## Description',
+    `Generated from Task Designer graph order for story slice group ${feature.ref}.`,
+    '',
+    '## Items',
+    '',
+    '| Ref | Type | Name | Ticket | Status |',
+    '| --- | --- | --- | --- | --- |'
+  ];
+
+  for (const story of feature.stories) {
+    lines.push(`| ${story.ref} | Story | ${toSingleLineText(story.node.summary) || '(no summary)'} | ${story.node.issueKey} | ${story.node.status} |`);
+  }
+
+  lines.push('', '## Dependencies');
+  if (feature.dependencies.length === 0) {
+    lines.push('1. No cross-feature dependencies.');
+  } else {
+    for (const [index, dependency] of feature.dependencies.entries()) {
+      lines.push(`${index + 1}. Depends on ${dependency}.`);
+    }
+  }
+
+  lines.push(
+    '',
+    '## Verification',
+    '1. Confirm the metadata block includes status, type, priority, dependencies, complexity, risk, and confidence.',
+    '2. Execute stories in listed order and verify cross-feature dependencies are satisfied first.',
+    '3. Run `npm run check-types`.'
+  );
+  return `${lines.join('\n')}\n`;
+}
+
+function buildGeneratedStoryMarkdown(story: GeneratedStoryArtifact): string {
+  const priority = toExecutionPriority(story.node.priority);
+  const lines: string[] = [
+    `# Story ${story.ref}: ${toSingleLineText(story.node.summary) || story.node.issueKey}`,
+    '',
+    '**Status:** Proposed',
+    '**Type:** Story',
+    `**Priority:** ${priority}`,
+    `**Dependencies:** ${story.dependencies.length > 0 ? story.dependencies.join(', ') : 'None'}`,
+    `**Complexity:** ${DEFAULT_ARTIFACT_COMPLEXITY}`,
+    `**Risk:** ${DEFAULT_ARTIFACT_RISK}`,
+    `**Confidence:** ${DEFAULT_ARTIFACT_CONFIDENCE}`,
+    `**Source Ticket:** ${story.node.issueKey}`,
+    '',
+    '## Description',
+    `Implement execution phase ${story.order} from the Task Designer graph using ticket ${story.node.issueKey}.`,
+    '',
+    '## Implementation Activities',
+    `1. Deliver the scope represented by ticket ${story.node.issueKey}.`,
+    '2. Keep implementation aligned with upstream dependency ordering.',
+    '3. Ensure the slice remains independently reviewable.',
+    '',
+    '## Acceptance Criteria',
+    '1. The ticket scope is implemented as a functional, compilable slice.',
+    '2. Graph dependencies are respected by execution order.',
+    '3. `npm run check-types` passes.',
+    '',
+    '## References',
+    `1. Ticket: ${story.node.issueKey}`,
+    `2. Graph order: ${story.order}`
+  ];
+
+  if (story.dependencies.length > 0) {
+    lines.push(`3. Upstream story refs: ${story.dependencies.join(', ')}`);
+  }
+
+  lines.push(
+    '',
+    '## Verification',
+    `1. Validate behavior for ticket ${story.node.issueKey} in isolation.`,
+    `2. Confirm prerequisite story refs are completed first: ${story.dependencies.length > 0 ? story.dependencies.join(', ') : 'None'}.`,
+    '3. Run `npm run check-types`.'
+  );
   return `${lines.join('\n')}\n`;
 }
 
@@ -1226,15 +1588,25 @@ export class NoteTestPanelManager {
 
     const plansDirectoryUri = vscode.Uri.joinPath(workspaceFolder.uri, MASTER_PLAN_DIRECTORY_NAME);
     const masterPlanFileUri = vscode.Uri.joinPath(plansDirectoryUri, MASTER_PLAN_FILE_NAME);
+    const generatedFeaturesRootUri = vscode.Uri.joinPath(
+      plansDirectoryUri,
+      GENERATED_FEATURES_ROOT_SEGMENT,
+      GENERATED_FEATURES_DIRECTORY_NAME
+    );
     const markdown = buildMasterPlanMarkdown(ticketNodes, ticketConnectors);
+    const featureArtifacts = buildGeneratedFeatureArtifacts(ticketNodes, ticketConnectors);
 
     try {
       await vscode.workspace.fs.createDirectory(plansDirectoryUri);
       await vscode.workspace.fs.writeFile(masterPlanFileUri, new TextEncoder().encode(markdown));
+      await this.writeGeneratedFeatureStoryArtifacts(generatedFeaturesRootUri, featureArtifacts);
       await this.panel?.webview.postMessage({
         type: 'generateMasterPlanResult',
         ok: true,
-        outputPath: masterPlanFileUri.fsPath
+        outputPath: masterPlanFileUri.fsPath,
+        generatedFeaturesPath: generatedFeaturesRootUri.fsPath,
+        generatedFeatureCount: featureArtifacts.length,
+        generatedStoryCount: featureArtifacts.reduce((count, feature) => count + feature.stories.length, 0)
       });
     } catch (error) {
       await this.panel?.webview.postMessage({
@@ -1242,6 +1614,38 @@ export class NoteTestPanelManager {
         ok: false,
         error: `Unable to write ${MASTER_PLAN_DIRECTORY_NAME}\\${MASTER_PLAN_FILE_NAME}: ${error instanceof Error ? error.message : String(error)}`
       });
+    }
+  }
+
+  private async writeGeneratedFeatureStoryArtifacts(
+    generatedFeaturesRootUri: vscode.Uri,
+    featureArtifacts: readonly GeneratedFeatureArtifact[]
+  ): Promise<void> {
+    try {
+      await vscode.workspace.fs.delete(generatedFeaturesRootUri, { recursive: true, useTrash: false });
+    } catch {
+      // no-op when generated output does not exist yet
+    }
+    await vscode.workspace.fs.createDirectory(generatedFeaturesRootUri);
+
+    for (const feature of featureArtifacts) {
+      const featureDirectoryName = `feature-${feature.ref}-${feature.slug}`;
+      const featureDirectoryUri = vscode.Uri.joinPath(generatedFeaturesRootUri, featureDirectoryName);
+      const featureFileUri = vscode.Uri.joinPath(featureDirectoryUri, `feature-${feature.ref}-${feature.slug}.md`);
+      await vscode.workspace.fs.createDirectory(featureDirectoryUri);
+      await vscode.workspace.fs.writeFile(
+        featureFileUri,
+        new TextEncoder().encode(buildGeneratedFeatureMarkdown(feature))
+      );
+
+      for (const story of feature.stories) {
+        const storyFileName = `story-${feature.ref}-${story.storyNumber}-${story.slug}.md`;
+        const storyFileUri = vscode.Uri.joinPath(featureDirectoryUri, storyFileName);
+        await vscode.workspace.fs.writeFile(
+          storyFileUri,
+          new TextEncoder().encode(buildGeneratedStoryMarkdown(story))
+        );
+      }
     }
   }
 
