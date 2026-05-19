@@ -2235,7 +2235,8 @@ export class NoteTestPanelManager {
       nodes: Array.isArray(initialState.nodes) ? initialState.nodes : [],
       connectors: Array.isArray(initialState.connectors) ? initialState.connectors : [],
       recommendation: undefined,
-      recommendationNodes: []
+      recommendationNodes: [],
+      recommendationSource: undefined
     };
 
     const uiState = {
@@ -3301,10 +3302,15 @@ export class NoteTestPanelManager {
       });
     }
 
-    function rejectRecommendation() {
+    function clearRecommendation() {
       state.recommendation = undefined;
       state.recommendationNodes = [];
+      state.recommendationSource = undefined;
       updateRecommendationActionState();
+    }
+
+    function rejectRecommendation() {
+      clearRecommendation();
       setFeedback('AI recommendation discarded.');
     }
 
@@ -3616,6 +3622,7 @@ export class NoteTestPanelManager {
         state.recommendationNodes = state.nodes
           .filter(node => node.type === 'ticket')
           .map(node => ({ ...node }));
+        state.recommendationSource = 'canvas tickets';
         updateRecommendationActionState();
         setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
         return;
@@ -3631,6 +3638,7 @@ export class NoteTestPanelManager {
         }
         state.recommendation = message.recommendation || undefined;
         state.recommendationNodes = buildPreviewNodes(message.nodes);
+        state.recommendationSource = message.boardName ? ('board "' + message.boardName + '"') : 'current board';
         updateRecommendationActionState();
         setFeedback('AI board recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
         return;
@@ -3655,9 +3663,7 @@ export class NoteTestPanelManager {
           clearLinkPreview();
           renderNodes();
         }
-        state.recommendation = undefined;
-        state.recommendationNodes = [];
-        updateRecommendationActionState();
+        clearRecommendation();
         setFeedback('AI recommendation applied.');
         return;
       }
