@@ -2244,7 +2244,7 @@ export class NoteTestPanelManager {
       linkSourceNodeId: undefined,
       selectedNodeId: undefined,
       selectedConnectorId: undefined,
-      nextConnectorIndex: state.connectors.length,
+      nextConnectorIndex: 0,
       ticketEntryOpen: false,
       toolbarPosition: {
         x: typeof initialState.toolbarPosition?.x === 'number' ? initialState.toolbarPosition.x : 16,
@@ -2264,6 +2264,21 @@ export class NoteTestPanelManager {
       if (generateMasterPlanButton instanceof HTMLButtonElement) {
         generateMasterPlanButton.disabled = uiState.generatingMasterPlan;
       }
+    }
+
+    function syncNextConnectorIndex() {
+      let maxIndex = -1;
+      for (const connector of state.connectors) {
+        const match = /-(\d+)$/.exec(connector.id);
+        const parsed = match ? Number.parseInt(match[1], 10) : Number.NaN;
+        if (Number.isFinite(parsed)) {
+          maxIndex = Math.max(maxIndex, parsed);
+        }
+      }
+      if (maxIndex < 0 && state.connectors.length > 0) {
+        maxIndex = state.connectors.length - 1;
+      }
+      uiState.nextConnectorIndex = maxIndex + 1;
     }
 
     function setFeedback(text, isError) {
@@ -3676,7 +3691,7 @@ export class NoteTestPanelManager {
           state.connectors = Array.isArray(message.state.connectors)
             ? message.state.connectors.map(connector => ({ ...connector }))
             : [];
-          uiState.nextConnectorIndex = state.connectors.length;
+          syncNextConnectorIndex();
           uiState.selectedNodeId = undefined;
           uiState.selectedConnectorId = undefined;
           clearLinkPreview();
@@ -3711,7 +3726,7 @@ export class NoteTestPanelManager {
             state.connectors = Array.isArray(message.state.connectors)
               ? message.state.connectors.map(connector => ({ ...connector }))
               : [];
-            uiState.nextConnectorIndex = state.connectors.length;
+            syncNextConnectorIndex();
             uiState.selectedNodeId = undefined;
             uiState.selectedConnectorId = undefined;
             renderNodes();
@@ -3800,6 +3815,7 @@ export class NoteTestPanelManager {
     syncFloatingLayout();
     setTicketEntryOpen(false);
     updateRecommendationActionState();
+    syncNextConnectorIndex();
     renderNodes();
     updateDeleteConnectorState();
 
