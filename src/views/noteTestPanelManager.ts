@@ -371,6 +371,9 @@ type NoteTestToolbarIcon =
   | 'zoomIn'
   | 'zoomOut'
   | 'deleteConnector'
+  | 'generateMasterPlan'
+  | 'recommendFlow'
+  | 'recommendBoardFlow'
   | 'reset'
   | 'confirm'
   | 'dismiss';
@@ -393,6 +396,12 @@ function renderToolbarIcon(icon: NoteTestToolbarIcon): string {
       return '<circle cx="8" cy="8" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M11.5 11.5 14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" /><path d="M6.2 8h3.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />';
     case 'deleteConnector':
       return '<path d="M3.5 4.5h9M6 4.5V3.4c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.1M5 6.5v5m3-5v5m3-5v5M4.5 4.5l.5 8.1c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9l.5-8.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" />';
+    case 'generateMasterPlan':
+      return '<path d="M4 3.5h5l2 2v7H4z" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round" fill="none" /><path d="M9 3.5v2h2" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" /><path d="M8 7.5v3.5M6.5 9.5 8 11l1.5-1.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />';
+    case 'recommendFlow':
+      return '<path d="M8 2.5 9.3 5l2.7.4-2 2 .5 2.8L8 9 5.5 10.2 6 7.4 4 5.4 6.7 5 8 2.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" fill="none" /><path d="M11.8 10.5l.6 1.2 1.3.2-.9.9.2 1.3-1.2-.6-1.1.6.2-1.3-.9-.9 1.3-.2.5-1.2z" fill="currentColor" />';
+    case 'recommendBoardFlow':
+      return '<rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none" /><path d="M6.2 3v10" stroke="currentColor" stroke-width="1.3" /><path d="M2.5 6.3h11" stroke="currentColor" stroke-width="1.3" /><path d="M11.2 2.4l.6 1.1 1.2.2-.8.9.2 1.2-1.2-.6-1.1.6.2-1.2-.8-.9 1.2-.2.5-1.1z" fill="currentColor" />';
     case 'confirm':
       return '<path d="M3.5 8.5 6.5 11.5 12.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />';
     case 'dismiss':
@@ -893,6 +902,9 @@ export class NoteTestPanelManager {
       cursor: default;
       transform: none;
     }
+    .overlay-icon-button.is-hidden {
+      display: none;
+    }
     .overlay-icon-button svg {
       width: 18px;
       height: 18px;
@@ -1271,6 +1283,14 @@ export class NoteTestPanelManager {
         <div class="canvas-toolbar-separator"></div>
         <div class="canvas-toolbar-group">
           ${renderToolbarButton('delete-connector-button', 'deleteConnector', 'Delete selected link', 'deleteConnector', { disabled: true })}
+          ${renderToolbarButton('generate-master-plan-button', 'generateMasterPlan', 'Generate master plan', 'generateMasterPlan')}
+          ${renderToolbarButton('recommend-flow-button', 'recommendFlow', 'AI recommend flow', 'recommendFlow')}
+          ${renderToolbarButton('recommend-board-flow-button', 'recommendBoardFlow', 'AI recommend from board', 'recommendBoardFlow')}
+          ${renderToolbarButton('apply-recommendation-button', 'applyRecommendation', 'Apply AI recommendation', 'confirm', { disabled: true, extraClass: 'is-hidden' })}
+          ${renderToolbarButton('reject-recommendation-button', 'rejectRecommendation', 'Discard AI recommendation', 'dismiss', { disabled: true, extraClass: 'is-hidden' })}
+        </div>
+        <div class="canvas-toolbar-separator"></div>
+        <div class="canvas-toolbar-group">
           ${renderToolbarButton('toolbar-reset-button', 'reset', 'Clear canvas', 'reset')}
         </div>
       </div>
@@ -2455,6 +2475,26 @@ export class NoteTestPanelManager {
         }
         if (action === 'deleteConnector') {
           deleteSelectedConnector();
+          return;
+        }
+        if (action === 'generateMasterPlan') {
+          setFeedback('Master plan generation is not wired in Note Test yet.', true);
+          return;
+        }
+        if (action === 'recommendFlow') {
+          setFeedback('AI flow recommendation is not wired in Note Test yet.', true);
+          return;
+        }
+        if (action === 'recommendBoardFlow') {
+          setFeedback('AI board recommendation is not wired in Note Test yet.', true);
+          return;
+        }
+        if (action === 'applyRecommendation') {
+          setFeedback('No recommendation to apply yet.', true);
+          return;
+        }
+        if (action === 'rejectRecommendation') {
+          setFeedback('No recommendation to discard yet.', true);
           return;
         }
         if (action === 'reset') {
