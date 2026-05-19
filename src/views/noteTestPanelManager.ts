@@ -871,11 +871,6 @@ export class NoteTestPanelManager {
       padding: 0;
       cursor: text;
     }
-    .note-node-title-input.is-readonly {
-      cursor: grab;
-      pointer-events: none;
-      user-select: none;
-    }
     .note-node-body {
       display: flex;
       flex-direction: column;
@@ -1097,7 +1092,6 @@ export class NoteTestPanelManager {
       activeTool: 'select',
       linkSourceNodeId: undefined,
       selectedNodeId: undefined,
-      editingNoteTitleId: undefined,
       selectedConnectorId: undefined,
       nextConnectorIndex: state.connectors.length,
       ticketEntryOpen: false,
@@ -1650,17 +1644,12 @@ export class NoteTestPanelManager {
         titleWrap.className = 'ticket-node-title-wrap';
 
         if (node.type === 'note') {
-          const isTitleEditing = uiState.editingNoteTitleId === node.id;
           const titleInput = document.createElement('input');
           titleInput.type = 'text';
           titleInput.className = 'note-node-title-input';
-          if (!isTitleEditing) {
-            titleInput.classList.add('is-readonly');
-          }
           titleInput.value = node.title || '';
           titleInput.placeholder = 'Notes';
           titleInput.setAttribute('aria-label', 'Note title');
-          titleInput.readOnly = !isTitleEditing;
           titleInput.addEventListener('focus', () => {
             uiState.selectedNodeId = node.id;
             uiState.selectedConnectorId = undefined;
@@ -1670,33 +1659,9 @@ export class NoteTestPanelManager {
           titleInput.addEventListener('click', event => {
             event.stopPropagation();
           });
-          titleInput.addEventListener('blur', () => {
-            if (uiState.editingNoteTitleId === node.id) {
-              uiState.editingNoteTitleId = undefined;
-              renderNodes();
-            }
-          });
-          titleInput.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === 'Escape') {
-              event.preventDefault();
-              titleInput.blur();
-            }
-          });
           titleInput.addEventListener('input', () => {
             node.title = titleInput.value;
             schedulePersistCanvasState();
-          });
-          titleWrap.addEventListener('dblclick', event => {
-            event.stopPropagation();
-            uiState.editingNoteTitleId = node.id;
-            renderNodes();
-            requestAnimationFrame(() => {
-              const refreshedInput = nodesLayer.querySelector('[data-node-id="' + node.id + '"] .note-node-title-input');
-              if (refreshedInput instanceof HTMLInputElement) {
-                refreshedInput.focus();
-                refreshedInput.select();
-              }
-            });
           });
           titleWrap.append(titleInput);
         } else if (node.type === 'website') {
@@ -1722,9 +1687,6 @@ export class NoteTestPanelManager {
           state.connectors = state.connectors.filter(connector => connector.sourceNodeId !== node.id && connector.targetNodeId !== node.id);
           if (uiState.selectedNodeId === node.id) {
             uiState.selectedNodeId = undefined;
-          }
-          if (uiState.editingNoteTitleId === node.id) {
-            uiState.editingNoteTitleId = undefined;
           }
           if (uiState.linkSourceNodeId === node.id) {
             clearLinkPreview();
