@@ -2238,7 +2238,6 @@ export class NoteTestPanelManager {
       recommendationNodes: []
     };
 
-    let feedbackTimer = undefined;
     const uiState = {
       activeTool: 'select',
       linkSourceNodeId: undefined,
@@ -2269,19 +2268,9 @@ export class NoteTestPanelManager {
       if (!(feedback instanceof HTMLElement)) {
         return;
       }
-      if (feedbackTimer) {
-        clearTimeout(feedbackTimer);
-        feedbackTimer = undefined;
-      }
       feedback.textContent = text || '';
       feedback.classList.toggle('error', Boolean(isError));
       feedback.classList.toggle('has-message', Boolean(text));
-      if (text) {
-        feedbackTimer = setTimeout(() => {
-          feedback.textContent = '';
-          feedback.classList.remove('error', 'has-message');
-        }, 3000);
-      }
     }
 
     function normalizeWebsitePreviewUrl(raw) {
@@ -3665,7 +3654,6 @@ export class NoteTestPanelManager {
           uiState.selectedConnectorId = undefined;
           clearLinkPreview();
           renderNodes();
-          persistCanvasState();
         }
         state.recommendation = undefined;
         state.recommendationNodes = [];
