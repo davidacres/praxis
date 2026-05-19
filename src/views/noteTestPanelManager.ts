@@ -3627,9 +3627,7 @@ export class NoteTestPanelManager {
           return;
         }
         state.recommendation = message.recommendation || undefined;
-        state.recommendationNodes = state.nodes
-          .filter(node => node.type === 'ticket')
-          .map(node => ({ ...node }));
+        state.recommendationNodes = state.nodes.map(node => ({ ...node }));
         state.recommendationSource = 'canvas tickets';
         updateRecommendationActionState();
         setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
