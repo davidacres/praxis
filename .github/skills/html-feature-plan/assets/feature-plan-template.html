@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{PLAN_TITLE}}</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f0d0c;
+      --bg-elevated: #171412;
+      --panel: #1a1715;
+      --panel-strong: #221d19;
+      --panel-soft: #13110f;
+      --border: #342d27;
+      --border-strong: #57493a;
+      --text: #f5eee4;
+      --text-muted: #cabbaa;
+      --text-soft: #9f9081;
+      --accent: #da9b52;
+      --accent-soft: rgba(218, 155, 82, 0.16);
+      --accent-strong: #f1bb78;
+      --success: #8fbe7b;
+      --warn: #dfb85f;
+      --danger: #db7b63;
+      --shadow: 0 26px 60px rgba(0, 0, 0, 0.34);
+      --shadow-soft: 0 16px 32px rgba(0, 0, 0, 0.22);
+      --radius: 20px;
+      --radius-sm: 12px;
+      --page-width: 1280px;
+      --space-1: 0.36rem;
+      --space-2: 0.72rem;
+      --space-3: 1.05rem;
+      --space-4: 1.5rem;
+      --space-5: 2.2rem;
+      --space-6: 3rem;
+      --mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+      --sans: "Segoe UI Variable Display", "Aptos", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(218, 155, 82, 0.15), transparent 26%),
+        radial-gradient(circle at top right, rgba(143, 190, 123, 0.08), transparent 20%),
+        linear-gradient(180deg, #151211 0%, #0f0d0c 100%);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 15.5px;
+      line-height: 1.6;
+    }
+
+    body {
+      padding: var(--space-5);
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 32px 32px;
+      -webkit-mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 36%);
+      mask-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 36%);
+      pointer-events: none;
+      opacity: 0.16;
+    }
+
+    .page {
+      max-width: var(--page-width);
+      margin: 0 auto;
+      display: grid;
+      gap: var(--space-5);
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero,
+    .panel,
+    .sidebar-card,
+    .risk-card,
+    .phase-card,
+    .metric-card {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 100%),
+        linear-gradient(180deg, rgba(218, 155, 82, 0.04), transparent 42%),
+        var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before,
+    .panel::before,
+    .sidebar-card::before,
+    .risk-card::before,
+    .phase-card::before,
+    .metric-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(241, 187, 120, 0.38), transparent);
+    }
+
+    .hero {
+      padding: var(--space-6);
+      display: grid;
+      grid-template-columns: 1.5fr 0.9fr;
+      gap: var(--space-5);
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top left, rgba(218, 155, 82, 0.16), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 100%),
+        linear-gradient(180deg, #1d1916 0%, #171412 100%);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -6rem -6rem auto;
+      width: 18rem;
+      height: 18rem;
+      background: radial-gradient(circle, rgba(216, 161, 91, 0.18), transparent 62%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid rgba(241, 187, 120, 0.22);
+      background: linear-gradient(180deg, rgba(218, 155, 82, 0.18), rgba(218, 155, 82, 0.08));
+      color: var(--accent);
+      font-size: 0.74rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      line-height: 1.1;
+    }
+
+    h1 {
+      margin-top: var(--space-3);
+      font-size: clamp(2.35rem, 3.4vw, 3.85rem);
+      letter-spacing: -0.055em;
+    }
+
+    h2 {
+      font-size: 1.18rem;
+      letter-spacing: -0.03em;
+    }
+
+    h3 {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      letter-spacing: -0.01em;
+    }
+
+    p {
+      margin: 0;
+      color: var(--text-muted);
+      max-width: 76ch;
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: var(--space-4);
+      align-content: start;
+    }
+
+    .lede {
+      max-width: 70ch;
+      font-size: 1.06rem;
+      line-height: 1.72;
+    }
+
+    .meta-grid,
+    .metric-grid,
+    .two-up,
+    .three-up,
+    .phase-grid,
+    .risk-grid,
+    .footer-grid,
+    .visual-grid {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .meta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metric-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .two-up {
+      grid-template-columns: 1.4fr 0.8fr;
+      align-items: start;
+    }
+
+    .three-up,
+    .visual-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .phase-grid,
+    .risk-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .footer-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .meta-item,
+    .metric-card,
+    .sidebar-card,
+    .phase-card,
+    .risk-card,
+    .visual-card {
+      padding: var(--space-4);
+    }
+
+    .visual-card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      border-radius: var(--radius-sm);
+      display: grid;
+      gap: var(--space-2);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .meta-item {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+    }
+
+    .label {
+      display: block;
+      margin-bottom: var(--space-1);
+      color: var(--text-soft);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .value {
+      color: var(--text);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .stack {
+      display: grid;
+      gap: var(--space-5);
+    }
+
+    .panel {
+      padding: var(--space-5);
+      display: grid;
+      gap: var(--space-4);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-3);
+      align-items: start;
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .panel-header p {
+      max-width: 70ch;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+    }
+
+    .chip {
+      padding: 0.42rem 0.78rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+    }
+
+    .chip.success {
+      color: var(--success);
+      border-color: rgba(143, 190, 123, 0.4);
+    }
+
+    .chip.warn {
+      color: var(--warn);
+      border-color: rgba(223, 184, 95, 0.4);
+    }
+
+    .chip.danger {
+      color: var(--danger);
+      border-color: rgba(219, 123, 99, 0.4);
+    }
+
+    ul,
+    ol {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: var(--text-muted);
+    }
+
+    li + li {
+      margin-top: 0.5rem;
+    }
+
+    .metric-value {
+      display: block;
+      margin-top: var(--space-2);
+      color: var(--text);
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.045em;
+    }
+
+    .timeline {
+      display: grid;
+      gap: var(--space-3);
+      position: relative;
+    }
+
+    .spec-table td:first-child,
+    .spec-table th:first-child {
+      width: 20%;
+    }
+
+    .spec-table td:nth-child(2),
+    .spec-table th:nth-child(2) {
+      width: 28%;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 0.62rem;
+      top: 0.65rem;
+      bottom: 0.65rem;
+      width: 1px;
+      background: linear-gradient(180deg, var(--accent), transparent);
+    }
+
+    .timeline-step {
+      position: relative;
+      padding-left: 2rem;
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .timeline-step::before {
+      content: "";
+      position: absolute;
+      left: 0.25rem;
+      top: 0.4rem;
+      width: 0.8rem;
+      height: 0.8rem;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 0.35rem rgba(216, 161, 91, 0.14);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    th,
+    td {
+      padding: 0.9rem 0.95rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    td {
+      color: var(--text-muted);
+    }
+
+    tbody tr:nth-child(even) td {
+      background: rgba(255, 255, 255, 0.018);
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.92em;
+      color: var(--accent);
+    }
+
+    .callout {
+      padding: var(--space-4);
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(216, 161, 91, 0.26);
+      background: linear-gradient(180deg, rgba(216, 161, 91, 0.12), rgba(216, 161, 91, 0.04));
+      box-shadow: var(--shadow-soft);
+    }
+
+    .sidebar {
+      display: grid;
+      gap: var(--space-3);
+    }
+
+    .muted {
+      color: var(--text-soft);
+    }
+
+    .footer-note {
+      color: var(--text-soft);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 1024px) {
+      .hero,
+      .two-up,
+      .three-up,
+      .phase-grid,
+      .risk-grid,
+      .footer-grid,
+      .metric-grid,
+      .visual-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .meta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: var(--space-3);
+      }
+
+      .hero,
+      .panel,
+      .sidebar-card,
+      .phase-card,
+      .risk-card,
+      .metric-card,
+      .visual-card {
+        padding: var(--space-4);
+      }
+
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel-header {
+        flex-direction: column;
+      }
+    }
+
+    @media print {
+      :root {
+        color-scheme: light;
+        --bg: #ffffff;
+        --bg-elevated: #ffffff;
+        --panel: #ffffff;
+        --panel-strong: #ffffff;
+        --panel-soft: #ffffff;
+        --border: #d7d2ca;
+        --border-strong: #c0b8ac;
+        --text: #1f1b17;
+        --text-muted: #3d352e;
+        --text-soft: #64584d;
+        --accent: #8f5d1f;
+        --accent-soft: rgba(143, 93, 31, 0.08);
+        --shadow: none;
+      }
+
+      html,
+      body {
+        background: #ffffff;
+      }
+
+      body {
+        padding: 0;
+      }
+
+      .hero,
+      .panel,
+      .sidebar-card,
+      .risk-card,
+      .phase-card,
+      .metric-card,
+      .meta-item {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">{{PLAN_TYPE}}</span>
+        <div>
+          <h1>{{PLAN_TITLE}}</h1>
+          <p class="lede">{{PLAN_SUMMARY}}</p>
+        </div>
+        <div class="chips">
+          <span class="chip">Status: {{STATUS}}</span>
+          <span class="chip">Priority: {{PRIORITY}}</span>
+          <span class="chip">Owner: {{OWNER}}</span>
+          <span class="chip success">Confidence: {{CONFIDENCE}}</span>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="label">Last Updated</span>
+            <span class="value">{{LAST_UPDATED}}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Target Window</span>
+            <span class="value">{{TARGET_WINDOW}}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Primary Systems</span>
+            <span class="value">{{SYSTEMS}}</span>
+          </div>
+          <div class="meta-item">
+            <span class="label">Delivery Shape</span>
+            <span class="value">{{DELIVERY_SHAPE}}</span>
+          </div>
+        </div>
+        <div class="callout">
+          <span class="label">Plan Intent</span>
+          <p>{{PLAN_INTENT}}</p>
+        </div>
+      </div>
+    </header>
+
+    <section class="metric-grid">
+      <article class="metric-card">
+        <span class="label">Workstreams</span>
+        <span class="metric-value">{{WORKSTREAM_COUNT}}</span>
+        <p>{{WORKSTREAM_NOTE}}</p>
+      </article>
+      <article class="metric-card">
+        <span class="label">Major Risks</span>
+        <span class="metric-value">{{RISK_COUNT}}</span>
+        <p>{{RISK_NOTE}}</p>
+      </article>
+      <article class="metric-card">
+        <span class="label">Dependencies</span>
+        <span class="metric-value">{{DEPENDENCY_COUNT}}</span>
+        <p>{{DEPENDENCY_NOTE}}</p>
+      </article>
+      <article class="metric-card">
+        <span class="label">Verification Gates</span>
+        <span class="metric-value">{{VERIFICATION_COUNT}}</span>
+        <p>{{VERIFICATION_NOTE}}</p>
+      </article>
+    </section>
+
+    <div class="two-up">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Executive Summary</h2>
+              <p>Summarize the opportunity, the proposed move, and the outcome expected if the work lands cleanly.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">Audience: {{AUDIENCE}}</span>
+              <span class="chip warn">Decision Type: {{DECISION_TYPE}}</span>
+            </div>
+          </div>
+          <p>{{EXECUTIVE_SUMMARY}}</p>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Goals and Non-Goals</h2>
+              <p>Separate what this plan is expected to accomplish from what it intentionally avoids.</p>
+            </div>
+          </div>
+          <div class="two-up">
+            <div>
+              <h3>Goals</h3>
+              <ul>
+                <li>{{GOAL_1}}</li>
+                <li>{{GOAL_2}}</li>
+                <li>{{GOAL_3}}</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Non-Goals</h3>
+              <ul>
+                <li>{{NON_GOAL_1}}</li>
+                <li>{{NON_GOAL_2}}</li>
+                <li>{{NON_GOAL_3}}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Scope, Assumptions, and Constraints</h2>
+              <p>Capture the boundaries that keep the plan honest and executable.</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Detail</th>
+                <th>Why It Matters</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>In Scope</td>
+                <td>{{IN_SCOPE}}</td>
+                <td>{{IN_SCOPE_REASON}}</td>
+              </tr>
+              <tr>
+                <td>Assumptions</td>
+                <td>{{ASSUMPTIONS}}</td>
+                <td>{{ASSUMPTIONS_REASON}}</td>
+              </tr>
+              <tr>
+                <td>Constraints</td>
+                <td>{{CONSTRAINTS}}</td>
+                <td>{{CONSTRAINTS_REASON}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Architecture and Delivery Approach</h2>
+              <p>Explain the implementation shape, the main components, and the sequencing logic behind the plan.</p>
+            </div>
+          </div>
+          <div class="phase-grid">
+            <article class="phase-card">
+              <span class="label">Primary Architecture Move</span>
+              <h3>{{ARCHITECTURE_MOVE_TITLE}}</h3>
+              <p>{{ARCHITECTURE_MOVE_DETAIL}}</p>
+            </article>
+            <article class="phase-card">
+              <span class="label">Key Interfaces</span>
+              <h3>{{INTERFACES_TITLE}}</h3>
+              <p>{{INTERFACES_DETAIL}}</p>
+            </article>
+            <article class="phase-card">
+              <span class="label">Operational Considerations</span>
+              <h3>{{OPERATIONS_TITLE}}</h3>
+              <p>{{OPERATIONS_DETAIL}}</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Styles, Colors, And Branding</h2>
+              <p>Make the visual identity explicit so the implementation team knows whether to follow prompt-specific brand cues or the planner's default Claude Code-style fallback.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">Brand Source: {{BRAND_SOURCE}}</span>
+              <span class="chip warn">Design Mode: {{BRAND_MODE}}</span>
+            </div>
+          </div>
+          <div class="three-up">
+            <article class="visual-card">
+              <span class="label">Color Direction</span>
+              <h3>{{BRAND_COLOR_TITLE}}</h3>
+              <p>{{BRAND_COLOR_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Typography And Tone</span>
+              <h3>{{BRAND_TYPE_TITLE}}</h3>
+              <p>{{BRAND_TYPE_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Brand Personality</span>
+              <h3>{{BRAND_PERSONALITY_TITLE}}</h3>
+              <p>{{BRAND_PERSONALITY_DETAIL}}</p>
+            </article>
+          </div>
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Style Area</th>
+                <th>Recommendation</th>
+                <th>Source</th>
+                <th>Implementation Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{STYLE_AREA_1}}</td>
+                <td>{{STYLE_RECOMMENDATION_1}}</td>
+                <td>{{STYLE_SOURCE_1}}</td>
+                <td>{{STYLE_NOTE_1}}</td>
+              </tr>
+              <tr>
+                <td>{{STYLE_AREA_2}}</td>
+                <td>{{STYLE_RECOMMENDATION_2}}</td>
+                <td>{{STYLE_SOURCE_2}}</td>
+                <td>{{STYLE_NOTE_2}}</td>
+              </tr>
+              <tr>
+                <td>{{STYLE_AREA_3}}</td>
+                <td>{{STYLE_RECOMMENDATION_3}}</td>
+                <td>{{STYLE_SOURCE_3}}</td>
+                <td>{{STYLE_NOTE_3}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Whiteboard Sketch To Working UI</h2>
+              <p>Translate rough concepts into a structured implementation path the team can actually build.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">Reference Type: {{SKETCH_REFERENCE_TYPE}}</span>
+              <span class="chip warn">Fidelity: {{SKETCH_FIDELITY}}</span>
+            </div>
+          </div>
+          <div class="visual-grid">
+            <article class="visual-card">
+              <span class="label">Observed In Sketch</span>
+              <h3>{{SKETCH_OBSERVED_TITLE}}</h3>
+              <p>{{SKETCH_OBSERVED_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Inferred Behavior</span>
+              <h3>{{SKETCH_INFERRED_TITLE}}</h3>
+              <p>{{SKETCH_INFERRED_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Implementation Recommendation</span>
+              <h3>{{SKETCH_RECOMMENDATION_TITLE}}</h3>
+              <p>{{SKETCH_RECOMMENDATION_DETAIL}}</p>
+            </article>
+          </div>
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Sketch Region</th>
+                <th>Likely UI Element</th>
+                <th>Build Guidance</th>
+                <th>Open Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{SKETCH_REGION_1}}</td>
+                <td>{{SKETCH_ELEMENT_1}}</td>
+                <td>{{SKETCH_GUIDANCE_1}}</td>
+                <td>{{SKETCH_OPEN_1}}</td>
+              </tr>
+              <tr>
+                <td>{{SKETCH_REGION_2}}</td>
+                <td>{{SKETCH_ELEMENT_2}}</td>
+                <td>{{SKETCH_GUIDANCE_2}}</td>
+                <td>{{SKETCH_OPEN_2}}</td>
+              </tr>
+              <tr>
+                <td>{{SKETCH_REGION_3}}</td>
+                <td>{{SKETCH_ELEMENT_3}}</td>
+                <td>{{SKETCH_GUIDANCE_3}}</td>
+                <td>{{SKETCH_OPEN_3}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Screenshot To Working Clone</h2>
+              <p>Clarify how closely the shipped result should mirror the reference and what must be recreated first.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">Clone Target: {{CLONE_TARGET}}</span>
+              <span class="chip success">Match Level: {{CLONE_MATCH_LEVEL}}</span>
+            </div>
+          </div>
+          <div class="three-up">
+            <article class="visual-card">
+              <span class="label">Must Match</span>
+              <p>{{CLONE_MUST_MATCH}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Can Adapt</span>
+              <p>{{CLONE_CAN_ADAPT}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">De-Risk First</span>
+              <p>{{CLONE_DERISK_FIRST}}</p>
+            </article>
+          </div>
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>Reference Detail</th>
+                <th>Implementation Approach</th>
+                <th>Fidelity Goal</th>
+                <th>Verification</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{CLONE_DETAIL_1}}</td>
+                <td>{{CLONE_APPROACH_1}}</td>
+                <td>{{CLONE_FIDELITY_1}}</td>
+                <td>{{CLONE_VERIFY_1}}</td>
+              </tr>
+              <tr>
+                <td>{{CLONE_DETAIL_2}}</td>
+                <td>{{CLONE_APPROACH_2}}</td>
+                <td>{{CLONE_FIDELITY_2}}</td>
+                <td>{{CLONE_VERIFY_2}}</td>
+              </tr>
+              <tr>
+                <td>{{CLONE_DETAIL_3}}</td>
+                <td>{{CLONE_APPROACH_3}}</td>
+                <td>{{CLONE_FIDELITY_3}}</td>
+                <td>{{CLONE_VERIFY_3}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Phased Execution Plan</h2>
+              <p>Break the delivery into a sequence that reduces risk and clarifies dependencies.</p>
+            </div>
+          </div>
+          <div class="timeline">
+            <div class="timeline-step">
+              <h3>Phase 1: {{PHASE_1_TITLE}}</h3>
+              <p>{{PHASE_1_DETAIL}}</p>
+            </div>
+            <div class="timeline-step">
+              <h3>Phase 2: {{PHASE_2_TITLE}}</h3>
+              <p>{{PHASE_2_DETAIL}}</p>
+            </div>
+            <div class="timeline-step">
+              <h3>Phase 3: {{PHASE_3_TITLE}}</h3>
+              <p>{{PHASE_3_DETAIL}}</p>
+            </div>
+            <div class="timeline-step">
+              <h3>Phase 4: {{PHASE_4_TITLE}}</h3>
+              <p>{{PHASE_4_DETAIL}}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Workstream Breakdown</h2>
+              <p>Use this table for parallel tracks, owners, and exit criteria.</p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Workstream</th>
+                <th>Scope</th>
+                <th>Owner</th>
+                <th>Exit Criteria</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{WORKSTREAM_1_NAME}}</td>
+                <td>{{WORKSTREAM_1_SCOPE}}</td>
+                <td>{{WORKSTREAM_1_OWNER}}</td>
+                <td>{{WORKSTREAM_1_EXIT}}</td>
+              </tr>
+              <tr>
+                <td>{{WORKSTREAM_2_NAME}}</td>
+                <td>{{WORKSTREAM_2_SCOPE}}</td>
+                <td>{{WORKSTREAM_2_OWNER}}</td>
+                <td>{{WORKSTREAM_2_EXIT}}</td>
+              </tr>
+              <tr>
+                <td>{{WORKSTREAM_3_NAME}}</td>
+                <td>{{WORKSTREAM_3_SCOPE}}</td>
+                <td>{{WORKSTREAM_3_OWNER}}</td>
+                <td>{{WORKSTREAM_3_EXIT}}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </div>
+
+      <aside class="sidebar">
+        <section class="sidebar-card">
+          <span class="label">Visual Inventory</span>
+          <h2>Screens, States, Components</h2>
+          <ul>
+            <li>{{VISUAL_INVENTORY_1}}</li>
+            <li>{{VISUAL_INVENTORY_2}}</li>
+            <li>{{VISUAL_INVENTORY_3}}</li>
+            <li>{{VISUAL_INVENTORY_4}}</li>
+          </ul>
+        </section>
+
+        <section class="sidebar-card">
+          <span class="label">Dependencies</span>
+          <h2>Coordination Map</h2>
+          <ul>
+            <li>{{DEPENDENCY_1}}</li>
+            <li>{{DEPENDENCY_2}}</li>
+            <li>{{DEPENDENCY_3}}</li>
+            <li>{{DEPENDENCY_4}}</li>
+          </ul>
+        </section>
+
+        <section class="sidebar-card">
+          <span class="label">Verification</span>
+          <h2>Readiness Gates</h2>
+          <ol>
+            <li>{{VERIFICATION_GATE_1}}</li>
+            <li>{{VERIFICATION_GATE_2}}</li>
+            <li>{{VERIFICATION_GATE_3}}</li>
+          </ol>
+        </section>
+
+        <section class="sidebar-card">
+          <span class="label">Rollout</span>
+          <h2>Launch Strategy</h2>
+          <p>{{ROLLOUT_STRATEGY}}</p>
+        </section>
+
+        <section class="sidebar-card">
+          <span class="label">Open Questions</span>
+          <h2>Needs Confirmation</h2>
+          <ul>
+            <li>{{OPEN_QUESTION_1}}</li>
+            <li>{{OPEN_QUESTION_2}}</li>
+            <li>{{OPEN_QUESTION_3}}</li>
+          </ul>
+        </section>
+      </aside>
+    </div>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Risk Register</h2>
+          <p>Surface the failure modes that could derail the work, then make the mitigations explicit.</p>
+        </div>
+      </div>
+      <div class="risk-grid">
+        <article class="risk-card">
+          <span class="label">Risk 1</span>
+          <h3>{{RISK_1_TITLE}}</h3>
+          <p>{{RISK_1_DETAIL}}</p>
+          <p class="muted">Mitigation: {{RISK_1_MITIGATION}}</p>
+        </article>
+        <article class="risk-card">
+          <span class="label">Risk 2</span>
+          <h3>{{RISK_2_TITLE}}</h3>
+          <p>{{RISK_2_DETAIL}}</p>
+          <p class="muted">Mitigation: {{RISK_2_MITIGATION}}</p>
+        </article>
+        <article class="risk-card">
+          <span class="label">Risk 3</span>
+          <h3>{{RISK_3_TITLE}}</h3>
+          <p>{{RISK_3_DETAIL}}</p>
+          <p class="muted">Mitigation: {{RISK_3_MITIGATION}}</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Decision Log and Source Inputs</h2>
+          <p>Document why the plan is shaped this way and where the key facts came from.</p>
+        </div>
+      </div>
+      <div class="footer-grid">
+        <div>
+          <h3>Key Decisions</h3>
+          <ul>
+            <li>{{DECISION_1}}</li>
+            <li>{{DECISION_2}}</li>
+            <li>{{DECISION_3}}</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Source Inputs</h3>
+          <ul>
+            <li>{{SOURCE_1}}</li>
+            <li>{{SOURCE_2}}</li>
+            <li>{{SOURCE_3}}</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Notes</h3>
+          <p class="footer-note">{{FOOTER_NOTES}}</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
