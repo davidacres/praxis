@@ -104,6 +104,23 @@ function asLinkHandleDirection(value: unknown): LinkHandleDirection | undefined 
     : undefined;
 }
 
+function normalizeWebsitePreviewUrl(raw: unknown): string | undefined {
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  if (!trimmed) {
+    return undefined;
+  }
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return undefined;
+    }
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function toTicketNode(value: unknown, fallbackIndex = 0): TicketNode | undefined {
   if (!isRecord(value) || value.type === 'note' || value.type === 'website') {
     return undefined;
@@ -443,6 +460,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'addNote') {
       await this.handleAddNoteMessage(message);
+      return;
+    }
+
+    if (message.type === 'addWebsitePreview') {
+      await this.handleAddWebsitePreviewMessage(message);
     }
   }
 
@@ -552,6 +574,37 @@ export class NoteTestPanelManager {
     }
     await this.panel?.webview.postMessage({
       type: 'addNoteResult',
+      ok: true,
+      node
+    });
+  }
+
+  private async handleAddWebsitePreviewMessage(message: Record<string, unknown>): Promise<void> {
+    const url = normalizeWebsitePreviewUrl(asString(message.url));
+    if (!url) {
+      await this.panel?.webview.postMessage({
+        type: 'addWebsitePreviewResult',
+        ok: false,
+        error: 'Enter a valid http or https URL before adding the website preview.'
+      });
+      return;
+    }
+
+    const x = asNumber(message.x);
+    const y = asNumber(message.y);
+    const node: WebsitePreviewNode = {
+      type: 'website',
+      id: `website-${this.nextNodeIndex}`,
+      url,
+      x: x === undefined ? 180 : Math.round(x),
+      y: y === undefined ? 90 : Math.round(y),
+      width: 360,
+      height: 260
+    };
+    this.nextNodeIndex += 1;
+
+    await this.panel?.webview.postMessage({
+      type: 'addWebsitePreviewResult',
       ok: true,
       node
     });
@@ -2060,21 +2113,13 @@ export class NoteTestPanelManager {
     function addWebsitePreview() {
       const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
       const point = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
-      const id = 'website-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-      state.nodes.push({
-        type: 'website',
-        id,
-        url: 'https://',
+      vscodeApi.postMessage({
+        type: 'addWebsitePreview',
+        url: 'https://example.com',
         x: Math.round(point.x),
-        y: Math.round(point.y),
-        width: 360,
-        height: 260
+        y: Math.round(point.y)
       });
-      uiState.selectedNodeId = id;
-      uiState.selectedConnectorId = undefined;
-      renderNodes();
-      persistCanvasState();
-      setFeedback('Website preview added. Enter a URL to load it.');
+      setFeedback('Adding website preview...');
     }
 
     function requestAddTicket() {
@@ -2235,6 +2280,24 @@ export class NoteTestPanelManager {
         renderNodes();
         persistCanvasState();
         setFeedback('Note added.');
+        return;
+      }
+
+      if (message.type === 'addWebsitePreviewResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to add website preview.', true);
+          return;
+        }
+        if (!message.node || typeof message.node !== 'object') {
+          setFeedback('Website preview payload was invalid.', true);
+          return;
+        }
+        state.nodes.push(message.node);
+        uiState.selectedNodeId = message.node.id;
+        uiState.selectedConnectorId = undefined;
+        renderNodes();
+        persistCanvasState();
+        setFeedback('Website preview added.');
       }
     });
 
