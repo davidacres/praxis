@@ -2626,6 +2626,15 @@ export class NoteTestPanelManager {
       return undefined;
     }
 
+    function revealNode(nodeId) {
+      window.requestAnimationFrame(() => {
+        const element = nodeElementById(nodeId);
+        if (element instanceof HTMLElement) {
+          element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      });
+    }
+
     function renderConnectors() {
       for (const element of connectorsLayer.querySelectorAll('.connector-group, .connector-preview-line')) {
         element.remove();
@@ -3567,6 +3576,7 @@ export class NoteTestPanelManager {
         clearRecommendation();
         renderNodes();
         persistCanvasState();
+        revealNode(message.node.id);
         setFeedback('Ticket ' + (message.node.issueKey || 'node') + ' added.');
         return;
       }
@@ -3586,6 +3596,7 @@ export class NoteTestPanelManager {
         clearRecommendation();
         renderNodes();
         persistCanvasState();
+        revealNode(message.node.id);
         setFeedback('Note added.');
         return;
       }
@@ -3605,6 +3616,7 @@ export class NoteTestPanelManager {
         clearRecommendation();
         renderNodes();
         persistCanvasState();
+        revealNode(message.node.id);
         setFeedback('Website preview added.');
         return;
       }
