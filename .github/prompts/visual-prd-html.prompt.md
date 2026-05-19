@@ -18,15 +18,22 @@ Interpret the input as the planning source of truth, including any combination o
 
 Requirements for the output:
 
-- Return raw HTML only.
-- Start with `<!DOCTYPE html>`.
+- If critical inputs are missing, ask concise clarifying questions before generating files.
+- Generate the main result as an HTML file under `docs/html/`.
+- Generate any supporting help files under `docs/html/` as well.
+- Open the main generated HTML file in the internal browser when done.
 - Make the document presentation-ready with inline CSS and no external dependencies.
 - Include the core planning structure: summary, goals, scope, architecture or delivery approach, phased execution, dependencies, risks, verification, rollout, and open questions.
 - Include the visual translation structure when relevant: whiteboard sketch to working UI, screenshot to working clone, visual inventory, and fidelity notes.
 - Include a dedicated styles, colors, and branding section.
+- Include a dedicated design system section.
+- Include working design-system examples for key controls and containers, such as buttons, text inputs, boxes, groups, panels, radii, and shade treatments.
 - If the user provides brand or style direction, derive recommendations from that input and label them clearly.
 - If the user does not provide brand or style direction, fall back to the planner's default Claude Code-inspired warm developer-tool aesthetic and label it as a fallback recommendation.
+- If the user provides design-system cues, derive recommendations from that input and label them clearly.
+- If the user does not provide design-system cues, fall back to the planner's default compact admin-tool design system and label it as a fallback recommendation.
 - Distinguish clearly between observed details, inferred behavior, and implementation recommendations whenever the plan is based on visual references.
+- In the final response, provide links or file paths to the generated files and identify which one was opened in the internal browser.
 
 Quality bar:
 

@@ -198,6 +198,7 @@
     .metric-grid,
     .two-up,
     .three-up,
+    .component-grid,
     .phase-grid,
     .risk-grid,
     .footer-grid,
@@ -222,6 +223,10 @@
     .three-up,
     .visual-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .component-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .phase-grid,
@@ -454,10 +459,171 @@
       font-size: 0.9rem;
     }
 
+    .specimen-card {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-radius: var(--radius-sm);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+      border: 1px solid rgba(255, 255, 255, 0.055);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .example-frame {
+      display: grid;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.08));
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .example-toolbar,
+    .example-group,
+    .token-row,
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .field-stack {
+      display: grid;
+      gap: 0.45rem;
+    }
+
+    .field-label {
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .example-panel {
+      display: grid;
+      gap: var(--space-2);
+      padding: var(--space-4);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.012));
+    }
+
+    .example-box {
+      padding: 0.9rem 1rem;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-muted);
+    }
+
+    .example-button {
+      appearance: none;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      padding: 0.7rem 1rem;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+      color: var(--text);
+      font: inherit;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .example-button.primary {
+      background: linear-gradient(180deg, rgba(218, 155, 82, 0.92), rgba(181, 117, 48, 0.92));
+      border-color: rgba(241, 187, 120, 0.35);
+      color: #18120e;
+    }
+
+    .example-button.ghost {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .example-button.danger {
+      background: linear-gradient(180deg, rgba(219, 123, 99, 0.25), rgba(219, 123, 99, 0.12));
+      border-color: rgba(219, 123, 99, 0.35);
+    }
+
+    .example-input,
+    .example-textarea {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      background: rgba(14, 12, 11, 0.68);
+      color: var(--text);
+      padding: 0.8rem 0.9rem;
+      font: inherit;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .example-textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .token-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+
+    .swatch {
+      width: 0.95rem;
+      height: 0.95rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: var(--accent);
+      flex: none;
+    }
+
+    .swatch.panel {
+      background: var(--panel);
+    }
+
+    .swatch.panel-strong {
+      background: var(--panel-strong);
+    }
+
+    .swatch.border {
+      background: var(--border-strong);
+    }
+
+    .radius-demo {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-end;
+    }
+
+    .radius-box {
+      width: 54px;
+      height: 54px;
+      background: linear-gradient(180deg, rgba(218, 155, 82, 0.18), rgba(255, 255, 255, 0.03));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .radius-box.sm {
+      border-radius: 12px;
+    }
+
+    .radius-box.md {
+      border-radius: 18px;
+    }
+
+    .radius-box.lg {
+      border-radius: 20px;
+    }
+
     @media (max-width: 1024px) {
       .hero,
       .two-up,
       .three-up,
+      .component-grid,
       .phase-grid,
       .risk-grid,
       .footer-grid,
@@ -763,6 +929,114 @@
               </tr>
             </tbody>
           </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h2>Design System</h2>
+              <p>Define the practical UI system the team should implement, including foundations, components, states, and interaction rules.</p>
+            </div>
+            <div class="chips">
+              <span class="chip">System Source: {{DESIGN_SYSTEM_SOURCE}}</span>
+              <span class="chip success">Density: {{DESIGN_SYSTEM_DENSITY}}</span>
+            </div>
+          </div>
+          <div class="three-up">
+            <article class="visual-card">
+              <span class="label">Foundations</span>
+              <h3>{{DS_FOUNDATIONS_TITLE}}</h3>
+              <p>{{DS_FOUNDATIONS_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">Components</span>
+              <h3>{{DS_COMPONENTS_TITLE}}</h3>
+              <p>{{DS_COMPONENTS_DETAIL}}</p>
+            </article>
+            <article class="visual-card">
+              <span class="label">States And Interaction</span>
+              <h3>{{DS_STATES_TITLE}}</h3>
+              <p>{{DS_STATES_DETAIL}}</p>
+            </article>
+          </div>
+          <table class="spec-table">
+            <thead>
+              <tr>
+                <th>System Area</th>
+                <th>Default Direction</th>
+                <th>Prompt Adjustment</th>
+                <th>Usage Rule</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{{DS_AREA_1}}</td>
+                <td>{{DS_DEFAULT_1}}</td>
+                <td>{{DS_ADJUSTMENT_1}}</td>
+                <td>{{DS_RULE_1}}</td>
+              </tr>
+              <tr>
+                <td>{{DS_AREA_2}}</td>
+                <td>{{DS_DEFAULT_2}}</td>
+                <td>{{DS_ADJUSTMENT_2}}</td>
+                <td>{{DS_RULE_2}}</td>
+              </tr>
+              <tr>
+                <td>{{DS_AREA_3}}</td>
+                <td>{{DS_DEFAULT_3}}</td>
+                <td>{{DS_ADJUSTMENT_3}}</td>
+                <td>{{DS_RULE_3}}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="component-grid">
+            <article class="specimen-card">
+              <span class="label">Component Examples</span>
+              <h3>Buttons, Inputs, Groups, Panels</h3>
+              <div class="example-frame">
+                <div class="button-row">
+                  <button class="example-button primary" type="button">Primary Action</button>
+                  <button class="example-button" type="button">Secondary</button>
+                  <button class="example-button ghost" type="button">Ghost</button>
+                  <button class="example-button danger" type="button">Destructive</button>
+                </div>
+                <label class="field-stack">
+                  <span class="field-label">Example Text Input</span>
+                  <input class="example-input" type="text" value="Compact admin input field" />
+                </label>
+                <div class="example-group">
+                  <div class="example-box">Filter group</div>
+                  <div class="example-box">Status chip set</div>
+                  <div class="example-box">Context actions</div>
+                </div>
+                <div class="example-panel">
+                  <strong>{{EXAMPLE_PANEL_TITLE}}</strong>
+                  <p>{{EXAMPLE_PANEL_DETAIL}}</p>
+                </div>
+              </div>
+            </article>
+            <article class="specimen-card">
+              <span class="label">Tokens And Surfaces</span>
+              <h3>Radii, Shades, And Layout Texture</h3>
+              <div class="example-frame">
+                <div class="token-row">
+                  <span class="token-chip"><span class="swatch"></span> Accent</span>
+                  <span class="token-chip"><span class="swatch panel"></span> Panel</span>
+                  <span class="token-chip"><span class="swatch panel-strong"></span> Strong Panel</span>
+                  <span class="token-chip"><span class="swatch border"></span> Border</span>
+                </div>
+                <div class="radius-demo">
+                  <div class="radius-box sm" title="12px"></div>
+                  <div class="radius-box md" title="18px"></div>
+                  <div class="radius-box lg" title="20px"></div>
+                </div>
+                <label class="field-stack">
+                  <span class="field-label">Example Multiline Surface</span>
+                  <textarea class="example-textarea">Corner radii, layered charcoal surfaces, warm accent treatment, and restrained elevation should stay consistent across panels, inputs, and groups.</textarea>
+                </label>
+              </div>
+            </article>
+          </div>
         </section>
 
         <section class="panel">

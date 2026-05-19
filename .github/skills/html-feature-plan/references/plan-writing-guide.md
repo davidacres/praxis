@@ -15,12 +15,13 @@ Use this order unless the user requests a different shape:
 9. Verification and rollout
 10. Open questions and decision log
 11. Styles, colors, and branding direction
+12. Design system guidance
 
 For UI-heavy or mockup-led work, also add:
 
-12. Whiteboard sketch to working UI
-13. Screenshot to working clone
-14. Visual inventory and fidelity notes
+13. Whiteboard sketch to working UI
+14. Screenshot to working clone
+15. Visual inventory and fidelity notes
 
 ## Content Rules
 
@@ -34,6 +35,9 @@ For UI-heavy or mockup-led work, also add:
 - Explain the target fidelity level: pixel-close clone, behavior-close adaptation, or design-system translation.
 - Add a styles, colors, and branding section that explains the intended visual identity in practical implementation terms.
 - If the prompt contains brand cues, preserve them; otherwise recommend a default warm Claude Code-style direction and label it as a fallback recommendation.
+- Add a design system section that defines foundations, component usage, states, spacing rules, and interaction guidance in practical implementation terms.
+- If the prompt contains design-system cues, preserve them; otherwise recommend the planner's default compact admin-tool design system and label it as a fallback recommendation.
+- Add working component examples so the design-system guidance includes rendered specimens for primary controls and containers, not only prose and tables.
 
 ## Styling Rules
 
@@ -49,3 +53,4 @@ For UI-heavy or mockup-led work, also add:
 - Keep CSS inside a single `<style>` block.
 - Avoid external libraries.
 - Avoid JavaScript unless the request explicitly requires interactive behavior.
+- When operating in artifact-generation mode, write the result to `docs/html/` and provide a path for the main file plus any supporting files.

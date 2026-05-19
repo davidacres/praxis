@@ -17,17 +17,20 @@ Generate a planning artifact as a complete HTML document instead of markdown.
 - The plan needs to combine scope, sequencing, risk, dependency, and verification detail in one document.
 - The user has sketches, screenshots, wireframes, or mockups that need to be translated into a buildable UI plan or visual PRD.
 - The reader would benefit from explicit style, palette, and brand recommendations alongside the implementation plan.
+- The user wants a generated artifact they can open immediately in the internal browser instead of only reading inline chat output.
 
 ## Procedure
 
 1. Gather the concrete planning inputs from the user request, nearby code, existing docs, tickets, and configuration.
-2. Separate confirmed facts from assumptions, unknowns, and decisions that still need confirmation.
-3. Build the plan around the structure in [the HTML template](./assets/feature-plan-template.html).
-4. If visual references exist, add explicit sections for whiteboard sketch to working UI and screenshot to working clone.
-5. Add a styles, colors, and branding section that either follows prompt-derived cues or falls back to the planner's Claude Code-inspired default system.
-6. Fill the document with concrete project details instead of generic filler text.
-7. Keep the output self-contained with inline CSS and a warm developer-tool visual language.
-8. Return the finished artifact as raw HTML.
+2. If key inputs are missing, ask clarifying questions before generating the final artifact.
+3. Separate confirmed facts from assumptions, unknowns, and decisions that still need confirmation.
+4. Build the plan around the structure in [the HTML template](./assets/feature-plan-template.html).
+5. If visual references exist, add explicit sections for whiteboard sketch to working UI and screenshot to working clone.
+6. Add a styles, colors, and branding section that either follows prompt-derived cues or falls back to the planner's Claude Code-inspired default system.
+7. Add a design system section that either follows prompt-derived cues or falls back to the planner's compact admin-tool defaults.
+8. Fill the document with concrete project details instead of generic filler text.
+9. Keep the output self-contained with inline CSS and a warm developer-tool visual language.
+10. Save the generated files under `docs/html/`, open the main result in the internal browser, and report links or file paths back to the user.
 
 ## Content Requirements
 
@@ -40,6 +43,9 @@ Generate a planning artifact as a complete HTML document instead of markdown.
 - For clone-oriented tasks, explain which details must match the reference closely and which can adapt to the target stack or design system.
 - Include explicit visual identity guidance: palette, typography mood, surface treatment, iconography direction, and branding notes.
 - State whether each branding suggestion is prompt-derived, reference-derived, or a default Claude Code-style fallback.
+- Include explicit design-system guidance: tokens, spacing, component families, states, interaction patterns, and layout rules.
+- State whether each design-system suggestion is prompt-derived, reference-derived, or a planner-default fallback.
+- Include working component specimens inside the document so the design system demonstrates actual buttons, text inputs, boxes, groups, panels, radii, and shade layers.
 
 ## Visual Requirements
 
