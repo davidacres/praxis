@@ -2287,13 +2287,123 @@ export class NoteTestPanelManager {
         setFeedback('Dropped issue key was empty.', true);
         return;
       }
-      vscodeApi.postMessage({
-        type: 'addTicket',
-        issueKey: normalizedIssueKey,
-        x: Math.round(dropPoint.x),
-        y: Math.round(dropPoint.y)
+      requestResolveDroppedIssue(normalizedIssueKey, dropPoint);
+      setFeedback('Resolving dropped ticket ' + normalizedIssueKey + '...');
+    }
+
+    function findNodeByIssueKey(issueKey) {
+      if (typeof issueKey !== 'string' || !issueKey.trim()) {
+        return undefined;
+      }
+      return state.nodes.find(node => node.type === 'ticket' && node.issueKey === issueKey);
+    }
+
+    function createLocalTicketNode(issue, x, y) {
+      uiState.nextConnectorIndex = Math.max(uiState.nextConnectorIndex, state.connectors.length);
+      const nodeIndex = state.nodes.length;
+      const issueKey = typeof issue.issueKey === 'string' && issue.issueKey.trim()
+        ? issue.issueKey.trim()
+        : ('TICKET-' + (nodeIndex + 1));
+      return {
+        type: 'ticket',
+        id: 'ticket-' + issueKey + '-' + nodeIndex,
+        issueKey,
+        summary: (typeof issue.summary === 'string' && issue.summary.trim()) ? issue.summary.trim() : issueKey,
+        issueType: typeof issue.issueType === 'string' ? issue.issueType : 'Unknown',
+        status: typeof issue.status === 'string' ? issue.status : 'Unknown',
+        assignee: typeof issue.assignee === 'string' ? issue.assignee : undefined,
+        priority: typeof issue.priority === 'string' ? issue.priority : undefined,
+        projectKey: (typeof issue.projectKey === 'string' && issue.projectKey.trim()) ? issue.projectKey.trim() : 'UNKNOWN',
+        x: Math.round(x),
+        y: Math.round(y)
+      };
+    }
+
+    function ensureIssueNode(issue, x, y) {
+      const existing = findNodeByIssueKey(issue.issueKey);
+      if (existing) {
+        return existing;
+      }
+      const node = createLocalTicketNode(issue, x, y);
+      state.nodes.push(node);
+      return node;
+    }
+
+    function pushConnector(sourceNodeId, targetNodeId) {
+      if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) {
+        return;
+      }
+      if (hasExistingConnector(sourceNodeId, targetNodeId)) {
+        return;
+      }
+      if (wouldCreateCycle(sourceNodeId, targetNodeId)) {
+        return;
+      }
+      state.connectors.push({
+        id: createConnectorId(),
+        sourceNodeId,
+        targetNodeId
       });
-      setFeedback('Adding dropped ticket ' + normalizedIssueKey + '...');
+    }
+
+    function applyDroppedIssuePayload(payload, dropPoint) {
+      if (!payload || typeof payload !== 'object' || !payload.mainIssue || typeof payload.mainIssue.issueKey !== 'string') {
+        setFeedback('Unable to add the dropped ticket.', true);
+        return;
+      }
+
+      const relatedIssues = Array.isArray(payload.relatedIssues)
+        ? payload.relatedIssues.filter(issue => issue && typeof issue.issueKey === 'string')
+        : [];
+      const relations = Array.isArray(payload.relations)
+        ? payload.relations.filter(relation => relation && typeof relation.sourceIssueKey === 'string' && typeof relation.targetIssueKey === 'string')
+        : [];
+
+      const includeRelated = relatedIssues.length > 0
+        ? window.confirm('Add ' + relatedIssues.length + ' related ticket' + (relatedIssues.length === 1 ? '' : 's') + ' and connect them to the dropped ticket?')
+        : false;
+
+      const mainNode = ensureIssueNode(payload.mainIssue, dropPoint.x - 125, dropPoint.y - 56);
+      uiState.selectedNodeId = mainNode.id;
+      uiState.selectedConnectorId = undefined;
+
+      if (includeRelated) {
+        let dependencyIndex = 0;
+        let childIndex = 0;
+
+        for (const relatedIssue of relatedIssues) {
+          const isDependency = relatedIssue.relation === 'dependsOn';
+          const slot = isDependency ? dependencyIndex++ : childIndex++;
+          const x = isDependency ? (mainNode.x - 320) : (mainNode.x + 320);
+          const y = mainNode.y + (slot * 148) - 72;
+          ensureIssueNode(relatedIssue, x, y);
+        }
+
+        for (const relation of relations) {
+          const sourceNode = findNodeByIssueKey(relation.sourceIssueKey);
+          const targetNode = findNodeByIssueKey(relation.targetIssueKey);
+          if (!sourceNode || !targetNode) {
+            continue;
+          }
+          pushConnector(sourceNode.id, targetNode.id);
+        }
+      }
+
+      renderNodes();
+      persistCanvasState();
+      setFeedback(
+        includeRelated
+          ? 'Dropped ticket added with related tickets and links.'
+          : 'Dropped ticket added to the canvas.'
+      );
+    }
+
+    function requestResolveDroppedIssue(issueKey, dropPoint) {
+      vscodeApi.postMessage({
+        type: 'resolveDroppedIssue',
+        issueKey,
+        dropPoint
+      });
     }
 
     function clearCanvas() {
@@ -2445,6 +2555,15 @@ export class NoteTestPanelManager {
         renderNodes();
         persistCanvasState();
         setFeedback('Website preview added.');
+        return;
+      }
+
+      if (message.type === 'resolveDroppedIssueResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to resolve dropped issue.', true);
+          return;
+        }
+        applyDroppedIssuePayload(message.payload, message.dropPoint || { x: 200, y: 120 });
       }
     });
 
