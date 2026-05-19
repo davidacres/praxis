@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { IssueDetails } from '../types';
+import type { IssueDetails, IssueSummary } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type {
   TaskDesignerFlowRecommendation,
@@ -106,6 +106,13 @@ type RecommendTaskDesignerFlow = (
   nodes: readonly TaskDesignerRecommendationNode[],
   connectors: readonly TaskDesignerRecommendationConnector[]
 ) => Promise<TaskDesignerFlowRecommendation>;
+
+interface TaskDesignerBoardRecommendationSeed {
+  boardName: string;
+  issues: readonly IssueSummary[];
+}
+
+type ResolveTaskDesignerBoardRecommendationSeed = () => Promise<TaskDesignerBoardRecommendationSeed | undefined>;
 
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -544,7 +551,8 @@ export class NoteTestPanelManager {
   constructor(
     private readonly workspaceState: vscode.Memento,
     private readonly backendService: IssueTrackerService,
-    private readonly recommendTaskDesignerFlow?: RecommendTaskDesignerFlow
+    private readonly recommendTaskDesignerFlow?: RecommendTaskDesignerFlow,
+    private readonly resolveBoardRecommendationSeed?: ResolveTaskDesignerBoardRecommendationSeed
   ) {}
 
   public open(): void {
@@ -647,6 +655,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'recommendCanvasFlow') {
       await this.handleRecommendCanvasFlowMessage(message);
+      return;
+    }
+
+    if (message.type === 'recommendBoardFlow') {
+      await this.handleRecommendBoardFlowMessage();
       return;
     }
 
@@ -964,6 +977,81 @@ export class NoteTestPanelManager {
     } catch (error) {
       await this.panel?.webview.postMessage({
         type: 'recommendCanvasFlowResult',
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  private async handleRecommendBoardFlowMessage(): Promise<void> {
+    if (!this.recommendTaskDesignerFlow) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendBoardFlowResult',
+        ok: false,
+        error: 'AI recommendation is not configured.'
+      });
+      return;
+    }
+
+    if (!this.resolveBoardRecommendationSeed) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendBoardFlowResult',
+        ok: false,
+        error: 'Board recommendation is not configured.'
+      });
+      return;
+    }
+
+    try {
+      const boardSeed = await this.resolveBoardRecommendationSeed();
+      if (!boardSeed) {
+        await this.panel?.webview.postMessage({
+          type: 'recommendBoardFlowResult',
+          ok: false,
+          error: 'No board selected. Open a board first, then try AI board recommendation.'
+        });
+        return;
+      }
+
+      if (boardSeed.issues.length === 0) {
+        await this.panel?.webview.postMessage({
+          type: 'recommendBoardFlowResult',
+          ok: false,
+          error: `Board "${boardSeed.boardName}" has no tickets to recommend.`
+        });
+        return;
+      }
+
+      if (boardSeed.issues.length < 2) {
+        await this.panel?.webview.postMessage({
+          type: 'recommendBoardFlowResult',
+          ok: false,
+          error: `Board "${boardSeed.boardName}" needs at least two tickets for AI recommendation.`
+        });
+        return;
+      }
+
+      const nodes: TaskDesignerRecommendationNode[] = boardSeed.issues.map((issue, index) => ({
+        id: `board-${issue.key}-${index}`,
+        issueKey: issue.key,
+        summary: issue.summary,
+        issueType: issue.issueType,
+        status: issue.status,
+        assignee: issue.assignee,
+        priority: issue.priority,
+        projectKey: issue.projectKey
+      }));
+      const recommendation = await this.recommendTaskDesignerFlow(nodes, []);
+      await this.panel?.webview.postMessage({
+        type: 'recommendBoardFlowResult',
+        ok: true,
+        recommendation,
+        boardName: boardSeed.boardName,
+        nodes
+      });
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'recommendBoardFlowResult',
         ok: false,
         error: error instanceof Error ? error.message : String(error)
       });
@@ -1734,6 +1822,7 @@ export class NoteTestPanelManager {
     const ticketEntryCloseButton = document.getElementById('ticket-entry-close-button');
     const deleteConnectorButton = document.getElementById('delete-connector-button');
     const recommendFlowButton = document.getElementById('recommend-flow-button');
+    const recommendBoardFlowButton = document.getElementById('recommend-board-flow-button');
     const applyRecommendationButton = document.getElementById('apply-recommendation-button');
     const rejectRecommendationButton = document.getElementById('reject-recommendation-button');
 
@@ -2733,6 +2822,46 @@ export class NoteTestPanelManager {
       });
     }
 
+    function requestRecommendBoardFlow() {
+      if (recommendBoardFlowButton instanceof HTMLButtonElement) {
+        recommendBoardFlowButton.disabled = true;
+      }
+      setFeedback('Requesting AI recommendation from current board...');
+      vscodeApi.postMessage({ type: 'recommendBoardFlow' });
+    }
+
+    function buildPreviewNodes(rawNodes) {
+      if (!Array.isArray(rawNodes)) {
+        return [];
+      }
+      const nodes = [];
+      for (let index = 0; index < rawNodes.length; index += 1) {
+        const candidate = rawNodes[index];
+        if (!candidate || typeof candidate !== 'object') {
+          continue;
+        }
+        const issueKey = typeof candidate.issueKey === 'string' ? candidate.issueKey : '';
+        if (!issueKey) {
+          continue;
+        }
+
+        nodes.push({
+          type: 'ticket',
+          id: typeof candidate.id === 'string' ? candidate.id : ('board-' + issueKey + '-' + index),
+          issueKey,
+          summary: typeof candidate.summary === 'string' ? candidate.summary : issueKey,
+          issueType: typeof candidate.issueType === 'string' ? candidate.issueType : 'Unknown',
+          status: typeof candidate.status === 'string' ? candidate.status : 'Unknown',
+          assignee: typeof candidate.assignee === 'string' ? candidate.assignee : undefined,
+          priority: typeof candidate.priority === 'string' ? candidate.priority : undefined,
+          projectKey: typeof candidate.projectKey === 'string' ? candidate.projectKey : 'UNKNOWN',
+          x: 24 + ((index % 4) * 280),
+          y: 72 + (Math.floor(index / 4) * 150)
+        });
+      }
+      return nodes;
+    }
+
     function requestApplyRecommendation() {
       if (!state.recommendation) {
         setFeedback('No recommendation to apply yet.', true);
@@ -2951,7 +3080,7 @@ export class NoteTestPanelManager {
           return;
         }
         if (action === 'recommendBoardFlow') {
-          setFeedback('AI board recommendation is not wired in Note Test yet.', true);
+          requestRecommendBoardFlow();
           return;
         }
         if (action === 'applyRecommendation') {
@@ -3086,6 +3215,21 @@ export class NoteTestPanelManager {
           .map(node => ({ ...node }));
         updateRecommendationActionState();
         setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
+        return;
+      }
+
+      if (message.type === 'recommendBoardFlowResult') {
+        if (recommendBoardFlowButton instanceof HTMLButtonElement) {
+          recommendBoardFlowButton.disabled = false;
+        }
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to generate AI recommendation from current board.', true);
+          return;
+        }
+        state.recommendation = message.recommendation || undefined;
+        state.recommendationNodes = buildPreviewNodes(message.nodes);
+        updateRecommendationActionState();
+        setFeedback('AI board recommendation ready. Use the check or x actions in the toolbar to apply or discard it.');
         return;
       }
 

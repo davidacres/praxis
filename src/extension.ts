@@ -3496,7 +3496,19 @@ export async function activate(
     async (nodes, connectors) => recommendTaskDesignerFlowWithCopilot(nodes, connectors, {
       cliPath: getCopilotCliPathOverride(),
       workingDirectory
-    })
+    }),
+    async () => {
+      const activeBoard = boardPanelManager.getActiveBoard();
+      if (!activeBoard) {
+        return undefined;
+      }
+
+      const displayDetails = await boardPanelManager.getActiveBoardDisplayDetails();
+      return {
+        boardName: activeBoard.name,
+        issues: displayDetails?.issues ?? []
+      };
+    }
   );
 
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
