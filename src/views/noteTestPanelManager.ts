@@ -3416,6 +3416,7 @@ export class NoteTestPanelManager {
         }
       }
 
+      clearRecommendation();
       renderNodes();
       persistCanvasState();
       setFeedback(
@@ -3563,6 +3564,7 @@ export class NoteTestPanelManager {
           ticketInput.value = '';
         }
         setTicketEntryOpen(false);
+        clearRecommendation();
         renderNodes();
         persistCanvasState();
         setFeedback('Ticket ' + (message.node.issueKey || 'node') + ' added.');
@@ -3581,6 +3583,7 @@ export class NoteTestPanelManager {
         state.nodes.push(message.node);
         uiState.selectedNodeId = message.node.id;
         uiState.selectedConnectorId = undefined;
+        clearRecommendation();
         renderNodes();
         persistCanvasState();
         setFeedback('Note added.');
@@ -3599,6 +3602,7 @@ export class NoteTestPanelManager {
         state.nodes.push(message.node);
         uiState.selectedNodeId = message.node.id;
         uiState.selectedConnectorId = undefined;
+        clearRecommendation();
         renderNodes();
         persistCanvasState();
         setFeedback('Website preview added.');
