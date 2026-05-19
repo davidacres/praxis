@@ -68,6 +68,15 @@ interface NoteTestStateRecoveryResult {
   warning?: string;
 }
 
+type ConnectorGraphValidationCode = 'duplicate-edge' | 'cycle';
+
+interface ConnectorGraphValidationError {
+  code: ConnectorGraphValidationCode;
+  sourceNodeId: string;
+  targetNodeId: string;
+  message: string;
+}
+
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -208,6 +217,103 @@ function normalizePersistedStateWithRecovery(rawState: unknown): NoteTestStateRe
   };
 }
 
+function detectDuplicateConnector(connectors: readonly DirectedConnector[]): DirectedConnector | undefined {
+  const seen = new Set<string>();
+  for (const connector of connectors) {
+    const key = `${connector.sourceNodeId}\u0000${connector.targetNodeId}`;
+    if (seen.has(key)) {
+      return connector;
+    }
+    seen.add(key);
+  }
+  return undefined;
+}
+
+function detectCycleConnector(connectors: readonly DirectedConnector[]): DirectedConnector | undefined {
+  const adjacency = new Map<string, string[]>();
+  for (const connector of connectors) {
+    const sourceList = adjacency.get(connector.sourceNodeId);
+    if (sourceList) {
+      sourceList.push(connector.targetNodeId);
+    } else {
+      adjacency.set(connector.sourceNodeId, [connector.targetNodeId]);
+    }
+    if (!adjacency.has(connector.targetNodeId)) {
+      adjacency.set(connector.targetNodeId, []);
+    }
+  }
+
+  const visited = new Set<string>();
+  const active = new Set<string>();
+  let cycleConnector: DirectedConnector | undefined;
+
+  const visit = (nodeId: string): boolean => {
+    visited.add(nodeId);
+    active.add(nodeId);
+    const nextNodeIds = adjacency.get(nodeId) ?? [];
+    for (const nextNodeId of nextNodeIds) {
+      if (!visited.has(nextNodeId)) {
+        if (visit(nextNodeId)) {
+          if (!cycleConnector) {
+            cycleConnector = {
+              id: '',
+              sourceNodeId: nodeId,
+              targetNodeId: nextNodeId
+            };
+          }
+          return true;
+        }
+        continue;
+      }
+      if (active.has(nextNodeId)) {
+        cycleConnector = {
+          id: '',
+          sourceNodeId: nodeId,
+          targetNodeId: nextNodeId
+        };
+        return true;
+      }
+    }
+    active.delete(nodeId);
+    return false;
+  };
+
+  for (const nodeId of adjacency.keys()) {
+    if (visited.has(nodeId)) {
+      continue;
+    }
+    if (visit(nodeId)) {
+      return cycleConnector;
+    }
+  }
+
+  return undefined;
+}
+
+function validateConnectorGraph(connectors: readonly DirectedConnector[]): ConnectorGraphValidationError | undefined {
+  const duplicate = detectDuplicateConnector(connectors);
+  if (duplicate) {
+    return {
+      code: 'duplicate-edge',
+      sourceNodeId: duplicate.sourceNodeId,
+      targetNodeId: duplicate.targetNodeId,
+      message: 'Duplicate directed links are not allowed.'
+    };
+  }
+
+  const cycleConnector = detectCycleConnector(connectors);
+  if (cycleConnector) {
+    return {
+      code: 'cycle',
+      sourceNodeId: cycleConnector.sourceNodeId,
+      targetNodeId: cycleConnector.targetNodeId,
+      message: 'Directed links cannot create cycles.'
+    };
+  }
+
+  return undefined;
+}
+
 type NoteTestToolbarIcon =
   | 'select'
   | 'ticket'
@@ -321,6 +427,10 @@ export class NoteTestPanelManager {
 
     if (message.type === 'persist' || message.type === 'persistCanvasState') {
       const recoveredState = normalizePersistedStateWithRecovery(message.state ?? message);
+      const graphError = validateConnectorGraph(recoveredState.state.connectors);
+      if (graphError) {
+        return;
+      }
       await this.workspaceState.update(NOTE_TEST_STATE_KEY, recoveredState.state);
       this.syncNextNodeIndex(recoveredState.state.nodes);
       return;
