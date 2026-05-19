@@ -9,6 +9,8 @@ import type {
 import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersistence';
 
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
+const MASTER_PLAN_DIRECTORY_NAME = 'plans';
+const MASTER_PLAN_FILE_NAME = 'master-plan.md';
 
 type LinkHandleDirection = 'top' | 'right' | 'bottom' | 'left';
 
@@ -312,6 +314,48 @@ function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | We
   return Boolean(node && node.type !== 'ticket');
 }
 
+function buildMasterPlanMarkdown(nodes: readonly TicketNode[], connectors: readonly DirectedConnector[]): string {
+  const nodeById = new Map(nodes.map(node => [node.id, node]));
+  const lines: string[] = [
+    '# Master Plan',
+    '',
+    `Generated from Note Test on ${new Date().toISOString()}.`,
+    '',
+    '## Tickets',
+    ''
+  ];
+
+  if (nodes.length === 0) {
+    lines.push('1. No ticket nodes are currently defined.');
+  } else {
+    for (const [index, node] of nodes.entries()) {
+      lines.push(`${index + 1}. **${node.issueKey}** - ${node.summary || '(no summary)'}`);
+    }
+  }
+
+  lines.push('', '## Dependencies', '');
+  if (connectors.length === 0) {
+    lines.push('1. No explicit directed dependencies are currently defined.');
+  } else {
+    let order = 1;
+    for (const connector of connectors) {
+      const source = nodeById.get(connector.sourceNodeId);
+      const target = nodeById.get(connector.targetNodeId);
+      if (!source || !target) {
+        continue;
+      }
+      lines.push(`${order}. ${source.issueKey} -> ${target.issueKey}`);
+      order += 1;
+    }
+    if (order === 1) {
+      lines.push('1. No explicit directed dependencies are currently defined.');
+    }
+  }
+
+  lines.push('', '## Verification', '', '1. Validate dependency ordering against connector graph.', '2. Run `npm run check-types`.');
+  return `${lines.join('\n')}\n`;
+}
+
 function normalizePersistedStateWithRecovery(rawState: unknown): NoteTestStateRecoveryResult {
   const recovered = normalizeTaskDesignerPersistedState(rawState);
   return {
@@ -585,6 +629,11 @@ export class NoteTestPanelManager {
 
     if (message.type === 'applyRecommendation') {
       await this.handleApplyRecommendationMessage(message);
+      return;
+    }
+
+    if (message.type === 'generateMasterPlan') {
+      await this.handleGenerateMasterPlanMessage(message);
     }
   }
 
@@ -1025,6 +1074,64 @@ export class NoteTestPanelManager {
       ok: true,
       state: nextState
     });
+  }
+
+  private async handleGenerateMasterPlanMessage(message: Record<string, unknown>): Promise<void> {
+    const state = normalizePersistedState(message.state);
+    const ticketNodes = state.nodes.filter(isTicketNode);
+    const ticketNodeIds = new Set(ticketNodes.map(node => node.id));
+    const ticketConnectors = state.connectors.filter(
+      connector => ticketNodeIds.has(connector.sourceNodeId) && ticketNodeIds.has(connector.targetNodeId)
+    );
+
+    if (ticketNodes.length === 0) {
+      await this.panel?.webview.postMessage({
+        type: 'generateMasterPlanResult',
+        ok: false,
+        error: 'Add at least one ticket node before generating a master plan.'
+      });
+      return;
+    }
+
+    const graphError = validateConnectorGraph(ticketConnectors);
+    if (graphError) {
+      await this.panel?.webview.postMessage({
+        type: 'generateMasterPlanResult',
+        ok: false,
+        error: `Cannot generate master plan: ${graphError.message}`
+      });
+      return;
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      await this.panel?.webview.postMessage({
+        type: 'generateMasterPlanResult',
+        ok: false,
+        error: 'Open a workspace folder before generating a master plan.'
+      });
+      return;
+    }
+
+    const plansDirectoryUri = vscode.Uri.joinPath(workspaceFolder.uri, MASTER_PLAN_DIRECTORY_NAME);
+    const masterPlanFileUri = vscode.Uri.joinPath(plansDirectoryUri, MASTER_PLAN_FILE_NAME);
+    const markdown = buildMasterPlanMarkdown(ticketNodes, ticketConnectors);
+
+    try {
+      await vscode.workspace.fs.createDirectory(plansDirectoryUri);
+      await vscode.workspace.fs.writeFile(masterPlanFileUri, new TextEncoder().encode(markdown));
+      await this.panel?.webview.postMessage({
+        type: 'generateMasterPlanResult',
+        ok: true,
+        outputPath: masterPlanFileUri.fsPath
+      });
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'generateMasterPlanResult',
+        ok: false,
+        error: `Unable to write ${MASTER_PLAN_DIRECTORY_NAME}\\${MASTER_PLAN_FILE_NAME}: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
   }
 
   private getHtml(nonce: string, initialState: NoteTestState): string {
@@ -2622,6 +2729,23 @@ export class NoteTestPanelManager {
       setFeedback('Applying AI recommendation...');
     }
 
+    function requestGenerateMasterPlan() {
+      if (!state.nodes.some(node => node.type === 'ticket')) {
+        setFeedback('Add at least one ticket node before generating a master plan.', true);
+        return;
+      }
+      setFeedback('Generating master plan artifact...');
+      vscodeApi.postMessage({
+        type: 'generateMasterPlan',
+        state: {
+          nodes: state.nodes.map(node => ({ ...node })),
+          connectors: state.connectors.map(connector => ({ ...connector })),
+          zoom: uiState.zoom,
+          toolbarPosition: { x: uiState.toolbarPosition.x, y: uiState.toolbarPosition.y }
+        }
+      });
+    }
+
     function rejectRecommendation() {
       state.recommendation = undefined;
       state.recommendationNodes = [];
@@ -2796,7 +2920,7 @@ export class NoteTestPanelManager {
           return;
         }
         if (action === 'generateMasterPlan') {
-          setFeedback('Master plan generation is not wired in Note Test yet.', true);
+          requestGenerateMasterPlan();
           return;
         }
         if (action === 'recommendFlow') {
@@ -2966,6 +3090,15 @@ export class NoteTestPanelManager {
         state.recommendationNodes = [];
         updateRecommendationActionState();
         setFeedback('AI recommendation applied.');
+        return;
+      }
+
+      if (message.type === 'generateMasterPlanResult') {
+        if (!message.ok) {
+          setFeedback(message.error || 'Unable to generate master plan.', true);
+          return;
+        }
+        setFeedback('Master plan generated at ' + (message.outputPath || 'plans/master-plan.md') + '.');
       }
     });
 
