@@ -3200,13 +3200,19 @@ export class NoteTestPanelManager {
       updateDeleteConnectorState();
     }
 
-    function addNote() {
+    function addNote(options) {
       const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
-      const point = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
+      const defaultPoint = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
+      const point = {
+        x: Math.round(options && typeof options.x === 'number' ? options.x : defaultPoint.x),
+        y: Math.round(options && typeof options.y === 'number' ? options.y : defaultPoint.y)
+      };
       vscodeApi.postMessage({
         type: 'addNote',
-        x: Math.round(point.x),
-        y: Math.round(point.y)
+        x: point.x,
+        y: point.y,
+        title: options && typeof options.title === 'string' ? options.title : undefined,
+        content: options && typeof options.content === 'string' ? options.content : undefined
       });
       setFeedback('Adding note...');
     }
@@ -3475,10 +3481,16 @@ export class NoteTestPanelManager {
       state.connectors = [];
       uiState.selectedNodeId = undefined;
       uiState.selectedConnectorId = undefined;
+      uiState.linkSourceNodeId = undefined;
+      clearRecommendation();
+      setActiveTool('select');
       clearLinkPreview();
       renderNodes();
       persistCanvasState();
-      setFeedback('Canvas cleared.');
+      const now = new Date();
+      const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      addNote({ title: 'Session Log', content: 'Opened: ' + dateStr + ' at ' + timeStr, x: 24, y: 72 });
     }
 
     for (const button of document.querySelectorAll('button[data-action]')) {
