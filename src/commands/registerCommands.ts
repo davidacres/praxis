@@ -1538,7 +1538,8 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
 
     vscode.commands.registerCommand('ticketManager.openNoteTest', () => {
-      deps.noteTestPanelManager.open();
+      const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
+      deps.noteTestPanelManager.open(board?.name);
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {
