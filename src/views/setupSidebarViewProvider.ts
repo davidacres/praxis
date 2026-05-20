@@ -763,7 +763,7 @@ ${connFields}`;
           if (mode === 'jiraapi') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
-            this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', true));
+            this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', false));
             this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
             this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
             this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
@@ -1024,7 +1024,7 @@ ${connFields}`;
       config.update('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim(), target),
       config.update('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim(), target),
       config.update('jiraPolling.requiredLabel', (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg', target),
-      config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false', target)
+      config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'false') === 'true', target)
     ]);
   }
 

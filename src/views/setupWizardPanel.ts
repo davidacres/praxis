@@ -199,7 +199,7 @@ export class SetupWizardPanel {
           if (mode === 'jiraapi') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
-            this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', true);
+            this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', false);
             this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
             this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
             this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');

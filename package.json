@@ -1021,9 +1021,9 @@
         },
         "ticketManager.jiraPolling.enabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "scope": "window",
-          "markdownDescription": "Start the built-in Node.js Jira poller when the extension activates in **Jira via MCP** or **Jira API** mode. Polling activity is logged to the **Ticket Manager** output channel, and the first successful poll shows a confirmation notification."
+          "markdownDescription": "Start the built-in Node.js Jira poller when the extension activates in **Jira via MCP** or **Jira API** mode. Disabled by default (opt-in). Polling activity is logged to the **Ticket Manager** output channel, and the first successful poll shows a confirmation notification."
         },
         "ticketManager.jiraPolling.requiredLabel": {
           "type": "string",

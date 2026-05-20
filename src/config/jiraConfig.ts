@@ -265,7 +265,7 @@ export class AppConfigStore {
   }
 
   public isJiraStartupPollingEnabled(): boolean {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.enabled', true);
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.enabled', false);
   }
 
   public getJiraPollingRequiredLabel(): string {
