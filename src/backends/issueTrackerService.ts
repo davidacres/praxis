@@ -55,10 +55,10 @@ export interface IssueTrackerService extends vscode.Disposable {
   /** Display name to assign when using "Assign to me"; undefined if not known for this backend. */
   getSelfAssigneeLabel(): Promise<string | undefined>;
 
-  /** Fetch sub-tasks for a parent issue. Only supported for Jira API backend. */
+  /** Fetch sub-tasks for a parent issue. Only supported for Jira Cloud backend. */
   getSubTasks?(parentKey: string): Promise<SubTaskSummary[]>;
 
-  /** Create sub-tasks linked to a parent issue. Only supported for Jira API backend. */
+  /** Create sub-tasks linked to a parent issue. Only supported for Jira Cloud backend. */
   createSubTasks?(
     parentKey: string,
     projectKey: string,

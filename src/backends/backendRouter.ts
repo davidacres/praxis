@@ -26,7 +26,7 @@ import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../con
 import { DemoService } from '../demo/demoService';
 import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
 import { GitLabBoardService } from '../gitlab/gitLabBoardService';
-import { JiraApiService } from '../jira/jiraApiService';
+import { JiraCloudService } from '../jira/jiraCloudService';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
@@ -340,7 +340,7 @@ export class BackendRouter implements IssueTrackerService {
 
   /**
    * Get a service scoped to a specific connection.
-  * This creates the appropriate service instance (JiraApiService, LiveFolderService, etc.)
+  * This creates the appropriate service instance (JiraCloudService, LiveFolderService, etc.)
    * using the connection's stored settings and secrets.
    */
   public async serviceFor(connectionId: string): Promise<IssueTrackerService> {
@@ -381,15 +381,15 @@ export class BackendRouter implements IssueTrackerService {
       service = new GitLabBoardService(scopedConfigStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context);
     } else if (mode === 'demo') {
       service = new DemoService(scopedConfigStore);
-    } else if (mode === 'jiraapi') {
-      service = new JiraApiService(this.context, scopedConfigStore, this.output);
+    } else if (mode === 'jiracloud') {
+      service = new JiraCloudService(this.context, scopedConfigStore, this.output);
     } else if (mode === 'livefolder') {
       service = new LiveFolderService(scopedConfigStore);
     } else if (mode === 'userworkspace') {
       service = new UserWorkspaceService(scopedConfigStore, this.userWorkspaceStore);
     } else {
       // Treat any remaining legacy Jira mode as Jira Cloud.
-      service = new JiraApiService(this.context, scopedConfigStore, this.output);
+      service = new JiraCloudService(this.context, scopedConfigStore, this.output);
     }
 
     // Cache the service
@@ -419,13 +419,13 @@ export class BackendRouter implements IssueTrackerService {
           ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
-          : configuredMode === 'jiraapi'
-            ? new JiraApiService(this.context, this.configStore, this.output)
+          : configuredMode === 'jiracloud'
+            ? new JiraCloudService(this.context, this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
             : configuredMode === 'userworkspace'
               ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-              : new JiraApiService(this.context, this.configStore, this.output);
+              : new JiraCloudService(this.context, this.configStore, this.output);
     if (this.activeService instanceof LiveFolderService) {
       this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
         this._onDidReceiveExternalComment.fire(event)
@@ -442,3 +442,5 @@ export class BackendRouter implements IssueTrackerService {
     this.activeMode = undefined;
   }
 }
+
+

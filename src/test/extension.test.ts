@@ -190,7 +190,7 @@ async function writeUserMcpOverride(contents: string): Promise<void> {
 async function resetConnectionState(api: TicketManagerExtensionApi): Promise<void> {
   const config = vscode.workspace.getConfiguration('ticketManager');
   await Promise.all([
-    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiracloud', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderPath', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectKey', '', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderProjectName', '', vscode.ConfigurationTarget.Workspace),
@@ -230,7 +230,7 @@ async function configureScenario(
   const config = vscode.workspace.getConfiguration('ticketManager');
 
   await Promise.all([
-    config.update('backendMode', 'jiraapi', vscode.ConfigurationTarget.Workspace),
+    config.update('backendMode', 'jiracloud', vscode.ConfigurationTarget.Workspace),
     config.update('connectionType', 'stdio', vscode.ConfigurationTarget.Global),
     config.update('stdioCommand', 'node', vscode.ConfigurationTarget.Global),
     config.update('stdioArgs', [serverPath, `--scenario=${scenario}`], vscode.ConfigurationTarget.Global),
@@ -946,3 +946,4 @@ suite('Ticket Manager Extension', () => {
     assert.match(result.message, /missing required tools/i);
   });
 });
+

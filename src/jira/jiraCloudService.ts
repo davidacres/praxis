@@ -41,7 +41,7 @@ import {
   normalizeIssueTypeLabel
 } from '../issues/issueHierarchy';
 
-interface JiraApiUser {
+interface JiraCloudUser {
   displayName?: string;
   name?: string;
   key?: string;
@@ -74,13 +74,13 @@ function buildJiraMention(raw: unknown): string | undefined {
   return undefined;
 }
 
-interface JiraApiFieldIds {
+interface JiraCloudFieldIds {
   epicLinkFieldId?: string;
   epicLinkFieldName?: string;
   epicNameFieldId?: string;
 }
 
-interface JiraApiSearchResult {
+interface JiraCloudSearchResult {
   issues: IssueSummary[];
   total: number;
   rawIssues: Array<Record<string, unknown>>;
@@ -369,6 +369,20 @@ function extractJiraErrorMessage(
     if (details) {
       return details;
     }
+
+    const message =
+      asString(value.message) ??
+      asString(value.errorMessage) ??
+      asString(value.error_description) ??
+      asString(value.error);
+    if (message) {
+      const code = asString(value.code);
+      return code ? `${code}: ${message}` : message;
+    }
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim();
   }
 
   if (bodyText && bodyText.trim().length > 0) {
@@ -604,12 +618,12 @@ function buildBoardColumns(issues: IssueSummary[]): BoardColumn[] {
     }));
 }
 
-export class JiraApiService implements IssueTrackerService {
-  public readonly mode: BackendMode = 'jiraapi';
+export class JiraCloudService implements IssueTrackerService {
+  public readonly mode: BackendMode = 'jiracloud';
 
   private cachedProjects?: Project[];
-  private fieldIds?: JiraApiFieldIds;
-  private currentUser?: JiraApiUser;
+  private fieldIds?: JiraCloudFieldIds;
+  private currentUser?: JiraCloudUser;
   private readonly oauthService: JiraCloudOAuthService;
 
   public constructor(
@@ -631,7 +645,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   public async checkConnection(): Promise<ConnectionCheck> {
-    if (!this.configStore.hasJiraApiConfig()) {
+    if (!this.configStore.hasJiraCloudConfig()) {
       return {
         status: 'error',
         message: 'No Jira Cloud connection is configured.',
@@ -764,7 +778,7 @@ export class JiraApiService implements IssueTrackerService {
       boards.push(...(await this.fetchAgileBoards()));
     } catch (error) {
       agileLoadError = error instanceof Error ? error.message : String(error);
-      this.output.appendLine(`[jiraapi] Failed to load Jira Cloud boards: ${agileLoadError}`);
+      this.output.appendLine(`[jiracloud] Failed to load Jira Cloud boards: ${agileLoadError}`);
     }
 
     const linkedEpicKey = this.getLinkedEpicKey();
@@ -784,7 +798,7 @@ export class JiraApiService implements IssueTrackerService {
         });
       } catch (error) {
         this.output.appendLine(
-          `[jiraapi] Failed to load linked epic board ${linkedEpicKey}: ${error instanceof Error ? error.message : String(error)}`
+          `[jiracloud] Failed to load linked epic board ${linkedEpicKey}: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }
@@ -879,7 +893,7 @@ export class JiraApiService implements IssueTrackerService {
         throw new Error('Invalid Jira Cloud board identifier.');
       }
       const epic = await this.getIssue(epicKey);
-      await this.configStore.setJiraApiEpicBoardName(inputName);
+      await this.configStore.setJiraCloudEpicBoardName(inputName);
       return {
         id: _boardId,
         name: inputName,
@@ -900,9 +914,9 @@ export class JiraApiService implements IssueTrackerService {
         if (!inputJql) {
           throw new Error('Board JQL cannot be empty.');
         }
-        await this.configStore.setJiraApiBoardJql(inputJql);
+        await this.configStore.setJiraCloudBoardJql(inputJql);
       }
-      await this.configStore.setJiraApiBoardName(inputName);
+      await this.configStore.setJiraCloudBoardName(inputName);
       return {
         id: _boardId,
         name: inputName,
@@ -1233,7 +1247,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private shouldUseInternalRouting(baseUrl: URL): boolean {
-    const internalDns = this.configStore.getJiraApiInternalDns().trim();
+    const internalDns = this.configStore.getJiraCloudInternalDns().trim();
     if (!internalDns) {
       return false;
     }
@@ -1568,8 +1582,8 @@ export class JiraApiService implements IssueTrackerService {
     body?: unknown
   ): Promise<unknown> {
     const candidateIps = await resolveInternalCandidateIps(
-      this.configStore.getJiraApiInternalDns(),
-      this.configStore.getJiraApiPreferredResolveIp()
+      this.configStore.getJiraCloudInternalDns(),
+      this.configStore.getJiraCloudPreferredResolveIp()
     );
     const failures: ConnectionError[] = [];
 
@@ -1626,8 +1640,8 @@ export class JiraApiService implements IssueTrackerService {
     contentType: string
   ): Promise<unknown> {
     const candidateIps = await resolveInternalCandidateIps(
-      this.configStore.getJiraApiInternalDns(),
-      this.configStore.getJiraApiPreferredResolveIp()
+      this.configStore.getJiraCloudInternalDns(),
+      this.configStore.getJiraCloudPreferredResolveIp()
     );
     const failures: ConnectionError[] = [];
 
@@ -1671,8 +1685,8 @@ export class JiraApiService implements IssueTrackerService {
     requestPath: string
   ): Promise<Buffer> {
     const candidateIps = await resolveInternalCandidateIps(
-      this.configStore.getJiraApiInternalDns(),
-      this.configStore.getJiraApiPreferredResolveIp()
+      this.configStore.getJiraCloudInternalDns(),
+      this.configStore.getJiraCloudPreferredResolveIp()
     );
     const failures: ConnectionError[] = [];
 
@@ -1745,7 +1759,7 @@ export class JiraApiService implements IssueTrackerService {
     return this.requestBinaryDirect('GET', downloadUrl.toString());
   }
 
-  private async getCurrentUser(): Promise<JiraApiUser> {
+  private async getCurrentUser(): Promise<JiraCloudUser> {
     if (this.currentUser) {
       return this.currentUser;
     }
@@ -1754,13 +1768,13 @@ export class JiraApiService implements IssueTrackerService {
     return this.currentUser;
   }
 
-  private async getFieldIds(): Promise<JiraApiFieldIds> {
+  private async getFieldIds(): Promise<JiraCloudFieldIds> {
     if (this.fieldIds) {
       return this.fieldIds;
     }
     const response = await this.requestJson('GET', '/rest/api/2/field');
     const fields = toArray(response);
-    const result: JiraApiFieldIds = {};
+    const result: JiraCloudFieldIds = {};
     for (const rawField of fields) {
       if (!isRecord(rawField)) {
         continue;
@@ -1845,7 +1859,7 @@ export class JiraApiService implements IssueTrackerService {
     fields: string[],
     startAt: number,
     maxResults: number
-  ): Promise<JiraApiSearchResult> {
+  ): Promise<JiraCloudSearchResult> {
     const cacheKey = `${jql}|${maxResults}|${startAt}`;
     const cursorToken = startAt === 0 ? undefined : this.searchCursorCache.get(cacheKey);
 
@@ -1874,7 +1888,7 @@ export class JiraApiService implements IssueTrackerService {
     return { issues, total, rawIssues, nextPageToken: responseNextToken };
   }
 
-  private async searchAllIssues(jql: string, fields: string[]): Promise<JiraApiSearchResult> {
+  private async searchAllIssues(jql: string, fields: string[]): Promise<JiraCloudSearchResult> {
     const pageSize = 100;
     const allIssues: IssueSummary[] = [];
     const allRawIssues: Array<Record<string, unknown>> = [];
@@ -1929,7 +1943,7 @@ export class JiraApiService implements IssueTrackerService {
       return orderedStatuses.length > 0 ? orderedStatuses : undefined;
     } catch (error) {
       this.output.appendLine(
-        `[jiraapi] Failed to load workflow statuses for ${projectKey}: ${error instanceof Error ? error.message : String(error)}`
+        `[jiracloud] Failed to load workflow statuses for ${projectKey}: ${error instanceof Error ? error.message : String(error)}`
       );
       return undefined;
     }
@@ -2054,14 +2068,14 @@ export class JiraApiService implements IssueTrackerService {
 
       if (orderedStatuses.length > 0) {
         this.output.appendLine(
-          `[jiraapi] Using agile board ${rapidViewId} status order: ${orderedStatuses.join(' | ')}`
+          `[jiracloud] Using agile board ${rapidViewId} status order: ${orderedStatuses.join(' | ')}`
         );
       }
 
       return orderedStatuses;
     } catch (error) {
       this.output.appendLine(
-        `[jiraapi] Failed to load agile board configuration for ${rapidViewId}: ${error instanceof Error ? error.message : String(error)}`
+        `[jiracloud] Failed to load agile board configuration for ${rapidViewId}: ${error instanceof Error ? error.message : String(error)}`
       );
       return [];
     }
@@ -2097,7 +2111,7 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private getLinkedEpicBoardName(): string | undefined {
-    return this.configStore.getJiraApiEpicBoardName().trim() || undefined;
+    return this.configStore.getJiraCloudEpicBoardName().trim() || undefined;
   }
 
   private parseJqlBoardQuery(board: Board): string | undefined {
@@ -2126,15 +2140,15 @@ export class JiraApiService implements IssueTrackerService {
   }
 
   private getLinkedEpicKey(): string | undefined {
-    return this.configStore.getJiraApiEpicKey().trim() || undefined;
+    return this.configStore.getJiraCloudEpicKey().trim() || undefined;
   }
 
   private getLinkedBoardJql(): string | undefined {
-    return this.configStore.getJiraApiBoardJql().trim() || undefined;
+    return this.configStore.getJiraCloudBoardJql().trim() || undefined;
   }
 
   private getLinkedBoardName(): string | undefined {
-    return this.configStore.getJiraApiBoardName().trim() || undefined;
+    return this.configStore.getJiraCloudBoardName().trim() || undefined;
   }
 
   private buildJqlBoardName(jql: string): string {
@@ -2325,3 +2339,6 @@ export class JiraApiService implements IssueTrackerService {
     }
   }
 }
+
+
+

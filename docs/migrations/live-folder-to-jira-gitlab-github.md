@@ -1,25 +1,25 @@
-# Live Folder Migration Plan: Jira API, GitLab, and GitHub
+# Live Folder Migration Plan: Jira Cloud, GitLab, and GitHub
 
 ## Goal
 
 Implement a reliable migration path from Live Folder markdown plans to hosted issue trackers:
 
-- Jira API first, using the existing `jiraapi` backend and linked-epic commands.
+- Jira Cloud first, using the existing `jiracloud` backend key and linked-epic commands.
 - GitLab next, accounting for the repository's existing GitLab MR/delivery helpers and different issue model.
 - GitHub after a GitHub issue/board backend service is designed and added; no such backend service is currently present in `src`.
 
 ## Current State
 
 - Live Folder mode can read and optionally write markdown features, stories, tasks, and bugs.
-- `Ticket Manager: Migrate Live Folder to Jira API` exists as the current migration surface.
-- `Ticket Manager: Link Jira API Epic` links a workspace to a Jira API epic.
-- Jira API supports direct Jira Server/Data Center issue, transition, comment, attachment, and sub-task operations.
+- `Ticket Manager: Migrate Live Folder to Jira Cloud` exists as the current migration surface.
+- `Ticket Manager: Link Jira Cloud Epic` links a workspace to a Jira Cloud epic.
+- Jira Cloud supports direct issue, transition, comment, attachment, and sub-task operations through Atlassian Cloud APIs.
 - GitLab support exists for API/MR delivery workflows, but it is not a full issue/board backend equivalent to Jira/File mode.
 - GitHub settings/setup exist, but no GitHub issue/board backend service is currently present in `src`.
 
 ## Phase 1 — Command and UI Surfaces
 
-1. Keep `Ticket Manager: Migrate Live Folder to Jira API` as the Jira-specific entry point.
+1. Keep `Ticket Manager: Migrate Live Folder to Jira Cloud` as the Jira-specific entry point.
 2. Add a generalized migration command only after at least two targets share the same migration flow, for example `Ticket Manager: Migrate Live Folder`.
 3. Add setup-view affordances:
    - show the current Live Folder source path
@@ -65,7 +65,7 @@ Create a target-neutral migration model first:
 
 Target-specific rules:
 
-- Jira API: map `Feature` to Epic when appropriate; map Story/Task/Bug/Sub-task according to Jira project issue types.
+- Jira Cloud: map `Feature` to Epic when appropriate; map Story/Task/Bug/Sub-task according to Jira project issue types.
 - GitLab: decide whether Live Folder items become issues, epics, labels, milestones, or issue tasks; GitLab's model differs from Jira.
 - GitHub: design the backend first; likely map items to issues with labels, milestones, projects, and task lists.
 
@@ -73,7 +73,7 @@ Target-specific rules:
 
 1. Preserve hierarchy:
    - Feature → Story/Task/Bug in Live Folder
-   - Jira API: Epic → Story/Task/Bug, with sub-tasks only where Jira issue types require it
+   - Jira Cloud: Epic → Story/Task/Bug, with sub-tasks only where Jira issue types require it
    - GitLab: Epic/Issue relationship or labels/milestones depending on available APIs and instance tier
    - GitHub: Issue hierarchy through task lists, sub-issues, labels, projects, or tracked-by links depending on supported APIs
 2. Store source-to-target mappings:
@@ -132,7 +132,7 @@ Target-specific rules:
    - hierarchy mapping
    - idempotency matching
 2. Integration-style tests with fake services:
-   - Jira API migration create/update/resume
+   - Jira Cloud migration create/update/resume
    - GitLab target mapping without full issue backend assumptions
    - GitHub target blocked until backend service exists
 3. Regression tests:

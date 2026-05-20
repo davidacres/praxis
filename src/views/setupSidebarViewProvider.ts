@@ -492,7 +492,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
       { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
       { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
-      { mode: 'jiraapi', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
+      { mode: 'jiracloud', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
     if (!vscode.workspace.workspaceFolders?.length) {
@@ -543,8 +543,8 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       case 'jira':
         fields = this.renderJiraFields();
         break;
-      case 'jiraapi':
-        fields = this.renderJiraApiFields();
+      case 'jiracloud':
+        fields = this.renderJiraCloudFields();
         break;
       case 'demo':
         fields = '<p class="info-text">Demo mode uses sample data — no additional configuration needed.</p>';
@@ -685,12 +685,12 @@ ${fields}
 ${connFields}`;
   }
 
-  private renderJiraApiFields(): string {
+  private renderJiraCloudFields(): string {
     const clientId = escapeHtml(this.setupFields.jiraOAuthClientId ?? '');
     const siteName = escapeHtml(this.setupFields.jiraCloudSiteName ?? '');
     const siteUrl = escapeHtml(this.setupFields.jiraCloudSiteUrl ?? '');
-    const epicKey = escapeHtml(this.setupFields.jiraApiEpicKey ?? '');
-    const boardJql = escapeHtml(this.setupFields.jiraApiBoardJql ?? '');
+    const epicKey = escapeHtml(this.setupFields.jiraCloudEpicKey ?? '');
+    const boardJql = escapeHtml(this.setupFields.jiraCloudBoardJql ?? '');
     const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
     const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
     const connectedSiteLabel = siteName || siteUrl;
@@ -712,12 +712,12 @@ ${connFields}`;
 </div>
 <div class="form-group">
   <label>Linked Epic Key</label>
-  <input type="text" data-field="jiraApiEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
+  <input type="text" data-field="jiraCloudEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
   <div class="help-text">Workspace-level epic associated with this repo. Jira Cloud issue creation uses it as the default parent, and an epic board is shown when set.</div>
 </div>
 <div class="form-group">
   <label>Board JQL Query</label>
-  <input type="text" data-field="jiraApiBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
+  <input type="text" data-field="jiraCloudBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
   <div class="help-text">Optional workspace-level JQL query exposed as a Jira Cloud board.</div>
 </div>
 <div class="settings-section">
@@ -760,15 +760,15 @@ ${connFields}`;
           if (mode === 'gitlab') {
             this.hasGitLabApiKeySecret = !!(await this.context.secrets.get('ticketManager.gitlabApiKey'));
           }
-          if (mode === 'jiraapi') {
+          if (mode === 'jiracloud') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
             this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', false));
             this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
             this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
             this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-            this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-            this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
+            this.setupFields.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
+            this.setupFields.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
           }
           this.render();
         }
@@ -965,10 +965,10 @@ ${connFields}`;
         }
         break;
       }
-      case 'jiraapi':
+      case 'jiracloud':
         await updateSetting('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim());
-        await updateSetting('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim());
-        await updateSetting('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim());
+        await updateSetting('jiraCloudEpicKey', (this.setupFields.jiraCloudEpicKey ?? '').trim());
+        await updateSetting('jiraCloudBoardJql', (this.setupFields.jiraCloudBoardJql ?? '').trim());
         await updateSetting(
           'jiraPolling.requiredLabel',
           (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'
@@ -1019,10 +1019,10 @@ ${connFields}`;
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
     await Promise.all([
-      config.update('backendMode', 'jiraapi', target),
+      config.update('backendMode', 'jiracloud', target),
       config.update('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim(), target),
-      config.update('jiraApiEpicKey', (this.setupFields.jiraApiEpicKey ?? '').trim(), target),
-      config.update('jiraApiBoardJql', (this.setupFields.jiraApiBoardJql ?? '').trim(), target),
+      config.update('jiraCloudEpicKey', (this.setupFields.jiraCloudEpicKey ?? '').trim(), target),
+      config.update('jiraCloudBoardJql', (this.setupFields.jiraCloudBoardJql ?? '').trim(), target),
       config.update('jiraPolling.requiredLabel', (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg', target),
       config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'false') === 'true', target)
     ]);
@@ -1033,7 +1033,8 @@ ${connFields}`;
     this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
     this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
     this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-    this.setupFields.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-    this.setupFields.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
+    this.setupFields.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
+    this.setupFields.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
   }
 }
+

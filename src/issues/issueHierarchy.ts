@@ -82,7 +82,7 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
     };
   }
 
-  const allowedParentTypes = mode === 'jira' || mode === 'jiraapi' ? ['Epic'] : ['Epic', 'Feature'];
+  const allowedParentTypes = mode === 'jira' || mode === 'jiracloud' ? ['Epic'] : ['Epic', 'Feature'];
   return {
     canHaveParent: true,
     requiresParent: false,
@@ -145,3 +145,4 @@ export function buildParentValidationMessage(
   }
   return `${childLabel} items can only belong to ${formatAllowedTypeList(rule.allowedParentTypes)}. "${parentLabel}" is not allowed.`;
 }
+

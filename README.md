@@ -2,7 +2,7 @@
 
 Ticket Manager is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface.
 
-It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira Cloud/API, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
+It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira Cloud, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
 Current extension version: 0.0.29
 
@@ -55,7 +55,7 @@ Configured through `ticketManager.backendMode` and, for tracked boards, through 
 
 | Mode | Value | Current support |
 | --- | --- | --- |
-| Jira Cloud / Jira API | `jiraapi` | Primary hosted tracker mode. Supports board and issue operations, comments, transitions, attachments, linked-epic flows, polling, and delivery automation. |
+| Jira Cloud | `jiracloud` | Primary hosted tracker mode. Supports board and issue operations, comments, transitions, attachments, linked-epic flows, polling, and delivery automation. |
 | Demo | `demo` | Built-in sample data for extension development and demos. |
 | GitHub | `github` | Configuration surface exists, but full board/issue parity with Jira is not implemented. |
 | GitLab | `gitlab` | Connection and delivery/MR workflows exist, but the issue/board model does not match Jira parity. |

@@ -47,7 +47,8 @@ interface AtlassianTokenResponse {
 const REQUIRED_JIRA_CLOUD_SCOPES = [
   'read:board-scope:jira-software',
   'read:project:jira',
-  'read:issue-details:jira'
+  'read:issue-details:jira',
+  'read:jira-user'
 ] as const;
 
 function parseJsonValue<T>(value: string | undefined): T | undefined {

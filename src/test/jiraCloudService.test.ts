@@ -1,7 +1,7 @@
 import * as assert from 'node:assert';
-import { resolveBoardWorkflowStatusOrder } from '../jira/jiraApiService';
+import { resolveBoardWorkflowStatusOrder } from '../jira/jiraCloudService';
 
-suite('jiraApiService', () => {
+suite('jiraCloudService', () => {
   test('uses exact agile board status order when board configuration is available', () => {
     const orderedStatuses = resolveBoardWorkflowStatusOrder(
       ['Selected for Development', 'In Progress', 'In Review', 'Done'],

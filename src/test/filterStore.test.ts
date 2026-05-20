@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import type { Memento, ExtensionContext } from 'vscode';
-import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from '../state/filterStore';
+import { FilterStore, shouldAdoptJiraCloudEpicIssueScope } from '../state/filterStore';
 
 class MemoryMemento implements Memento {
   private readonly store = new Map<string, unknown>();
@@ -34,9 +34,9 @@ function createContext(): ExtensionContext {
 }
 
 suite('FilterStore', () => {
-  test('recognizes the untouched default issue scope for Jira API epic migration', () => {
+  test('recognizes the untouched default issue scope for Jira Cloud epic migration', () => {
     assert.strictEqual(
-      shouldAdoptJiraApiEpicIssueScope({
+      shouldAdoptJiraCloudEpicIssueScope({
         projectKeys: [],
         statuses: [],
         issueTypes: [],
@@ -51,7 +51,7 @@ suite('FilterStore', () => {
 
   test('does not override an explicitly broadened or narrowed issue scope', () => {
     assert.strictEqual(
-      shouldAdoptJiraApiEpicIssueScope({
+      shouldAdoptJiraCloudEpicIssueScope({
         projectKeys: [],
         statuses: [],
         issueTypes: [],
@@ -64,7 +64,7 @@ suite('FilterStore', () => {
     );
 
     assert.strictEqual(
-      shouldAdoptJiraApiEpicIssueScope({
+      shouldAdoptJiraCloudEpicIssueScope({
         projectKeys: [],
         statuses: ['In Progress'],
         issueTypes: [],

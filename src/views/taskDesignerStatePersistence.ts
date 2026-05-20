@@ -204,12 +204,15 @@ function toDirectedConnector(value: unknown): TaskDesignerDirectedConnector | un
     return undefined;
   }
 
+  const sourceDirection = asLinkHandleDirection(value.sourceDirection);
+  const targetDirection = asLinkHandleDirection(value.targetDirection);
+
   return {
     id,
     sourceNodeId,
     targetNodeId,
-    sourceDirection: asLinkHandleDirection(value.sourceDirection),
-    targetDirection: asLinkHandleDirection(value.targetDirection)
+    ...(sourceDirection ? { sourceDirection } : {}),
+    ...(targetDirection ? { targetDirection } : {})
   };
 }
 

@@ -2,7 +2,7 @@
 
 `JiraPollingService` is the Node.js polling and delivery runtime used by the extension and by standalone local debugging commands.
 
-The extension can start the poller when `ticketManager.jiraPolling.enabled` is true and the active backend is Jira via MCP or Jira API. This setting is disabled by default, so polling is opt-in. In Jira API mode, the poller also follows the linked workspace epic from `ticketManager.jiraApiEpicKey`; linked-epic tasks are synced regardless of label, while the required label controls which tasks are eligible for AI execution.
+The extension can start the poller when `ticketManager.jiraPolling.enabled` is true and the active backend is Jira via MCP or Jira Cloud. This setting is disabled by default, so polling is opt-in. In Jira Cloud mode, the poller also follows the linked workspace epic from `ticketManager.jiraCloudEpicKey`; linked-epic tasks are synced regardless of label, while the required label controls which tasks are eligible for AI execution.
 
 In its default standalone configuration, it polls Jira every 30 seconds and reports issues in project `KAMAI` that:
 
@@ -74,7 +74,7 @@ $env:JIRA_TOKEN = "your-jira-personal-access-token"
 node .\JiraPollingService\node\cli.js --once
 ```
 
-To test the same linked-epic path the extension uses in Jira API mode without editing `appsettings.json`:
+To test the same linked-epic path the extension uses in Jira Cloud mode without editing `appsettings.json`:
 
 ```powershell
 $env:JIRA_TOKEN = "your-jira-personal-access-token"
@@ -95,9 +95,9 @@ When launched by the extension, the poller is controlled by Ticket Manager setti
 - `ticketManager.jiraPolling.enabled`
 - `ticketManager.jiraPolling.requiredLabel`
 - `ticketManager.jiraPolling.clarificationAnalysis`
-- `ticketManager.jiraApiBaseUrl`
-- `ticketManager.jiraApiToken` or `JIRA_TOKEN`
-- `ticketManager.jiraApiEpicKey`
+- `ticketManager.jiraCloudBaseUrl`
+- `ticketManager.jiraCloudToken` or `JIRA_TOKEN`
+- `ticketManager.jiraCloudEpicKey`
 - `ticketManager.delivery.defaultBaseBranch`
 - `ticketManager.delivery.autoMergeSubTasks`
 - `ticketManager.ai.deliveryWorkflowEnabled`
@@ -108,7 +108,7 @@ When launched by the extension, the poller is controlled by Ticket Manager setti
 - `ticketManager.ai.deliverySummaryTemplate`
 - `ticketManager.ai.deliveryFailureTemplate`
 
-Delivery mode uses the Jira API path for comments, attachments, linked epic/sub-task data, and artifact publication. Jira MCP mode can still be used for browsing, but direct attachment upload/download is handled by Jira API support.
+Delivery mode uses the Jira Cloud REST path for comments, attachments, linked epic/sub-task data, and artifact publication. Jira MCP mode can still be used for browsing, but direct attachment upload/download is handled through the Jira Cloud backend.
 
 ## Build
 
@@ -175,3 +175,4 @@ On startup, the service logs the Jira board reference and JQL. On each polling c
 1. This project is intentionally isolated from the existing TokenWise application structure.
 2. It is kept in its own folder so the standalone poller can still be run independently of the extension during debugging.
 3. If board-column filtering is needed beyond project, label, and raw Jira status, the next step would be to query Jira Agile board/filter metadata and fold that into the polling logic.
+

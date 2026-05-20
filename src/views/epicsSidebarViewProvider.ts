@@ -9,7 +9,7 @@ interface EpicsSidebarCallbacks {
   onSelectEpic: (issueKey: string, openFullPanel?: boolean) => Promise<void>;
   onCreateEpic: () => Promise<void>;
   onEditEpic: (issueKey: string) => Promise<void>;
-  onLinkEpic: (issueKey: string) => Promise<void>;
+  onSetDefaultEpic: (issueKey: string) => Promise<void>;
   onDeleteEpic: (issueKey: string) => Promise<void>;
   onSetSearchText?: (searchText: string) => Promise<void>;
   onSetStatuses?: (statuses: string[]) => Promise<void>;
@@ -110,7 +110,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private statusOptions: string[] = [];
   private epics: IssueSummary[] = [];
   private errorMessage?: string;
-  private linkedEpicKey?: string;
+  private defaultEpicKey?: string;
   private requestGeneration = 0;
   private supportingDataGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
@@ -151,8 +151,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     this.render();
   }
 
-  public setLinkedEpicKey(issueKey: string | undefined): void {
-    this.linkedEpicKey = issueKey?.trim() || undefined;
+  public setDefaultEpicKey(issueKey: string | undefined): void {
+    this.defaultEpicKey = issueKey?.trim() || undefined;
     this.render();
   }
 
@@ -192,7 +192,17 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         return;
       }
 
-      this.epics = epics;
+      const defaultEpicKey = this.defaultEpicKey;
+      this.epics = defaultEpicKey
+        ? [...epics].sort((left, right) => {
+            const leftIsDefault = left.key === defaultEpicKey;
+            const rightIsDefault = right.key === defaultEpicKey;
+            if (leftIsDefault === rightIsDefault) {
+              return 0;
+            }
+            return leftIsDefault ? -1 : 1;
+          })
+        : epics;
       this.errorMessage = undefined;
     } catch (error) {
       if (generation !== this.requestGeneration) {
@@ -284,8 +294,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         return async () => this.callbacks.onSelectEpic(issueKey, Boolean(payload.openFullPanel));
       case 'editEpic':
         return async () => this.callbacks.onEditEpic(issueKey);
-      case 'linkEpic':
-        return async () => this.callbacks.onLinkEpic(issueKey);
+      case 'setDefaultEpic':
+        return async () => this.callbacks.onSetDefaultEpic(issueKey);
       case 'deleteEpic':
         return async () => this.callbacks.onDeleteEpic(issueKey);
       default:
@@ -457,15 +467,9 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       .epic-row.selected {
         background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground));
       }
-      .epic-row.linked {
+      .epic-row.default-epic {
         background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
         box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-textLink-foreground) 35%, transparent);
-      }
-      .epic-row.linked-other {
-        opacity: 0.45;
-      }
-      .epic-row.linked-other:hover {
-        opacity: 0.62;
       }
       .row-main {
         display: flex;
@@ -580,7 +584,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       .epic-row.selected .item-key {
         color: inherit;
       }
-      .epic-row.linked .item-key {
+      .epic-row.default-epic .item-key {
         color: var(--vscode-textLink-foreground);
       }
       .epic-row.selected .item-meta {
@@ -600,16 +604,44 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         background: color-mix(in srgb, var(--vscode-textLink-foreground) 14%, transparent);
         border: 1px solid color-mix(in srgb, var(--vscode-textLink-foreground) 24%, transparent);
       }
+      .context-menu {
+        position: fixed;
+        z-index: 3;
+        min-width: 210px;
+        display: none;
+        flex-direction: column;
+        box-sizing: border-box;
+        border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
+        border-radius: 6px;
+        background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.22);
+        overflow: hidden;
+      }
+      .context-menu.open {
+        display: flex;
+      }
+      .context-menu button {
+        border: none;
+        background: transparent;
+        color: var(--vscode-menu-foreground, var(--vscode-editor-foreground));
+        text-align: left;
+        padding: 8px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .context-menu button:hover {
+        background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground));
+        color: var(--vscode-menu-selectionForeground, var(--vscode-editor-foreground));
+      }
+      .context-menu button:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
       .done .item-key,
       .done .item-summary,
       .done .item-meta {
         text-decoration: line-through;
         text-decoration-thickness: 1px;
-      }
-      .row-actions {
-        display: flex;
-        align-items: center;
-        gap: 4px;
       }
       .icon-button {
         display: inline-flex;
@@ -623,10 +655,6 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         background: transparent;
         color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
         cursor: pointer;
-      }
-      .row-actions .icon-button {
-        width: 24px;
-        height: 24px;
       }
       .icon-button:hover {
         border-color: var(--vscode-widget-border, transparent);
@@ -705,6 +733,17 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         });
       }
 
+      const contextMenu = document.getElementById('epicContextMenu');
+      const setDefaultEpicMenuItem = document.getElementById('setDefaultEpicMenuItem');
+      let currentContextIssueKey;
+
+      function closeContextMenu() {
+        if (contextMenu) {
+          contextMenu.classList.remove('open');
+        }
+        currentContextIssueKey = undefined;
+      }
+
       for (const row of document.querySelectorAll('[data-epic-key]')) {
         row.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'selectEpic', issueKey: row.getAttribute('data-epic-key') });
@@ -716,28 +755,47 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
             openFullPanel: true
           });
         });
-      }
+        row.addEventListener('contextmenu', event => {
+          event.preventDefault();
+          const issueKey = row.getAttribute('data-epic-key');
+          if (!issueKey || !contextMenu || !setDefaultEpicMenuItem) {
+            return;
+          }
 
-      for (const button of document.querySelectorAll('[data-edit-epic-key]')) {
-        button.addEventListener('click', event => {
-          event.stopPropagation();
-          vscodeApi.postMessage({ type: 'editEpic', issueKey: button.getAttribute('data-edit-epic-key') });
+          currentContextIssueKey = issueKey;
+          const isDefaultEpic = row.getAttribute('data-is-default') === 'true';
+          setDefaultEpicMenuItem.disabled = isDefaultEpic;
+          contextMenu.style.left = event.clientX + 'px';
+          contextMenu.style.top = event.clientY + 'px';
+          contextMenu.classList.add('open');
         });
       }
 
-      for (const button of document.querySelectorAll('[data-link-epic-key]')) {
-        button.addEventListener('click', event => {
+      if (setDefaultEpicMenuItem) {
+        setDefaultEpicMenuItem.addEventListener('click', event => {
           event.stopPropagation();
-          vscodeApi.postMessage({ type: 'linkEpic', issueKey: button.getAttribute('data-link-epic-key') });
+          if (!currentContextIssueKey) {
+            return;
+          }
+          vscodeApi.postMessage({ type: 'setDefaultEpic', issueKey: currentContextIssueKey });
+          closeContextMenu();
         });
       }
 
-      for (const button of document.querySelectorAll('[data-delete-epic-key]')) {
-        button.addEventListener('click', event => {
-          event.stopPropagation();
-          vscodeApi.postMessage({ type: 'deleteEpic', issueKey: button.getAttribute('data-delete-epic-key') });
-        });
-      }
+      document.addEventListener('click', event => {
+        if (!contextMenu) {
+          return;
+        }
+        if (!contextMenu.contains(event.target)) {
+          closeContextMenu();
+        }
+      });
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          closeContextMenu();
+        }
+      });
     </script>
   </body>
 </html>`;
@@ -759,7 +817,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     return `${this.renderSearchRow(epicStatuses)}<div class="item-list">
       ${this.epics
         .map(epic => {
-          const isLinked = this.linkedEpicKey === epic.key;
+          const isDefaultEpic = this.defaultEpicKey === epic.key;
           const epicTitle = `${epic.key}: ${epic.summary}`;
           const epicProjectLabel = [
             epic.projectName ? `${epic.projectKey} • ${epic.projectName}` : epic.projectKey
@@ -769,46 +827,30 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           const classes = [
             'epic-row',
             this.selectedIssueKey === epic.key ? 'selected' : '',
-            isLinked ? 'linked' : '',
-            this.linkedEpicKey && !isLinked ? 'linked-other' : '',
+            isDefaultEpic ? 'default-epic' : '',
             isDoneIssue(epic) ? 'done' : ''
           ]
             .filter(Boolean)
             .join(' ');
-          return `<div class="${classes}" data-epic-key="${escapeHtml(epic.key)}" title="${escapeHtml(epicTitle)}">
+          return `<div class="${classes}" data-epic-key="${escapeHtml(epic.key)}" data-is-default="${isDefaultEpic ? 'true' : 'false'}" title="${escapeHtml(epicTitle)}">
             <div class="row-main">
               <div class="row-left">
                 <div class="item-key">${escapeHtml(epic.key)}</div>
                 ${renderIssueTypeBadge(epic.issueType)}
-                ${isLinked ? '<span class="link-pill">Linked</span>' : ''}
+                ${isDefaultEpic ? '<span class="link-pill">Default</span>' : ''}
                 <div class="item-summary">${escapeHtml(epic.summary)}</div>
                 <div class="item-meta">${escapeHtml(epicProjectLabel)}</div>
               </div>
               <div class="row-right">
                 ${renderStatusBadge(epic.status)}
-                <div class="row-actions">
-                  ${renderIconButton(`editEpic-${epic.key}`, 'Edit EPIC', 'edit').replace(
-                    'id="editEpic-' + epic.key + '"',
-                    `id="editEpic-${epic.key}" data-edit-epic-key="${escapeHtml(epic.key)}"`
-                  )}
-                  ${renderIconButton(
-                    `linkEpic-${epic.key}`,
-                    isLinked ? 'Linked to this repo' : 'Link EPIC to this repo',
-                    'link'
-                  ).replace(
-                    'id="linkEpic-' + epic.key + '"',
-                    `id="linkEpic-${epic.key}" data-link-epic-key="${escapeHtml(epic.key)}"`
-                  )}
-                  ${renderIconButton(`deleteEpic-${epic.key}`, 'Delete EPIC', 'delete').replace(
-                    'id="deleteEpic-' + epic.key + '"',
-                    `id="deleteEpic-${epic.key}" data-delete-epic-key="${escapeHtml(epic.key)}"`
-                  )}
-                </div>
               </div>
             </div>
           </div>`;
         })
         .join('')}
+    </div>
+    <div class="context-menu" id="epicContextMenu">
+      <button id="setDefaultEpicMenuItem" type="button">Set as default EPIC for this repo</button>
     </div>`;
   }
 

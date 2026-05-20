@@ -4,19 +4,15 @@
     "ticketManager.jiraPolling.requiredLabel": "syscfg",
     "ticketManager.jiraPolling.enabled": true,
     "ticketManager.planFilePath": "",
-    "ticketManager.liveFolderPath": "",
-    "ticketManager.liveFolderAllowIssueCreation": true,
-    "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": "",
     "ticketManager.gitlabUrl": "https://git.tools.dev.assaabloyglobalsolutions.net/",
-    "ticketManager.jiraApiEpicKey": "",
-    "ticketManager.jiraApiBoardJql": "project = KAMAI ORDER BY Rank ASC",
+    "ticketManager.jiraCloudEpicKey": "",
+    "ticketManager.jiraCloudBoardJql": "project = KAMAI ORDER BY Rank ASC",
     "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
     "ticketManager.jiraCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
     "ticketManager.jiraCloudSiteName": "aags-assaabloy",
     "ticketManager.jiraCloudSiteUrl": "https://aags-assaabloy.atlassian.net",
     "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
-    "ticketManager.jiraApiBoardName": "KAMAI",
+    "ticketManager.jiraCloudBoardName": "KAMAI",
     "ticketManager.gitlabListAllAccessibleBoards": true,
     "ticketManager.connections": [
         {
@@ -75,5 +71,10 @@
         }
     ],
     "ticketManager.boardsSidebarPreviewMode": "work",
-    "ticketManager.workModeEnabled": false
+    "ticketManager.workModeEnabled": false,
+    "ticketManager.backendMode": "jiracloud",
+    "ticketManager.liveFolderPath": "",
+    "ticketManager.liveFolderAllowIssueCreation": true,
+    "ticketManager.liveFolderProjectKey": "",
+    "ticketManager.liveFolderProjectName": ""
 }

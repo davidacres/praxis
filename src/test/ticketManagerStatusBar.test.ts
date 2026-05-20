@@ -23,7 +23,7 @@ suite('TicketManagerStatusBar', () => {
 
   test('shows default AI provider in healthy state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jiraapi',
+      backendMode: 'jiracloud',
       connection: {
         status: 'ok',
         message: 'Connected. 3 accessible project(s) found.',
@@ -65,7 +65,7 @@ suite('TicketManagerStatusBar', () => {
 
   test('surfaces paused sessions and pending approvals as attention state', () => {
     const presentation = buildTicketManagerStatusPresentation({
-      backendMode: 'jiraapi',
+      backendMode: 'jiracloud',
       connection: {
         status: 'ok',
         message: 'Connected.',
@@ -90,3 +90,4 @@ suite('TicketManagerStatusBar', () => {
     assert.ok(presentation.tooltipMarkdown.includes('Open Sessions'));
   });
 });
+

@@ -28,7 +28,7 @@ import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
-import { JiraApiService } from '../jira/jiraApiService';
+import { JiraCloudService } from '../jira/jiraCloudService';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
 import {
@@ -292,7 +292,7 @@ async function loadAllIssuesForMigration(
   return issues;
 }
 
-async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promise<void> {
+async function runLiveFolderToJiraCloudMigration(deps: CommandDependencies): Promise<void> {
   if (deps.backendService.mode !== 'livefolder') {
     await vscode.window.showWarningMessage(
       'Switch to Live Folder mode before running Live Folder to Jira Cloud migration.'
@@ -300,7 +300,7 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
     return;
   }
 
-  if (!deps.configStore.hasJiraApiConfig()) {
+  if (!deps.configStore.hasJiraCloudConfig()) {
     await vscode.window.showErrorMessage(
       'Configure Jira Cloud mode first, then run the migration again.'
     );
@@ -345,8 +345,8 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
     return;
   }
 
-  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
-  const projects = await jiraApiService.getProjects();
+  const jiraCloudService = new JiraCloudService(deps.context, deps.configStore, deps.output);
+  const projects = await jiraCloudService.getProjects();
   if (projects.length === 0) {
     await vscode.window.showWarningMessage('No Jira projects are available in Jira Cloud mode.');
     return;
@@ -392,7 +392,7 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
     if (!epicSummary) {
       return;
     }
-    const createdEpic = await jiraApiService.createIssue({
+    const createdEpic = await jiraCloudService.createIssue({
       projectKey: targetProject.key,
       issueType: 'Epic',
       summary: epicSummary,
@@ -411,10 +411,10 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
     if (!epicKey) {
       return;
     }
-    await jiraApiService.getIssue(epicKey);
+    await jiraCloudService.getIssue(epicKey);
   }
 
-  await deps.configStore.setJiraApiEpicKey(epicKey);
+  await deps.configStore.setJiraCloudEpicKey(epicKey);
 
   const childIssues = allIssues
     .filter(issue => issue.parentKey === feature.key)
@@ -436,7 +436,7 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
           increment: childIssues.length > 0 ? 100 / childIssues.length : 100
         });
         try {
-          await jiraApiService.createIssue({
+          await jiraCloudService.createIssue({
             projectKey: targetProject.key,
             issueType: issue.issueType,
             summary: issue.summary,
@@ -469,21 +469,21 @@ async function runLiveFolderToJiraApiMigration(deps: CommandDependencies): Promi
   );
 
   if (switchChoice === 'Switch to Jira Cloud') {
-    await setBackendMode(deps, 'jiraapi');
+    await setBackendMode(deps, 'jiracloud');
     await vscode.window.showInformationMessage('Backend mode is now Jira Cloud.');
   }
 }
 
-async function linkJiraApiEpicToWorkspace(deps: CommandDependencies): Promise<void> {
-  if (!deps.configStore.hasJiraApiConfig()) {
+async function linkJiraCloudEpicToWorkspace(deps: CommandDependencies): Promise<void> {
+  if (!deps.configStore.hasJiraCloudConfig()) {
     await vscode.window.showErrorMessage(
       'Configure Jira Cloud mode first, then link an epic to this workspace.'
     );
     return;
   }
 
-  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
-  const currentEpicKey = deps.configStore.getJiraApiEpicKey();
+  const jiraCloudService = new JiraCloudService(deps.context, deps.configStore, deps.output);
+  const currentEpicKey = deps.configStore.getJiraCloudEpicKey();
   const epicKey = await vscode.window.showInputBox({
     title: 'Linked Jira Cloud Epic Key',
     prompt:
@@ -497,32 +497,32 @@ async function linkJiraApiEpicToWorkspace(deps: CommandDependencies): Promise<vo
 
   const trimmedEpicKey = epicKey.trim();
   if (!trimmedEpicKey) {
-    await deps.configStore.setJiraApiEpicKey(undefined);
+    await deps.configStore.setJiraCloudEpicKey(undefined);
     await vscode.window.showInformationMessage('Cleared the linked Jira Cloud epic for this workspace.');
     return;
   }
 
-  const epic = await jiraApiService.getIssue(trimmedEpicKey);
+  const epic = await jiraCloudService.getIssue(trimmedEpicKey);
   if (epic.issueType !== 'Epic') {
     throw new Error(`${trimmedEpicKey} is a ${epic.issueType}, not an Epic.`);
   }
 
-  await deps.configStore.setJiraApiEpicKey(trimmedEpicKey);
+  await deps.configStore.setJiraCloudEpicKey(trimmedEpicKey);
   await vscode.window.showInformationMessage(
     `Linked this workspace to Jira epic ${trimmedEpicKey}.`
   );
 }
 
-async function linkJiraApiBoardQueryToWorkspace(deps: CommandDependencies): Promise<void> {
-  if (!deps.configStore.hasJiraApiConfig()) {
+async function linkJiraCloudBoardQueryToWorkspace(deps: CommandDependencies): Promise<void> {
+  if (!deps.configStore.hasJiraCloudConfig()) {
     await vscode.window.showErrorMessage(
       'Configure Jira Cloud mode first, then set a board JQL query for this workspace.'
     );
     return;
   }
 
-  const jiraApiService = new JiraApiService(deps.context, deps.configStore, deps.output);
-  const currentBoardJql = deps.configStore.getJiraApiBoardJql();
+  const jiraCloudService = new JiraCloudService(deps.context, deps.configStore, deps.output);
+  const currentBoardJql = deps.configStore.getJiraCloudBoardJql();
   const boardJql = await vscode.window.showInputBox({
     title: 'Linked Jira Cloud Board JQL',
     prompt:
@@ -536,13 +536,13 @@ async function linkJiraApiBoardQueryToWorkspace(deps: CommandDependencies): Prom
 
   const trimmedBoardJql = boardJql.trim();
   if (!trimmedBoardJql) {
-    await deps.configStore.setJiraApiBoardJql(undefined);
+    await deps.configStore.setJiraCloudBoardJql(undefined);
     await vscode.window.showInformationMessage('Cleared the linked Jira Cloud board query for this workspace.');
     return;
   }
 
-  await jiraApiService.validateBoardJql(trimmedBoardJql);
-  await deps.configStore.setJiraApiBoardJql(trimmedBoardJql);
+  await jiraCloudService.validateBoardJql(trimmedBoardJql);
+  await deps.configStore.setJiraCloudBoardJql(trimmedBoardJql);
   await vscode.window.showInformationMessage('Linked this workspace to a Jira Cloud JQL board query.');
 }
 
@@ -676,7 +676,7 @@ function toTransitionQuickPickItems(
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  jiraapi: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  jiracloud: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   gitlab: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
@@ -939,8 +939,8 @@ async function promptForCreateIssueInput(
 
   const parentRule = getParentRule(pickedType.label, deps.backendService.mode);
   const linkedEpicKey =
-    deps.backendService.mode === 'jiraapi' && parentRule.allowedParentTypes.includes('Epic')
-      ? deps.configStore.getJiraApiEpicKey()
+    deps.backendService.mode === 'jiracloud' && parentRule.allowedParentTypes.includes('Epic')
+      ? deps.configStore.getJiraCloudEpicKey()
       : undefined;
   const defaultParentKey =
     selectedIssue &&
@@ -1029,31 +1029,31 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     vscode.commands.registerCommand('ticketManager.importMarkdownFeaturePlan', async () => {
       await runMarkdownFeaturePlanImport(deps);
     }),
-    vscode.commands.registerCommand('ticketManager.migrateLiveFolderToJiraApi', async () => {
+    vscode.commands.registerCommand('ticketManager.migrateLiveFolderToJiraCloud', async () => {
       try {
-        await runLiveFolderToJiraApiMigration(deps);
+        await runLiveFolderToJiraCloudMigration(deps);
       } catch (error) {
-        reportCommandError(deps, 'livefolder-jiraapi-migration', error);
+        reportCommandError(deps, 'livefolder-jira-cloud-migration', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.linkJiraApiEpic', async () => {
+    vscode.commands.registerCommand('ticketManager.linkJiraCloudEpic', async () => {
       try {
-        await linkJiraApiEpicToWorkspace(deps);
+        await linkJiraCloudEpicToWorkspace(deps);
       } catch (error) {
-        reportCommandError(deps, 'link-jiraapi-epic', error);
+        reportCommandError(deps, 'link-jira-cloud-epic', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.linkJiraApiBoardQuery', async () => {
+    vscode.commands.registerCommand('ticketManager.linkJiraCloudBoardQuery', async () => {
       try {
-        await linkJiraApiBoardQueryToWorkspace(deps);
+        await linkJiraCloudBoardQueryToWorkspace(deps);
       } catch (error) {
-        reportCommandError(deps, 'link-jiraapi-board-query', error);
+        reportCommandError(deps, 'link-jira-cloud-board-query', error);
         await vscode.window.showErrorMessage(
           error instanceof Error ? error.message : String(error)
         );
@@ -1714,3 +1714,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     })
   ];
 }
+
+
+

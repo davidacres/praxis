@@ -59,8 +59,8 @@ interface SetupState {
   jiraOAuthClientId: string;
   jiraCloudSiteName: string;
   jiraCloudSiteUrl: string;
-  jiraApiEpicKey: string;
-  jiraApiBoardJql: string;
+  jiraCloudEpicKey: string;
+  jiraCloudBoardJql: string;
 }
 
 function createInitialState(): SetupState {
@@ -85,8 +85,8 @@ function createInitialState(): SetupState {
     jiraOAuthClientId: '',
     jiraCloudSiteName: '',
     jiraCloudSiteUrl: '',
-    jiraApiEpicKey: '',
-    jiraApiBoardJql: '',
+    jiraCloudEpicKey: '',
+    jiraCloudBoardJql: '',
   };
 }
 
@@ -105,7 +105,7 @@ const MODE_OPTIONS: ModeOption[] = [
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
   { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
   { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
-  { mode: 'jiraapi', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
+  { mode: 'jiracloud', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
 
@@ -196,15 +196,15 @@ export class SetupWizardPanel {
         const mode = typeof message.mode === 'string' ? message.mode as SetupBackendMode : undefined;
         if (mode) {
           this.state.selectedMode = mode;
-          if (mode === 'jiraapi') {
+          if (mode === 'jiracloud') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.state.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
             this.state.jiraPollingEnabled = config.get<boolean>('jiraPolling.enabled', false);
             this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
             this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
             this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-            this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-            this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
+            this.state.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
+            this.state.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
           }
           this.state.step = 1;
           this.rerender();
@@ -337,10 +337,10 @@ export class SetupWizardPanel {
         await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
         break;
 
-      case 'jiraapi':
+      case 'jiracloud':
         await config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target);
-        await config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target);
-        await config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target);
+        await config.update('jiraCloudEpicKey', this.state.jiraCloudEpicKey.trim(), target);
+        await config.update('jiraCloudBoardJql', this.state.jiraCloudBoardJql.trim(), target);
         await config.update(
           'jiraPolling.requiredLabel',
           this.state.jiraPollingRequiredLabel.trim() || 'syscfg',
@@ -400,10 +400,10 @@ export class SetupWizardPanel {
       ? vscode.ConfigurationTarget.Workspace
       : vscode.ConfigurationTarget.Global;
     await Promise.all([
-      config.update('backendMode', 'jiraapi', target),
+      config.update('backendMode', 'jiracloud', target),
       config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target),
-      config.update('jiraApiEpicKey', this.state.jiraApiEpicKey.trim(), target),
-      config.update('jiraApiBoardJql', this.state.jiraApiBoardJql.trim(), target),
+      config.update('jiraCloudEpicKey', this.state.jiraCloudEpicKey.trim(), target),
+      config.update('jiraCloudBoardJql', this.state.jiraCloudBoardJql.trim(), target),
       config.update('jiraPolling.requiredLabel', this.state.jiraPollingRequiredLabel.trim() || 'syscfg', target),
       config.update('jiraPolling.enabled', this.state.jiraPollingEnabled, target)
     ]);
@@ -414,8 +414,8 @@ export class SetupWizardPanel {
     this.state.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
     this.state.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
     this.state.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-    this.state.jiraApiEpicKey = config.get<string>('jiraApiEpicKey', '');
-    this.state.jiraApiBoardJql = config.get<string>('jiraApiBoardJql', '');
+    this.state.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
+    this.state.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
   }
 
   /* ---------------------------------------------------------------- */
@@ -490,8 +490,8 @@ export class SetupWizardPanel {
       case 'gitlab':
         formHtml = this.renderGitlabForm();
         break;
-      case 'jiraapi':
-        formHtml = this.renderJiraApiForm();
+      case 'jiracloud':
+        formHtml = this.renderJiraCloudForm();
         break;
       case 'demo':
         formHtml = this.renderDemoForm();
@@ -679,12 +679,12 @@ export class SetupWizardPanel {
       ${httpFields}`;
   }
 
-  private renderJiraApiForm(): string {
+  private renderJiraCloudForm(): string {
     const clientId = esc(this.state.jiraOAuthClientId);
     const siteName = esc(this.state.jiraCloudSiteName);
     const siteUrl = esc(this.state.jiraCloudSiteUrl);
-    const epicKey = esc(this.state.jiraApiEpicKey);
-    const boardJql = esc(this.state.jiraApiBoardJql);
+    const epicKey = esc(this.state.jiraCloudEpicKey);
+    const boardJql = esc(this.state.jiraCloudBoardJql);
     const connectedSiteLabel = siteName || siteUrl;
     const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
     const connectionStatus = siteUrl
@@ -709,7 +709,7 @@ export class SetupWizardPanel {
             <div class="field-group">
          <label class="field-label">Linked Epic Key</label>
          <input type="text" class="field-input"
-            data-field="jiraApiEpicKey"
+            data-field="jiraCloudEpicKey"
             value="${epicKey}"
             placeholder="Optional: e.g. KAMAI-123" />
          <p class="field-hint polling-hint">Optional workspace-level epic to associate with this repo. Jira Cloud issue creation will use it as the default parent, and an epic board is shown when set.</p>
@@ -717,7 +717,7 @@ export class SetupWizardPanel {
       <div class="field-group">
         <label class="field-label">Board JQL Query</label>
         <input type="text" class="field-input"
-               data-field="jiraApiBoardJql"
+               data-field="jiraCloudBoardJql"
                value="${boardJql}"
                placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
         <p class="field-hint polling-hint">Optional workspace-level JQL query exposed as a Jira Cloud board.</p>
@@ -733,9 +733,9 @@ export class SetupWizardPanel {
                  placeholder="syscfg" />
         </div>
         <div class="field-group polling-toggle-row">
-          <label class="toggle-switch" for="jiraApiPollingEnabled">
+          <label class="toggle-switch" for="jiraCloudPollingEnabled">
             <input type="checkbox"
-                   id="jiraApiPollingEnabled"
+                   id="jiraCloudPollingEnabled"
                    data-field="jiraPollingEnabled"
                    ${this.state.jiraPollingEnabled ? 'checked' : ''} />
             <span class="toggle-slider" aria-hidden="true"></span>
@@ -1078,3 +1078,5 @@ export class SetupWizardPanel {
     `;
   }
 }
+
+

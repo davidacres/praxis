@@ -4,7 +4,7 @@
 
 This document lists the user-facing commands contributed through the extension manifest.
 
-Total contributed commands: 59
+Total contributed commands: 61
 
 | Command Title | Command Id | Category | Icon |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ Total contributed commands: 59
 | Configure Board Settings | `ticketManager.configureBoardColumns` | Ticket Manager | $(settings-gear) |
 | Configure Jira Cloud Connection | `ticketManager.configureConnection` | Ticket Manager | $(plug) |
 | Configure Project | `ticketManager.openSetup` | Ticket Manager | $(gear) |
+| Confirm Analysis Complete | `ticketManager.confirmAnalysisComplete` | Ticket Manager | $(pass) |
 | Copy Issue Key | `ticketManager.copyKey` | Ticket Manager | $(copy) |
 | Create Board | `ticketManager.createBoard` | Ticket Manager | $(new-folder) |
 | Create EPIC | `ticketManager.createEpic` | Ticket Manager | $(add) |
@@ -33,12 +34,13 @@ Total contributed commands: 59
 | Disconnect Jira Cloud | `ticketManager.disconnectJiraCloud` | Ticket Manager | $(debug-disconnect) |
 | Import Markdown Files to Template Format | `ticketManager.importMarkdownFiles` | Ticket Manager | $(file-code) |
 | Import Plan from Markdown Features | `ticketManager.importMarkdownFeaturePlan` | Ticket Manager | $(file-code) |
-| Link Jira API Board Query | `ticketManager.linkJiraApiBoardQuery` | Ticket Manager | $(list-filter) |
-| Link Jira API Epic | `ticketManager.linkJiraApiEpic` | Ticket Manager | $(link) |
+| Link Jira Cloud Board Query | `ticketManager.linkJiraCloudBoardQuery` | Ticket Manager | $(list-filter) |
+| Link Jira Cloud Epic | `ticketManager.linkJiraCloudEpic` | Ticket Manager | $(link) |
 | Load More | `ticketManager.loadMore` | Ticket Manager | $(chevron-down) |
 | Local Peer Review (LPR) | `ticketManager.localPeerReview` | Ticket Manager | $(checklist) |
-| Migrate Live Folder to Jira API | `ticketManager.migrateLiveFolderToJiraApi` | Ticket Manager | $(cloud-upload) |
+| Migrate Live Folder to Jira Cloud | `ticketManager.migrateLiveFolderToJiraCloud` | Ticket Manager | $(cloud-upload) |
 | New Project | `ticketManager.newProject` | Ticket Manager | $(rocket) |
+| Open Analysis Window | `ticketManager.openAnalysisWindow` | Ticket Manager | $(comment) |
 | Open Board | `ticketManager.openBoard` | Ticket Manager | $(go-to-file) |
 | Open Connections & Boards | `ticketManager.openConnectionsManager` | Ticket Manager | $(plug) |
 | Open External Link | `ticketManager.openInBrowser` | Ticket Manager | $(link-external) |

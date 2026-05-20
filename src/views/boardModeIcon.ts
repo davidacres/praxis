@@ -12,7 +12,7 @@ const DEFAULT_LIVEFOLDER_BOARD_ICON = '#f59e0b';
 export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
   const cfg = vscode.workspace.getConfiguration('ticketManager');
   const key =
-    mode === 'jira' || mode === 'jiraapi'
+    mode === 'jira' || mode === 'jiracloud'
       ? 'jiraBoardListIconColor'
       : mode === 'demo'
         ? 'demoBoardListIconColor'
@@ -27,7 +27,7 @@ export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
   }
   switch (mode) {
     case 'jira':
-    case 'jiraapi':
+    case 'jiracloud':
       return DEFAULT_JIRA_BOARD_ICON;
     case 'demo':
       return DEFAULT_DEMO_BOARD_ICON;
@@ -47,7 +47,7 @@ export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
 export function boardListModeIconSvg(mode: BackendMode): string {
   switch (mode) {
     case 'jira':
-    case 'jiraapi':
+    case 'jiracloud':
       return '<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M30.2 0H15.6C15.6 3.6 18.5 6.6 22.1 6.6H24.7V9.2C24.7 12.8 27.6 15.8 31.2 15.8V1C31.2 0.4 30.8 0 30.2 0Z" fill="#0052CC"/><path d="M22.1 8H7.5C7.5 11.6 10.4 14.6 14 14.6H16.6V17.2C16.6 20.8 19.5 23.8 23.1 23.8V9C23.1 8.4 22.7 8 22.1 8Z" fill="url(#paint0_linear)"/><path d="M14 16H0C0 19.6 2.9 22.6 6.5 22.6H9.1V25.2C9.1 28.8 12 31.8 15.6 31.8V17C15.6 16.4 15.2 16 14 16Z" fill="url(#paint1_linear)"/><defs><linearGradient id="paint0_linear" x1="22.9" y1="9.5" x2="16.4" y2="16.7" gradientUnits="userSpaceOnUse"><stop offset="0.18" stop-color="#0052CC"/><stop offset="1" stop-color="#2684FF"/></linearGradient><linearGradient id="paint1_linear" x1="14.2" y1="16.9" x2="7.7" y2="24.2" gradientUnits="userSpaceOnUse"><stop offset="0.18" stop-color="#0052CC"/><stop offset="1" stop-color="#2684FF"/></linearGradient></defs></svg>';
     case 'demo':
       return '<svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.2 2.8v8.4l7.3-4.2-7.3-4.2z" fill="currentColor"/></svg>';
@@ -62,3 +62,4 @@ export function boardListModeIconSvg(mode: BackendMode): string {
 
   return '<svg viewBox="0 0 14 14" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 3.5h3.5l1 1.5H12v6H2V3.5z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M5 8h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>';
 }
+
