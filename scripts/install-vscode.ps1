@@ -13,7 +13,8 @@ if (-not (Test-Path $packageJsonPath)) {
 }
 
 $packageJson = Get-Content -Raw -Path $packageJsonPath | ConvertFrom-Json
-$vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version).vsix"
+$artifactsPath = Join-Path $projectRoot 'artifacts'
+$vsixPath = Join-Path $artifactsPath "$($packageJson.name)-$($packageJson.version).vsix"
 $extensionId = "$($packageJson.publisher).$($packageJson.name)"
 $quotedVsixPath = '"' + $vsixPath + '"'
 
@@ -45,11 +46,14 @@ $codeCliPath = Get-StableVsCodeCliPath
 $quotedCodeCliPath = '"' + $codeCliPath + '"'
 
 if (-not $SkipPackage) {
+    if (-not (Test-Path $artifactsPath)) {
+        New-Item -ItemType Directory -Path $artifactsPath | Out-Null
+    }
     Push-Location $projectRoot
     try {
         $repoUrl = "https://git.example.com/example/software/ai/tools/ticket-manager-extension"
         $rawContentUrl = "$repoUrl/-/raw/main/"
-        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl
+        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl --out $vsixPath
     }
     finally {
         Pop-Location

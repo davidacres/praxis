@@ -13,7 +13,8 @@ if (-not (Test-Path $packageJsonPath)) {
 }
 
 $packageJson = Get-Content -Raw -Path $packageJsonPath | ConvertFrom-Json
-$vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version).vsix"
+$artifactsPath = Join-Path $projectRoot 'artifacts'
+$vsixPath = Join-Path $artifactsPath "$($packageJson.name)-$($packageJson.version).vsix"
 
 function Get-CursorCliPath {
     $command = Get-Command cursor -ErrorAction SilentlyContinue
@@ -38,9 +39,12 @@ function Get-CursorCliPath {
 $cursorCli = Get-CursorCliPath
 
 if (-not $SkipPackage) {
+    if (-not (Test-Path $artifactsPath)) {
+        New-Item -ItemType Directory -Path $artifactsPath | Out-Null
+    }
     Push-Location $projectRoot
     try {
-        & npx @vscode/vsce package --allow-missing-repository
+        & npx @vscode/vsce package --allow-missing-repository --out $vsixPath
     }
     finally {
         Pop-Location

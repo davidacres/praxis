@@ -8,6 +8,7 @@ dist/
 
 # Packaged extension
 *.vsix
+artifacts/
 
 # VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/

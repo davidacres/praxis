@@ -13,7 +13,8 @@ if (-not (Test-Path $packageJsonPath)) {
 }
 
 $packageJson = Get-Content -Raw -Path $packageJsonPath | ConvertFrom-Json
-$vsixPath = Join-Path $projectRoot "$($packageJson.name)-$($packageJson.version).vsix"
+$artifactsPath = Join-Path $projectRoot 'artifacts'
+$vsixPath = Join-Path $artifactsPath "$($packageJson.name)-$($packageJson.version).vsix"
 $quotedVsixPath = '"' + $vsixPath + '"'
 
 function Get-InsidersVsCodeCliPath {
@@ -54,11 +55,14 @@ $insidersCliPath = Get-InsidersVsCodeCliPath
 $quotedInsidersCliPath = '"' + $insidersCliPath + '"'
 
 if (-not $SkipPackage) {
+    if (-not (Test-Path $artifactsPath)) {
+        New-Item -ItemType Directory -Path $artifactsPath | Out-Null
+    }
     Push-Location $projectRoot
     try {
         $repoUrl = "https://git.example.com/example/software/ai/tools/ticket-manager-extension"
         $rawContentUrl = "$repoUrl/-/raw/main/"
-        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl
+        & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl --out $vsixPath
         if ($LASTEXITCODE -ne 0) {
             if (Test-Path $vsixPath) {
                 Write-Warning "Packaging failed with exit code $LASTEXITCODE. Continuing with existing VSIX: $vsixPath"
