@@ -3552,6 +3552,13 @@ export class NoteTestPanelManager {
           return;
         }
         if (action === 'reset') {
+          if (state.nodes.length === 0 && state.connectors.length === 0) {
+            setFeedback('Canvas is already empty.', false);
+            return;
+          }
+          if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
+            return;
+          }
           clearCanvas();
           return;
         }
