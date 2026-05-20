@@ -6,6 +6,7 @@ import type {
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode
 } from '../ai/aiReviewService';
+import { issueTypeHex } from '../board/issueTypeColors';
 import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersistence';
 
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
@@ -140,6 +141,7 @@ const DEFAULT_ARTIFACT_PRIORITY = 'P2';
 const DEFAULT_ARTIFACT_COMPLEXITY = 'Low';
 const DEFAULT_ARTIFACT_RISK = 'Low';
 const DEFAULT_ARTIFACT_CONFIDENCE = 'High';
+const DEFAULT_TASK_DESIGNER_TICKET_HEX = '#2563eb';
 
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -350,6 +352,41 @@ function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | We
 
 function toSingleLineText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
+}
+
+function clampColorChannel(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } | undefined {
+  const normalized = /^#?([\da-f]{6})$/i.exec(hex.trim());
+  if (!normalized) {
+    return undefined;
+  }
+  const value = normalized[1];
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16)
+  };
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${clampColorChannel(r).toString(16).padStart(2, '0')}${clampColorChannel(g).toString(16).padStart(2, '0')}${clampColorChannel(b).toString(16).padStart(2, '0')}`;
+}
+
+function shiftHex(hex: string, delta: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) {
+    return hex;
+  }
+  return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
+}
+
+function taskDesignerTicketHeaderBackground(issueType: string | undefined): string {
+  const trimmed = issueType?.trim();
+  const base = trimmed ? issueTypeHex(trimmed) : DEFAULT_TASK_DESIGNER_TICKET_HEX;
+  return `linear-gradient(135deg, ${shiftHex(base, 18)} 0%, ${shiftHex(base, -14)} 100%)`;
 }
 
 function compareNodeIds(
@@ -2906,6 +2943,9 @@ export class NoteTestPanelManager {
 
         const header = document.createElement('div');
         header.className = 'ticket-node-header ticket-node-header--' + node.type;
+        if (node.type === 'ticket') {
+          header.style.background = taskDesignerTicketHeaderBackground(node.issueType);
+        }
 
         const titleWrap = document.createElement('div');
         titleWrap.className = 'ticket-node-title-wrap';
