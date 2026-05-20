@@ -3220,15 +3220,25 @@ export class NoteTestPanelManager {
     }
 
     function addWebsitePreview() {
-      const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
-      const point = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
+      if (!(canvasSurface instanceof HTMLElement)) {
+        return;
+      }
+      const rawUrl = window.prompt('Enter a website URL for the preview component', 'https://');
+      if (rawUrl === null) {
+        return;
+      }
+      const normalized = normalizeWebsitePreviewUrl(rawUrl);
+      if (!normalized) {
+        setFeedback('Enter a valid http or https URL for the website preview.', true);
+        return;
+      }
+      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
       vscodeApi.postMessage({
         type: 'addWebsitePreview',
-        url: 'https://example.com',
-        x: Math.round(point.x),
-        y: Math.round(point.y)
+        url: normalized,
+        x: point.x,
+        y: point.y
       });
-      setFeedback('Adding website preview...');
     }
 
     function requestAddTicket() {
