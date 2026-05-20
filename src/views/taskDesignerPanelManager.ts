@@ -2393,6 +2393,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const recommendBoardFlowButton = document.getElementById('recommend-board-flow-button');
     const applyRecommendationButton = document.getElementById('apply-recommendation-button');
     const rejectRecommendationButton = document.getElementById('reject-recommendation-button');
+    const resetCanvasButton = document.getElementById('toolbar-reset-button');
     const feedback = document.getElementById('toolbar-feedback');
     const connectorsLayer = document.getElementById('connectors-layer');
     const nodesLayer = document.getElementById('nodes-layer');
@@ -2860,6 +2861,26 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           connectors: state.connectors.map(connector => ({ ...connector }))
         }
       });
+    }
+
+    function clearCanvas() {
+      if (state.nodes.length === 0 && state.connectors.length === 0) {
+        setFeedback('Canvas is already empty.', false);
+        return;
+      }
+      if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
+        return;
+      }
+      state.nodes = [];
+      state.connectors = [];
+      uiState.selectedNodeId = undefined;
+      uiState.selectedConnectorId = undefined;
+      uiState.linkSourceNodeId = undefined;
+      clearRecommendation();
+      setActiveTool('select');
+      renderNodes();
+      persistCanvasState();
+      setFeedback('Canvas cleared.', false);
     }
 
     function buildPreviewNodes(rawNodes) {
@@ -4090,26 +4111,17 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           return;
         }
         if (action === 'reset') {
-          if (state.nodes.length === 0 && state.connectors.length === 0) {
-            setFeedback('Canvas is already empty.', false);
-            return;
-          }
-          if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
-            return;
-          }
-          state.nodes = [];
-          state.connectors = [];
-          uiState.selectedNodeId = undefined;
-          uiState.selectedConnectorId = undefined;
-          uiState.linkSourceNodeId = undefined;
-          clearRecommendation();
-          setActiveTool('select');
-          renderNodes();
-          persistCanvasState();
-          setFeedback('Canvas cleared.', false);
+          clearCanvas();
           return;
         }
         vscodeApi.postMessage({ type: 'toolbarAction', action });
+      });
+    }
+
+    if (resetCanvasButton instanceof HTMLButtonElement) {
+      resetCanvasButton.addEventListener('click', event => {
+        event.preventDefault();
+        clearCanvas();
       });
     }
 
