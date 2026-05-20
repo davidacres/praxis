@@ -3354,8 +3354,12 @@ export class NoteTestPanelManager {
     }
 
     function rejectRecommendation() {
+      if (!state.recommendation) {
+        setFeedback('No AI recommendation to discard.', true);
+        return;
+      }
       clearRecommendation();
-      setFeedback('AI recommendation discarded.');
+      setFeedback('AI recommendation discarded.', false);
     }
 
     function findNodeByIssueKey(issueKey) {
