@@ -2868,9 +2868,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         setFeedback('Canvas is already empty.', false);
         return;
       }
-      if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
-        return;
-      }
       state.nodes = [];
       state.connectors = [];
       uiState.selectedNodeId = undefined;
