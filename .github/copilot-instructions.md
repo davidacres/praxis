@@ -31,9 +31,9 @@ The remote `origin` is configured as HTTPS:
 https://git.tools.dev.assaabloyglobalsolutions.net/traka/software/ai/tools/ticket-manager-extension.git
 ```
 
-Use one of the following push patterns. Both avoid SSH prompts.
+Use either of the following HTTPS push patterns.
 
-### Option A — `GITLAB_TOKEN` env var (preferred for agents)
+### Option A — `GITLAB_TOKEN` env var (optional)
 
 ```powershell
 # From inside the worktree (or with -C <worktreePath>)
@@ -44,8 +44,6 @@ git -c "http.extraHeader=Authorization: Basic $auth" push -u origin HEAD
 ```
 
 Rules:
-- Require `$env:GITLAB_TOKEN` to be present before pushing. If it is missing,
-  stop and report the failure — do not fall back to SSH.
 - Never write the token to a file, commit it, or echo it into the session
   transcript. Only pass it through `-c http.extraHeader=...` as shown above.
 - The `oauth2:` username is required by GitLab for PAT-based HTTPS auth.
@@ -57,9 +55,8 @@ git push -u origin HEAD
 ```
 
 This works on developer machines where Git Credential Manager has already cached
-HTTPS credentials. It is NOT reliable inside agent sessions because the first
-push may trigger a browser auth prompt — prefer Option A whenever the token is
-available.
+HTTPS credentials. If credential manager is configured, this is an acceptable
+default push path.
 
 ### What NOT to do
 
