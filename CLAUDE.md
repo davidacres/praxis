@@ -36,3 +36,16 @@ rather than setting `webview.html` on an existing panel after an async operation
 default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';
 ```
 Use `<style>` without a nonce attribute, and `<script nonce="${nonce}">` for scripts.
+
+**IMPORTANT: Script runtime scope**
+
+Code inside `<script nonce="...">` runs in the webview browser context and cannot call
+TypeScript helper functions declared in the extension host file scope.
+
+If script code needs helper logic (for example color/format utilities used by `renderNodes`),
+define that logic inside the webview script block (or serialize required values) rather than
+calling host-scope functions directly.
+
+Regression note:
+- Calling host-only helpers from webview script previously caused runtime errors that broke node
+	rendering and ticket add flows in Task Designer.

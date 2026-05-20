@@ -213,11 +213,6 @@
         "icon": "$(symbol-misc)"
       },
       {
-        "command": "ticketManager.openNoteTest",
-        "title": "Open Note Test Panel",
-        "category": "Ticket Manager"
-      },
-      {
         "command": "ticketManager.openConnectionsManager",
         "title": "Open Connections & Boards",
         "category": "Ticket Manager",
