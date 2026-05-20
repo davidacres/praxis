@@ -2943,6 +2943,10 @@ export class NoteTestPanelManager {
         deleteButton.className = 'ticket-node-delete';
         deleteButton.setAttribute('aria-label', 'Delete ' + getNodeLabel(node) + ' node');
         deleteButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        deleteButton.addEventListener('pointerdown', event => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
         deleteButton.addEventListener('click', event => {
           event.stopPropagation();
           state.nodes = state.nodes.filter(item => item.id !== node.id);
@@ -3590,10 +3594,7 @@ export class NoteTestPanelManager {
       clearLinkPreview();
       renderNodes();
       persistCanvasState();
-      const now = new Date();
-      const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-      const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      addNote({ title: 'Session Log', content: 'Opened: ' + dateStr + ' at ' + timeStr, x: 24, y: 72 });
+      setFeedback('Canvas cleared.', false);
     }
 
     for (const button of document.querySelectorAll('button[data-action]')) {
