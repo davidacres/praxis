@@ -3319,15 +3319,21 @@ export class NoteTestPanelManager {
 
     function requestApplyRecommendation() {
       if (!state.recommendation) {
-        setFeedback('No recommendation to apply yet.', true);
+        setFeedback('No AI recommendation to apply.', true);
+        return;
+      }
+      const recommendationNodes = buildPreviewNodes(state.recommendationNodes);
+      if (recommendationNodes.length < 2) {
+        setFeedback('Recommendation preview is missing ticket nodes.', true);
         return;
       }
       uiState.applyingRecommendation = true;
       updateRecommendationActionState();
+      setFeedback('Applying AI recommendation...');
       vscodeApi.postMessage({
         type: 'applyRecommendation',
         recommendation: state.recommendation,
-        nodes: state.recommendationNodes,
+        nodes: recommendationNodes,
         state: {
           nodes: state.nodes.map(node => ({ ...node })),
           connectors: state.connectors.map(connector => ({ ...connector })),
@@ -3335,7 +3341,6 @@ export class NoteTestPanelManager {
           toolbarPosition: { x: uiState.toolbarPosition.x, y: uiState.toolbarPosition.y }
         }
       });
-      setFeedback('Applying AI recommendation...');
     }
 
     function requestGenerateMasterPlan() {
