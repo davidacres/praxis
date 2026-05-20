@@ -2364,6 +2364,8 @@ export class NoteTestPanelManager {
       }
     }
 
+    // Keep these helpers in webview script scope. They are used by renderNodes at runtime,
+    // and host-scope TypeScript helpers are not callable from the browser context.
     const KNOWN_ISSUE_TYPE_HEX = {
       bug: '#e5534b',
       story: '#3fb950',
