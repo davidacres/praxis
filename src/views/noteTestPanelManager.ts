@@ -481,7 +481,7 @@ function buildMasterPlanMarkdown(
       return left.id.localeCompare(right.id);
     });
 
-  const description = `Generated from the Note Test graph with ${orderedNodes.length} ticket node${orderedNodes.length === 1 ? '' : 's'} and ${dependencyRows.length} dependency link${dependencyRows.length === 1 ? '' : 's'}.`;
+  const description = `Generated from the Task Designer graph with ${orderedNodes.length} ticket node${orderedNodes.length === 1 ? '' : 's'} and ${dependencyRows.length} dependency link${dependencyRows.length === 1 ? '' : 's'}.`;
   const goals = [
     'Execute planned tickets in deterministic topological order.',
     'Keep graph dependencies explicit and reviewable in markdown.',
@@ -520,7 +520,7 @@ function buildMasterPlanMarkdown(
     lines.push('1. No ticket nodes are currently defined.');
   } else {
     for (const [index, node] of orderedNodes.entries()) {
-      lines.push(`${index + 1}. **Phase ${index + 1} - ${node.issueKey}:** ${toSingleLineText(node.summary) || '(no summary)'}`);
+      lines.push(`${index + 1}. **Phase ${index + 1} — ${node.issueKey}:** ${toSingleLineText(node.summary) || '(no summary)'}`);
     }
   }
 
@@ -534,7 +534,7 @@ function buildMasterPlanMarkdown(
       if (!source || !target) {
         continue;
       }
-      lines.push(`${index + 1}. ${source.issueKey} -> ${target.issueKey}`);
+      lines.push(`${index + 1}. ${source.issueKey} → ${target.issueKey}`);
     }
   }
 
@@ -657,7 +657,7 @@ function buildGeneratedFeatureArtifacts(
       }
 
       const firstStory = stories[0];
-      const title = `Execution Slice ${toTwoDigitNumber(featureNumber)} - ${toSingleLineText(firstStory.node.summary) || firstStory.node.issueKey}`;
+      const title = `Execution Slice ${toTwoDigitNumber(featureNumber)} — ${toSingleLineText(firstStory.node.summary) || firstStory.node.issueKey}`;
       return {
         featureNumber,
         ref: toTwoDigitNumber(featureNumber),
