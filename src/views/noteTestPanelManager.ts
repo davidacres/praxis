@@ -1955,6 +1955,11 @@ export class NoteTestPanelManager {
     }
     .ticket-node.dragging { cursor: grabbing; }
     .ticket-node.is-resizing { cursor: nwse-resize; }
+    .ticket-node--note,
+    .ticket-node--website {
+      display: flex;
+      flex-direction: column;
+    }
     .ticket-node.is-selected {
       border-color: color-mix(in oklab, var(--vscode-focusBorder, #007fd4) 82%, var(--vscode-panel-border, #444));
       box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder, #007fd4) 28%, transparent), 0 12px 24px rgba(0, 0, 0, 0.18);

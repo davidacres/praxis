@@ -2064,6 +2064,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .ticket-node.is-resizing {
       cursor: nwse-resize;
     }
+    .ticket-node--note,
+    .ticket-node--website {
+      display: flex;
+      flex-direction: column;
+    }
     .ticket-node-header {
       display: flex;
       align-items: center;
@@ -2182,12 +2187,13 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .note-node-body {
       display: flex;
       flex-direction: column;
-      min-height: 110px;
+      flex: 1;
+      min-height: 0;
       margin-top: 6px;
     }
     .note-node-textarea {
       width: 100%;
-      min-height: 110px;
+      min-height: 0;
       height: 100%;
       flex: 1;
       resize: none;
@@ -2199,6 +2205,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       font: inherit;
       line-height: 1.45;
       outline: none;
+      box-sizing: border-box;
     }
     .note-node-textarea:focus {
       border-color: color-mix(in oklab, var(--vscode-focusBorder) 72%, var(--vscode-panel-border));
