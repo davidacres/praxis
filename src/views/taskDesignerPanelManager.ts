@@ -2376,7 +2376,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         </defs>
       </svg>
       <div id="nodes-layer" class="nodes-layer"></div>
-      <div class="surface-hint">Add tickets or notes to create nodes on the canvas.</div>
     </main>
   </div>
   <script nonce="${nonce}">
@@ -2398,7 +2397,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const connectorsLayer = document.getElementById('connectors-layer');
     const nodesLayer = document.getElementById('nodes-layer');
     const canvasSurface = document.querySelector('.canvas-surface');
-    const surfaceHint = document.querySelector('.surface-hint');
     const initialState = ${initialStateLiteral};
     const initialWarning = ${initialWarningLiteral};
 
@@ -2574,10 +2572,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       if (ticketEntryPanel instanceof HTMLElement) {
         ticketEntryPanel.style.left = (uiState.toolbarPosition.x + 72) + 'px';
         ticketEntryPanel.style.top = uiState.toolbarPosition.y + 'px';
-      }
-      if (surfaceHint instanceof HTMLElement) {
-        surfaceHint.style.left = (uiState.toolbarPosition.x + 72) + 'px';
-        surfaceHint.style.top = uiState.toolbarPosition.y + 'px';
       }
       if (nodesLayer instanceof HTMLElement) {
         nodesLayer.style.transformOrigin = 'top left';
@@ -3233,9 +3227,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
       console.log('[TaskDesigner] renderNodes begin', { stateNodeCount: state.nodes.length, lastNode: state.nodes[state.nodes.length - 1], nodesLayerExists: nodesLayer instanceof HTMLElement, zoom: uiState.zoom });
       nodesLayer.textContent = '';
-      if (surfaceHint) {
-        surfaceHint.style.display = state.nodes.length > 0 ? 'none' : '';
-      }
       for (const node of state.nodes) {
         const root = document.createElement('article');
         root.className = 'ticket-node ticket-node--' + node.type;
