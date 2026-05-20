@@ -917,7 +917,7 @@ export class NoteTestPanelManager {
     private readonly resolveBoardRecommendationSeed?: ResolveTaskDesignerBoardRecommendationSeed
   ) {}
 
-  public open(): void {
+  public open(boardName?: string): void {
     if (this.panel) {
       this.panel.dispose();
       this.panel = undefined;
@@ -926,19 +926,30 @@ export class NoteTestPanelManager {
     const recoveredState = this.getPersistedCanvasState();
     const state = recoveredState.state;
     this.syncNextNodeIndex(state.nodes);
+    const panelTitle = this.buildPanelTitle(boardName);
+    const wasEmpty = state.nodes.length === 0;
+    if (wasEmpty) {
+      const now = new Date();
+      const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const sessionNote = this.createNoteNode();
+      sessionNote.title = 'Session Log';
+      sessionNote.content = `Opened: ${dateStr} at ${timeStr}`;
+      state.nodes.push(sessionNote);
+    }
 
     const nonce = createNonce();
     const panel = vscode.window.createWebviewPanel(
       'ticketManager.noteTest',
-      'Note Test',
+      panelTitle,
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
 
-    panel.webview.html = this.getHtml(nonce, state);
+    panel.webview.html = this.getHtml(nonce, state, recoveredState.warning, panelTitle);
 
     this.panel = panel;
-    if (recoveredState.repaired) {
+    if (recoveredState.repaired || wasEmpty) {
       void this.workspaceState.update(NOTE_TEST_STATE_KEY, state);
     }
 
@@ -1055,11 +1066,15 @@ export class NoteTestPanelManager {
     return normalizePersistedStateWithRecovery(rawState);
   }
 
+  private buildPanelTitle(boardName: string | undefined): string {
+    return boardName?.trim() ? `Note Test - ${boardName.trim()}` : 'Note Test';
+  }
+
   private createTicketNode(issue: IssueDetails, requestedIssueKey?: string, x?: number, y?: number): TicketNode {
     const index = this.nextNodeIndex;
     this.nextNodeIndex += 1;
-    const column = index % 4;
-    const row = Math.floor(index / 4);
+    const column = index % 3;
+    const row = Math.floor(index / 3);
     const issueKey = (issue.key || requestedIssueKey || '').trim();
     if (!issueKey) {
       throw new Error('Issue details are missing a valid issue key.');
@@ -1076,7 +1091,7 @@ export class NoteTestPanelManager {
       priority: issue.priority,
       projectKey: issue.projectKey || (/^([A-Za-z]\w+)-\d+$/.exec(issueKey)?.[1] ?? 'UNKNOWN'),
       x: x === undefined ? (24 + (column * 280)) : Math.round(x),
-      y: y === undefined ? (72 + (row * 160)) : Math.round(y)
+      y: y === undefined ? (72 + (row * 150)) : Math.round(y)
     };
   }
 
@@ -1091,9 +1106,25 @@ export class NoteTestPanelManager {
       title: 'Notes',
       content: '',
       x: x === undefined ? (24 + (column * 300)) : Math.round(x),
-      y: y === undefined ? (72 + (row * 220)) : Math.round(y),
+      y: y === undefined ? (72 + (row * 210)) : Math.round(y),
       width: 280,
       height: 190
+    };
+  }
+
+  private createWebsitePreviewNode(url: string): WebsitePreviewNode {
+    const index = this.nextNodeIndex;
+    this.nextNodeIndex += 1;
+    const column = index % 3;
+    const row = Math.floor(index / 3);
+    return {
+      type: 'website',
+      id: `website-${index}`,
+      url,
+      x: 24 + (column * 320),
+      y: 72 + (row * 240),
+      width: 360,
+      height: 260
     };
   }
 
@@ -1159,16 +1190,13 @@ export class NoteTestPanelManager {
 
     const x = asNumber(message.x);
     const y = asNumber(message.y);
-    const node: WebsitePreviewNode = {
-      type: 'website',
-      id: `website-${this.nextNodeIndex}`,
-      url,
-      x: x === undefined ? 180 : Math.round(x),
-      y: y === undefined ? 90 : Math.round(y),
-      width: 360,
-      height: 260
-    };
-    this.nextNodeIndex += 1;
+    const node = this.createWebsitePreviewNode(url);
+    if (x !== undefined) {
+      node.x = Math.round(x);
+    }
+    if (y !== undefined) {
+      node.y = Math.round(y);
+    }
 
     await this.panel?.webview.postMessage({
       type: 'addWebsitePreviewResult',
@@ -1649,8 +1677,17 @@ export class NoteTestPanelManager {
     }
   }
 
-  private getHtml(nonce: string, initialState: NoteTestState): string {
+  private getHtml(
+    nonce: string,
+    initialState: NoteTestState,
+    initialWarning?: string,
+    panelTitle = 'Note Test'
+  ): string {
     const initialStateLiteral = JSON.stringify(initialState)
+      .replace(/</g, '\\u003c')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+    const initialWarningLiteral = JSON.stringify(initialWarning ?? '')
       .replace(/</g, '\\u003c')
       .replace(/\u2028/g, '\\u2028')
       .replace(/\u2029/g, '\\u2029');
@@ -1661,7 +1698,7 @@ export class NoteTestPanelManager {
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Note Test</title>
+  <title>${panelTitle.replace(/</g, '&lt;')}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -2211,6 +2248,7 @@ export class NoteTestPanelManager {
   <script nonce="${nonce}">
     const vscodeApi = acquireVsCodeApi();
     const initialState = ${initialStateLiteral};
+    const initialWarning = ${initialWarningLiteral};
 
     const canvasSurface = document.getElementById('canvas-surface');
     const nodesLayer = document.getElementById('nodes-layer');
@@ -3922,11 +3960,15 @@ export class NoteTestPanelManager {
     renderNodes();
     updateDeleteConnectorState();
 
-    setFeedback(
-      state.nodes.length === 0
-        ? 'Use ticket, note, or website tools to create components.'
-        : state.nodes.length + ' component(s) loaded.'
-    );
+    if (initialWarning) {
+      setFeedback(initialWarning, true);
+    } else {
+      setFeedback(
+        state.nodes.length === 0
+          ? 'Use ticket, note, or website tools to create components.'
+          : state.nodes.length + ' component(s) loaded.'
+      );
+    }
   </script>
 </body>
 </html>`;
