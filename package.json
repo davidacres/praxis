@@ -528,6 +528,18 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "ticketManager.openAnalysisWindow",
+        "title": "Open Analysis Window",
+        "category": "Ticket Manager",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "ticketManager.confirmAnalysisComplete",
+        "title": "Confirm Analysis Complete",
+        "category": "Ticket Manager",
+        "icon": "$(pass)"
+      },
+      {
         "command": "ticketManager.localPeerReview",
         "title": "Local Peer Review (LPR)",
         "category": "Ticket Manager",
@@ -700,6 +712,11 @@
           "command": "ticketManager.assignToAi",
           "when": "view == ticketManager.issueDetails",
           "group": "navigation@4"
+        },
+        {
+          "command": "ticketManager.openAnalysisWindow",
+          "when": "view == ticketManager.issueDetails && ticketManager.analysisGateEnabled",
+          "group": "navigation@4.5"
         },
         {
           "command": "ticketManager.assignWorkflowPack",
@@ -1200,6 +1217,24 @@
           "type": "string",
           "default": "",
           "description": "Default AI model to store on newly created live-folder markdown tickets when a model is configured. Leave empty to omit the model field."
+        },
+        "ticketManager.ai.analysisEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "Enable the per-issue analysis gate before assigning a ticket to AI."
+        },
+        "ticketManager.ai.analysisDefaultPrompt": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Required default prompt used in the Analysis Window. If empty, analysis gating is treated as disabled at runtime."
+        },
+        "ticketManager.ai.analysisDefaultModel": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Default model used by the Analysis Window. Leave empty to fall back to ticketManager.ai.defaultModel."
         },
         "ticketManager.ai.openaiAgentName": {
           "type": "string",

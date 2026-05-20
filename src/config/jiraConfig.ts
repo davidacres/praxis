@@ -530,6 +530,29 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.defaultModel', '');
   }
 
+  public getAiAnalysisEnabled(): boolean {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('ai.analysisEnabled', false);
+  }
+
+  public getAiAnalysisDefaultPrompt(): string {
+    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.analysisDefaultPrompt', '');
+  }
+
+  public getAiAnalysisDefaultModel(): string {
+    const configured = vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .get<string>('ai.analysisDefaultModel', '')
+      .trim();
+    if (configured.length > 0) {
+      return configured;
+    }
+    return this.getAiDefaultModel().trim();
+  }
+
+  public isAiAnalysisGateEnabled(): boolean {
+    return this.getAiAnalysisEnabled() && this.getAiAnalysisDefaultPrompt().trim().length > 0;
+  }
+
   public getAiOpenaiAgentName(): string {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiAgentName', '');
   }

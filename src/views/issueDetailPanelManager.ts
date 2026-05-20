@@ -255,6 +255,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       return;
     }
 
+    if (type === 'openAnalysisWindow') {
+      await vscode.commands.executeCommand('ticketManager.openAnalysisWindow', this.activeIssueKey);
+      return;
+    }
+
     if (type === 'viewAiSession') {
       await vscode.commands.executeCommand('ticketManager.viewAgentSession', this.activeIssueKey);
       return;
@@ -1591,6 +1596,9 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     document.getElementById('lprButton')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'localPeerReview' });
     });
+    document.getElementById('openAnalysisBtn')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openAnalysisWindow' });
+    });
     document.getElementById('viewAiSessionBtn')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'viewAiSession' });
     });
@@ -2002,6 +2010,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
                   ).join('')
                 : `<button type="button" class="assign-btn" id="assignToAiBtn"${delegateDisabledAttr}>Delegate to AI</button>`
               }
+              <button type="button" class="assign-btn" id="openAnalysisBtn">Open Analysis</button>
             </div>
             ${delegateDisabledHelp}
           </label>

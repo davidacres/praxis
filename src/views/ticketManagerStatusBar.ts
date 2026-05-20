@@ -19,6 +19,9 @@ export interface TicketManagerStatusSnapshot {
   activeSessionCount?: number;
   approvalSessionCount?: number;
   pausedSessionCount?: number;
+  analysisEnabled?: boolean;
+  analysisPromptConfigured?: boolean;
+  analysisModel?: string;
   lastError?: string;
   isChecking: boolean;
 }
@@ -148,12 +151,43 @@ function getSessionAttentionSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
+function getAnalysisSummary(snapshot: TicketManagerStatusSnapshot): {
+  shortLabel: string;
+  detailLabel: string;
+  tone: 'ok' | 'warning';
+} {
+  const analysisConfigured = snapshot.analysisEnabled === true;
+  if (!analysisConfigured) {
+    return {
+      shortLabel: 'off',
+      detailLabel: 'Analysis gate is disabled.',
+      tone: 'ok'
+    };
+  }
+
+  if (!snapshot.analysisPromptConfigured) {
+    return {
+      shortLabel: 'disabled',
+      detailLabel: 'Analysis gate is enabled but disabled at runtime because Analysis Default Prompt is empty.',
+      tone: 'warning'
+    };
+  }
+
+  const model = snapshot.analysisModel?.trim() || 'workspace default';
+  return {
+    shortLabel: `ready (${model})`,
+    detailLabel: `Analysis gate is enabled. Default model: ${model}.`,
+    tone: 'ok'
+  };
+}
+
 export function buildTicketManagerStatusPresentation(
   snapshot: TicketManagerStatusSnapshot
 ): TicketManagerStatusPresentation {
   const backendLabel = snapshot.connectionLabel ?? getBackendModeLabel(snapshot.backendMode);
   const aiSummary = getAiSummary(snapshot);
   const sessionAttention = getSessionAttentionSummary(snapshot);
+  const analysisSummary = getAnalysisSummary(snapshot);
 
   let tone: StatusTone = 'ok';
   if (snapshot.isChecking) {
@@ -164,6 +198,7 @@ export function buildTicketManagerStatusPresentation(
     !snapshot.backendMode ||
     snapshot.connection?.status === 'warning' ||
     aiSummary.tone === 'warning' ||
+    analysisSummary.tone === 'warning' ||
     sessionAttention.hasAttention
   ) {
     tone = 'warning';
@@ -199,6 +234,7 @@ export function buildTicketManagerStatusPresentation(
       : undefined,
     '',
     `AI: ${escapeMarkdown(aiSummary.detailLabel)}`,
+    `Analysis: ${escapeMarkdown(analysisSummary.detailLabel)}`,
     ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
     '',
@@ -210,7 +246,7 @@ export function buildTicketManagerStatusPresentation(
     : '';
 
   return {
-    text: `${icon} Ticket Manager: ${backendLabel} • AI ${aiSummary.shortLabel}${sessionAttentionSuffix}`,
+    text: `${icon} Ticket Manager: ${backendLabel} • AI ${aiSummary.shortLabel} • Analysis ${analysisSummary.shortLabel}${sessionAttentionSuffix}`,
     tooltipMarkdown: tooltipLines.join('\n'),
     tone
   };
@@ -323,6 +359,10 @@ export class TicketManagerStatusBar implements vscode.Disposable {
     this.snapshot.connectionLabel = this.resolveActiveConnectionLabel();
     this.snapshot.aiProviders = this.configStore.getConfiguredAiProviders();
     this.snapshot.defaultProvider = this.configStore.getAiDefaultProvider();
+    this.snapshot.analysisEnabled = this.configStore.getAiAnalysisEnabled();
+    this.snapshot.analysisPromptConfigured =
+      this.configStore.getAiAnalysisDefaultPrompt().trim().length > 0;
+    this.snapshot.analysisModel = this.configStore.getAiAnalysisDefaultModel();
     this.syncSessionState();
   }
 

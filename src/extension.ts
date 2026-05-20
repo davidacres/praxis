@@ -60,6 +60,7 @@ import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
+import { IssueAnalysisPanelManager } from './views/issueAnalysisPanelManager';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
@@ -3411,6 +3412,15 @@ export async function activate(
     getBoardsSidebarMode() === 'work' ? 'ticketManager.workModeSetup' : 'ticketManager.setup';
   await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
 
+  const updateAnalysisContext = async (): Promise<void> => {
+    await vscode.commands.executeCommand(
+      'setContext',
+      'ticketManager.analysisGateEnabled',
+      configStore.isAiAnalysisGateEnabled()
+    );
+  };
+  await updateAnalysisContext();
+
   const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore, connectionStore, backendService);
   const detailsProvider = new DetailsViewProvider(backendService);
@@ -3421,6 +3431,7 @@ export async function activate(
   let issueDetailsSidebarViewProvider: IssueDetailsSidebarViewProvider;
   let activeSessionsSidebarViewProvider: ActiveSessionsSidebarViewProvider;
   let issueDetailPanelManager: IssueDetailPanelManager;
+  let issueAnalysisPanelManager: IssueAnalysisPanelManager;
   const boardPanelManager = new BoardPanelManager(
     backendService,
     async issue => {
@@ -3514,6 +3525,71 @@ export async function activate(
     });
   });
 
+  issueAnalysisPanelManager = new IssueAnalysisPanelManager(
+    context.workspaceState,
+    aiSessionManager,
+    () => configStore.getAiAnalysisDefaultPrompt(),
+    () => configStore.getAiAnalysisDefaultModel(),
+    () => {
+      const options = getConfiguredAiOptions();
+      return options[0]?.label ?? 'No provider configured';
+    },
+    issueKey => backendService.getIssue(issueKey),
+    async input => {
+      const options = getConfiguredAiOptions();
+      if (options.length === 0) {
+        throw new Error('No AI providers are configured. Run Ticket Manager: Configure AI.');
+      }
+
+      const chosen = options[0];
+      const historyText = input.history
+        .map(entry => `${entry.role.toUpperCase()}: ${entry.text}`)
+        .join('\n\n');
+      const appendedPrompt = [
+        input.defaultPrompt,
+        input.model.trim() ? `Selected model hint: ${input.model.trim()}` : undefined,
+        `Question: ${input.question}`,
+        historyText ? `Conversation so far:\n${historyText}` : undefined
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join('\n\n');
+
+      const issueForAnalysis: IssueDetails = {
+        ...input.issue,
+        description: [input.issue.description ?? '', appendedPrompt].filter(Boolean).join('\n\n')
+      };
+
+      if (chosen.provider === 'openai') {
+        return reviewTicketWithOpenAi(
+          issueForAnalysis,
+          chosen.credential ?? configStore.getAiOpenaiApiKey().trim(),
+          chosen.agentName ?? chosen.label
+        );
+      }
+
+      if (chosen.provider === 'claude') {
+        return reviewTicketWithClaude(
+          issueForAnalysis,
+          chosen.credential ?? configStore.getAiClaudeApiKey().trim(),
+          chosen.agentName ?? chosen.label
+        );
+      }
+
+      if (chosen.provider === 'copilot-cli') {
+        return reviewTicketWithCopilot(
+          issueForAnalysis,
+          getCopilotCliPathOverride(),
+          chosen.agentName ?? chosen.label,
+          workingDirectory
+        );
+      }
+
+      throw new Error(
+        `${AI_PROVIDER_LABELS[chosen.provider] ?? chosen.provider} is not supported in the analysis chat. Use OpenAI, Claude, or GitHub Copilot SDK.`
+      );
+    }
+  );
+
   context.subscriptions.push(
     outputChannel,
     filterStore,
@@ -3525,6 +3601,7 @@ export async function activate(
     boardPanelManager,
     issueDetailPanelManager,
     localPeerReviewPanel,
+    issueAnalysisPanelManager,
     boardColumnStore,
     boardColumnConfigPanel,
     newProjectWizardPanel,
@@ -3608,6 +3685,7 @@ export async function activate(
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
     await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
     await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
+    await updateAnalysisContext();
   }
 
   async function revealSetupView(): Promise<void> {
@@ -4628,6 +4706,17 @@ export async function activate(
   }
 
   async function assignIssueToAi(issueKey: string, chosen: AiOptionPick): Promise<void> {
+    if (configStore.isAiAnalysisGateEnabled() && !issueAnalysisPanelManager.isConfirmed(issueKey)) {
+      const selection = await vscode.window.showWarningMessage(
+        `${issueKey} requires analysis confirmation before AI assignment.`,
+        'Open Analysis Window'
+      );
+      if (selection === 'Open Analysis Window') {
+        await issueAnalysisPanelManager.open(issueKey);
+      }
+      return;
+    }
+
     if (!(await ensureIssueCanBeDelegated(issueKey))) {
       return;
     }
@@ -5311,6 +5400,38 @@ export async function activate(
         reportError(error);
       }
     }),
+    vscode.commands.registerCommand('ticketManager.openAnalysisWindow', async (arg?: unknown) => {
+      try {
+        if (!configStore.isAiAnalysisGateEnabled()) {
+          await vscode.window.showInformationMessage(
+            'Analysis gate is disabled. Enable Ticket Manager AI Analysis and set a default analysis prompt in Settings.'
+          );
+          return;
+        }
+
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+
+        await issueAnalysisPanelManager.open(issueKey);
+      } catch (error) {
+        reportError(error, 'open-analysis-window');
+      }
+    }),
+    vscode.commands.registerCommand('ticketManager.confirmAnalysisComplete', async (arg?: unknown) => {
+      try {
+        const issueKey = resolveIssueKeyFromArgOrActive(arg);
+        if (!issueKey) {
+          await vscode.window.showInformationMessage('Select an issue first.');
+          return;
+        }
+        issueAnalysisPanelManager.markConfirmed(issueKey);
+      } catch (error) {
+        reportError(error, 'confirm-analysis-complete');
+      }
+    }),
     vscode.commands.registerCommand('ticketManager.unassignAi', async (arg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
@@ -5554,6 +5675,7 @@ export async function activate(
             ) {
               refreshAiAssignmentMenus();
               updateCommentPlaceholders();
+              void updateAnalysisContext().catch(error => reportError(error));
               void ticketManagerStatusBar.refresh().catch(error => reportError(error));
               return;
             }
@@ -5562,6 +5684,7 @@ export async function activate(
               try {
                 refreshAiAssignmentMenus();
                 updateCommentPlaceholders();
+                await updateAnalysisContext();
                 const boardsModeChanged = event.affectsConfiguration('ticketManager.boardsSidebarPreviewMode');
                 const workModeToggleChanged = event.affectsConfiguration('ticketManager.workModeEnabled');
                 if (boardsModeChanged || workModeToggleChanged) {
