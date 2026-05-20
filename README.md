@@ -191,6 +191,8 @@ npm run package
 - `npm run jira-mr-polling:once`
 - `npm run jira-mr-polling:test`
 
+Installer/package helper scripts write extension packages to `artifacts/` (for example `artifacts/ticket-manager-<version>.vsix`).
+
 ## Migration docs
 
 - [docs/migrations/live-folder-to-jira-gitlab-github.md](docs/migrations/live-folder-to-jira-gitlab-github.md)
