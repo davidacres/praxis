@@ -2255,6 +2255,7 @@ export class NoteTestPanelManager {
       hoveredLinkNodeId: undefined,
       persistCanvasStateTimer: undefined,
       toolbarDrag: undefined,
+      feedbackDismissTimer: undefined,
       generatingMasterPlan: false,
       applyingRecommendation: false
     };
@@ -2285,9 +2286,22 @@ export class NoteTestPanelManager {
       if (!(feedback instanceof HTMLElement)) {
         return;
       }
+      if (uiState.feedbackDismissTimer) {
+        clearTimeout(uiState.feedbackDismissTimer);
+        uiState.feedbackDismissTimer = undefined;
+      }
       feedback.textContent = text || '';
       feedback.classList.toggle('error', Boolean(isError));
       feedback.classList.toggle('has-message', Boolean(text));
+      if (text) {
+        const dismissMs = Boolean(isError) ? 7000 : 4000;
+        uiState.feedbackDismissTimer = setTimeout(() => {
+          uiState.feedbackDismissTimer = undefined;
+          feedback.textContent = '';
+          feedback.classList.remove('error');
+          feedback.classList.remove('has-message');
+        }, dismissMs);
+      }
     }
 
     function normalizeWebsitePreviewUrl(raw) {

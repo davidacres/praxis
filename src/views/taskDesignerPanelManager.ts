@@ -2416,6 +2416,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       linkPreview: undefined,
       hoveredLinkNodeId: undefined,
       persistCanvasStateTimer: undefined,
+      feedbackDismissTimer: undefined,
       toolbarDrag: undefined
     };
 
@@ -2445,9 +2446,22 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       if (!(feedback instanceof HTMLElement)) {
         return;
       }
+      if (uiState.feedbackDismissTimer) {
+        window.clearTimeout(uiState.feedbackDismissTimer);
+        uiState.feedbackDismissTimer = undefined;
+      }
       feedback.textContent = text || '';
       feedback.classList.toggle('error', Boolean(isError));
       feedback.classList.toggle('has-message', Boolean(text));
+      if (text) {
+        const dismissMs = Boolean(isError) ? 7000 : 4000;
+        uiState.feedbackDismissTimer = window.setTimeout(() => {
+          uiState.feedbackDismissTimer = undefined;
+          feedback.textContent = '';
+          feedback.classList.remove('error');
+          feedback.classList.remove('has-message');
+        }, dismissMs);
+      }
     }
 
     function clampToolbarPosition(position) {
