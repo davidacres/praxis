@@ -1,4 +1,4 @@
-const { existsSync } = require('node:fs');
+const { existsSync, mkdirSync } = require('node:fs');
 const { join } = require('node:path');
 const { execFileSync } = require('node:child_process');
 
@@ -27,14 +27,16 @@ function cliExists(name) {
 function main() {
   const projectRoot = join(__dirname, '..');
   const vsixName = `${pkg.name}-${pkg.version}.vsix`;
-  const vsixPath = join(projectRoot, vsixName);
+  const artifactsDir = join(projectRoot, 'artifacts');
+  const vsixPath = join(artifactsDir, vsixName);
   const extensionId = `${pkg.publisher}.${pkg.name}`;
 
   // Accept target from CLI arg: --target code|insiders|both (default: both)
   const targetArg = process.argv.find(a => a.startsWith('--target='));
   const target = targetArg ? targetArg.split('=')[1] : 'both';
 
-  run(commandFor('npx'), ['@vscode/vsce', 'package', '--allow-missing-repository']);
+  mkdirSync(artifactsDir, { recursive: true });
+  run(commandFor('npx'), ['@vscode/vsce', 'package', '--allow-missing-repository', '--out', vsixPath]);
 
   if (!existsSync(vsixPath)) {
     throw new Error(`Expected VSIX was not created: ${vsixPath}`);
