@@ -2550,15 +2550,23 @@ export class NoteTestPanelManager {
 
     function createConnectorBetweenNodes(sourceNodeId, targetNodeId, sourceDirection, targetDirection) {
       if (sourceNodeId === targetNodeId) {
-        setFeedback('Select a different target component.', true);
+        setFeedback('Select a different target node.', true);
         return false;
       }
       if (hasExistingConnector(sourceNodeId, targetNodeId)) {
-        setFeedback('Link already exists.', true);
+        const sourceNode = findNodeById(sourceNodeId);
+        const targetNode = findNodeById(targetNodeId);
+        const sourceLabel = getNodeLabel(sourceNode);
+        const targetLabel = getNodeLabel(targetNode);
+        setFeedback('Link already exists from ' + sourceLabel + ' to ' + targetLabel + '.', true);
         return false;
       }
       if (wouldCreateCycle(sourceNodeId, targetNodeId)) {
-        setFeedback('Cannot create link: this introduces a cycle.', true);
+        const sourceNode = findNodeById(sourceNodeId);
+        const targetNode = findNodeById(targetNodeId);
+        const sourceLabel = getNodeLabel(sourceNode);
+        const targetLabel = getNodeLabel(targetNode);
+        setFeedback('Cannot create link from ' + sourceLabel + ' to ' + targetLabel + ': it introduces a cycle.', true);
         return false;
       }
 
@@ -2575,7 +2583,7 @@ export class NoteTestPanelManager {
       clearLinkPreview();
       renderNodes();
       persistCanvasState();
-      setFeedback('Directed link created.');
+      setFeedback('Directed link created.', false);
       updateDeleteConnectorState();
       return true;
     }
@@ -3036,7 +3044,7 @@ export class NoteTestPanelManager {
             syncNodeInteractionClasses();
             renderConnectors();
             updateDeleteConnectorState();
-            setFeedback('Drag to another connector to create a directed link.');
+            setFeedback('Drag to a connector on another component to create a link.', false);
           });
           root.append(handle);
         }
@@ -3133,7 +3141,8 @@ export class NoteTestPanelManager {
               );
             } else {
               clearLinkPreview();
-              setFeedback('Link cancelled. Drop on another connector to create it.');
+              renderConnectors();
+              setFeedback('Link cancelled. Drop on a connector to create a link.', false);
             }
             return;
           }
@@ -3244,7 +3253,8 @@ export class NoteTestPanelManager {
     function requestAddTicket() {
       const issueKey = ticketInput instanceof HTMLInputElement ? ticketInput.value.trim() : '';
       if (!issueKey) {
-        setFeedback('Issue key is required to add a ticket.', true);
+        setFeedback('Enter a ticket number before adding.', true);
+        setTicketEntryOpen(true, { focus: true });
         return;
       }
       const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
