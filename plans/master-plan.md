@@ -9,7 +9,7 @@
 **Confidence:** High
 
 ## Description
-Generated from the Task Designer graph with 1 ticket node and 0 dependency links.
+Master planning index for feature-level artifacts under plans/features, maintained to provide a deterministic execution overview across multiple planned initiatives.
 
 ## Goals
 1. Execute planned tickets in deterministic topological order.
@@ -23,6 +23,7 @@ Generated from the Task Designer graph with 1 ticket node and 0 dependency links
 
 ## Phase Overview
 1. **Phase 1 — KAMAI-4:** Modern Example Admin App
+2. **Phase 2 — Feature 06:** Analysis Window Gate Before AI Assignment
 
 ## Dependencies
 1. No explicit directed dependencies are currently defined.
