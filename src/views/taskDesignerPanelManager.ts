@@ -2064,6 +2064,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .ticket-node.is-resizing {
       cursor: nwse-resize;
     }
+    .ticket-node--note,
+    .ticket-node--website {
+      display: flex;
+      flex-direction: column;
+    }
     .ticket-node-header {
       display: flex;
       align-items: center;
@@ -2182,12 +2187,13 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .note-node-body {
       display: flex;
       flex-direction: column;
-      min-height: 110px;
+      flex: 1;
+      min-height: 0;
       margin-top: 6px;
     }
     .note-node-textarea {
       width: 100%;
-      min-height: 110px;
+      min-height: 0;
       height: 100%;
       flex: 1;
       resize: none;
@@ -2199,6 +2205,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       font: inherit;
       line-height: 1.45;
       outline: none;
+      box-sizing: border-box;
     }
     .note-node-textarea:focus {
       border-color: color-mix(in oklab, var(--vscode-focusBorder) 72%, var(--vscode-panel-border));
@@ -2369,7 +2376,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         </defs>
       </svg>
       <div id="nodes-layer" class="nodes-layer"></div>
-      <div class="surface-hint">Add tickets or notes to create nodes on the canvas.</div>
     </main>
   </div>
   <script nonce="${nonce}">
@@ -2386,13 +2392,90 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const recommendBoardFlowButton = document.getElementById('recommend-board-flow-button');
     const applyRecommendationButton = document.getElementById('apply-recommendation-button');
     const rejectRecommendationButton = document.getElementById('reject-recommendation-button');
+    const resetCanvasButton = document.getElementById('toolbar-reset-button');
     const feedback = document.getElementById('toolbar-feedback');
     const connectorsLayer = document.getElementById('connectors-layer');
     const nodesLayer = document.getElementById('nodes-layer');
     const canvasSurface = document.querySelector('.canvas-surface');
-    const surfaceHint = document.querySelector('.surface-hint');
     const initialState = ${initialStateLiteral};
     const initialWarning = ${initialWarningLiteral};
+
+    // Keep these helpers in webview script scope. They are used by renderNodes at runtime,
+    // and host-scope TypeScript helpers are not callable from the browser context.
+
+    const KNOWN_ISSUE_TYPE_HEX = {
+      bug: '#e5534b',
+      story: '#3fb950',
+      task: '#58a6ff',
+      epic: '#a371f7',
+      feature: '#3fbccd',
+      idea: '#f59e0b',
+      subtask: '#8b949e',
+      'sub-task': '#8b949e',
+      improvement: '#79c0ff',
+      spike: '#d29922'
+    };
+    const ISSUE_TYPE_FALLBACK_HEX = ['#58a6ff', '#a371f7', '#3fbccd', '#d29922', '#79c0ff', '#ff7b72', '#56d364', '#db61a2'];
+
+    function clampColorChannel(value) {
+      return Math.max(0, Math.min(255, Math.round(value)));
+    }
+
+    function hexToRgb(hex) {
+      const normalized = /^#?([\da-f]{6})$/i.exec((hex || '').trim());
+      if (!normalized) {
+        return undefined;
+      }
+      const value = normalized[1];
+      return {
+        r: Number.parseInt(value.slice(0, 2), 16),
+        g: Number.parseInt(value.slice(2, 4), 16),
+        b: Number.parseInt(value.slice(4, 6), 16)
+      };
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' +
+        clampColorChannel(r).toString(16).padStart(2, '0') +
+        clampColorChannel(g).toString(16).padStart(2, '0') +
+        clampColorChannel(b).toString(16).padStart(2, '0');
+    }
+
+    function shiftHex(hex, delta) {
+      const rgb = hexToRgb(hex);
+      if (!rgb) {
+        return hex;
+      }
+      return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
+    }
+
+    function hashPickIssueTypeHex(label) {
+      let hash = 0;
+      for (let index = 0; index < label.length; index += 1) {
+        hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
+      }
+      return ISSUE_TYPE_FALLBACK_HEX[hash % ISSUE_TYPE_FALLBACK_HEX.length];
+    }
+
+    function issueTypeHex(issueType) {
+      const raw = typeof issueType === 'string' ? issueType : '';
+      const key = raw.trim().toLowerCase();
+      if (!key) {
+        return '#2563eb';
+      }
+      return KNOWN_ISSUE_TYPE_HEX[key] || hashPickIssueTypeHex(raw);
+    }
+
+    function taskDesignerTicketHeaderBackground(issueType) {
+      const base = issueTypeHex(issueType);
+      return 'linear-gradient(135deg, ' + shiftHex(base, 18) + ' 0%, ' + shiftHex(base, -14) + ' 100%)';
+    }
+
+    function taskDesignerWebsiteHeaderBackground() {
+      const base = '#58a6ff';
+      return 'linear-gradient(135deg, ' + shiftHex(base, 12) + ' 0%, ' + shiftHex(base, -18) + ' 100%)';
+    }
+
     const state = {
       nodes: Array.isArray(initialState.nodes) ? initialState.nodes.map(node => ({ ...node })) : [],
       connectors: Array.isArray(initialState.connectors) ? initialState.connectors.map(connector => ({ ...connector })) : [],
@@ -2489,10 +2572,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       if (ticketEntryPanel instanceof HTMLElement) {
         ticketEntryPanel.style.left = (uiState.toolbarPosition.x + 72) + 'px';
         ticketEntryPanel.style.top = uiState.toolbarPosition.y + 'px';
-      }
-      if (surfaceHint instanceof HTMLElement) {
-        surfaceHint.style.left = (uiState.toolbarPosition.x + 72) + 'px';
-        surfaceHint.style.top = uiState.toolbarPosition.y + 'px';
       }
       if (nodesLayer instanceof HTMLElement) {
         nodesLayer.style.transformOrigin = 'top left';
@@ -2776,6 +2855,23 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           connectors: state.connectors.map(connector => ({ ...connector }))
         }
       });
+    }
+
+    function clearCanvas() {
+      if (state.nodes.length === 0 && state.connectors.length === 0) {
+        setFeedback('Canvas is already empty.', false);
+        return;
+      }
+      state.nodes = [];
+      state.connectors = [];
+      uiState.selectedNodeId = undefined;
+      uiState.selectedConnectorId = undefined;
+      uiState.linkSourceNodeId = undefined;
+      clearRecommendation();
+      setActiveTool('select');
+      renderNodes();
+      persistCanvasState();
+      setFeedback('Canvas cleared.', false);
     }
 
     function buildPreviewNodes(rawNodes) {
@@ -3131,9 +3227,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
       console.log('[TaskDesigner] renderNodes begin', { stateNodeCount: state.nodes.length, lastNode: state.nodes[state.nodes.length - 1], nodesLayerExists: nodesLayer instanceof HTMLElement, zoom: uiState.zoom });
       nodesLayer.textContent = '';
-      if (surfaceHint) {
-        surfaceHint.style.display = state.nodes.length > 0 ? 'none' : '';
-      }
       for (const node of state.nodes) {
         const root = document.createElement('article');
         root.className = 'ticket-node ticket-node--' + node.type;
@@ -3197,6 +3290,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         deleteButton.className = 'ticket-node-delete';
         deleteButton.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4.5 4.5 11.5 11.5M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
         deleteButton.setAttribute('aria-label', 'Delete ' + getNodeLabel(node) + ' node');
+        deleteButton.addEventListener('pointerdown', event => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
         deleteButton.addEventListener('click', event => {
           event.stopPropagation();
           state.nodes = state.nodes.filter(item => item.id !== node.id);
@@ -4002,29 +4099,17 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           return;
         }
         if (action === 'reset') {
-          if (state.nodes.length === 0 && state.connectors.length === 0) {
-            setFeedback('Canvas is already empty.', false);
-            return;
-          }
-          if (!window.confirm('Clear the canvas? This will remove all nodes and connections.')) {
-            return;
-          }
-          state.nodes = [];
-          state.connectors = [];
-          uiState.selectedNodeId = undefined;
-          uiState.selectedConnectorId = undefined;
-          uiState.linkSourceNodeId = undefined;
-          clearRecommendation();
-          setActiveTool('select');
-          renderNodes();
-          persistCanvasState();
-          const now = new Date();
-          const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-          const timeStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-          requestAddNote({ title: 'Session Log', content: 'Opened: ' + dateStr + ' at ' + timeStr, x: 24, y: 72 });
+          clearCanvas();
           return;
         }
         vscodeApi.postMessage({ type: 'toolbarAction', action });
+      });
+    }
+
+    if (resetCanvasButton instanceof HTMLButtonElement) {
+      resetCanvasButton.addEventListener('click', event => {
+        event.preventDefault();
+        clearCanvas();
       });
     }
 

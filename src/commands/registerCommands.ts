@@ -24,7 +24,6 @@ import { NewProjectWizardPanel } from '../views/newProjectWizardPanel';
 import { SetupSidebarViewProvider } from '../views/setupSidebarViewProvider';
 import { SetupWizardPanel } from '../views/setupWizardPanel';
 import { TaskDesignerPanelManager } from '../views/taskDesignerPanelManager';
-import { NoteTestPanelManager } from '../views/noteTestPanelManager';
 import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
@@ -59,7 +58,6 @@ interface CommandDependencies {
   setupWizardPanel: SetupWizardPanel;
   setupSidebarViewProvider: SetupSidebarViewProvider;
   taskDesignerPanelManager: TaskDesignerPanelManager;
-  noteTestPanelManager: NoteTestPanelManager;
   revealSetupView?: () => Promise<void>;
   /** Focus the Issue Details tree and expand the current issue root (no editor steal). */
   revealIssueDetailsTree: () => Promise<void>;
@@ -1535,10 +1533,6 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
       const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
       deps.taskDesignerPanelManager.open(board?.name);
-    }),
-
-    vscode.commands.registerCommand('ticketManager.openNoteTest', () => {
-      deps.noteTestPanelManager.open();
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {

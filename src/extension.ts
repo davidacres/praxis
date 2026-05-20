@@ -60,7 +60,6 @@ import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
-import { NoteTestPanelManager } from './views/noteTestPanelManager';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
@@ -3490,27 +3489,6 @@ export async function activate(
     }
   );
 
-  const noteTestPanelManager = new NoteTestPanelManager(
-    context.workspaceState,
-    backendService,
-    async (nodes, connectors) => recommendTaskDesignerFlowWithCopilot(nodes, connectors, {
-      cliPath: getCopilotCliPathOverride(),
-      workingDirectory
-    }),
-    async () => {
-      const activeBoard = boardPanelManager.getActiveBoard();
-      if (!activeBoard) {
-        return undefined;
-      }
-
-      const displayDetails = await boardPanelManager.getActiveBoardDisplayDetails();
-      return {
-        boardName: activeBoard.name,
-        issues: displayDetails?.issues ?? []
-      };
-    }
-  );
-
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
@@ -5481,7 +5459,6 @@ export async function activate(
       setupWizardPanel,
       setupSidebarViewProvider,
       taskDesignerPanelManager,
-      noteTestPanelManager,
       issuesProvider,
       boardsProvider,
       detailsProvider,
