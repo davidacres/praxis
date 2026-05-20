@@ -2,7 +2,7 @@
 
 `JiraPollingService` is the Node.js polling and delivery runtime used by the extension and by standalone local debugging commands.
 
-The extension can start the poller when `ticketManager.jiraPolling.enabled` is true and the active backend is Jira via MCP or Jira API. In Jira API mode, the poller also follows the linked workspace epic from `ticketManager.jiraApiEpicKey`; linked-epic tasks are synced regardless of label, while the required label controls which tasks are eligible for AI execution.
+The extension can start the poller when `ticketManager.jiraPolling.enabled` is true and the active backend is Jira via MCP or Jira API. This setting is disabled by default, so polling is opt-in. In Jira API mode, the poller also follows the linked workspace epic from `ticketManager.jiraApiEpicKey`; linked-epic tasks are synced regardless of label, while the required label controls which tasks are eligible for AI execution.
 
 In its default standalone configuration, it polls Jira every 30 seconds and reports issues in project `KAMAI` that:
 

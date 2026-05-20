@@ -64,7 +64,7 @@ This file documents the settings currently contributed by the extension.
 | --- | --- | --- |
 | `ticketManager.requestTimeoutMs` | number | Timeout for MCP/backend requests. |
 | `ticketManager.defaultPageSize` | number | Page size for issue fetching. |
-| `ticketManager.jiraPolling.enabled` | boolean | Starts the built-in Jira poller on activation in supported modes. |
+| `ticketManager.jiraPolling.enabled` | boolean | Starts the built-in Jira poller on activation in supported modes (disabled by default). |
 | `ticketManager.jiraPolling.requiredLabel` | string | Label gate used for AI execution eligibility. |
 | `ticketManager.jiraPolling.clarificationAnalysis` | boolean | Enables readiness analysis before AI execution. |
 | `ticketManager.delivery.defaultBaseBranch` | string | Default delivery workflow base branch. |
