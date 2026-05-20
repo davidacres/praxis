@@ -6,7 +6,6 @@ import type {
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode
 } from '../ai/aiReviewService';
-import { issueTypeHex } from '../board/issueTypeColors';
 import { normalizeTaskDesignerPersistedState } from './taskDesignerStatePersistence';
 
 const NOTE_TEST_STATE_KEY = 'ticketManager.noteTest.state';
@@ -141,7 +140,6 @@ const DEFAULT_ARTIFACT_PRIORITY = 'P2';
 const DEFAULT_ARTIFACT_COMPLEXITY = 'Low';
 const DEFAULT_ARTIFACT_RISK = 'Low';
 const DEFAULT_ARTIFACT_CONFIDENCE = 'High';
-const DEFAULT_TASK_DESIGNER_TICKET_HEX = '#2563eb';
 
 function createNonce(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -352,41 +350,6 @@ function isCustomCanvasNode(node: CanvasNode | undefined): node is NoteNode | We
 
 function toSingleLineText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
-}
-
-function clampColorChannel(value: number): number {
-  return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | undefined {
-  const normalized = /^#?([\da-f]{6})$/i.exec(hex.trim());
-  if (!normalized) {
-    return undefined;
-  }
-  const value = normalized[1];
-  return {
-    r: Number.parseInt(value.slice(0, 2), 16),
-    g: Number.parseInt(value.slice(2, 4), 16),
-    b: Number.parseInt(value.slice(4, 6), 16)
-  };
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  return `#${clampColorChannel(r).toString(16).padStart(2, '0')}${clampColorChannel(g).toString(16).padStart(2, '0')}${clampColorChannel(b).toString(16).padStart(2, '0')}`;
-}
-
-function shiftHex(hex: string, delta: number): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) {
-    return hex;
-  }
-  return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
-}
-
-function taskDesignerTicketHeaderBackground(issueType: string | undefined): string {
-  const trimmed = issueType?.trim();
-  const base = trimmed ? issueTypeHex(trimmed) : DEFAULT_TASK_DESIGNER_TICKET_HEX;
-  return `linear-gradient(135deg, ${shiftHex(base, 18)} 0%, ${shiftHex(base, -14)} 100%)`;
 }
 
 function compareNodeIds(
@@ -2399,6 +2362,75 @@ export class NoteTestPanelManager {
       } catch {
         return undefined;
       }
+    }
+
+    const KNOWN_ISSUE_TYPE_HEX = {
+      bug: '#e5534b',
+      story: '#3fb950',
+      task: '#58a6ff',
+      epic: '#a371f7',
+      feature: '#3fbccd',
+      idea: '#f59e0b',
+      subtask: '#8b949e',
+      'sub-task': '#8b949e',
+      improvement: '#79c0ff',
+      spike: '#d29922'
+    };
+
+    const ISSUE_TYPE_FALLBACK_HEX = ['#58a6ff', '#a371f7', '#3fbccd', '#d29922', '#79c0ff', '#ff7b72', '#56d364', '#db61a2'];
+
+    function clampColorChannel(value) {
+      return Math.max(0, Math.min(255, Math.round(value)));
+    }
+
+    function hexToRgb(hex) {
+      const normalized = /^#?([\da-f]{6})$/i.exec((hex || '').trim());
+      if (!normalized) {
+        return undefined;
+      }
+      const value = normalized[1];
+      return {
+        r: Number.parseInt(value.slice(0, 2), 16),
+        g: Number.parseInt(value.slice(2, 4), 16),
+        b: Number.parseInt(value.slice(4, 6), 16)
+      };
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' +
+        clampColorChannel(r).toString(16).padStart(2, '0') +
+        clampColorChannel(g).toString(16).padStart(2, '0') +
+        clampColorChannel(b).toString(16).padStart(2, '0');
+    }
+
+    function shiftHex(hex, delta) {
+      const rgb = hexToRgb(hex);
+      if (!rgb) {
+        return hex;
+      }
+      return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
+    }
+
+    function hashPickIssueTypeHex(label) {
+      let hash = 0;
+      for (let index = 0; index < label.length; index += 1) {
+        hash = (hash * 31 + label.charCodeAt(index)) >>> 0;
+      }
+      return ISSUE_TYPE_FALLBACK_HEX[hash % ISSUE_TYPE_FALLBACK_HEX.length];
+    }
+
+    function issueTypeHex(issueType) {
+      const raw = typeof issueType === 'string' ? issueType : '';
+      const key = raw.trim().toLowerCase();
+      if (!key) {
+        return '#2563eb';
+      }
+      return KNOWN_ISSUE_TYPE_HEX[key] || hashPickIssueTypeHex(raw);
+    }
+
+    function taskDesignerTicketHeaderBackground(issueType) {
+      const base = issueTypeHex(issueType);
+      return 'linear-gradient(135deg, ' + shiftHex(base, 18) + ' 0%, ' + shiftHex(base, -14) + ' 100%)';
     }
 
     function websitePreviewTitle(url) {
