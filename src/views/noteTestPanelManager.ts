@@ -2820,6 +2820,12 @@ export class NoteTestPanelManager {
     }
 
     function renderNodes() {
+      console.log('[NoteTest] renderNodes begin', {
+        stateNodeCount: state.nodes.length,
+        lastNode: state.nodes[state.nodes.length - 1],
+        nodesLayerExists: nodesLayer instanceof HTMLElement,
+        zoom: uiState.zoom
+      });
       if (!(nodesLayer instanceof HTMLElement)) {
         return;
       }
@@ -3185,6 +3191,16 @@ export class NoteTestPanelManager {
 
       renderConnectors();
       syncNodeInteractionClasses();
+      const renderedEls = nodesLayer.querySelectorAll('.ticket-node');
+      const lastEl = renderedEls.length > 0 ? renderedEls[renderedEls.length - 1] : undefined;
+      const lastRect = lastEl instanceof HTMLElement ? lastEl.getBoundingClientRect() : undefined;
+      const nodesLayerRect = nodesLayer.getBoundingClientRect();
+      console.log('[NoteTest] renderNodes end', {
+        renderedElementCount: renderedEls.length,
+        lastElementRect: lastRect && { x: lastRect.x, y: lastRect.y, w: lastRect.width, h: lastRect.height },
+        nodesLayerRect: nodesLayerRect && { x: nodesLayerRect.x, y: nodesLayerRect.y, w: nodesLayerRect.width, h: nodesLayerRect.height },
+        nodesLayerTransform: nodesLayer instanceof HTMLElement ? nodesLayer.style.transform : null
+      });
     }
 
     function updateDeleteConnectorState() {
@@ -3218,6 +3234,7 @@ export class NoteTestPanelManager {
         x: Math.round(options && typeof options.x === 'number' ? options.x : defaultPoint.x),
         y: Math.round(options && typeof options.y === 'number' ? options.y : defaultPoint.y)
       };
+      console.log('[NoteTest] addNote', { point, zoom: uiState.zoom, surface: { clientWidth: viewW } });
       vscodeApi.postMessage({
         type: 'addNote',
         x: point.x,
@@ -3230,6 +3247,7 @@ export class NoteTestPanelManager {
 
     function addWebsitePreview() {
       if (!(canvasSurface instanceof HTMLElement)) {
+        console.warn('[NoteTest] addWebsitePreview aborted: canvasSurface is not HTMLElement', canvasSurface);
         return;
       }
       const rawUrl = window.prompt('Enter a website URL for the preview component', 'https://');
@@ -3242,6 +3260,7 @@ export class NoteTestPanelManager {
         return;
       }
       const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
+      console.log('[NoteTest] addWebsitePreview', { url: normalized, point, zoom: uiState.zoom });
       vscodeApi.postMessage({
         type: 'addWebsitePreview',
         url: normalized,
@@ -3259,6 +3278,7 @@ export class NoteTestPanelManager {
       }
       const viewW = canvasSurface instanceof HTMLElement ? canvasSurface.clientWidth : 400;
       const point = visibleCanvasPoint(Math.min(180, viewW / 3), 80);
+      console.log('[NoteTest] requestAddTicket', { issueKey, point, zoom: uiState.zoom, surface: { clientWidth: viewW } });
       vscodeApi.postMessage({ type: 'addTicket', issueKey, x: Math.round(point.x), y: Math.round(point.y) });
       setFeedback('Adding ticket ' + issueKey + '...');
     }
@@ -3277,7 +3297,7 @@ export class NoteTestPanelManager {
       if (recommendFlowButton instanceof HTMLButtonElement) {
         recommendFlowButton.disabled = true;
       }
-      setFeedback('Requesting AI recommendation...');
+      setFeedback('Requesting AI recommendation…', false);
       vscodeApi.postMessage({
         type: 'recommendCanvasFlow',
         state: {
@@ -3291,7 +3311,7 @@ export class NoteTestPanelManager {
       if (recommendBoardFlowButton instanceof HTMLButtonElement) {
         recommendBoardFlowButton.disabled = true;
       }
-      setFeedback('Requesting AI recommendation from current board...');
+      setFeedback('Requesting AI recommendation from current board…', false);
       vscodeApi.postMessage({ type: 'recommendBoardFlow' });
     }
 
@@ -3339,7 +3359,7 @@ export class NoteTestPanelManager {
       }
       uiState.applyingRecommendation = true;
       updateRecommendationActionState();
-      setFeedback('Applying AI recommendation...');
+      setFeedback('Applying AI recommendation…', false);
       vscodeApi.postMessage({
         type: 'applyRecommendation',
         recommendation: state.recommendation,
@@ -3630,6 +3650,7 @@ export class NoteTestPanelManager {
         return;
       }
       if (message.type === 'addTicketResult') {
+        console.log('[NoteTest] addTicketResult received', { ok: message.ok, error: message.error, node: message.node });
         if (!message.ok) {
           setFeedback(message.error || 'Unable to add ticket.', true);
           return;
@@ -3655,6 +3676,7 @@ export class NoteTestPanelManager {
       }
 
       if (message.type === 'addNoteResult') {
+        console.log('[NoteTest] addNoteResult received', { ok: message.ok, error: message.error, node: message.node });
         if (!message.ok) {
           setFeedback(message.error || 'Unable to add note.', true);
           return;
@@ -3675,6 +3697,7 @@ export class NoteTestPanelManager {
       }
 
       if (message.type === 'addWebsitePreviewResult') {
+        console.log('[NoteTest] addWebsitePreviewResult received', { ok: message.ok, error: message.error, node: message.node });
         if (!message.ok) {
           setFeedback(message.error || 'Unable to add website preview.', true);
           return;
@@ -3777,6 +3800,11 @@ export class NoteTestPanelManager {
       }
 
       if (message.type === 'persistCanvasStateResult') {
+        console.log('[NoteTest] persistCanvasStateResult', {
+          ok: message.ok,
+          error: message.error,
+          stateNodeCount: message.state && Array.isArray(message.state.nodes) ? message.state.nodes.length : undefined
+        });
         if (!message.ok) {
           if (message.state) {
             state.nodes = Array.isArray(message.state.nodes)
