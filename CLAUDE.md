@@ -48,4 +48,4 @@ calling host-scope functions directly.
 
 Regression note:
 - Calling host-only helpers from webview script previously caused runtime errors that broke node
-	rendering and ticket add flows in Task Designer/Note Test.
+	rendering and ticket add flows in Task Designer.
