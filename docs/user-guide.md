@@ -84,7 +84,7 @@ Suggested filenames are listed in [docs/screenshots/README.md](screenshots/READM
 
 ## Supported backends
 
-### Jira Cloud / Jira API (`jiraapi`)
+### Jira Cloud (`jiracloud`)
 
 Primary hosted tracker mode.
 
@@ -120,7 +120,7 @@ Capabilities include:
 - reading markdown issue structures,
 - optional local issue creation,
 - markdown import helpers,
-- migration support toward Jira API.
+- migration support toward Jira Cloud.
 
 ### User Workspace (`userworkspace`)
 
@@ -216,9 +216,9 @@ The extension includes:
 
 - `Import Plan from Markdown Features`
 - `Import Markdown Files to Template Format`
-- `Migrate Live Folder to Jira API`
-- `Link Jira API Epic`
-- `Link Jira API Board Query`
+- `Migrate Live Folder to Jira Cloud`
+- `Link Jira Cloud Epic`
+- `Link Jira Cloud Board Query`
 
 Migration docs live under [docs/migrations](migrations/live-folder-to-jira-gitlab-github.md).
 
@@ -296,9 +296,9 @@ This section is a grouped summary. The dedicated reference lives in [docs/comman
 - `Ticket Manager: Open Task Designer`
 - `Ticket Manager: Import Plan from Markdown Features`
 - `Ticket Manager: Import Markdown Files to Template Format`
-- `Ticket Manager: Migrate Live Folder to Jira API`
-- `Ticket Manager: Link Jira API Epic`
-- `Ticket Manager: Link Jira API Board Query`
+- `Ticket Manager: Migrate Live Folder to Jira Cloud`
+- `Ticket Manager: Link Jira Cloud Epic`
+- `Ticket Manager: Link Jira Cloud Board Query`
 
 ## Live Folder mode
 

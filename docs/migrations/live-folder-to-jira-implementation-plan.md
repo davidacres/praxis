@@ -20,7 +20,7 @@ Currently, the Live Folder to Jira migration command creates remote issues but l
 
 ## Current State
 
-- `Ticket Manager: Migrate Live Folder to Jira API` command exists but doesn't clean up
+- `Ticket Manager: Migrate Live Folder to Jira Cloud` command exists but doesn't clean up
 - Migration mapping not persisted (can't resume or prevent duplicates)
 - No post-migration cleanup UI
 - File identification is structural (folder layout) not semantic (front matter)
@@ -84,7 +84,7 @@ interface MigrationMapping {
 
 ### Phase 3: Safe Migration Command Refactor
 
-**Goal:** Enhance `migrateLiveFolderToJiraApi` to:
+**Goal:** Enhance `migrateLiveFolderToJiraCloud` to:
 1. Discover and validate source files
 2. Create mapping entries
 3. Offer post-migration cleanup UI
@@ -125,7 +125,7 @@ Will preserve: 33 documentation files
 - Require user approval to proceed
 
 #### 3d. Execute Migration
-- Create remote issues via Jira API
+- Create remote issues via Jira Cloud APIs
 - Record mappings in workspace state
 - Update local files with Jira issue key (optional)
 - Log progress per file
@@ -170,7 +170,7 @@ c) Skip for now (can delete manually later)
 ### Phase 4: UI Components
 
 #### 4a. Migration Setup View Updates
-Add to Setup view (when Live Folder + Jira API modes are active):
+Add to Setup view (when Live Folder + Jira Cloud mode is active):
 
 **Section: Live Folder → Jira Migration**
 - Input: Select target epic or project
@@ -288,3 +288,4 @@ Add to `package.json` settings:
 
 - [Live Folder Migration Goal](./live-folder-to-jira-gitlab-github.md) — High-level migration strategy
 - [Live Folder mode guide](../user-guide.md#live-folder-mode) — Current markdown work-item structure and feature overview
+

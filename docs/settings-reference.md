@@ -14,12 +14,12 @@ This file documents the settings currently contributed by the extension.
 
 | Setting | Type | Purpose |
 | --- | --- | --- |
-| `ticketManager.jiraApiBaseUrl` | string | Jira API base URL. |
-| `ticketManager.jiraApiToken` | string | Jira API token. |
-| `ticketManager.jiraApiEpicKey` | string | Linked Jira epic key. |
-| `ticketManager.jiraApiEpicBoardName` | string | Friendly board name for the linked epic board. |
-| `ticketManager.jiraApiBoardJql` | string | Jira board query/JQL used for linked board behavior. |
-| `ticketManager.jiraApiBoardName` | string | Friendly name for the Jira API board. |
+| `ticketManager.jiraCloudBaseUrl` | string | Jira Cloud polling/delivery base URL (legacy key name). |
+| `ticketManager.jiraCloudToken` | string | Jira Cloud polling/delivery bearer token (legacy key name). |
+| `ticketManager.jiraCloudEpicKey` | string | Linked Jira epic key. |
+| `ticketManager.jiraCloudEpicBoardName` | string | Friendly board name for the linked epic board. |
+| `ticketManager.jiraCloudBoardJql` | string | Jira board query/JQL used for linked board behavior. |
+| `ticketManager.jiraCloudBoardName` | string | Friendly name for the Jira Cloud board. |
 | `ticketManager.jiraOAuthClientId` | string | OAuth client id for Jira Cloud sign-in. |
 | `ticketManager.jiraOAuthScopes` | array | OAuth scopes requested during Jira Cloud auth. |
 | `ticketManager.jiraCloudId` | string | Jira Cloud site id captured after OAuth connection. |

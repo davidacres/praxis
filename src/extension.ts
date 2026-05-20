@@ -11,7 +11,7 @@ import { ConnectionStore } from './config/connectionStore';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
-import { FilterStore, shouldAdoptJiraApiEpicIssueScope } from './state/filterStore';
+import { FilterStore, shouldAdoptJiraCloudEpicIssueScope } from './state/filterStore';
 import { StartupPollingController } from './jira/startupPollingController';
 import { initializeJiraCloudOAuthService } from './jira/jiraCloudOAuthService';
 import type {
@@ -3356,14 +3356,14 @@ export async function activate(
     const resolved = resolveBackendModeContextState(
       configStore.getBackendMode(),
       configStore.hasJiraConnectionConfig(),
-      configStore.hasJiraApiConfig()
+      configStore.hasJiraCloudConfig()
     );
     if (resolved.mode === 'livefolder' && configStore.getLiveFolderPath().trim().length === 0) {
       return { ...resolved, configured: false };
     }
     return resolved;
   };
-  const JIRA_API_SCOPE_MIGRATION_KEY = 'ticketManager.jiraApiEpicIssueScopeMigrated';
+  const JIRA_CLOUD_SCOPE_MIGRATION_KEY = 'ticketManager.jiraCloudEpicIssueScopeMigrated';
   const initialModeContext = getModeContextState();
   await vscode.commands.executeCommand(
     'setContext', 'ticketManager.mode',
@@ -3795,27 +3795,27 @@ export async function activate(
     );
   }
 
-  async function ensureJiraApiIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
-    if (modeContext.mode !== 'jiraapi' || !modeContext.configured) {
+  async function ensureJiraCloudIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
+    if (modeContext.mode !== 'jiracloud' || !modeContext.configured) {
       return;
     }
 
-    if (configStore.getJiraApiEpicKey().trim().length === 0) {
+    if (configStore.getJiraCloudEpicKey().trim().length === 0) {
       return;
     }
 
-    if (context.workspaceState.get<boolean>(JIRA_API_SCOPE_MIGRATION_KEY) === true) {
+    if (context.workspaceState.get<boolean>(JIRA_CLOUD_SCOPE_MIGRATION_KEY) === true) {
       return;
     }
 
     const filters = filterStore.getFilters();
-    if (!shouldAdoptJiraApiEpicIssueScope(filters)) {
-      await context.workspaceState.update(JIRA_API_SCOPE_MIGRATION_KEY, true);
+    if (!shouldAdoptJiraCloudEpicIssueScope(filters)) {
+      await context.workspaceState.update(JIRA_CLOUD_SCOPE_MIGRATION_KEY, true);
       return;
     }
 
     await filterStore.updateFilters({ assigneeMode: 'all' });
-    await context.workspaceState.update(JIRA_API_SCOPE_MIGRATION_KEY, true);
+    await context.workspaceState.update(JIRA_CLOUD_SCOPE_MIGRATION_KEY, true);
   }
 
   async function refreshSearchActionContexts(): Promise<void> {
@@ -3838,33 +3838,33 @@ export async function activate(
     ]);
   }
 
-  async function linkEpicToWorkspace(issueKey: string): Promise<void> {
-    if (backendService.mode !== 'jiraapi') {
-      void vscode.window.showWarningMessage('Epic linking from the Epics view is available in Jira API mode only.');
+  async function setDefaultEpicForWorkspace(issueKey: string): Promise<void> {
+    if (backendService.mode !== 'jiracloud') {
+      void vscode.window.showWarningMessage('Epic linking from the Epics view is available in Jira Cloud mode only.');
       return;
     }
 
-    const currentLinkedEpicKey = configStore.getJiraApiEpicKey();
+    const currentLinkedEpicKey = configStore.getJiraCloudEpicKey();
     if (currentLinkedEpicKey === issueKey) {
-      void vscode.window.showInformationMessage(`${issueKey} is already linked to this workspace.`);
+      void vscode.window.showInformationMessage(`${issueKey} is already set as the default EPIC for this workspace.`);
       return;
     }
 
     const confirmation = await vscode.window.showInformationMessage(
-      `Do you want to link ${issueKey} to this repo?`,
+      `Set ${issueKey} as the default EPIC for this repo?`,
       {
         modal: true,
-        detail: 'This sets the workspace Jira API epic link. New Jira API issue creation will use this epic as the default parent.'
+        detail: 'This sets the workspace Jira Cloud epic link. New Jira issue creation will use this epic as the default parent.'
       },
-      'Link Epic',
+      'Set Default EPIC',
       'Cancel'
     );
-    if (confirmation !== 'Link Epic') {
+    if (confirmation !== 'Set Default EPIC') {
       return;
     }
 
-    await configStore.setJiraApiEpicKey(issueKey);
-    epicsSidebarViewProvider.setLinkedEpicKey(issueKey);
+    await configStore.setJiraCloudEpicKey(issueKey);
+    epicsSidebarViewProvider.setDefaultEpicKey(issueKey);
     await Promise.all([
       issuesProvider.refresh(),
       boardsProvider.refresh(),
@@ -3873,7 +3873,7 @@ export async function activate(
     await selectBoard(await resolveBoardById(`epic:${issueKey}`));
     await boardPanelManager.refresh();
     await ticketManagerStatusBar.refresh();
-    void vscode.window.showInformationMessage(`Linked this repo to Jira epic ${issueKey}.`);
+    void vscode.window.showInformationMessage(`${issueKey} is now the default EPIC for this repo.`);
   }
 
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
@@ -3881,7 +3881,7 @@ export async function activate(
       {
         label: 'Jira Cloud',
         description: 'Connect directly to Jira Cloud over OAuth.',
-        mode: 'jiraapi'
+        mode: 'jiracloud'
       },
       {
         label: 'Demo',
@@ -4047,7 +4047,7 @@ export async function activate(
   }
 
   function getEpicIssueType(mode: BackendMode): string {
-    return mode === 'jira' || mode === 'jiraapi' ? 'Epic' : 'Feature';
+    return mode === 'jira' || mode === 'jiracloud' ? 'Epic' : 'Feature';
   }
 
   async function reportActionError(error: unknown): Promise<void> {
@@ -4333,25 +4333,25 @@ export async function activate(
     await configStore.setGitLabSelectedBoardRefs(nextRefs);
   }
 
-  async function closeJiraApiBoard(board: Board): Promise<void> {
+  async function closeJiraCloudBoard(board: Board): Promise<void> {
     if (board.id.startsWith('epic:')) {
       const epicKey = board.id.slice('epic:'.length).trim();
-      if (!epicKey || configStore.getJiraApiEpicKey() !== epicKey) {
-        throw new Error('This Jira API epic board is not linked through Ticket Manager settings.');
+      if (!epicKey || configStore.getJiraCloudEpicKey() !== epicKey) {
+        throw new Error('This Jira Cloud epic board is not linked through Ticket Manager settings.');
       }
 
-      await configStore.setJiraApiEpicKey(undefined);
-      await configStore.setJiraApiEpicBoardName(undefined);
+      await configStore.setJiraCloudEpicKey(undefined);
+      await configStore.setJiraCloudEpicBoardName(undefined);
       return;
     }
 
     if (board.id === 'jql:workspace') {
-      await configStore.setJiraApiBoardJql(undefined);
-      await configStore.setJiraApiBoardName(undefined);
+      await configStore.setJiraCloudBoardJql(undefined);
+      await configStore.setJiraCloudBoardName(undefined);
       return;
     }
 
-    throw new Error('This Jira API board cannot be closed individually.');
+    throw new Error('This Jira Cloud board cannot be closed individually.');
   }
 
   async function removeBoardFromTicketManager(board: Board): Promise<void> {
@@ -4359,8 +4359,8 @@ export async function activate(
       case 'gitlab':
         await closeGitLabBoard(board);
         return;
-      case 'jiraapi':
-        await closeJiraApiBoard(board);
+      case 'jiracloud':
+        await closeJiraCloudBoard(board);
         return;
       default:
         await backendService.deleteBoard(board.id);
@@ -4403,12 +4403,12 @@ export async function activate(
         case 'gitlab':
           await configStore.setGitLabSelectedBoardRefs([]);
           break;
-        case 'jiraapi':
+        case 'jiracloud':
           await Promise.all([
-            configStore.setJiraApiBoardJql(undefined),
-            configStore.setJiraApiBoardName(undefined),
-            configStore.setJiraApiEpicKey(undefined),
-            configStore.setJiraApiEpicBoardName(undefined)
+            configStore.setJiraCloudBoardJql(undefined),
+            configStore.setJiraCloudBoardName(undefined),
+            configStore.setJiraCloudEpicKey(undefined),
+            configStore.setJiraCloudEpicBoardName(undefined)
           ]);
           break;
         default:
@@ -5050,8 +5050,8 @@ export async function activate(
   const refreshAndRestoreSelection = async (options?: { skipBoards?: boolean }): Promise<void> => {
     const modeContext = getModeContextState();
     await setModeContext();
-    await ensureJiraApiIssueScopeVisibility(modeContext);
-    epicsSidebarViewProvider.setLinkedEpicKey(configStore.getJiraApiEpicKey());
+    await ensureJiraCloudIssueScopeVisibility(modeContext);
+    epicsSidebarViewProvider.setDefaultEpicKey(configStore.getJiraCloudEpicKey());
 
     if (!modeContext.configured) {
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
@@ -5156,8 +5156,8 @@ export async function activate(
       onEditEpic: async issueKey => {
         await editEpic(issueKey);
       },
-      onLinkEpic: async issueKey => {
-        await linkEpicToWorkspace(issueKey);
+      onSetDefaultEpic: async issueKey => {
+        await setDefaultEpicForWorkspace(issueKey);
       },
       onDeleteEpic: async issueKey => {
         await deleteIssue(issueKey);
@@ -5800,3 +5800,5 @@ export async function deactivate(): Promise<void> {
   deactivateHandler = undefined;
   await handler?.();
 }
+
+

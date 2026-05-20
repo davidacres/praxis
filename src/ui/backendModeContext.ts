@@ -7,8 +7,8 @@ export interface BackendModeContextState {
 
 export function resolveBackendModeContextState(
   storedMode: BackendMode | undefined,
-  jiraMcpConfigured: boolean,
-  jiraApiConfigured: boolean
+  _jiraMcpConfigured: boolean,
+  jiraCloudConfigured: boolean
 ): BackendModeContextState {
   switch (storedMode) {
     case 'demo':
@@ -19,12 +19,12 @@ export function resolveBackendModeContextState(
     case 'gitlab':
       return { mode: storedMode, configured: false };
     case 'jira':
-      return { mode: 'jiraapi', configured: jiraApiConfigured };
-    case 'jiraapi':
-      return { mode: 'jiraapi', configured: jiraApiConfigured };
+      return { mode: 'jiracloud', configured: jiraCloudConfigured };
+    case 'jiracloud':
+      return { mode: 'jiracloud', configured: jiraCloudConfigured };
     default:
-      return jiraApiConfigured
-        ? { mode: 'jiraapi', configured: true }
+      return jiraCloudConfigured
+        ? { mode: 'jiracloud', configured: true }
         : { mode: undefined, configured: false };
   }
 }

@@ -44,7 +44,7 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
   switch (mode) {
     case 'jira':
       return 'Jira Cloud';
-    case 'jiraapi':
+    case 'jiracloud':
       return 'Jira Cloud';
     case 'demo':
       return 'Demo';
@@ -431,3 +431,4 @@ export class TicketManagerStatusBar implements vscode.Disposable {
           : undefined;
   }
 }
+

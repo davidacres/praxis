@@ -113,7 +113,7 @@ function renderAssignmentBadge(issue: IssueSummary): string {
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
   jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  jiraapi: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
+  jiracloud: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   gitlab: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],

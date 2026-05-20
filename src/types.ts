@@ -1,7 +1,7 @@
 export type ConnectionType = 'stdio' | 'http';
 export type BackendMode =
   | 'jira'
-  | 'jiraapi'
+  | 'jiracloud'
   | 'demo'
   | 'github'
   | 'gitlab'
@@ -361,3 +361,4 @@ export interface ConfigureConnectionResult {
   saved: boolean;
   description: string;
 }
+

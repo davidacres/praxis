@@ -5,12 +5,12 @@ import type { AppConfigStore } from './jiraConfig';
 /**
  * Per-connection secret values resolved synchronously so the scoped config
  * store can satisfy the existing synchronous getter signatures on
- * `AppConfigStore` (e.g. `getJiraApiToken(): string`).
+ * `AppConfigStore` (e.g. `getJiraCloudToken(): string`).
  *
  * Populated by `loadConnectionSecrets()` before the scoped store is built.
  */
 export interface ConnectionSecretsSnapshot {
-  jiraApiToken?: string;
+  jiraCloudToken?: string;
   oauthClientSecret?: string;
   gitlabApiKey?: string;
   githubPat?: string;
@@ -48,15 +48,15 @@ export async function loadConnectionSecrets(
 ): Promise<ConnectionSecretsSnapshot> {
   const secretKey = (name: string): string =>
     `ticketManager.connection.${connection.id}.${name}`;
-  const [jiraApiToken, oauthClientSecret, gitlabApiKey, githubPat] = await Promise.all([
-    context.secrets.get(secretKey('jiraApiToken')).then(value => value ?? context.secrets.get(secretKey('token'))),
+  const [jiraCloudToken, oauthClientSecret, gitlabApiKey, githubPat] = await Promise.all([
+    context.secrets.get(secretKey('jiraCloudToken')).then(value => value ?? context.secrets.get(secretKey('token'))),
     context.secrets
       .get(secretKey('oauthClientSecret'))
       .then(value => value ?? context.secrets.get(secretKey('jiraOAuthClientSecret'))),
     context.secrets.get(secretKey('gitlabApiKey')).then(value => value ?? context.secrets.get(secretKey('apiKey'))),
     context.secrets.get(secretKey('githubPat')).then(value => value ?? context.secrets.get(secretKey('pat')))
   ]);
-  return { jiraApiToken, oauthClientSecret, gitlabApiKey, githubPat };
+  return { jiraCloudToken, oauthClientSecret, gitlabApiKey, githubPat };
 }
 
 /**
@@ -66,7 +66,7 @@ export async function loadConnectionSecrets(
  * existing services accept it unchanged.
  *
  * Secrets are resolved synchronously from `secrets` so getters that need to
- * return a string (e.g. `getJiraApiToken`) keep their existing signature.
+ * return a string (e.g. `getJiraCloudToken`) keep their existing signature.
  */
 export function createConnectionScopedConfigStore(
   base: AppConfigStore,
@@ -104,24 +104,24 @@ export function createConnectionScopedConfigStore(
       return inline && inline.length > 0 ? inline : base.getJiraOAuthClientSecret();
     },
 
-    // ── Jira API ─────────────────────────────────────────────────────
-    getJiraApiBaseUrl: () => {
+    // ── Jira Cloud compatibility keys ───────────────────────────────
+    getJiraCloudBaseUrl: () => {
       const value = getString(settings, 'baseUrl')?.trim();
-      return value && value.length > 0 ? value : base.getJiraApiBaseUrl();
+      return value && value.length > 0 ? value : base.getJiraCloudBaseUrl();
     },
-    getJiraApiToken: () => {
-      if (secrets.jiraApiToken && secrets.jiraApiToken.trim().length > 0) {
-        return secrets.jiraApiToken;
+    getJiraCloudToken: () => {
+      if (secrets.jiraCloudToken && secrets.jiraCloudToken.trim().length > 0) {
+        return secrets.jiraCloudToken;
       }
       const inline = getString(settings, 'token')?.trim();
-      return inline && inline.length > 0 ? inline : base.getJiraApiToken();
+      return inline && inline.length > 0 ? inline : base.getJiraCloudToken();
     },
-    getJiraApiEpicKey: () => getString(settings, 'epicKey')?.trim() ?? base.getJiraApiEpicKey(),
-    getJiraApiEpicBoardName: () =>
-      getString(settings, 'epicBoardName')?.trim() ?? base.getJiraApiEpicBoardName(),
-    getJiraApiBoardJql: () => getString(settings, 'boardJql')?.trim() ?? base.getJiraApiBoardJql(),
-    getJiraApiBoardName: () =>
-      getString(settings, 'boardName')?.trim() ?? base.getJiraApiBoardName(),
+    getJiraCloudEpicKey: () => getString(settings, 'epicKey')?.trim() ?? base.getJiraCloudEpicKey(),
+    getJiraCloudEpicBoardName: () =>
+      getString(settings, 'epicBoardName')?.trim() ?? base.getJiraCloudEpicBoardName(),
+    getJiraCloudBoardJql: () => getString(settings, 'boardJql')?.trim() ?? base.getJiraCloudBoardJql(),
+    getJiraCloudBoardName: () =>
+      getString(settings, 'boardName')?.trim() ?? base.getJiraCloudBoardName(),
 
     // ── GitLab ───────────────────────────────────────────────────────
     getGitLabUrl: () => getString(settings, 'url')?.trim() ?? base.getGitLabUrl(),
@@ -170,3 +170,4 @@ export function createConnectionScopedConfigStore(
     }
   }) as AppConfigStore;
 }
+

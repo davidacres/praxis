@@ -113,7 +113,7 @@ export class StartupPollingController implements vscode.Disposable {
     const targets = this.resolveTargets();
     const desiredIds = new Set(targets.map(t => t.id));
 
-    // Stop runs whose target is gone or whose mode is no longer jiraapi.
+    // Stop runs whose target is gone or whose mode is no longer jiracloud.
     for (const [id, state] of this.runs) {
       if (!desiredIds.has(id)) {
         await this.stopRun(id, state);
@@ -144,33 +144,33 @@ export class StartupPollingController implements vscode.Disposable {
   }
 
   /**
-   * Resolve which jiraapi connections (if any) should be polled. When no
-   * connections are configured, fall back to the legacy global jiraapi
+   * Resolve which jiracloud connections (if any) should be polled. When no
+   * connections are configured, fall back to the legacy global jiracloud
    * settings so existing single-mode setups keep working.
    */
   private resolveTargets(): PollingTarget[] {
     const connections = this.connectionStore?.getConnections() ?? [];
-    const jiraApi = connections.filter(c => c.mode === 'jiraapi');
-    if (jiraApi.length > 0) {
-      return jiraApi
+    const jiraCloudConnections = connections.filter(c => c.mode === 'jiracloud');
+    if (jiraCloudConnections.length > 0) {
+      return jiraCloudConnections
         .map(c => this.connectionToTarget(c))
         .filter((t): t is PollingTarget => t !== undefined);
     }
 
     // Legacy fallback: single global config.
     if (
-      this.configStore.getEffectiveBackendMode() !== 'jiraapi' ||
-      this.configStore.getJiraApiEpicKey().trim().length === 0
+      this.configStore.getEffectiveBackendMode() !== 'jiracloud' ||
+      this.configStore.getJiraCloudEpicKey().trim().length === 0
     ) {
       return [];
     }
     return [
       {
         id: '__global__',
-        label: 'global jiraapi config',
-        baseUrl: this.configStore.getJiraApiBaseUrl(),
-        token: this.configStore.getJiraApiToken(),
-        epicKey: this.configStore.getJiraApiEpicKey()
+        label: 'global jiracloud config',
+        baseUrl: this.configStore.getJiraCloudBaseUrl(),
+        token: this.configStore.getJiraCloudToken(),
+        epicKey: this.configStore.getJiraCloudEpicKey()
       }
     ];
   }
@@ -321,7 +321,7 @@ export class StartupPollingController implements vscode.Disposable {
     // Per-connection secret token wins when available.
     if (target.connection && this.connectionStore) {
       const secretToken = await this.connectionStore
-        .getSecret(target.connection.id, 'jiraApiToken')
+        .getSecret(target.connection.id, 'jiraCloudToken')
         .catch(() => undefined);
       if (secretToken && secretToken.trim().length > 0) {
         return { source: 'config', value: secretToken.trim() };
@@ -383,3 +383,5 @@ interface RunState {
   abortController: AbortController;
   runPromise: Promise<void>;
 }
+
+

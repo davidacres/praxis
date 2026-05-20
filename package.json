@@ -53,7 +53,7 @@
     "watch:tsc": "tsc --noEmit --watch -p ./",
     "package": "npm run check-types && node esbuild.mjs --production",
     "check-types": "tsc --noEmit -p ./",
-    "pretest": "tsc -p ./",
+    "pretest": "rimraf out && tsc -p ./",
     "test": "vscode-test --label integration",
     "jira-polling": "node ./JiraPollingService/node/cli.js",
     "jira-polling:once": "node ./JiraPollingService/node/cli.js --once",
@@ -297,20 +297,20 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "ticketManager.migrateLiveFolderToJiraApi",
-        "title": "Migrate Live Folder to Jira API",
+        "command": "ticketManager.migrateLiveFolderToJiraCloud",
+        "title": "Migrate Live Folder to Jira Cloud",
         "category": "Ticket Manager",
         "icon": "$(cloud-upload)"
       },
       {
-        "command": "ticketManager.linkJiraApiEpic",
-        "title": "Link Jira API Epic",
+        "command": "ticketManager.linkJiraCloudEpic",
+        "title": "Link Jira Cloud Epic",
         "category": "Ticket Manager",
         "icon": "$(link)"
       },
       {
-        "command": "ticketManager.linkJiraApiBoardQuery",
-        "title": "Link Jira API Board Query",
+        "command": "ticketManager.linkJiraCloudBoardQuery",
+        "title": "Link Jira Cloud Board Query",
         "category": "Ticket Manager",
         "icon": "$(list-filter)"
       },
@@ -804,7 +804,7 @@
         "ticketManager.backendMode": {
           "type": "string",
           "enum": [
-            "jiraapi",
+            "jiracloud",
             "demo",
             "github",
             "gitlab",
@@ -821,6 +821,20 @@
           ],
           "scope": "window",
           "description": "Choose whether the app uses Jira Cloud, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
+        },
+        "ticketManager.connectionType": {
+          "type": "string",
+          "enum": [
+            "stdio",
+            "http"
+          ],
+          "enumItemLabels": [
+            "stdio",
+            "http"
+          ],
+          "default": "stdio",
+          "scope": "window",
+          "description": "Legacy Jira MCP transport selector retained for compatibility with existing setup flows and integration tests."
         },
         "ticketManager.connections": {
           "type": "array",
@@ -842,7 +856,7 @@
               "mode": {
                 "type": "string",
                 "enum": [
-                  "jiraapi",
+                  "jiracloud",
                   "demo",
                   "github",
                   "gitlab",
@@ -882,42 +896,42 @@
             }
           }
         },
-        "ticketManager.jiraApiBaseUrl": {
+        "ticketManager.jiraCloudBaseUrl": {
           "type": "string",
           "default": "https://jira.example.com",
           "format": "uri",
           "scope": "window",
-          "description": "Base URL for direct Jira Server/Data Center API access in Jira API mode. Defaults to the same base URL used by the bundled Jira polling service."
+          "description": "Base URL used by the built-in Jira polling and delivery runtime in Jira Cloud mode."
         },
-        "ticketManager.jiraApiToken": {
+        "ticketManager.jiraCloudToken": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Personal access token used for direct Jira Server/Data Center API access in Jira API mode. If empty, Ticket Manager falls back to JIRA_TOKEN."
+          "description": "Bearer token used by the built-in Jira polling and delivery runtime in Jira Cloud mode. If empty, Ticket Manager falls back to JIRA_TOKEN."
         },
-        "ticketManager.jiraApiEpicKey": {
+        "ticketManager.jiraCloudEpicKey": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional Jira Epic key associated with this workspace in Jira API mode. Boards and polling sync follow this epic, and Jira API issue creation uses it as the default parent epic."
+          "description": "Optional Jira Epic key associated with this workspace in Jira Cloud mode. Boards and polling sync follow this epic, and Jira issue creation uses it as the default parent epic."
         },
-        "ticketManager.jiraApiEpicBoardName": {
+        "ticketManager.jiraCloudEpicBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional display name for the Jira API epic board in this workspace."
+          "description": "Optional display name for the Jira Cloud epic board in this workspace."
         },
-        "ticketManager.jiraApiBoardJql": {
+        "ticketManager.jiraCloudBoardJql": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional Jira JQL query associated with this workspace in Jira API mode. When set, a JQL board is shown in addition to any linked epic board."
+          "description": "Optional Jira JQL query associated with this workspace in Jira Cloud mode. When set, a JQL board is shown in addition to any linked epic board."
         },
-        "ticketManager.jiraApiBoardName": {
+        "ticketManager.jiraCloudBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional display name for the Jira API JQL board in this workspace."
+          "description": "Optional display name for the Jira Cloud JQL board in this workspace."
         },
         "ticketManager.jiraOAuthClientId": {
           "type": "string",
@@ -930,7 +944,7 @@
           "default": [],
           "items": { "type": "string" },
           "scope": "window",
-          "description": "OAuth scopes requested when connecting Jira Cloud. Defaults to offline_access, read:jira-work, write:jira-work, and read:me."
+          "description": "OAuth scopes requested when connecting Jira Cloud. Defaults to offline_access, read:jira-work, write:jira-work, read:jira-user, read:me, read:board-scope:jira-software, read:project:jira, and read:issue-details:jira."
         },
         "ticketManager.jiraCloudId": {
           "type": "string",
@@ -1035,13 +1049,13 @@
           "type": "boolean",
           "default": false,
           "scope": "window",
-          "markdownDescription": "Start the built-in Node.js Jira poller when the extension activates in **Jira via MCP** or **Jira API** mode. Disabled by default (opt-in). Polling activity is logged to the **Ticket Manager** output channel, and the first successful poll shows a confirmation notification."
+          "markdownDescription": "Start the built-in Node.js Jira poller when the extension activates in **Jira via MCP** or **Jira Cloud** mode. Disabled by default (opt-in). Polling activity is logged to the **Ticket Manager** output channel, and the first successful poll shows a confirmation notification."
         },
         "ticketManager.jiraPolling.requiredLabel": {
           "type": "string",
           "default": "syscfg",
           "scope": "window",
-          "markdownDescription": "Jira label used as the AI execution gate by the built-in poller. In **Jira API** mode, linked-epic tasks are synced regardless of label, but only tasks with this label are eligible for AI execution."
+          "markdownDescription": "Jira label used as the AI execution gate by the built-in poller. In **Jira Cloud** mode, linked-epic tasks are synced regardless of label, but only tasks with this label are eligible for AI execution."
         },
         "ticketManager.jiraPolling.clarificationAnalysis": {
           "type": "boolean",
@@ -1324,3 +1338,4 @@
     "typescript": "^6.0.2"
   }
 }
+

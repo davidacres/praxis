@@ -255,7 +255,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       return;
     }
     const connection = this.connectionStore.getConnection(picker.connectionId);
-    if (!connection || (connection.mode !== 'jiraapi' && connection.mode !== 'jira')) {
+    if (!connection || (connection.mode !== 'jiracloud' && connection.mode !== 'jira')) {
       return;
     }
 
@@ -787,7 +787,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
 
   private renderConnectionModeFields(form: ConnectionFormState): string {
     switch (form.mode) {
-      case 'jiraapi':
+      case 'jiracloud':
         return [
           textField(form, 'baseUrl', 'Site URL', 'https://your-tenant.atlassian.net'),
           secretField(form, 'token', 'API token (Atlassian PAT or basic-auth token)'),
@@ -885,7 +885,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <section class="form">
         ${content}
         <div class="form-actions">
-          ${connection && (connection.mode === 'jiraapi' || connection.mode === 'jira')
+          ${connection && (connection.mode === 'jiracloud' || connection.mode === 'jira')
             ? '<button data-action="addCustomJqlBoard">+ Add Custom JQL Board</button>'
             : ''}
           <button data-action="navigateList">Cancel</button>
@@ -935,7 +935,7 @@ export type InitialAction =
   | { kind: 'addBoard'; connectionId: string };
 
 const SUPPORTED_MODES: readonly BackendMode[] = [
-  'jiraapi',
+  'jiracloud',
   'gitlab',
   'livefolder',
   'userworkspace',
@@ -948,7 +948,7 @@ function createInitialState(): PanelState {
 
 function createNewConnectionForm(): ConnectionFormState {
   return {
-    mode: 'jiraapi',
+    mode: 'jiracloud',
     isEditing: false,
     name: '',
     settings: {},
@@ -962,7 +962,7 @@ function modeLabel(mode: BackendMode): string {
   switch (mode) {
     case 'jira':
       return 'Jira Cloud (OAuth)';
-    case 'jiraapi':
+    case 'jiracloud':
       return 'Jira REST (API token)';
     case 'gitlab':
       return 'GitLab';
@@ -1029,7 +1029,7 @@ function getConnectionStringSetting(connection: Connection, key: string): string
 
 function secretNamesForMode(mode: BackendMode): readonly string[] {
   switch (mode) {
-    case 'jiraapi':
+    case 'jiracloud':
       return ['token'];
     case 'jira':
       return ['oauthClientSecret'];
@@ -1206,3 +1206,4 @@ function getScript(): string {
     });
   `;
 }
+

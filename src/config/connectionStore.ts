@@ -8,7 +8,7 @@ const SECRET_PREFIX = 'ticketManager.connection';
 
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'jira',
-  'jiraapi',
+  'jiracloud',
   'demo',
   'github',
   'gitlab',
@@ -309,3 +309,4 @@ export class ConnectionStore implements vscode.Disposable {
     }
   }
 }
+

@@ -157,7 +157,7 @@ export class AppConfigStore {
   }
 
   public getEffectiveBackendMode(): BackendMode {
-    return this.getBackendMode() ?? 'jiraapi';
+    return this.getBackendMode() ?? 'jiracloud';
   }
 
   public hasJiraConnectionConfig(): boolean {
@@ -170,13 +170,13 @@ export class AppConfigStore {
     return config.get<string>('stdioCommand', '').trim().length > 0;
   }
 
-  public hasJiraApiConfig(): boolean {
+  public hasJiraCloudConfig(): boolean {
     if (this.getJiraCloudId().length > 0) {
       return true;
     }
     return (
-      this.getJiraApiBaseUrl().trim().length > 0 &&
-      this.getJiraApiToken().trim().length > 0
+      this.getJiraCloudBaseUrl().trim().length > 0 &&
+      this.getJiraCloudToken().trim().length > 0
     );
   }
 
@@ -220,6 +220,7 @@ export class AppConfigStore {
       'offline_access',
       'read:jira-work',
       'write:jira-work',
+      'read:jira-user',
       'read:me',
       'read:board-scope:jira-software',
       'read:project:jira',
@@ -298,76 +299,66 @@ export class AppConfigStore {
     return loadJiraPollingDefaults().baseUrl;
   }
 
-  public getJiraApiInternalDns(): string {
+  public getJiraCloudInternalDns(): string {
     return loadJiraPollingDefaults().internalDns;
   }
 
-  public getJiraApiPreferredResolveIp(): string {
+  public getJiraCloudPreferredResolveIp(): string {
     return loadJiraPollingDefaults().preferredResolveIp;
   }
 
-  public getJiraApiBaseUrl(): string {
-    const configured = this.getWorkspaceScopedConfigValue<string>('jiraApiBaseUrl', '').trim();
+  public getJiraCloudBaseUrl(): string {
+    const configured = this.getWorkspaceScopedConfigValue<string>('jiraCloudBaseUrl', '').trim();
     return configured || loadJiraPollingDefaults().baseUrl;
   }
 
-  public getJiraApiToken(): string {
-    const configured = this.getWorkspaceScopedConfigValue<string>('jiraApiToken', '').trim();
+  public getJiraCloudToken(): string {
+    const configured = this.getWorkspaceScopedConfigValue<string>('jiraCloudToken', '').trim();
     return configured || process.env.JIRA_TOKEN?.trim() || loadJiraPollingDefaults().token;
   }
 
-  public getJiraApiEpicKey(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraApiEpicKey', '').trim();
+  public getJiraCloudEpicKey(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraCloudEpicKey', '').trim();
   }
 
-  public getJiraApiEpicBoardName(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraApiEpicBoardName', '').trim();
+  public getJiraCloudEpicBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraCloudEpicBoardName', '').trim();
   }
 
-  public getJiraApiBoardJql(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraApiBoardJql', '').trim();
+  public getJiraCloudBoardJql(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraCloudBoardJql', '').trim();
   }
 
-  public getJiraApiBoardName(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraApiBoardName', '').trim();
+  public getJiraCloudBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraCloudBoardName', '').trim();
   }
 
-  public async setJiraApiBaseUrl(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraApiBaseUrl', value, target);
-  }
-
-  public async setJiraApiToken(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraApiToken', value, target);
-  }
-
-  public async setJiraApiEpicKey(value: string | undefined): Promise<void> {
+  public async setJiraCloudEpicKey(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraApiEpicKey', value?.trim() ?? '', target);
+      .update('jiraCloudEpicKey', value?.trim() ?? '', target);
   }
 
-  public async setJiraApiEpicBoardName(value: string | undefined): Promise<void> {
+  public async setJiraCloudEpicBoardName(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraApiEpicBoardName', value?.trim() ?? '', target);
+      .update('jiraCloudEpicBoardName', value?.trim() ?? '', target);
   }
 
-  public async setJiraApiBoardJql(value: string | undefined): Promise<void> {
+  public async setJiraCloudBoardJql(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraApiBoardJql', value?.trim() ?? '', target);
+      .update('jiraCloudBoardJql', value?.trim() ?? '', target);
   }
 
-  public async setJiraApiBoardName(value: string | undefined): Promise<void> {
+  public async setJiraCloudBoardName(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraApiBoardName', value?.trim() ?? '', target);
+      .update('jiraCloudBoardName', value?.trim() ?? '', target);
   }
 
   // ── GitHub settings ──────────────────────────────────────────────
@@ -680,13 +671,13 @@ export class AppConfigStore {
       return 'User Workspace';
     }
 
-    if (this.getEffectiveBackendMode() === 'jiraapi') {
-      const baseUrl = this.getJiraApiBaseUrl();
-      const epicKey = this.getJiraApiEpicKey();
-      const boardJql = this.getJiraApiBoardJql();
+    if (this.getEffectiveBackendMode() === 'jiracloud') {
+      const baseUrl = this.getJiraCloudBaseUrl();
+      const epicKey = this.getJiraCloudEpicKey();
+      const boardJql = this.getJiraCloudBoardJql();
       return baseUrl
-        ? `Jira API (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''}${boardJql ? '; jql board configured' : ''})`
-        : 'Jira API (not configured)';
+        ? `Jira Cloud (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''}${boardJql ? '; jql board configured' : ''})`
+        : 'Jira Cloud (not configured)';
     }
 
     return 'Not configured';
@@ -709,7 +700,7 @@ export class AppConfigStore {
 
     await Promise.all([
       this.setJiraOAuthClientId(clientId),
-      this.setBackendMode('jiraapi'),
+      this.setBackendMode('jiracloud'),
       vscode.workspace.getConfiguration(CONFIG_ROOT).update('connectionType', undefined, this.configTarget()),
       vscode.workspace.getConfiguration(CONFIG_ROOT).update('stdioCommand', undefined, this.configTarget()),
       vscode.workspace.getConfiguration(CONFIG_ROOT).update('stdioArgs', undefined, this.configTarget()),
@@ -724,3 +715,4 @@ export class AppConfigStore {
   }
 
 }
+
