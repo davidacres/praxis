@@ -42,8 +42,6 @@ function toErrorMessage(error: unknown): string {
 
 export function getBackendModeLabel(mode: BackendMode | undefined): string {
   switch (mode) {
-    case 'jira':
-      return 'Jira Cloud';
     case 'jiracloud':
       return 'Jira Cloud';
     case 'demo':

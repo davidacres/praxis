@@ -540,9 +540,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       case 'gitlab':
         fields = this.renderGitLabFields();
         break;
-      case 'jira':
-        fields = this.renderJiraFields();
-        break;
       case 'jiracloud':
         fields = this.renderJiraCloudFields();
         break;
@@ -934,34 +931,6 @@ ${connFields}`;
         if (this.setupFields.gitlabApiKey?.trim()) {
           await this.context.secrets.store('ticketManager.gitlabApiKey', this.setupFields.gitlabApiKey.trim());
           this.hasGitLabApiKeySecret = true;
-        }
-        break;
-      }
-      case 'jira': {
-        const conn = this.setupFields.jiraConnectionType || 'stdio';
-        await updateSetting('connectionType', conn);
-        await updateSetting(
-          'jiraPolling.requiredLabel',
-          (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'
-        );
-        await updateSetting(
-          'jiraPolling.enabled',
-          (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false'
-        );
-        if (conn === 'stdio') {
-          if (this.setupFields.jiraStdioCommand) {
-            await updateSetting('stdioCommand', this.setupFields.jiraStdioCommand);
-          }
-          if (this.setupFields.jiraStdioArgs) {
-            await updateSetting('stdioArgs', this.setupFields.jiraStdioArgs.split(' ').filter(Boolean));
-          }
-          if (this.setupFields.jiraCwd) {
-            await updateSetting('stdioCwd', this.setupFields.jiraCwd);
-          }
-        } else {
-          if (this.setupFields.jiraHttpUrl) {
-            await updateSetting('httpUrl', this.setupFields.jiraHttpUrl);
-          }
         }
         break;
       }

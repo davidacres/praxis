@@ -37,7 +37,7 @@ suite('TicketManagerStatusBar', () => {
       isChecking: false
     });
 
-    assert.strictEqual(getBackendModeLabel('jira'), 'Jira Cloud');
+    assert.strictEqual(getBackendModeLabel('jiracloud'), 'Jira Cloud');
     assert.strictEqual(presentation.tone, 'ok');
     assert.ok(presentation.text.includes('AI OpenAI'));
     assert.ok(presentation.tooltipMarkdown.includes('Default provider: OpenAI'));

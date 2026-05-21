@@ -82,7 +82,7 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
     };
   }
 
-  const allowedParentTypes = mode === 'jira' || mode === 'jiracloud' ? ['Epic'] : ['Epic', 'Feature'];
+  const allowedParentTypes = mode === 'jiracloud' ? ['Epic'] : ['Epic', 'Feature'];
   return {
     canHaveParent: true,
     requiresParent: false,

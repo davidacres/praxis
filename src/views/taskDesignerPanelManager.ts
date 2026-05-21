@@ -114,7 +114,8 @@ interface TaskDesignerBoardRecommendationSeed {
   issues: readonly IssueSummary[];
 }
 
-type ResolveTaskDesignerBoardRecommendationSeed = () => Promise<TaskDesignerBoardRecommendationSeed | undefined>;
+type ResolveTaskDesignerBoardRecommendationSeed = (boardId?: string) => Promise<TaskDesignerBoardRecommendationSeed | undefined>;
+type ResolveTaskDesignerIssueTypeColors = (boardId?: string) => Record<string, string> | undefined;
 
 type TaskDesignerRelatedIssueRelation = 'dependsOn' | 'subTask';
 
@@ -557,12 +558,6 @@ function shiftHex(hex: string, delta: number): string {
     return hex;
   }
   return rgbToHex(rgb.r + delta, rgb.g + delta, rgb.b + delta);
-}
-
-function taskDesignerTicketHeaderBackground(issueType: string | undefined): string {
-  const trimmed = issueType?.trim();
-  const base = trimmed ? issueTypeHex(trimmed) : DEFAULT_TASK_DESIGNER_TICKET_HEX;
-  return `linear-gradient(135deg, ${shiftHex(base, 18)} 0%, ${shiftHex(base, -14)} 100%)`;
 }
 
 function taskDesignerWebsiteHeaderBackground(): string {
@@ -1033,15 +1028,21 @@ function renderTaskDesignerToolbarButton(
 export class TaskDesignerPanelManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private nextNodeIndex = 0;
+  private currentBoardId: string | undefined;
+  private currentBoardName: string | undefined;
 
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly workspaceState: vscode.Memento,
     private readonly recommendTaskDesignerFlow?: RecommendTaskDesignerFlow,
-    private readonly resolveBoardRecommendationSeed?: ResolveTaskDesignerBoardRecommendationSeed
+    private readonly resolveBoardRecommendationSeed?: ResolveTaskDesignerBoardRecommendationSeed,
+    private readonly resolveIssueTypeColors?: ResolveTaskDesignerIssueTypeColors
   ) {}
 
-  public open(boardName?: string): void {
+  public open(board?: { id?: string; name?: string }): void {
+    this.currentBoardId = board?.id;
+    this.currentBoardName = board?.name;
+    const boardName = board?.name;
     const panelTitle = this.buildPanelTitle(boardName);
     if (this.panel) {
       this.panel.dispose();
@@ -1072,7 +1073,13 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
     );
 
-    panel.webview.html = this.getHtml(nonce, initialState, persistedState.warning, panelTitle);
+    panel.webview.html = this.getHtml(
+      nonce,
+      initialState,
+      persistedState.warning,
+      panelTitle,
+      this.resolveIssueTypeColors?.(this.currentBoardId) ?? {}
+    );
 
     this.panel = panel;
     if (persistedState.repaired || wasEmpty) {
@@ -1094,6 +1101,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       undefined,
       []
     );
+  }
+
+  public refreshIfOpen(): void {
+    if (!this.panel) {
+      return;
+    }
+
+    this.open({ id: this.currentBoardId, name: this.currentBoardName });
   }
 
   public dispose(): void {
@@ -1443,7 +1458,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     try {
-      const boardSeed = await this.resolveBoardRecommendationSeed();
+      const boardSeed = await this.resolveBoardRecommendationSeed(this.currentBoardId);
       if (!boardSeed) {
         await this.panel?.webview.postMessage({
           type: 'recommendBoardFlowResult',
@@ -1807,7 +1822,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     nonce: string,
     initialState: PersistedTaskDesignerState,
     initialWarning?: string,
-    panelTitle = 'Task Designer'
+    panelTitle = 'Task Designer',
+    issueTypeColors: Record<string, string> = {}
   ): string {
     const initialStateLiteral = JSON.stringify(initialState)
       .replace(/</g, '\\u003c')
@@ -1817,6 +1833,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       .replace(/</g, '\\u003c')
       .replace(/\u2028/g, '\\u2028')
       .replace(/\u2029/g, '\\u2029');
+    const issueTypeColorsLiteral = JSON.stringify(issueTypeColors)
+      .replace(/</g, '\u003c')
+      .replace(/\u2028/g, '\u2028')
+      .replace(/\u2029/g, '\u2029');
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -2099,14 +2119,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       width: 20px;
       height: 20px;
       padding: 0;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.1);
-      color: #eff6ff;
+      border: 1px solid color-mix(in oklab, currentColor 22%, transparent);
+      background: color-mix(in oklab, currentColor 10%, transparent);
+      color: inherit;
       border-radius: 6px;
       cursor: pointer;
     }
     .ticket-node-delete:hover {
-      background: rgba(255, 255, 255, 0.18);
+      background: color-mix(in oklab, currentColor 18%, transparent);
     }
     .ticket-node-delete svg {
       width: 10px;
@@ -2402,6 +2422,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const canvasSurface = document.querySelector('.canvas-surface');
     const initialState = ${initialStateLiteral};
     const initialWarning = ${initialWarningLiteral};
+    const configuredIssueTypeColors = ${issueTypeColorsLiteral};
 
     // Keep these helpers in webview script scope. They are used by renderNodes at runtime,
     // and host-scope TypeScript helpers are not callable from the browser context.
@@ -2409,12 +2430,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const KNOWN_ISSUE_TYPE_HEX = {
       bug: '#e5534b',
       story: '#3fb950',
-      task: '#58a6ff',
+      task: '#db61a2',
       epic: '#a371f7',
       feature: '#3fbccd',
       idea: '#f59e0b',
-      subtask: '#8b949e',
-      'sub-task': '#8b949e',
+      subtask: '#db61a2',
+      'sub-task': '#db61a2',
       improvement: '#79c0ff',
       spike: '#d29922'
     };
@@ -2463,15 +2484,26 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     function issueTypeHex(issueType) {
       const raw = typeof issueType === 'string' ? issueType : '';
       const key = raw.trim().toLowerCase();
+      const canonicalKey = key === 'sub-task' ? 'subtask' : key;
       if (!key) {
         return '#2563eb';
       }
-      return KNOWN_ISSUE_TYPE_HEX[key] || hashPickIssueTypeHex(raw);
+      const configured = configuredIssueTypeColors[raw.trim()] || configuredIssueTypeColors[canonicalKey];
+      return configured || KNOWN_ISSUE_TYPE_HEX[canonicalKey] || hashPickIssueTypeHex(raw);
+    }
+
+    function ticketHeaderForeground(hex) {
+      const rgb = hexToRgb(hex);
+      if (!rgb) {
+        return '#eff6ff';
+      }
+      const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+      return brightness >= 160 ? '#111827' : '#eff6ff';
     }
 
     function taskDesignerTicketHeaderBackground(issueType) {
       const base = issueTypeHex(issueType);
-      return 'linear-gradient(135deg, ' + shiftHex(base, 18) + ' 0%, ' + shiftHex(base, -14) + ' 100%)';
+      return 'background: ' + base + '; color: ' + ticketHeaderForeground(base) + '; border-bottom: 1px solid color-mix(in srgb, ' + base + ' 72%, black);';
     }
 
     function taskDesignerWebsiteHeaderBackground() {
@@ -3247,7 +3279,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         const header = document.createElement('div');
         header.className = 'ticket-node-header ticket-node-header--' + node.type;
         if (node.type === 'ticket') {
-          header.style.background = taskDesignerTicketHeaderBackground(node.issueType);
+          header.style.cssText = taskDesignerTicketHeaderBackground(node.issueType);
         } else if (node.type === 'website') {
           header.style.background = taskDesignerWebsiteHeaderBackground();
         }

@@ -985,7 +985,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
 
         function getParentUi(issueType) {
           const normalized = normalizeIssueType(issueType);
-          const mode = parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.mode : 'jira';
+          const mode = parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.mode : 'jiracloud';
           if (normalized === 'epic' || normalized === 'feature') {
             return {
               canHaveParent: false,
@@ -1011,8 +1011,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             requiresParent: false,
             label: 'Epic',
             helper:
-              mode === 'jira'
-                || mode === 'jiracloud'
+              mode === 'jiracloud'
                 ? 'This item can only belong to an Epic.'
                 : 'This item can only belong to an Epic/Feature.',
             emptyText: 'No epic selected.',

@@ -70,6 +70,7 @@ function resolvePriorityBarStyle(priority: string | undefined, priorityColors: R
 
 interface BoardRenderPrefs {
   statusColors?: Record<string, string>;
+  issueTypeColors?: Record<string, string>;
   priorityColors: Record<string, string>;
 }
 
@@ -207,6 +208,10 @@ export class BoardPanelManager implements vscode.Disposable {
       errorMessage: this.errorMessage,
       selectedIssueKey: this.selectedIssueKey
     };
+  }
+
+  public getCurrentDisplayDetails(): BoardDetails | undefined {
+    return this.getDisplayBoardDetails() ?? this.boardDetails;
   }
 
   public async getActiveBoardDisplayDetails(): Promise<BoardDetails | undefined> {
@@ -561,13 +566,13 @@ export class BoardPanelManager implements vscode.Disposable {
                             ${column.issues
                               .map(
                                 issue => `
-                                  <div class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" draggable="true" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType))}59;">
+                                  <div class="issue-card${this.selectedIssueKey === issue.key ? ' selected' : ''}" draggable="true" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType, prefs.issueTypeColors))}59;">
                                     <div class="priority-bar" style="${escapeHtml(resolvePriorityBarStyle(issue.priority, prefs.priorityColors))}"></div>
                                     <div class="issue-card-content">
                                       <div class="issue-card-top">
                                         <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
                                         <span class="issue-type-pill" style="${escapeHtml(
-                                          issueTypePillInlineStyle(issue.issueType)
+                                          issueTypePillInlineStyle(issue.issueType, prefs.issueTypeColors)
                                         )}">${escapeHtml(issue.issueType)}</span>
                                       </div>
                                       <span class="issue-summary">${escapeHtml(issue.summary)}</span>
@@ -607,12 +612,12 @@ export class BoardPanelManager implements vscode.Disposable {
                 : column.issues
                     .map(
                       issue => `
-                        <div class="list-item${this.selectedIssueKey === issue.key ? ' selected' : ''}" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType))}59;">
+                        <div class="list-item${this.selectedIssueKey === issue.key ? ' selected' : ''}" data-issue-key="${escapeHtml(issue.key)}" style="border-top: 2px solid ${escapeHtml(issueTypeHex(issue.issueType, prefs.issueTypeColors))}59;">
                           <div class="priority-bar" style="${escapeHtml(resolvePriorityBarStyle(issue.priority, prefs.priorityColors))}"></div>
                           <div class="list-item-inner">
                             <button type="button" class="issue-key-btn" data-issue-key="${escapeHtml(issue.key)}">${escapeHtml(issue.key)}</button>
                             <span class="issue-type-pill" style="${escapeHtml(
-                              issueTypePillInlineStyle(issue.issueType)
+                              issueTypePillInlineStyle(issue.issueType, prefs.issueTypeColors)
                             )}">${escapeHtml(issue.issueType)}</span>
                             <span class="list-item-summary">${escapeHtml(issue.summary)}</span>
                             <span class="issue-status-dot" style="background: ${escapeHtml(
@@ -713,6 +718,7 @@ export class BoardPanelManager implements vscode.Disposable {
         const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
         const renderPrefs: BoardRenderPrefs = {
           statusColors: columnPrefs.statusColors,
+          issueTypeColors: columnPrefs.issueTypeColors,
           priorityColors
         };
         if (display.columns.length === 0) {

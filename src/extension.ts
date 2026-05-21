@@ -1,5 +1,8 @@
 import * as path from 'node:path';
+import { execFile as execFileCallback } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs/promises';
+import * as util from 'node:util';
 import * as vscode from 'vscode';
 import { AiSessionManager } from './ai/aiSessionManager';
 import { BackendRouter } from './backends/backendRouter';
@@ -9,6 +12,7 @@ import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { ConnectionStore } from './config/connectionStore';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
+import { issueTypeHex } from './board/issueTypeColors';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore, shouldAdoptJiraCloudEpicIssueScope } from './state/filterStore';
@@ -26,6 +30,7 @@ import type {
 } from './types';
 import {
   assessCopilotImplementationReadiness,
+  buildTicketContext,
   recommendTaskDesignerFlowWithCopilot,
   respondToCopilotComment,
   reviewTicketWithClaude,
@@ -126,6 +131,8 @@ import {
   type GitLabMergeRequest
 } from './gitlab/gitLabApiService';
 
+const execFile = util.promisify(execFileCallback);
+
 export interface TicketManagerExtensionApi {
   refresh(): Promise<void>;
   backendService: IssueTrackerService;
@@ -183,6 +190,37 @@ interface AiAssignmentMenuOption {
   label: string;
 }
 
+interface AiModelOption {
+  id: string;
+  label: string;
+}
+
+const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
+  openai: [
+    { id: 'gpt-5.4', label: 'GPT 5.4' },
+    { id: 'gpt-5-mini', label: 'GPT 5 Mini' },
+    { id: 'gpt-4.1', label: 'GPT 4.1' },
+    { id: 'gpt-4.1-mini', label: 'GPT 4.1 Mini' },
+    { id: 'o3', label: 'o3' },
+    { id: 'o4-mini', label: 'o4 Mini' }
+  ],
+  claude: [
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
+  ],
+  'copilot-cli': [
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'gpt-5.4', label: 'GPT 5.4' },
+    { id: 'gpt-4.1', label: 'GPT 4.1' },
+    { id: 'o3', label: 'o3' }
+  ],
+  'cursor-cli': [],
+  'claude-cli': []
+};
+
 function logError(output: vscode.OutputChannel, error: unknown, scope?: string): void {
   const message = error instanceof Error ? error.stack ?? error.message : String(error);
   output.appendLine(scope ? `[${scope}] ${message}` : message);
@@ -190,6 +228,482 @@ function logError(output: vscode.OutputChannel, error: unknown, scope?: string):
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function collectRegexMatches(text: string, pattern: RegExp): string[] {
+  return Array.from(text.matchAll(pattern), match => match[0]);
+}
+
+function getGitLabProjectRef(issueKey: string): string | undefined {
+  const separatorIndex = issueKey.lastIndexOf('#');
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  const projectRef = issueKey.slice(0, separatorIndex).trim();
+  return projectRef.includes('/') ? projectRef : undefined;
+}
+
+function extractReferencedIssueKeys(issue: IssueDetails): string[] {
+  const currentKeyLower = issue.key.trim().toLowerCase();
+  const gitLabProjectRef = getGitLabProjectRef(issue.key);
+  const sources = [
+    issue.summary,
+    issue.description,
+    issue.parentIssue?.key,
+    ...(issue.dependsOn ?? []),
+    ...(issue.comments?.map(comment => comment.body) ?? [])
+  ].filter((value): value is string => Boolean(value?.trim()));
+  const orderedKeys: string[] = [];
+  const seen = new Set<string>();
+
+  const addReference = (rawKey: string): void => {
+    const key = rawKey.trim();
+    if (!key) {
+      return;
+    }
+
+    const normalized = key.toLowerCase();
+    if (normalized === currentKeyLower || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    orderedKeys.push(key);
+  };
+
+  for (const source of sources) {
+    for (const key of collectRegexMatches(source, /\b[A-Z][A-Z0-9]+-\d+\b/g)) {
+      addReference(key);
+    }
+
+    for (const key of collectRegexMatches(source, /\b[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+#\d+\b/g)) {
+      addReference(key);
+    }
+
+    if (!gitLabProjectRef) {
+      continue;
+    }
+
+    for (const match of source.matchAll(/(^|[^A-Za-z0-9._/-])#(\d+)\b/g)) {
+      addReference(`${gitLabProjectRef}#${match[2]}`);
+    }
+  }
+
+  return orderedKeys;
+}
+
+async function buildReferencedIssueAnalysisContext(
+  issue: IssueDetails,
+  getIssue: (issueKey: string) => Promise<IssueDetails>
+): Promise<string | undefined> {
+  const referencedKeys = extractReferencedIssueKeys(issue).slice(0, 5);
+  if (referencedKeys.length === 0) {
+    return undefined;
+  }
+
+  const referencedIssues = await Promise.all(
+    referencedKeys.map(async issueKey => {
+      try {
+        return await getIssue(issueKey);
+      } catch {
+        return undefined;
+      }
+    })
+  );
+  const referencedBlocks = referencedIssues
+    .filter((referencedIssue): referencedIssue is IssueDetails => Boolean(referencedIssue))
+    .map(referencedIssue => buildTicketContext(referencedIssue, { recentCommentLimit: 2, newestComments: true }));
+
+  if (referencedBlocks.length === 0) {
+    return undefined;
+  }
+
+  return ['Referenced tickets mentioned in this ticket:', ...referencedBlocks].join('\n\n');
+}
+
+interface AnalysisRepositoryContext {
+  promptContext: string;
+  workingDirectory?: string;
+}
+
+interface AnalysisRepositoryReference {
+  repository?: string;
+  branch?: string;
+  commit?: string;
+  subdirectory?: string;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isGitRepository(repoPath: string): Promise<boolean> {
+  try {
+    await execFile('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd: repoPath,
+      windowsHide: true
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readGitStdout(args: string[], cwd: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFile('git', args, {
+      cwd,
+      windowsHide: true
+    });
+    return stdout.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cleanCapturedRepositoryReference(value: string): string {
+  return value.trim().replace(/[),.;]+$/g, '');
+}
+
+function cleanCapturedRepositoryDetail(value: string): string | undefined {
+  const trimmed = cleanCapturedRepositoryReference(value).replace(/^['"]|['"]$/g, '');
+  return trimmed || undefined;
+}
+
+function extractRepositoryReferenceFromText(text: string): string | undefined {
+  const explicitMatch = text.match(/(?:^|\n)\s*(?:repo|repository)\s*:\s*(\S+)/i);
+  if (explicitMatch?.[1]) {
+    return cleanCapturedRepositoryReference(explicitMatch[1]);
+  }
+
+  const remoteMatch = text.match(/(https?:\/\/[^\s'"]+|ssh:\/\/[^\s'"]+|git@[^\s'"]+)/i);
+  if (remoteMatch?.[1]) {
+    return cleanCapturedRepositoryReference(remoteMatch[1]);
+  }
+
+  const windowsPathMatch = text.match(/([A-Za-z]:\\[^\s'"]+)/);
+  if (windowsPathMatch?.[1]) {
+    return cleanCapturedRepositoryReference(windowsPathMatch[1]);
+  }
+
+  const relativePathMatch = text.match(/((?:\.\.?[\\/]|[\\/])[^\s'"]+)/);
+  if (relativePathMatch?.[1]) {
+    return cleanCapturedRepositoryReference(relativePathMatch[1]);
+  }
+
+  return undefined;
+}
+
+function extractRepositoryBranchFromText(text: string): string | undefined {
+  const explicitMatch = text.match(/(?:^|\n)\s*branch\s*:\s*(\S+)/i);
+  if (explicitMatch?.[1]) {
+    return cleanCapturedRepositoryDetail(explicitMatch[1]);
+  }
+
+  const inlineMatch = text.match(/\bbranch\s+([A-Za-z0-9._/-]+)\b/i);
+  return inlineMatch?.[1] ? cleanCapturedRepositoryDetail(inlineMatch[1]) : undefined;
+}
+
+function extractRepositoryCommitFromText(text: string): string | undefined {
+  const explicitMatch = text.match(/(?:^|\n)\s*(?:commit|sha|revision)\s*:\s*([A-Fa-f0-9]{7,40})/i);
+  if (explicitMatch?.[1]) {
+    return cleanCapturedRepositoryDetail(explicitMatch[1]);
+  }
+
+  const inlineMatch = text.match(/\b(?:commit|sha|revision)\s+([A-Fa-f0-9]{7,40})\b/i);
+  return inlineMatch?.[1] ? cleanCapturedRepositoryDetail(inlineMatch[1]) : undefined;
+}
+
+function extractRepositorySubdirectoryFromText(text: string): string | undefined {
+  const explicitMatch = text.match(/(?:^|\n)\s*(?:subdir|subdirectory|path|folder)\s*:\s*(\S+)/i);
+  if (explicitMatch?.[1]) {
+    return cleanCapturedRepositoryDetail(explicitMatch[1]);
+  }
+
+  return undefined;
+}
+
+function extractAnalysisRepositoryReference(
+  question: string,
+  history: Array<{ role: string; text: string }>
+): AnalysisRepositoryReference | undefined {
+  const texts = [question, ...history.filter(entry => entry.role === 'user').map(entry => entry.text).reverse()];
+  const reference: AnalysisRepositoryReference = {};
+
+  for (const text of texts) {
+    reference.repository ??= extractRepositoryReferenceFromText(text);
+    reference.branch ??= extractRepositoryBranchFromText(text);
+    reference.commit ??= extractRepositoryCommitFromText(text);
+    reference.subdirectory ??= extractRepositorySubdirectoryFromText(text);
+
+    if (reference.repository && (reference.branch || reference.commit || reference.subdirectory)) {
+      return reference;
+    }
+  }
+
+  return reference.repository || reference.branch || reference.commit || reference.subdirectory ? reference : undefined;
+}
+
+function buildMissingRepositoryPrompt(reason?: string): string {
+  const lines = [reason ?? 'Repository access is currently unavailable.'];
+  lines.push('If code-level confidence depends on implementation details, ask the user for:');
+  lines.push('1. The git repository URL or a local repository path');
+  lines.push('2. The branch or commit to inspect if not the default branch');
+  lines.push('3. Any relevant subdirectory if the repository is large');
+  lines.push('Provide any ticket-only findings you can make now, but clearly separate them from code-backed findings.');
+  return lines.join('\n');
+}
+
+function getAnalysisRepoRoot(workingDirectory: string | undefined, globalStoragePath: string): string {
+  return workingDirectory
+    ? path.join(workingDirectory, '.ticket-manager-analysis', 'repos')
+    : path.join(globalStoragePath, 'analysis-repos');
+}
+
+function isRemoteRepositoryReference(reference: string): boolean {
+  return /^(?:https?:\/\/|ssh:\/\/|git@)/i.test(reference) || reference.endsWith('.git');
+}
+
+function resolveLocalRepositoryPath(reference: string, workingDirectory: string | undefined): string {
+  if (path.isAbsolute(reference)) {
+    return path.normalize(reference);
+  }
+
+  return path.resolve(workingDirectory ?? process.cwd(), reference);
+}
+
+function buildAnalysisRepoFolderName(issueKey: string, source: string, branch?: string, commit?: string): string {
+  const fingerprint = createHash('sha1')
+    .update(JSON.stringify({ source, branch: branch ?? '', commit: commit ?? '' }))
+    .digest('hex')
+    .slice(0, 10);
+  return `${issueKey.replace(/[^a-z0-9._-]+/gi, '-').toLowerCase()}-${fingerprint}`;
+}
+
+async function ensureAnalysisCheckoutRevision(repoPath: string, branch?: string, commit?: string): Promise<void> {
+  if (branch) {
+    await execFile('git', ['fetch', '--depth', '1', 'origin', branch], {
+      cwd: repoPath,
+      windowsHide: true
+    }).catch(() => undefined);
+    await execFile('git', ['checkout', branch], {
+      cwd: repoPath,
+      windowsHide: true
+    }).catch(async () => {
+      await execFile('git', ['checkout', '-B', branch, `origin/${branch}`], {
+        cwd: repoPath,
+        windowsHide: true
+      });
+    });
+  }
+
+  if (commit) {
+    await execFile('git', ['fetch', '--depth', '1', 'origin', commit], {
+      cwd: repoPath,
+      windowsHide: true
+    }).catch(() => undefined);
+    await execFile('git', ['checkout', commit], {
+      cwd: repoPath,
+      windowsHide: true
+    });
+  }
+}
+
+async function prepareAnalysisRepositoryClone(options: {
+  issueKey: string;
+  source: string;
+  analysisRepoRoot: string;
+  branch?: string;
+  commit?: string;
+}): Promise<string> {
+  await fs.mkdir(options.analysisRepoRoot, { recursive: true });
+  const repoPath = path.join(
+    options.analysisRepoRoot,
+    buildAnalysisRepoFolderName(options.issueKey, options.source, options.branch, options.commit)
+  );
+
+  if (!await pathExists(repoPath)) {
+    await execFile('git', ['clone', '--depth', '1', options.source, repoPath], {
+      cwd: options.analysisRepoRoot,
+      windowsHide: true
+    });
+  }
+
+  await ensureAnalysisCheckoutRevision(repoPath, options.branch, options.commit);
+  return repoPath;
+}
+
+async function readOptionalTextFile(filePath: string, maxChars = 1600): Promise<string | undefined> {
+  try {
+    const text = await fs.readFile(filePath, 'utf8');
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    return trimmed.slice(0, maxChars);
+  } catch {
+    return undefined;
+  }
+}
+
+async function buildRepositorySummary(repoPath: string, sourceLabel: string): Promise<string> {
+  const [branch, remoteUrl] = await Promise.all([
+    readGitStdout(['rev-parse', '--abbrev-ref', 'HEAD'], repoPath),
+    readGitStdout(['config', '--get', 'remote.origin.url'], repoPath)
+  ]);
+  const rootEntries = await fs.readdir(repoPath, { withFileTypes: true }).catch(
+    () => [] as Array<{ name: string; isDirectory(): boolean }>
+  );
+  const visibleEntries = rootEntries
+    .filter(entry => !['.git', 'node_modules', '.worktrees', '.ticket-manager-analysis'].includes(entry.name))
+    .slice(0, 12)
+    .map(entry => `${entry.isDirectory() ? 'dir' : 'file'}:${entry.name}`);
+  const readmeText = await readOptionalTextFile(path.join(repoPath, 'README.md'))
+    ?? await readOptionalTextFile(path.join(repoPath, 'README'));
+  const packageJsonText = await readOptionalTextFile(path.join(repoPath, 'package.json'), 1200);
+  let packageSummary: string | undefined;
+  if (packageJsonText) {
+    try {
+      const parsed = JSON.parse(packageJsonText) as {
+        name?: unknown;
+        private?: unknown;
+        scripts?: Record<string, unknown>;
+        dependencies?: Record<string, unknown>;
+        devDependencies?: Record<string, unknown>;
+      };
+      packageSummary = JSON.stringify(
+        {
+          name: typeof parsed.name === 'string' ? parsed.name : undefined,
+          private: typeof parsed.private === 'boolean' ? parsed.private : undefined,
+          scripts: Object.keys(parsed.scripts ?? {}).slice(0, 10),
+          dependencyCount: Object.keys(parsed.dependencies ?? {}).length,
+          devDependencyCount: Object.keys(parsed.devDependencies ?? {}).length
+        },
+        null,
+        2
+      );
+    } catch {
+      packageSummary = packageJsonText;
+    }
+  }
+
+  return [
+    'Repository access is available for this analysis.',
+    `Repository source: ${sourceLabel}`,
+    `Local repository path: ${repoPath}`,
+    branch ? `Repository branch: ${branch}` : undefined,
+    remoteUrl ? `Repository origin: ${remoteUrl}` : undefined,
+    visibleEntries.length > 0 ? `Top-level entries: ${visibleEntries.join(', ')}` : undefined,
+    readmeText ? `README excerpt:\n${readmeText}` : undefined,
+    packageSummary ? `package.json summary:\n${packageSummary}` : undefined,
+    'Use repository context when it helps. If important implementation details are still missing, ask specific follow-up questions.'
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join('\n\n');
+}
+
+async function resolveAnalysisRepositoryContext(options: {
+  issueKey: string;
+  question: string;
+  history: Array<{ role: string; text: string }>;
+  workingDirectory?: string;
+  globalStoragePath: string;
+}): Promise<AnalysisRepositoryContext> {
+  const repositoryReference = extractAnalysisRepositoryReference(options.question, options.history);
+  if (!repositoryReference?.repository) {
+    if (options.workingDirectory && await isGitRepository(options.workingDirectory)) {
+      const workspacePath = repositoryReference?.subdirectory
+        ? path.join(options.workingDirectory, repositoryReference.subdirectory)
+        : options.workingDirectory;
+      return {
+        workingDirectory: workspacePath,
+        promptContext: [
+          await buildRepositorySummary(options.workingDirectory, 'current workspace repository'),
+          repositoryReference?.subdirectory
+            ? `Requested repository subdirectory: ${repositoryReference.subdirectory}`
+            : undefined,
+          repositoryReference?.branch ? `Requested branch hint: ${repositoryReference.branch}` : undefined,
+          repositoryReference?.commit ? `Requested commit hint: ${repositoryReference.commit}` : undefined
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join('\n\n')
+      };
+    }
+
+    return {
+      promptContext: buildMissingRepositoryPrompt()
+    };
+  }
+
+  try {
+    const analysisRepoRoot = getAnalysisRepoRoot(options.workingDirectory, options.globalStoragePath);
+    let repoPath: string;
+    if (isRemoteRepositoryReference(repositoryReference.repository)) {
+      repoPath = await prepareAnalysisRepositoryClone({
+        issueKey: options.issueKey,
+        source: repositoryReference.repository,
+        analysisRepoRoot,
+        branch: repositoryReference.branch,
+        commit: repositoryReference.commit
+      });
+    } else if (repositoryReference.branch || repositoryReference.commit) {
+      const localSourcePath = resolveLocalRepositoryPath(repositoryReference.repository, options.workingDirectory);
+      repoPath = await prepareAnalysisRepositoryClone({
+        issueKey: options.issueKey,
+        source: localSourcePath,
+        analysisRepoRoot,
+        branch: repositoryReference.branch,
+        commit: repositoryReference.commit
+      });
+    } else {
+      repoPath = resolveLocalRepositoryPath(repositoryReference.repository, options.workingDirectory);
+    }
+
+    if (repositoryReference.subdirectory) {
+      repoPath = path.join(repoPath, repositoryReference.subdirectory);
+    }
+
+    if (!await isGitRepository(repositoryReference.subdirectory ? path.dirname(repoPath) : repoPath)) {
+      return {
+        promptContext: buildMissingRepositoryPrompt(
+          `The provided repository reference could not be opened as a git repository: ${repositoryReference.repository}`
+        )
+      };
+    }
+
+    if (!await pathExists(repoPath)) {
+      return {
+        promptContext: buildMissingRepositoryPrompt(
+          `The provided repository path or subdirectory does not exist: ${repoPath}`
+        )
+      };
+    }
+
+    return {
+      workingDirectory: repoPath,
+      promptContext: [
+        await buildRepositorySummary(repositoryReference.subdirectory ? path.dirname(repoPath) : repoPath, repositoryReference.repository),
+        repositoryReference.branch ? `Requested branch: ${repositoryReference.branch}` : undefined,
+        repositoryReference.commit ? `Requested commit: ${repositoryReference.commit}` : undefined,
+        repositoryReference.subdirectory ? `Requested subdirectory: ${repositoryReference.subdirectory}` : undefined
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join('\n\n')
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      promptContext: buildMissingRepositoryPrompt(
+        `The provided repository reference could not be accessed (${repositoryReference.repository}): ${message}`
+      )
+    };
+  }
 }
 
 function extractCopilotRequest(body: string, mentionNames: string[] = ['copilot']): string | undefined {
@@ -3486,9 +4000,9 @@ export async function activate(
       cliPath: getCopilotCliPathOverride(),
       workingDirectory
     }),
-    async () => {
+    async (boardId) => {
       const activeBoard = boardPanelManager.getActiveBoard();
-      if (!activeBoard) {
+      if (!activeBoard || (boardId && activeBoard.id !== boardId)) {
         return undefined;
       }
 
@@ -3497,6 +4011,32 @@ export async function activate(
         boardName: activeBoard.name,
         issues: displayDetails?.issues ?? []
       };
+    },
+    (boardId) => {
+      if (!boardId) {
+        return undefined;
+      }
+
+      const activeBoard = boardPanelManager.getActiveBoard();
+      if (!activeBoard || activeBoard.id !== boardId) {
+        return boardColumnStore.getPreferences(boardId).issueTypeColors;
+      }
+
+      const prefs = boardColumnStore.getPreferences(boardId);
+      const displayDetails = boardPanelManager.getCurrentDisplayDetails();
+      const issueTypes = new Set<string>(Object.keys(prefs.issueTypeColors ?? {}));
+      for (const issue of displayDetails?.issues ?? []) {
+        if (issue.issueType.trim()) {
+          issueTypes.add(issue.issueType.trim());
+        }
+      }
+
+      const resolvedColors: Record<string, string> = {};
+      for (const issueType of issueTypes) {
+        resolvedColors[issueType] = issueTypeHex(issueType, prefs.issueTypeColors);
+      }
+
+      return Object.keys(resolvedColors).length > 0 ? resolvedColors : prefs.issueTypeColors;
     }
   );
 
@@ -3534,6 +4074,7 @@ export async function activate(
       const options = getConfiguredAiOptions();
       return options[0]?.label ?? 'No provider configured';
     },
+    () => getAnalysisModelOptions(),
     issueKey => backendService.getIssue(issueKey),
     async input => {
       const options = getConfiguredAiOptions();
@@ -3542,11 +4083,23 @@ export async function activate(
       }
 
       const chosen = options[0];
+      const referencedIssueContext = await buildReferencedIssueAnalysisContext(
+        input.issue,
+        issueKey => backendService.getIssue(issueKey)
+      );
+      const repositoryContext = await resolveAnalysisRepositoryContext({
+        issueKey: input.issue.key,
+        question: input.question,
+        history: input.history,
+        workingDirectory,
+        globalStoragePath: context.globalStorageUri.fsPath
+      });
       const historyText = input.history
         .map(entry => `${entry.role.toUpperCase()}: ${entry.text}`)
         .join('\n\n');
       const appendedPrompt = [
         input.defaultPrompt,
+        repositoryContext.promptContext,
         input.model.trim() ? `Selected model hint: ${input.model.trim()}` : undefined,
         `Question: ${input.question}`,
         historyText ? `Conversation so far:\n${historyText}` : undefined
@@ -3556,14 +4109,15 @@ export async function activate(
 
       const issueForAnalysis: IssueDetails = {
         ...input.issue,
-        description: [input.issue.description ?? '', appendedPrompt].filter(Boolean).join('\n\n')
+        description: [input.issue.description ?? '', referencedIssueContext, appendedPrompt].filter(Boolean).join('\n\n')
       };
 
       if (chosen.provider === 'openai') {
         return reviewTicketWithOpenAi(
           issueForAnalysis,
           chosen.credential ?? configStore.getAiOpenaiApiKey().trim(),
-          chosen.agentName ?? chosen.label
+          chosen.agentName ?? chosen.label,
+          { onUpdate: input.onUpdate, model: input.model }
         );
       }
 
@@ -3571,7 +4125,8 @@ export async function activate(
         return reviewTicketWithClaude(
           issueForAnalysis,
           chosen.credential ?? configStore.getAiClaudeApiKey().trim(),
-          chosen.agentName ?? chosen.label
+          chosen.agentName ?? chosen.label,
+          { onUpdate: input.onUpdate, model: input.model }
         );
       }
 
@@ -3580,7 +4135,8 @@ export async function activate(
           issueForAnalysis,
           getCopilotCliPathOverride(),
           chosen.agentName ?? chosen.label,
-          workingDirectory
+          repositoryContext.workingDirectory ?? workingDirectory,
+          { onUpdate: input.onUpdate, model: input.model }
         );
       }
 
@@ -3662,6 +4218,8 @@ export async function activate(
     }),
     boardColumnStore.onDidChange(() => {
       boardPanelManager.refreshColumnLayout();
+      void issuesSidebarViewProvider.refresh();
+      taskDesignerPanelManager.refreshIfOpen();
     })
   );
 
@@ -4047,7 +4605,7 @@ export async function activate(
   }
 
   function getEpicIssueType(mode: BackendMode): string {
-    return mode === 'jira' || mode === 'jiracloud' ? 'Epic' : 'Feature';
+    return mode === 'jiracloud' ? 'Epic' : 'Feature';
   }
 
   async function reportActionError(error: unknown): Promise<void> {
@@ -4310,7 +4868,16 @@ export async function activate(
         return;
       }
       const details = await backendService.getBoardDetails(board);
-      await boardColumnConfigPanel.open(board, details);
+      const metadata = await backendService.getFilterMetadata({
+        projectKeys: board.projectKey ? [board.projectKey] : [],
+        statuses: [],
+        issueTypes: [],
+        searchText: '',
+        assigneeMode: 'all',
+        boardId: board.id,
+        grouping: 'none'
+      }).catch(() => undefined);
+      await boardColumnConfigPanel.open(board, details, metadata?.issueTypes ?? []);
     } catch (error) {
       await reportActionError(error);
     }
@@ -4568,6 +5135,14 @@ export async function activate(
       provider: option.provider,
       label: option.label
     }));
+  }
+
+  function getAnalysisModelOptions(): AiModelOption[] {
+    const provider = getConfiguredAiOptions()[0]?.provider;
+    if (!provider) {
+      return [];
+    }
+    return ANALYSIS_MODEL_OPTIONS[provider] ?? [];
   }
 
   function refreshAiAssignmentMenus(): void {
@@ -5139,6 +5714,10 @@ export async function activate(
       onLoadMore: async () => {
         await issuesProvider.loadMore();
       }
+    },
+    () => {
+      const activeBoard = boardPanelManager.getActiveBoard();
+      return activeBoard ? boardColumnStore.getPreferences(activeBoard.id).issueTypeColors : undefined;
     }
   );
   refreshAiAssignmentMenus();

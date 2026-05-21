@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
+import { issueTypePillInlineStyle } from '../board/issueTypeColors';
 import { FilterStore } from '../state/filterStore';
 import type { AiProvider, BackendMode, CreateIssueInput, IssueFilters, IssueSummary, Project } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
@@ -22,6 +23,8 @@ interface IssuesSidebarCallbacks {
   onSetStatuses?: (statuses: string[]) => Promise<void>;
   onLoadMore: () => Promise<void>;
 }
+
+type ResolveIssueTypeColors = () => Record<string, string> | undefined;
 
 function escapeHtml(value: string): string {
   return value
@@ -72,10 +75,13 @@ function getIssueTypeToken(issueType: string | undefined): string {
   }
 }
 
-function renderIssueTypeBadge(issueType: string | undefined): string {
+function renderIssueTypeBadge(
+  issueType: string | undefined,
+  overrideColors?: Record<string, string>
+): string {
   const label = issueType?.trim() || 'Issue';
   const token = getIssueTypeToken(label);
-  return `<span class="type-badge type-badge--${token}">${escapeHtml(label)}</span>`;
+  return `<span class="type-badge type-badge--${token}" style="${escapeHtml(issueTypePillInlineStyle(label, overrideColors))}">${escapeHtml(label)}</span>`;
 }
 
 function getStatusToken(status: string | undefined): string {
@@ -112,7 +118,6 @@ function renderAssignmentBadge(issue: IssueSummary): string {
 }
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   jiracloud: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
@@ -147,7 +152,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     private readonly filterStore: FilterStore,
     private readonly issuesProvider: IssuesTreeProvider,
     private readonly aiSessionManager: AiSessionManager,
-    private readonly callbacks: IssuesSidebarCallbacks
+    private readonly callbacks: IssuesSidebarCallbacks,
+    private readonly resolveIssueTypeColors?: ResolveIssueTypeColors
   ) {
     this.disposables.push(
       this.filterStore.onDidChange(() => {
@@ -382,7 +388,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const filters = this.filterStore.getFilters();
     const snapshot = this.issuesProvider.getSnapshot();
     const nonce = createNonce();
-    const issuesSection = this.renderIssuesSection(snapshot, filters);
+    const issuesSection = this.renderIssuesSection(snapshot, filters, this.resolveIssueTypeColors?.());
 
     try {
       this.view.title = undefined;
@@ -687,34 +693,34 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         line-height: 1.4;
       }
       .type-badge--epic {
-        color: #d8b4fe;
-        background: rgba(168, 85, 247, 0.16);
-        border-color: rgba(168, 85, 247, 0.28);
+        color: #e9d5ff;
+        background: rgba(163, 113, 247, 0.16);
+        border-color: rgba(163, 113, 247, 0.28);
       }
       .type-badge--feature {
-        color: #fdba74;
-        background: rgba(249, 115, 22, 0.16);
-        border-color: rgba(249, 115, 22, 0.28);
+        color: #99f6e4;
+        background: rgba(63, 188, 205, 0.16);
+        border-color: rgba(63, 188, 205, 0.28);
       }
       .type-badge--idea {
-        color: #fbbf24;
+        color: #fde68a;
         background: rgba(245, 158, 11, 0.16);
         border-color: rgba(245, 158, 11, 0.28);
       }
       .type-badge--story {
-        color: #93c5fd;
-        background: rgba(59, 130, 246, 0.16);
-        border-color: rgba(59, 130, 246, 0.28);
+        color: #bbf7d0;
+        background: rgba(63, 185, 80, 0.16);
+        border-color: rgba(63, 185, 80, 0.28);
       }
       .type-badge--task {
-        color: #86efac;
-        background: rgba(34, 197, 94, 0.16);
-        border-color: rgba(34, 197, 94, 0.28);
+        color: #f5b5db;
+        background: rgba(219, 97, 162, 0.16);
+        border-color: rgba(219, 97, 162, 0.28);
       }
       .type-badge--bug {
-        color: #fca5a5;
-        background: rgba(239, 68, 68, 0.16);
-        border-color: rgba(239, 68, 68, 0.28);
+        color: #fecaca;
+        background: rgba(229, 83, 75, 0.16);
+        border-color: rgba(229, 83, 75, 0.28);
       }
       .type-badge--issue {
         color: #a1a1aa;
@@ -1289,7 +1295,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
 
   private renderIssuesSection(
     snapshot: ReturnType<IssuesTreeProvider['getSnapshot']>,
-    filters: IssueFilters
+    filters: IssueFilters,
+    issueTypeColors?: Record<string, string>
   ): string {
     let content = '';
     if (snapshot.status === 'error') {
@@ -1318,7 +1325,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             <div class="row-main">
               <div class="row-left">
                 <div class="item-key">${escapeHtml(issue.key)}</div>
-                ${renderIssueTypeBadge(issue.issueType)}
+                ${renderIssueTypeBadge(issue.issueType, issueTypeColors)}
                 ${aiBadge}
                 <div class="item-summary">${escapeHtml(issue.summary)}</div>
               </div>

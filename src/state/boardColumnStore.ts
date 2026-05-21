@@ -61,6 +61,7 @@ function hasPreferenceData(prefs: BoardColumnPreferences): boolean {
       prefs.issueFilterEpicKey ||
       (prefs.issueFilterStatuses && prefs.issueFilterStatuses.length > 0) ||
       (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) ||
+      (prefs.issueTypeColors && Object.keys(prefs.issueTypeColors).length > 0) ||
       prefs.viewMode === 'list' ||
       (prefs.listGroupOrder && prefs.listGroupOrder.length > 0) ||
       prefs.maxAgeWeeks !== undefined ||
@@ -141,6 +142,9 @@ export class BoardColumnStore implements vscode.Disposable {
     }
     if (prefs.statusColors && Object.keys(prefs.statusColors).length > 0) {
       next.statusColors = { ...prefs.statusColors };
+    }
+    if (prefs.issueTypeColors && Object.keys(prefs.issueTypeColors).length > 0) {
+      next.issueTypeColors = { ...prefs.issueTypeColors };
     }
     if (prefs.viewMode === 'list') {
       next.viewMode = prefs.viewMode;

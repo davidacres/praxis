@@ -64,7 +64,7 @@ suite('AppConfigStore workspace-scoped settings', () => {
     await config.update('backendMode', 'livefolder', vscode.ConfigurationTarget.Global);
 
     assert.strictEqual(store.getBackendMode(), undefined);
-    assert.strictEqual(store.getEffectiveBackendMode(), 'jira');
+    assert.strictEqual(store.getEffectiveBackendMode(), 'jiracloud');
   });
 
   test('workspace projects ignore global live folder path', async () => {

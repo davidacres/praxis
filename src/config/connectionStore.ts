@@ -7,7 +7,6 @@ const BOARDS_KEY = 'boards';
 const SECRET_PREFIX = 'ticketManager.connection';
 
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
-  'jira',
   'jiracloud',
   'demo',
   'github',
@@ -26,7 +25,8 @@ function sanitizeConnection(raw: unknown): Connection | undefined {
   }
   const id = typeof raw.id === 'string' ? raw.id.trim() : '';
   const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-  const mode = raw.mode as BackendMode;
+  const rawMode = typeof raw.mode === 'string' ? raw.mode.trim() : '';
+  const mode = (rawMode === 'jira' ? 'jiracloud' : rawMode) as BackendMode;
   if (!id || !name || !VALID_MODES.has(mode)) {
     return undefined;
   }

@@ -107,7 +107,12 @@ Rules:
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
 const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
 
-function buildTicketContext(
+interface ReviewStreamOptions {
+  onUpdate?: (content: string) => void;
+  model?: string;
+}
+
+export function buildTicketContext(
   issue: IssueDetails,
   options?: { recentCommentLimit?: number; newestComments?: boolean }
 ): string {
@@ -178,6 +183,77 @@ async function extractApiError(response: Response, providerLabel: string): Promi
   return `${providerLabel} API error (${response.status})`;
 }
 
+async function consumeSseStream(
+  response: Response,
+  onEvent: (eventName: string, data: string) => void
+): Promise<void> {
+  if (!response.body) {
+    throw new Error('Streaming response body was unavailable.');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+
+    let separatorIndex = buffer.indexOf('\n\n');
+    while (separatorIndex !== -1) {
+      const rawEvent = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+
+      let eventName = 'message';
+      const dataLines: string[] = [];
+      for (const rawLine of rawEvent.split(/\r?\n/)) {
+        const line = rawLine.trimEnd();
+        if (!line || line.startsWith(':')) {
+          continue;
+        }
+        if (line.startsWith('event:')) {
+          eventName = line.slice('event:'.length).trim() || 'message';
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice('data:'.length).trimStart());
+        }
+      }
+
+      if (dataLines.length > 0) {
+        onEvent(eventName, dataLines.join('\n'));
+      }
+
+      separatorIndex = buffer.indexOf('\n\n');
+    }
+
+    if (done) {
+      const trailing = buffer.trim();
+      if (trailing.length > 0) {
+        let eventName = 'message';
+        const dataLines: string[] = [];
+        for (const rawLine of trailing.split(/\r?\n/)) {
+          const line = rawLine.trimEnd();
+          if (!line || line.startsWith(':')) {
+            continue;
+          }
+          if (line.startsWith('event:')) {
+            eventName = line.slice('event:'.length).trim() || 'message';
+            continue;
+          }
+          if (line.startsWith('data:')) {
+            dataLines.push(line.slice('data:'.length).trimStart());
+          }
+        }
+        if (dataLines.length > 0) {
+          onEvent(eventName, dataLines.join('\n'));
+        }
+      }
+      break;
+    }
+  }
+}
+
 async function runCopilotPrompt(
   prompt: string,
   options: {
@@ -185,6 +261,8 @@ async function runCopilotPrompt(
     systemPrompt: string;
     workingDirectory?: string;
     timeoutMs?: number;
+    onUpdate?: (content: string) => void;
+    model?: string;
   }
 ): Promise<string> {
   const sdk = await import('@github/copilot-sdk');
@@ -193,6 +271,7 @@ async function runCopilotPrompt(
   let session:
     | {
         disconnect(): Promise<void>;
+        on?: (listener: (event: { type: string; data?: Record<string, unknown> }) => void) => () => void;
         sendAndWait(
           args: { prompt: string },
           timeout?: number
@@ -200,12 +279,16 @@ async function runCopilotPrompt(
       }
     | undefined;
   const timeoutMs = options.timeoutMs ?? COPILOT_PROMPT_TIMEOUT_MS;
+  let unsubscribe: (() => void) | undefined;
+  const messageBuffers = new Map<string, string>();
   try {
     await client.start();
     session = await client.createSession({
       clientName: 'ticket-manager-extension',
       availableTools: [],
       infiniteSessions: { enabled: false },
+      streaming: true,
+      model: options.model,
       onPermissionRequest: sdk.approveAll,
       systemMessage: {
         content: options.systemPrompt
@@ -213,14 +296,46 @@ async function runCopilotPrompt(
       workingDirectory: options.workingDirectory
     });
 
+    unsubscribe = session.on?.((event) => {
+      const data = event.data ?? {};
+      if (event.type === 'assistant.message_delta') {
+        const messageId = typeof data.messageId === 'string' ? data.messageId : 'message';
+        const deltaContent = typeof data.deltaContent === 'string' ? data.deltaContent : '';
+        if (!deltaContent) {
+          return;
+        }
+        const previous = messageBuffers.get(messageId) ?? '';
+        messageBuffers.set(messageId, previous + deltaContent);
+        const next = [...messageBuffers.values()].join('\n\n').trim();
+        if (next) {
+          options.onUpdate?.(next);
+        }
+        return;
+      }
+
+      if (event.type === 'assistant.message') {
+        const messageId = typeof data.messageId === 'string'
+          ? data.messageId
+          : `message-${messageBuffers.size + 1}`;
+        const content = typeof data.content === 'string' ? data.content : '';
+        messageBuffers.set(messageId, content);
+        const next = [...messageBuffers.values()].join('\n\n').trim();
+        if (next) {
+          options.onUpdate?.(next);
+        }
+      }
+    });
+
     const response = await session.sendAndWait({ prompt }, timeoutMs);
-    const content = response?.data?.content?.trim();
+    const streamedContent = [...messageBuffers.values()].join('\n\n').trim();
+    const content = streamedContent || response?.data?.content?.trim();
     if (!content) {
       throw new Error('Copilot returned an empty response.');
     }
 
     return content;
   } finally {
+    unsubscribe?.();
     if (session) {
       await session.disconnect();
     }
@@ -549,10 +664,61 @@ export function normalizeClarificationCommentBody(text: string): string | undefi
 export async function reviewTicketWithOpenAi(
   issue: IssueDetails,
   apiKey: string,
-  agentName: string
+  agentName: string,
+  options?: ReviewStreamOptions
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
+  const model = options?.model?.trim() || 'gpt-4o-mini';
+
+  if (options?.onUpdate) {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        messages: [
+          { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+          { role: 'user', content: userMessage }
+        ],
+        max_tokens: 1024
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response, 'OpenAI'));
+    }
+
+    let content = '';
+    await consumeSseStream(response, (_eventName, data) => {
+      if (data === '[DONE]') {
+        return;
+      }
+      let parsed: { choices?: Array<{ delta?: { content?: string } }> } | undefined;
+      try {
+        parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+      } catch {
+        return;
+      }
+      const delta = parsed.choices?.[0]?.delta?.content ?? '';
+      if (!delta) {
+        return;
+      }
+      content += delta;
+      options.onUpdate?.(`## AI Review by ${agentName}\n\n${content}`);
+    });
+
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new Error('OpenAI returned an empty response.');
+    }
+
+    return `## AI Review by ${agentName}\n\n${trimmed}`;
+  }
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -561,7 +727,7 @@ export async function reviewTicketWithOpenAi(
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model,
       messages: [
         { role: 'system', content: REVIEW_SYSTEM_PROMPT },
         { role: 'user', content: userMessage }
@@ -588,10 +754,62 @@ export async function reviewTicketWithOpenAi(
 export async function reviewTicketWithClaude(
   issue: IssueDetails,
   apiKey: string,
-  agentName: string
+  agentName: string,
+  options?: ReviewStreamOptions
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
+  const model = options?.model?.trim() || 'claude-haiku-4-5-20251001';
+
+  if (options?.onUpdate) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        max_tokens: 1024,
+        system: REVIEW_SYSTEM_PROMPT,
+        messages: [
+          { role: 'user', content: userMessage }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(await extractApiError(response, 'Claude'));
+    }
+
+    let content = '';
+    await consumeSseStream(response, (eventName, data) => {
+      if (eventName !== 'content_block_delta') {
+        return;
+      }
+      let parsed: { delta?: { text?: string } } | undefined;
+      try {
+        parsed = JSON.parse(data) as { delta?: { text?: string } };
+      } catch {
+        return;
+      }
+      const delta = parsed.delta?.text ?? '';
+      if (!delta) {
+        return;
+      }
+      content += delta;
+      options.onUpdate?.(`## AI Review by ${agentName}\n\n${content}`);
+    });
+
+    const trimmed = content.trim();
+    if (!trimmed) {
+      throw new Error('Claude returned an empty response.');
+    }
+
+    return `## AI Review by ${agentName}\n\n${trimmed}`;
+  }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -601,7 +819,7 @@ export async function reviewTicketWithClaude(
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model,
       max_tokens: 1024,
       system: REVIEW_SYSTEM_PROMPT,
       messages: [
@@ -630,7 +848,8 @@ export async function reviewTicketWithCopilot(
   issue: IssueDetails,
   cliPath: string | undefined,
   agentName: string,
-  workingDirectory?: string
+  workingDirectory?: string,
+  options?: ReviewStreamOptions
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
   const content = await runCopilotPrompt(
@@ -638,7 +857,9 @@ export async function reviewTicketWithCopilot(
     {
       cliPath,
       systemPrompt: REVIEW_SYSTEM_PROMPT,
-      workingDirectory
+      workingDirectory,
+      onUpdate: options?.onUpdate,
+      model: options?.model
     }
   );
 

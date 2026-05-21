@@ -675,7 +675,6 @@ function toTransitionQuickPickItems(
 }
 
 const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jira: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   jiracloud: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
   github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
@@ -1532,7 +1531,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
       const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
-      deps.taskDesignerPanelManager.open(board?.name);
+      deps.taskDesignerPanelManager.open(board ? { id: board.id, name: board.name } : undefined);
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {

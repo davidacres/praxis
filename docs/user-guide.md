@@ -150,6 +150,24 @@ Available capabilities include:
 - create issues from a board,
 - open board-specific issue workflows.
 
+#### Board settings
+
+Board settings are centered around a single `Statuses` editor.
+
+- Use `Customize statuses and columns` to switch from the board's detected defaults to a local override.
+- Reorder statuses by dragging them.
+- Rename statuses inline.
+- Add or remove statuses from the same list.
+- Use `Visible on board` to control which statuses appear as board columns.
+- Set each status color in the same row so column visibility, naming, and color stay together.
+
+Other board-level controls include:
+
+- swim lane grouping,
+- board-level ticket filters,
+- board list pill color,
+- ticket type colors for issue pills, board accents, and Task Designer ticket colors.
+
 ### Issue workflows
 
 Issue-related capabilities include:
@@ -209,6 +227,7 @@ Notes about Task Designer behavior:
 - Ticket nodes participate in AI recommendation and master-plan flows.
 - Note and website nodes are preserved in designer state, but are not treated as executable ticket graph nodes.
 - Website previews rely on iframe embedding; some sites will refuse to display.
+- When opened from an active board context, Task Designer uses that board's ticket type color settings for ticket nodes.
 
 ### Live Folder and migration workflows
 

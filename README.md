@@ -4,7 +4,7 @@ Ticket Manager is a VS Code extension for working with tracked boards, issues, A
 
 It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira Cloud, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
-Current extension version: 0.0.29
+Current extension version: 0.0.30
 
 ## What the extension includes
 
@@ -13,6 +13,7 @@ Current extension version: 0.0.29
 	- Classic mode with Boards, EPICs, My Issues, Sessions, and Issue Details views.
 	- Work Mode with a board-centric view that nests active AI sessions under boards.
 - Board browsing, tracked-board selection, board filtering, and board display customization.
+- Board settings for unified status editing, per-status colors, swim lanes, filters, and per-ticket-type board colors.
 - Issue workflows including create, edit, transition, comment, assign-to-me, assign-to-AI, and open-in-browser flows.
 - AI session management for Copilot, Claude, OpenAI, and CLI-backed agent providers.
 - Local Peer Review (LPR) for issue-focused review output.
@@ -124,6 +125,15 @@ Important settings include:
 5. Use the issue views, Issue Details, Task Designer, and AI/session tools from there.
 
 If you prefer the board-centric layout, turn on `ticketManager.workModeEnabled` or run `Ticket Manager: Toggle Work Mode`.
+
+## Board settings
+
+Tracked boards can be customized from `Ticket Manager: Configure Board Settings`.
+
+- `Statuses` is the main editor for status order, naming, visibility on the board, and per-status colors.
+- Board filters can narrow tickets by assignee, epic, age, and included statuses.
+- Ticket type colors control issue-type accents on the board and in Task Designer when that board is active.
+- Swim lanes can group the board by assignee or epic.
 
 ## Screenshots and walkthroughs
 
