@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
 import { DEFAULT_MAX_AGE_WEEKS } from '../board/boardIssueFilters';
+import {
+  defaultIssueTypeHex,
+  normalizeIssueTypeColorKey,
+  sanitizeIssueTypeColors
+} from '../board/issueTypeColors';
 import { defaultStatusDotHex, sanitizeStatusColors } from '../board/statusColors';
 import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
 import type { BoardColumnStore } from '../state/boardColumnStore';
@@ -75,6 +80,21 @@ function buildColumnRows(
   return rows;
 }
 
+function normalizeIssueTypes(issueTypes: string[]): string[] {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const issueType of issueTypes) {
+    const trimmed = issueType.trim();
+    const canonicalKey = normalizeIssueTypeColorKey(trimmed);
+    if (!trimmed || seen.has(canonicalKey)) {
+      continue;
+    }
+    seen.add(canonicalKey);
+    unique.push(canonicalKey === 'subtask' ? 'Subtask' : trimmed);
+  }
+  return unique;
+}
+
 export class BoardColumnConfigPanel implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private boardNameUpdater?: BoardNameUpdater;
@@ -95,7 +115,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     this.boardSettingsUpdater = updater;
   }
 
-  public async open(board: Board, details: BoardDetails): Promise<void> {
+  public async open(board: Board, details: BoardDetails, availableIssueTypes: string[] = []): Promise<void> {
     this.ensurePanel();
     const defaultWorkflow = getDefaultStatusColumnOrder(details);
     await this.columnStore.normalizeLegacyPreferences(board.id, defaultWorkflow);
@@ -110,6 +130,17 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       defaultStatusHex[s] = def;
       statusColorsState[s] = prefs.statusColors?.[s] ?? def;
     }
+    const issueTypeRows = normalizeIssueTypes([
+      ...availableIssueTypes,
+      ...details.issues.map(issue => issue.issueType)
+    ]);
+    const defaultIssueTypeHexMap: Record<string, string> = {};
+    const issueTypeColorsState: Record<string, string> = {};
+    for (const issueType of issueTypeRows) {
+      const def = defaultIssueTypeHex(issueType);
+      defaultIssueTypeHexMap[issueType] = def;
+      issueTypeColorsState[issueType] = prefs.issueTypeColors?.[normalizeIssueTypeColorKey(issueType)] ?? def;
+    }
 
     const payload = {
       boardId: board.id,
@@ -119,6 +150,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       defaultWorkflow,
       useCustomWorkflow: prefs.workflowStatuses.length > 0,
       useCustomColumns: prefs.orderedStatuses.length > 0,
+      customizeStatuses: prefs.workflowStatuses.length > 0 || prefs.orderedStatuses.length > 0,
       workflowRows,
       columnRows,
       projectPillColor: prefs.projectPillColor ?? '',
@@ -128,7 +160,10 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       issueFilterStatuses: prefs.issueFilterStatuses ?? [],
       maxAgeWeeks: prefs.maxAgeWeeks ?? DEFAULT_MAX_AGE_WEEKS,
       defaultStatusHex,
-      statusColorsState
+      statusColorsState,
+      issueTypeRows,
+      defaultIssueTypeHex: defaultIssueTypeHexMap,
+      issueTypeColorsState
     };
 
     this.panel!.title = `Board Settings: ${board.name}`;
@@ -182,8 +217,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       const originalBoardQuery =
         typeof message.originalBoardQuery === 'string' ? message.originalBoardQuery.trim() : '';
       const boardType = typeof message.boardType === 'string' ? message.boardType : '';
-      const useCustomWorkflow = Boolean(message.useCustomWorkflow);
-      const useCustomColumns = Boolean(message.useCustomColumns);
+      const customizeStatuses = Boolean(message.customizeStatuses);
+      const useCustomWorkflow = customizeStatuses;
+      const useCustomColumns = customizeStatuses;
       const defaultWorkflow = Array.isArray(message.defaultWorkflow)
         ? normalizeStatuses(message.defaultWorkflow.filter((s): s is string => typeof s === 'string'))
         : [];
@@ -226,6 +262,20 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         }
         if (Object.keys(trimmed).length > 0) {
           statusColorsOut = trimmed;
+        }
+      }
+
+      const sanitizedIssueTypeColors = sanitizeIssueTypeColors(message.issueTypeColors);
+      let issueTypeColorsOut: Record<string, string> | undefined;
+      if (sanitizedIssueTypeColors) {
+        const trimmed: Record<string, string> = {};
+        for (const [issueType, hex] of Object.entries(sanitizedIssueTypeColors)) {
+          if (hex !== defaultIssueTypeHex(issueType)) {
+            trimmed[issueType] = hex;
+          }
+        }
+        if (Object.keys(trimmed).length > 0) {
+          issueTypeColorsOut = trimmed;
         }
       }
 
@@ -285,6 +335,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       if (statusColorsOut) {
         nextPrefs.statusColors = statusColorsOut;
       }
+      if (issueTypeColorsOut) {
+        nextPrefs.issueTypeColors = issueTypeColorsOut;
+      }
 
       const hasExtra =
         Boolean(nextPrefs.projectPillColor) ||
@@ -293,7 +346,8 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         Boolean(nextPrefs.issueFilterEpicKey) ||
         (nextPrefs.issueFilterStatuses && nextPrefs.issueFilterStatuses.length > 0) ||
         nextPrefs.maxAgeWeeks !== undefined ||
-        Boolean(nextPrefs.statusColors && Object.keys(nextPrefs.statusColors).length > 0);
+        Boolean(nextPrefs.statusColors && Object.keys(nextPrefs.statusColors).length > 0) ||
+        Boolean(nextPrefs.issueTypeColors && Object.keys(nextPrefs.issueTypeColors).length > 0);
 
       if (
         nextPrefs.workflowStatuses.length === 0 &&
@@ -323,6 +377,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     defaultWorkflow: string[];
     useCustomWorkflow: boolean;
     useCustomColumns: boolean;
+    customizeStatuses: boolean;
     workflowRows: string[];
     columnRows: Array<{ status: string; checked: boolean }>;
     projectPillColor: string;
@@ -333,6 +388,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     maxAgeWeeks: number;
     defaultStatusHex: Record<string, string>;
     statusColorsState: Record<string, string>;
+    issueTypeRows: string[];
+    defaultIssueTypeHex: Record<string, string>;
+    issueTypeColorsState: Record<string, string>;
   }): string {
     const nonce = createNonce();
     const json = JSON.stringify(payload);
@@ -521,6 +579,34 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       border-radius: 6px;
       cursor: pointer;
     }
+    .status-visibility-label {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+    }
+    .status-inline-color {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-inline-color input[type="color"] {
+      width: 32px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--vscode-input-background);
+    }
+    .status-inline-color input[type="text"] {
+      width: 92px;
+      padding: 6px 8px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+    }
   </style>
 </head>
   <body>
@@ -531,7 +617,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   <input type="text" id="boardQuery" class="field-input" value="${escapeHtml(payload.boardQuery)}" placeholder="project = KAMAI AND issuetype in (Story, Task)" />
   <p class="helper">This JQL defines which issues appear on the board.</p>` : ''}
   <h1>${escapeHtml(payload.boardName)}</h1>
-  <p>Set this board's workflow statuses and the columns you want to see. The workflow order becomes the default board layout; column customization can then hide or reorder those statuses locally.</p>
+  <p>Set this board's statuses in one place. You can reorder them, rename them, add new ones, and choose which of them show as board columns.</p>
 
   <section class="section">
     <h2>Board list</h2>
@@ -558,6 +644,19 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   </section>
 
   <section class="section">
+    <h2>Statuses</h2>
+    <p class="helper">Use the board's current statuses as the default. Turn customization on to change names or order, add or remove statuses, and decide which ones appear as columns.</p>
+    <label class="mode">
+      <input type="checkbox" id="customizeStatuses" ${payload.customizeStatuses ? 'checked' : ''} />
+      <span>Customize statuses and columns</span>
+    </label>
+    <div id="workflowList" class="list${payload.customizeStatuses ? '' : ' disabled'}"></div>
+    <div class="sub-actions">
+      <button type="button" class="secondary" id="addWorkflowStatusBtn">Add Status</button>
+    </div>
+  </section>
+
+  <section class="section">
     <h2>Board filters</h2>
     <p class="helper">Narrow which tickets load into this board view. For statuses, leave every box checked to allow all workflow columns.</p>
     <label class="field-label" for="issueFilterAssignee">Assignee contains</label>
@@ -576,32 +675,9 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
   </section>
 
   <section class="section">
-    <h2>Status colors</h2>
-    <p class="helper">Column header dot color per status. Values start from the built-in defaults; override any hex as needed.</p>
-    <div id="statusColorList" class="list"></div>
-  </section>
-
-  <section class="section">
-    <h2>Workflow</h2>
-    <p class="helper">Use the board's current statuses as the default. Turn customization on to add, remove, rename, or reorder workflow steps.</p>
-    <label class="mode">
-      <input type="checkbox" id="useCustomWorkflow" ${payload.useCustomWorkflow ? 'checked' : ''} />
-      <span>Customize workflow</span>
-    </label>
-    <div id="workflowList" class="list${payload.useCustomWorkflow ? '' : ' disabled'}"></div>
-    <div class="sub-actions">
-      <button type="button" class="secondary" id="addWorkflowStatusBtn">Add Status</button>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>Columns</h2>
-    <p class="helper">Choose which workflow statuses show as board columns and their order. When customization is off, every workflow status is shown.</p>
-    <label class="mode">
-      <input type="checkbox" id="useCustomColumns" ${payload.useCustomColumns ? 'checked' : ''} />
-      <span>Customize columns</span>
-    </label>
-    <div id="columnList" class="list${payload.useCustomColumns ? '' : ' disabled'}"></div>
+    <h2>Ticket type colors</h2>
+    <p class="helper">Issue type pill and card accent color per ticket type on this board. Values start from the built-in defaults; override any hex as needed.</p>
+    <div id="issueTypeColorList" class="list"></div>
   </section>
 
   <div class="actions">
@@ -614,17 +690,16 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     const vscodeApi = acquireVsCodeApi();
     const initial = ${json};
     const workflowListEl = document.getElementById('workflowList');
-    const columnListEl = document.getElementById('columnList');
-    const statusColorListEl = document.getElementById('statusColorList');
+    const issueTypeColorListEl = document.getElementById('issueTypeColorList');
     const filterStatusListEl = document.getElementById('filterStatusList');
-    const useCustomWorkflowEl = document.getElementById('useCustomWorkflow');
-    const useCustomColumnsEl = document.getElementById('useCustomColumns');
+    const customizeStatusesEl = document.getElementById('customizeStatuses');
     const projectPillHexEl = document.getElementById('projectPillColorHex');
     const projectPillPickerEl = document.getElementById('projectPillColorPicker');
 
     let workflowRows = initial.workflowRows.slice();
     let columnRows = initial.columnRows.map(row => ({ status: row.status, checked: row.checked }));
     let statusColorsMap = { ...initial.statusColorsState };
+    let issueTypeColorsMap = { ...initial.issueTypeColorsState };
     let filterStatusChecked = {};
 
     function defaultStatusDotHexFallback(status) {
@@ -638,6 +713,11 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         done: '#2ea043'
       };
       return map[n] || '#8b949e';
+    }
+
+    function defaultIssueTypeHexFallback(issueType) {
+      const key = String(issueType || '').trim();
+      return initial.defaultIssueTypeHex[key] || '#db61a2';
     }
 
     function initFilterChecksFromSaved(saved) {
@@ -698,53 +778,49 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       }
     }
 
-    function renderStatusColorList() {
-      statusColorListEl.innerHTML = '';
-      const keys = normalizeStatuses(workflowRows);
+    function renderIssueTypeColorList() {
+      issueTypeColorListEl.innerHTML = '';
+      const keys = initial.issueTypeRows || [];
       for (const k of keys) {
-        const hex =
-          statusColorsMap[k] ||
-          initial.defaultStatusHex[k] ||
-          defaultStatusDotHexFallback(k);
-        const safeHex = /^#[0-9a-fA-F]{6}$/i.test(hex) ? hex : '#888888';
+        const hex = issueTypeColorsMap[k] || defaultIssueTypeHexFallback(k);
+        const safeHex = /^#[0-9a-fA-F]{6}$/i.test(hex) ? hex : defaultIssueTypeHexFallback(k);
         const row = document.createElement('div');
         row.className = 'row status-color-row';
-        const id = 'sc-' + k.replace(/[^a-zA-Z0-9]+/g, '_');
         row.innerHTML =
           '<span class="status-name">' +
           escapeHtml(k) +
           '</span>' +
-          '<input type="color" class="sc-picker" data-status="' +
+          '<input type="color" class="itc-picker" data-issue-type="' +
           escapeAttr(k) +
           '" value="' +
           escapeAttr(safeHex) +
           '" />' +
-          '<input type="text" class="name-input sc-hex" data-status="' +
+          '<input type="text" class="name-input itc-hex" data-issue-type="' +
           escapeAttr(k) +
           '" value="' +
           escapeAttr(hex) +
           '" />';
-        statusColorListEl.appendChild(row);
+        issueTypeColorListEl.appendChild(row);
       }
-      for (const p of statusColorListEl.querySelectorAll('.sc-picker')) {
+      for (const p of issueTypeColorListEl.querySelectorAll('.itc-picker')) {
         p.addEventListener('input', () => {
-          const st = p.dataset.status;
-          if (st) {
-            statusColorsMap[st] = p.value;
-            const hexInput = statusColorListEl.querySelector('.sc-hex[data-status="' + escapeAttr(st) + '"]');
+          const issueType = p.dataset.issueType;
+          if (issueType) {
+            issueTypeColorsMap[issueType] = p.value;
+            const hexInput = issueTypeColorListEl.querySelector('.itc-hex[data-issue-type="' + escapeAttr(issueType) + '"]');
             if (hexInput) {
               hexInput.value = p.value;
             }
           }
         });
       }
-      for (const inp of statusColorListEl.querySelectorAll('.sc-hex')) {
+      for (const inp of issueTypeColorListEl.querySelectorAll('.itc-hex')) {
         inp.addEventListener('input', () => {
-          const st = inp.dataset.status;
+          const issueType = inp.dataset.issueType;
           const v = inp.value.trim();
-          if (st && /^#[0-9a-fA-F]{6}$/i.test(v)) {
-            statusColorsMap[st] = v;
-            const picker = statusColorListEl.querySelector('.sc-picker[data-status="' + escapeAttr(st) + '"]');
+          if (issueType && /^#[0-9a-fA-F]{6}$/i.test(v)) {
+            issueTypeColorsMap[issueType] = v;
+            const picker = issueTypeColorListEl.querySelector('.itc-picker[data-issue-type="' + escapeAttr(issueType) + '"]');
             if (picker) {
               picker.value = v;
             }
@@ -780,8 +856,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     }
 
     function syncDisabledState() {
-      workflowListEl.classList.toggle('disabled', !useCustomWorkflowEl.checked);
-      columnListEl.classList.toggle('disabled', !useCustomColumnsEl.checked);
+      workflowListEl.classList.toggle('disabled', !customizeStatusesEl.checked);
     }
 
     function reconcileColumns() {
@@ -795,13 +870,23 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     function renderWorkflowList() {
       workflowListEl.innerHTML = '';
       for (let i = 0; i < workflowRows.length; i++) {
+        const statusName = workflowRows[i];
         const row = document.createElement('div');
         row.className = 'row';
         row.draggable = true;
         row.dataset.index = String(i);
+        const currentColumn = columnRows.find(column => column.status === statusName);
+        const currentColor = statusColorsMap[statusName] || initial.defaultStatusHex[statusName] || defaultStatusDotHexFallback(statusName);
+        const safeColor = /^#[0-9a-fA-F]{6}$/i.test(currentColor) ? currentColor : defaultStatusDotHexFallback(statusName);
         row.innerHTML =
           '<span class="drag-hint" title="Drag to reorder">⠿</span>' +
-          '<input type="text" class="name-input" value="' + escapeAttr(workflowRows[i]) + '" data-index="' + i + '" />' +
+          '<input type="checkbox" class="vis" title="Show as board column" ' + ((currentColumn?.checked ?? true) ? 'checked' : '') + ' data-status="' + escapeAttr(statusName) + '" />' +
+          '<span class="status-visibility-label">Visible on board</span>' +
+          '<input type="text" class="name-input" value="' + escapeAttr(statusName) + '" data-index="' + i + '" />' +
+          '<div class="status-inline-color">' +
+          '<input type="color" class="sc-picker" data-status="' + escapeAttr(statusName) + '" value="' + escapeAttr(safeColor) + '" />' +
+          '<input type="text" class="sc-hex" data-status="' + escapeAttr(statusName) + '" value="' + escapeAttr(currentColor) + '" />' +
+          '</div>' +
           '<button type="button" class="remove-btn" data-index="' + i + '">Remove</button>';
         workflowListEl.appendChild(row);
       }
@@ -837,9 +922,62 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
           if (Number.isNaN(index)) {
             return;
           }
-          workflowRows[index] = input.value;
+          const previousStatus = workflowRows[index];
+          const nextStatus = input.value;
+          workflowRows[index] = nextStatus;
+          if (previousStatus !== nextStatus) {
+            const columnEntry = columnRows.find(row => row.status === previousStatus);
+            if (columnEntry) {
+              columnEntry.status = nextStatus;
+            }
+            if (Object.prototype.hasOwnProperty.call(statusColorsMap, previousStatus)) {
+              statusColorsMap[nextStatus] = statusColorsMap[previousStatus];
+              delete statusColorsMap[previousStatus];
+            }
+            if (Object.prototype.hasOwnProperty.call(filterStatusChecked, previousStatus)) {
+              filterStatusChecked[nextStatus] = filterStatusChecked[previousStatus];
+              delete filterStatusChecked[previousStatus];
+            }
+          }
           reconcileColumns();
-          renderColumnList();
+          renderAll();
+        });
+      }
+
+      for (const picker of workflowListEl.querySelectorAll('.sc-picker')) {
+        picker.addEventListener('input', () => {
+          const status = picker.dataset.status;
+          if (status) {
+            statusColorsMap[status] = picker.value;
+            const hexInput = workflowListEl.querySelector('.sc-hex[data-status="' + escapeAttr(status) + '"]');
+            if (hexInput) {
+              hexInput.value = picker.value;
+            }
+          }
+        });
+      }
+
+      for (const input of workflowListEl.querySelectorAll('.sc-hex')) {
+        input.addEventListener('input', () => {
+          const status = input.dataset.status;
+          const value = input.value.trim();
+          if (status && /^#[0-9a-fA-F]{6}$/i.test(value)) {
+            statusColorsMap[status] = value;
+            const picker = workflowListEl.querySelector('.sc-picker[data-status="' + escapeAttr(status) + '"]');
+            if (picker) {
+              picker.value = value;
+            }
+          }
+        });
+      }
+
+      for (const cb of workflowListEl.querySelectorAll('.vis')) {
+        cb.addEventListener('change', () => {
+          const status = cb.dataset.status;
+          const entry = columnRows.find(row => row.status === status);
+          if (entry) {
+            entry.checked = cb.checked;
+          }
         });
       }
 
@@ -856,62 +994,11 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       }
     }
 
-    function renderColumnList() {
-      columnListEl.innerHTML = '';
-      for (let i = 0; i < columnRows.length; i++) {
-        const row = document.createElement('div');
-        row.className = 'row';
-        row.draggable = true;
-        row.dataset.index = String(i);
-        const current = columnRows[i];
-        row.innerHTML =
-          '<span class="drag-hint" title="Drag to reorder">⠿</span>' +
-          '<input type="checkbox" class="vis" ' + (current.checked ? 'checked' : '') + ' data-status="' + escapeAttr(current.status) + '" />' +
-          '<span class="name">' + escapeHtml(current.status) + '</span>';
-        columnListEl.appendChild(row);
-      }
-
-      for (const row of columnListEl.querySelectorAll('.row')) {
-        row.addEventListener('dragstart', e => {
-          row.classList.add('dragging');
-          e.dataTransfer.setData('text/plain', row.dataset.index);
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        row.addEventListener('dragend', () => row.classList.remove('dragging'));
-        row.addEventListener('dragover', e => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'move';
-        });
-        row.addEventListener('drop', e => {
-          e.preventDefault();
-          const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
-          const to = parseInt(row.dataset.index, 10);
-          if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-          const next = columnRows.slice();
-          const [moved] = next.splice(from, 1);
-          next.splice(to, 0, moved);
-          columnRows = next;
-          renderColumnList();
-        });
-      }
-
-      for (const cb of columnListEl.querySelectorAll('.vis')) {
-        cb.addEventListener('change', () => {
-          const status = cb.dataset.status;
-          const entry = columnRows.find(row => row.status === status);
-          if (entry) {
-            entry.checked = cb.checked;
-          }
-        });
-      }
-    }
-
     function renderAll() {
       syncMapsFromWorkflow();
       renderWorkflowList();
-      renderColumnList();
       renderFilterStatusList();
-      renderStatusColorList();
+      renderIssueTypeColorList();
       syncDisabledState();
     }
 
@@ -931,8 +1018,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       projectPillPickerEl.value = '#808080';
     });
 
-    useCustomWorkflowEl.addEventListener('change', syncDisabledState);
-    useCustomColumnsEl.addEventListener('change', syncDisabledState);
+    customizeStatusesEl.addEventListener('change', syncDisabledState);
 
     document.getElementById('addWorkflowStatusBtn').addEventListener('click', () => {
       workflowRows.push('');
@@ -944,8 +1030,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => {
-      useCustomWorkflowEl.checked = false;
-      useCustomColumnsEl.checked = false;
+      customizeStatusesEl.checked = false;
       document.getElementById('boardName').value = initial.boardName;
       if (document.getElementById('boardQuery')) {
         document.getElementById('boardQuery').value = initial.boardQuery || '';
@@ -962,6 +1047,10 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         statusColorsMap[s] =
           initial.defaultStatusHex[s] || defaultStatusDotHexFallback(s);
       }
+      issueTypeColorsMap = {};
+      for (const issueType of initial.issueTypeRows || []) {
+        issueTypeColorsMap[issueType] = defaultIssueTypeHexFallback(issueType);
+      }
       initFilterChecksFromSaved([]);
       renderAll();
     });
@@ -975,8 +1064,8 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
       const boardQueryInput = document.getElementById('boardQuery');
       const boardQuery = boardQueryInput ? String(boardQueryInput.value || '').trim() : '';
       const workflowStatuses = normalizeStatuses(workflowRows);
-      if (useCustomWorkflowEl.checked && workflowStatuses.length === 0) {
-        alert('Add at least one workflow status, or turn off workflow customization.');
+      if (customizeStatusesEl.checked && workflowStatuses.length === 0) {
+        alert('Add at least one status, or turn off status customization.');
         return;
       }
 
@@ -984,8 +1073,8 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         .filter(row => row.checked)
         .map(row => row.status)
         .filter(status => workflowStatuses.includes(status) || initial.defaultWorkflow.includes(status));
-      if (useCustomColumnsEl.checked && orderedStatuses.length === 0) {
-        alert('Select at least one status column, or turn off column customization.');
+      if (customizeStatusesEl.checked && orderedStatuses.length === 0) {
+        alert('Select at least one visible status column, or turn off status customization.');
         return;
       }
 
@@ -1008,17 +1097,17 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
         boardQuery,
         originalBoardQuery: initial.boardQuery,
         defaultWorkflow: initial.defaultWorkflow,
-        useCustomWorkflow: useCustomWorkflowEl.checked,
-        useCustomColumns: useCustomColumnsEl.checked,
-        workflowStatuses: useCustomWorkflowEl.checked ? workflowStatuses : [],
-        orderedStatuses: useCustomColumnsEl.checked ? orderedStatuses : [],
+        customizeStatuses: customizeStatusesEl.checked,
+        workflowStatuses: customizeStatusesEl.checked ? workflowStatuses : [],
+        orderedStatuses: customizeStatusesEl.checked ? orderedStatuses : [],
         projectPillColor: String(projectPillHexEl.value || '').trim(),
         swimLaneGroupBy: document.getElementById('swimLaneSelect').value,
         issueFilterAssignee: document.getElementById('issueFilterAssignee').value.trim(),
         issueFilterEpicKey: document.getElementById('issueFilterEpicKey').value.trim(),
         maxAgeWeeks: parseInt(document.getElementById('maxAgeWeeks').value, 10) || 0,
         issueFilterStatuses: issueFilterStatusesPayload,
-        statusColors: statusColorsMap
+        statusColors: statusColorsMap,
+        issueTypeColors: issueTypeColorsMap
       });
     });
 

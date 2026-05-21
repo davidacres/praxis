@@ -1,6 +1,5 @@
 export type ConnectionType = 'stdio' | 'http';
 export type BackendMode =
-  | 'jira'
   | 'jiracloud'
   | 'demo'
   | 'github'
@@ -228,6 +227,7 @@ export interface IssueFilters {
   searchText: string;
   assigneeMode: AssigneeMode;
   parentKey?: string;
+  boardId?: string;
   grouping: GroupingMode;
 }
 
@@ -335,6 +335,8 @@ export interface BoardColumnPreferences {
   issueFilterStatuses?: string[];
   /** Per-status column dot color; key is exact status name as on the board. */
   statusColors?: Record<string, string>;
+  /** Per-issue-type card and pill color; key is exact issue type label on the board. */
+  issueTypeColors?: Record<string, string>;
   /** Board panel layout: Kanban columns or grouped list view. */
   viewMode?: 'board' | 'list';
   /** List-view group order by exact status name. */

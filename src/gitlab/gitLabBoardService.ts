@@ -815,6 +815,22 @@ export class GitLabBoardService implements IssueTrackerService {
   }
 
   private parseBoardReference(board: Board): { projectRef: string | number; boardId: number } {
+    const boardProjectKey = board.projectKey?.trim();
+    if (boardProjectKey) {
+      const rawBoardId = (board.raw as { id?: number } | undefined)?.id;
+      const parsedBoardId =
+        typeof rawBoardId === 'number'
+          ? rawBoardId
+          : Number(/^gitlab:(?:\d+:)?(\d+)$/.exec(board.id.trim())?.[1]);
+
+      if (Number.isFinite(parsedBoardId)) {
+        return {
+          projectRef: boardProjectKey,
+          boardId: parsedBoardId
+        };
+      }
+    }
+
     const rawBoard = board.raw as { project?: { id?: number }; id?: number } | undefined;
     if (typeof rawBoard?.project?.id === 'number' && typeof rawBoard.id === 'number') {
       return {

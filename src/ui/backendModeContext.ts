@@ -18,8 +18,6 @@ export function resolveBackendModeContextState(
     case 'github':
     case 'gitlab':
       return { mode: storedMode, configured: false };
-    case 'jira':
-      return { mode: 'jiracloud', configured: jiraCloudConfigured };
     case 'jiracloud':
       return { mode: 'jiracloud', configured: jiraCloudConfigured };
     default:

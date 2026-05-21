@@ -693,6 +693,17 @@ export class JiraCloudService implements IssueTrackerService {
     startAt: number,
     pageSize: number
   ): Promise<PagedIssues> {
+    const boardScopedIssues = await this.getBoardScopedIssues(filters);
+    if (boardScopedIssues) {
+      const filtered = await this.filterIssuesForSidebar(boardScopedIssues, filters);
+      const pageIssues = filtered.slice(startAt, startAt + pageSize);
+      return {
+        issues: pageIssues,
+        total: filtered.length,
+        hasMore: startAt + pageIssues.length < filtered.length
+      };
+    }
+
     const search = await this.searchIssues(
       this.buildIssueSearchJql(filters),
       [
@@ -717,6 +728,21 @@ export class JiraCloudService implements IssueTrackerService {
   }
 
   public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
+    const boardScopedIssues = await this.getBoardScopedIssues(filters);
+    if (boardScopedIssues) {
+      const filtered = await this.filterIssuesForSidebar(boardScopedIssues, {
+        ...filters,
+        statuses: [],
+        issueTypes: [],
+        searchText: '',
+        parentKey: undefined
+      });
+      return {
+        statuses: [...new Set(filtered.map(issue => issue.status))].sort((a, b) => a.localeCompare(b)),
+        issueTypes: [...new Set(filtered.map(issue => issue.issueType))].sort((a, b) => a.localeCompare(b))
+      };
+    }
+
     const search = await this.searchIssues(
       this.buildIssueSearchJql({
         ...filters,
@@ -745,6 +771,31 @@ export class JiraCloudService implements IssueTrackerService {
       : ['Epic'];
     if (allowedParentTypes.length === 0) {
       return [];
+    }
+
+    const boardScopedIssues = await this.getBoardScopedIssues(filters);
+    if (boardScopedIssues) {
+      const parentTypeSet = new Set(allowedParentTypes.map(value => value.trim().toLowerCase()));
+      const normalizedSearchText = searchText?.trim().toLowerCase();
+      return boardScopedIssues
+        .filter(issue => parentTypeSet.has(issue.issueType.trim().toLowerCase()))
+        .filter(issue =>
+          filters.statuses.length === 0 ||
+          filters.statuses.some(status => status.trim().toLowerCase() === issue.status.trim().toLowerCase())
+        )
+        .filter(issue => {
+          if (!normalizedSearchText) {
+            return true;
+          }
+          const target = `${issue.key} ${issue.summary} ${issue.description ?? ''}`.toLowerCase();
+          return target.includes(normalizedSearchText);
+        })
+        .sort((left, right) => {
+          const leftUpdated = left.updated ? Date.parse(left.updated) : 0;
+          const rightUpdated = right.updated ? Date.parse(right.updated) : 0;
+          return rightUpdated - leftUpdated;
+        })
+        .slice(0, 50);
     }
 
     const clauses = [`issuetype in (${allowedParentTypes.map(escapeJqlValue).join(', ')})`];
@@ -2275,6 +2326,76 @@ export class JiraCloudService implements IssueTrackerService {
     }
 
     return issues;
+  }
+
+  private async getBoardScopedIssues(filters: IssueFilters): Promise<IssueSummary[] | undefined> {
+    const boardId = filters.boardId?.trim();
+    if (!boardId) {
+      return undefined;
+    }
+
+    const board = await this.resolveBoardById(boardId);
+    if (!board) {
+      return [];
+    }
+
+    const details = await this.getBoardDetails(board);
+    return details.issues;
+  }
+
+  private async resolveBoardById(boardId: string): Promise<Board | undefined> {
+    const boards = await this.getBoards({ projectKeys: [], types: [], searchText: '' });
+    return boards.find(board => board.id === boardId);
+  }
+
+  private async filterIssuesForSidebar(issues: IssueSummary[], filters: IssueFilters): Promise<IssueSummary[]> {
+    const normalizedSearchText = filters.searchText.trim().toLowerCase();
+    const normalizedStatuses = new Set(filters.statuses.map(status => status.trim().toLowerCase()));
+    const normalizedIssueTypes = new Set(filters.issueTypes.map(type => type.trim().toLowerCase()));
+    const normalizedProjectKeys = new Set(filters.projectKeys.map(projectKey => projectKey.trim().toLowerCase()));
+    const normalizedParentKey = filters.parentKey?.trim().toLowerCase();
+    const currentUserTokens =
+      filters.assigneeMode === 'me' ? await this.getCurrentUserMatchTokens() : undefined;
+
+    return issues.filter(issue => {
+      if (normalizedProjectKeys.size > 0 && !normalizedProjectKeys.has(issue.projectKey.trim().toLowerCase())) {
+        return false;
+      }
+      if (normalizedStatuses.size > 0 && !normalizedStatuses.has(issue.status.trim().toLowerCase())) {
+        return false;
+      }
+      if (normalizedIssueTypes.size > 0 && !normalizedIssueTypes.has(issue.issueType.trim().toLowerCase())) {
+        return false;
+      }
+      if (filters.assigneeMode === 'me') {
+        const assignee = issue.assignee?.trim().toLowerCase();
+        if (!assignee || !currentUserTokens?.has(assignee)) {
+          return false;
+        }
+      }
+      if (normalizedParentKey) {
+        const issueKey = issue.key.trim().toLowerCase();
+        const parentKey = issue.parentKey?.trim().toLowerCase();
+        if (issueKey !== normalizedParentKey && parentKey !== normalizedParentKey) {
+          return false;
+        }
+      }
+      if (normalizedSearchText.length > 0) {
+        const target = `${issue.key} ${issue.summary} ${issue.description ?? ''}`.toLowerCase();
+        if (!target.includes(normalizedSearchText)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
+  private async getCurrentUserMatchTokens(): Promise<Set<string>> {
+    const currentUser = await this.getCurrentUser();
+    const tokens = [currentUser.displayName, currentUser.name, currentUser.key, currentUser.accountId]
+      .map(value => value?.trim().toLowerCase())
+      .filter((value): value is string => Boolean(value));
+    return new Set(tokens);
   }
 
   private matchesBoardFilters(board: Board, filters: BoardFilters): boolean {

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { FilterStore } from '../state/filterStore';
-import type { IssueFilters, IssueSummary } from '../types';
+import type { Board, IssueFilters, IssueSummary } from '../types';
 
 export interface IssuesProviderSnapshot {
   issues: IssueSummary[];
@@ -78,6 +78,7 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   private status: 'idle' | 'loading' | 'ready' | 'error' = 'idle';
   private errorMessage?: string;
   private requestGeneration = 0;
+  private scopedBoard?: Board;
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -224,6 +225,19 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     return this.issues.find(issue => issue.key === issueKey);
   }
 
+  public setBoardScope(board: Board | undefined): void {
+    const nextBoardId = board?.id;
+    const nextProjectKey = board?.projectKey;
+    const currentBoardId = this.scopedBoard?.id;
+    const currentProjectKey = this.scopedBoard?.projectKey;
+    if (nextBoardId === currentBoardId && nextProjectKey === currentProjectKey) {
+      return;
+    }
+
+    this.scopedBoard = board;
+    void this.refresh();
+  }
+
   public dispose(): void {
     this.onDidChangeTreeDataEmitter.dispose();
   }
@@ -240,7 +254,7 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     this.onDidChangeTreeDataEmitter.fire(undefined);
 
     try {
-      const filters = this.filterStore.getFilters();
+      const filters = this.buildScopedFilters(this.filterStore.getFilters());
       const page = await this.backendService.getIssues(
         filters,
         startAt,
@@ -305,6 +319,20 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
     }
 
     return new MessageNode('empty', 'No issues match the current filters.', 'warning');
+  }
+
+  private buildScopedFilters(filters: IssueFilters): IssueFilters {
+    const board = this.scopedBoard;
+    if (!board) {
+      return filters;
+    }
+
+    const projectKey = board.projectKey?.trim();
+    return {
+      ...filters,
+      boardId: board.id,
+      projectKeys: projectKey ? [projectKey] : filters.projectKeys
+    };
   }
 }
 

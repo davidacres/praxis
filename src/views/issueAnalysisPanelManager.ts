@@ -21,6 +21,7 @@ interface AnalysisPanelContext {
   state: IssueAnalysisState;
   defaultPrompt: string;
   providerLabel: string;
+  availableModels: Array<{ id: string; label: string }>;
 }
 
 const STORAGE_KEY = 'ticketManager.issueAnalysisStates';
@@ -69,6 +70,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     private readonly getDefaultPrompt: () => string,
     private readonly getDefaultModel: () => string,
     private readonly getProviderLabel: () => string,
+    private readonly getAvailableModels: () => Array<{ id: string; label: string }>,
     private readonly loadIssue: (issueKey: string) => Promise<IssueDetails>,
     private readonly runAnalysis: (input: {
       issue: IssueDetails;
@@ -76,6 +78,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       model: string;
       history: AnalysisMessage[];
       defaultPrompt: string;
+      onUpdate?: (content: string) => void;
     }) => Promise<string>
   ) {
     this.states = this.loadStates();
@@ -203,6 +206,12 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
         text: effectiveQuestion,
         createdAt: new Date().toISOString()
       });
+      const assistantMessage: AnalysisMessage = {
+        role: 'assistant',
+        text: 'Analyzing... ',
+        createdAt: new Date().toISOString()
+      };
+      state.messages.push(assistantMessage);
       state.confirmed = false;
       state.confirmedAt = undefined;
       this.persistStates();
@@ -215,19 +224,15 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
           question: effectiveQuestion,
           model,
           history: [...state.messages],
-          defaultPrompt
+          defaultPrompt,
+          onUpdate: content => {
+            assistantMessage.text = content;
+            this.postState(issueKey);
+          }
         });
-        state.messages.push({
-          role: 'assistant',
-          text: reply,
-          createdAt: new Date().toISOString()
-        });
+        assistantMessage.text = reply;
       } catch (error) {
-        state.messages.push({
-          role: 'assistant',
-          text: `Analysis failed: ${error instanceof Error ? error.message : String(error)}`,
-          createdAt: new Date().toISOString()
-        });
+        assistantMessage.text = `Analysis failed: ${error instanceof Error ? error.message : String(error)}`;
       } finally {
         this.persistStates();
         this.postState(issueKey);
@@ -305,13 +310,25 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       issue,
       state,
       defaultPrompt: this.getDefaultPrompt().trim(),
-      providerLabel: this.getProviderLabel()
+      providerLabel: this.getProviderLabel(),
+      availableModels: this.getAvailableModels()
     };
   }
 
   private renderHtml(webview: vscode.Webview, context: AnalysisPanelContext): string {
     const nonce = createNonce();
     const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    const selectedModel = context.state.model || this.getDefaultModel();
+    const hasSelectedModel = context.availableModels.some(model => model.id === selectedModel);
+    const modelOptions = [
+      `<option value="" ${selectedModel ? '' : 'selected'}>Default${this.getDefaultModel().trim() ? ` (${escapeHtml(this.getDefaultModel().trim())})` : ''}</option>`,
+      ...context.availableModels.map(model =>
+        `<option value="${escapeHtml(model.id)}" ${model.id === selectedModel ? 'selected' : ''}>${escapeHtml(model.label)}</option>`
+      ),
+      ...(selectedModel && !hasSelectedModel
+        ? [`<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel)}</option>`]
+        : [])
+    ].join('');
     return `<!doctype html>
 <html>
 <head>
@@ -351,7 +368,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       <div class="meta">${escapeHtml(context.issue.summary)}<br/>Provider: ${escapeHtml(context.providerLabel)}</div>
       <div class="controls">
         <label>Model</label>
-        <input class="input" id="modelInput" value="${escapeHtml(context.state.model || this.getDefaultModel())}" placeholder="model id" />
+        <select class="select" id="modelInput">${modelOptions}</select>
         <button class="btn secondary" id="saveModelBtn">Save Model</button>
         <span class="pill ${context.state.confirmed ? 'ok' : 'pending'}" id="confirmPill">${context.state.confirmed ? `Confirmed ${escapeHtml(formatDate(context.state.confirmedAt))}` : 'Not confirmed'}</span>
       </div>
@@ -361,7 +378,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     <div class="feed" id="feed"></div>
 
     <div class="composer">
-      <textarea id="questionInput" class="textarea" placeholder="Optional follow-up question. Leave blank to analyze the ticket as-is."></textarea>
+      <textarea id="questionInput" class="textarea" placeholder="Ask a follow-up question or paste a repo URL/path if the analysis needs code context. Leave blank to analyze the ticket as-is."></textarea>
       <div class="row">
         <span class="status" id="statusLine">Ready</span>
         <div style="display:flex; gap: 8px;">
@@ -426,7 +443,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
 
     sendBtn.addEventListener('click', () => {
       const question = (questionInput.value || '').trim();
-      if (!question || busy) {
+      if (busy) {
         return;
       }
       questionInput.value = '';
@@ -466,6 +483,8 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
         context = message.context;
         if (typeof context.state?.model === 'string') {
           modelInput.value = context.state.model;
+        } else {
+          modelInput.value = '';
         }
         statusLine.textContent = 'Ready';
         render();

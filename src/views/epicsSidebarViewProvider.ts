@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { FilterStore } from '../state/filterStore';
-import type { IssueFilters, IssueSummary } from '../types';
+import type { Board, IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
@@ -111,6 +111,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private epics: IssueSummary[] = [];
   private errorMessage?: string;
   private defaultEpicKey?: string;
+  private scopedBoard?: Board;
   private requestGeneration = 0;
   private supportingDataGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
@@ -156,6 +157,19 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     this.render();
   }
 
+  public setBoardScope(board: Board | undefined): void {
+    const nextBoardId = board?.id;
+    const nextProjectKey = board?.projectKey;
+    const currentBoardId = this.scopedBoard?.id;
+    const currentProjectKey = this.scopedBoard?.projectKey;
+    if (nextBoardId === currentBoardId && nextProjectKey === currentProjectKey) {
+      return;
+    }
+
+    this.scopedBoard = board;
+    void this.refresh();
+  }
+
   public async setSearchText(searchText: string): Promise<void> {
     this.searchText = searchText.trim();
     await this.refresh();
@@ -172,7 +186,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
     const generation = ++this.requestGeneration;
     const supportingGeneration = ++this.supportingDataGeneration;
-    const filters = this.filterStore.getFilters();
+    const filters = this.buildScopedFilters(this.filterStore.getFilters());
     const epicStatuses = this.filterStore.getEpicStatuses();
 
     try {
@@ -884,5 +898,19 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
       </div>
       </div>
     </div>`;
+  }
+
+  private buildScopedFilters(filters: IssueFilters): IssueFilters {
+    const board = this.scopedBoard;
+    if (!board) {
+      return filters;
+    }
+
+    const projectKey = board.projectKey?.trim();
+    return {
+      ...filters,
+      boardId: board.id,
+      projectKeys: projectKey ? [projectKey] : filters.projectKeys
+    };
   }
 }

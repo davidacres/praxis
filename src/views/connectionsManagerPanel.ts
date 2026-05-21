@@ -255,7 +255,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       return;
     }
     const connection = this.connectionStore.getConnection(picker.connectionId);
-    if (!connection || (connection.mode !== 'jiracloud' && connection.mode !== 'jira')) {
+    if (!connection || connection.mode !== 'jiracloud') {
       return;
     }
 
@@ -669,7 +669,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       .map(connection => this.renderConnectionRow(connection, tracked))
       .join('');
     
-    const jiraCloudConnection = connections.find(c => c.mode === 'jira');
+    const jiraCloudConnection = connections.find(c => c.mode === 'jiracloud');
     const jiraCloudActionHtml = jiraCloudConnection
       ? `<div class="jira-cloud-action">
            <button class="danger" data-action="disconnectJiraCloud">Disconnect Jira Cloud</button>
@@ -796,13 +796,6 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
           textField(form, 'boardJql', 'Board JQL (optional)', 'project = PROJ AND status != Done'),
           textField(form, 'boardName', 'Default board name (optional)', '')
         ].join('');
-      case 'jira':
-        return [
-          textField(form, 'url', 'Site URL', 'https://your-tenant.atlassian.net'),
-          textField(form, 'clientId', 'OAuth client ID', ''),
-          secretField(form, 'oauthClientSecret', 'OAuth client secret'),
-          textField(form, 'cloudId', 'Cloud ID (optional, auto-detected after OAuth)', '')
-        ].join('');
       case 'gitlab':
         return [
           textField(form, 'url', 'GitLab base URL', 'https://gitlab.com'),
@@ -885,7 +878,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <section class="form">
         ${content}
         <div class="form-actions">
-          ${connection && (connection.mode === 'jiracloud' || connection.mode === 'jira')
+          ${connection && connection.mode === 'jiracloud'
             ? '<button data-action="addCustomJqlBoard">+ Add Custom JQL Board</button>'
             : ''}
           <button data-action="navigateList">Cancel</button>
@@ -960,10 +953,8 @@ function createNewConnectionForm(): ConnectionFormState {
 
 function modeLabel(mode: BackendMode): string {
   switch (mode) {
-    case 'jira':
-      return 'Jira Cloud (OAuth)';
     case 'jiracloud':
-      return 'Jira REST (API token)';
+      return 'Jira Cloud';
     case 'gitlab':
       return 'GitLab';
     case 'livefolder':
@@ -1031,8 +1022,6 @@ function secretNamesForMode(mode: BackendMode): readonly string[] {
   switch (mode) {
     case 'jiracloud':
       return ['token'];
-    case 'jira':
-      return ['oauthClientSecret'];
     case 'gitlab':
       return ['apiKey'];
     case 'github':
