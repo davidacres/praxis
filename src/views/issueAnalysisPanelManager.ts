@@ -24,6 +24,8 @@ interface AnalysisPanelContext {
 }
 
 const STORAGE_KEY = 'ticketManager.issueAnalysisStates';
+const DEFAULT_ANALYSIS_REQUEST =
+  'Analyze this ticket using its title, description, comments, and available metadata. Identify missing information, assumptions, risks, and whether it is ready for AI assignment.';
 
 function escapeHtml(value: string): string {
   return value
@@ -182,9 +184,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
 
     if (type === 'submitQuestion') {
       const question = (asString(message.question) ?? '').trim();
-      if (!question) {
-        return;
-      }
+      const effectiveQuestion = question || DEFAULT_ANALYSIS_REQUEST;
 
       const defaultPrompt = this.getDefaultPrompt().trim();
       if (!defaultPrompt) {
@@ -200,7 +200,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
 
       state.messages.push({
         role: 'user',
-        text: question,
+        text: effectiveQuestion,
         createdAt: new Date().toISOString()
       });
       state.confirmed = false;
@@ -212,7 +212,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       try {
         const reply = await this.runAnalysis({
           issue,
-          question,
+          question: effectiveQuestion,
           model,
           history: [...state.messages],
           defaultPrompt
@@ -361,7 +361,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     <div class="feed" id="feed"></div>
 
     <div class="composer">
-      <textarea id="questionInput" class="textarea" placeholder="Ask analysis questions about this ticket..."></textarea>
+      <textarea id="questionInput" class="textarea" placeholder="Optional follow-up question. Leave blank to analyze the ticket as-is."></textarea>
       <div class="row">
         <span class="status" id="statusLine">Ready</span>
         <div style="display:flex; gap: 8px;">
