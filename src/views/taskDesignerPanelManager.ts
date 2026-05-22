@@ -2097,6 +2097,32 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       opacity: 0.88;
       cursor: default;
     }
+    .recommendation-lane {
+      position: absolute;
+      border: 1px dashed color-mix(in oklab, var(--vscode-focusBorder) 34%, transparent);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in oklab, var(--vscode-focusBorder) 10%, transparent) 0%, color-mix(in oklab, var(--vscode-focusBorder) 4%, transparent) 100%),
+        repeating-linear-gradient(180deg, transparent 0, transparent 20px, color-mix(in oklab, var(--vscode-focusBorder) 6%, transparent) 20px, color-mix(in oklab, var(--vscode-focusBorder) 6%, transparent) 21px);
+      box-shadow: inset 0 0 0 1px color-mix(in oklab, white 4%, transparent);
+      pointer-events: none;
+    }
+    .recommendation-lane-label {
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--vscode-descriptionForeground);
+      background: color-mix(in oklab, var(--vscode-editorWidget-background) 82%, transparent);
+      border: 1px solid color-mix(in oklab, var(--vscode-panel-border) 72%, transparent);
+    }
     .ticket-node.linking-source {
       outline: 2px solid var(--vscode-focusBorder);
       outline-offset: 2px;
@@ -2110,6 +2136,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       flex-direction: column;
     }
     .ticket-node-header {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -2117,6 +2144,9 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       margin: -10px -10px 8px;
       padding: 6px 10px 5px;
       color: #eff6ff;
+    }
+    .ticket-node-header.has-recommendation-adorner {
+      padding-left: 42px;
     }
     .ticket-node-header--note {
       background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
@@ -2157,21 +2187,23 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       color: inherit;
       opacity: 0.9;
     }
-    .ticket-node-recommendation-badge {
+    .ticket-node-recommendation-adorner {
       display: inline-flex;
-      width: fit-content;
       align-items: center;
-      gap: 4px;
-      margin-top: 2px;
-      padding: 1px 6px;
+      justify-content: center;
+      position: absolute;
+      top: 6px;
+      left: 10px;
+      width: 22px;
+      height: 22px;
       border-radius: 999px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+      line-height: 1;
       color: var(--vscode-editor-foreground);
-      background: color-mix(in oklab, var(--vscode-focusBorder) 22%, transparent);
-      border: 1px solid color-mix(in oklab, var(--vscode-focusBorder) 38%, transparent);
+      background: color-mix(in oklab, white 88%, var(--vscode-focusBorder) 12%);
+      border: 1px solid color-mix(in oklab, white 64%, var(--vscode-focusBorder) 36%);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
     }
     .note-node-title-input {
       width: 100%;
@@ -2998,20 +3030,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return nodes;
     }
 
-    function buildRecommendationPreviewState() {
-      if (!state.recommendation) {
-        return undefined;
-      }
-      const previewNodes = buildPreviewNodes(state.recommendationNodes);
-      if (previewNodes.length < 2) {
-        return undefined;
-      }
-
+    function buildOrderedRecommendationNodeIds(previewNodes, recommendation) {
       const byId = new Map(previewNodes.map(node => [node.id, node]));
       const orderedNodeIds = [];
       const seenNodeIds = new Set();
-      const recommendation = state.recommendation || {};
-      const recommendedNodeIds = Array.isArray(recommendation.orderedNodeIds)
+      const recommendedNodeIds = recommendation && Array.isArray(recommendation.orderedNodeIds)
         ? recommendation.orderedNodeIds
         : [];
 
@@ -3022,6 +3045,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         seenNodeIds.add(nodeId);
         orderedNodeIds.push(nodeId);
       }
+
       for (const node of previewNodes) {
         if (seenNodeIds.has(node.id)) {
           continue;
@@ -3030,9 +3054,71 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         orderedNodeIds.push(node.id);
       }
 
+      return orderedNodeIds;
+    }
+
+    function applyVerticalRecommendationLayout(previewNodes, orderedNodeIds) {
+      const byId = new Map(previewNodes.map(node => [node.id, node]));
+      const layoutWidth = 250;
+      const layoutMarginX = 28;
+      const layoutTopOffset = 48;
+      const layoutStepY = 188;
+      const viewportLeft = canvasSurface instanceof HTMLElement
+        ? clientDistanceToCanvas(canvasSurface.scrollLeft)
+        : 0;
+      const viewportTop = canvasSurface instanceof HTMLElement
+        ? clientDistanceToCanvas(canvasSurface.scrollTop)
+        : 0;
+      const viewportWidth = canvasSurface instanceof HTMLElement
+        ? clientDistanceToCanvas(canvasSurface.clientWidth)
+        : (layoutWidth + (layoutMarginX * 2));
+      const layoutX = viewportLeft + Math.max(layoutMarginX, (viewportWidth - layoutWidth) / 2);
+      const layoutStartY = viewportTop + layoutTopOffset;
+      return orderedNodeIds
+        .map((nodeId, index) => {
+          const node = byId.get(nodeId);
+          if (!node) {
+            return undefined;
+          }
+          return {
+            ...node,
+            x: layoutX,
+            y: layoutStartY + (index * layoutStepY)
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function appendRecommendationAdorner(header, recommendationOrder) {
+      if (typeof recommendationOrder !== 'number') {
+        return;
+      }
+      header.classList.add('has-recommendation-adorner');
+      const adorner = document.createElement('span');
+      adorner.className = 'ticket-node-recommendation-adorner';
+      adorner.textContent = String(recommendationOrder);
+      adorner.setAttribute('aria-label', 'AI execution order ' + recommendationOrder);
+      header.append(adorner);
+    }
+
+    function buildRecommendationPreviewState() {
+      if (!state.recommendation) {
+        return undefined;
+      }
+      const previewNodes = buildPreviewNodes(state.recommendationNodes);
+      if (previewNodes.length < 2) {
+        return undefined;
+      }
+
+      const recommendation = state.recommendation || {};
+      const orderedNodeIds = buildOrderedRecommendationNodeIds(previewNodes, recommendation);
+
       if (orderedNodeIds.length < 2) {
         return undefined;
       }
+
+      const positionedNodes = applyVerticalRecommendationLayout(previewNodes, orderedNodeIds);
+      const positionedById = new Map(positionedNodes.map(node => [node.id, node]));
 
       const orderIndex = new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]));
       const connectors = [];
@@ -3078,11 +3164,38 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
 
       const stateNodeIds = new Set(state.nodes.map(node => node.id));
+      const laneX = positionedNodes.length > 0 ? Math.max(0, positionedNodes[0].x - 22) : 0;
+      const laneY = positionedNodes.length > 0 ? Math.max(0, positionedNodes[0].y - 18) : 0;
+      const laneWidth = 294;
+      const laneHeight = Math.max(164, 150 + Math.max(0, positionedNodes.length - 1) * 188);
       return {
+        nodes: positionedNodes,
+        nodeById: positionedById,
         orderById: new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index + 1])),
-        ghostNodes: previewNodes.filter(node => !stateNodeIds.has(node.id)),
-        connectors
+        ghostNodes: positionedNodes.filter(node => !stateNodeIds.has(node.id)),
+        connectors,
+        lane: {
+          x: laneX,
+          y: laneY,
+          width: laneWidth,
+          height: laneHeight
+        }
       };
+    }
+
+    function createRecommendationLane(lane) {
+      const element = document.createElement('div');
+      element.className = 'recommendation-lane';
+      element.style.left = lane.x + 'px';
+      element.style.top = lane.y + 'px';
+      element.style.width = lane.width + 'px';
+      element.style.height = lane.height + 'px';
+
+      const label = document.createElement('div');
+      label.className = 'recommendation-lane-label';
+      label.textContent = 'Recommended flow';
+      element.append(label);
+      return element;
     }
 
     function createRecommendationGhostNode(node, recommendationOrder) {
@@ -3099,17 +3212,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       const titleWrap = document.createElement('div');
       titleWrap.className = 'ticket-node-title-wrap';
 
+      appendRecommendationAdorner(header, recommendationOrder);
+
       const key = document.createElement('div');
       key.className = 'ticket-node-key';
       key.textContent = node.issueKey;
       titleWrap.append(key);
-
-      if (typeof recommendationOrder === 'number') {
-        const badge = document.createElement('span');
-        badge.className = 'ticket-node-recommendation-badge';
-        badge.textContent = 'AI ' + recommendationOrder;
-        titleWrap.append(badge);
-      }
 
       header.append(titleWrap);
 
@@ -3148,7 +3256,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         setFeedback('No AI recommendation to apply.', true);
         return;
       }
-      const recommendationNodes = buildPreviewNodes(state.recommendationNodes);
+      const recommendationPreview = buildRecommendationPreviewState();
+      const recommendationNodes = recommendationPreview ? recommendationPreview.nodes : [];
       if (recommendationNodes.length < 2) {
         setFeedback('Recommendation preview is missing ticket nodes.', true);
         return;
@@ -3485,12 +3594,17 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       console.log('[TaskDesigner] renderNodes begin', { stateNodeCount: state.nodes.length, lastNode: state.nodes[state.nodes.length - 1], nodesLayerExists: nodesLayer instanceof HTMLElement, zoom: uiState.zoom });
       nodesLayer.textContent = '';
       const recommendationPreview = buildRecommendationPreviewState();
+      if (recommendationPreview && recommendationPreview.lane) {
+        nodesLayer.append(createRecommendationLane(recommendationPreview.lane));
+      }
       const recommendationOrderById = recommendationPreview ? recommendationPreview.orderById : new Map();
       for (const node of state.nodes) {
+        const previewNode = recommendationPreview ? recommendationPreview.nodeById.get(node.id) : undefined;
+        const renderedNode = previewNode || node;
         const root = document.createElement('article');
         root.className = 'ticket-node ticket-node--' + node.type;
-        root.style.left = node.x + 'px';
-        root.style.top = node.y + 'px';
+        root.style.left = renderedNode.x + 'px';
+        root.style.top = renderedNode.y + 'px';
         if (node.type === 'note' || node.type === 'website') {
           root.style.width = node.width + 'px';
           root.style.height = node.height + 'px';
@@ -3513,6 +3627,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
         const titleWrap = document.createElement('div');
         titleWrap.className = 'ticket-node-title-wrap';
+
+        if (node.type === 'ticket') {
+          appendRecommendationAdorner(header, recommendationOrder);
+        }
 
         if (node.type === 'note') {
           const titleInput = document.createElement('input');
@@ -3545,12 +3663,6 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           key.className = 'ticket-node-key';
           key.textContent = node.issueKey;
           titleWrap.append(key);
-          if (typeof recommendationOrder === 'number') {
-            const badge = document.createElement('span');
-            badge.className = 'ticket-node-recommendation-badge';
-            badge.textContent = 'AI ' + recommendationOrder;
-            titleWrap.append(badge);
-          }
         }
 
         const deleteButton = document.createElement('button');
