@@ -131,6 +131,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     addCustomJqlBoard: () => this.handleAddCustomJqlBoard(),
     saveBoardSelection: () => this.handleSaveBoardSelection(),
     refreshBoardPicker: () => this.handleRefreshBoardPicker(),
+    connectJiraCloud: async () => this.handleConnectJiraCloud(),
     disconnectJiraCloud: async () => this.handleDisconnectJiraCloud()
   };
 
@@ -144,15 +145,41 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   private handleAddConnection(): void {
     this.state.view = 'connection';
     this.state.connectionForm = createNewConnectionForm();
+    this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
     this.rerender();
+  }
+
+  private async handleConnectJiraCloud(): Promise<void> {
+    const form = this.state.connectionForm;
+    if (!form || form.mode !== 'jiracloud') {
+      return;
+    }
+
+    try {
+      const config = vscode.workspace.getConfiguration('ticketManager');
+      const target = this.configTarget();
+      const clientId = typeof form.settings.clientId === 'string' ? form.settings.clientId.trim() : '';
+      await config.update('jiraOAuthClientId', clientId, target);
+      await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
+      this.applyJiraCloudWorkspaceDefaults(form);
+      this.rerender();
+    } catch (error) {
+      vscode.window.showErrorMessage(
+        `Failed to connect Jira Cloud: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   private async handleDisconnectJiraCloud(): Promise<void> {
     try {
       await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
-      this.state.view = 'list';
-      this.state.connectionForm = undefined;
-      this.state.boardPicker = undefined;
+      if (this.state.connectionForm?.mode === 'jiracloud') {
+        this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
+      } else {
+        this.state.view = 'list';
+        this.state.connectionForm = undefined;
+        this.state.boardPicker = undefined;
+      }
       this.rerender();
     } catch (error) {
       vscode.window.showErrorMessage(
@@ -167,6 +194,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     if (connection) {
       this.state.view = 'connection';
       this.state.connectionForm = await this.buildEditForm(connection);
+      this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
       this.rerender();
     }
   }
@@ -668,17 +696,8 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     const rows = connections
       .map(connection => this.renderConnectionRow(connection, tracked))
       .join('');
-    
-    const jiraCloudConnection = connections.find(c => c.mode === 'jiracloud');
-    const jiraCloudActionHtml = jiraCloudConnection
-      ? `<div class="jira-cloud-action">
-           <button class="danger" data-action="disconnectJiraCloud">Disconnect Jira Cloud</button>
-           <p class="subtle">Clears your OAuth token and requires reconnecting to refresh permissions.</p>
-         </div>`
-      : '';
-    
+
     return `${headerHtml}
-      ${jiraCloudActionHtml}
       <section class="connection-list">${rows}</section>
     `;
   }
@@ -712,6 +731,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
           </div>
           <div class="actions">
             ${canAddBoard ? `<button data-action="addBoard" data-connection-id="${esc(connection.id)}">+ Add Board</button>` : ''}
+            ${connection.mode === 'jiracloud' ? '<button class="danger" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
             <button data-action="editConnection" data-connection-id="${esc(connection.id)}">Edit</button>
             <button class="danger" data-action="removeConnection" data-connection-id="${esc(connection.id)}">Remove</button>
           </div>
@@ -789,8 +809,8 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     switch (form.mode) {
       case 'jiracloud':
         return [
-          textField(form, 'baseUrl', 'Site URL', 'https://your-tenant.atlassian.net'),
-          secretField(form, 'token', 'API token (Atlassian PAT or basic-auth token)'),
+          textField(form, 'clientId', 'Atlassian OAuth Client ID', 'Client ID from the Ticket Manager Atlassian app'),
+          this.renderJiraCloudConnectionSection(),
           textField(form, 'epicKey', 'Linked epic key (optional)', 'PROJ-123'),
           textField(form, 'epicBoardName', 'Epic board name (optional)', 'My Epic Board'),
           textField(form, 'boardJql', 'Board JQL (optional)', 'project = PROJ AND status != Done'),
@@ -886,6 +906,58 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
         </div>
       </section>
     `;
+  }
+
+  private renderJiraCloudConnectionSection(): string {
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const siteName = config.get<string>('jiraCloudSiteName', '').trim();
+    const siteUrl = config.get<string>('jiraCloudSiteUrl', '').trim();
+    const connectedSiteLabel = siteName || siteUrl;
+    const connectedSiteDetail = siteName && siteUrl ? ` (${siteUrl})` : '';
+    const statusHtml = siteUrl
+      ? `<div class="oauth-status">Connected to <strong>${esc(connectedSiteLabel)}</strong>${esc(connectedSiteDetail)}.</div>`
+      : '<div class="oauth-status">Not connected. Use the shared Atlassian OAuth flow for Jira Cloud.</div>';
+
+    return `
+      <section class="oauth-box">
+        <div class="oauth-heading">Jira Cloud Connection</div>
+        ${statusHtml}
+        <div class="oauth-actions">
+          <button class="primary" data-action="connectJiraCloud">Connect with Atlassian</button>
+          ${siteUrl ? '<button data-action="disconnectJiraCloud">Disconnect</button>' : ''}
+        </div>
+        <small class="subtle">This uses the same Jira Cloud OAuth setup as Configure Project. The client secret is requested during connection and stored in VS Code secret storage.</small>
+      </section>
+    `;
+  }
+
+  private applyJiraCloudWorkspaceDefaults(form: ConnectionFormState | undefined): void {
+    if (!form || form.mode !== 'jiracloud') {
+      return;
+    }
+
+    const config = vscode.workspace.getConfiguration('ticketManager');
+    const clientId = config.get<string>('jiraOAuthClientId', '').trim();
+    const cloudId = config.get<string>('jiraCloudId', '').trim();
+    const siteUrl = config.get<string>('jiraCloudSiteUrl', '').trim();
+
+    if (typeof form.settings.clientId !== 'string' || form.settings.clientId.trim().length === 0) {
+      form.settings.clientId = clientId;
+    }
+
+    if (cloudId) {
+      form.settings.cloudId = cloudId;
+    }
+
+    if (siteUrl) {
+      form.settings.url = siteUrl;
+    }
+  }
+
+  private configTarget(): vscode.ConfigurationTarget {
+    return vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
   }
 }
 
@@ -1021,7 +1093,7 @@ function getConnectionStringSetting(connection: Connection, key: string): string
 function secretNamesForMode(mode: BackendMode): readonly string[] {
   switch (mode) {
     case 'jiracloud':
-      return ['token'];
+      return [];
     case 'gitlab':
       return ['apiKey'];
     case 'github':
@@ -1133,6 +1205,10 @@ function getCss(): string {
     .field span { font-weight: 500; font-size: 0.9rem; }
     .field input, .field select { padding: 6px 10px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); border-radius: 3px; font-family: inherit; font-size: 0.9rem; }
     .field-inline { display: flex; align-items: center; gap: 8px; }
+    .oauth-box { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; background: color-mix(in srgb, var(--vscode-editorWidget-background) 70%, transparent); }
+    .oauth-heading { font-weight: 600; font-size: 0.9rem; }
+    .oauth-status { font-size: 0.9rem; color: var(--vscode-foreground); }
+    .oauth-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
     .test-result { padding: 10px 12px; border-radius: 4px; display: flex; gap: 12px; align-items: flex-start; font-size: 0.9rem; }
     .test-ok { background: rgba(0,180,0,0.1); border: 1px solid rgba(0,180,0,0.3); }
@@ -1145,8 +1221,6 @@ function getCss(): string {
     .board-picker-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; padding: 6px 8px; align-items: center; cursor: pointer; }
     .board-picker-row:hover { background: var(--vscode-list-hoverBackground); }
     .empty-state-inline { color: var(--vscode-descriptionForeground); padding: 12px 0; }
-    .jira-cloud-action { background: rgba(100, 150, 200, 0.08); border: 1px solid rgba(100, 150, 200, 0.25); border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; }
-    .jira-cloud-action button { margin: 0; }
   `;
 }
 

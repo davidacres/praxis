@@ -5700,7 +5700,12 @@ export async function activate(
         await deleteIssue(issueKey);
       },
       onCreateIssue: async input => {
-        const createdIssue = await backendService.createIssue(input);
+        const activeBoard = boardPanelManager.getActiveBoard();
+        const targetService =
+          input.boardId && activeBoard && activeBoard.id === input.boardId && activeBoard.connectionId
+            ? await backendService.serviceFor(activeBoard.connectionId)
+            : backendService;
+        const createdIssue = await targetService.createIssue(input);
         await syncIssueAfterMutation(createdIssue.key);
         await revealIssueDetailsInSidebar({ focus: false });
       },

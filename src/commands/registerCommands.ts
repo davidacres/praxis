@@ -978,6 +978,25 @@ async function promptForCreateIssueInput(
   };
 }
 
+function resolveCreateIssueDefaults(
+  deps: CommandDependencies,
+  arg?: unknown
+): Partial<CreateIssueInput> {
+  const argumentRecord = arg && typeof arg === 'object' ? (arg as Record<string, unknown>) : undefined;
+  const board = resolveCreateBoard(deps, arg);
+  const selectedIssue = resolveIssue(deps.detailsProvider, arg);
+  const issueType = typeof argumentRecord?.issueType === 'string'
+    ? argumentRecord.issueType.trim()
+    : undefined;
+
+  return {
+    projectKey: board?.projectKey ?? selectedIssue?.projectKey,
+    issueType,
+    parentKey: selectedIssue?.key,
+    boardId: board?.id
+  };
+}
+
 export function registerCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
     vscode.commands.registerCommand('ticketManager.refresh', async () => {
@@ -1063,9 +1082,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         resolveBoard(deps.boardsProvider, arg, deps.boardStore) ??
         deps.boardPanelManager.getActiveBoard();
       if (!board) {
-        await vscode.window.showInformationMessage(
-          'Select a board in the Boards list or open a board tab first.'
-        );
+        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
         return;
       }
 
@@ -1091,7 +1108,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.createIssue', async (arg?: unknown) => {
       try {
-        if (await deps.openCreateIssueForm?.()) {
+        if (await deps.openCreateIssueForm?.(resolveCreateIssueDefaults(deps, arg))) {
           return;
         }
 
@@ -1135,21 +1152,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.createBoard', async () => {
       try {
-        if (deps.backendService.mode === 'userworkspace') {
-          const draft = await promptForUserWorkspaceBoardInput();
-          if (!draft) {
-            return;
-          }
-          await deps.backendService.createBoard(draft);
-          await refreshViews(deps);
-          await vscode.window.showInformationMessage(`Created board "${draft.name}".`);
-          return;
-        }
-
-        // Boards are tracked locally in the extension against a connection —
-        // not created on the remote system. Delegate to the board picker which
-        // handles per-connection board selection and local tracking.
-        await vscode.commands.executeCommand('ticketManager.addBoard');
+        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
       } catch (error) {
         reportCommandError(deps, 'create-board', error);
         await vscode.window.showErrorMessage(

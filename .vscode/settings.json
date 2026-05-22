@@ -6,24 +6,15 @@
     "ticketManager.planFilePath": "",
     "ticketManager.gitlabUrl": "https://git.example.com/",
     "ticketManager.jiraCloudEpicKey": "",
-    "ticketManager.jiraCloudBoardJql": "project = KAMAI ORDER BY Rank ASC",
+    "ticketManager.jiraCloudBoardJql": "",
     "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
-    "ticketManager.jiraCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
-    "ticketManager.jiraCloudSiteName": "aags-example",
-    "ticketManager.jiraCloudSiteUrl": "https://aags-example.atlassian.net",
+    "ticketManager.jiraCloudId": "44cc86db-d3f2-402a-bf99-b800427b690e",
+    "ticketManager.jiraCloudSiteName": "example-test",
+    "ticketManager.jiraCloudSiteUrl": "https://example-test.atlassian.net",
     "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
-    "ticketManager.jiraCloudBoardName": "KAMAI",
+    "ticketManager.jiraCloudBoardName": "",
     "ticketManager.gitlabListAllAccessibleBoards": true,
     "ticketManager.connections": [
-        {
-            "id": "jira-cloud",
-            "name": "Jira Cloud",
-            "mode": "jira",
-            "settings": {
-                "clientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
-                "url": "https://aags-example.atlassian.net/"
-            }
-        },
         {
             "id": "gitlab",
             "name": "GitLab",
@@ -41,14 +32,21 @@
                 "projectName": "Example HID",
                 "allowIssueCreation": true
             }
+        },
+        {
+            "id": "jira-cloud-test",
+            "name": "Jira Cloud - Test",
+            "mode": "jiracloud",
+            "settings": {
+                "clientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+                "cloudId": "44cc86db-d3f2-402a-bf99-b800427b690e",
+                "url": "https://example-test.atlassian.net",
+                "boardJql": "project IN (10261) AND assignee = 712020:aa13c976-56f3-496d-b911-abca529f2fd7 AND status != Done",
+                "boardName": "Security Board"
+            }
         }
     ],
     "ticketManager.boards": [
-        {
-            "connectionId": "jira-cloud",
-            "boardId": "jql:workspace",
-            "displayName": "KAMAI"
-        },
         {
             "connectionId": "gitlab",
             "boardId": "gitlab:3668:279",
@@ -65,13 +63,13 @@
             "displayName": "Example HID (Live)"
         },
         {
-            "connectionId": "jira-cloud",
-            "boardId": "agile:620",
-            "displayName": "Presales Configurator"
+            "connectionId": "jira-cloud-test",
+            "boardId": "jql:workspace",
+            "displayName": "Security Board"
         }
     ],
     "ticketManager.boardsSidebarPreviewMode": "work",
-    "ticketManager.workModeEnabled": false,
+    "ticketManager.workModeEnabled": true,
     "ticketManager.backendMode": "jiracloud",
     "ticketManager.liveFolderPath": "",
     "ticketManager.liveFolderAllowIssueCreation": true,

@@ -211,7 +211,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         summary: defaults?.summary ?? '',
         description: defaults?.description ?? '',
         parentKey: defaults?.parentKey ?? '',
-        ideaTranscript: defaults?.ideaTranscript ?? ''
+        ideaTranscript: defaults?.ideaTranscript ?? '',
+        boardId: defaults?.boardId ?? ''
       }
     });
     return true;
@@ -344,6 +345,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         const description = typeof payload.description === 'string' ? payload.description.trim() : '';
         const parentKey = typeof payload.parentKey === 'string' ? payload.parentKey.trim() : '';
         const ideaTranscript = typeof payload.ideaTranscript === 'string' ? payload.ideaTranscript.trim() : '';
+        const boardId = typeof payload.boardId === 'string' ? payload.boardId.trim() : '';
         if (!projectKey || !issueType || !summary) {
           await this.view?.webview.postMessage({
             type: 'createIssueResult',
@@ -360,7 +362,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             summary,
             description: description || undefined,
             parentKey: parentKey || undefined,
-            ideaTranscript: ideaTranscript || undefined
+            ideaTranscript: ideaTranscript || undefined,
+            boardId: boardId || undefined
           });
           await this.view?.webview.postMessage({ type: 'createIssueResult', ok: true });
         } catch (error) {
@@ -1047,6 +1050,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       const submitCreateIssueButton = document.getElementById('submitCreateIssueButton');
       const createIssueStatus = document.getElementById('createIssueStatus');
       let creatingIssue = false;
+      let createBoardId = '';
 
       function setCreateIssueStatus(text, kind) {
         if (!(createIssueStatus instanceof HTMLElement)) {
@@ -1090,6 +1094,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         if (createIdeaTranscriptInput instanceof HTMLTextAreaElement) {
           createIdeaTranscriptInput.value = typeof defaults?.ideaTranscript === 'string' ? defaults.ideaTranscript : '';
         }
+        createBoardId = typeof defaults?.boardId === 'string' ? defaults.boardId : '';
         refreshCreateIdeaVisibility();
         setCreateIssueStatus('', '');
         if (createSummaryInput instanceof HTMLInputElement) {
@@ -1121,6 +1126,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
           createIssueDialog.hidden = true;
         }
         creatingIssue = false;
+        createBoardId = '';
         if (submitCreateIssueButton instanceof HTMLButtonElement) {
           submitCreateIssueButton.disabled = false;
         }
@@ -1166,7 +1172,8 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             summary,
             description,
             parentKey,
-            ideaTranscript
+            ideaTranscript,
+            boardId: createBoardId
           });
         });
       }

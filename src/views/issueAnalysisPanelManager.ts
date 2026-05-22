@@ -348,10 +348,46 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     .btn.secondary { background: transparent; border-color: var(--vscode-input-border); color: var(--vscode-foreground); }
     .btn:disabled { opacity: 0.55; cursor: default; }
     .feed { overflow: auto; padding: 12px; display: grid; gap: 10px; align-content: start; }
-    .msg { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 10px; white-space: pre-wrap; line-height: 1.4; }
+    .msg { border: 1px solid var(--vscode-editorWidget-border); border-radius: 8px; padding: 10px; line-height: 1.4; }
     .msg-user { background: color-mix(in srgb, var(--vscode-button-background) 14%, transparent); }
     .msg-assistant { background: color-mix(in srgb, var(--vscode-editor-inactiveSelectionBackground) 35%, transparent); }
     .msg-meta { font-size: 11px; opacity: 0.75; margin-bottom: 6px; }
+    .msg-body { display: grid; gap: 8px; }
+    .msg-body > :first-child { margin-top: 0; }
+    .msg-body > :last-child { margin-bottom: 0; }
+    .msg-body p, .msg-body ul, .msg-body ol, .msg-body blockquote, .msg-body pre, .msg-body h1, .msg-body h2, .msg-body h3, .msg-body h4 { margin: 0; }
+    .msg-body ul, .msg-body ol { padding-left: 20px; }
+    .msg-body li + li { margin-top: 4px; }
+    .msg-body blockquote {
+      padding-left: 10px;
+      border-left: 3px solid var(--vscode-textLink-foreground);
+      opacity: 0.9;
+    }
+    .msg-body code {
+      font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+      font-size: 0.95em;
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--vscode-textBlockQuote-background) 60%, transparent);
+    }
+    .msg-body pre {
+      overflow: auto;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid var(--vscode-editorWidget-border);
+      background: var(--vscode-textCodeBlock-background);
+    }
+    .msg-body pre code {
+      padding: 0;
+      background: transparent;
+      border-radius: 0;
+    }
+    .msg-body a { color: var(--vscode-textLink-foreground); }
+    .msg-body hr {
+      border: 0;
+      border-top: 1px solid var(--vscode-editorWidget-border);
+      margin: 0;
+    }
     .composer { border-top: 1px solid var(--vscode-editorWidget-border); padding: 12px; display: grid; gap: 8px; }
     .textarea { min-height: 92px; width: 100%; resize: vertical; padding: 8px; box-sizing: border-box; }
     .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
@@ -405,6 +441,134 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     const statusLine = document.getElementById('statusLine');
     const confirmPill = document.getElementById('confirmPill');
 
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function renderInlineMarkdown(text) {
+      const tick = String.fromCharCode(96);
+      let html = escapeHtml(text);
+      html = html.replace(new RegExp(tick + '([^' + tick + ']+)' + tick, 'g'), '<code>$1</code>');
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer noopener">$1</a>');
+      return html;
+    }
+
+    function renderMarkdown(text) {
+      const codeFence = String.fromCharCode(96).repeat(3);
+      const source = String(text || '').replace(/\r\n/g, '\n');
+      const lines = source.split('\n');
+      const blocks = [];
+      let index = 0;
+
+      while (index < lines.length) {
+        const line = lines[index];
+        const trimmed = line.trim();
+
+        if (!trimmed) {
+          index += 1;
+          continue;
+        }
+
+        if (trimmed.startsWith(codeFence)) {
+          const codeLines = [];
+          index += 1;
+          while (index < lines.length && !lines[index].trim().startsWith(codeFence)) {
+            codeLines.push(lines[index]);
+            index += 1;
+          }
+          if (index < lines.length) {
+            index += 1;
+          }
+          blocks.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+          continue;
+        }
+
+        if (/^---+$/.test(trimmed) || /^\*\*\*+$/.test(trimmed)) {
+          blocks.push('<hr />');
+          index += 1;
+          continue;
+        }
+
+        const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed);
+        if (headingMatch) {
+          const level = headingMatch[1].length;
+          blocks.push('<h' + level + '>' + renderInlineMarkdown(headingMatch[2]) + '</h' + level + '>');
+          index += 1;
+          continue;
+        }
+
+        if (trimmed.startsWith('>')) {
+          const quoteLines = [];
+          while (index < lines.length && lines[index].trim().startsWith('>')) {
+            quoteLines.push(lines[index].trim().replace(/^>\s?/, ''));
+            index += 1;
+          }
+          blocks.push('<blockquote>' + renderMarkdown(quoteLines.join('\n')) + '</blockquote>');
+          continue;
+        }
+
+        const unorderedMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+        if (unorderedMatch) {
+          const items = [];
+          while (index < lines.length) {
+            const match = /^[-*]\s+(.+)$/.exec(lines[index].trim());
+            if (!match) {
+              break;
+            }
+            items.push('<li>' + renderInlineMarkdown(match[1]) + '</li>');
+            index += 1;
+          }
+          blocks.push('<ul>' + items.join('') + '</ul>');
+          continue;
+        }
+
+        const orderedMatch = /^\d+\.\s+(.+)$/.exec(trimmed);
+        if (orderedMatch) {
+          const items = [];
+          while (index < lines.length) {
+            const match = /^\d+\.\s+(.+)$/.exec(lines[index].trim());
+            if (!match) {
+              break;
+            }
+            items.push('<li>' + renderInlineMarkdown(match[1]) + '</li>');
+            index += 1;
+          }
+          blocks.push('<ol>' + items.join('') + '</ol>');
+          continue;
+        }
+
+        const paragraphLines = [];
+        while (index < lines.length && lines[index].trim()) {
+          const candidate = lines[index].trim();
+          if (
+            candidate.startsWith(codeFence) ||
+            candidate.startsWith('>') ||
+            /^#{1,4}\s+/.test(candidate) ||
+            /^[-*]\s+/.test(candidate) ||
+            /^\d+\.\s+/.test(candidate) ||
+            /^---+$/.test(candidate) ||
+            /^\*\*\*+$/.test(candidate)
+          ) {
+            break;
+          }
+          paragraphLines.push(candidate);
+          index += 1;
+        }
+        blocks.push('<p>' + renderInlineMarkdown(paragraphLines.join('<br />')) + '</p>');
+      }
+
+      return blocks.join('');
+    }
+
     function render() {
       feed.innerHTML = '';
       for (const message of context.state.messages || []) {
@@ -416,7 +580,8 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
         meta.textContent = (message.role === 'user' ? 'You' : 'AI') + ' • ' + new Date(message.createdAt).toLocaleString();
 
         const body = document.createElement('div');
-        body.textContent = message.text || '';
+  body.className = 'msg-body';
+  body.innerHTML = renderMarkdown(message.text || '');
 
         card.appendChild(meta);
         card.appendChild(body);
