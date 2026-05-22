@@ -1842,7 +1842,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-src https: http:;" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${panelTitle.replace(/</g, '&lt;')}</title>
   <style>
@@ -2059,6 +2059,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       opacity: 0.9;
       pointer-events: none;
     }
+    .connector-recommendation-line {
+      fill: none;
+      stroke: color-mix(in oklab, var(--vscode-focusBorder) 78%, var(--vscode-editorWarning-foreground, #f59e0b));
+      stroke-width: 2.5;
+      stroke-dasharray: 10 7;
+      opacity: 0.88;
+      pointer-events: none;
+    }
     .connector-group.is-selected .connector-line {
       stroke: var(--vscode-focusBorder);
       stroke-width: 3;
@@ -2073,12 +2081,21 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       box-shadow: 0 2px 8px color-mix(in oklab, var(--vscode-editor-background) 70%, black 30%);
       user-select: none;
       cursor: grab;
-      overflow: hidden;
+      overflow: visible;
     }
     .ticket-node.dragging { cursor: grabbing; }
     .ticket-node.is-selected {
       border-color: color-mix(in oklab, var(--vscode-focusBorder) 82%, var(--vscode-panel-border));
       box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder) 28%, transparent), 0 12px 24px rgba(0, 0, 0, 0.18);
+    }
+    .ticket-node.is-recommendation-preview {
+      border-color: color-mix(in oklab, var(--vscode-focusBorder) 54%, var(--vscode-panel-border));
+      box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder) 16%, transparent), 0 8px 18px rgba(0, 0, 0, 0.14);
+    }
+    .ticket-node.is-recommendation-ghost {
+      border-style: dashed;
+      opacity: 0.88;
+      cursor: default;
     }
     .ticket-node.linking-source {
       outline: 2px solid var(--vscode-focusBorder);
@@ -2140,6 +2157,22 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       color: inherit;
       opacity: 0.9;
     }
+    .ticket-node-recommendation-badge {
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--vscode-editor-foreground);
+      background: color-mix(in oklab, var(--vscode-focusBorder) 22%, transparent);
+      border: 1px solid color-mix(in oklab, var(--vscode-focusBorder) 38%, transparent);
+    }
     .note-node-title-input {
       width: 100%;
       min-width: 0;
@@ -2158,18 +2191,18 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     .ticket-node-handle {
       --handle-transform: translate(-50%, -50%);
       position: absolute;
-      width: 14px;
-      height: 14px;
+      width: 22px;
+      height: 22px;
       padding: 0;
-      border: 2px solid var(--vscode-focusBorder);
+      border: 3px solid var(--vscode-focusBorder);
       border-radius: 999px;
       background: var(--vscode-editorWidget-background);
-      box-shadow: 0 0 0 1px color-mix(in oklab, var(--vscode-panel-border) 72%, transparent);
+      box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-editor-background) 72%, transparent), 0 2px 6px rgba(0, 0, 0, 0.24);
       opacity: 0;
       pointer-events: none;
       z-index: 3;
       cursor: crosshair;
-      transform: var(--handle-transform) scale(0.72);
+      transform: var(--handle-transform) scale(0.82);
       transition: opacity 120ms ease, transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
     }
     .ticket-node-handle--top {
@@ -2192,6 +2225,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       left: 0;
       --handle-transform: translate(-50%, -50%);
     }
+    .ticket-node:hover .ticket-node-handle,
     .ticket-node.is-selected .ticket-node-handle,
     .ticket-node.is-link-target .ticket-node-handle {
       opacity: 1;
@@ -2200,7 +2234,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
     .ticket-node-handle:hover {
       background: var(--vscode-focusBorder);
-      box-shadow: 0 0 0 2px color-mix(in oklab, var(--vscode-focusBorder) 24%, transparent);
+      box-shadow: 0 0 0 4px color-mix(in oklab, var(--vscode-focusBorder) 22%, transparent), 0 4px 10px rgba(0, 0, 0, 0.24);
     }
     .ticket-node-summary {
       margin-top: 6px;
@@ -2527,6 +2561,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       applyingRecommendation: false,
       generatingMasterPlan: false,
       ticketEntryOpen: false,
+      ticketEntryMode: 'ticket',
       toolbarPosition: initialState.toolbarPosition && typeof initialState.toolbarPosition.x === 'number' && typeof initialState.toolbarPosition.y === 'number'
         ? { x: initialState.toolbarPosition.x, y: initialState.toolbarPosition.y }
         : { x: 16, y: 16 },
@@ -2787,17 +2822,38 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         const action = button.getAttribute('data-action');
         const isActive =
           action === uiState.activeTool ||
-          (action === 'ticket' && uiState.ticketEntryOpen);
+          ((action === 'ticket' || action === 'website') && uiState.ticketEntryOpen && uiState.ticketEntryMode === action);
         button.classList.toggle('is-active', Boolean(isActive));
       }
     }
 
+    function syncTicketEntryUi() {
+      if (!(ticketInput instanceof HTMLInputElement) || !(ticketAddButton instanceof HTMLElement)) {
+        return;
+      }
+      if (uiState.ticketEntryMode === 'website') {
+        ticketInput.placeholder = 'Website URL (e.g. https://example.com)';
+        ticketInput.setAttribute('aria-label', 'Website preview URL');
+        ticketAddButton.setAttribute('title', 'Confirm add website preview');
+        ticketAddButton.setAttribute('aria-label', 'Confirm add website preview');
+      } else {
+        ticketInput.placeholder = 'Ticket number (e.g. APP-123)';
+        ticketInput.setAttribute('aria-label', 'Ticket number');
+        ticketAddButton.setAttribute('title', 'Confirm add ticket');
+        ticketAddButton.setAttribute('aria-label', 'Confirm add ticket');
+      }
+    }
+
     function setTicketEntryOpen(isOpen, options) {
+      if (options && (options.mode === 'ticket' || options.mode === 'website')) {
+        uiState.ticketEntryMode = options.mode;
+      }
       uiState.ticketEntryOpen = Boolean(isOpen);
       if (ticketEntryPanel instanceof HTMLElement) {
         ticketEntryPanel.hidden = !uiState.ticketEntryOpen;
         ticketEntryPanel.classList.toggle('is-open', uiState.ticketEntryOpen);
       }
+      syncTicketEntryUi();
       syncToolbarState();
       syncFloatingLayout();
       if (uiState.ticketEntryOpen && options && options.focus && ticketInput instanceof HTMLInputElement) {
@@ -2940,6 +2996,138 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         });
       }
       return nodes;
+    }
+
+    function buildRecommendationPreviewState() {
+      if (!state.recommendation) {
+        return undefined;
+      }
+      const previewNodes = buildPreviewNodes(state.recommendationNodes);
+      if (previewNodes.length < 2) {
+        return undefined;
+      }
+
+      const byId = new Map(previewNodes.map(node => [node.id, node]));
+      const orderedNodeIds = [];
+      const seenNodeIds = new Set();
+      const recommendation = state.recommendation || {};
+      const recommendedNodeIds = Array.isArray(recommendation.orderedNodeIds)
+        ? recommendation.orderedNodeIds
+        : [];
+
+      for (const nodeId of recommendedNodeIds) {
+        if (typeof nodeId !== 'string' || !byId.has(nodeId) || seenNodeIds.has(nodeId)) {
+          continue;
+        }
+        seenNodeIds.add(nodeId);
+        orderedNodeIds.push(nodeId);
+      }
+      for (const node of previewNodes) {
+        if (seenNodeIds.has(node.id)) {
+          continue;
+        }
+        seenNodeIds.add(node.id);
+        orderedNodeIds.push(node.id);
+      }
+
+      if (orderedNodeIds.length < 2) {
+        return undefined;
+      }
+
+      const orderIndex = new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index]));
+      const connectors = [];
+      const seenConnectors = new Set();
+      const recommendedConnectors = Array.isArray(recommendation.connectors)
+        ? recommendation.connectors
+        : [];
+
+      for (const connector of recommendedConnectors) {
+        if (!connector || typeof connector !== 'object') {
+          continue;
+        }
+        const sourceNodeId = typeof connector.sourceNodeId === 'string' ? connector.sourceNodeId : '';
+        const targetNodeId = typeof connector.targetNodeId === 'string' ? connector.targetNodeId : '';
+        if (!orderIndex.has(sourceNodeId) || !orderIndex.has(targetNodeId)) {
+          continue;
+        }
+        const sourceOrder = orderIndex.get(sourceNodeId);
+        const targetOrder = orderIndex.get(targetNodeId);
+        if (!Number.isFinite(sourceOrder) || !Number.isFinite(targetOrder) || sourceOrder >= targetOrder) {
+          continue;
+        }
+        const connectorKey = sourceNodeId + '\u0000' + targetNodeId;
+        if (seenConnectors.has(connectorKey)) {
+          continue;
+        }
+        seenConnectors.add(connectorKey);
+        connectors.push({
+          id: 'recommendation-' + connectors.length,
+          sourceNodeId,
+          targetNodeId
+        });
+      }
+
+      if (connectors.length === 0) {
+        for (let index = 0; index < orderedNodeIds.length - 1; index += 1) {
+          connectors.push({
+            id: 'recommendation-' + connectors.length,
+            sourceNodeId: orderedNodeIds[index],
+            targetNodeId: orderedNodeIds[index + 1]
+          });
+        }
+      }
+
+      const stateNodeIds = new Set(state.nodes.map(node => node.id));
+      return {
+        orderById: new Map(orderedNodeIds.map((nodeId, index) => [nodeId, index + 1])),
+        ghostNodes: previewNodes.filter(node => !stateNodeIds.has(node.id)),
+        connectors
+      };
+    }
+
+    function createRecommendationGhostNode(node, recommendationOrder) {
+      const root = document.createElement('article');
+      root.className = 'ticket-node ticket-node--ticket is-recommendation-preview is-recommendation-ghost';
+      root.style.left = node.x + 'px';
+      root.style.top = node.y + 'px';
+      root.dataset.nodeId = node.id;
+
+      const header = document.createElement('div');
+      header.className = 'ticket-node-header ticket-node-header--ticket';
+      header.style.cssText = taskDesignerTicketHeaderBackground(node.issueType);
+
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'ticket-node-title-wrap';
+
+      const key = document.createElement('div');
+      key.className = 'ticket-node-key';
+      key.textContent = node.issueKey;
+      titleWrap.append(key);
+
+      if (typeof recommendationOrder === 'number') {
+        const badge = document.createElement('span');
+        badge.className = 'ticket-node-recommendation-badge';
+        badge.textContent = 'AI ' + recommendationOrder;
+        titleWrap.append(badge);
+      }
+
+      header.append(titleWrap);
+
+      const summary = document.createElement('div');
+      summary.className = 'ticket-node-summary';
+      summary.textContent = node.summary || '(no summary)';
+
+      const meta = document.createElement('div');
+      meta.className = 'ticket-node-meta';
+      meta.append(
+        createMetaRow('Type', node.issueType),
+        createMetaRow('Status', node.status),
+        createMetaRow('Assignee', node.assignee),
+        createMetaRow('Priority', node.priority)
+      );
+
+      root.append(header, summary, meta);
+      return root;
     }
 
     function updateRecommendationActionState() {
@@ -3168,12 +3356,14 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     function renderConnectors() {
-      for (const element of connectorsLayer.querySelectorAll('.connector-group, .connector-preview-line')) {
+      for (const element of connectorsLayer.querySelectorAll('.connector-group, .connector-preview-line, .connector-recommendation-line')) {
         element.remove();
       }
       if (uiState.selectedConnectorId && !state.connectors.some(connector => connector.id === uiState.selectedConnectorId)) {
         uiState.selectedConnectorId = undefined;
       }
+
+      const recommendationPreview = buildRecommendationPreviewState();
 
       const nodeLayerRect = nodesLayer.getBoundingClientRect();
       for (const connector of state.connectors) {
@@ -3227,6 +3417,38 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         connectorsLayer.append(group);
       }
 
+      if (recommendationPreview) {
+        for (const connector of recommendationPreview.connectors) {
+          const sourceEl = nodeElementById(connector.sourceNodeId);
+          const targetEl = nodeElementById(connector.targetNodeId);
+          if (!(sourceEl instanceof HTMLElement) || !(targetEl instanceof HTMLElement)) {
+            continue;
+          }
+
+          const sourceRect = sourceEl.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          const directions = resolveConnectorDirections(sourceRect, targetRect);
+          const sourcePoint = getAnchorPointFromRect(sourceRect, nodeLayerRect, directions.sourceDirection);
+          const targetPoint = getAnchorPointFromRect(targetRect, nodeLayerRect, directions.targetDirection);
+
+          const previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          previewLine.setAttribute('class', 'connector-recommendation-line');
+          previewLine.setAttribute(
+            'd',
+            buildConnectorCurvePath(
+              sourcePoint.x,
+              sourcePoint.y,
+              targetPoint.x,
+              targetPoint.y,
+              directions.sourceDirection,
+              directions.targetDirection
+            )
+          );
+          previewLine.setAttribute('marker-end', 'url(#task-designer-arrowhead-preview)');
+          connectorsLayer.append(previewLine);
+        }
+      }
+
       if (uiState.linkPreview) {
         const previewLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         previewLine.setAttribute('class', 'connector-preview-line');
@@ -3262,6 +3484,8 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       }
       console.log('[TaskDesigner] renderNodes begin', { stateNodeCount: state.nodes.length, lastNode: state.nodes[state.nodes.length - 1], nodesLayerExists: nodesLayer instanceof HTMLElement, zoom: uiState.zoom });
       nodesLayer.textContent = '';
+      const recommendationPreview = buildRecommendationPreviewState();
+      const recommendationOrderById = recommendationPreview ? recommendationPreview.orderById : new Map();
       for (const node of state.nodes) {
         const root = document.createElement('article');
         root.className = 'ticket-node ticket-node--' + node.type;
@@ -3275,6 +3499,9 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         root.classList.toggle('linking-source', uiState.linkSourceNodeId === node.id);
         root.classList.toggle('is-selected', uiState.selectedNodeId === node.id);
         root.classList.toggle('is-link-target', uiState.hoveredLinkNodeId === node.id);
+        root.classList.toggle('is-recommendation-preview', recommendationOrderById.has(node.id));
+
+        const recommendationOrder = recommendationOrderById.get(node.id);
 
         const header = document.createElement('div');
         header.className = 'ticket-node-header ticket-node-header--' + node.type;
@@ -3318,6 +3545,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           key.className = 'ticket-node-key';
           key.textContent = node.issueKey;
           titleWrap.append(key);
+          if (typeof recommendationOrder === 'number') {
+            const badge = document.createElement('span');
+            badge.className = 'ticket-node-recommendation-badge';
+            badge.textContent = 'AI ' + recommendationOrder;
+            titleWrap.append(badge);
+          }
         }
 
         const deleteButton = document.createElement('button');
@@ -3640,6 +3873,12 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
         nodesLayer.append(root);
       }
+      if (recommendationPreview) {
+        for (const node of recommendationPreview.ghostNodes) {
+          const recommendationOrder = recommendationPreview.orderById.get(node.id);
+          nodesLayer.append(createRecommendationGhostNode(node, recommendationOrder));
+        }
+      }
       if (connectorsLayer instanceof SVGElement) {
         connectorsLayer.setAttribute('width', String(clientDistanceToCanvas(canvasSurface.scrollWidth)));
         connectorsLayer.setAttribute('height', String(clientDistanceToCanvas(canvasSurface.scrollHeight)));
@@ -3745,7 +3984,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       const issueKey = ticketInput instanceof HTMLInputElement ? ticketInput.value.trim() : '';
       if (!issueKey) {
         setFeedback('Enter a ticket number before adding.', true);
-        setTicketEntryOpen(true, { focus: true });
+        setTicketEntryOpen(true, { focus: true, mode: 'ticket' });
         return;
       }
       if (!(canvasSurface instanceof HTMLElement)) {
@@ -3755,6 +3994,27 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
       console.log('[TaskDesigner] requestAddTicket', { issueKey, point, zoom: uiState.zoom, surface: { clientWidth: canvasSurface.clientWidth, clientHeight: canvasSurface.clientHeight, scrollLeft: canvasSurface.scrollLeft, scrollTop: canvasSurface.scrollTop } });
       vscodeApi.postMessage({ type: 'addTicket', issueKey, x: point.x, y: point.y });
+    }
+
+    function requestAddWebsitePreviewFromEntry() {
+      const rawUrl = ticketInput instanceof HTMLInputElement ? ticketInput.value.trim() : '';
+      if (!rawUrl) {
+        setFeedback('Enter a website URL before adding the preview.', true);
+        setTicketEntryOpen(true, { focus: true, mode: 'website' });
+        return;
+      }
+      const normalized = normalizeWebsitePreviewUrl(rawUrl);
+      if (!normalized) {
+        setFeedback('Enter a valid http or https URL for the website preview.', true);
+        setTicketEntryOpen(true, { focus: true, mode: 'website' });
+        return;
+      }
+      if (!(canvasSurface instanceof HTMLElement)) {
+        return;
+      }
+      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
+      console.log('[TaskDesigner] requestAddWebsitePreviewFromEntry', { url: normalized, point, zoom: uiState.zoom });
+      vscodeApi.postMessage({ type: 'addWebsitePreview', url: normalized, x: point.x, y: point.y });
     }
 
     function revealNode(nodeId) {
@@ -3796,29 +4056,28 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     function requestAddWebsitePreview() {
-      if (!(canvasSurface instanceof HTMLElement)) {
-        return;
+      if (ticketInput instanceof HTMLInputElement) {
+        ticketInput.value = ticketInput.value && uiState.ticketEntryMode === 'website' ? ticketInput.value : 'https://';
       }
-      const rawUrl = window.prompt('Enter a website URL for the preview component', 'https://');
-      if (rawUrl === null) {
-        return;
-      }
-      const normalized = normalizeWebsitePreviewUrl(rawUrl);
-      if (!normalized) {
-        setFeedback('Enter a valid http or https URL for the website preview.', true);
-        return;
-      }
-      const point = visibleCanvasPoint(Math.min(180, Math.max(96, canvasSurface.clientWidth / 3)), 96);
-      console.log('[TaskDesigner] requestAddWebsitePreview', { url: normalized, point, zoom: uiState.zoom });
-      vscodeApi.postMessage({ type: 'addWebsitePreview', url: normalized, x: point.x, y: point.y });
+      setTicketEntryOpen(true, { focus: true, mode: 'website' });
     }
 
     if (ticketAddButton instanceof HTMLElement) {
-      ticketAddButton.addEventListener('click', requestAddTicket);
+      ticketAddButton.addEventListener('click', () => {
+        if (uiState.ticketEntryMode === 'website') {
+          requestAddWebsitePreviewFromEntry();
+          return;
+        }
+        requestAddTicket();
+      });
     }
     if (ticketEntryPanel instanceof HTMLFormElement) {
       ticketEntryPanel.addEventListener('submit', event => {
         event.preventDefault();
+        if (uiState.ticketEntryMode === 'website') {
+          requestAddWebsitePreviewFromEntry();
+          return;
+        }
         requestAddTicket();
       });
     }
@@ -3967,9 +4226,15 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
           state.nodes.push(message.node);
           uiState.selectedNodeId = message.node.id;
           uiState.selectedConnectorId = undefined;
+          clearRecommendation();
           renderNodes();
           persistCanvasState();
+          revealNode(message.node.id);
           setFeedback('Website preview added.', false);
+          if (ticketInput instanceof HTMLInputElement) {
+            ticketInput.value = '';
+          }
+          setTicketEntryOpen(false, { mode: 'website' });
         }
         return;
       }
@@ -4012,6 +4277,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         state.recommendationNodes = state.nodes.map(node => ({ ...node }));
         state.recommendationSource = 'canvas tickets';
         updateRecommendationActionState();
+        renderNodes();
         setFeedback('AI recommendation ready. Use the check or x actions in the toolbar to apply or discard it.', false);
         return;
       }
@@ -4028,6 +4294,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
         state.recommendationNodes = buildPreviewNodes(message.nodes);
         state.recommendationSource = message.boardName ? ('board "' + message.boardName + '"') : 'current board';
         updateRecommendationActionState();
+        renderNodes();
         setFeedback('AI board recommendation ready. Use the check or x actions in the toolbar to apply or discard it.', false);
         return;
       }
@@ -4072,7 +4339,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       button.addEventListener('click', () => {
         const action = button.getAttribute('data-action');
         if (action === 'ticket') {
-          setTicketEntryOpen(true, { focus: true });
+          setTicketEntryOpen(true, { focus: true, mode: 'ticket' });
           return;
         }
         if (action === 'note') {
@@ -4130,6 +4397,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
             return;
           }
           clearRecommendation();
+          renderNodes();
           setFeedback('AI recommendation discarded.', false);
           return;
         }
@@ -4149,15 +4417,24 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
 
     canvasSurface.addEventListener('click', event => {
-      if (event.target !== canvasSurface && event.target !== connectorsLayer) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest('.ticket-node, .connector-group, .connector-hit-area, .canvas-toolbar, .ticket-entry-panel')) {
         return;
       }
       if (uiState.ticketEntryOpen) {
         setTicketEntryOpen(false);
       }
+      const hadSelectedNode = Boolean(uiState.selectedNodeId);
       if (uiState.selectedConnectorId) {
         uiState.selectedConnectorId = undefined;
         renderConnectors();
+      }
+      if (hadSelectedNode) {
+        uiState.selectedNodeId = undefined;
+        renderNodes();
       }
     });
 
@@ -4187,6 +4464,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     pruneDanglingConnectors();
     setActiveTool('select');
     setTicketEntryOpen(false);
+    syncTicketEntryUi();
     renderNodes();
     updateRecommendationActionState();
     setGeneratingMasterPlan(false);

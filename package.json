@@ -609,39 +609,34 @@
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.createBoard",
+          "command": "ticketManager.createIssue",
           "when": "view == ticketManager.boards",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.createIssue",
-          "when": "view == ticketManager.boards",
-          "group": "navigation@3"
-        },
-        {
           "command": "ticketManager.searchBoards",
           "when": "view == ticketManager.boards && !ticketManager.boardsSearchActive",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "ticketManager.searchBoardsActive",
           "when": "view == ticketManager.boards && ticketManager.boardsSearchActive",
-          "group": "navigation@4"
+          "group": "navigation@3"
         },
         {
           "command": "ticketManager.setBoardProjects",
           "when": "view == ticketManager.boards",
-          "group": "navigation@5"
+          "group": "navigation@4"
         },
         {
           "command": "ticketManager.setBoardTypes",
           "when": "view == ticketManager.boards",
-          "group": "navigation@6"
+          "group": "navigation@5"
         },
         {
-          "command": "ticketManager.configureBoardColumns",
+          "command": "ticketManager.openConnectionsManager",
           "when": "view == ticketManager.boards",
-          "group": "navigation@7"
+          "group": "navigation@6"
         },
         {
           "command": "ticketManager.clearBoardFilters",
@@ -764,6 +759,11 @@
           "command": "ticketManager.configureBoardColumns",
           "when": "view == ticketManager.boards && viewItem == board",
           "group": "inline@2"
+        },
+        {
+          "command": "ticketManager.configureBoardColumns",
+          "when": "view == ticketManager.workModeBoards && viewItem == board",
+          "group": "inline@1"
         },
         {
           "command": "ticketManager.createIssue",
