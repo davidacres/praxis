@@ -4659,8 +4659,28 @@ export async function activate(
     boardsSidebarViewProvider.setSelectedBoardId(board.id);
     workModeBoardsSidebarViewProvider.setSelectedBoardId(board.id);
     outputChannel.appendLine(`[selectBoard] about to open board panel for: ${board.id}`);
-    await boardPanelManager.openBoard(board);
-    outputChannel.appendLine(`[selectBoard] board panel opened for: ${board.id}`);
+    try {
+      await boardPanelManager.openBoard(board);
+      try {
+        const active = boardPanelManager.getActiveBoard?.();
+        if (!active || active.id !== board.id) {
+          outputChannel.appendLine(`[selectBoard] warning: boardPanelManager active board mismatch after open. expected=${board.id} actual=${active?.id ?? 'none'}`);
+        }
+      } catch (_) {}
+      outputChannel.appendLine(`[selectBoard] board panel opened for: ${board.id}`);
+    } catch (err) {
+      outputChannel.appendLine(`[selectBoard] openBoard failed: ${err instanceof Error ? err.message : String(err)} - retrying once`);
+      try {
+        // attempt to recover: ensure panel exists and retry once after short delay
+        try { (boardPanelManager as any).ensurePanel?.(); } catch (_) {}
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await boardPanelManager.openBoard(board);
+        outputChannel.appendLine(`[selectBoard] board panel opened on retry for: ${board.id}`);
+      } catch (err2) {
+        outputChannel.appendLine(`[selectBoard] openBoard retry failed: ${err2 instanceof Error ? err2.message : String(err2)}`);
+        try { void vscode.window.showErrorMessage(`Could not open board: ${board.name}`); } catch (_) {}
+      }
+    }
   }
 
   async function selectIssueByKey(
