@@ -815,7 +815,7 @@ export class BoardPanelManager implements vscode.Disposable {
         border: 1px solid var(--vscode-panel-border);
         border-radius: 8px;
         background: var(--vscode-sideBar-background);
-        padding: 4px;
+        padding: 0;
         overflow: hidden;
       }
 
