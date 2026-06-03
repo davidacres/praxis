@@ -812,9 +812,9 @@ export class BoardPanelManager implements vscode.Disposable {
         flex-direction: column;
         min-width: 0;
         min-height: 0;
-        border: 1px solid var(--vscode-panel-border);
+        border: none;
         border-radius: 8px;
-        background: var(--vscode-sideBar-background);
+        background: transparent;
         padding: 0;
         overflow: hidden;
       }
@@ -1009,13 +1009,16 @@ export class BoardPanelManager implements vscode.Disposable {
       .board-grid {
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(260px, 1fr);
+        /* fixed column width to avoid centering and ensure left-aligned columns */
+        grid-auto-columns: minmax(260px, 260px);
         gap: 8px;
         align-items: stretch;
+        justify-items: start;
+        justify-content: start;
         flex: 1;
         min-height: 100%;
         overflow-x: auto;
-        padding-bottom: 8px;
+        padding: 0 0 8px 0;
       }
 
       .column {
