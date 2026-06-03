@@ -802,7 +802,7 @@ export class BoardPanelManager implements vscode.Disposable {
         flex: 1;
         width: 100%;
         min-height: 100vh;
-        padding: 8px;
+        padding: 0;
       }
 
       .panel-shell {
@@ -815,6 +815,7 @@ export class BoardPanelManager implements vscode.Disposable {
         border: 1px solid var(--vscode-panel-border);
         border-radius: 8px;
         background: var(--vscode-sideBar-background);
+        padding: 4px;
         overflow: hidden;
       }
 
@@ -823,7 +824,7 @@ export class BoardPanelManager implements vscode.Disposable {
         justify-content: space-between;
         align-items: flex-start;
         gap: 16px;
-        padding: 16px;
+        padding: 8px;
         border-bottom: 1px solid var(--vscode-panel-border);
         flex-shrink: 0;
       }
@@ -1001,7 +1002,7 @@ export class BoardPanelManager implements vscode.Disposable {
       }
 
       .swim-lane-grid {
-        padding: 12px;
+        padding: 8px 4px;
         min-height: 120px;
       }
 
@@ -1009,7 +1010,7 @@ export class BoardPanelManager implements vscode.Disposable {
         display: grid;
         grid-auto-flow: column;
         grid-auto-columns: minmax(260px, 1fr);
-        gap: 16px;
+        gap: 8px;
         align-items: stretch;
         flex: 1;
         min-height: 100%;
@@ -1022,18 +1023,18 @@ export class BoardPanelManager implements vscode.Disposable {
         flex-direction: column;
         min-height: 0;
         height: 100%;
-        border: 1px solid var(--vscode-panel-border);
-        border-radius: 8px;
-        background: var(--vscode-sideBar-background);
+        border: none;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 60%, transparent);
       }
 
       .column-header {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-start;
         align-items: center;
-        gap: 12px;
-        padding: 12px 14px;
-        border-bottom: 1px solid var(--vscode-panel-border);
+        gap: 8px;
+        padding: 8px 8px 6px;
+        border-bottom: none;
       }
 
       .column-title {
@@ -1059,7 +1060,8 @@ export class BoardPanelManager implements vscode.Disposable {
 
       .column-count {
         color: var(--vscode-descriptionForeground);
-        font-size: 12px;
+        font-size: 11px;
+        font-weight: 700;
         flex-shrink: 0;
       }
 
@@ -1067,9 +1069,9 @@ export class BoardPanelManager implements vscode.Disposable {
         display: flex;
         flex: 1;
         flex-direction: column;
-        gap: 10px;
+        gap: 6px;
         min-height: 0;
-        padding: 12px;
+        padding: 6px 4px 8px;
         overflow-y: auto;
       }
 
@@ -1081,7 +1083,7 @@ export class BoardPanelManager implements vscode.Disposable {
         flex-shrink: 0;
         text-align: left;
         border: 1px solid var(--vscode-focusBorder);
-        border-radius: 8px;
+        border-radius: 4px;
         background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
         color: inherit;
         cursor: grab;
@@ -1102,9 +1104,9 @@ export class BoardPanelManager implements vscode.Disposable {
         display: flex;
         flex: 1;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
         min-width: 0;
-        padding: 12px;
+        padding: 8px 10px;
       }
 
       .issue-card-top {
