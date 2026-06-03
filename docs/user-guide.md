@@ -44,7 +44,7 @@ Work Mode is the board-centric layout.
 
 - Boards render as richer cards.
 - Active AI sessions are shown under their owning board.
-- The mode can be toggled with `Ticket Manager: Toggle Work Mode` or the `ticketManager.workModeEnabled` setting.
+- The mode can be toggled with `Ticket Manager: Toggle Work Mode` or by setting `ticketManager.boardsSidebarPreviewMode` to `work`.
 
 ### Panels and detail surfaces
 

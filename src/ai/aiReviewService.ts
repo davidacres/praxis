@@ -105,20 +105,23 @@ Rules:
 - Never include markdown outside the single JSON code block.`;
 
 const COPILOT_REPLY_COMMENT_LIMIT = 8;
-const COPILOT_PROMPT_TIMEOUT_MS = 3 * 60 * 1000;
+const COPILOT_PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
+const COPILOT_STREAM_IDLE_TIMEOUT_MS = 90 * 1000;
 
 interface ReviewStreamOptions {
   onUpdate?: (content: string) => void;
   model?: string;
+  systemPrompt?: string;
 }
 
 export function buildTicketContext(
   issue: IssueDetails,
-  options?: { recentCommentLimit?: number; newestComments?: boolean }
+  options?: { recentCommentLimit?: number; newestComments?: boolean; commentBodyLimit?: number }
 ): string {
   const parts: string[] = [];
   const recentCommentLimit = options?.recentCommentLimit ?? 5;
   const newestComments = options?.newestComments ?? false;
+  const commentBodyLimit = options?.commentBodyLimit ?? 600;
   parts.push(`**Ticket:** ${issue.key}`);
   parts.push(`**Type:** ${issue.issueType}`);
   parts.push(`**Summary:** ${issue.summary}`);
@@ -128,16 +131,59 @@ export function buildTicketContext(
   if (issue.priority) {
     parts.push(`**Priority:** ${issue.priority}`);
   }
+  if (issue.severity) {
+    parts.push(`**Severity:** ${issue.severity}`);
+  }
+  if (issue.complexity) {
+    parts.push(`**Complexity:** ${issue.complexity}`);
+  }
   if (issue.assignee) {
     parts.push(`**Assignee:** ${issue.assignee}`);
   }
+  if (issue.reporter) {
+    parts.push(`**Reporter:** ${issue.reporter}`);
+  } else if (issue.reportedBy) {
+    parts.push(`**Reported By:** ${issue.reportedBy}`);
+  }
+  if (issue.created) {
+    parts.push(`**Created:** ${issue.created}`);
+  }
+  if (issue.updated) {
+    parts.push(`**Updated:** ${issue.updated}`);
+  }
+  if (issue.branch) {
+    parts.push(`**Branch:** ${issue.branch}`);
+  }
   if (issue.parentIssue) {
     parts.push(`**Parent:** ${issue.parentIssue.key}${issue.parentIssue.summary ? ` — ${issue.parentIssue.summary}` : ''}`);
+  }
+  if (issue.dependsOn && issue.dependsOn.length > 0) {
+    parts.push(`**Depends On:** ${issue.dependsOn.join(', ')}`);
   }
   if (issue.description?.trim()) {
     parts.push(`\n**Description:**\n${issue.description.trim()}`);
   } else {
     parts.push('\n**Description:** *(none)*');
+  }
+  if (issue.ideaTranscript?.trim()) {
+    const transcript = issue.ideaTranscript.trim();
+    const truncatedTranscript = transcript.length > 2000 ? `${transcript.slice(0, 2000)}… *(truncated)*` : transcript;
+    parts.push(`\n**Idea Transcript:**\n${truncatedTranscript}`);
+  }
+  if (issue.linkedIssues && issue.linkedIssues.length > 0) {
+    parts.push(`\n**Linked Issues (${issue.linkedIssues.length}):**`);
+    for (const link of issue.linkedIssues) {
+      const statusPart = link.status ? ` [${link.status}]` : '';
+      const summaryPart = link.summary ? ` — ${link.summary}` : '';
+      parts.push(`- ${link.relationship} ${link.key}${summaryPart}${statusPart}`);
+    }
+  }
+  if (issue.subTasks && issue.subTasks.length > 0) {
+    parts.push(`\n**Sub-Tasks (${issue.subTasks.length}):**`);
+    for (const task of issue.subTasks) {
+      const assigneePart = task.assignee ? ` (${task.assignee})` : '';
+      parts.push(`- ${task.key}: ${task.summary} [${task.status}]${assigneePart}`);
+    }
   }
   if (issue.comments && issue.comments.length > 0) {
     const limit = Math.min(recentCommentLimit, issue.comments.length);
@@ -145,7 +191,7 @@ export function buildTicketContext(
     parts.push(`\n**${newestComments ? 'Recent comments' : 'Comments'} (${issue.comments.length} total, showing ${limit}):**`);
     for (const comment of visibleComments) {
       const author = comment.author ?? 'Unknown';
-      const body = comment.body.length > 300 ? `${comment.body.slice(0, 300)}…` : comment.body;
+      const body = comment.body.length > commentBodyLimit ? `${comment.body.slice(0, commentBodyLimit)}…` : comment.body;
       parts.push(`- **${author}:** ${body}`);
     }
   }
@@ -261,6 +307,7 @@ async function runCopilotPrompt(
     systemPrompt: string;
     workingDirectory?: string;
     timeoutMs?: number;
+    streamIdleTimeoutMs?: number;
     onUpdate?: (content: string) => void;
     model?: string;
   }
@@ -281,6 +328,7 @@ async function runCopilotPrompt(
   const timeoutMs = options.timeoutMs ?? COPILOT_PROMPT_TIMEOUT_MS;
   let unsubscribe: (() => void) | undefined;
   const messageBuffers = new Map<string, string>();
+  let resetIdleTimer: (() => void) | undefined;
   try {
     await client.start();
     session = await client.createSession({
@@ -310,6 +358,7 @@ async function runCopilotPrompt(
         if (next) {
           options.onUpdate?.(next);
         }
+        resetIdleTimer?.();
         return;
       }
 
@@ -323,10 +372,42 @@ async function runCopilotPrompt(
         if (next) {
           options.onUpdate?.(next);
         }
+        resetIdleTimer?.();
       }
     });
 
-    const response = await session.sendAndWait({ prompt }, timeoutMs);
+    // Use a resettable idle timer so the timeout resets whenever streaming
+    // data arrives, preventing premature abort during long-running analysis.
+    let idleTimerId: ReturnType<typeof setTimeout> | undefined;
+    let rejectIdle: ((reason: Error) => void) | undefined;
+    const idleTimeoutMs = options.streamIdleTimeoutMs ?? COPILOT_STREAM_IDLE_TIMEOUT_MS;
+
+    const idlePromise = new Promise<never>((_resolve, reject) => {
+      rejectIdle = reject;
+      idleTimerId = setTimeout(() => {
+        reject(new Error(`Copilot response timed out after ${Math.round(timeoutMs / 1000)}s with no streaming activity for ${Math.round(idleTimeoutMs / 1000)}s.`));
+      }, timeoutMs);
+    });
+
+    resetIdleTimer = () => {
+      if (idleTimerId !== undefined) {
+        clearTimeout(idleTimerId);
+      }
+      idleTimerId = setTimeout(() => {
+        rejectIdle?.(new Error(`Copilot response stalled — no streaming data received for ${Math.round(idleTimeoutMs / 1000)}s.`));
+      }, idleTimeoutMs);
+    };
+
+    // Give sendAndWait a very generous ceiling — the resettable idle timer
+    // (via Promise.race) handles the real timeout logic, aborting only when
+    // no streaming data has arrived for idleTimeoutMs.
+    const sdkCeilingMs = 30 * 60 * 1000;
+    const sendPromise = session.sendAndWait({ prompt }, sdkCeilingMs);
+    const response = await Promise.race([sendPromise, idlePromise]).finally(() => {
+      if (idleTimerId !== undefined) {
+        clearTimeout(idleTimerId);
+      }
+    });
     const streamedContent = [...messageBuffers.values()].join('\n\n').trim();
     const content = streamedContent || response?.data?.content?.trim();
     if (!content) {
@@ -670,6 +751,7 @@ export async function reviewTicketWithOpenAi(
   const ticketContext = buildTicketContext(issue);
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'gpt-4o-mini';
+  const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
 
   if (options?.onUpdate) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -682,10 +764,10 @@ export async function reviewTicketWithOpenAi(
         model,
         stream: true,
         messages: [
-          { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
-        max_tokens: 1024
+        max_tokens: 16384
       })
     });
 
@@ -729,10 +811,10 @@ export async function reviewTicketWithOpenAi(
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: REVIEW_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
       ],
-      max_tokens: 1024
+      max_tokens: 16384
     })
   });
 
@@ -760,6 +842,7 @@ export async function reviewTicketWithClaude(
   const ticketContext = buildTicketContext(issue);
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'claude-haiku-4-5-20251001';
+  const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
 
   if (options?.onUpdate) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -772,8 +855,8 @@ export async function reviewTicketWithClaude(
       body: JSON.stringify({
         model,
         stream: true,
-        max_tokens: 1024,
-        system: REVIEW_SYSTEM_PROMPT,
+        max_tokens: 16384,
+        system: systemPrompt,
         messages: [
           { role: 'user', content: userMessage }
         ]
@@ -820,8 +903,8 @@ export async function reviewTicketWithClaude(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1024,
-      system: REVIEW_SYSTEM_PROMPT,
+      max_tokens: 16384,
+      system: systemPrompt,
       messages: [
         { role: 'user', content: userMessage }
       ]
@@ -852,11 +935,12 @@ export async function reviewTicketWithCopilot(
   options?: ReviewStreamOptions
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
+  const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
   const content = await runCopilotPrompt(
     `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`,
     {
       cliPath,
-      systemPrompt: REVIEW_SYSTEM_PROMPT,
+      systemPrompt,
       workingDirectory,
       onUpdate: options?.onUpdate,
       model: options?.model

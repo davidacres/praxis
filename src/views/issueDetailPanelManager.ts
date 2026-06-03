@@ -1071,6 +1071,11 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       flex-direction: column;
       gap: 8px;
     }
+    .linked-issue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     .markdown-preview {
       border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
       border-radius: 8px;
@@ -1086,6 +1091,46 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       border: 1px solid var(--vscode-panel-border);
       border-radius: 8px;
       background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+    }
+    .linked-issue-item {
+      padding: 10px 12px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 8px;
+      background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .linked-issue-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .linked-issue-relationship {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 600;
+    }
+    .linked-issue-key {
+      color: var(--vscode-textLink-foreground);
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .linked-issue-key:hover {
+      text-decoration: underline;
+    }
+    .linked-issue-summary {
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .linked-issue-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     .comment-meta {
       margin-bottom: 4px;
@@ -1965,6 +2010,29 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         </div>`;
       })
       .join('');
+    const linkedIssues = (d.linkedIssues ?? [])
+      .map(linkedIssue => {
+        const relationship = escapeHtml(linkedIssue.relationship || 'Linked issue');
+        const keyMarkup = linkedIssue.browseUrl?.trim()
+          ? `<a class="linked-issue-key" href="${escapeHtml(linkedIssue.browseUrl)}" target="_blank" rel="noreferrer noopener">${escapeHtml(linkedIssue.key)}</a>`
+          : `<span class="linked-issue-key">${escapeHtml(linkedIssue.key)}</span>`;
+        const summaryMarkup = linkedIssue.summary?.trim()
+          ? `<div class="linked-issue-summary">${escapeHtml(linkedIssue.summary)}</div>`
+          : '';
+        const metaMarkup = [linkedIssue.issueType, linkedIssue.status]
+          .filter((value): value is string => Boolean(value?.trim()))
+          .map(value => renderPill(value))
+          .join(' ');
+        return `<div class="linked-issue-item">
+          <div class="linked-issue-head">
+            <span class="linked-issue-relationship">${relationship}</span>
+            ${keyMarkup}
+          </div>
+          ${summaryMarkup}
+          ${metaMarkup ? `<div class="linked-issue-meta">${metaMarkup}</div>` : ''}
+        </div>`;
+      })
+      .join('');
 
     return `
       <section class="card">
@@ -2119,6 +2187,16 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       ${isIdea ? '' : this.renderWorkflowPackSection(d.key)}
       ${this.renderModelSection(d.key)}
       ${this.renderSubTasksSection(d.key)}
+      <section class="card">
+        <h3>Linked Items</h3>
+        <div class="linked-issue-list">
+          ${
+            linkedIssues.length > 0
+              ? linkedIssues
+              : '<div class="comment-empty">No linked Jira items.</div>'
+          }
+        </div>
+      </section>
       <section class="card">
         <h3>Activity</h3>
         <div class="comment-list">

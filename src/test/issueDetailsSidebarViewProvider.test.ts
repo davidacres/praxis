@@ -96,5 +96,76 @@ suite('IssueDetailsSidebarViewProvider', () => {
 
     provider.dispose();
   });
+
+  test('renders linked Jira items with relationship labels', () => {
+    const detailsProvider = new FakeDetailsProvider({
+      loading: false,
+      selectedIssue: {
+        key: 'APP-101',
+        summary: 'Add delivery links to details pane',
+        status: 'In Progress',
+        issueType: 'Story',
+        projectKey: 'APP',
+        projectName: 'Application Platform'
+      },
+      detailedIssue: {
+        key: 'APP-101',
+        summary: 'Add delivery links to details pane',
+        status: 'In Progress',
+        issueType: 'Story',
+        projectKey: 'APP',
+        projectName: 'Application Platform',
+        comments: [],
+        transitions: [],
+        linkedIssues: [
+          {
+            key: 'APP-77',
+            summary: 'Implement delivery workflow',
+            issueType: 'Task',
+            status: 'Done',
+            relationship: 'code implemented in',
+            browseUrl: 'https://jira.example.com/browse/APP-77'
+          },
+          {
+            key: 'APP-88',
+            summary: 'Release package update',
+            relationship: 'resolved in'
+          }
+        ]
+      },
+      transitions: []
+    });
+
+    const provider = new IssueDetailsSidebarViewProvider(
+      { mode: 'jiracloud' } as unknown as IssueTrackerService,
+      detailsProvider as unknown as DetailsViewProvider,
+      {
+        getSession: () => undefined,
+        getAgentSession: () => undefined,
+        getIssueWorkflowAssignment: () => undefined,
+        onDidChangeSession: () => new vscode.Disposable(() => {}),
+        onDidChangeAgentSession: () => new vscode.Disposable(() => {}),
+        onDidChangeWorkflowAssignment: () => new vscode.Disposable(() => {})
+      } as unknown as AiSessionManager,
+      () => [],
+      {
+        onSaveIssueEdits: async () => {},
+        onAddComment: async () => {},
+        onRequestAiReview: async () => {}
+      }
+    );
+
+    const view = createFakeWebviewView();
+    provider.resolveWebviewView(view);
+
+    assert.match(view.webview.html, /Linked Items/);
+    assert.match(view.webview.html, /code implemented in/i);
+    assert.match(view.webview.html, /resolved in/i);
+    assert.match(view.webview.html, /https:\/\/jira\.example\.com\/browse\/APP-77/);
+    assert.match(view.webview.html, /APP-77/);
+    assert.match(view.webview.html, /Implement delivery workflow/);
+
+    provider.dispose();
+  });
 });
 

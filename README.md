@@ -110,7 +110,6 @@ The extension contributes a large command and settings surface. Use these docs a
 Important settings include:
 
 - `ticketManager.backendMode`
-- `ticketManager.workModeEnabled`
 - `ticketManager.boardsSidebarPreviewMode`
 - `ticketManager.jiraPolling.enabled`
 - `ticketManager.ai.defaultProvider`
@@ -124,7 +123,7 @@ Important settings include:
 4. Open a tracked board from the Boards or Work Mode view.
 5. Use the issue views, Issue Details, Task Designer, and AI/session tools from there.
 
-If you prefer the board-centric layout, turn on `ticketManager.workModeEnabled` or run `Ticket Manager: Toggle Work Mode`.
+If you prefer the board-centric layout, set `ticketManager.boardsSidebarPreviewMode` to `work` or run `Ticket Manager: Toggle Work Mode`.
 
 ## Board settings
 

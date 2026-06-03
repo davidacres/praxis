@@ -65,7 +65,7 @@ import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
-import { IssueAnalysisPanelManager } from './views/issueAnalysisPanelManager';
+import { IssueAnalysisPanelManager, type AnalysisRepositoryEntry } from './views/issueAnalysisPanelManager';
 import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
@@ -429,11 +429,36 @@ function extractRepositorySubdirectoryFromText(text: string): string | undefined
   return undefined;
 }
 
+function extractAllGitReferencesFromText(text: string): string[] {
+  const refs: string[] = [];
+  const explicitMatches = text.matchAll(/(?:^|\n)\s*(?:repo|repository)\s*:\s*(\S+)/gi);
+  for (const m of explicitMatches) {
+    if (m[1]) {
+      refs.push(cleanCapturedRepositoryReference(m[1]));
+    }
+  }
+  const remoteMatches = text.matchAll(/(https?:\/\/[^\s'"]+\.git(?:\b|$)|ssh:\/\/[^\s'"]+|git@[^\s'"]+)/gi);
+  for (const m of remoteMatches) {
+    if (m[1]) {
+      const cleaned = cleanCapturedRepositoryReference(m[1]);
+      if (!refs.includes(cleaned)) {
+        refs.push(cleaned);
+      }
+    }
+  }
+  return refs;
+}
+
 function extractAnalysisRepositoryReference(
   question: string,
-  history: Array<{ role: string; text: string }>
+  history: Array<{ role: string; text: string }>,
+  issueTexts?: string[]
 ): AnalysisRepositoryReference | undefined {
-  const texts = [question, ...history.filter(entry => entry.role === 'user').map(entry => entry.text).reverse()];
+  const texts = [
+    question,
+    ...history.filter(entry => entry.role === 'user').map(entry => entry.text).reverse(),
+    ...(issueTexts ?? [])
+  ];
   const reference: AnalysisRepositoryReference = {};
 
   for (const text of texts) {
@@ -614,8 +639,76 @@ async function resolveAnalysisRepositoryContext(options: {
   history: Array<{ role: string; text: string }>;
   workingDirectory?: string;
   globalStoragePath: string;
+  repositories?: AnalysisRepositoryEntry[];
+  issueTexts?: string[];
 }): Promise<AnalysisRepositoryContext> {
-  const repositoryReference = extractAnalysisRepositoryReference(options.question, options.history);
+  // When explicit repository entries are attached, use them instead of regex extraction.
+  if (options.repositories && options.repositories.length > 0) {
+    const summaries: string[] = [];
+    let lastWorkingDirectory: string | undefined;
+
+    for (const entry of options.repositories) {
+      try {
+        const analysisRepoRoot = getAnalysisRepoRoot(options.workingDirectory, options.globalStoragePath);
+        let repoPath: string;
+        if (isRemoteRepositoryReference(entry.source)) {
+          repoPath = await prepareAnalysisRepositoryClone({
+            issueKey: options.issueKey,
+            source: entry.source,
+            analysisRepoRoot,
+            branch: entry.branch,
+            commit: entry.commit
+          });
+        } else if (entry.branch || entry.commit) {
+          const localSourcePath = resolveLocalRepositoryPath(entry.source, options.workingDirectory);
+          repoPath = await prepareAnalysisRepositoryClone({
+            issueKey: options.issueKey,
+            source: localSourcePath,
+            analysisRepoRoot,
+            branch: entry.branch,
+            commit: entry.commit
+          });
+        } else {
+          repoPath = resolveLocalRepositoryPath(entry.source, options.workingDirectory);
+        }
+
+        if (entry.subdirectory) {
+          repoPath = path.join(repoPath, entry.subdirectory);
+        }
+
+        if (!await pathExists(repoPath)) {
+          summaries.push(`Repository ${entry.label}: path not found — ${repoPath}`);
+          continue;
+        }
+
+        const repoSummary = await buildRepositorySummary(
+          entry.subdirectory ? path.dirname(repoPath) : repoPath,
+          entry.source
+        );
+        const parts = [
+          `Repository: ${entry.label}`,
+          repoSummary,
+          entry.branch ? `Requested branch: ${entry.branch}` : undefined,
+          entry.commit ? `Requested commit: ${entry.commit}` : undefined,
+          entry.subdirectory ? `Requested subdirectory: ${entry.subdirectory}` : undefined
+        ]
+          .filter((part): part is string => Boolean(part));
+        summaries.push(parts.join('\n\n'));
+        lastWorkingDirectory = repoPath;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        summaries.push(`Repository ${entry.label}: access error — ${message}`);
+      }
+    }
+
+    return {
+      workingDirectory: lastWorkingDirectory,
+      promptContext: summaries.join('\n\n---\n\n')
+    };
+  }
+
+  // Fallback: regex extraction from question/history/ticket text.
+  const repositoryReference = extractAnalysisRepositoryReference(options.question, options.history, options.issueTexts);
   if (!repositoryReference?.repository) {
     if (options.workingDirectory && await isGitRepository(options.workingDirectory)) {
       const workspacePath = repositoryReference?.subdirectory
@@ -3890,14 +3983,6 @@ export async function activate(
   type BoardsSidebarMode = 'classic' | 'work';
   const getBoardsSidebarMode = (): BoardsSidebarMode => {
     const configuration = vscode.workspace.getConfiguration('ticketManager');
-    const workModeEnabled = configuration.inspect<boolean>('workModeEnabled');
-    const explicitToggleValue =
-      workModeEnabled?.workspaceFolderValue ??
-      workModeEnabled?.workspaceValue ??
-      workModeEnabled?.globalValue;
-    if (typeof explicitToggleValue === 'boolean') {
-      return explicitToggleValue ? 'work' : 'classic';
-    }
     return configuration.get<string>('boardsSidebarPreviewMode') === 'work'
       ? 'work'
       : 'classic';
@@ -3911,10 +3996,7 @@ export async function activate(
   const setBoardsSidebarMode = async (mode: BoardsSidebarMode): Promise<void> => {
     const configuration = vscode.workspace.getConfiguration('ticketManager');
     const target = getBoardsSidebarSettingsTarget();
-    await Promise.all([
-      configuration.update('boardsSidebarPreviewMode', mode, target),
-      configuration.update('workModeEnabled', mode === 'work', target)
-    ]);
+    await configuration.update('boardsSidebarPreviewMode', mode, target);
   };
 
   const getBoardsContainerCommand = (): string =>
@@ -4075,7 +4157,9 @@ export async function activate(
       return options[0]?.label ?? 'No provider configured';
     },
     () => getAnalysisModelOptions(),
+    () => vscode.workspace.workspaceFolders?.map(f => ({ uri: f.uri.fsPath, name: f.name })) ?? [],
     issueKey => backendService.getIssue(issueKey),
+    message => outputChannel.appendLine(message),
     async input => {
       const options = getConfiguredAiOptions();
       if (options.length === 0) {
@@ -4087,20 +4171,45 @@ export async function activate(
         input.issue,
         issueKey => backendService.getIssue(issueKey)
       );
+
+      const issueTexts = [
+        input.issue.description,
+        ...(input.issue.comments ?? []).map(c => c.body)
+      ].filter((t): t is string => Boolean(t));
+
+      // Auto-populate repositories from ticket text when none are explicitly attached.
+      let effectiveRepositories = input.repositories;
+      if (!effectiveRepositories || effectiveRepositories.length === 0) {
+        const discoveredRefs = issueTexts.flatMap(t => extractAllGitReferencesFromText(t));
+        if (discoveredRefs.length > 0) {
+          const seen = new Set<string>();
+          effectiveRepositories = discoveredRefs
+            .filter(ref => { const dup = seen.has(ref); seen.add(ref); return !dup; })
+            .slice(0, 5)
+            .map(ref => {
+              const label = ref.replace(/\.git$/, '').split('/').pop() ?? ref;
+              return { source: ref, label } satisfies AnalysisRepositoryEntry;
+            });
+          outputChannel.appendLine(
+            `[IssueAnalysis] Auto-discovered ${effectiveRepositories.length} repository reference(s) from ticket text for ${input.issue.key}.`
+          );
+        }
+      }
+
       const repositoryContext = await resolveAnalysisRepositoryContext({
         issueKey: input.issue.key,
         question: input.question,
         history: input.history,
         workingDirectory,
-        globalStoragePath: context.globalStorageUri.fsPath
+        globalStoragePath: context.globalStorageUri.fsPath,
+        repositories: effectiveRepositories,
+        issueTexts
       });
       const historyText = input.history
         .map(entry => `${entry.role.toUpperCase()}: ${entry.text}`)
         .join('\n\n');
       const appendedPrompt = [
-        input.defaultPrompt,
         repositoryContext.promptContext,
-        input.model.trim() ? `Selected model hint: ${input.model.trim()}` : undefined,
         `Question: ${input.question}`,
         historyText ? `Conversation so far:\n${historyText}` : undefined
       ]
@@ -4112,12 +4221,18 @@ export async function activate(
         description: [input.issue.description ?? '', referencedIssueContext, appendedPrompt].filter(Boolean).join('\n\n')
       };
 
+      const reviewOptions: { onUpdate?: (content: string) => void; model: string; systemPrompt: string } = {
+        onUpdate: input.onUpdate,
+        model: input.model,
+        systemPrompt: input.defaultPrompt
+      };
+
       if (chosen.provider === 'openai') {
         return reviewTicketWithOpenAi(
           issueForAnalysis,
           chosen.credential ?? configStore.getAiOpenaiApiKey().trim(),
           chosen.agentName ?? chosen.label,
-          { onUpdate: input.onUpdate, model: input.model }
+          reviewOptions
         );
       }
 
@@ -4126,7 +4241,7 @@ export async function activate(
           issueForAnalysis,
           chosen.credential ?? configStore.getAiClaudeApiKey().trim(),
           chosen.agentName ?? chosen.label,
-          { onUpdate: input.onUpdate, model: input.model }
+          reviewOptions
         );
       }
 
@@ -4136,7 +4251,7 @@ export async function activate(
           getCopilotCliPathOverride(),
           chosen.agentName ?? chosen.label,
           repositoryContext.workingDirectory ?? workingDirectory,
-          { onUpdate: input.onUpdate, model: input.model }
+          reviewOptions
         );
       }
 
@@ -4513,6 +4628,7 @@ export async function activate(
   }
 
   async function selectBoard(board: Board | undefined): Promise<void> {
+    outputChannel.appendLine(`[selectBoard] called with boardId: ${board?.id ?? 'undefined'}`);
     if (!board) {
       await boardStore.setLastSelectedBoardId(undefined);
       await boardStore.setLastSelectedTrackedBoard(undefined);
@@ -4523,9 +4639,6 @@ export async function activate(
     }
 
     await boardStore.setLastSelectedBoardId(board.id);
-    // Resolve the connection for this board so per-connection routing kicks
-    // in. Prefer the board's own connectionId (set by the boards loader);
-    // otherwise fall back to a tracked-board match on the active connection.
     let resolvedConnectionId: string | undefined = board.connectionId;
     if (!resolvedConnectionId) {
       const tracked = connectionStore.getTrackedBoards().filter(t => t.boardId === board.id);
@@ -4545,7 +4658,9 @@ export async function activate(
     }
     boardsSidebarViewProvider.setSelectedBoardId(board.id);
     workModeBoardsSidebarViewProvider.setSelectedBoardId(board.id);
+    outputChannel.appendLine(`[selectBoard] about to open board panel for: ${board.id}`);
     await boardPanelManager.openBoard(board);
+    outputChannel.appendLine(`[selectBoard] board panel opened for: ${board.id}`);
   }
 
   async function selectIssueByKey(
@@ -5781,7 +5896,17 @@ export async function activate(
     () => backendService.mode,
     {
       onSelectBoard: async boardId => {
-        await selectBoard(await resolveBoardById(boardId));
+        try {
+          outputChannel.appendLine(`[WorkMode] Board selected: ${boardId}`);
+          const board = await resolveBoardById(boardId);
+          if (!board) {
+            outputChannel.appendLine(`[WorkMode] Board not found: ${boardId}`);
+            return;
+          }
+          await selectBoard(board);
+        } catch (error) {
+          outputChannel.appendLine(`[WorkMode] onSelectBoard error: ${error instanceof Error ? error.message : String(error)}`);
+        }
       },
       onEditBoard: async boardId => {
         await editBoard(boardId);
@@ -6270,19 +6395,13 @@ export async function activate(
                 updateCommentPlaceholders();
                 await updateAnalysisContext();
                 const boardsModeChanged = event.affectsConfiguration('ticketManager.boardsSidebarPreviewMode');
-                const workModeToggleChanged = event.affectsConfiguration('ticketManager.workModeEnabled');
-                if (boardsModeChanged || workModeToggleChanged) {
+                if (boardsModeChanged) {
                   const configuration = vscode.workspace.getConfiguration('ticketManager');
                   const desiredMode = getBoardsSidebarMode();
                   const currentPreviewMode = configuration.get<string>('boardsSidebarPreviewMode') === 'work'
                     ? 'work'
                     : 'classic';
-                  const workModeEnabledInspect = configuration.inspect<boolean>('workModeEnabled');
-                  const currentWorkModeToggle =
-                    workModeEnabledInspect?.workspaceFolderValue ??
-                    workModeEnabledInspect?.workspaceValue ??
-                    workModeEnabledInspect?.globalValue;
-                  if (currentPreviewMode !== desiredMode || currentWorkModeToggle !== (desiredMode === 'work')) {
+                  if (currentPreviewMode !== desiredMode) {
                     await setBoardsSidebarMode(desiredMode);
                     return;
                   }
@@ -6305,7 +6424,7 @@ export async function activate(
                   await backendService.reset();
                   await refreshAndRestoreSelection();
                   await startupPollingController.refresh();
-                  if (boardsModeChanged || workModeToggleChanged) {
+                  if (boardsModeChanged) {
                     await vscode.commands.executeCommand(getBoardsContainerCommand());
                   }
                 } catch {

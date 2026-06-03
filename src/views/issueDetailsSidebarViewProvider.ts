@@ -429,6 +429,29 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
             </div>`;
           })
           .join('');
+        const linkedIssues = (issue.linkedIssues ?? [])
+          .map(linkedIssue => {
+            const relationship = escapeHtml(linkedIssue.relationship || 'Linked issue');
+            const keyMarkup = linkedIssue.browseUrl?.trim()
+              ? `<a class="linked-issue-key" href="${escapeHtml(linkedIssue.browseUrl)}" target="_blank" rel="noreferrer noopener">${escapeHtml(linkedIssue.key)}</a>`
+              : `<span class="linked-issue-key">${escapeHtml(linkedIssue.key)}</span>`;
+            const summaryMarkup = linkedIssue.summary?.trim()
+              ? `<div class="linked-issue-summary">${escapeHtml(linkedIssue.summary)}</div>`
+              : '';
+            const metaMarkup = [linkedIssue.issueType, linkedIssue.status]
+              .filter((value): value is string => Boolean(value?.trim()))
+              .map(value => renderPill(value))
+              .join(' ');
+            return `<div class="linked-issue-item">
+              <div class="linked-issue-head">
+                <span class="linked-issue-relationship">${relationship}</span>
+                ${keyMarkup}
+              </div>
+              ${summaryMarkup}
+              ${metaMarkup ? `<div class="linked-issue-meta">${metaMarkup}</div>` : ''}
+            </div>`;
+          })
+          .join('');
 
         content = `<div class="item-list">
         <div class="issue-header" title="${escapeHtml(`${issue.key}: ${issue.summary}`)}">
@@ -575,6 +598,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
         ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderAiAssignmentSection(issue.key, agentNames)}
         ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderWorkflowPackSection(issue.key)}
         ${issue.issueType.trim().toLowerCase() === 'idea' ? '' : this.renderCopilotAgentSection(issue)}
+        <div class="card">
+          <div class="section-title">Linked Items</div>
+          <div class="linked-issue-list">
+            ${
+              linkedIssues.length > 0
+                ? linkedIssues
+                : '<div class="comment-empty">No linked Jira items.</div>'
+            }
+          </div>
+        </div>
         <form class="card" id="commentForm" data-issue-key="${escapeHtml(issue.key)}">
           <div class="section-title">Activity</div>
           <div class="comment-list">
@@ -915,6 +948,51 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       .comment-body {
         word-break: break-word;
         line-height: 1.45;
+      }
+      .linked-issue-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .linked-issue-item {
+        padding: 8px 10px;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
+        background: var(--vscode-textBlockQuote-background, var(--vscode-editor-background));
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .linked-issue-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .linked-issue-relationship {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 600;
+      }
+      .linked-issue-key {
+        color: var(--vscode-textLink-foreground);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .linked-issue-key:hover {
+        text-decoration: underline;
+      }
+      .linked-issue-summary {
+        line-height: 1.4;
+        word-break: break-word;
+      }
+      .linked-issue-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
       }
       ${MARKDOWN_BODY_CSS}
       .comment-empty {
