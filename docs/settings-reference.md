@@ -31,8 +31,7 @@ This file documents the settings currently contributed by the extension.
 | Setting | Type | Purpose |
 | --- | --- | --- |
 | `ticketManager.enableNewProject` | boolean | Enables the preview New Project wizard command. |
-| `ticketManager.workModeEnabled` | boolean | Toggles the board-centric Work Mode sidebar layout on or off. |
-| `ticketManager.boardsSidebarPreviewMode` | string | Legacy/internal enum backing classic vs work sidebar mode. |
+| `ticketManager.boardsSidebarPreviewMode` | string | Selects the Boards sidebar layout (`classic` or `work`). |
 | `ticketManager.priorityColors` | object | Configures priority indicator colors and gradients on ticket cards. |
 | `ticketManager.jiraBoardListIconColor` | string | Optional accent color for Jira board list icons. |
 | `ticketManager.demoBoardListIconColor` | string | Optional accent color for Demo board list icons. |
@@ -103,6 +102,5 @@ This file documents the settings currently contributed by the extension.
 
 ## Notes
 
-- `ticketManager.workModeEnabled` is the preferred user-facing toggle for switching between classic and Work Mode.
-- `ticketManager.boardsSidebarPreviewMode` still exists for compatibility and is kept in sync with the boolean toggle.
+- Use `ticketManager.boardsSidebarPreviewMode` to switch between classic and Work Mode.
 - `ticketManager.gitlabApiKey` is deprecated; current GitLab credentials are intended to be stored through VS Code SecretStorage.

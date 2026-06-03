@@ -128,6 +128,16 @@ export interface ParentIssueReference {
   description?: string;
 }
 
+export interface LinkedIssueReference {
+  key: string;
+  summary?: string;
+  issueType?: string;
+  status?: string;
+  relationship: string;
+  browseUrl?: string;
+  raw?: unknown;
+}
+
 export interface SubTaskSummary {
   key: string;
   summary: string;
@@ -179,6 +189,7 @@ export interface IssueSummary {
 export interface IssueDetails extends IssueSummary {
   transitions?: WorkflowTransition[];
   comments?: IssueComment[];
+  linkedIssues?: LinkedIssueReference[];
 }
 
 export interface CreateIssueInput {

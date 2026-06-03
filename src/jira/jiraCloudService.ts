@@ -21,6 +21,7 @@ import type {
   IssueAttachment,
   IssueComment,
   IssueDetails,
+  LinkedIssueReference,
   IssueFilters,
   ParentItemQueryOptions,
   ParentIssueReference,
@@ -86,6 +87,8 @@ interface JiraCloudSearchResult {
   rawIssues: Array<Record<string, unknown>>;
   nextPageToken?: string;
 }
+
+type JiraCloudSearchMode = 'enhanced' | 'legacy';
 
 interface JiraAgileBoardColumnStatus {
   id?: string;
@@ -392,6 +395,25 @@ function extractJiraErrorMessage(
   return `${status} ${statusText}`.trim();
 }
 
+export function shouldFallbackToLegacySearch(error: unknown): boolean {
+  const message =
+    (error instanceof Error ? error.message : asString(error))?.trim().toLowerCase() ?? '';
+  if (!message) {
+    return false;
+  }
+
+  return [
+    '401 unauthorized',
+    '403 forbidden',
+    'forbidden',
+    'unauthorized',
+    'insufficient scope',
+    'scope',
+    'permission',
+    'not allowed'
+  ].some(token => message.includes(token));
+}
+
 function normalizeProject(raw: unknown): Project | undefined {
   if (!isRecord(raw)) {
     return undefined;
@@ -544,6 +566,125 @@ function normalizeAttachment(raw: unknown): IssueAttachment | undefined {
   };
 }
 
+function normalizeIssueLink(raw: unknown, baseUrl: string): LinkedIssueReference | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const type = isRecord(raw.type) ? raw.type : {};
+  const outwardIssue = isRecord(raw.outwardIssue) ? raw.outwardIssue : undefined;
+  const inwardIssue = isRecord(raw.inwardIssue) ? raw.inwardIssue : undefined;
+  const linkedIssue = outwardIssue ?? inwardIssue;
+  if (!linkedIssue) {
+    return undefined;
+  }
+
+  const key = asString(linkedIssue.key)?.trim();
+  if (!key) {
+    return undefined;
+  }
+
+  const fields = isRecord(linkedIssue.fields) ? linkedIssue.fields : {};
+  const status = isRecord(fields.status) ? fields.status : {};
+  const issueType = isRecord(fields.issuetype) ? fields.issuetype : {};
+  const relationship = outwardIssue
+    ? asString(type.outward)?.trim() || asString(type.name)?.trim() || 'Linked issue'
+    : asString(type.inward)?.trim() || asString(type.name)?.trim() || 'Linked issue';
+
+  return {
+    key,
+    summary: asString(fields.summary)?.trim(),
+    issueType: asString(issueType.name)?.trim(),
+    status: asString(status.name)?.trim(),
+    relationship,
+    browseUrl: deriveBrowseUrl(baseUrl, key),
+    raw
+  };
+}
+
+function deriveLinkedReferenceKey(title: string | undefined, url: string | undefined): string | undefined {
+  const trimmedTitle = title?.trim();
+  if (trimmedTitle) {
+    const issueKeyMatch = /\b[A-Z][A-Z0-9_]+-\d+\b/.exec(trimmedTitle);
+    return issueKeyMatch?.[0] ?? trimmedTitle;
+  }
+
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl) {
+    return undefined;
+  }
+
+  const browseMatch = /\/browse\/([^/?#]+)/i.exec(trimmedUrl);
+  if (browseMatch?.[1]) {
+    return decodeURIComponent(browseMatch[1]);
+  }
+
+  try {
+    const parsed = new URL(trimmedUrl);
+    const lastSegment = parsed.pathname.split('/').filter(Boolean).pop();
+    return lastSegment ? decodeURIComponent(lastSegment) : trimmedUrl;
+  } catch {
+    return trimmedUrl;
+  }
+}
+
+function normalizeRemoteIssueLink(raw: unknown): LinkedIssueReference | undefined {
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  const object = isRecord(raw.object) ? raw.object : {};
+  const url = asString(object.url)?.trim();
+  const title = asString(object.title)?.trim();
+  const summary = asString(object.summary)?.trim();
+  const relationship = asString(raw.relationship)?.trim() || 'Remote link';
+  const key = deriveLinkedReferenceKey(title, url);
+
+  if (!key && !summary && !url) {
+    return undefined;
+  }
+
+  const status = isRecord(object.status)
+    ? asString(object.status.title)?.trim() || asString(object.status.resolved)?.trim()
+    : undefined;
+  const effectiveKey = key ?? summary ?? url ?? 'Remote link';
+  const effectiveSummary = summary && summary !== effectiveKey ? summary : title && title !== effectiveKey ? title : undefined;
+
+  return {
+    key: effectiveKey,
+    summary: effectiveSummary,
+    status,
+    relationship,
+    browseUrl: url,
+    raw
+  };
+}
+
+export function normalizeLinkedIssueReferences(
+  fieldsObject: unknown,
+  remoteLinksResponse: unknown,
+  baseUrl: string
+): LinkedIssueReference[] {
+  const classicLinks = (isRecord(fieldsObject) ? toArray(fieldsObject.issuelinks) : [])
+    .map(link => normalizeIssueLink(link, baseUrl))
+    .filter((item): item is LinkedIssueReference => Boolean(item));
+  const remoteLinks = toArray(remoteLinksResponse)
+    .map(normalizeRemoteIssueLink)
+    .filter((item): item is LinkedIssueReference => Boolean(item));
+
+  const merged = [...classicLinks, ...remoteLinks];
+  const seen = new Set<string>();
+
+  return merged.filter(link => {
+    const dedupeKey = `${link.relationship.toLowerCase()}|${link.browseUrl ?? ''}|${link.key.toLowerCase()}`;
+    if (seen.has(dedupeKey)) {
+      return false;
+    }
+    seen.add(dedupeKey);
+    return true;
+  });
+}
+
 function statusCategoryRank(statusCategory: string | undefined): number {
   const normalized = (statusCategory ?? '').trim().toLowerCase();
   if (normalized === 'to do' || normalized === 'todo') {
@@ -624,6 +765,7 @@ export class JiraCloudService implements IssueTrackerService {
   private cachedProjects?: Project[];
   private fieldIds?: JiraCloudFieldIds;
   private currentUser?: JiraCloudUser;
+  private issueSearchMode: JiraCloudSearchMode = 'enhanced';
   private readonly oauthService: JiraCloudOAuthService;
 
   public constructor(
@@ -642,6 +784,8 @@ export class JiraCloudService implements IssueTrackerService {
     this.cachedProjects = undefined;
     this.fieldIds = undefined;
     this.currentUser = undefined;
+    this.issueSearchMode = 'enhanced';
+    this.searchCursorCache.clear();
   }
 
   public async checkConnection(): Promise<ConnectionCheck> {
@@ -997,7 +1141,8 @@ export class JiraCloudService implements IssueTrackerService {
       'description',
       'parent',
       'comment',
-      'attachment'
+      'attachment',
+      'issuelinks'
     ];
     if (fieldIds.epicLinkFieldId) {
       fields.push(fieldIds.epicLinkFieldId);
@@ -1019,10 +1164,27 @@ export class JiraCloudService implements IssueTrackerService {
     const attachments = toArray(fieldsObject.attachment)
       .map(normalizeAttachment)
       .filter((item): item is IssueAttachment => Boolean(item));
+    let remoteLinksResponse: unknown = [];
+    try {
+      remoteLinksResponse = await this.requestJson(
+        'GET',
+        `/rest/api/2/issue/${encodeURIComponent(issueKey)}/remotelink`
+      );
+    } catch (error) {
+      this.output.appendLine(
+        `[jiracloud] Failed to load remote links for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    const linkedIssues = normalizeLinkedIssueReferences(
+      fieldsObject,
+      remoteLinksResponse,
+      this.getBrowseBaseUrl()
+    );
     return {
       ...issue,
       comments,
-      attachments
+      attachments,
+      linkedIssues
     };
   }
 
@@ -1911,6 +2073,28 @@ export class JiraCloudService implements IssueTrackerService {
     startAt: number,
     maxResults: number
   ): Promise<JiraCloudSearchResult> {
+    if (this.issueSearchMode === 'legacy') {
+      return this.searchIssuesLegacy(jql, fields, startAt, maxResults);
+    }
+
+    try {
+      return await this.searchIssuesEnhanced(jql, fields, startAt, maxResults);
+    } catch (error) {
+      if (!shouldFallbackToLegacySearch(error)) {
+        throw error;
+      }
+
+      this.enableLegacyIssueSearch(error);
+      return this.searchIssuesLegacy(jql, fields, startAt, maxResults);
+    }
+  }
+
+  private async searchIssuesEnhanced(
+    jql: string,
+    fields: string[],
+    startAt: number,
+    maxResults: number
+  ): Promise<JiraCloudSearchResult> {
     const cacheKey = `${jql}|${maxResults}|${startAt}`;
     const cursorToken = startAt === 0 ? undefined : this.searchCursorCache.get(cacheKey);
 
@@ -1939,7 +2123,44 @@ export class JiraCloudService implements IssueTrackerService {
     return { issues, total, rawIssues, nextPageToken: responseNextToken };
   }
 
+  private async searchIssuesLegacy(
+    jql: string,
+    fields: string[],
+    startAt: number,
+    maxResults: number
+  ): Promise<JiraCloudSearchResult> {
+    const body: Record<string, unknown> = { jql, startAt, maxResults, fields };
+    const response = await this.requestJson('POST', '/rest/api/3/search', body);
+    const payload = isRecord(response) ? response : {};
+    const rawIssues = toArray(payload.issues).filter(isRecord);
+    const issues = rawIssues
+      .map(issue => normalizeIssue(issue, this.getBrowseBaseUrl()))
+      .filter((item): item is IssueSummary => Boolean(item));
+    const total = typeof payload.total === 'number' ? payload.total : startAt + issues.length;
+    return { issues, total, rawIssues };
+  }
+
   private async searchAllIssues(jql: string, fields: string[]): Promise<JiraCloudSearchResult> {
+    if (this.issueSearchMode === 'legacy') {
+      return this.searchAllIssuesLegacy(jql, fields);
+    }
+
+    try {
+      return await this.searchAllIssuesEnhanced(jql, fields);
+    } catch (error) {
+      if (!shouldFallbackToLegacySearch(error)) {
+        throw error;
+      }
+
+      this.enableLegacyIssueSearch(error);
+      return this.searchAllIssuesLegacy(jql, fields);
+    }
+  }
+
+  private async searchAllIssuesEnhanced(
+    jql: string,
+    fields: string[]
+  ): Promise<JiraCloudSearchResult> {
     const pageSize = 100;
     const allIssues: IssueSummary[] = [];
     const allRawIssues: Array<Record<string, unknown>> = [];
@@ -1963,6 +2184,45 @@ export class JiraCloudService implements IssueTrackerService {
       }
     }
     return { issues: allIssues, total: allIssues.length, rawIssues: allRawIssues };
+  }
+
+  private async searchAllIssuesLegacy(
+    jql: string,
+    fields: string[]
+  ): Promise<JiraCloudSearchResult> {
+    const pageSize = 100;
+    const allIssues: IssueSummary[] = [];
+    const allRawIssues: Array<Record<string, unknown>> = [];
+    let startAt = 0;
+    let total = 0;
+
+    while (true) {
+      const page = await this.searchIssuesLegacy(jql, fields, startAt, pageSize);
+      allIssues.push(...page.issues);
+      allRawIssues.push(...page.rawIssues);
+      total = page.total;
+
+      if (page.issues.length === 0 || startAt + page.issues.length >= total) {
+        break;
+      }
+
+      startAt += page.issues.length;
+    }
+
+    return { issues: allIssues, total, rawIssues: allRawIssues };
+  }
+
+  private enableLegacyIssueSearch(error: unknown): void {
+    if (this.issueSearchMode === 'legacy') {
+      return;
+    }
+
+    this.issueSearchMode = 'legacy';
+    this.searchCursorCache.clear();
+    const message = error instanceof Error ? error.message : String(error);
+    this.output.appendLine(
+      `[jiracloud] Enhanced issue search failed; falling back to classic search endpoint for this session: ${message}`
+    );
   }
 
   private async fetchBoardWorkflowStatuses(

@@ -289,7 +289,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     };
     webviewView.webview.onDidReceiveMessage(
       message => {
-        void this.handleMessage(message);
+        this.handleMessage(message).catch(error => {
+          console.error(`[WorkMode] Message handler error:`, error);
+        });
       },
       undefined,
       this.disposables
@@ -519,7 +521,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       } catch (_) {}
       for (const row of document.querySelectorAll('[data-board-id]')) {
         row.addEventListener('click', () => {
-          vscodeApi.postMessage({ type: 'selectBoard', boardId: row.getAttribute('data-board-id') });
+          const boardId = row.getAttribute('data-board-id');
+          console.log('[WorkMode] Card clicked, boardId:', boardId);
+          vscodeApi.postMessage({ type: 'selectBoard', boardId });
         });
       }
       function postToggleBoardSessions(boardId) {

@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.30",
+  "version": "0.0.32",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
@@ -580,7 +580,7 @@
         },
         {
           "command": "ticketManager.createIdea",
-          "when": "view == ticketManager.myIssues",
+          "when": "view == ticketManager.myIssues && config.ticketManager.enableCreateIdea",
           "group": "navigation@2"
         },
         {
@@ -790,6 +790,10 @@
           "when": "false"
         },
         {
+          "command": "ticketManager.createIdea",
+          "when": "config.ticketManager.enableCreateIdea"
+        },
+        {
           "command": "ticketManager.newProject",
           "when": "config.ticketManager.enableNewProject"
         },
@@ -964,20 +968,20 @@
           "scope": "window",
           "description": "URL of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
         },
+        "ticketManager.enableCreateIdea": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "Enable the **Create Idea** command and button (preview). When disabled, the command and its icon are hidden.",
+          "tags": [
+            "preview"
+          ]
+        },
         "ticketManager.enableNewProject": {
           "type": "boolean",
           "default": false,
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
-          "tags": [
-            "preview"
-          ]
-        },
-        "ticketManager.workModeEnabled": {
-          "type": "boolean",
-          "default": false,
-          "scope": "window",
-          "markdownDescription": "Toggle **Work Mode** on or off for the side panel. When enabled, Ticket Manager switches from the classic multi-view sidebar to the **Work Mode** board layout.",
           "tags": [
             "preview"
           ]
@@ -994,7 +998,7 @@
             "Work Mode"
           ],
           "scope": "window",
-          "markdownDescription": "Preview layout for the **Boards** side panel. **Work Mode** shows boards as cards and nests agent sessions under the owning board.",
+          "markdownDescription": "Select the **Boards** sidebar layout. **Classic** uses separate views (Boards, EPICs, My Issues, Sessions, Issue Details). **Work Mode** uses a board-centric layout with boards as cards and nested agent sessions.",
           "tags": [
             "preview"
           ]
@@ -1240,7 +1244,8 @@
         },
         "ticketManager.ai.analysisDefaultPrompt": {
           "type": "string",
-          "default": "",
+          "default": "# Technical Ticket Readiness Review Prompt\n\nYou are a senior technical analyst and reviewer with strong expertise across backend, frontend, infrastructure, integrations, data, APIs, CI/CD, and production systems.\n\nYour task is to review a development ticket (e.g. Jira) and determine whether it is sufficiently defined for **safe, accurate implementation**.\n\nYour review must be **practical, code-aware, version-aware, and implementation-focused**.\n\n---\n\n## Core Rules\n\n- Analyse in a **step-by-step structure**, explicitly stating the step being performed\n- Report **findings, gaps, and risks only** (no internal reasoning or chain-of-thought)\n- Do **not invent missing details**\n- Be precise, critical, and concise\n- Focus on **implementation readiness, code impact, technology compatibility, and delivery risk**\n- All guidance must be compatible with the **actual technologies and versions** used\n\n---\n\n## Mandatory Requirements\n\n1. **Ticket review**\n   - Title, description, acceptance criteria, comments, attachments, linked tickets\n\n2. **Linked tickets**\n   - Analyse each once only\n   - Avoid duplicates\n   - Detect circular references and stop safely\n\n3. **Repository & artefact analysis**\n   - Inspect referenced repos, services, files, designs, schemas\n   - Identify likely impacted code areas\n\n4. **Technology discovery & compatibility validation (MANDATORY)**\n   - Identify languages, frameworks, runtimes, platforms, and versions\n   - Unknown or unverifiable versions must be flagged as risks or blockers\n\n5. **Code-level impact analysis (MANDATORY)**\n   - Map requirements to specific code layers/components\n   - Inability to map code impact = blocker\n\n6. **Readiness rule**\n   - A ticket is **not ready** if code impact or technology compatibility cannot be validated\n\n---\n\n## Required Review Steps\n\n### STEP 1 — Ticket Understanding\n\n**Task**\n- Review the ticket and directly relevant linked items\n\n**Findings**\n- Problem being solved\n- Expected outcome / deliverable\n- Constraints, assumptions, dependencies\n- Referenced teams, systems, services, environments, releases\n- Acceptance criteria: existence and testability\n- Explicit technology references\n\n---\n\n### STEP 2 — Linked Ticket Validation\n\n**Task**\n- Analyse each linked ticket once; detect circular references\n\n**Findings**\n- Linked tickets reviewed\n- Relevant findings and dependencies\n- Missing or inaccessible linked tickets\n\n---\n\n### STEP 3 — Repository & Artefact Validation\n\n**Task**\n- Identify and validate all referenced repos, services, designs, schemas, configs\n\n**Findings**\n- Available vs missing artefacts\n- Why missing artefacts matter\n- [Critical] flag if implementation context is missing\n\n---\n\n### STEP 4 — Technology Discovery & Compatibility Validation (MANDATORY)\n\n**Task**\n- Determine actual technology stack and validate implementation compatibility\n\n**Identify**\n- Languages, versions, frameworks, runtimes, SDKs, platforms, build tooling, package management, databases, infrastructure constraints\n\n**Validation**\n- Ensure suggestions fit discovered stack\n- Flag version mismatches or unsupported patterns\n- Distinguish: confirmed / inferred / unknown versions\n- [Critical] flag if compatibility cannot be validated\n\n---\n\n### STEP 5 — Code Impact Analysis (MANDATORY)\n\n**Task**\n- Map requirements to likely code changes (compatible with discovered stack)\n\n**Analyse across**\n- API, business logic, domain, data access, database/schema, UI/frontend, integrations, config, infrastructure, logging, security, tests\n\n**For each impacted area**\n- Repo / service / module affected\n- Change type (new feature, bug fix, enhancement, refactor, config, schema)\n- Certain vs inferred impact\n- Compatibility considerations\n- [Critical] flag if code impact cannot be determined\n\n---\n\n### STEP 6 — Completeness Assessment\n\n**Task**\n- Assess whether ticket has sufficient detail for safe implementation\n\n**Gap categories**\n- Functional requirements (behaviours, rules, flows, acceptance conditions)\n- Non-functional requirements (performance, security, reliability, observability)\n- Data / contracts / interfaces (inputs, outputs, validation, schemas)\n- Error handling / edge cases (failures, retries, idempotency, rollback)\n- Dependencies (teams, systems, release sequencing)\n- Technology compatibility (missing versions, unknown constraints)\n\n**Label each gap**: [Critical] / [Major] / [Minor]\n\n---\n\n### STEP 7 — Technology & Domain Analysis\n\n**Task**\n- Summarise all relevant technologies and domain concepts\n\n**Findings**\n- Key technologies and versions\n- Ambiguous technical/domain concepts\n- Risks from unclear architecture, integrations, legacy constraints, security, compliance\n- Concise stack summary (e.g. Backend: .NET 4.8 C# 7.3, Frontend: jQuery, DB: SQL Server)\n\n---\n\n### STEP 8 — Implementation View\n\n**Task**\n- Describe likely implementation approach at high level\n\n**Findings**\n- Strategy, code paths, key decisions, trade-offs\n- Cross-cutting concerns\n- Technology constraints shaping approach\n- Testing and rollout implications\n\n---\n\n### STEP 9 — Risk Assessment\n\n**Categories**: requirement ambiguity, technical complexity, code impact uncertainty, technology compatibility, integration/dependency, delivery, operational, maintainability, testability\n\n**For each risk**: title, severity (Low/Medium/High), explanation, justification\n\n---\n\n### STEP 10 — Readiness Evaluation\n\n- **Completeness score**: 0–100%\n- **Confidence level**: Low / Medium / High\n- **Justification** based on analysis evidence\n\n---\n\n### STEP 11 — Final Decision\n\nChoose ONE:\n- ✅ Ready to implement\n- ⚠️ Implementable with clarifications\n- ❌ Not ready for implementation\n\nRule: if technology compatibility cannot be validated → not ✅\n\n---\n\n### STEP 12 — Prioritised Next Actions\n\nSpecific, actionable, implementation-focused actions in priority order.\n\n---\n\n## Output Rules\n\n- Use exact step headings (STEP 1–12)\n- Concise bullet points\n- Distinguish: confirmed / inferred / missing information\n- No internal reasoning or chain-of-thought\n- Do not invent details\n- State clearly if implementation cannot proceed safely",
+          "editPresentation": "multilineText",
           "scope": "window",
           "description": "Required default prompt used in the Analysis Window. If empty, analysis gating is treated as disabled at runtime."
         },
