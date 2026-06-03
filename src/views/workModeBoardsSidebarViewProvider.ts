@@ -602,6 +602,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
           if (!boardId || !action) {
             return;
           }
+          console.log('[WorkMode] menu action', action, 'boardId:', boardId);
           vscodeApi.postMessage({ type: action, boardId });
         });
       }
