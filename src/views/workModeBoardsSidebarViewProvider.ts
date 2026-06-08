@@ -49,25 +49,17 @@ function boardRemovalLabel(mode: BackendMode): string {
   return mode === 'demo' || mode === 'userworkspace' ? 'Delete board' : 'Close board';
 }
 
-const BOARD_TYPE_LABELS: Record<string, string> = {
-  epic: 'Epics',
-  jql: 'JQL Filters',
-  'jql-custom': 'JQL Filters',
-  'issue-board': 'Issue Boards',
-  board: 'Boards',
-  agile: 'Boards',
-  sprint: 'Sprints'
+const BACKEND_MODE_LABELS: Record<BackendMode, string> = {
+  jiracloud: 'Jira',
+  gitlab: 'GitLab',
+  github: 'GitHub',
+  demo: 'Demo',
+  livefolder: 'Live Folder',
+  userworkspace: 'User Workspace'
 };
 
-function boardTypeLabel(type: string): string {
-  const known = BOARD_TYPE_LABELS[type];
-  if (known) {
-    return known;
-  }
-  if (!type.trim()) {
-    return 'Other';
-  }
-  return type.replace(/[-_]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+function backendModeLabel(mode: BackendMode): string {
+  return BACKEND_MODE_LABELS[mode] ?? String(mode);
 }
 
 function escapeHtml(value: string): string {
@@ -384,8 +376,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         this.render();
         return;
       }
-      case 'toggleGroupByType':
-        await this.boardStore.setWorkModeGroupByType(!this.boardStore.getWorkModeGroupByType());
+      case 'toggleGroupByProvider':
+        await this.boardStore.setWorkModeGroupByProvider(!this.boardStore.getWorkModeGroupByProvider());
         this.render();
         return;
       case 'toggleBoardSessions':
@@ -687,10 +679,10 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
           vscodeApi.postMessage({ type: 'resetGitLabConfig' });
         });
       }
-      const groupToggleBtn = document.getElementById('toggleGroupByType');
+      const groupToggleBtn = document.getElementById('toggleGroupByProvider');
       if (groupToggleBtn) {
         groupToggleBtn.addEventListener('click', () => {
-          vscodeApi.postMessage({ type: 'toggleGroupByType' });
+          vscodeApi.postMessage({ type: 'toggleGroupByProvider' });
         });
       }
       const addBoardBtn = document.getElementById('addBoard');
@@ -913,30 +905,33 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .map(entry => entry.board);
   }
 
-  private groupBoardsByType(boards: Board[]): Array<{ label: string; boards: Board[] }> {
-    const groups = new Map<string, Board[]>();
+  private resolveBoardMode(connectionId: string | undefined): BackendMode {
+    if (connectionId && this.connectionStore) {
+      const conn = this.connectionStore.getConnection(connectionId);
+      if (conn) {
+        return conn.mode;
+      }
+    }
+    return this.getBackendMode();
+  }
+
+  private groupBoardsByProvider(boards: Board[]): Array<{ label: string; boards: Board[] }> {
+    const groups = new Map<BackendMode, Board[]>();
     for (const board of boards) {
-      const list = groups.get(board.type) ?? [];
+      const mode = this.resolveBoardMode(board.connectionId);
+      const list = groups.get(mode) ?? [];
       list.push(board);
-      groups.set(board.type, list);
+      groups.set(mode, list);
     }
     return [...groups.entries()]
-      .map(([type, grouped]) => ({ label: boardTypeLabel(type), boards: grouped }))
+      .map(([mode, grouped]) => ({ label: backendModeLabel(mode), boards: grouped }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   private renderBoards(boards: Board[]): string {
     const fallbackMode = this.getBackendMode();
     const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
-    const resolveBoardMode = (connectionId: string | undefined): BackendMode => {
-      if (connectionId && this.connectionStore) {
-        const conn = this.connectionStore.getConnection(connectionId);
-        if (conn) {
-          return conn.mode;
-        }
-      }
-      return fallbackMode;
-    };
+    const resolveBoardMode = (connectionId: string | undefined): BackendMode => this.resolveBoardMode(connectionId);
     const fallbackModeIconMarkup = boardListModeIconSvg(fallbackMode);
     const fallbackModeIconColor = resolveBackendModeBoardIconColor(fallbackMode);
     const statusIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M2 8h2.4l1.2-3.2L8 11.2 10 5.8l1.1 2.2H14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -955,8 +950,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       ? `<button class="work-board-icon-btn" type="button" id="resetGitLabConfig" title="Reset config" aria-label="Reset config">${resetConfigIcon}</button>`
       : '';
     const addBoardBtn = `<button class="work-board-icon-btn accent" type="button" id="addBoard" title="Add board" aria-label="Add board">${addBoardIcon}</button>`;
-    const groupByType = this.boardStore.getWorkModeGroupByType();
-    const groupToggleBtn = `<button class="work-board-icon-btn ${groupByType ? 'active' : ''}" type="button" id="toggleGroupByType" aria-pressed="${groupByType ? 'true' : 'false'}" title="${groupByType ? 'Grouped by type — manual ordering disabled' : 'Group boards by type'}" aria-label="Group boards by type">${groupTypeIcon}</button>`;
+    const groupByProvider = this.boardStore.getWorkModeGroupByProvider();
+    const groupToggleBtn = `<button class="work-board-icon-btn ${groupByProvider ? 'active' : ''}" type="button" id="toggleGroupByProvider" aria-pressed="${groupByProvider ? 'true' : 'false'}" title="${groupByProvider ? 'Grouped by provider — manual ordering disabled' : 'Group boards by provider'}" aria-label="Group boards by provider">${groupTypeIcon}</button>`;
     const removeAllBtn = `<button class="work-board-icon-btn danger" type="button" id="removeAllBoards" title="Remove all boards" aria-label="Remove all boards">${removeAllIcon}</button>`;
     const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, modeIconColor: fallbackModeIconColor, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
 
@@ -972,8 +967,8 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     };
 
     let listMarkup: string;
-    if (groupByType) {
-      listMarkup = this.groupBoardsByType(orderedBoards)
+    if (groupByProvider) {
+      listMarkup = this.groupBoardsByProvider(orderedBoards)
         .map(group => `
           <div class="work-board-group">
             <div class="work-board-group-label">${escapeHtml(group.label)}</div>
