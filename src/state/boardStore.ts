@@ -6,7 +6,7 @@ const WORK_MODE_LAYOUT_KEY = 'ticketManager.workMode.layout';
 
 interface PersistedWorkModeLayout {
   boardOrder?: string[];
-  groupByType?: boolean;
+  groupByProvider?: boolean;
 }
 
 const DEFAULT_BOARD_FILTERS: BoardFilters = {
@@ -105,15 +105,15 @@ export class BoardStore implements vscode.Disposable {
     } satisfies PersistedWorkModeLayout);
   }
 
-  public getWorkModeGroupByType(): boolean {
-    return this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY)?.groupByType ?? false;
+  public getWorkModeGroupByProvider(): boolean {
+    return this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY)?.groupByProvider ?? false;
   }
 
-  public async setWorkModeGroupByType(value: boolean): Promise<void> {
+  public async setWorkModeGroupByProvider(value: boolean): Promise<void> {
     const current = this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY) ?? {};
     await this.context.workspaceState.update(WORK_MODE_LAYOUT_KEY, {
       ...current,
-      groupByType: value
+      groupByProvider: value
     } satisfies PersistedWorkModeLayout);
   }
 
