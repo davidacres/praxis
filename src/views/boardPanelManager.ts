@@ -790,6 +790,7 @@ export class BoardPanelManager implements vscode.Disposable {
 
       body {
         margin: 0;
+        padding: 0;
         display: flex;
         font-family: var(--vscode-font-family);
         color: var(--vscode-editor-foreground);

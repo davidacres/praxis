@@ -1850,6 +1850,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
+      padding: 0;
       font-family: var(--vscode-font-family);
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
