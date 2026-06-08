@@ -47,16 +47,6 @@ This file documents the settings currently contributed by the extension.
 | `ticketManager.liveFolderProjectName` | string | Human-readable project name for Live Folder mode. |
 | `ticketManager.liveFolderAllowIssueCreation` | boolean | Allows the extension to create markdown issues while in Live Folder mode. |
 
-## GitHub and GitLab settings
-
-| Setting | Type | Purpose |
-| --- | --- | --- |
-| `ticketManager.githubPat` | string | GitHub Personal Access Token. |
-| `ticketManager.githubUrl` | string | GitHub API base URL. |
-| `ticketManager.githubOwner` | string | GitHub owner or organization name. |
-| `ticketManager.gitlabUrl` | string | GitLab instance URL. |
-| `ticketManager.gitlabApiKey` | string | Deprecated GitLab PAT compatibility setting. SecretStorage is preferred. |
-
 ## Polling, delivery, and MCP settings
 
 | Setting | Type | Purpose |
@@ -103,4 +93,3 @@ This file documents the settings currently contributed by the extension.
 ## Notes
 
 - Use `ticketManager.boardsSidebarPreviewMode` to switch between classic and Work Mode.
-- `ticketManager.gitlabApiKey` is deprecated; current GitLab credentials are intended to be stored through VS Code SecretStorage.

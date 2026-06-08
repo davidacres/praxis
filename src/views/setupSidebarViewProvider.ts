@@ -5,44 +5,6 @@ import {
 } from '../ai/aiProviderSetup';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
-import type { Board } from '../types';
-
-interface GitLabSetupValues {
-  gitlabUrl: string;
-  gitlabApiKey: string;
-  gitlabProjectPath: string;
-  gitlabListAllAccessibleBoards: boolean;
-}
-
-interface GitLabSetupFieldInput {
-  gitlabUrl?: string;
-  gitlabApiKey?: string;
-  gitlabProjectPath?: string;
-  gitlabListAllAccessibleBoards?: string;
-}
-
-interface GitLabSetupUpdate {
-  key: string;
-  value: unknown;
-}
-
-interface GitLabBoardProjectSummary {
-  id: number;
-  name: string;
-  path: string;
-  pathWithNamespace: string;
-}
-
-interface GitLabBoardSummary {
-  id: number;
-  name: string;
-  hideBacklogList: boolean;
-  hideClosedList: boolean;
-  project: GitLabBoardProjectSummary;
-  labels: unknown[];
-  lists: unknown[];
-  raw?: unknown;
-}
 
 function escapeHtml(value: string): string {
   return value
@@ -57,65 +19,6 @@ function createNonce(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function getGitLabSetupValues(
-  config: Pick<vscode.WorkspaceConfiguration, 'get'>
-): GitLabSetupValues {
-  return {
-    gitlabUrl: config.get<string>('gitlabUrl', '').trim(),
-    gitlabApiKey: config.get<string>('gitlabApiKey', '').trim(),
-    gitlabProjectPath: config.get<string>('gitlabProjectPath', '').trim(),
-    gitlabListAllAccessibleBoards: config.get<boolean>('gitlabListAllAccessibleBoards', false)
-  };
-}
-
-export function buildGitLabSetupUpdates(fields: GitLabSetupFieldInput): GitLabSetupUpdate[] {
-  const updates: GitLabSetupUpdate[] = [];
-  const projectPath = fields.gitlabProjectPath?.trim();
-  if (projectPath) {
-    updates.push({ key: 'gitlabProjectPath', value: projectPath });
-  }
-
-  if (fields.gitlabListAllAccessibleBoards != null) {
-    updates.push({
-      key: 'gitlabListAllAccessibleBoards',
-      value: fields.gitlabListAllAccessibleBoards === 'true'
-    });
-  }
-
-  const gitlabUrl = fields.gitlabUrl?.trim();
-  if (gitlabUrl) {
-    updates.push({ key: 'gitlabUrl', value: gitlabUrl });
-  }
-
-  const apiKey = fields.gitlabApiKey?.trim();
-  if (apiKey) {
-    updates.push({ key: 'gitlabApiKey', value: apiKey });
-  }
-
-  return updates;
-}
-
-export function canPromptForGitLabBoardSelection(fields: GitLabSetupFieldInput): boolean {
-  return (fields.gitlabUrl?.trim().length ?? 0) > 0
-    && (fields.gitlabApiKey?.trim().length ?? 0) > 0;
-}
-
-export function createGitLabBoardSelectionSummary(
-  board: GitLabBoardSummary,
-  project: GitLabBoardProjectSummary,
-  baseUrl: string
-): Board {
-  return {
-    id: `gitlab:${project.id}:${board.id}`,
-    name: board.name,
-    type: 'issue-board',
-    projectKey: project.pathWithNamespace,
-    projectName: project.name,
-    locationName: baseUrl.trim().replace(/\/+$/, ''),
-    raw: board
-  };
-}
-
 export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewId = 'ticketManager.setup';
 
@@ -123,7 +26,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private setupStep: 0 | 1 = 0;
   private setupMode: string | undefined;
   private setupFields: Record<string, string> = {};
-  private hasGitLabApiKeySecret = false;
   private readonly disposables: vscode.Disposable[] = [];
 
   public constructor(private readonly context: vscode.ExtensionContext) {}
@@ -464,8 +366,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           vscodeApi.postMessage({ type: 'connectJiraCloud' });
         } else if (action === 'disconnectJiraCloud') {
           vscodeApi.postMessage({ type: 'disconnectJiraCloud' });
-        } else if (action === 'resetGitLab') {
-          vscodeApi.postMessage({ type: 'resetGitLab' });
         }
       });
 
@@ -490,8 +390,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private renderStepZero(): string {
     const modes: Array<{ mode: string; emoji: string; title: string; desc: string }> = [
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
-      { mode: 'github', emoji: '🐙', title: 'GitHub', desc: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
-      { mode: 'gitlab', emoji: '🦊', title: 'GitLab', desc: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
       { mode: 'jiracloud', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
@@ -533,12 +431,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         break;
       case 'userworkspace':
         fields = this.renderUserWorkspaceFields();
-        break;
-      case 'github':
-        fields = this.renderGitHubFields();
-        break;
-      case 'gitlab':
-        fields = this.renderGitLabFields();
         break;
       case 'jiracloud':
         fields = this.renderJiraCloudFields();
@@ -582,46 +474,6 @@ ${fields}
 
   private renderUserWorkspaceFields(): string {
     return `<p class="info-text">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
-  }
-
-  private renderGitHubFields(): string {
-    const url = escapeHtml(this.setupFields.githubUrl ?? 'https://api.github.com');
-    const pat = escapeHtml(this.setupFields.githubPat ?? '');
-    const owner = escapeHtml(this.setupFields.githubOwner ?? '');
-    return `<div class="form-group">
-  <label>API URL</label>
-  <input type="text" data-field="githubUrl" value="${url}" />
-</div>
-<div class="form-group">
-  <label>Personal Access Token</label>
-  <input type="password" data-field="githubPat" value="${pat}" />
-  <div class="help-text"><a href="https://github.com/settings/tokens">Create a token</a></div>
-</div>
-<div class="form-group">
-  <label>Owner / Organisation</label>
-  <input type="text" data-field="githubOwner" value="${owner}" />
-</div>`;
-  }
-
-  private renderGitLabFields(): string {
-    const url = escapeHtml(this.setupFields.gitlabUrl ?? '');
-    const apiKey = escapeHtml(this.setupFields.gitlabApiKey ?? '');
-    const keyPlaceholder = (!apiKey && this.hasGitLabApiKeySecret)
-      ? '(configured — leave blank to keep)'
-      : 'API key or personal access token';
-
-    return `<div class="form-group">
-  <label>GitLab URL</label>
-  <input type="text" data-field="gitlabUrl" value="${url}" placeholder="https://gitlab.com" />
-</div>
-<div class="form-group">
-  <label>Personal Access Token</label>
-  <input type="password" data-field="gitlabApiKey" value="${apiKey}" placeholder="${keyPlaceholder}" />
-</div>
-<div class="help-text">Create a token in GitLab \u2192 Settings \u2192 Access Tokens</div>
-<div class="danger-zone">
-  <button class="btn btn-danger-link" data-action="resetGitLab">Reset GitLab configuration…</button>
-</div>`;
   }
 
   private renderJiraFields(): string {
@@ -751,12 +603,6 @@ ${connFields}`;
         if (mode) {
           this.setupMode = mode;
           this.setupStep = 1;
-          if (mode === 'github' && !this.setupFields.githubUrl) {
-            this.setupFields.githubUrl = 'https://api.github.com';
-          }
-          if (mode === 'gitlab') {
-            this.hasGitLabApiKeySecret = !!(await this.context.secrets.get('ticketManager.gitlabApiKey'));
-          }
           if (mode === 'jiracloud') {
             const config = vscode.workspace.getConfiguration('ticketManager');
             this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
@@ -842,36 +688,6 @@ ${connFields}`;
           void vscode.window.showErrorMessage(`Failed to save configuration: ${error instanceof Error ? error.message : String(error)}`);
         }
         return;
-      case 'resetGitLab': {
-        const confirm = await vscode.window.showWarningMessage(
-          'Reset all GitLab configuration? This clears the URL, API key, project path, and selected boards.',
-          { modal: true },
-          'Reset'
-        );
-        if (confirm !== 'Reset') {
-          return;
-        }
-        const config = vscode.workspace.getConfiguration('ticketManager');
-        const target = vscode.workspace.workspaceFolders?.length
-          ? vscode.ConfigurationTarget.Workspace
-          : vscode.ConfigurationTarget.Global;
-        await Promise.all([
-          config.update('gitlabUrl', undefined, target),
-          config.update('gitlabApiKey', undefined, target),
-          config.update('gitlabProjectPath', undefined, target),
-          config.update('gitlabListAllAccessibleBoards', undefined, target),
-          config.update('gitlabSelectedBoardRefs', undefined, target),
-          config.update('backendMode', undefined, target),
-          this.context.secrets.delete('ticketManager.gitlabApiKey')
-        ]);
-        this.hasGitLabApiKeySecret = false;
-        this.setupStep = 0;
-        this.setupMode = undefined;
-        this.setupFields = {};
-        this.render();
-        void vscode.window.showInformationMessage('GitLab configuration has been reset.');
-        return;
-      }
     }
   }
 
@@ -913,27 +729,6 @@ ${connFields}`;
         break;
       case 'userworkspace':
         break;
-      case 'github':
-        if (this.setupFields.githubUrl) {
-          await updateSetting('githubUrl', this.setupFields.githubUrl);
-        }
-        if (this.setupFields.githubPat) {
-          await updateSetting('githubPat', this.setupFields.githubPat);
-        }
-        if (this.setupFields.githubOwner) {
-          await updateSetting('githubOwner', this.setupFields.githubOwner);
-        }
-        break;
-      case 'gitlab': {
-        if (this.setupFields.gitlabUrl) {
-          await updateSetting('gitlabUrl', this.setupFields.gitlabUrl);
-        }
-        if (this.setupFields.gitlabApiKey?.trim()) {
-          await this.context.secrets.store('ticketManager.gitlabApiKey', this.setupFields.gitlabApiKey.trim());
-          this.hasGitLabApiKeySecret = true;
-        }
-        break;
-      }
       case 'jiracloud':
         await updateSetting('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim());
         await updateSetting('jiraCloudEpicKey', (this.setupFields.jiraCloudEpicKey ?? '').trim());
@@ -1006,4 +801,3 @@ ${connFields}`;
     this.setupFields.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
   }
 }
-
