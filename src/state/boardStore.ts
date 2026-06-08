@@ -2,6 +2,12 @@ import * as vscode from 'vscode';
 import type { BoardFilters, PersistedBoardFilterState, TrackedBoardRef } from '../types';
 
 const BOARD_FILTERS_KEY = 'ticketManager.boards.filters';
+const WORK_MODE_LAYOUT_KEY = 'ticketManager.workMode.layout';
+
+interface PersistedWorkModeLayout {
+  boardOrder?: string[];
+  groupByType?: boolean;
+}
 
 const DEFAULT_BOARD_FILTERS: BoardFilters = {
   projectKeys: [],
@@ -84,6 +90,31 @@ export class BoardStore implements vscode.Disposable {
     await this.persist(next, this.getLastSelectedBoardId());
     this.onDidChangeEmitter.fire(next);
     return next;
+  }
+
+  public getWorkModeBoardOrder(): string[] {
+    const stored = this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY);
+    return [...(stored?.boardOrder ?? [])];
+  }
+
+  public async setWorkModeBoardOrder(order: string[]): Promise<void> {
+    const current = this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY) ?? {};
+    await this.context.workspaceState.update(WORK_MODE_LAYOUT_KEY, {
+      ...current,
+      boardOrder: [...order]
+    } satisfies PersistedWorkModeLayout);
+  }
+
+  public getWorkModeGroupByType(): boolean {
+    return this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY)?.groupByType ?? false;
+  }
+
+  public async setWorkModeGroupByType(value: boolean): Promise<void> {
+    const current = this.context.workspaceState.get<PersistedWorkModeLayout>(WORK_MODE_LAYOUT_KEY) ?? {};
+    await this.context.workspaceState.update(WORK_MODE_LAYOUT_KEY, {
+      ...current,
+      groupByType: value
+    } satisfies PersistedWorkModeLayout);
   }
 
   private async persist(

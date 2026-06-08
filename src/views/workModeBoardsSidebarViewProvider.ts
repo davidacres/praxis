@@ -48,6 +48,27 @@ function boardRemovalLabel(mode: BackendMode): string {
   return mode === 'demo' || mode === 'userworkspace' ? 'Delete board' : 'Close board';
 }
 
+const BOARD_TYPE_LABELS: Record<string, string> = {
+  epic: 'Epics',
+  jql: 'JQL Filters',
+  'jql-custom': 'JQL Filters',
+  'issue-board': 'Issue Boards',
+  board: 'Boards',
+  agile: 'Boards',
+  sprint: 'Sprints'
+};
+
+function boardTypeLabel(type: string): string {
+  const known = BOARD_TYPE_LABELS[type];
+  if (known) {
+    return known;
+  }
+  if (!type.trim()) {
+    return 'Other';
+  }
+  return type.replace(/[-_]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -248,6 +269,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
   private readonly boardStates = new Map<string, WorkModeBoardState>();
   private readonly expandedBoardIds = new Set<string>();
   private generation = 0;
+  private boardDragActive = false;
+  private renderQueuedDuringDrag = false;
+  private dragFailsafeTimer?: ReturnType<typeof setTimeout>;
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -339,6 +363,27 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       case 'resetGitLabConfig':
         await this.callbacks.onResetGitLabConfig();
         return;
+      case 'boardDragState':
+        this.setBoardDragActive(payload.active === true);
+        return;
+      case 'reorderBoards': {
+        const order = Array.isArray(payload.order)
+          ? payload.order.filter((value): value is string => typeof value === 'string')
+          : [];
+        await this.persistBoardOrder(order);
+        if (this.dragFailsafeTimer) {
+          clearTimeout(this.dragFailsafeTimer);
+          this.dragFailsafeTimer = undefined;
+        }
+        this.boardDragActive = false;
+        this.renderQueuedDuringDrag = false;
+        this.render();
+        return;
+      }
+      case 'toggleGroupByType':
+        await this.boardStore.setWorkModeGroupByType(!this.boardStore.getWorkModeGroupByType());
+        this.render();
+        return;
       case 'toggleBoardSessions':
         if (typeof payload.boardId === 'string') {
           this.handleToggleBoardSessions(payload.boardId);
@@ -369,6 +414,13 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
   private render(): void {
     if (!this.view) {
+      return;
+    }
+
+    // Defer full HTML rebuilds while the user is dragging a board card so the
+    // live drag DOM is not wiped by an async event (e.g. board detail load).
+    if (this.boardDragActive) {
+      this.renderQueuedDuringDrag = true;
       return;
     }
 
@@ -480,7 +532,17 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-session-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground)); font-size: 11px; font-weight: 800; }
       .work-session-subtitle { margin-top: 2px; color: var(--vscode-descriptionForeground); font-size: 9px; line-height: 1.2; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .work-session-chevron { width: 12px; height: 12px; color: color-mix(in srgb, var(--vscode-descriptionForeground) 52%, transparent); flex-shrink: 0; }
-      .work-board-list-header { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 10px 8px; }
+      .work-board-list-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 10px 8px; }
+      .work-board-list-header-left, .work-board-list-header-right { display: flex; align-items: center; gap: 6px; }
+      .work-board-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+      .work-board-group:last-child { margin-bottom: 0; }
+      .work-board-group-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vscode-descriptionForeground); padding: 0 4px; }
+      .work-board[draggable="true"] { cursor: grab; }
+      .work-board.dragging { opacity: 0.45; cursor: grabbing; }
+      .work-board-group-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
+      .work-board-group-toggle:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
+      .work-board-group-toggle.active { color: var(--vscode-textLink-foreground, #818cf8); border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.12); opacity: 1; }
+      .work-board-group-toggle svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
       .work-board-remove-all { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-errorForeground, #f87171); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
       .work-board-remove-all:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 10%, transparent); border-color: var(--vscode-errorForeground, #f87171); }
       .work-board-remove-all svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
@@ -504,6 +566,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const boardDndState = { dragging: false, suppressClick: false };
       // Animate newly expanded stacks; skip transition for stacks already visible before this render.
       try {
         const prevExpanded = new Set(JSON.parse(sessionStorage.getItem('expandedStacks') || '[]'));
@@ -521,6 +584,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       } catch (_) {}
       for (const row of document.querySelectorAll('[data-board-id]')) {
         row.addEventListener('click', () => {
+          if (boardDndState.dragging || boardDndState.suppressClick) {
+            return;
+          }
           const boardId = row.getAttribute('data-board-id');
           console.log('[WorkMode] Card clicked, boardId:', boardId);
           vscodeApi.postMessage({ type: 'selectBoard', boardId });
@@ -618,6 +684,68 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         resetConfigBtn.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'resetGitLabConfig' });
         });
+      }
+      const groupToggleBtn = document.getElementById('toggleGroupByType');
+      if (groupToggleBtn) {
+        groupToggleBtn.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'toggleGroupByType' });
+        });
+      }
+      const dndContainer = document.querySelector('[data-board-dnd="true"]');
+      if (dndContainer) {
+        let draggingEl = null;
+        const getDragAfterElement = y => {
+          const candidates = [...dndContainer.querySelectorAll('[data-board-order-id]:not(.dragging)')];
+          let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+          for (const child of candidates) {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+              closest = { offset, element: child };
+            }
+          }
+          return closest.element;
+        };
+        for (const section of dndContainer.querySelectorAll('[data-board-order-id]')) {
+          section.setAttribute('draggable', 'true');
+          section.addEventListener('dragstart', event => {
+            draggingEl = section;
+            boardDndState.dragging = true;
+            section.classList.add('dragging');
+            if (event.dataTransfer) {
+              event.dataTransfer.effectAllowed = 'move';
+              try { event.dataTransfer.setData('text/plain', section.getAttribute('data-board-order-id') || ''); } catch (_) {}
+            }
+            vscodeApi.postMessage({ type: 'boardDragState', active: true });
+          });
+          section.addEventListener('dragend', () => {
+            section.classList.remove('dragging');
+            draggingEl = null;
+            boardDndState.dragging = false;
+            boardDndState.suppressClick = true;
+            setTimeout(() => { boardDndState.suppressClick = false; }, 150);
+            const order = [...dndContainer.querySelectorAll('[data-board-order-id]')]
+              .map(el => el.getAttribute('data-board-order-id'))
+              .filter(Boolean);
+            vscodeApi.postMessage({ type: 'reorderBoards', order });
+          });
+        }
+        dndContainer.addEventListener('dragover', event => {
+          if (!draggingEl) {
+            return;
+          }
+          event.preventDefault();
+          if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = 'move';
+          }
+          const afterElement = getDragAfterElement(event.clientY);
+          if (afterElement == null) {
+            dndContainer.appendChild(draggingEl);
+          } else if (afterElement !== draggingEl) {
+            dndContainer.insertBefore(draggingEl, afterElement);
+          }
+        });
+        dndContainer.addEventListener('drop', event => event.preventDefault());
       }
     </script>
   </body>
@@ -721,6 +849,74 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     return this.backendService;
   }
 
+  private setBoardDragActive(active: boolean): void {
+    this.boardDragActive = active;
+    if (this.dragFailsafeTimer) {
+      clearTimeout(this.dragFailsafeTimer);
+      this.dragFailsafeTimer = undefined;
+    }
+    if (active) {
+      // Failsafe: if a dragend/reorder message is ever missed, don't block
+      // rendering forever.
+      this.dragFailsafeTimer = setTimeout(() => {
+        this.boardDragActive = false;
+        this.dragFailsafeTimer = undefined;
+        this.render();
+      }, 10000);
+    } else if (this.renderQueuedDuringDrag) {
+      this.renderQueuedDuringDrag = false;
+      this.render();
+    }
+  }
+
+  private async persistBoardOrder(order: string[]): Promise<void> {
+    const currentIds = this.boardsProvider.getSnapshot().boards.map(board => board.id);
+    const currentSet = new Set(currentIds);
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const id of order) {
+      if (currentSet.has(id) && !seen.has(id)) {
+        seen.add(id);
+        normalized.push(id);
+      }
+    }
+    for (const id of currentIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        normalized.push(id);
+      }
+    }
+    await this.boardStore.setWorkModeBoardOrder(normalized);
+  }
+
+  private applyBoardLayout(boards: Board[]): Board[] {
+    const order = this.boardStore.getWorkModeBoardOrder();
+    if (order.length === 0) {
+      return [...boards];
+    }
+    const orderIndex = new Map(order.map((id, index) => [id, index]));
+    return boards
+      .map((board, originalIndex) => ({ board, originalIndex }))
+      .sort((a, b) => {
+        const ai = orderIndex.get(a.board.id) ?? Number.MAX_SAFE_INTEGER;
+        const bi = orderIndex.get(b.board.id) ?? Number.MAX_SAFE_INTEGER;
+        return ai - bi || a.originalIndex - b.originalIndex;
+      })
+      .map(entry => entry.board);
+  }
+
+  private groupBoardsByType(boards: Board[]): Array<{ label: string; boards: Board[] }> {
+    const groups = new Map<string, Board[]>();
+    for (const board of boards) {
+      const list = groups.get(board.type) ?? [];
+      list.push(board);
+      groups.set(board.type, list);
+    }
+    return [...groups.entries()]
+      .map(([type, grouped]) => ({ label: boardTypeLabel(type), boards: grouped }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   private renderBoards(boards: Board[]): string {
     const fallbackMode = this.getBackendMode();
     const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
@@ -744,29 +940,52 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
     const removeAllIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 4.5h9M6 4.5V3.4c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.1M5 6.5v5m3-5v5m3-5v5M4.5 4.5l.5 8.1c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9l.5-8.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const resetConfigIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 .8-2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 4.5V8h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const groupTypeIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
     const hasGitLabBoard = boards.some(b => resolveBoardMode(b.connectionId) === 'gitlab');
     const resetConfigBtn = hasGitLabBoard
       ? `<button class="work-board-reset-config" type="button" id="resetGitLabConfig">${resetConfigIcon}<span>Reset config</span></button>`
       : '';
+    const groupByType = this.boardStore.getWorkModeGroupByType();
+    const groupToggleBtn = `<button class="work-board-group-toggle ${groupByType ? 'active' : ''}" type="button" id="toggleGroupByType" aria-pressed="${groupByType ? 'true' : 'false'}" title="${groupByType ? 'Grouped by type — manual ordering disabled' : 'Group boards by type'}">${groupTypeIcon}<span>Group by type</span></button>`;
     const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, modeIconColor: fallbackModeIconColor, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
+
+    const orderedBoards = this.applyBoardLayout(boards);
+    const renderCard = (board: Board): string => {
+      const boardMode = resolveBoardMode(board.connectionId);
+      const perBoardIcons: BoardRenderIcons = {
+        ...icons,
+        modeIcon: boardListModeIconSvg(boardMode),
+        modeIconColor: resolveBackendModeBoardIconColor(boardMode)
+      };
+      return this.renderBoard(board, perBoardIcons, boardRemovalLabel(boardMode), priorityColors);
+    };
+
+    let listMarkup: string;
+    if (groupByType) {
+      listMarkup = this.groupBoardsByType(orderedBoards)
+        .map(group => `
+          <div class="work-board-group">
+            <div class="work-board-group-label">${escapeHtml(group.label)}</div>
+            <div class="work-board-list">
+              ${group.boards.map(renderCard).join('')}
+            </div>
+          </div>`)
+        .join('');
+    } else {
+      listMarkup = `<div class="work-board-list" data-board-dnd="true">
+        ${orderedBoards.map(renderCard).join('')}
+      </div>`;
+    }
+
     return `<div>
       <div class="work-board-list-header">
-        ${resetConfigBtn}
-        <button class="work-board-remove-all" type="button" id="removeAllBoards">${removeAllIcon}<span>Remove all</span></button>
+        <div class="work-board-list-header-left">${groupToggleBtn}</div>
+        <div class="work-board-list-header-right">
+          ${resetConfigBtn}
+          <button class="work-board-remove-all" type="button" id="removeAllBoards">${removeAllIcon}<span>Remove all</span></button>
+        </div>
       </div>
-      <div class="work-board-list">
-        ${boards
-          .map(board => {
-            const boardMode = resolveBoardMode(board.connectionId);
-            const perBoardIcons: BoardRenderIcons = {
-              ...icons,
-              modeIcon: boardListModeIconSvg(boardMode),
-              modeIconColor: resolveBackendModeBoardIconColor(boardMode)
-            };
-            return this.renderBoard(board, perBoardIcons, boardRemovalLabel(boardMode), priorityColors);
-          })
-          .join('')}
-      </div>
+      ${listMarkup}
     </div>`;
   }
 
@@ -801,7 +1020,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       : `<span class="work-board-status">${escapeHtml(pluralize(issueCount, 'item'))}</span>`;
     const stackMarkup = isExpanded && hasSessions ? this.renderExpandedSessions(board.id, sessions, icons.activityIcon, state.loading) : '';
 
-    return `<section class="work-board">
+    return `<section class="work-board" data-board-order-id="${escapeHtml(board.id)}">
       <div class="work-board-card ${selectedClass}" data-board-id="${escapeHtml(board.id)}" title="${escapeHtml(board.name)}">
         <div class="work-board-shell">
           <div class="work-board-head">

@@ -66,6 +66,11 @@
             "connectionId": "jira-cloud-test",
             "boardId": "jql:workspace",
             "displayName": "Security Board"
+        },
+        {
+            "connectionId": "jira-cloud-test",
+            "boardId": "jql:custom:project%20IN%20(10261)%20AND%20assignee%20%3D%20712020%3Aaa13c976-56f3-496d-b911-abca529f2fd7%20AND%20status%20!%3D%20Done",
+            "displayName": "My Board"
         }
     ],
     "ticketManager.boardsSidebarPreviewMode": "work",
