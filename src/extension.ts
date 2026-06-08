@@ -4343,6 +4343,14 @@ export async function activate(
       return;
     }
 
+    // The issueDetails sidebar view only exists in classic mode (all classic views are
+    // gated `when boardsSidebarMode == classic`). In work mode the detail is shown in the
+    // editor panel, so switching the activity bar to the classic "Tickets" container would
+    // blank the Work Mode sidebar — i.e. the side menu would disappear.
+    if (getBoardsSidebarMode() === 'work') {
+      return;
+    }
+
     try {
       await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
       if (options.focus) {
@@ -4619,7 +4627,11 @@ export async function activate(
       return;
     }
 
-    if (options?.openFullPanel) {
+    // In work mode there is no issueDetails sidebar view, so the detail must be shown in the
+    // editor panel. Force the full panel to avoid a no-op (and a blank sidebar) on click.
+    const openFullPanel = options?.openFullPanel || getBoardsSidebarMode() === 'work';
+
+    if (openFullPanel) {
       await issueDetailPanelManager.open(issue.key);
       await revealIssueDetailsInSidebar({ focus: false });
     } else {
