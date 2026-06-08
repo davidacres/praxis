@@ -749,6 +749,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
+      padding: 0;
       display: flex;
       font-family: var(--vscode-font-family);
       color: var(--vscode-editor-foreground);
