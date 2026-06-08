@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.44",
+  "version": "0.0.45",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
@@ -511,7 +511,7 @@
       },
       {
         "command": "ticketManager.assignToAi",
-        "title": "Assign to AI Agent",
+        "title": "Delegate to AI Agent",
         "category": "Ticket Manager",
         "icon": "$(hubot)"
       },
@@ -529,7 +529,7 @@
       },
       {
         "command": "ticketManager.openAnalysisWindow",
-        "title": "Open Analysis Window",
+        "title": "View Analysis",
         "category": "Ticket Manager",
         "icon": "$(comment)"
       },
@@ -774,6 +774,16 @@
           "command": "ticketManager.openIssueFullDetails",
           "when": "view == ticketManager.issueDetails && viewItem == issueKey",
           "group": "inline@1"
+        },
+        {
+          "command": "ticketManager.assignToAi",
+          "when": "(view == ticketManager.myIssues || view == ticketManager.boards) && viewItem == issue",
+          "group": "ai@1"
+        },
+        {
+          "command": "ticketManager.openAnalysisWindow",
+          "when": "(view == ticketManager.myIssues || view == ticketManager.boards) && viewItem == issue && ticketManager.analysisGateEnabled",
+          "group": "ai@2"
         }
       ],
       "commandPalette": [
@@ -1310,4 +1320,5 @@
     "typescript": "^6.0.2"
   }
 }
+
 
