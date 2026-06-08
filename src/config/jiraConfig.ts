@@ -13,7 +13,6 @@ import type {
 } from '../types';
 
 const CONFIG_ROOT = 'ticketManager';
-const GITLAB_API_KEY_SECRET = 'ticketManager.gitlabApiKey';
 const SECRET_ENV_KEY = 'ticketManager.secretEnv';
 const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
 const POLLING_CONFIG_PATH = path.resolve(__dirname, '..', '..', 'JiraPollingService', 'appsettings.json');
@@ -364,58 +363,37 @@ export class AppConfigStore {
   // ── GitHub settings ──────────────────────────────────────────────
 
   public getGitHubPat(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubPat', '');
+    return '';
   }
 
   public getGitHubUrl(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubUrl', 'https://api.github.com');
+    return '';
   }
 
   public getGitHubOwner(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('githubOwner', '');
-  }
-
-  public async setGitHubPat(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubPat', value, target);
-  }
-
-  public async setGitHubUrl(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubUrl', value, target);
-  }
-
-  public async setGitHubOwner(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('githubOwner', value, target);
+    return '';
   }
 
   // ── GitLab settings ──────────────────────────────────────────────
 
   public getGitLabUrl(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabUrl', '');
-  }
-
-  // Only retained for one-time migration from settings to SecretStorage.
-  public getGitLabApiKey(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('gitlabApiKey', '');
+    return '';
   }
 
   public async getGitLabApiKeyFromSecrets(context: vscode.ExtensionContext): Promise<string> {
-    const fromSecrets = await context.secrets.get(GITLAB_API_KEY_SECRET);
-    if (fromSecrets !== undefined) {
-      return fromSecrets.trim();
-    }
-    // Fallback to legacy settings value during migration
-    return this.getGitLabApiKey().trim();
+    return (await context.secrets.get('ticketManager.gitlabApiKey') ?? '').trim();
+  }
+
+  public getGitLabApiKey(): string {
+    return '';
   }
 
   public async storeGitLabApiKey(context: vscode.ExtensionContext, value: string): Promise<void> {
-    await context.secrets.store(GITLAB_API_KEY_SECRET, value);
+    await context.secrets.store('ticketManager.gitlabApiKey', value);
   }
 
   public async deleteGitLabApiKeySecret(context: vscode.ExtensionContext): Promise<void> {
-    await context.secrets.delete(GITLAB_API_KEY_SECRET);
+    await context.secrets.delete('ticketManager.gitlabApiKey');
   }
 
   public getGitLabProjectPath(): string {
@@ -437,17 +415,6 @@ export class AppConfigStore {
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
       .update('gitlabSelectedBoardRefs', values, target);
-  }
-
-  public async setGitLabUrl(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabUrl', value, target);
-  }
-
-  // Use storeGitLabApiKey/deleteGitLabApiKeySecret for new code. Kept only to clear legacy settings value.
-  public async setGitLabApiKey(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('gitlabApiKey', value, target);
   }
 
   // ── Live Folder settings ──────────────────────────────────────────
@@ -645,21 +612,11 @@ export class AppConfigStore {
     }
 
     if (this.getEffectiveBackendMode() === 'gitlab') {
-      const baseUrl = this.getGitLabUrl().trim();
-      const projectPath = this.getGitLabProjectPath().trim();
-      if (projectPath) {
-        return baseUrl ? `GitLab (${projectPath} @ ${baseUrl})` : `GitLab (${projectPath})`;
-      }
-      return baseUrl ? `GitLab (${baseUrl})` : 'GitLab';
+      return 'GitLab';
     }
 
     if (this.getEffectiveBackendMode() === 'github') {
-      const owner = this.getGitHubOwner().trim();
-      const baseUrl = this.getGitHubUrl().trim();
-      if (owner) {
-        return baseUrl ? `GitHub (${owner} @ ${baseUrl})` : `GitHub (${owner})`;
-      }
-      return baseUrl ? `GitHub (${baseUrl})` : 'GitHub';
+      return 'GitHub';
     }
 
     if (this.getEffectiveBackendMode() === 'livefolder') {
@@ -715,4 +672,3 @@ export class AppConfigStore {
   }
 
 }
-

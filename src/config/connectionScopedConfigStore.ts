@@ -124,8 +124,8 @@ export function createConnectionScopedConfigStore(
       getString(settings, 'boardName')?.trim() ?? base.getJiraCloudBoardName(),
 
     // ── GitLab ───────────────────────────────────────────────────────
-    getGitLabUrl: () => getString(settings, 'url')?.trim() ?? base.getGitLabUrl(),
-    getGitLabApiKey: () => getString(settings, 'apiKey') ?? base.getGitLabApiKey(),
+    getGitLabUrl: () => getString(settings, 'url')?.trim() ?? '',
+    getGitLabApiKey: () => getString(settings, 'apiKey') ?? '',
     getGitLabApiKeyFromSecrets: async (..._args: unknown[]): Promise<string> => {
       if (secrets.gitlabApiKey && secrets.gitlabApiKey.trim().length > 0) {
         return secrets.gitlabApiKey.trim();
@@ -154,10 +154,10 @@ export function createConnectionScopedConfigStore(
       if (secrets.githubPat && secrets.githubPat.length > 0) {
         return secrets.githubPat;
       }
-      return getString(settings, 'pat') ?? base.getGitHubPat();
+      return getString(settings, 'pat') ?? '';
     },
-    getGitHubUrl: () => getString(settings, 'url') ?? base.getGitHubUrl(),
-    getGitHubOwner: () => getString(settings, 'owner') ?? base.getGitHubOwner()
+    getGitHubUrl: () => getString(settings, 'url') ?? '',
+    getGitHubOwner: () => getString(settings, 'owner') ?? ''
   };
 
   return new Proxy(base, {
@@ -170,4 +170,3 @@ export function createConnectionScopedConfigStore(
     }
   }) as AppConfigStore;
 }
-

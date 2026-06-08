@@ -32,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /*  Types                                                             */
 /* ------------------------------------------------------------------ */
 
-type SetupBackendMode = BackendMode | 'github' | 'gitlab';
+type SetupBackendMode = BackendMode;
 
 interface SetupState {
   step: 0 | 1;
@@ -41,13 +41,6 @@ interface SetupState {
   liveFolderPath: string;
   liveFolderProjectKey: string;
   liveFolderProjectName: string;
-  // GitHub
-  githubUrl: string;
-  githubPat: string;
-  githubOwner: string;
-  // GitLab
-  gitlabUrl: string;
-  gitlabApiKey: string;
   // Jira
   jiraConnectionType: 'stdio' | 'http';
   jiraStdioCommand: string;
@@ -70,11 +63,6 @@ function createInitialState(): SetupState {
     liveFolderPath: '',
     liveFolderProjectKey: '',
     liveFolderProjectName: '',
-    githubUrl: 'https://api.github.com',
-    githubPat: '',
-    githubOwner: '',
-    gitlabUrl: '',
-    gitlabApiKey: '',
     jiraConnectionType: 'stdio',
     jiraStdioCommand: '',
     jiraStdioArgs: '',
@@ -103,8 +91,6 @@ interface ModeOption {
 
 const MODE_OPTIONS: ModeOption[] = [
   { mode: 'livefolder', icon: '📂', title: 'Live Folder', description: 'Two-way sync with a markdown plans folder' },
-  { mode: 'github', icon: '🐙', title: 'GitHub', description: 'Store GitHub credentials for repository automation. Issue and board mode is not implemented yet' },
-  { mode: 'gitlab', icon: '🦊', title: 'GitLab', description: 'Store GitLab credentials for merge request automation. Issue and board mode is not implemented yet' },
   { mode: 'jiracloud', icon: '☁️', title: 'Jira Cloud', description: 'Connect with Atlassian OAuth' },
   { mode: 'demo', icon: '🎭', title: 'Demo', description: 'Try with sample data, no configuration needed' },
 ];
@@ -325,18 +311,6 @@ export class SetupWizardPanel {
 
       case 'userworkspace':
         break;
-
-      case 'github':
-        await config.update('githubUrl', this.state.githubUrl, target);
-        await config.update('githubPat', this.state.githubPat, target);
-        await config.update('githubOwner', this.state.githubOwner, target);
-        break;
-
-      case 'gitlab':
-        await config.update('gitlabUrl', this.state.gitlabUrl, target);
-        await config.update('gitlabApiKey', this.state.gitlabApiKey, target);
-        break;
-
       case 'jiracloud':
         await config.update('jiraOAuthClientId', this.state.jiraOAuthClientId.trim(), target);
         await config.update('jiraCloudEpicKey', this.state.jiraCloudEpicKey.trim(), target);
@@ -484,12 +458,6 @@ export class SetupWizardPanel {
       case 'userworkspace':
         formHtml = this.renderUserWorkspaceForm();
         break;
-      case 'github':
-        formHtml = this.renderGithubForm();
-        break;
-      case 'gitlab':
-        formHtml = this.renderGitlabForm();
-        break;
       case 'jiracloud':
         formHtml = this.renderJiraCloudForm();
         break;
@@ -543,58 +511,6 @@ export class SetupWizardPanel {
   private renderUserWorkspaceForm(): string {
     return `
       <p class="form-help">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
-  }
-
-  /* -- GitHub form ------------------------------------------------- */
-
-  private renderGithubForm(): string {
-    return `
-      <div class="field-group">
-        <label class="field-label">GitHub API URL</label>
-        <input type="text" class="field-input"
-               data-field="githubUrl"
-               value="${esc(this.state.githubUrl)}"
-               placeholder="https://api.github.com" />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Personal Access Token</label>
-        <input type="password" class="field-input"
-               data-field="githubPat"
-               value="${esc(this.state.githubPat)}"
-               placeholder="ghp_…" />
-        <p class="field-hint">Need a token?
-          <a href="https://github.com/settings/tokens" class="link">Create one on GitHub</a>
-        </p>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Owner / Organization</label>
-        <input type="text" class="field-input"
-               data-field="githubOwner"
-               value="${esc(this.state.githubOwner)}"
-               placeholder="my-org" />
-      </div>`;
-  }
-
-  /* -- GitLab form ------------------------------------------------- */
-
-  private renderGitlabForm(): string {
-    return `
-      <div class="field-group">
-        <label class="field-label">GitLab URL</label>
-        <input type="text" class="field-input"
-               data-field="gitlabUrl"
-               value="${esc(this.state.gitlabUrl)}"
-               placeholder="https://gitlab.com" />
-      </div>
-      <div class="field-group">
-        <label class="field-label">Personal Access Token</label>
-        <input type="password" class="field-input"
-               data-field="gitlabApiKey"
-               value="${esc(this.state.gitlabApiKey)}"
-               placeholder="glpat-…" />
-        <p class="field-hint">Need a token? Create one in GitLab → Settings → Access Tokens</p>
-      </div>
-      `;
   }
 
   /* -- Jira form --------------------------------------------------- */
@@ -1078,5 +994,4 @@ export class SetupWizardPanel {
     `;
   }
 }
-
 

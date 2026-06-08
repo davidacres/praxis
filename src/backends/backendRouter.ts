@@ -32,17 +32,17 @@ import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
 
-function buildUnsupportedBackendMessage(mode: 'github'): string {
-  const label = 'GitHub';
+function buildUnsupportedBackendMessage(mode: 'github' | 'gitlab'): string {
+  const label = mode === 'gitlab' ? 'GitLab' : 'GitHub';
   return `${label} project mode is not implemented yet. Current ${label} support is limited to setup metadata and repository automation helpers.`;
 }
 
 class UnsupportedBackendService implements IssueTrackerService {
   public readonly mode: BackendMode;
-  private readonly unsupportedMode: 'github';
+  private readonly unsupportedMode: 'github' | 'gitlab';
 
   public constructor(
-    mode: 'github',
+    mode: 'github' | 'gitlab',
     private readonly defaultPageSize: number
   ) {
     this.unsupportedMode = mode;
@@ -416,7 +416,7 @@ export class BackendRouter implements IssueTrackerService {
       configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
         : configuredMode === 'gitlab'
-          ? new GitLabBoardService(this.configStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context)
+            ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiracloud'
@@ -442,5 +442,3 @@ export class BackendRouter implements IssueTrackerService {
     this.activeMode = undefined;
   }
 }
-
-
