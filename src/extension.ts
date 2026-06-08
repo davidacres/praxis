@@ -5953,6 +5953,9 @@ export async function activate(
       onResetGitLabConfig: async () => {
         await resetGitLabConfig();
       },
+      onAddBoard: async () => {
+        await vscode.commands.executeCommand('ticketManager.addBoard');
+      },
       onOpenSession: async (issueKey, boardId) => {
         const sessionBoardId =
           boardId ??

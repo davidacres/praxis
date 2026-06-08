@@ -15,6 +15,7 @@ interface WorkModeBoardsSidebarCallbacks {
   onDeleteBoard: (boardId: string) => Promise<void>;
   onRemoveAllBoards: () => Promise<void>;
   onResetGitLabConfig: () => Promise<void>;
+  onAddBoard: () => Promise<void>;
   onOpenSession: (issueKey: string, boardId?: string) => Promise<void>;
 }
 
@@ -363,6 +364,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       case 'resetGitLabConfig':
         await this.callbacks.onResetGitLabConfig();
         return;
+      case 'addBoard':
+        await this.callbacks.onAddBoard();
+        return;
       case 'boardDragState':
         this.setBoardDragActive(payload.active === true);
         return;
@@ -539,16 +543,14 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       .work-board-group-label { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--vscode-descriptionForeground); padding: 0 4px; }
       .work-board[draggable="true"] { cursor: grab; }
       .work-board.dragging { opacity: 0.45; cursor: grabbing; }
-      .work-board-group-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
-      .work-board-group-toggle:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-      .work-board-group-toggle.active { color: var(--vscode-textLink-foreground, #818cf8); border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.12); opacity: 1; }
-      .work-board-group-toggle svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
-      .work-board-remove-all { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-errorForeground, #f87171); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
-      .work-board-remove-all:hover { opacity: 1; background: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 10%, transparent); border-color: var(--vscode-errorForeground, #f87171); }
-      .work-board-remove-all svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
-      .work-board-reset-config { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 10px; background: transparent; color: var(--vscode-descriptionForeground); font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0.75; }
-      .work-board-reset-config:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-      .work-board-reset-config svg { width: 12px; height: 12px; display: block; flex-shrink: 0; }
+      .work-board-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35)); border-radius: 8px; background: transparent; color: var(--vscode-descriptionForeground); cursor: pointer; opacity: 0.75; }
+      .work-board-icon-btn:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
+      .work-board-icon-btn svg { width: 14px; height: 14px; display: block; flex-shrink: 0; }
+      .work-board-icon-btn.active { color: var(--vscode-textLink-foreground, #818cf8); border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.12); opacity: 1; }
+      .work-board-icon-btn.accent { color: var(--vscode-textLink-foreground, #818cf8); }
+      .work-board-icon-btn.accent:hover { border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.12); }
+      .work-board-icon-btn.danger { color: var(--vscode-errorForeground, #f87171); }
+      .work-board-icon-btn.danger:hover { background: color-mix(in srgb, var(--vscode-errorForeground, #f87171) 10%, transparent); border-color: var(--vscode-errorForeground, #f87171); }
       .pill { display: inline-flex; align-items: center; flex-shrink: 0; padding: 1px 5px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 600; line-height: 1.35; }
       .pill--progress { color: #6ee7b7; background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); }
       .pill--done { color: #93c5fd; background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); }
@@ -689,6 +691,12 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       if (groupToggleBtn) {
         groupToggleBtn.addEventListener('click', () => {
           vscodeApi.postMessage({ type: 'toggleGroupByType' });
+        });
+      }
+      const addBoardBtn = document.getElementById('addBoard');
+      if (addBoardBtn) {
+        addBoardBtn.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'addBoard' });
         });
       }
       const dndContainer = document.querySelector('[data-board-dnd="true"]');
@@ -941,12 +949,15 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     const removeAllIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.5 4.5h9M6 4.5V3.4c0-.5.4-.9.9-.9h2.2c.5 0 .9.4.9.9v1.1M5 6.5v5m3-5v5m3-5v5M4.5 4.5l.5 8.1c0 .5.4.9.9.9h4.2c.5 0 .9-.4.9-.9l.5-8.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const resetConfigIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8a5 5 0 1 0 .8-2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 4.5V8h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const groupTypeIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    const addBoardIcon = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
     const hasGitLabBoard = boards.some(b => resolveBoardMode(b.connectionId) === 'gitlab');
     const resetConfigBtn = hasGitLabBoard
-      ? `<button class="work-board-reset-config" type="button" id="resetGitLabConfig">${resetConfigIcon}<span>Reset config</span></button>`
+      ? `<button class="work-board-icon-btn" type="button" id="resetGitLabConfig" title="Reset config" aria-label="Reset config">${resetConfigIcon}</button>`
       : '';
+    const addBoardBtn = `<button class="work-board-icon-btn accent" type="button" id="addBoard" title="Add board" aria-label="Add board">${addBoardIcon}</button>`;
     const groupByType = this.boardStore.getWorkModeGroupByType();
-    const groupToggleBtn = `<button class="work-board-group-toggle ${groupByType ? 'active' : ''}" type="button" id="toggleGroupByType" aria-pressed="${groupByType ? 'true' : 'false'}" title="${groupByType ? 'Grouped by type — manual ordering disabled' : 'Group boards by type'}">${groupTypeIcon}<span>Group by type</span></button>`;
+    const groupToggleBtn = `<button class="work-board-icon-btn ${groupByType ? 'active' : ''}" type="button" id="toggleGroupByType" aria-pressed="${groupByType ? 'true' : 'false'}" title="${groupByType ? 'Grouped by type — manual ordering disabled' : 'Group boards by type'}" aria-label="Group boards by type">${groupTypeIcon}</button>`;
+    const removeAllBtn = `<button class="work-board-icon-btn danger" type="button" id="removeAllBoards" title="Remove all boards" aria-label="Remove all boards">${removeAllIcon}</button>`;
     const icons: BoardRenderIcons = { modeIcon: fallbackModeIconMarkup, modeIconColor: fallbackModeIconColor, statusIcon, activityIcon, menuDotsIcon, openBoardIcon, editBoardIcon, deleteBoardIcon };
 
     const orderedBoards = this.applyBoardLayout(boards);
@@ -981,8 +992,9 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
       <div class="work-board-list-header">
         <div class="work-board-list-header-left">${groupToggleBtn}</div>
         <div class="work-board-list-header-right">
+          ${addBoardBtn}
           ${resetConfigBtn}
-          <button class="work-board-remove-all" type="button" id="removeAllBoards">${removeAllIcon}<span>Remove all</span></button>
+          ${removeAllBtn}
         </div>
       </div>
       ${listMarkup}
