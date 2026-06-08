@@ -79,6 +79,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
   private readonly panels = new Map<string, vscode.WebviewPanel>();
   private readonly states = new Map<string, IssueAnalysisState>();
   private readonly issues = new Map<string, IssueDetails>();
+  private readonly runControllers = new Map<string, AbortController>();
 
   public constructor(
     private readonly workspaceState: vscode.Memento,
@@ -98,6 +99,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       defaultPrompt: string;
       repositories?: AnalysisRepositoryEntry[];
       onUpdate?: (content: string) => void;
+      signal?: AbortSignal;
     }) => Promise<string>
   ) {
     this.states = this.loadStates();
@@ -220,6 +222,15 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       await this.runSubmitQuestion(issueKey, asString(message.question));
     }
 
+    if (type === 'cancelAnalysis') {
+      const controller = this.runControllers.get(issueKey);
+      if (controller && !controller.signal.aborted) {
+        this.log(`[IssueAnalysis] Cancellation requested for ${issueKey}.`);
+        controller.abort();
+      }
+      return;
+    }
+
     if (type === 'addRepository') {
       await this.handleAddRepository(issueKey);
       return;
@@ -269,6 +280,9 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     this.postState(issueKey);
     this.postBusy(issueKey, true);
 
+    const controller = new AbortController();
+    this.runControllers.set(issueKey, controller);
+
     try {
       const defaultPrompt = this.getDefaultPrompt().trim();
       if (!defaultPrompt) {
@@ -289,6 +303,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
         history: [...state.messages],
         defaultPrompt,
         repositories: state.repositories,
+        signal: controller.signal,
         onUpdate: content => {
           assistantMessage.text = content;
           this.postState(issueKey);
@@ -297,9 +312,19 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       assistantMessage.text = reply;
       this.log(`[IssueAnalysis] Analysis completed for ${issueKey}.`);
     } catch (error) {
-      this.log(`[IssueAnalysis] Analysis failed for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`);
-      assistantMessage.text = `Analysis failed: ${error instanceof Error ? error.message : String(error)}`;
+      if (controller.signal.aborted) {
+        this.log(`[IssueAnalysis] Analysis cancelled for ${issueKey}.`);
+        const partial = assistantMessage.text.trim();
+        const hadPartial = partial.length > 0 && partial !== 'Analyzing...' && partial !== 'Analyzing... ';
+        assistantMessage.text = hadPartial
+          ? `${assistantMessage.text}\n\n_Analysis cancelled._`
+          : 'Analysis cancelled.';
+      } else {
+        this.log(`[IssueAnalysis] Analysis failed for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`);
+        assistantMessage.text = `Analysis failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
     } finally {
+      this.runControllers.delete(issueKey);
       this.persistStates();
       this.postState(issueKey);
       this.postBusy(issueKey, false);
@@ -486,6 +511,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     const sendBtn = document.getElementById('sendBtn');
     const clearBtn = document.getElementById('clearBtn');
     const confirmBtn = document.getElementById('confirmBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
     const saveModelBtn = document.getElementById('saveModelBtn');
     const statusLine = document.getElementById('statusLine');
     const confirmPill = document.getElementById('confirmPill');
@@ -661,6 +687,8 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       }
 
       sendBtn.disabled = busy;
+      sendBtn.style.display = busy ? 'none' : '';
+      cancelBtn.style.display = busy ? '' : 'none';
       clearBtn.disabled = busy;
       confirmBtn.disabled = busy;
       saveModelBtn.disabled = busy;
@@ -708,6 +736,12 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
 
     sendBtn.addEventListener('click', () => {
       runAnalysis();
+    });
+    cancelBtn.addEventListener('click', () => {
+      if (!busy) { return; }
+      debugLog('Cancel clicked.');
+      statusLine.textContent = 'Cancelling...';
+      vscode.postMessage({ type: 'cancelAnalysis' });
     });
     questionInput.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.shiftKey) {
@@ -886,6 +920,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
         <div style="display:flex; gap: 8px;">
           <button type="button" class="btn secondary" id="clearBtn">Clear Chat</button>
           <button type="button" class="btn secondary" id="confirmBtn">Confirm Analysis Complete</button>
+          <button type="button" class="btn secondary" id="cancelBtn" style="display:none;">Cancel</button>
           <button type="button" class="btn" id="sendBtn">Run Analysis</button>
         </div>
       </div>

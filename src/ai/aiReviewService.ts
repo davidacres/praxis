@@ -112,6 +112,16 @@ interface ReviewStreamOptions {
   onUpdate?: (content: string) => void;
   model?: string;
   systemPrompt?: string;
+  signal?: AbortSignal;
+}
+
+export const ANALYSIS_CANCELLED_MESSAGE = 'Analysis cancelled.';
+
+export class AnalysisCancelledError extends Error {
+  public constructor() {
+    super(ANALYSIS_CANCELLED_MESSAGE);
+    this.name = 'AnalysisCancelledError';
+  }
 }
 
 export function buildTicketContext(
@@ -310,8 +320,12 @@ async function runCopilotPrompt(
     streamIdleTimeoutMs?: number;
     onUpdate?: (content: string) => void;
     model?: string;
+    signal?: AbortSignal;
   }
 ): Promise<string> {
+  if (options.signal?.aborted) {
+    throw new AnalysisCancelledError();
+  }
   const sdk = await import('@github/copilot-sdk');
   const { clientOptions } = resolveCopilotClientOptions(options.cliPath);
   const client = new sdk.CopilotClient(clientOptions);
@@ -403,9 +417,22 @@ async function runCopilotPrompt(
     // no streaming data has arrived for idleTimeoutMs.
     const sdkCeilingMs = 30 * 60 * 1000;
     const sendPromise = session.sendAndWait({ prompt }, sdkCeilingMs);
-    const response = await Promise.race([sendPromise, idlePromise]).finally(() => {
+
+    let onAbort: (() => void) | undefined;
+    const abortPromise = new Promise<never>((_resolve, reject) => {
+      if (!options.signal) {
+        return;
+      }
+      onAbort = () => reject(new AnalysisCancelledError());
+      options.signal.addEventListener('abort', onAbort, { once: true });
+    });
+
+    const response = await Promise.race([sendPromise, idlePromise, abortPromise]).finally(() => {
       if (idleTimerId !== undefined) {
         clearTimeout(idleTimerId);
+      }
+      if (onAbort) {
+        options.signal?.removeEventListener('abort', onAbort);
       }
     });
     const streamedContent = [...messageBuffers.values()].join('\n\n').trim();
@@ -768,7 +795,8 @@ export async function reviewTicketWithOpenAi(
           { role: 'user', content: userMessage }
         ],
         max_tokens: 16384
-      })
+      }),
+      signal: options.signal
     });
 
     if (!response.ok) {
@@ -815,7 +843,8 @@ export async function reviewTicketWithOpenAi(
         { role: 'user', content: userMessage }
       ],
       max_tokens: 16384
-    })
+    }),
+    signal: options?.signal
   });
 
   if (!response.ok) {
@@ -860,7 +889,8 @@ export async function reviewTicketWithClaude(
         messages: [
           { role: 'user', content: userMessage }
         ]
-      })
+      }),
+      signal: options.signal
     });
 
     if (!response.ok) {
@@ -908,7 +938,8 @@ export async function reviewTicketWithClaude(
       messages: [
         { role: 'user', content: userMessage }
       ]
-    })
+    }),
+    signal: options?.signal
   });
 
   if (!response.ok) {
@@ -943,7 +974,8 @@ export async function reviewTicketWithCopilot(
       systemPrompt,
       workingDirectory,
       onUpdate: options?.onUpdate,
-      model: options?.model
+      model: options?.model,
+      signal: options?.signal
     }
   );
 
