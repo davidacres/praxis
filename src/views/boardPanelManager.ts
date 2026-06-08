@@ -803,7 +803,7 @@ export class BoardPanelManager implements vscode.Disposable {
         flex: 1;
         width: 100%;
         min-height: 100vh;
-        padding: 2px;
+        padding: 8px;
       }
 
       .panel-shell {
@@ -813,8 +813,8 @@ export class BoardPanelManager implements vscode.Disposable {
         flex-direction: column;
         min-width: 0;
         min-height: 0;
-        border: none;
-        border-radius: 0;
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 8px;
         background: var(--vscode-sideBar-background);
         overflow: hidden;
       }
@@ -824,7 +824,7 @@ export class BoardPanelManager implements vscode.Disposable {
         justify-content: space-between;
         align-items: flex-start;
         gap: 16px;
-        padding: 12px 16px 12px 0;
+        padding: 16px;
         border-bottom: 1px solid var(--vscode-panel-border);
         flex-shrink: 0;
       }
@@ -907,7 +907,7 @@ export class BoardPanelManager implements vscode.Disposable {
         flex-direction: column;
         gap: 12px;
         min-height: 0;
-        padding: 12px 16px 16px 0;
+        padding: 16px;
         overflow: auto;
       }
 
