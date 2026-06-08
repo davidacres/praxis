@@ -4221,10 +4221,11 @@ export async function activate(
         description: [input.issue.description ?? '', referencedIssueContext, appendedPrompt].filter(Boolean).join('\n\n')
       };
 
-      const reviewOptions: { onUpdate?: (content: string) => void; model: string; systemPrompt: string } = {
+      const reviewOptions: { onUpdate?: (content: string) => void; model: string; systemPrompt: string; signal?: AbortSignal } = {
         onUpdate: input.onUpdate,
         model: input.model,
-        systemPrompt: input.defaultPrompt
+        systemPrompt: input.defaultPrompt,
+        signal: input.signal
       };
 
       if (chosen.provider === 'openai') {
