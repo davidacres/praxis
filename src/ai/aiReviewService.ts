@@ -347,7 +347,9 @@ async function runCopilotPrompt(
     await client.start();
     session = await client.createSession({
       clientName: 'ticket-manager-extension',
-      availableTools: [],
+      // Omit availableTools so the Copilot agent exposes its standard built-in
+      // toolset (file read, grep/search, shell, etc.). An empty array here would
+      // be an allow-list of nothing, disabling all tools.
       infiniteSessions: { enabled: false },
       streaming: true,
       model: options.model,
@@ -360,6 +362,19 @@ async function runCopilotPrompt(
 
     unsubscribe = session.on?.((event) => {
       const data = event.data ?? {};
+      // Keep the idle watchdog alive during tool execution and reasoning. With
+      // the standard toolset enabled the agent can spend time running tools
+      // (grep, file reads, shell) without emitting assistant message events.
+      if (
+        event.type.startsWith('tool.') ||
+        event.type === 'assistant.reasoning' ||
+        event.type === 'assistant.reasoning_delta' ||
+        event.type === 'assistant.streaming_delta' ||
+        event.type === 'assistant.turn_start'
+      ) {
+        resetIdleTimer?.();
+        return;
+      }
       if (event.type === 'assistant.message_delta') {
         const messageId = typeof data.messageId === 'string' ? data.messageId : 'message';
         const deltaContent = typeof data.deltaContent === 'string' ? data.deltaContent : '';
