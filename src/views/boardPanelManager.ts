@@ -721,7 +721,12 @@ export class BoardPanelManager implements vscode.Disposable {
     if (board) {
       if (this.loading && !hasDisplay) {
         body = `
-          <section class="empty-state">
+          <section class="empty-state loading-state">
+            <div class="board-loading-spinner" role="status" aria-label="Loading board">
+              <span class="board-loading-ring board-loading-ring--1"></span>
+              <span class="board-loading-ring board-loading-ring--2"></span>
+              <span class="board-loading-ring board-loading-ring--3"></span>
+            </div>
             <h2>Loading ${escapeHtml(board.name)}...</h2>
             <p>Fetching issues for the selected board.</p>
           </section>
@@ -1273,6 +1278,58 @@ export class BoardPanelManager implements vscode.Disposable {
 
       .empty-state.error {
         border-color: var(--vscode-errorForeground);
+      }
+
+      .empty-state.loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        text-align: center;
+      }
+
+      .board-loading-spinner {
+        position: relative;
+        width: 56px;
+        height: 56px;
+      }
+
+      .board-loading-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 3px solid transparent;
+        animation: board-loading-spin 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      }
+
+      .board-loading-ring--1 {
+        border-top-color: var(--vscode-progressBar-background, var(--vscode-textLink-foreground, #6366f1));
+        animation-duration: 1.4s;
+      }
+
+      .board-loading-ring--2 {
+        inset: 9px;
+        border-top-color: color-mix(in srgb, var(--vscode-textLink-foreground, #6366f1) 70%, transparent);
+        animation-duration: 1.05s;
+        animation-direction: reverse;
+      }
+
+      .board-loading-ring--3 {
+        inset: 18px;
+        border-top-color: color-mix(in srgb, var(--vscode-textLink-foreground, #6366f1) 45%, transparent);
+        animation-duration: 0.8s;
+      }
+
+      @keyframes board-loading-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .board-loading-ring {
+          animation-duration: 3s;
+        }
       }
 
       .list-view {

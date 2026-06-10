@@ -129,6 +129,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private requestGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
   private aiAssignOptions: DetailAiAssignOption[] = [];
+  private knownModels?: Array<{ id: string; label: string }>;
 
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
@@ -152,6 +153,15 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
   public setAiAssignOptions(options: DetailAiAssignOption[]): void {
     this.aiAssignOptions = [...options];
+  }
+
+  /**
+   * Override the model list shown in the model picker. Used to surface the live
+   * Copilot models discovered via VS Code's language model API instead of the
+   * static fallback list.
+   */
+  public setKnownModels(models: Array<{ id: string; label: string }>): void {
+    this.knownModels = models.length > 0 ? [...models] : undefined;
   }
 
   public async open(issueKey: string): Promise<void> {
@@ -630,9 +640,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
 
   private renderModelSection(issueKey: string): string {
     const currentModel = this.aiSessionManager.getIssueModelOverride(issueKey) ?? '';
-    const isKnown = !currentModel || IssueDetailPanelManager.KNOWN_MODELS.some(m => m.id === currentModel);
+    const models = this.knownModels ?? IssueDetailPanelManager.KNOWN_MODELS;
+    const isKnown = !currentModel || models.some(m => m.id === currentModel);
 
-    const modelOptions = IssueDetailPanelManager.KNOWN_MODELS.map(
+    const modelOptions = models.map(
       m => `<option value="${escapeHtml(m.id)}" ${m.id === currentModel ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
     ).join('');
 

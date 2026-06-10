@@ -221,6 +221,47 @@ const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
   'claude-cli': []
 };
 
+/**
+ * Live Copilot models discovered via the VS Code Language Model API
+ * (`vscode.lm.selectChatModels`). This reflects whatever the user's Copilot
+ * subscription exposes, so it stays in sync with VS Code's own model picker.
+ * Populated asynchronously; falls back to the curated `copilot-cli` list until
+ * the first refresh completes.
+ */
+let copilotModelCache: AiModelOption[] = [];
+
+async function refreshCopilotModelCache(log?: (message: string) => void): Promise<void> {
+  try {
+    if (!vscode.lm || typeof vscode.lm.selectChatModels !== 'function') {
+      return;
+    }
+    const models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    const seen = new Set<string>();
+    const options: AiModelOption[] = [];
+    for (const model of models) {
+      const id = model.id?.trim();
+      if (!id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      options.push({ id, label: model.name?.trim() || id });
+    }
+    if (options.length > 0) {
+      copilotModelCache = options;
+      log?.(`[ai-models] Loaded ${options.length} Copilot model(s) from VS Code language model API.`);
+    }
+  } catch (error) {
+    log?.(`[ai-models] Failed to load Copilot models from VS Code: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function getModelOptionsForProvider(provider: AiProvider): AiModelOption[] {
+  if (provider === 'copilot-cli' && copilotModelCache.length > 0) {
+    return copilotModelCache;
+  }
+  return ANALYSIS_MODEL_OPTIONS[provider] ?? [];
+}
+
 function logError(output: vscode.OutputChannel, error: unknown, scope?: string): void {
   const message = error instanceof Error ? error.stack ?? error.message : String(error);
   output.appendLine(scope ? `[${scope}] ${message}` : message);
@@ -5336,7 +5377,7 @@ export async function activate(
     if (!provider) {
       return [];
     }
-    return ANALYSIS_MODEL_OPTIONS[provider] ?? [];
+    return getModelOptionsForProvider(provider);
   }
 
   function refreshAiAssignmentMenus(): void {
@@ -5828,7 +5869,35 @@ export async function activate(
       activeSessionsSidebarViewProvider?.setSelectedIssueKey(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
       workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
+      issuesProvider.setBoardScope(undefined);
+      epicsSidebarViewProvider.setBoardScope(undefined);
       return;
+    }
+
+    // Restore the board scope for the EPIC and My Issues sidebars before they
+    // refresh. These sidebars require a scoped board (each board carries its own
+    // connection); without re-applying the last-selected board on activation /
+    // refresh they would render blank until the user re-selects a board.
+    const lastSelectedBoardId = boardStore.getLastSelectedBoardId();
+    if (lastSelectedBoardId) {
+      try {
+        const restoredBoard = await resolveBoardById(lastSelectedBoardId);
+        if (restoredBoard) {
+          const trackedRef = boardStore.getLastSelectedTrackedBoard();
+          const restoredConnectionId =
+            restoredBoard.connectionId ??
+            (trackedRef?.boardId === restoredBoard.id ? trackedRef.connectionId : undefined);
+          const scopedBoard: Board = restoredConnectionId
+            ? { ...restoredBoard, connectionId: restoredConnectionId }
+            : restoredBoard;
+          issuesProvider.setBoardScope(scopedBoard);
+          epicsSidebarViewProvider.setBoardScope(scopedBoard);
+        }
+      } catch (error) {
+        outputChannel.appendLine(
+          `[refreshAndRestoreSelection] failed to restore board scope: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
     await Promise.all([
@@ -5920,6 +5989,15 @@ export async function activate(
     }
   );
   refreshAiAssignmentMenus();
+  // Populate the live Copilot model list from VS Code's language model API in
+  // the background so the model pickers match VS Code's own list. Refresh the
+  // assignment menus once loaded.
+  void refreshCopilotModelCache(message => outputChannel.appendLine(message)).then(() => {
+    refreshAiAssignmentMenus();
+    if (copilotModelCache.length > 0) {
+      issueDetailPanelManager.setKnownModels(copilotModelCache);
+    }
+  });
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
     filterStore,
@@ -5957,7 +6035,15 @@ export async function activate(
     () => backendService.mode,
     {
       onSelectBoard: async boardId => {
-        await selectBoard(await resolveBoardById(boardId));
+        const board = await resolveBoardById(boardId);
+        if (!board) {
+          // Do not call selectBoard(undefined): that clears the EPIC/My Issues
+          // board scope and leaves those sidebars blank. Keep the current scope
+          // and surface the failure instead.
+          outputChannel.appendLine(`[selectBoard] classic board not found, keeping current scope: ${boardId}`);
+          return;
+        }
+        await selectBoard(board);
       },
       onEditBoard: async boardId => {
         await editBoard(boardId);
