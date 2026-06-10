@@ -416,7 +416,13 @@ export class BackendRouter implements IssueTrackerService {
       configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
         : configuredMode === 'gitlab'
-            ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
+            ? new GitLabBoardService(
+                this.configStore,
+                this.output,
+                globalThis.fetch,
+                inferGitLabProjectFromRepo,
+                this.context
+              )
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
           : configuredMode === 'jiracloud'

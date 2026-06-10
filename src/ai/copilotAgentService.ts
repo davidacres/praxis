@@ -835,17 +835,6 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflowDirective}`;
     });
   }
 
-  private async failTaskForStepLimit(issueKey: string, maxSteps: number): Promise<void> {
-    await this.stopTask(issueKey, {
-      terminalState: 'failed',
-      event: evt(
-        'error',
-        `Task stopped after reaching the tool step limit (${maxSteps}). Start a new session to continue.`
-      ),
-      logLine: `[Agent] Max steps (${maxSteps}) reached for ${issueKey}`
-    });
-  }
-
   private async promptForStepLimitExtension(issueKey: string): Promise<void> {
     const task = this.activeTasks.get(issueKey);
     if (!task || task.ending || task.stepLimitPromptInFlight) {

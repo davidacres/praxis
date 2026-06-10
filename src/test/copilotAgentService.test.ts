@@ -439,7 +439,7 @@ suite('CopilotAgentService', () => {
     assert.strictEqual(service.hasActiveTask(issueKey), false);
   });
 
-  test('step limit failure is recorded once and not reported as a user abort', async () => {
+  test('step limit extension runs in autopilot mode without aborting the session', async () => {
     const sessionManager = new FakeSessionManager();
     const issueKey = 'TM-6';
     const record = createRecord(issueKey, 'executing');
@@ -458,25 +458,27 @@ suite('CopilotAgentService', () => {
     };
     (service as any).activeTasks.set(issueKey, activeTask);
 
-    // Directly invoke the step-limit failure path (bypasses the interactive prompt)
-    await (service as any).failTaskForStepLimit(issueKey, 50);
+    // Directly invoke the live autopilot step-limit path.
+    await (service as any).promptForStepLimitExtension(issueKey);
 
-    // Autopilot mode: no abort when step limit reached - it extends the limit instead
+    // Autopilot mode: the step limit is removed transparently, the session is
+    // never aborted, and no terminal state change is recorded.
     assert.strictEqual(abortCallCount, 0);
     assert.deepStrictEqual(
       sessionManager.stateChanges.map(change => change.state),
-      // No state change - continues executing
       []
     );
+
     const flatEvents = sessionManager.appendedEvents.flatMap(({ events }) => events);
-    // Should warn about approaching limit
     assert.ok(
       flatEvents.some(
-        event =>
-          event.type === 'warning' &&
-          event.summary.includes('step limit')
-      )
+        event => event.type === 'info' && event.summary.includes('Step limit removed automatically')
+      ),
+      'Should record that the step limit was removed automatically'
     );
+
+    // The cap is lifted and the task remains active.
+    assert.strictEqual(activeTask.maxSteps, Number.MAX_SAFE_INTEGER);
     assert.strictEqual(service.hasActiveTask(issueKey), true);
   });
 });
