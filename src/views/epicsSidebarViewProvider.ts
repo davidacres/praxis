@@ -120,7 +120,8 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     private readonly backendService: IssueTrackerService,
     private readonly filterStore: FilterStore,
     private readonly issuesProvider: IssuesTreeProvider,
-    private readonly callbacks: EpicsSidebarCallbacks
+    private readonly callbacks: EpicsSidebarCallbacks,
+    private readonly resolveBoardService?: (board: Board) => Promise<IssueTrackerService>
   ) {
     this.disposables.push(
       this.filterStore.onDidChange(() => {
@@ -132,11 +133,39 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
     );
   }
 
+  /**
+   * In connections mode (a board-service resolver is wired) EPICs are only shown
+   * once a board is selected, because each board carries its own connection.
+   */
+  private requiresBoardSelection(): boolean {
+    return Boolean(this.resolveBoardService) && !this.scopedBoard;
+  }
+
+  /**
+   * Resolve the service to query. When a board with its own connection is scoped,
+   * route through that connection's service; otherwise use the shared router.
+   */
+  private async getScopedService(): Promise<IssueTrackerService> {
+    const board = this.scopedBoard;
+    if (board?.connectionId && this.resolveBoardService) {
+      return this.resolveBoardService(board);
+    }
+    return this.backendService;
+  }
+
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     this.view = webviewView;
     webviewView.webview.options = {
       enableScripts: true
     };
+    // When the view's container is hidden (e.g. after a classic <-> work mode
+    // switch) VS Code disposes this WebviewView. Drop the stale reference so a
+    // later render() does not throw "Webview is disposed".
+    webviewView.onDidDispose(() => {
+      if (this.view === webviewView) {
+        this.view = undefined;
+      }
+    });
     webviewView.webview.onDidReceiveMessage(
       message => {
         void this.handleMessage(message);
@@ -186,11 +215,23 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
     const generation = ++this.requestGeneration;
     const supportingGeneration = ++this.supportingDataGeneration;
+
+    // In connections mode, wait for a board (and therefore a connection) to be
+    // selected before querying. Avoids hitting an unconfigured shared service.
+    if (this.requiresBoardSelection()) {
+      this.epics = [];
+      this.errorMessage = undefined;
+      this.statusOptions = [];
+      this.render();
+      return;
+    }
+
     const filters = this.buildScopedFilters(this.filterStore.getFilters());
     const epicStatuses = this.filterStore.getEpicStatuses();
+    const service = await this.getScopedService();
 
     try {
-      const epics = await this.backendService.getParentItems(
+      const epics = await service.getParentItems(
         {
           ...filters,
           statuses: epicStatuses,
@@ -229,7 +270,7 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
     let statusOptions = unique([...epicStatuses, ...this.epics.map(epic => epic.status)]);
     try {
-      const metadata = await this.backendService.getFilterMetadata(
+      const metadata = await service.getFilterMetadata(
         buildEpicStatusMetadataFilters(filters)
       );
       statusOptions = unique([...statusOptions, ...metadata.statuses]);
@@ -817,6 +858,10 @@ export class EpicsSidebarViewProvider implements vscode.WebviewViewProvider, vsc
 
   private renderContent(): string {
     const epicStatuses = this.filterStore.getEpicStatuses();
+    if (this.requiresBoardSelection()) {
+      return `${this.renderSearchRow(epicStatuses)}<div class="message">Select a board to see its EPICs.</div>`;
+    }
+
     if (this.errorMessage) {
       return `${this.renderSearchRow(epicStatuses)}<div class="message error">${escapeHtml(this.errorMessage)}</div>`;
     }

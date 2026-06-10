@@ -1,7 +1,7 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.45",
+  "version": "0.0.50",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
@@ -849,6 +849,33 @@
           "default": "stdio",
           "scope": "window",
           "description": "Legacy Jira MCP transport selector retained for compatibility with existing setup flows and integration tests."
+        },
+        "ticketManager.stdioCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Legacy Jira MCP stdio command retained for compatibility with existing setup flows and integration tests."
+        },
+        "ticketManager.stdioArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "window",
+          "description": "Legacy Jira MCP stdio command arguments retained for compatibility with existing setup flows and integration tests."
+        },
+        "ticketManager.stdioCwd": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Legacy Jira MCP stdio working directory retained for compatibility with existing setup flows and integration tests."
+        },
+        "ticketManager.httpUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Legacy Jira MCP HTTP endpoint URL retained for compatibility with existing setup flows and integration tests."
         },
         "ticketManager.connections": {
           "type": "array",

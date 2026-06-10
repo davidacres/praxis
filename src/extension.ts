@@ -4011,7 +4011,14 @@ export async function activate(
   };
   await updateAnalysisContext();
 
-  const issuesProvider = new IssuesTreeProvider(backendService, filterStore, aiSessionManager);
+  const resolveBoardService = async (board: Board): Promise<IssueTrackerService> =>
+    board.connectionId ? backendService.serviceFor(board.connectionId) : backendService;
+  const issuesProvider = new IssuesTreeProvider(
+    backendService,
+    filterStore,
+    aiSessionManager,
+    resolveBoardService
+  );
   const boardsProvider = new BoardsTreeProvider(backendService, boardStore, connectionStore, backendService);
   const detailsProvider = new DetailsViewProvider(backendService);
   let issuesSidebarViewProvider: IssuesSidebarViewProvider;
@@ -4047,7 +4054,11 @@ export async function activate(
     async board => (board.connectionId ? backendService.serviceFor(board.connectionId) : backendService)
   );
   boardColumnConfigPanel.setBoardSettingsUpdater(async (boardId, input) => {
-    const updatedBoard = await backendService.updateBoard(boardId, input);
+    // Route the update through the board's own connection so per-connection
+    // Jira Cloud config (workspace JQL/epic) is read and written correctly.
+    const board = await resolveBoardById(boardId);
+    const service = board ? await resolveBoardService(board) : backendService;
+    const updatedBoard = await service.updateBoard(boardId, input);
     await boardsProvider.refresh();
     if (boardPanelManager.getActiveBoard()?.id === boardId) {
       await boardPanelManager.openBoard(updatedBoard);
@@ -4634,13 +4645,18 @@ export async function activate(
     }
   }
 
-  async function selectBoard(board: Board | undefined): Promise<void> {
+  async function selectBoard(
+    board: Board | undefined,
+    options?: { forceRecreatePanel?: boolean }
+  ): Promise<void> {
     outputChannel.appendLine(`[selectBoard] called with boardId: ${board?.id ?? 'undefined'}`);
     if (!board) {
       await boardStore.setLastSelectedBoardId(undefined);
       await boardStore.setLastSelectedTrackedBoard(undefined);
       boardsSidebarViewProvider.setSelectedBoardId(undefined);
       workModeBoardsSidebarViewProvider.setSelectedBoardId(undefined);
+      issuesProvider.setBoardScope(undefined);
+      epicsSidebarViewProvider.setBoardScope(undefined);
       boardPanelManager.clear();
       return;
     }
@@ -4663,11 +4679,19 @@ export async function activate(
         backendService.setActiveConnection(resolvedConnectionId);
       }
     }
+    // Scope the classic EPIC and My Issues sidebars to this board so they query
+    // the board's own connection. Ensure the board carries the resolved
+    // connectionId so the per-connection service is used.
+    const scopedBoard: Board = resolvedConnectionId
+      ? { ...board, connectionId: resolvedConnectionId }
+      : board;
+    issuesProvider.setBoardScope(scopedBoard);
+    epicsSidebarViewProvider.setBoardScope(scopedBoard);
     boardsSidebarViewProvider.setSelectedBoardId(board.id);
     workModeBoardsSidebarViewProvider.setSelectedBoardId(board.id);
     outputChannel.appendLine(`[selectBoard] about to open board panel for: ${board.id}`);
     try {
-      await boardPanelManager.openBoard(board);
+      await boardPanelManager.openBoard(board, options);
       try {
         const active = boardPanelManager.getActiveBoard?.();
         if (!active || active.id !== board.id) {
@@ -4678,10 +4702,9 @@ export async function activate(
     } catch (err) {
       outputChannel.appendLine(`[selectBoard] openBoard failed: ${err instanceof Error ? err.message : String(err)} - retrying once`);
       try {
-        // attempt to recover: ensure panel exists and retry once after short delay
-        try { (boardPanelManager as any).ensurePanel?.(); } catch (_) {}
+        // attempt to recover: force a fresh panel and retry once after short delay
         await new Promise(resolve => setTimeout(resolve, 250));
-        await boardPanelManager.openBoard(board);
+        await boardPanelManager.openBoard(board, { forceRecreatePanel: true });
         outputChannel.appendLine(`[selectBoard] board panel opened on retry for: ${board.id}`);
       } catch (err2) {
         outputChannel.appendLine(`[selectBoard] openBoard retry failed: ${err2 instanceof Error ? err2.message : String(err2)}`);
@@ -5009,8 +5032,13 @@ export async function activate(
         await vscode.window.showInformationMessage('Select a board first.');
         return;
       }
-      const details = await backendService.getBoardDetails(board);
-      const metadata = await backendService.getFilterMetadata({
+      // Route through the board's own connection so per-connection config (e.g.
+      // the workspace JQL/epic that backs a Jira Cloud board) resolves correctly.
+      // Using the shared router would read the global config and fail with
+      // "Invalid Jira Cloud board identifier." for connection-scoped boards.
+      const service = await resolveBoardService(board);
+      const details = await service.getBoardDetails(board);
+      const metadata = await service.getFilterMetadata({
         projectKeys: board.projectKey ? [board.projectKey] : [],
         statuses: [],
         issueTypes: [],
@@ -5064,6 +5092,16 @@ export async function activate(
   }
 
   async function removeBoardFromTicketManager(board: Board): Promise<void> {
+    // In connections mode a board is tracked against a specific connection.
+    // Removing it just untracks it from that connection; the underlying backend
+    // config is owned by the connection, not the global config store.
+    const trackedRef = resolveTrackedRefForBoard(board);
+    if (trackedRef) {
+      await connectionStore.removeTrackedBoard(trackedRef);
+      return;
+    }
+
+    // Legacy single-backend mode: fall back to the global backend/config.
     switch (backendService.mode) {
       case 'gitlab':
         await closeGitLabBoard(board);
@@ -5074,6 +5112,13 @@ export async function activate(
       default:
         await backendService.deleteBoard(board.id);
     }
+  }
+
+  function resolveTrackedRefForBoard(board: Board): { connectionId: string; boardId: string } | undefined {
+    const connectionId =
+      board.connectionId ??
+      connectionStore.getTrackedBoards().find(t => t.boardId === board.id)?.connectionId;
+    return connectionId ? { connectionId, boardId: board.id } : undefined;
   }
 
   async function deleteBoard(boardId: string): Promise<void> {
@@ -5108,20 +5153,29 @@ export async function activate(
         return;
       }
 
-      switch (backendService.mode) {
-        case 'gitlab':
-          await configStore.setGitLabSelectedBoardRefs([]);
-          break;
-        case 'jiracloud':
-          await Promise.all([
-            configStore.setJiraCloudBoardJql(undefined),
-            configStore.setJiraCloudBoardName(undefined),
-            configStore.setJiraCloudEpicKey(undefined),
-            configStore.setJiraCloudEpicBoardName(undefined)
-          ]);
-          break;
-        default:
-          await Promise.all(snapshot.boards.map(board => backendService.deleteBoard(board.id)));
+      // Connections mode: untrack every board from its connection.
+      const trackedRefs = snapshot.boards
+        .map(board => resolveTrackedRefForBoard(board))
+        .filter((ref): ref is { connectionId: string; boardId: string } => ref !== undefined);
+      if (trackedRefs.length > 0) {
+        await Promise.all(trackedRefs.map(ref => connectionStore.removeTrackedBoard(ref)));
+      } else {
+        // Legacy single-backend mode.
+        switch (backendService.mode) {
+          case 'gitlab':
+            await configStore.setGitLabSelectedBoardRefs([]);
+            break;
+          case 'jiracloud':
+            await Promise.all([
+              configStore.setJiraCloudBoardJql(undefined),
+              configStore.setJiraCloudBoardName(undefined),
+              configStore.setJiraCloudEpicKey(undefined),
+              configStore.setJiraCloudEpicBoardName(undefined)
+            ]);
+            break;
+          default:
+            await Promise.all(snapshot.boards.map(board => backendService.deleteBoard(board.id)));
+        }
       }
 
       await boardStore.setLastSelectedBoardId(undefined);
@@ -5892,7 +5946,8 @@ export async function activate(
       onSetStatuses: async (statuses) => {
         await filterStore.setEpicStatuses(statuses);
       }
-    }
+    },
+    resolveBoardService
   );
   boardsSidebarViewProvider = new ClassicBoardsSidebarViewProvider(
     backendService,
@@ -5946,7 +6001,10 @@ export async function activate(
         await resetGitLabConfig();
       },
       onAddBoard: async () => {
-        await vscode.commands.executeCommand('ticketManager.addBoard');
+        // Work mode's "Add board" opens the Connections & Boards manager screen,
+        // matching the classic Boards view toolbar. Route through the shared
+        // command so both modes use the exact same entry point.
+        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
       },
       onOpenSession: async (issueKey, boardId) => {
         const sessionBoardId =
@@ -6281,8 +6339,11 @@ export async function activate(
     vscode.commands.registerCommand('ticketManager.toggleWorkMode', async () => {
       try {
         const nextMode: BoardsSidebarMode = getBoardsSidebarMode() === 'work' ? 'classic' : 'work';
+        // Only persist the mode change. The onDidChangeConfiguration handler
+        // performs the container switch and re-opens the previously active board.
+        // Doing the container switch here as well caused a double-switch race
+        // that left the board editor panel unable to open.
         await setBoardsSidebarMode(nextMode);
-        await vscode.commands.executeCommand(getBoardsContainerCommand());
         void vscode.window.showInformationMessage(
           nextMode === 'work' ? 'Ticket Manager switched to Work Mode.' : 'Ticket Manager switched to Classic mode.'
         );
@@ -6434,6 +6495,61 @@ export async function activate(
                     return;
                   }
                 }
+
+                // A pure boards-mode preview switch (classic <-> work) does not
+                // change the backend or connection, so the selected board and its
+                // connection are still valid. Preserve and re-select the board so
+                // the board details pane re-opens and the active connection (and
+                // therefore the status bar connection check) is not lost.
+                const onlyBoardsModeChanged =
+                  boardsModeChanged &&
+                  !event.affectsConfiguration('ticketManager.backendMode') &&
+                  !event.affectsConfiguration('ticketManager.connectionType') &&
+                  !event.affectsConfiguration('ticketManager.httpUrl') &&
+                  !event.affectsConfiguration('ticketManager.stdioCommand') &&
+                  !event.affectsConfiguration('ticketManager.stdioArgs') &&
+                  !event.affectsConfiguration('ticketManager.stdioCwd') &&
+                  !event.affectsConfiguration('ticketManager.liveFolderPath') &&
+                  !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
+                  !event.affectsConfiguration('ticketManager.liveFolderProjectName');
+
+                if (onlyBoardsModeChanged) {
+                  // A pure classic <-> work preview switch keeps the same backend,
+                  // connection, and selected board. Do NOT reset the backend or
+                  // clear the selection. Re-open the previously active board and
+                  // ONLY THEN switch the activity-bar container.
+                  //
+                  // Ordering matters: executeCommand(getBoardsContainerCommand())
+                  // focuses the activity-bar/sidebar, so ViewColumn.Active no longer
+                  // points at an editor group. Creating the board webview panel after
+                  // that focus change leaves the editor tab unsurfaced ("no tab
+                  // opens"). Opening the board first lands it in the editor group.
+                  const previousBoardId = boardStore.getLastSelectedBoardId();
+                  await setModeContext();
+                  await boardsProvider.refresh();
+                  let previousBoard = previousBoardId
+                    ? await resolveBoardById(previousBoardId)
+                    : undefined;
+                  // Boards may not be repopulated yet right after the mode change;
+                  // retry resolution briefly before giving up.
+                  if (previousBoardId && !previousBoard) {
+                    await new Promise(resolve => setTimeout(resolve, 150));
+                    await boardsProvider.refresh();
+                    previousBoard = await resolveBoardById(previousBoardId);
+                  }
+                  // Open the board panel FIRST (while the editor area is still the
+                  // active group) so the webview lands in the editor group. Force a
+                  // fresh panel because the existing one can be left detached/blank
+                  // across a mode switch.
+                  if (previousBoard) {
+                    await selectBoard(previousBoard, { forceRecreatePanel: true });
+                  }
+                  // Switch the activity-bar container AFTER the board panel exists.
+                  await vscode.commands.executeCommand(getBoardsContainerCommand());
+                  refreshStatusBarInBackground();
+                  return;
+                }
+
                 await setModeContext();
                 await filterStore.setLastSelectedIssueKey(undefined);
                 await boardStore.setLastSelectedBoardId(undefined);
