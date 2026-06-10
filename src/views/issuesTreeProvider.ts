@@ -9,6 +9,8 @@ export interface IssuesProviderSnapshot {
   hasMore: boolean;
   status: 'idle' | 'loading' | 'ready' | 'error';
   errorMessage?: string;
+  /** True when a board must be selected before issues can be shown (connections mode). */
+  requiresBoardSelection?: boolean;
 }
 
 abstract class BaseNode {
@@ -82,11 +84,34 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
   public readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
+  /**
+   * In connections mode (a board-service resolver is wired) we only show issues
+   * once a board is selected, because each board carries its own connection.
+   * Without a scoped board there is no connection to query.
+   */
+  private requiresBoardSelection(): boolean {
+    return Boolean(this.resolveBoardService) && !this.scopedBoard;
+  }
+
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly filterStore: FilterStore,
-    private readonly aiSessionManager?: AiSessionManager
+    private readonly aiSessionManager?: AiSessionManager,
+    private readonly resolveBoardService?: (board: Board) => Promise<IssueTrackerService>
   ) {}
+
+  /**
+   * Resolve the service to use for fetches. When a board with its own connection
+   * is scoped, route through that connection's service so the right credentials
+   * and settings are used. Otherwise fall back to the shared router.
+   */
+  private async getScopedService(): Promise<IssueTrackerService> {
+    const board = this.scopedBoard;
+    if (board?.connectionId && this.resolveBoardService) {
+      return this.resolveBoardService(board);
+    }
+    return this.backendService;
+  }
 
   public getTreeItem(element: TreeNode): vscode.TreeItem {
     if (element instanceof GroupNode) {
@@ -217,7 +242,8 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       issues: [...this.issues],
       hasMore: this.hasMore,
       status: this.status,
-      errorMessage: this.errorMessage
+      errorMessage: this.errorMessage,
+      requiresBoardSelection: this.requiresBoardSelection()
     };
   }
 
@@ -245,6 +271,18 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   private async loadPage(reset: boolean): Promise<void> {
     const generation = ++this.requestGeneration;
     const startAt = reset ? 0 : this.issues.length;
+
+    // In connections mode, do not query an unconfigured shared service. Wait for
+    // a board (and therefore a connection) to be selected.
+    if (this.requiresBoardSelection()) {
+      this.issues = [];
+      this.hasMore = false;
+      this.status = 'ready';
+      this.errorMessage = undefined;
+      this.onDidChangeTreeDataEmitter.fire(undefined);
+      return;
+    }
+
     this.status = 'loading';
     if (reset) {
       this.errorMessage = undefined;
@@ -255,10 +293,11 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
 
     try {
       const filters = this.buildScopedFilters(this.filterStore.getFilters());
-      const page = await this.backendService.getIssues(
+      const service = await this.getScopedService();
+      const page = await service.getIssues(
         filters,
         startAt,
-        this.backendService.getDefaultPageSize()
+        service.getDefaultPageSize()
       );
 
       if (generation !== this.requestGeneration) {
@@ -309,6 +348,10 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
   }
 
   private buildEmptyNode(): MessageNode {
+    if (this.requiresBoardSelection()) {
+      return new MessageNode('empty', 'Select a board to see its issues.', 'info');
+    }
+
     const filters = this.filterStore.getFilters();
     if (filters.parentKey) {
       return new MessageNode(

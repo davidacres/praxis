@@ -85,6 +85,14 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
     webviewView.webview.options = {
       enableScripts: true
     };
+    // When the view's container is hidden (e.g. after a classic <-> work mode
+    // switch) VS Code disposes this WebviewView. Drop the stale reference so a
+    // later render()/setSelectedBoardId() does not throw "Webview is disposed".
+    webviewView.onDidDispose(() => {
+      if (this.view === webviewView) {
+        this.view = undefined;
+      }
+    });
     webviewView.webview.onDidReceiveMessage(
       message => {
         void this.handleMessage(message);

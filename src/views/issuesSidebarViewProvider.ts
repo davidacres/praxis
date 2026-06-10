@@ -1306,7 +1306,9 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     issueTypeColors?: Record<string, string>
   ): string {
     let content = '';
-    if (snapshot.status === 'error') {
+    if (snapshot.requiresBoardSelection) {
+      content = '<div class="message">Select a board to see its issues.</div>';
+    } else if (snapshot.status === 'error') {
       content = `<div class="message error">${escapeHtml(snapshot.errorMessage ?? 'Unable to load issues.')}</div>`;
     } else if ((snapshot.status === 'idle' || snapshot.status === 'loading') && snapshot.issues.length === 0) {
       content = '<div class="message">Loading issues...</div>';

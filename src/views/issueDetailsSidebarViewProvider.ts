@@ -173,6 +173,16 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     webviewView.webview.options = {
       enableScripts: true
     };
+    // When the view's container is hidden (e.g. after a classic <-> work mode
+    // switch) VS Code disposes this WebviewView. Drop the stale reference so a
+    // later render() does not throw "Webview is disposed".
+    this.viewDisposables.push(
+      webviewView.onDidDispose(() => {
+        if (this.view === webviewView) {
+          this.view = undefined;
+        }
+      })
+    );
     this.viewDisposables.push(
       webviewView.webview.onDidReceiveMessage(message => {
         void this.handleMessage(message);

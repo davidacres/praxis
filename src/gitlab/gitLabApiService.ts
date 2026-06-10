@@ -140,6 +140,76 @@ function escapeForRegExp(value: string): string {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
+/**
+ * Build a concise, user-facing error message for a failed GitLab request.
+ * GitLab returns error details in the response body, often as JSON like
+ * `{"message":"401 Unauthorized"}` or `{"error":"..."}`. Surfacing the raw body
+ * floods the UI with JSON, so extract a short message and fall back to the HTTP
+ * status when no readable detail is available.
+ */
+function formatGitLabError(status: number, statusText: string, responseText: string): string {
+  const statusSuffix = statusText ? ` ${statusText}` : '';
+  const base = `GitLab request failed (HTTP ${status}${statusSuffix})`;
+  const detail = extractGitLabErrorDetail(responseText);
+  return detail ? `${base}: ${detail}` : `${base}.`;
+}
+
+function extractGitLabErrorDetail(responseText: string): string | undefined {
+  const trimmed = responseText.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  // Try to parse a structured GitLab error body.
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === 'string') {
+      return truncateErrorDetail(parsed);
+    }
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      // GitLab uses `message` or `error`; `message` can be a string, an array,
+      // or a nested object of field -> messages.
+      const message = record.message ?? record.error ?? record.error_description;
+      const flattened = flattenGitLabMessage(message);
+      if (flattened) {
+        return truncateErrorDetail(flattened);
+      }
+    }
+  } catch {
+    // Not JSON; fall through to returning the raw (truncated) text.
+  }
+
+  return truncateErrorDetail(trimmed);
+}
+
+function flattenGitLabMessage(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim() || undefined;
+  }
+  if (Array.isArray(value)) {
+    const parts = value.map(flattenGitLabMessage).filter((part): part is string => Boolean(part));
+    return parts.length > 0 ? parts.join('; ') : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const parts: string[] = [];
+    for (const [field, fieldValue] of Object.entries(value as Record<string, unknown>)) {
+      const flattened = flattenGitLabMessage(fieldValue);
+      if (flattened) {
+        parts.push(`${field}: ${flattened}`);
+      }
+    }
+    return parts.length > 0 ? parts.join('; ') : undefined;
+  }
+  return undefined;
+}
+
+function truncateErrorDetail(value: string): string {
+  const normalized = value.replaceAll(/\s+/g, ' ').trim();
+  const MAX = 200;
+  return normalized.length > MAX ? `${normalized.slice(0, MAX - 1)}…` : normalized;
+}
+
 export function parseGitLabRemoteUrl(remoteUrl: string): GitLabProjectRemote {
   const trimmed = remoteUrl.trim();
   if (!trimmed) {
@@ -863,7 +933,7 @@ export class GitLabApiService {
 
     const responseText = await response.text();
     if (!response.ok) {
-      throw new Error(`GitLab request failed with HTTP ${response.status} (${response.statusText}). Response: ${responseText}`);
+      throw new Error(formatGitLabError(response.status, response.statusText, responseText));
     }
 
     if (!responseText.trim()) {

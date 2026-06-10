@@ -113,16 +113,34 @@ export class BoardPanelManager implements vscode.Disposable {
     this.render();
   }
 
-  public async openBoard(board: Board): Promise<void> {
+  public async openBoard(board: Board, options?: { forceRecreatePanel?: boolean }): Promise<void> {
     this.activeBoard = board;
     this.boardDetails = this.boardDetailsCache.get(board.id);
     this.loading = true;
     this.errorMessage = undefined;
     this.activeBoardService = undefined;
+    // After a classic <-> work mode transition the existing webview panel can be
+    // left in a detached/blank state (VS Code Insiders). Recreating it instead of
+    // reusing it guarantees a fresh, rendered panel. See CLAUDE.md webview rules.
+    if (options?.forceRecreatePanel) {
+      this.disposePanel();
+    }
     this.ensurePanel();
-    this.panel?.reveal(vscode.ViewColumn.Active, false);
+    // Reveal into a concrete editor column rather than ViewColumn.Active. After a
+    // mode switch the activity-bar/sidebar may be focused, so ViewColumn.Active no
+    // longer points at an editor group and the tab would not surface.
+    this.panel?.reveal(this.panel.viewColumn ?? vscode.ViewColumn.One, false);
     this.render();
     await this.refresh();
+  }
+
+  /** Dispose the current webview panel (if any) without clearing board state. */
+  private disposePanel(): void {
+    if (this.panel) {
+      const panel = this.panel;
+      this.panel = undefined;
+      panel.dispose();
+    }
   }
 
   public async refresh(): Promise<void> {
@@ -247,7 +265,10 @@ export class BoardPanelManager implements vscode.Disposable {
     this.panel = vscode.window.createWebviewPanel(
       'ticketManager.boardPanel',
       this.activeBoard ? `Board: ${this.activeBoard.name}` : 'Board',
-      vscode.ViewColumn.Active,
+      // Use a concrete editor column so the panel always lands in the editor
+      // group, even when the sidebar/activity-bar is focused (e.g. right after a
+      // classic <-> work mode switch).
+      { viewColumn: vscode.ViewColumn.One, preserveFocus: false },
       {
         enableScripts: true,
         retainContextWhenHidden: true
