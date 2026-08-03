@@ -54,7 +54,7 @@ export function resolveCopilotCliOverride(rawPath: string | undefined): Resolved
   if (KNOWN_EDITOR_LAUNCHERS.has(basename)) {
     return {
       warning:
-        'Ignoring ticketManager.ai.copilotCliPath because it points to an editor launcher rather than the GitHub Copilot SDK runtime. Clear that setting to use the SDK default runtime.'
+        'Ignoring ticketManager.ai.provider.runtimePath because it points to an editor launcher rather than the GitHub Copilot SDK runtime. Clear that setting to use the SDK default runtime.'
     };
   }
 

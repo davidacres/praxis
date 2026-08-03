@@ -11,6 +11,17 @@ import type {
   DeliveryWorkflowSettings,
   SecretConnectionValues
 } from '../types';
+import {
+  buildAiProviderSettingsFromLegacy,
+  isNestedAiProviderObject,
+  isAiProviderConfigured,
+  LEGACY_AI_SETTING_KEYS,
+  legacyAiSettingsHaveValues,
+  readFlatAiProviderSettings,
+  sanitizeAiProviderSettings,
+  type AiProviderSettings,
+  type LegacyAiSettingsSnapshot
+} from './aiProviderConfig';
 
 const CONFIG_ROOT = 'ticketManager';
 const SECRET_ENV_KEY = 'ticketManager.secretEnv';
@@ -452,36 +463,135 @@ export class AppConfigStore {
 
   // ── AI settings ─────────────────────────────────────────────────
 
+  public getAiProviderSettings(): AiProviderSettings {
+    return readFlatAiProviderSettings(vscode.workspace.getConfiguration(CONFIG_ROOT));
+  }
+
+  public async setAiProviderSettings(settings: AiProviderSettings): Promise<void> {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const target = vscode.ConfigurationTarget.Global;
+    const normalized = sanitizeAiProviderSettings(settings);
+
+    await Promise.all([
+      config.update('ai.provider', normalized.provider, target),
+      config.update('ai.credential', normalized.credential, target),
+      config.update('ai.agentName', normalized.agentName, target),
+      config.update('ai.runtimePath', normalized.runtimePath, target)
+    ]);
+    await this.clearLegacyAiSettings();
+  }
+
+  private readLegacyAiSettingsSnapshot(): LegacyAiSettingsSnapshot {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    return {
+      defaultProvider: config.get<AiProvider | 'none'>('ai.defaultProvider', 'none'),
+      openaiApiKey: config.get<string>('ai.openaiApiKey', '').trim(),
+      claudeApiKey: config.get<string>('ai.claudeApiKey', '').trim(),
+      cursorCliPath: config.get<string>('ai.cursorCliPath', '').trim(),
+      copilotEnabled: config.get<boolean>('ai.copilotEnabled', false),
+      copilotCliPath: config.get<string>('ai.copilotCliPath', '').trim(),
+      copilotAgentName: config.get<string>('ai.copilotAgentName', '').trim(),
+      claudeCliPath: config.get<string>('ai.claudeCliPath', '').trim(),
+      openaiAgentName: config.get<string>('ai.openaiAgentName', '').trim(),
+      claudeAgentName: config.get<string>('ai.claudeAgentName', '').trim()
+    };
+  }
+
+  private hasLegacyAiSettings(): boolean {
+    return legacyAiSettingsHaveValues(this.readLegacyAiSettingsSnapshot());
+  }
+
+  private async clearLegacyAiSettings(): Promise<void> {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const target = vscode.ConfigurationTarget.Global;
+    await Promise.all(
+      LEGACY_AI_SETTING_KEYS.map(async key => {
+        try {
+          await config.update(key, undefined, target);
+        } catch {
+          // Legacy keys may already be removed from package.json while still present on disk.
+        }
+      })
+    );
+  }
+
+  /** Migrate legacy AI settings into flat ticketManager.ai.* fields. */
+  public async migrateAiProviderSettings(): Promise<void> {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+    const target = vscode.ConfigurationTarget.Global;
+    const current = this.getAiProviderSettings();
+    const legacy = this.readLegacyAiSettingsSnapshot();
+    const rawProvider = config.get<unknown>('ai.provider');
+    const needsObjectMigration = isNestedAiProviderObject(rawProvider);
+
+    if (!this.hasLegacyAiSettings() && !needsObjectMigration) {
+      return;
+    }
+
+    const migrated =
+      current.provider !== 'none' && isAiProviderConfigured(current)
+        ? current
+        : buildAiProviderSettingsFromLegacy(legacy) ?? current;
+
+    const normalized = sanitizeAiProviderSettings(migrated);
+    await Promise.all([
+      config.update('ai.provider', normalized.provider, target),
+      config.update('ai.credential', normalized.credential, target),
+      config.update('ai.agentName', normalized.agentName, target),
+      config.update('ai.runtimePath', normalized.runtimePath, target)
+    ]);
+    await this.clearLegacyAiSettings();
+  }
+
   public getAiOpenaiApiKey(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiApiKey', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'openai' ? settings.credential : '';
   }
 
   public getAiClaudeApiKey(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeApiKey', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'claude' ? settings.credential : '';
   }
 
   public getAiCursorCliPath(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.cursorCliPath', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'cursor-cli' ? settings.credential : '';
   }
 
   public getAiCopilotCliPath(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotCliPath', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'copilot-cli' ? settings.runtimePath : '';
   }
 
   public getAiCopilotAgentName(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.copilotAgentName', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'copilot-cli' ? settings.agentName : '';
   }
 
   public getAiClaudeCliPath(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeCliPath', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'claude-cli' ? settings.credential : '';
   }
 
   public getAiCopilotEnabled(): boolean {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('ai.copilotEnabled', false);
+    return this.getAiProviderSettings().provider === 'copilot-cli';
   }
 
   public getAiDefaultProvider(): AiProvider | 'none' {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<AiProvider | 'none'>('ai.defaultProvider', 'none');
+    return this.getActiveAiProvider();
+  }
+
+  /** The single AI provider Ticket Manager uses for assignment, analysis, and agent tasks. */
+  public getActiveAiProvider(): AiProvider | 'none' {
+    return this.getAiProviderSettings().provider;
+  }
+
+  public isProviderCredentialsConfigured(provider: AiProvider): boolean {
+    const settings = this.getAiProviderSettings();
+    if (settings.provider !== provider) {
+      return false;
+    }
+    return isAiProviderConfigured(settings);
   }
 
   public getAiDefaultModel(): string {
@@ -512,11 +622,13 @@ export class AppConfigStore {
   }
 
   public getAiOpenaiAgentName(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.openaiAgentName', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'openai' ? settings.agentName : '';
   }
 
   public getAiClaudeAgentName(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('ai.claudeAgentName', '');
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'claude' ? settings.agentName : '';
   }
 
   public getAiMentionName(): string {
@@ -537,39 +649,31 @@ export class AppConfigStore {
   }
 
   public getConfiguredAiProviders(): AiProvider[] {
-    const providers: AiProvider[] = [];
-    if (this.getAiOpenaiApiKey().trim().length > 0) {
-      providers.push('openai');
+    const settings = this.getAiProviderSettings();
+    if (settings.provider === 'none' || !isAiProviderConfigured(settings)) {
+      return [];
     }
-    if (this.getAiClaudeApiKey().trim().length > 0) {
-      providers.push('claude');
-    }
-    if (this.getAiCursorCliPath().trim().length > 0) {
-      providers.push('cursor-cli');
-    }
-    if (this.getAiCopilotEnabled() || this.getAiCopilotCliPath().trim().length > 0) {
-      providers.push('copilot-cli');
-    }
-    if (this.getAiClaudeCliPath().trim().length > 0) {
-      providers.push('claude-cli');
-    }
-    return providers;
+    return [settings.provider];
   }
 
-  /** Returns registered AI agents that have both a name and an API key configured. */
+  /** Returns the active API-backed agent when credential is configured. */
   public getConfiguredAiAgents(): AiAgentRegistration[] {
-    const agents: AiAgentRegistration[] = [];
-    const openaiKey = this.getAiOpenaiApiKey().trim();
-    const openaiName = this.getAiOpenaiAgentName().trim();
-    if (openaiName && openaiKey) {
-      agents.push({ name: openaiName, provider: 'openai', apiKey: openaiKey });
+    const settings = this.getAiProviderSettings();
+    if (settings.provider === 'openai' && settings.credential.trim()) {
+      return [{
+        name: settings.agentName.trim() || 'OpenAI',
+        provider: 'openai',
+        apiKey: settings.credential.trim()
+      }];
     }
-    const claudeKey = this.getAiClaudeApiKey().trim();
-    const claudeName = this.getAiClaudeAgentName().trim();
-    if (claudeName && claudeKey) {
-      agents.push({ name: claudeName, provider: 'claude', apiKey: claudeKey });
+    if (settings.provider === 'claude' && settings.credential.trim()) {
+      return [{
+        name: settings.agentName.trim() || 'Claude (Anthropic)',
+        provider: 'claude',
+        apiKey: settings.credential.trim()
+      }];
     }
-    return agents;
+    return [];
   }
 
   /** Returns display names for all AI providers that have an API key configured. */

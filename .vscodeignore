@@ -1,0 +1,48 @@
+# Editor / IDE files
+.vscode/**
+.vscode-test/**
+.vscode-test.mjs
+.ticket-manager-test/**
+
+# Source / build inputs (we ship the esbuild bundle)
+src/**
+esbuild.mjs
+tsconfig.json
+scripts/**
+.esbuild/**
+
+# Build outputs we don't need inside the .vsix
+out/**/*.map
+out/**/*.tsbuildinfo
+artifacts/**
+
+# Plans / speculative docs
+docs/**
+plans/**
+.claude/**
+
+# Misc
+.gitignore
+.gitlab-ci.yml
+.git/**
+.github/**
+CLAUDE.md
+latest
+test-output.txt
+test-failures.txt
+.cache/**
+
+# Source maps and TS sources anywhere in the package
+**/*.map
+**/*.ts
+**/*.tsbuildinfo
+
+# Icons in media/ we don't surface (only marketplace-icon.png + icon.svg
+# become part of the .vsix + sidecar).
+media/activitybar-ticket.svg
+media/activitybar-jira.svg
+media/search-active-light.svg
+media/search-active-dark.svg
+media/ticket.svg
+media/ticket-manager-icons.woff
+

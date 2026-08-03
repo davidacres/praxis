@@ -1030,6 +1030,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
   private nextNodeIndex = 0;
   private currentBoardId: string | undefined;
   private currentBoardName: string | undefined;
+  private currentConnectionId: string | undefined;
 
   public constructor(
     private readonly backendService: IssueTrackerService,
@@ -1039,9 +1040,10 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     private readonly resolveIssueTypeColors?: ResolveTaskDesignerIssueTypeColors
   ) {}
 
-  public open(board?: { id?: string; name?: string }): void {
+  public open(board?: { id?: string; name?: string; connectionId?: string }): void {
     this.currentBoardId = board?.id;
     this.currentBoardName = board?.name;
+    this.currentConnectionId = board?.connectionId;
     const boardName = board?.name;
     const panelTitle = this.buildPanelTitle(boardName);
     if (this.panel) {
@@ -1083,7 +1085,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
 
     this.panel = panel;
     if (persistedState.repaired || wasEmpty) {
-      void this.workspaceState.update(TASK_DESIGNER_STATE_KEY, initialState);
+      void this.workspaceState.update(this.getStateKey(), initialState);
     }
 
     panel.onDidDispose(
@@ -1108,7 +1110,11 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return;
     }
 
-    this.open({ id: this.currentBoardId, name: this.currentBoardName });
+    this.open({
+      id: this.currentBoardId,
+      name: this.currentBoardName,
+      connectionId: this.currentConnectionId
+    });
   }
 
   public dispose(): void {
@@ -1353,7 +1359,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     const nextState = recoveredState.state;
     if (recoveredState.repaired) {
       this.syncNextNodeIndex(nextState.nodes);
-      await this.workspaceState.update(TASK_DESIGNER_STATE_KEY, nextState);
+      await this.workspaceState.update(this.getStateKey(), nextState);
       await this.panel?.webview.postMessage({
         type: 'persistCanvasStateResult',
         ok: false,
@@ -1375,7 +1381,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       return;
     }
     this.syncNextNodeIndex(nextState.nodes);
-    await this.workspaceState.update(TASK_DESIGNER_STATE_KEY, nextState);
+    await this.workspaceState.update(this.getStateKey(), nextState);
     await this.panel?.webview.postMessage({
       type: 'persistCanvasStateResult',
       ok: true
@@ -1633,7 +1639,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     };
 
     this.syncNextNodeIndex(nextState.nodes);
-    await this.workspaceState.update(TASK_DESIGNER_STATE_KEY, nextState);
+    await this.workspaceState.update(this.getStateKey(), nextState);
     await this.panel?.webview.postMessage({
       type: 'applyRecommendationResult',
       ok: true,
@@ -1740,8 +1746,22 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
   }
 
+  /**
+   * Each board gets its own Task Designer canvas, so the persisted state is
+   * scoped to the currently-open board. When a board is opened we key the state
+   * by its connection id + board id; with no board (or legacy data) we fall back
+   * to the shared key so previously-saved canvases keep loading.
+   */
+  private getStateKey(): string {
+    if (!this.currentBoardId) {
+      return TASK_DESIGNER_STATE_KEY;
+    }
+    const connectionScope = this.currentConnectionId ?? 'default';
+    return `${TASK_DESIGNER_STATE_KEY}.${connectionScope}.${this.currentBoardId}`;
+  }
+
   private getPersistedCanvasState(): PersistedTaskDesignerRecoveryResult {
-    const raw = this.workspaceState.get<unknown>(TASK_DESIGNER_STATE_KEY);
+    const raw = this.workspaceState.get<unknown>(this.getStateKey());
     return normalizePersistedStateWithRecovery(raw);
   }
 

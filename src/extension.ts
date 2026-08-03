@@ -39,6 +39,8 @@ import {
   runLocalPeerReview
 } from './ai/aiReviewService';
 import { ClaudeAgentService, ClaudeAgentLogger } from './ai/claudeAgentService';
+import { reviewTicketWithClaudeCli } from './ai/claudeCliReview';
+import { reviewTicketWithWorkspaceLanguageModel, listWorkspaceLanguageModelOptions } from './ai/workspaceLanguageModelReview';
 import {
   AI_PROVIDER_LABELS,
   describeAiConfigurationResult,
@@ -218,7 +220,12 @@ const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
     { id: 'o3', label: 'o3' }
   ],
   'cursor-cli': [],
-  'claude-cli': []
+  'claude-cli': [
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
+  ]
 };
 
 /**
@@ -229,6 +236,7 @@ const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
  * the first refresh completes.
  */
 let copilotModelCache: AiModelOption[] = [];
+let workspaceLanguageModelCache: AiModelOption[] = [];
 
 async function refreshCopilotModelCache(log?: (message: string) => void): Promise<void> {
   try {
@@ -255,7 +263,22 @@ async function refreshCopilotModelCache(log?: (message: string) => void): Promis
   }
 }
 
+async function refreshWorkspaceLanguageModelCache(log?: (message: string) => void): Promise<void> {
+  try {
+    const options = await listWorkspaceLanguageModelOptions();
+    if (options.length > 0) {
+      workspaceLanguageModelCache = options;
+      log?.(`[ai-models] Loaded ${options.length} editor language model(s) for Cursor CLI analysis.`);
+    }
+  } catch (error) {
+    log?.(`[ai-models] Failed to load editor language models: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 function getModelOptionsForProvider(provider: AiProvider): AiModelOption[] {
+  if (provider === 'cursor-cli' && workspaceLanguageModelCache.length > 0) {
+    return workspaceLanguageModelCache;
+  }
   if (provider === 'copilot-cli' && copilotModelCache.length > 0) {
     return copilotModelCache;
   }
@@ -1234,6 +1257,7 @@ export async function activate(
     context.workspaceState.get<Record<string, string>>(pollingStatusSnapshotStateKey) ?? {};
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
+  await configStore.migrateAiProviderSettings();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
   const connectionStore = new ConnectionStore(context);
   const startupPollingController = new StartupPollingController(
@@ -1444,16 +1468,17 @@ export async function activate(
   }
 
   function isCopilotSdkConfigured(): boolean {
-    const providers = configStore.getConfiguredAiProviders();
-    // Default to Copilot SDK when no agent provider is explicitly configured.
-    if (!providers.includes('copilot-cli') && !providers.includes('claude-cli')) {
-      return true;
-    }
-    return providers.includes('copilot-cli');
+    return (
+      configStore.getActiveAiProvider() === 'copilot-cli' &&
+      configStore.getConfiguredAiProviders().includes('copilot-cli')
+    );
   }
 
   function isClaudeSdkConfigured(): boolean {
-    return configStore.getConfiguredAiProviders().includes('claude-cli');
+    return (
+      configStore.getActiveAiProvider() === 'claude-cli' &&
+      configStore.getConfiguredAiProviders().includes('claude-cli')
+    );
   }
 
   function normalizeMentionName(name: string | undefined): string | undefined {
@@ -4302,8 +4327,26 @@ export async function activate(
         );
       }
 
+      if (chosen.provider === 'cursor-cli') {
+        return reviewTicketWithWorkspaceLanguageModel(
+          issueForAnalysis,
+          chosen.agentName ?? chosen.label,
+          reviewOptions
+        );
+      }
+
+      if (chosen.provider === 'claude-cli') {
+        return reviewTicketWithClaudeCli(
+          issueForAnalysis,
+          chosen.credential ?? configStore.getAiClaudeCliPath().trim(),
+          chosen.agentName ?? chosen.label,
+          repositoryContext.workingDirectory ?? workingDirectory,
+          reviewOptions
+        );
+      }
+
       throw new Error(
-        `${AI_PROVIDER_LABELS[chosen.provider] ?? chosen.provider} is not supported in the analysis chat. Use OpenAI, Claude, or GitHub Copilot SDK.`
+        `${AI_PROVIDER_LABELS[chosen.provider] ?? chosen.provider} is not supported in the analysis chat.`
       );
     }
   );
@@ -5998,6 +6041,7 @@ export async function activate(
       issueDetailPanelManager.setKnownModels(copilotModelCache);
     }
   });
+  void refreshWorkspaceLanguageModelCache(message => outputChannel.appendLine(message));
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
     filterStore,

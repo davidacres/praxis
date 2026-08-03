@@ -65,17 +65,14 @@ This file documents the settings currently contributed by the extension.
 
 | Setting | Type | Purpose |
 | --- | --- | --- |
-| `ticketManager.ai.openaiApiKey` | string | OpenAI API key. |
-| `ticketManager.ai.claudeApiKey` | string | Claude/Anthropic API key. |
-| `ticketManager.ai.cursorCliPath` | string | Path to the Cursor CLI executable. |
-| `ticketManager.ai.copilotEnabled` | boolean | Enables GitHub Copilot SDK-powered features. |
-| `ticketManager.ai.copilotCliPath` | string | Legacy compatibility override for Copilot runtime. |
-| `ticketManager.ai.copilotAgentName` | string | Display/@mention name for the Copilot agent. |
-| `ticketManager.ai.claudeCliPath` | string | Path to the Claude Code CLI executable. |
-| `ticketManager.ai.defaultProvider` | string | Default AI provider used for assignments. |
+| `ticketManager.ai.provider` | string | Active AI provider (`none`, `openai`, `claude`, `cursor-cli`, `copilot-cli`, `claude-cli`). |
+| `ticketManager.ai.credential` | string | API key or CLI path for the active provider. |
+| `ticketManager.ai.agentName` | string | Display and @mention name for the active provider. |
+| `ticketManager.ai.runtimePath` | string | Optional GitHub Copilot SDK runtime override. |
 | `ticketManager.ai.defaultModel` | string | Default model recorded on newly created Live Folder tickets. |
-| `ticketManager.ai.openaiAgentName` | string | Friendly display name for OpenAI assignment. |
-| `ticketManager.ai.claudeAgentName` | string | Friendly display name for Claude assignment. |
+| `ticketManager.ai.analysisEnabled` | boolean | Enables the per-issue analysis gate before AI assignment. |
+| `ticketManager.ai.analysisDefaultPrompt` | string | Required default prompt for the Analysis Window. |
+| `ticketManager.ai.analysisDefaultModel` | string | Default model for the Analysis Window. |
 | `ticketManager.ai.verboseActivityFeed` | boolean | Shows lower-level AI session activity events. |
 
 ## AI delivery workflow settings
