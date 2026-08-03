@@ -13,6 +13,13 @@ artifacts/
 # VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/
 
+# Local development scratch files (debug runs, installed-editor lister,
+# ad-hoc shell outputs from reproducing an issue). Never commit these.
+loc.txt
+test-output.txt
+test-failures.txt
+test-*.txt
+
 # Test coverage
 coverage/
 .nyc_output/
