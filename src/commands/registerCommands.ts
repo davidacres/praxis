@@ -1534,7 +1534,9 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
     vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
       const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
-      deps.taskDesignerPanelManager.open(board ? { id: board.id, name: board.name } : undefined);
+      deps.taskDesignerPanelManager.open(
+        board ? { id: board.id, name: board.name, connectionId: board.connectionId } : undefined
+      );
     }),
 
     vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {

@@ -73,11 +73,11 @@
             "displayName": "My Board"
         }
     ],
-    "ticketManager.boardsSidebarPreviewMode": "work",
+    "ticketManager.boardsSidebarPreviewMode": "classic",
+    "ticketManager.workModeEnabled": false,
     "ticketManager.backendMode": "jiracloud",
     "ticketManager.liveFolderPath": "",
     "ticketManager.liveFolderAllowIssueCreation": true,
     "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": "",
-    "ticketManager.workModeEnabled": false
+    "ticketManager.liveFolderProjectName": ""
 }

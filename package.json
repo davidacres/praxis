@@ -1,29 +1,20 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.0.50",
+  "version": "0.1.0",
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
   "license": "MIT",
+  "homepage": "https://git.example.com/example/software/ai/tools/ticket-manager-extension",
   "repository": {
     "type": "git",
     "url": "https://git.example.com/example/software/ai/tools/ticket-manager-extension.git"
   },
-  "preview": true,
   "pricing": "Free",
   "type": "commonjs",
   "main": "./out/extension.js",
   "icon": "media/marketplace-icon.png",
-  "files": [
-    "out/extension.js",
-    "media/**",
-    "JiraPollingService/appsettings.json",
-    "JiraPollingService/node/polling.js",
-    "node_modules/@github/copilot-win32-x64/package.json",
-    "node_modules/@github/copilot-win32-x64/copilot.exe",
-    "README.md",
-    "LICENSE"
-  ],
+  "markdown": "EXTENSION.md",
   "engines": {
     "vscode": "^1.105.0"
   },
@@ -52,6 +43,9 @@
     "watch:esbuild": "node esbuild.mjs --watch",
     "watch:tsc": "tsc --noEmit --watch -p ./",
     "package": "npm run check-types && node esbuild.mjs --production",
+    "build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build.ps1",
+    "publish:gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-gitlab.ps1",
+    "install:from-gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-from-gitlab.ps1",
     "check-types": "tsc --noEmit -p ./",
     "pretest": "rimraf out && tsc -p ./",
     "test": "vscode-test --label integration",
@@ -71,6 +65,15 @@
     "docs:commands": "node ./scripts/generate-command-reference.cjs"
   },
   "contributes": {
+    "icons": {
+      "ticket-manager-ticket": {
+        "description": "Ticket Manager ticket icon",
+        "default": {
+          "fontPath": "media/ticket-manager-icons.woff",
+          "fontCharacter": "\\ea01"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -1179,61 +1182,41 @@
           "default": "",
           "markdownDescription": "Accent color for the small backend icon beside board names when **Live Folder** mode is active. Use hex (e.g. `#f59e0b`). Leave empty for the built-in default."
         },
-        "ticketManager.ai.openaiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "OpenAI API key for AI agent assignment."
-        },
-        "ticketManager.ai.claudeApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Claude/Anthropic API key for AI agent assignment."
-        },
-        "ticketManager.ai.cursorCliPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the Cursor CLI executable for AI agent assignment."
-        },
-        "ticketManager.ai.copilotEnabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable the GitHub Copilot SDK for AI reviews, in-app @copilot comment replies, and Copilot agent tasks."
-        },
-        "ticketManager.ai.copilotCliPath": {
-          "type": "string",
-          "default": "",
-          "description": "Legacy compatibility override for the runtime used by the GitHub Copilot SDK. Leave empty unless you are debugging a local Copilot SDK installation."
-        },
-        "ticketManager.ai.copilotAgentName": {
-          "type": "string",
-          "default": "",
-          "description": "Display and @mention name for the GitHub Copilot agent. Leave empty to use the built-in GitHub Copilot SDK label."
-        },
-        "ticketManager.ai.claudeCliPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the Claude Code CLI executable for AI agent assignment."
-        },
-        "ticketManager.ai.defaultProvider": {
+        "ticketManager.ai.provider": {
           "type": "string",
           "default": "none",
           "enum": [
+            "none",
             "openai",
             "claude",
             "cursor-cli",
             "copilot-cli",
-            "claude-cli",
-            "none"
+            "claude-cli"
           ],
           "enumDescriptions": [
-            "Use OpenAI as the default AI provider.",
-            "Use Claude/Anthropic as the default AI provider.",
-            "Use Cursor CLI as the default AI provider.",
-            "Use the GitHub Copilot SDK as the default AI provider.",
-            "Use Claude Code CLI as the default AI provider.",
-            "No default AI provider."
+            "No active AI provider.",
+            "Use OpenAI.",
+            "Use Claude/Anthropic.",
+            "Use Cursor CLI.",
+            "Use the GitHub Copilot SDK.",
+            "Use Claude Code CLI."
           ],
-          "description": "Default AI provider to use when assigning tickets to an AI agent."
+          "description": "The single active AI provider Ticket Manager uses."
+        },
+        "ticketManager.ai.credential": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI/Claude API key or CLI executable path for the active provider. Not required for GitHub Copilot SDK."
+        },
+        "ticketManager.ai.agentName": {
+          "type": "string",
+          "default": "",
+          "description": "Display and @mention name for the active AI provider. Leave empty to use the provider default label."
+        },
+        "ticketManager.ai.runtimePath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional GitHub Copilot SDK runtime override for debugging."
         },
         "ticketManager.ai.defaultModel": {
           "type": "string",
@@ -1258,16 +1241,6 @@
           "default": "",
           "scope": "window",
           "description": "Default model used by the Analysis Window. Leave empty to fall back to ticketManager.ai.defaultModel."
-        },
-        "ticketManager.ai.openaiAgentName": {
-          "type": "string",
-          "default": "",
-          "description": "Display name for the OpenAI agent (e.g. 'GPT-4 Reviewer'). When set, this name appears as an assignee option and is used when assigning tickets to the OpenAI agent."
-        },
-        "ticketManager.ai.claudeAgentName": {
-          "type": "string",
-          "default": "",
-          "description": "Display name for the Claude agent (e.g. 'Claude AI'). When set, this name appears as an assignee option and is used when assigning tickets to the Claude agent."
         },
         "ticketManager.ai.verboseActivityFeed": {
           "type": "boolean",

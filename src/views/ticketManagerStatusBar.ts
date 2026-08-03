@@ -9,13 +9,18 @@ import type { AiProvider, BackendMode, ConnectionCheck } from '../types';
 
 type StatusTone = 'ok' | 'warning' | 'error' | 'loading';
 
+/** Contributed product icon id from package.json → contributes.icons. */
+export const TICKET_MANAGER_STATUS_BAR_ICON = 'ticket-manager-ticket';
+
 export interface TicketManagerStatusSnapshot {
   backendMode?: BackendMode;
   /** Human-readable label of the active connection (when multi-connection mode is active). */
   connectionLabel?: string;
+  /** Number of configured ticket providers (connections). */
+  providerCount?: number;
   connection?: ConnectionCheck;
   aiProviders: AiProvider[];
-  defaultProvider: AiProvider | 'none';
+  activeProvider: AiProvider | 'none';
   activeSessionCount?: number;
   approvalSessionCount?: number;
   pausedSessionCount?: number;
@@ -28,6 +33,7 @@ export interface TicketManagerStatusSnapshot {
 
 export interface TicketManagerStatusPresentation {
   text: string;
+  accessibilityLabel: string;
   tooltipMarkdown: string;
   tone: StatusTone;
 }
@@ -59,8 +65,23 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
   }
 }
 
-function getAiProviderLabels(providers: AiProvider[]): string[] {
-  return providers.map(provider => AI_PROVIDER_LABELS[provider] ?? provider);
+function getProviderSummary(snapshot: TicketManagerStatusSnapshot): {
+  shortLabel: string;
+  detailLabel: string;
+} {
+  const count = snapshot.providerCount ?? 0;
+  if (count === 0) {
+    return {
+      shortLabel: 'no providers',
+      detailLabel: 'No providers configured.'
+    };
+  }
+
+  const noun = count === 1 ? 'provider' : 'providers';
+  return {
+    shortLabel: `${count} ${noun}`,
+    detailLabel: `Connected to ${count} ${noun}.`
+  };
 }
 
 function getAiSummary(snapshot: TicketManagerStatusSnapshot): {
@@ -68,41 +89,29 @@ function getAiSummary(snapshot: TicketManagerStatusSnapshot): {
   detailLabel: string;
   tone: 'ok' | 'warning';
 } {
-  const labels = getAiProviderLabels(snapshot.aiProviders);
-  if (labels.length === 0) {
-    return {
-      shortLabel: 'none',
-      detailLabel: 'No AI provider configured.',
-      tone: 'warning'
-    };
-  }
+  const active = snapshot.activeProvider;
+  const activeLabel = active !== 'none' ? AI_PROVIDER_LABELS[active] ?? active : undefined;
 
-  if (
-    snapshot.defaultProvider !== 'none' &&
-    !snapshot.aiProviders.includes(snapshot.defaultProvider)
-  ) {
+  if (snapshot.aiProviders.length === 1 && activeLabel) {
     return {
-      shortLabel: `${labels.length} configured`,
-      detailLabel: `Default provider ${AI_PROVIDER_LABELS[snapshot.defaultProvider] ?? snapshot.defaultProvider} is selected but not configured.`,
-      tone: 'warning'
-    };
-  }
-
-  if (snapshot.defaultProvider !== 'none') {
-    return {
-      shortLabel: AI_PROVIDER_LABELS[snapshot.defaultProvider] ?? snapshot.defaultProvider,
-      detailLabel: `Default provider: ${AI_PROVIDER_LABELS[snapshot.defaultProvider] ?? snapshot.defaultProvider}. Configured: ${labels.join(', ')}.`,
+      shortLabel: activeLabel,
+      detailLabel: `Configured with ${activeLabel}.`,
       tone: 'ok'
     };
   }
 
+  if (active !== 'none' && activeLabel) {
+    return {
+      shortLabel: activeLabel,
+      detailLabel: `${activeLabel} is selected but not configured yet.`,
+      tone: 'warning'
+    };
+  }
+
   return {
-    shortLabel: labels.length === 1 ? labels[0] : `${labels.length} configured`,
-    detailLabel:
-      labels.length === 1
-        ? `Configured provider: ${labels[0]}.`
-        : `Configured providers: ${labels.join(', ')}.`,
-    tone: 'ok'
+    shortLabel: 'no AI',
+    detailLabel: 'AI not configured.',
+    tone: 'warning'
   };
 }
 
@@ -182,10 +191,11 @@ function getAnalysisSummary(snapshot: TicketManagerStatusSnapshot): {
 export function buildTicketManagerStatusPresentation(
   snapshot: TicketManagerStatusSnapshot
 ): TicketManagerStatusPresentation {
-  const backendLabel = snapshot.connectionLabel ?? getBackendModeLabel(snapshot.backendMode);
+  const providerSummary = getProviderSummary(snapshot);
   const aiSummary = getAiSummary(snapshot);
   const sessionAttention = getSessionAttentionSummary(snapshot);
   const analysisSummary = getAnalysisSummary(snapshot);
+  const providerCount = snapshot.providerCount ?? 0;
 
   let tone: StatusTone = 'ok';
   if (snapshot.isChecking) {
@@ -193,7 +203,7 @@ export function buildTicketManagerStatusPresentation(
   } else if (snapshot.lastError || snapshot.connection?.status === 'error') {
     tone = 'error';
   } else if (
-    !snapshot.backendMode ||
+    providerCount === 0 ||
     snapshot.connection?.status === 'warning' ||
     aiSummary.tone === 'warning' ||
     analysisSummary.tone === 'warning' ||
@@ -202,36 +212,24 @@ export function buildTicketManagerStatusPresentation(
     tone = 'warning';
   }
 
-  const icon =
+  const toneIcon =
     tone === 'loading'
       ? '$(sync~spin)'
       : tone === 'error'
         ? '$(error)'
         : tone === 'warning'
           ? '$(warning)'
-          : '$(check)';
+          : undefined;
 
-  const connectionSummary = snapshot.isChecking
-    ? 'Checking connection…'
-    : snapshot.connection?.message ??
-      (snapshot.backendMode ? 'Connection status not checked yet.' : 'Choose a backend to get started.');
+  const providerLine = snapshot.isChecking
+    ? 'Checking connections…'
+    : providerSummary.detailLabel;
 
   const tooltipLines = [
     '**Ticket Manager**',
     '',
-    `Backend: **${escapeMarkdown(backendLabel)}**`,
-    `Connection: ${escapeMarkdown(connectionSummary)}`,
-    snapshot.connection?.serverName
-      ? `Server: ${escapeMarkdown(snapshot.connection.serverName)}`
-      : undefined,
-    snapshot.connection?.projectCount !== undefined
-      ? `Projects: ${snapshot.connection.projectCount}`
-      : undefined,
-    snapshot.connection?.toolCount !== undefined
-      ? `Tools: ${snapshot.connection.toolCount}`
-      : undefined,
-    '',
-    `AI: ${escapeMarkdown(aiSummary.detailLabel)}`,
+    escapeMarkdown(providerLine),
+    escapeMarkdown(aiSummary.detailLabel),
     `Analysis: ${escapeMarkdown(analysisSummary.detailLabel)}`,
     ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
@@ -243,8 +241,14 @@ export function buildTicketManagerStatusPresentation(
     ? ` • ${sessionAttention.shortLabel}`
     : '';
 
+  const accessibilityLabel = `${providerSummary.shortLabel} • ${aiSummary.shortLabel} • Analysis ${analysisSummary.shortLabel}${sessionAttentionSuffix}`;
+  const text = toneIcon
+    ? `$(${TICKET_MANAGER_STATUS_BAR_ICON}) ${toneIcon}`
+    : `$(${TICKET_MANAGER_STATUS_BAR_ICON})`;
+
   return {
-    text: `${icon} Ticket Manager: ${backendLabel} • AI ${aiSummary.shortLabel} • Analysis ${analysisSummary.shortLabel}${sessionAttentionSuffix}`,
+    text,
+    accessibilityLabel,
     tooltipMarkdown: tooltipLines.join('\n'),
     tone
   };
@@ -256,7 +260,7 @@ export class TicketManagerStatusBar implements vscode.Disposable {
   private refreshVersion = 0;
   private snapshot: TicketManagerStatusSnapshot = {
     aiProviders: [],
-    defaultProvider: 'none',
+    activeProvider: 'none',
     isChecking: false
   };
 
@@ -355,8 +359,9 @@ export class TicketManagerStatusBar implements vscode.Disposable {
   private syncStaticState(): void {
     this.snapshot.backendMode = this.configStore.getBackendMode();
     this.snapshot.connectionLabel = this.resolveActiveConnectionLabel();
+    this.snapshot.providerCount = this.connectionStore?.getConnections().length ?? 0;
     this.snapshot.aiProviders = this.configStore.getConfiguredAiProviders();
-    this.snapshot.defaultProvider = this.configStore.getAiDefaultProvider();
+    this.snapshot.activeProvider = this.configStore.getActiveAiProvider();
     this.snapshot.analysisEnabled = this.configStore.getAiAnalysisEnabled();
     this.snapshot.analysisPromptConfigured =
       this.configStore.getAiAnalysisDefaultPrompt().trim().length > 0;
@@ -421,6 +426,9 @@ export class TicketManagerStatusBar implements vscode.Disposable {
 
     this.item.text = presentation.text;
     this.item.tooltip = tooltip;
+    this.item.accessibilityInformation = {
+      label: `Ticket Manager: ${presentation.accessibilityLabel}`
+    };
     this.item.backgroundColor =
       presentation.tone === 'error'
         ? new vscode.ThemeColor('statusBarItem.errorBackground')

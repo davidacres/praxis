@@ -108,7 +108,7 @@ const COPILOT_REPLY_COMMENT_LIMIT = 8;
 const COPILOT_PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
 const COPILOT_STREAM_IDLE_TIMEOUT_MS = 90 * 1000;
 
-interface ReviewStreamOptions {
+export interface ReviewStreamOptions {
   onUpdate?: (content: string) => void;
   model?: string;
   systemPrompt?: string;

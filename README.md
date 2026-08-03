@@ -112,7 +112,8 @@ Important settings include:
 - `ticketManager.backendMode`
 - `ticketManager.boardsSidebarPreviewMode`
 - `ticketManager.jiraPolling.enabled`
-- `ticketManager.ai.defaultProvider`
+- `ticketManager.ai.provider`
+- `ticketManager.ai.agentName`
 - `ticketManager.ai.deliveryWorkflowEnabled`
 
 ## Getting started

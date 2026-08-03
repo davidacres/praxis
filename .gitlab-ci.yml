@@ -1,0 +1,141 @@
+# Package Registry: the .vsix is published as a Generic package named
+# `ticket-manager` under Deploy → Package Registry. Publish runs automatically
+# on version tags (v0.1.0 or 0.1.0) and can be triggered manually from other
+# pipelines.
+
+stages:
+  - test
+  - package
+  - publish
+  - secret-detection
+
+variables:
+  SECRET_DETECTION_ENABLED: 'true'
+  # Public npm for vsce / TypeScript / esbuild when the org registry cannot resolve them.
+  NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/'
+  PACKAGE_NAME: ticket-manager
+
+secret_detection:
+  stage: secret-detection
+
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+# --- Unit tests ------------------------------------------------------------
+test:
+  stage: test
+  image: node:20-bookworm
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  script:
+    - npm ci || npm install
+    - npm run check-types
+    - npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# --- Build .vsix -----------------------------------------------------------
+package:vsix:
+  stage: package
+  image: node:20-bookworm
+  needs:
+    - job: test
+      optional: true
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  script:
+    - npm ci || npm install
+    - |
+      set -euo pipefail
+      VERSION="$(node -p "require('./package.json').version")"
+      NAME="$(node -p "require('./package.json').name")"
+      mkdir -p artifacts
+      VSIX="artifacts/${NAME}-${VERSION}.vsix"
+      npx --yes @vscode/vsce package \
+        --no-dependencies \
+        --skip-license \
+        --allow-missing-repository \
+        --out "$VSIX"
+      cp scripts/install-dist.ps1 artifacts/install.ps1
+      cat > artifacts/README.txt <<EOF
+Ticket Manager ${VERSION}
+========================
+
+This package contains:
+
+  - ${NAME}-${VERSION}.vsix   (the extension)
+  - install.ps1                 (installer for VS Code / Cursor)
+
+To install on Windows (PowerShell), download both files into the same folder, then:
+
+  pwsh ./install.ps1
+
+That installs into detected editors (VS Code, VS Code Insiders, Cursor).
+Then fully restart your editor(s).
+
+Do not double-click the .vsix (that opens Visual Studio's installer and fails).
+EOF
+      echo "Packaged:"
+      ls -la artifacts/
+  artifacts:
+    name: "ticket-manager-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - artifacts/*.vsix
+      - artifacts/install.ps1
+      - artifacts/README.txt
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
+
+# --- Publish .vsix to GitLab Generic Package Registry ----------------------
+publish:gitlab-package:
+  stage: publish
+  image: curlimages/curl:8.5.0
+  needs:
+    - job: package:vsix
+      artifacts: true
+  script:
+    - |
+      set -euo pipefail
+      VSIX="$(ls artifacts/*.vsix | head -n 1)"
+      FILE_NAME="$(basename "$VSIX")"
+      VERSION="$(echo "$FILE_NAME" | sed -E "s/^${PACKAGE_NAME}-([0-9].*)\\.vsix$/\\1/")"
+      if [ -z "$VERSION" ] || [ "$VERSION" = "$FILE_NAME" ]; then
+        echo "Could not parse version from $FILE_NAME" >&2
+        exit 1
+      fi
+      BASE="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${VERSION}"
+      echo "Uploading ${FILE_NAME} → ${PACKAGE_NAME}@${VERSION}"
+      curl --fail-with-body --location \
+        --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --upload-file "$VSIX" \
+        "${BASE}/${FILE_NAME}"
+      echo
+      echo "Published. Package Registry → ${PACKAGE_NAME} → ${VERSION}"
+      echo "  ${CI_PROJECT_URL}/-/packages"
+      echo
+      echo "Local: run pwsh ./scripts/build.ps1 + pwsh ./scripts/publish-gitlab.ps1 to upload the store-side metadata sidecars (.json/.svg/.md)."
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+/
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
