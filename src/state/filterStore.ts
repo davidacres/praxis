@@ -15,7 +15,7 @@ const DEFAULT_FILTERS: IssueFilters = {
   grouping: 'none'
 };
 
-export function shouldAdoptJiraCloudEpicIssueScope(filters: IssueFilters): boolean {
+export function shouldAdoptJiraMcpEpicIssueScope(filters: IssueFilters): boolean {
   return (
     filters.assigneeMode === 'me' &&
     filters.projectKeys.length === 0 &&

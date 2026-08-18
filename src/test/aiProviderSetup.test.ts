@@ -7,40 +7,26 @@ import {
 } from '../ai/aiProviderSetup';
 
 suite('AI provider setup', () => {
-  test('includes GitHub Copilot SDK in setup options', () => {
+  test('includes only Vercel AI Gateway and Disable AI', () => {
     const options = buildAiProviderSetupOptions();
-    const copilotOption = options.find(option => option.provider === 'copilot-cli');
-
-    assert.ok(copilotOption);
-    assert.strictEqual(copilotOption?.label, 'GitHub Copilot SDK');
-    assert.ok(copilotOption?.detail?.includes('existing GitHub Copilot authentication'));
-    assert.ok(!copilotOption?.detail?.toLowerCase().includes('cli path'));
-    assert.strictEqual(AI_PROVIDER_LABELS['copilot-cli'], 'GitHub Copilot SDK');
-  });
-
-  test('includes Claude Code CLI in setup options', () => {
-    const options = buildAiProviderSetupOptions();
-    const claudeCliOption = options.find(option => option.provider === 'claude-cli');
-
-    assert.ok(claudeCliOption);
-    assert.strictEqual(claudeCliOption?.label, 'Claude Code CLI');
-    assert.ok(claudeCliOption?.detail?.includes('Claude Code CLI'));
-    assert.strictEqual(AI_PROVIDER_LABELS['claude-cli'], 'Claude Code CLI');
+    assert.deepStrictEqual(
+      options.map(option => option.provider),
+      ['vercel-gateway', 'none']
+    );
+    assert.strictEqual(AI_PROVIDER_LABELS['vercel-gateway'], 'Vercel AI Gateway');
+    assert.ok(options[0]?.detail?.toLowerCase().includes('gateway'));
   });
 
   test('sorts configured options by default provider', () => {
     const options: Array<{ provider: AiProvider; label: string }> = [
-      { provider: 'openai', label: 'OpenAI' },
-      { provider: 'claude', label: 'Claude' },
-      { provider: 'copilot-cli', label: 'GitHub Copilot SDK' }
+      { provider: 'vercel-gateway', label: 'Vercel AI Gateway' }
     ];
 
-    const sorted = sortAiOptionsByDefaultProvider(options, 'copilot-cli');
+    const sorted = sortAiOptionsByDefaultProvider(options, 'vercel-gateway');
 
-    assert.deepStrictEqual(sorted.map(option => option.provider), [
-      'copilot-cli',
-      'openai',
-      'claude'
-    ]);
+    assert.deepStrictEqual(
+      sorted.map(option => option.provider),
+      ['vercel-gateway']
+    );
   });
 });

@@ -123,7 +123,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
   private view?: vscode.WebviewView;
   private readonly disposables: vscode.Disposable[] = [];
   private viewDisposables: vscode.Disposable[] = [];
-  private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
+  private commentPlaceholder = 'Write a comment (mention @agent for a reply)';
   private aiAssignOptions: SidebarAiAssignOption[] = [];
 
   public constructor(
@@ -308,7 +308,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     if (type === 'delegateToCopilot') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.delegateToCopilot', issueKey);
+        await vscode.commands.executeCommand('ticketManager.delegateToAiAgent', issueKey);
       }
     }
 
@@ -1621,11 +1621,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     const hasAiProviders = agentNames.length > 0;
 
     const providerLabels: Record<string, string> = {
-      'openai': 'OpenAI',
-      'claude': 'Claude',
-      'cursor-cli': 'Cursor CLI',
-      'copilot-cli': 'GitHub Copilot SDK',
-      'claude-cli': 'Claude Code CLI'
+      'vercel-gateway': 'Vercel AI Gateway'
     };
 
     const statusTokenMap: Record<string, string> = {
@@ -1726,7 +1722,7 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
     const isTerminal = record.state === 'completed' || record.state === 'failed' || record.state === 'aborted';
 
     return `<div class="card">
-      <div class="section-title">Copilot Agent</div>
+      <div class="section-title">AI Agent</div>
       <div class="detail-row">
         <div class="detail-label">Goal</div>
         <div class="detail-value" title="${escapeHtml(record.taskDefinition.goal)}">${escapeHtml(record.taskDefinition.goal.length > 60 ? record.taskDefinition.goal.slice(0, 60) + '…' : record.taskDefinition.goal)}</div>

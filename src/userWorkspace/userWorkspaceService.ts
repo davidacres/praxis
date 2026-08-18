@@ -120,10 +120,11 @@ export class UserWorkspaceService implements IssueTrackerService {
   public async checkConnection(): Promise<ConnectionCheck> {
     const boards = this.userWorkspaceStore.getBoards();
     if (boards.length === 0) {
+      // Empty is a valid first-run state — not a failed connection.
       return {
-        status: 'warning',
+        status: 'ok',
         message:
-          'User Workspace is configured, but no boards have been added yet. Use Create Board to add a plans folder.',
+          'User Workspace connection is ready. Next: use Create Board (+) in the Boards view to add a plans folder.',
         toolCount: 0,
         projectCount: 0
       };

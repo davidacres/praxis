@@ -78,7 +78,7 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
       defaultLabel: 'Feature',
       helperText: `${normalizeIssueTypeLabel(issueType)} items in ${mode === 'userworkspace' ? 'User Workspace' : 'Live Folder'} mode must belong to a Feature.`,
       emptyText: 'No feature selected.',
-      placeholder: 'Enter a feature key'
+      placeholder: 'Select a feature or type a new name'
     };
   }
 

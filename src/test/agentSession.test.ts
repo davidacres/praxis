@@ -68,10 +68,15 @@ suite('AiSessionManager — Agent Sessions', () => {
   });
 
   test('createAgentSession stores the runtime provider when supplied', () => {
-    const record = manager.createAgentSession('ISSUE-CLAUDE', 'session-claude', taskDef, 'claude-cli');
+    const record = manager.createAgentSession(
+      'ISSUE-GATEWAY',
+      'session-gateway',
+      taskDef,
+      'vercel-gateway'
+    );
 
-    assert.strictEqual(record.provider, 'claude-cli');
-    assert.strictEqual(manager.getAgentSession('ISSUE-CLAUDE')?.provider, 'claude-cli');
+    assert.strictEqual(record.provider, 'vercel-gateway');
+    assert.strictEqual(manager.getAgentSession('ISSUE-GATEWAY')?.provider, 'vercel-gateway');
   });
 
   test('getAgentSession returns created session', () => {
@@ -133,7 +138,7 @@ suite('AiSessionManager — Agent Sessions', () => {
   });
 
   test('updateAgentState keeps paused sessions active and not completed', () => {
-    manager.createSession('AI-PAUSE', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createSession('AI-PAUSE', 'vercel-gateway', 'Vercel AI Gateway');
     manager.createAgentSession('AI-PAUSE', 's1', taskDef);
 
     manager.updateAgentState('AI-PAUSE', 'paused');
@@ -374,7 +379,7 @@ suite('AiSessionManager — Agent Sessions', () => {
       changedLabel = event.session?.label;
     });
 
-    const session = manager.createSession('AI-1', 'openai', 'Planner Bot');
+    const session = manager.createSession('AI-1', 'vercel-gateway', 'Planner Bot');
 
     assert.strictEqual(session.label, 'Planner Bot');
     assert.strictEqual(manager.getSession('AI-1')?.label, 'Planner Bot');
@@ -384,7 +389,7 @@ suite('AiSessionManager — Agent Sessions', () => {
   });
 
   test('agent terminal states update linked AI assignment status', () => {
-    manager.createSession('AI-2', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createSession('AI-2', 'vercel-gateway', 'Vercel AI Gateway');
     manager.createAgentSession('AI-2', 'agent-1', taskDef);
 
     manager.updateAgentState('AI-2', 'executing');
@@ -393,7 +398,7 @@ suite('AiSessionManager — Agent Sessions', () => {
     manager.updateAgentState('AI-2', 'completed');
     assert.strictEqual(manager.getSession('AI-2')?.status, 'completed');
 
-    manager.createSession('AI-3', 'copilot-cli', 'GitHub Copilot SDK');
+    manager.createSession('AI-3', 'vercel-gateway', 'Vercel AI Gateway');
     manager.createAgentSession('AI-3', 'agent-2', taskDef);
     manager.updateAgentState('AI-3', 'failed');
     assert.strictEqual(manager.getSession('AI-3')?.status, 'failed');

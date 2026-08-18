@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as util from 'node:util';
 import type { OutputChannel } from 'vscode';
 import type { IssueDetails } from '../types';
-import { buildWorktreeName } from '../ai/copilotAgentService';
+import { buildWorktreeName } from '../ai/agentPrompt';
 
 const execFile = util.promisify(execFileCallback);
 

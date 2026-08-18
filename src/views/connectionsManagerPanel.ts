@@ -131,8 +131,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     addCustomJqlBoard: () => this.handleAddCustomJqlBoard(),
     saveBoardSelection: () => this.handleSaveBoardSelection(),
     refreshBoardPicker: () => this.handleRefreshBoardPicker(),
-    connectJiraCloud: async () => this.handleConnectJiraCloud(),
-    disconnectJiraCloud: async () => this.handleDisconnectJiraCloud()
+    createUserWorkspaceBoard: async () => this.handleCreateUserWorkspaceBoard()
   };
 
   private handleNavigateList(): void {
@@ -145,47 +144,22 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
   private handleAddConnection(): void {
     this.state.view = 'connection';
     this.state.connectionForm = createNewConnectionForm();
-    this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
+    this.applyJiraMcpConnectionDefaults(this.state.connectionForm);
     this.rerender();
   }
 
-  private async handleConnectJiraCloud(): Promise<void> {
+  private async handleCreateUserWorkspaceBoard(): Promise<void> {
     const form = this.state.connectionForm;
-    if (!form || form.mode !== 'jiracloud') {
-      return;
-    }
-
-    try {
-      const config = vscode.workspace.getConfiguration('ticketManager');
-      const target = this.configTarget();
-      const clientId = typeof form.settings.clientId === 'string' ? form.settings.clientId.trim() : '';
-      await config.update('jiraOAuthClientId', clientId, target);
-      await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
-      this.applyJiraCloudWorkspaceDefaults(form);
-      this.rerender();
-    } catch (error) {
-      vscode.window.showErrorMessage(
-        `Failed to connect Jira Cloud: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  private async handleDisconnectJiraCloud(): Promise<void> {
-    try {
-      await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
-      if (this.state.connectionForm?.mode === 'jiracloud') {
-        this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
-      } else {
-        this.state.view = 'list';
-        this.state.connectionForm = undefined;
-        this.state.boardPicker = undefined;
+    if (form && !form.connectionId) {
+      await this.saveCurrentConnectionForm();
+      if (form.saveError || !form.connectionId) {
+        this.rerender();
+        return;
       }
-      this.rerender();
-    } catch (error) {
-      vscode.window.showErrorMessage(
-        `Failed to disconnect Jira Cloud: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+    // Leave the manager so Create Board input boxes keep focus.
+    this.panel?.dispose();
+    await vscode.commands.executeCommand('ticketManager.createBoard');
   }
 
   private async handleEditConnection(message: Record<string, unknown>): Promise<void> {
@@ -194,7 +168,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     if (connection) {
       this.state.view = 'connection';
       this.state.connectionForm = await this.buildEditForm(connection);
-      this.applyJiraCloudWorkspaceDefaults(this.state.connectionForm);
+      this.applyJiraMcpConnectionDefaults(this.state.connectionForm);
       this.rerender();
     }
   }
@@ -289,7 +263,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
 
     try {
       const boardName = await vscode.window.showInputBox({
-        title: 'Custom Jira Cloud Board',
+        title: 'Custom Jira MCP Board',
         prompt: 'Display name for this local JQL board',
         value: 'Custom JQL Board',
         ignoreFocusOut: true,
@@ -300,7 +274,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       }
 
       const jql = await vscode.window.showInputBox({
-        title: 'Custom Jira Cloud Board',
+        title: 'Custom Jira MCP Board',
         prompt: 'Enter the Jira JQL query for this local board',
         ignoreFocusOut: true,
         validateInput: value => (value.trim().length > 0 ? undefined : 'JQL is required.')
@@ -457,6 +431,11 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     this.rerender();
     try {
       const connection = await this.materializeFormConnection(form, { temporary: false });
+      // Drop any legacy placeholder tracked boards (boardId === connection.id)
+      // left over from earlier builds that incorrectly synthesized them.
+      if (connection.mode === 'userworkspace') {
+        await this.prunePlaceholderTrackedBoards(connection.id);
+      }
       // Auto-synthesize one board for modes without discoverable boards so
       // the explicit-assignment flow stays uniform.
       if (autoSynthesizesBoard(connection.mode)) {
@@ -484,10 +463,32 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
         }
         this.state.view = 'list';
         this.state.connectionForm = undefined;
+        void vscode.window.showInformationMessage(
+          `Connection "${connection.name}" saved. Boards are available in the Ticket Manager sidebar.`
+        );
+      } else if (connection.mode === 'userworkspace') {
+        this.state.view = 'list';
+        this.state.connectionForm = undefined;
+        void vscode.window.showInformationMessage(
+          `Connection "${connection.name}" saved. Use Ticket Manager: Create Board to add a plans folder.`
+        );
       } else {
         // Chain into the board picker for backends with discoverable boards.
         this.state.connectionForm = undefined;
         this.applyInitialAction({ kind: 'addBoard', connectionId: connection.id });
+      }
+
+      // Keep legacy backendMode aligned for paths that still read the workspace
+      // setting. Only set it for the first connection (or when unset) so a
+      // second connection of a different mode does not thrash the setting.
+      const currentMode = vscode.workspace
+        .getConfiguration('ticketManager')
+        .get<string>('backendMode');
+      const connectionCount = this.connectionStore.getConnections().length;
+      if (!currentMode || connectionCount === 1) {
+        await vscode.workspace
+          .getConfiguration('ticketManager')
+          .update('backendMode', connection.mode, this.configTarget());
       }
     } catch (error) {
       form.saveError = error instanceof Error ? error.message : String(error);
@@ -551,6 +552,23 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     // Evict any previously-cached service so the next serviceFor() rebuilds
     // against the updated settings/secrets.
     return connection;
+  }
+
+  /**
+   * Older builds tracked a fake board whose id equalled the connection id.
+   * Those never exist in UserWorkspaceStore and fail with
+   * "Board X was not found in the user workspace."
+   */
+  private async prunePlaceholderTrackedBoards(connectionId: string): Promise<void> {
+    const tracked = this.connectionStore.getTrackedBoardsForConnection(connectionId);
+    for (const board of tracked) {
+      if (board.boardId === connectionId) {
+        await this.connectionStore.removeTrackedBoard({
+          connectionId,
+          boardId: board.boardId
+        });
+      }
+    }
   }
 
   private async removeConnectionWithConfirm(connectionId: string): Promise<void> {
@@ -731,7 +749,12 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
           </div>
           <div class="actions">
             ${canAddBoard ? `<button data-action="addBoard" data-connection-id="${esc(connection.id)}">+ Add Board</button>` : ''}
-            ${connection.mode === 'jiracloud' ? '<button class="danger" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
+            ${
+              connection.mode === 'userworkspace'
+                ? `<button class="primary" data-action="createUserWorkspaceBoard" data-connection-id="${esc(connection.id)}">+ Create Board</button>`
+                : ''
+            }
+            ${connection.mode === 'jiracloud' ? '<small>Manage auth via your MCP server\'s logout flow.</small>' : ''}
             <button data-action="editConnection" data-connection-id="${esc(connection.id)}">Edit</button>
             <button class="danger" data-action="removeConnection" data-connection-id="${esc(connection.id)}">Remove</button>
           </div>
@@ -809,8 +832,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     switch (form.mode) {
       case 'jiracloud':
         return [
-          textField(form, 'clientId', 'Atlassian OAuth Client ID', 'Client ID from the Ticket Manager Atlassian app'),
-          this.renderJiraCloudConnectionSection(),
+          textField(form, 'url', 'Jira site URL (optional override)', 'https://your-jira.example.com'),
           textField(form, 'epicKey', 'Linked epic key (optional)', 'PROJ-123'),
           textField(form, 'epicBoardName', 'Epic board name (optional)', 'My Epic Board'),
           textField(form, 'boardJql', 'Board JQL (optional)', 'project = PROJ AND status != Done'),
@@ -836,7 +858,20 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
           secretField(form, 'pat', 'Personal access token')
         ].join('');
       case 'userworkspace':
-        return `<p class="subtle">User Workspace stores boards locally — no further configuration needed.</p>`;
+        return `
+          <p class="subtle">
+            User Workspace stores boards locally. Save this connection, then use
+            <strong>Create Board</strong> (the + in the Boards view) to pick a plans folder.
+            An empty workspace is valid until you add the first board.
+          </p>
+          ${
+            form.connectionId
+              ? `<div class="form-actions" style="margin-top:8px">
+                   <button class="primary" data-action="createUserWorkspaceBoard">Create Board…</button>
+                 </div>`
+              : '<p class="subtle">Save the connection first, then you can create a board from here.</p>'
+          }
+        `;
       case 'demo':
         return `<p class="subtle">Demo mode uses sample data — no further configuration needed.</p>`;
       default:
@@ -908,49 +943,24 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     `;
   }
 
-  private renderJiraCloudConnectionSection(): string {
-    const config = vscode.workspace.getConfiguration('ticketManager');
-    const siteName = config.get<string>('jiraCloudSiteName', '').trim();
-    const siteUrl = config.get<string>('jiraCloudSiteUrl', '').trim();
-    const connectedSiteLabel = siteName || siteUrl;
-    const connectedSiteDetail = siteName && siteUrl ? ` (${siteUrl})` : '';
-    const statusHtml = siteUrl
-      ? `<div class="oauth-status">Connected to <strong>${esc(connectedSiteLabel)}</strong>${esc(connectedSiteDetail)}.</div>`
-      : '<div class="oauth-status">Not connected. Use the shared Atlassian OAuth flow for Jira Cloud.</div>';
-
-    return `
-      <section class="oauth-box">
-        <div class="oauth-heading">Jira Cloud Connection</div>
-        ${statusHtml}
-        <div class="oauth-actions">
-          <button class="primary" data-action="connectJiraCloud">Connect with Atlassian</button>
-          ${siteUrl ? '<button data-action="disconnectJiraCloud">Disconnect</button>' : ''}
-        </div>
-        <small class="subtle">This uses the same Jira Cloud OAuth setup as Configure Project. The client secret is requested during connection and stored in VS Code secret storage.</small>
-      </section>
-    `;
-  }
-
-  private applyJiraCloudWorkspaceDefaults(form: ConnectionFormState | undefined): void {
+  private applyJiraMcpConnectionDefaults(form: ConnectionFormState | undefined): void {
     if (!form || form.mode !== 'jiracloud') {
       return;
     }
 
     const config = vscode.workspace.getConfiguration('ticketManager');
-    const clientId = config.get<string>('jiraOAuthClientId', '').trim();
-    const cloudId = config.get<string>('jiraCloudId', '').trim();
-    const siteUrl = config.get<string>('jiraCloudSiteUrl', '').trim();
-
-    if (typeof form.settings.clientId !== 'string' || form.settings.clientId.trim().length === 0) {
-      form.settings.clientId = clientId;
-    }
-
-    if (cloudId) {
-      form.settings.cloudId = cloudId;
-    }
+    const siteUrl = config.get<string>('jiraMcpSiteUrl', '').trim();
+    const epicKey = config.get<string>('jiraMcpEpicKey', '').trim();
+    const boardJql = config.get<string>('jiraMcpBoardJql', '').trim();
 
     if (siteUrl) {
       form.settings.url = siteUrl;
+    }
+    if (epicKey) {
+      form.settings.epicKey = epicKey;
+    }
+    if (boardJql) {
+      form.settings.boardJql = boardJql;
     }
   }
 
@@ -1026,7 +1036,7 @@ function createNewConnectionForm(): ConnectionFormState {
 function modeLabel(mode: BackendMode): string {
   switch (mode) {
     case 'jiracloud':
-      return 'Jira Cloud';
+      return 'Jira MCP';
     case 'gitlab':
       return 'GitLab';
     case 'livefolder':
@@ -1043,7 +1053,10 @@ function modeLabel(mode: BackendMode): string {
 }
 
 function autoSynthesizesBoard(mode: BackendMode): boolean {
-  return mode === 'livefolder' || mode === 'userworkspace' || mode === 'demo';
+  // User Workspace boards are real plans-folder entries created via
+  // "Create Board" — do not invent a placeholder tracked board from the
+  // connection id (that id is not in UserWorkspaceStore and fails to open).
+  return mode === 'livefolder' || mode === 'demo';
 }
 
 function supportsManualBoardSelection(mode: BackendMode): boolean {
@@ -1074,7 +1087,7 @@ function createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | u
     };
   }
 
-  if (connection.mode === 'userworkspace' || connection.mode === 'demo') {
+  if (connection.mode === 'demo') {
     return {
       connectionId: connection.id,
       boardId: connection.id,

@@ -1,5 +1,6 @@
 export type ToolbarIconName =
   | 'add'
+  | 'new-issue'
   | 'columns'
   | 'refresh'
   | 'filter'
@@ -13,6 +14,10 @@ function getIconPath(name: ToolbarIconName): string {
   switch (name) {
     case 'add':
       return '<path d="M8 3v10M3 8h10" />';
+    // A ticket card with a plus — distinguishes "new issue" from the generic
+    // add-anything button sitting next to it.
+    case 'new-issue':
+      return '<path d="M9.5 2.5H3.25a.75.75 0 0 0-.75.75v9.5a.75.75 0 0 0 .75.75h7.5a.75.75 0 0 0 .75-.75V8.5M5 6h3M5 8.5h2.5M12.5 2v4M10.5 4h4" />';
     case 'columns':
       return '<path d="M2.5 3.5h3v9h-3zM6.5 3.5h3v9h-3zM10.5 3.5h3v9h-3z" />';
     case 'refresh':

@@ -471,7 +471,35 @@ export class LiveFolderService implements IssueTrackerService {
       return this.getIssue(stableFeatureKey(this.projectKey, featureId));
     }
 
-    const parentFeature = this.resolveCreateParent(projectKey, issueType, input.parentKey?.trim());
+    // newParentSummary is specific to livefolder/userworkspace and is ignored by
+    // other backends: when no existing parent was picked, create the Feature first
+    // (same primitives as the Feature branch above) and use its key as the parent.
+    let resolvedParentKey = input.parentKey?.trim() || undefined;
+    if (!resolvedParentKey && input.newParentSummary?.trim()) {
+      const newFeatureId = this.getNextFeatureId();
+      const newFeatureDirUri = vscode.Uri.joinPath(
+        this.featuresRootUri,
+        buildFeatureDirectoryName(newFeatureId, input.newParentSummary.trim())
+      );
+      await vscode.workspace.fs.createDirectory(newFeatureDirUri);
+      await this.writeManagedFile(
+        vscode.Uri.joinPath(newFeatureDirUri, 'feature.md'),
+        buildIssueMarkdown(
+          'Feature',
+          input.newParentSummary.trim(),
+          undefined,
+          undefined,
+          createdAt,
+          undefined,
+          defaultModel
+        )
+      );
+      // The new feature must be in the in-memory model before resolveCreateParent.
+      await this.loadFromDisk();
+      resolvedParentKey = stableFeatureKey(projectKey, newFeatureId);
+    }
+
+    const parentFeature = this.resolveCreateParent(projectKey, issueType, resolvedParentKey);
     const childSeq = this.getNextChildSequence(parentFeature.featureId!, issueType);
     const childFileUri = vscode.Uri.joinPath(
       this.featuresRootUri,

@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
+import { toStoredFolderPath } from '../livefolder/pathUtils';
 
 class MemoryMemento {
   private store = new Map<string, unknown>();
@@ -140,6 +141,25 @@ suite('UserWorkspaceService', () => {
     assert.strictEqual(persisted[0].liveFolderPath, 'C:/plans/alpha');
   });
 
+  test('creates a board from an empty folder without writing any files', async () => {
+    const plansRootUri = vscode.Uri.joinPath(suiteRoot, 'empty-repository', 'docs', 'plans');
+    await vscode.workspace.fs.createDirectory(plansRootUri);
+
+    const board = await service.createBoard({
+      name: 'Empty Repository',
+      projectKey: 'EMPTYREPO',
+      projectName: 'Empty Repository',
+      liveFolderPath: plansRootUri.fsPath
+    });
+    const details = await service.getBoardDetails(board);
+
+    assert.strictEqual(details.board.locationName, toStoredFolderPath(plansRootUri.fsPath));
+    assert.strictEqual(details.issues.length, 0, 'an empty board starts with no tickets');
+
+    const entries = await vscode.workspace.fs.readDirectory(plansRootUri);
+    assert.deepStrictEqual(entries, [], 'creating a board must not write anything to the folder');
+  });
+
   test('aggregates boards from multiple plan folders and scopes board details', async () => {
     const appFixture = await createUserWorkspaceFixture(suiteRoot, {
       folderName: 'app-work',
@@ -227,6 +247,41 @@ suite('UserWorkspaceService', () => {
     assert.strictEqual(created.issueType, 'Bug');
 
     const details = await service.getBoardDetails(board);
+    assert.ok(details.issues.some(issue => issue.key === created.key));
+  });
+
+  test('passes newParentSummary through: creates the feature, then the issue under it', async () => {
+    const fixture = await createUserWorkspaceFixture(suiteRoot, {
+      folderName: 'inline-feature-work',
+      featureTitle: 'Authentication',
+      storyTitle: 'Login flow',
+      projectKey: 'APP',
+      projectName: 'Application Platform'
+    });
+
+    const board = await service.createBoard({
+      name: 'App Board',
+      projectKey: 'APP',
+      projectName: 'Application Platform',
+      liveFolderPath: fixture.plansRootUri.fsPath
+    });
+
+    const created = await service.createIssue({
+      boardId: board.id,
+      projectKey: 'APP',
+      issueType: 'Story',
+      summary: 'Password reset flow',
+      newParentSummary: 'Account Management'
+    });
+
+    // feature-01 exists in the fixture, so the inline feature is feature-02.
+    assert.strictEqual(created.parentKey, 'APP-F02');
+
+    const details = await service.getBoardDetails(board);
+    const newFeature = details.issues.find(issue => issue.key === 'APP-F02');
+    assert.ok(newFeature, 'the new feature appears on the board');
+    assert.strictEqual(newFeature.issueType, 'Feature');
+    assert.strictEqual(newFeature.summary, 'Account Management');
     assert.ok(details.issues.some(issue => issue.key === created.key));
   });
 });

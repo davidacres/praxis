@@ -167,7 +167,7 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       `${element.issue.key}: ${element.issue.summary}`,
       `${element.issue.projectKey || 'Unknown project'} • ${element.issue.issueType}`,
       element.issue.assignee ? `Assignee: ${element.issue.assignee}` : undefined,
-      agentRecord ? `Copilot Agent: ${agentRecord.state}` : undefined,
+      agentRecord ? `AI Agent: ${agentRecord.state}` : undefined,
       element.issue.updated ? `Updated: ${element.issue.updated}` : undefined
     ]
       .filter((line): line is string => Boolean(line))

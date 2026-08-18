@@ -1,9 +1,9 @@
 {
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "kam-ai-team",
-  "description": "A compact issue and board sidebar for VS Code with Jira Cloud, demo, and file-backed modes.",
+  "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
   "homepage": "https://git.tools.dev.assaabloyglobalsolutions.net/traka/software/ai/tools/ticket-manager-extension",
   "repository": {
@@ -44,14 +44,14 @@
     "watch:tsc": "tsc --noEmit --watch -p ./",
     "package": "npm run check-types && node esbuild.mjs --production",
     "build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build.ps1",
+    "install:all": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install.ps1",
+    "uninstall:all": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install.ps1 -Uninstall",
+    "build:install": "npm run build && npm run install:all",
     "publish:gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-gitlab.ps1",
     "install:from-gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-from-gitlab.ps1",
     "check-types": "tsc --noEmit -p ./",
     "pretest": "rimraf out && tsc -p ./",
     "test": "vscode-test --label integration",
-    "jira-polling": "node ./JiraPollingService/node/cli.js",
-    "jira-polling:once": "node ./JiraPollingService/node/cli.js --once",
-    "jira-polling:test": "node --test ./JiraPollingService/node/polling.test.js",
     "jira-mr-polling": "node ./JiraPollingService/node/standalone-cli.js",
     "jira-mr-polling:once": "node ./JiraPollingService/node/standalone-cli.js --once",
     "jira-mr-polling:test": "node --test ./JiraPollingService/node/standalone.test.js",
@@ -161,11 +161,11 @@
       },
       {
         "view": "ticketManager.boards",
-        "contents": "Browse boards and open a board tab.\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+        "contents": "Browse boards and open a board tab.\n[$(add) Create Board](command:ticketManager.createBoard)\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
       },
       {
         "view": "ticketManager.workModeBoards",
-        "contents": "Browse boards in Work Mode and open a board tab.\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+        "contents": "Browse boards in Work Mode and open a board tab.\n[$(add) Create Board](command:ticketManager.createBoard)\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
       },
       {
         "view": "ticketManager.workModeSetup",
@@ -181,7 +181,7 @@
       },
       {
         "command": "ticketManager.configureConnection",
-        "title": "Configure Jira Cloud Connection",
+        "title": "Configure Jira MCP Connection",
         "category": "Ticket Manager",
         "icon": "$(plug)"
       },
@@ -190,12 +190,6 @@
         "title": "Check Connection",
         "category": "Ticket Manager",
         "icon": "$(debug-alt)"
-      },
-      {
-        "command": "ticketManager.disconnectJiraCloud",
-        "title": "Disconnect Jira Cloud",
-        "category": "Ticket Manager",
-        "icon": "$(debug-disconnect)"
       },
       {
         "command": "ticketManager.setBackendMode",
@@ -258,14 +252,20 @@
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.delegateToCopilot",
-        "title": "Delegate to Copilot Agent",
+        "command": "ticketManager.openAiGatewaySettings",
+        "title": "AI Gateway Settings",
+        "category": "Ticket Manager",
+        "icon": "$(key)"
+      },
+      {
+        "command": "ticketManager.delegateToAiAgent",
+        "title": "Delegate to AI Agent",
         "category": "Ticket Manager",
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.startClaudeSession",
-        "title": "Start Claude Code Session",
+        "command": "ticketManager.delegateToCopilot",
+        "title": "Delegate to AI Agent (Deprecated)",
         "category": "Ticket Manager",
         "icon": "$(hubot)"
       },
@@ -300,20 +300,20 @@
         "icon": "$(file-code)"
       },
       {
-        "command": "ticketManager.migrateLiveFolderToJiraCloud",
-        "title": "Migrate Live Folder to Jira Cloud",
+        "command": "ticketManager.migrateLiveFolderToJiraMcp",
+        "title": "Migrate Live Folder to Jira MCP",
         "category": "Ticket Manager",
         "icon": "$(cloud-upload)"
       },
       {
-        "command": "ticketManager.linkJiraCloudEpic",
-        "title": "Link Jira Cloud Epic",
+        "command": "ticketManager.linkJiraMcpEpic",
+        "title": "Link Jira MCP Epic",
         "category": "Ticket Manager",
         "icon": "$(link)"
       },
       {
-        "command": "ticketManager.linkJiraCloudBoardQuery",
-        "title": "Link Jira Cloud Board Query",
+        "command": "ticketManager.linkJiraMcpBoardQuery",
+        "title": "Link Jira MCP Board Query",
         "category": "Ticket Manager",
         "icon": "$(list-filter)"
       },
@@ -345,7 +345,7 @@
         "command": "ticketManager.createBoard",
         "title": "Create Board",
         "category": "Ticket Manager",
-        "icon": "$(new-folder)"
+        "icon": "$(add)"
       },
       {
         "command": "ticketManager.createEpic",
@@ -612,7 +612,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.createIssue",
+          "command": "ticketManager.createBoard",
           "when": "view == ticketManager.boards",
           "group": "navigation@2"
         },
@@ -829,7 +829,7 @@
             "userworkspace"
           ],
           "enumItemLabels": [
-            "Jira Cloud",
+            "Jira MCP",
             "Demo",
             "GitHub",
             "GitLab",
@@ -837,7 +837,7 @@
             "User Workspace"
           ],
           "scope": "window",
-          "description": "Choose whether the app uses Jira Cloud, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
+          "description": "Choose whether the app uses Jira MCP, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
         },
         "ticketManager.connectionType": {
           "type": "string",
@@ -887,7 +887,11 @@
           "description": "Named backend connections. Each entry is one configured backend instance (Jira server, GitLab host, Live Folder root, etc.). Use the Ticket Manager: Connections command to manage these via the UI.",
           "items": {
             "type": "object",
-            "required": ["id", "name", "mode"],
+            "required": [
+              "id",
+              "name",
+              "mode"
+            ],
             "properties": {
               "id": {
                 "type": "string",
@@ -923,7 +927,10 @@
           "description": "Boards the user has explicitly chosen to track. Each entry references a connection by id and a board id native to that backend.",
           "items": {
             "type": "object",
-            "required": ["connectionId", "boardId"],
+            "required": [
+              "connectionId",
+              "boardId"
+            ],
             "properties": {
               "connectionId": {
                 "type": "string",
@@ -940,73 +947,42 @@
             }
           }
         },
-        "ticketManager.jiraCloudBaseUrl": {
+        "ticketManager.jiraMcpSiteUrl": {
           "type": "string",
-          "default": "https://jira.assaabloy.net",
+          "default": "",
           "format": "uri",
           "scope": "window",
-          "description": "Base URL used by the built-in Jira polling and delivery runtime in Jira Cloud mode."
+          "description": "Base URL of the Jira instance that MCP tools connect to in Jira MCP mode. Used for display and as a fallback when no MCP connection reports a URL."
         },
-        "ticketManager.jiraCloudToken": {
+        "ticketManager.jiraMcpDefaultProjectKey": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Bearer token used by the built-in Jira polling and delivery runtime in Jira Cloud mode. If empty, Ticket Manager falls back to JIRA_TOKEN."
+          "description": "Default Jira project key for new issues created through the Jira MCP backend when the form does not specify one."
         },
-        "ticketManager.jiraCloudEpicKey": {
+        "ticketManager.jiraMcpEpicKey": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional Jira Epic key associated with this workspace in Jira Cloud mode. Boards and polling sync follow this epic, and Jira issue creation uses it as the default parent epic."
+          "description": "Optional Jira Epic key associated with this workspace in Jira MCP mode. Boards follow this epic and Jira issue creation uses it as the default parent epic."
         },
-        "ticketManager.jiraCloudEpicBoardName": {
+        "ticketManager.jiraMcpEpicBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional display name for the Jira Cloud epic board in this workspace."
+          "description": "Optional display name for the Jira MCP epic board in this workspace."
         },
-        "ticketManager.jiraCloudBoardJql": {
+        "ticketManager.jiraMcpBoardJql": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional Jira JQL query associated with this workspace in Jira Cloud mode. When set, a JQL board is shown in addition to any linked epic board."
+          "description": "Optional Jira JQL query associated with this workspace in Jira MCP mode. When set, a JQL board is shown in addition to any linked epic board."
         },
-        "ticketManager.jiraCloudBoardName": {
+        "ticketManager.jiraMcpBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional display name for the Jira Cloud JQL board in this workspace."
-        },
-        "ticketManager.jiraOAuthClientId": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Client ID of the Atlassian OAuth 2.0 app used to connect Jira Cloud."
-        },
-        "ticketManager.jiraOAuthScopes": {
-          "type": "array",
-          "default": [],
-          "items": { "type": "string" },
-          "scope": "window",
-          "description": "OAuth scopes requested when connecting Jira Cloud. Defaults to offline_access, read:jira-work, write:jira-work, read:jira-user, read:me, read:board-scope:jira-software, read:project:jira, and read:issue-details:jira."
-        },
-        "ticketManager.jiraCloudId": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Atlassian Cloud ID of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
-        },
-        "ticketManager.jiraCloudSiteName": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "Display name of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
-        },
-        "ticketManager.jiraCloudSiteUrl": {
-          "type": "string",
-          "default": "",
-          "scope": "window",
-          "description": "URL of the connected Jira Cloud site. Set automatically after a successful OAuth connection."
+          "description": "Optional display name for the Jira MCP JQL board in this workspace."
         },
         "ticketManager.enableCreateIdea": {
           "type": "boolean",
@@ -1055,24 +1031,6 @@
           "minimum": 5,
           "maximum": 100,
           "description": "Number of issues to request per page."
-        },
-        "ticketManager.jiraPolling.enabled": {
-          "type": "boolean",
-          "default": false,
-          "scope": "window",
-          "markdownDescription": "Start the built-in Node.js Jira poller when the extension activates in **Jira via MCP** or **Jira Cloud** mode. Disabled by default (opt-in). Polling activity is logged to the **Ticket Manager** output channel, and the first successful poll shows a confirmation notification."
-        },
-        "ticketManager.jiraPolling.requiredLabel": {
-          "type": "string",
-          "default": "syscfg",
-          "scope": "window",
-          "markdownDescription": "Jira label used as the AI execution gate by the built-in poller. In **Jira Cloud** mode, linked-epic tasks are synced regardless of label, but only tasks with this label are eligible for AI execution."
-        },
-        "ticketManager.jiraPolling.clarificationAnalysis": {
-          "type": "boolean",
-          "default": false,
-          "scope": "window",
-          "markdownDescription": "When enabled, the poller runs a readiness analysis on each eligible ticket and may post clarification questions before starting work. When disabled (default), the agent proceeds directly to implementation with the information available on the ticket."
         },
         "ticketManager.delivery.defaultBaseBranch": {
           "type": "string",
@@ -1187,26 +1145,18 @@
           "default": "none",
           "enum": [
             "none",
-            "openai",
-            "claude",
-            "cursor-cli",
-            "copilot-cli",
-            "claude-cli"
+            "vercel-gateway"
           ],
           "enumDescriptions": [
             "No active AI provider.",
-            "Use OpenAI.",
-            "Use Claude/Anthropic.",
-            "Use Cursor CLI.",
-            "Use the GitHub Copilot SDK.",
-            "Use Claude Code CLI."
+            "Use the Vercel AI Gateway."
           ],
-          "description": "The single active AI provider Ticket Manager uses."
+          "description": "The single active AI provider Ticket Manager uses. Only Vercel AI Gateway is supported."
         },
         "ticketManager.ai.credential": {
           "type": "string",
           "default": "",
-          "description": "OpenAI/Claude API key or CLI executable path for the active provider. Not required for GitHub Copilot SDK."
+          "description": "Deprecated for Vercel Gateway (API key is stored in Secret Storage). Kept for migration of older installs."
         },
         "ticketManager.ai.agentName": {
           "type": "string",
@@ -1216,7 +1166,12 @@
         "ticketManager.ai.runtimePath": {
           "type": "string",
           "default": "",
-          "description": "Optional GitHub Copilot SDK runtime override for debugging."
+          "description": "Optional runtime override path for CLI-based providers."
+        },
+        "ticketManager.ai.vercelUrl": {
+          "type": "string",
+          "default": "https://ai-gateway.vercel.sh",
+          "description": "Base URL for the Vercel AI Gateway when the active provider is vercel-gateway."
         },
         "ticketManager.ai.defaultModel": {
           "type": "string",
@@ -1251,13 +1206,13 @@
           "type": "boolean",
           "default": true,
           "scope": "window",
-          "description": "When enabled, Jira polling moves implementation-ready issues into the delivery workflow instead of posting the full Copilot conversation back into Jira comments."
+          "description": "When enabled, Jira polling moves implementation-ready issues into the delivery workflow instead of posting the full AI conversation back into Jira comments."
         },
         "ticketManager.ai.deliveryPublishCommand": {
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Repository-specific command the Copilot delivery workflow must run inside the dedicated worktree to publish the MSI artifact."
+          "description": "Repository-specific command the AI delivery workflow must run inside the dedicated worktree to publish the MSI artifact."
         },
         "ticketManager.ai.deliveryArtifactPattern": {
           "type": "string",
@@ -1269,7 +1224,7 @@
           "type": "string",
           "default": "",
           "scope": "window",
-          "description": "Optional repo-relative or absolute path to the workflow-pack skill folder or SKILL.md file that Copilot must follow for Jira delivery tasks. Example: .github/skills/add-edit-dotnet-web-api"
+          "description": "Optional repo-relative or absolute path to the workflow-pack skill folder or SKILL.md file that the AI agent must follow for Jira delivery tasks. Example: .github/skills/add-edit-dotnet-web-api"
         },
         "ticketManager.ai.deliveryAgentWorkflowUrl": {
           "type": "string",
@@ -1294,7 +1249,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1029.0",
-    "@github/copilot-sdk": "^0.2.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "jsonc-parser": "^3.3.1",
     "markdown-it": "^14.1.1",
@@ -1320,5 +1274,3 @@
     "typescript": "^6.0.2"
   }
 }
-
-

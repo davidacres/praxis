@@ -37,11 +37,7 @@ interface ActiveSessionListItem {
 type SessionFilter = 'active' | 'inactive' | 'all';
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
-  openai: 'OpenAI',
-  claude: 'Claude',
-  'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK',
-  'claude-cli': 'Claude Code CLI'
+  'vercel-gateway': 'Vercel AI Gateway'
 };
 
 function escapeHtml(value: string): string {
@@ -86,7 +82,7 @@ function resolveProviderLabel(
     return PROVIDER_LABELS[record.provider] ?? record.provider;
   }
   if (record) {
-    return PROVIDER_LABELS['copilot-cli'];
+    return PROVIDER_LABELS['vercel-gateway'];
   }
   return 'AI Session';
 }
@@ -238,8 +234,7 @@ export class ActiveSessionsSidebarViewProvider
           const presentation = resolveSessionState(assignment, record);
           const supportsCopilotSession =
             record?.sessionId != null ||
-            assignment?.provider === 'copilot-cli' ||
-            assignment?.provider === 'claude-cli';
+            assignment?.provider === 'vercel-gateway';
           const requiresApproval = record?.state === 'awaiting_approval';
           const isPaused = record?.state === 'paused';
           const attentionSummary = requiresApproval

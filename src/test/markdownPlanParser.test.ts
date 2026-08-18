@@ -1,6 +1,11 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { identifyPlanFolder, parsePlanFolder } from '../livefolder/markdownPlanParser';
+import {
+  discoverPlanFolders,
+  discoverRepositoryFolders,
+  identifyPlanFolder,
+  parsePlanFolder
+} from '../livefolder/markdownPlanParser';
 
 interface LiveFolderFixture {
   rootUri: vscode.Uri;
@@ -81,6 +86,163 @@ suite('markdownPlanParser', () => {
 
     assert.strictEqual(identified.plansRootUri.fsPath, fixture.plansRootUri.fsPath);
     assert.strictEqual(identified.featuresRootUri.fsPath, fixture.featuresRootUri.fsPath);
+  });
+
+  test('discoverPlanFolders finds every repository plans root under a matching parent', async () => {
+    const first = await createLiveFolderFixture('multi-repo-first');
+    const second = await createLiveFolderFixture('multi-repo-second');
+    const parentUri = vscode.Uri.joinPath(first.rootUri, '..', 'multi-repo-parent');
+    fixtureRoots.push(first.rootUri, second.rootUri, parentUri);
+
+    await vscode.workspace.fs.createDirectory(parentUri);
+    await vscode.workspace.fs.rename(first.rootUri, vscode.Uri.joinPath(parentUri, 'repo-one'));
+    await vscode.workspace.fs.rename(second.rootUri, vscode.Uri.joinPath(parentUri, 'repo-two'));
+    await vscode.workspace.fs.writeFile(
+      vscode.Uri.joinPath(parentUri, 'README.md'),
+      Buffer.from('**Type:** Story\n', 'utf8')
+    );
+
+    const matches = await discoverPlanFolders(parentUri);
+
+    assert.deepStrictEqual(
+      matches.map(match => match.plansRootUri.fsPath).sort(),
+      [
+        vscode.Uri.joinPath(parentUri, 'repo-one', 'product', 'docs', 'plans').fsPath,
+        vscode.Uri.joinPath(parentUri, 'repo-two', 'product', 'docs', 'plans').fsPath
+      ].sort()
+    );
+  });
+
+  test('discoverRepositoryFolders finds empty parent and child repositories', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('A workspace folder is required for repository discovery tests.');
+    }
+    const parentUri = vscode.Uri.joinPath(
+      workspaceFolder.uri,
+      '.ticket-manager-test',
+      `empty-repositories-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    const repoOneUri = vscode.Uri.joinPath(parentUri, 'repo-one');
+    const repoTwoUri = vscode.Uri.joinPath(parentUri, 'repo-two');
+    fixtureRoots.push(parentUri);
+
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(parentUri, '.git'));
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(repoOneUri, '.git'));
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(repoTwoUri, '.git'));
+
+    const matches = await discoverRepositoryFolders(parentUri);
+
+    assert.deepStrictEqual(
+      matches.map(match => match.fsPath).sort(),
+      [parentUri.fsPath, repoOneUri.fsPath, repoTwoUri.fsPath].sort()
+    );
+  });
+
+  test('identifyPlanFolder accepts an explicitly selected empty folder', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('A workspace folder is required for empty-folder tests.');
+    }
+    const emptyUri = vscode.Uri.joinPath(
+      workspaceFolder.uri,
+      '.ticket-manager-test',
+      `empty-plans-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    fixtureRoots.push(emptyUri);
+    await vscode.workspace.fs.createDirectory(emptyUri);
+
+    const identified = await identifyPlanFolder(emptyUri);
+
+    assert.strictEqual(identified.plansRootUri.fsPath, emptyUri.fsPath);
+    // No features/ directory is required, and none is created just to validate.
+    const entries = await vscode.workspace.fs.readDirectory(emptyUri);
+    assert.deepStrictEqual(entries, []);
+  });
+
+  test('identifyPlanFolder accepts a folder holding only loose ticket markdown', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('A workspace folder is required for loose-ticket tests.');
+    }
+    const plansUri = vscode.Uri.joinPath(
+      workspaceFolder.uri,
+      '.ticket-manager-test',
+      `loose-tickets-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    fixtureRoots.push(plansUri);
+    await writeTextFile(
+      vscode.Uri.joinPath(plansUri, 'bug-001-login-fails.md'),
+      '# Login fails\n\n**Status:** To Do\n**Type:** Bug\n'
+    );
+
+    const identified = await identifyPlanFolder(plansUri);
+    const parsed = await parsePlanFolder(plansUri);
+
+    assert.strictEqual(identified.plansRootUri.fsPath, plansUri.fsPath);
+    assert.strictEqual(parsed.childItems.length, 1);
+    assert.strictEqual(parsed.childItems[0].issueType, 'Bug');
+  });
+
+  test('discoverPlanFolders ignores C# source folders named Features', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('A workspace folder is required for source-folder tests.');
+    }
+    const repoUri = vscode.Uri.joinPath(
+      workspaceFolder.uri,
+      '.ticket-manager-test',
+      `csharp-features-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    const sourceFeaturesUri = vscode.Uri.joinPath(repoUri, 'Traka.Integration.Engine', 'Features');
+    fixtureRoots.push(repoUri);
+
+    await vscode.workspace.fs.createDirectory(sourceFeaturesUri);
+    for (const fileName of ['FeatureConstants.cs', 'FeatureHelper.cs', 'IFeatureHelper.cs']) {
+      await writeTextFile(
+        vscode.Uri.joinPath(sourceFeaturesUri, fileName),
+        'namespace Traka.Integration.Engine.Features;\n'
+      );
+    }
+
+    const matches = await discoverPlanFolders(repoUri);
+
+    assert.deepStrictEqual(
+      matches.map(match => match.plansRootUri.fsPath),
+      [],
+      'C# source folders must not be detected as plans roots'
+    );
+  });
+
+  test('identifyPlanFolder keeps a selected parent plans root when child plans exist', async () => {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+      throw new Error('A workspace folder is required for direct plans-root tests.');
+    }
+    const parentUri = vscode.Uri.joinPath(
+      workspaceFolder.uri,
+      '.ticket-manager-test',
+      `parent-with-child-plans-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    const childFeatureUri = vscode.Uri.joinPath(
+      parentUri,
+      'workspace',
+      'child-repo',
+      'features',
+      'feature-01-child'
+    );
+    fixtureRoots.push(parentUri);
+
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(parentUri, 'features'));
+    await vscode.workspace.fs.createDirectory(childFeatureUri);
+    await writeTextFile(
+      vscode.Uri.joinPath(childFeatureUri, 'feature.md'),
+      '# Child feature\n\n**Status:** Planned\n'
+    );
+
+    const identified = await identifyPlanFolder(parentUri);
+
+    assert.strictEqual(identified.plansRootUri.fsPath, parentUri.fsPath);
   });
 
   test('identifyPlanFolder normalizes a selected features folder back to the plans root', async () => {

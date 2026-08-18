@@ -2,7 +2,7 @@
 
 Ticket Manager is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface.
 
-It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira Cloud, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
+It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira MCP, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
 Current extension version: 0.0.30
 
@@ -19,7 +19,7 @@ Current extension version: 0.0.30
 - Local Peer Review (LPR) for issue-focused review output.
 - Task Designer for planning execution with ticket nodes, note nodes, website preview nodes, curved connectors, zoom, AI recommendations, and master-plan generation.
 - Live Folder markdown import/migration helpers.
-- Jira polling and delivery workflow orchestration, including worktree-backed delivery flows and sub-task delivery support.
+- Jira MCP-backed delivery workflow orchestration, including worktree-backed delivery flows and sub-task delivery support.
 
 ## Main UI surfaces
 
@@ -56,7 +56,7 @@ Configured through `ticketManager.backendMode` and, for tracked boards, through 
 
 | Mode | Value | Current support |
 | --- | --- | --- |
-| Jira Cloud | `jiracloud` | Primary hosted tracker mode. Supports board and issue operations, comments, transitions, attachments, linked-epic flows, polling, and delivery automation. |
+| Jira MCP | `jiracloud` | Primary hosted tracker mode. Backed by an external Jira MCP server (`atlassian-jira_*` or `mcp_com_atlassian_*`). Supports board and issue operations, comments, transitions, linked-epic flows, and delivery automation. |
 | Demo | `demo` | Built-in sample data for extension development and demos. |
 | GitHub | `github` | Configuration surface exists, but full board/issue parity with Jira is not implemented. |
 | GitLab | `gitlab` | Connection and delivery/MR workflows exist, but the issue/board model does not match Jira parity. |
@@ -94,7 +94,7 @@ Ticket Manager includes several AI-related surfaces:
 - Starting Claude Code sessions.
 - Delegating work to a Copilot agent workflow.
 - Local Peer Review for implementation-focused review output.
-- Jira polling that can trigger readiness analysis and delivery workflows.
+- Jira MCP-driven delivery workflows (readiness analysis + delivery automation are launched by the AI agent when the user delegates a ticket).
 - Delivery workflow configuration for worktree-backed implementation, publish command execution, artifact matching, and Jira summary/failure templates.
 - Sub-task delivery initiation for feature decomposition flows.
 
@@ -194,9 +194,6 @@ npm run package
 - `npm run install:code`
 - `npm run install:insiders`
 - `npm run install:cursor`
-- `npm run jira-polling`
-- `npm run jira-polling:once`
-- `npm run jira-polling:test`
 - `npm run jira-mr-polling`
 - `npm run jira-mr-polling:once`
 - `npm run jira-mr-polling:test`

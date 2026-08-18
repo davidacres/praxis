@@ -8,7 +8,7 @@ export type BackendMode =
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'openai' | 'claude' | 'cursor-cli' | 'copilot-cli' | 'claude-cli';
+export type AiProvider = 'vercel-gateway';
 
 export interface AiAssignment {
   provider: AiProvider;
@@ -200,6 +200,12 @@ export interface CreateIssueInput {
   ideaTranscript?: string;
   parentKey?: string;
   boardId?: string;
+  /**
+   * livefolder/userworkspace only: when `parentKey` is absent and this is
+   * non-empty, the service creates a Feature with this summary first, then
+   * creates the requested item under it. Ignored by other backends.
+   */
+  newParentSummary?: string;
 }
 
 export interface UpdateIssueInput {
@@ -369,9 +375,3 @@ export interface ToolCallPayload {
   value: unknown;
   textBlocks: string[];
 }
-
-export interface ConfigureConnectionResult {
-  saved: boolean;
-  description: string;
-}
-

@@ -16,7 +16,7 @@ const AGENT_STORAGE_KEY = 'ticketManager.agentSessions';
 const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'ticketManager.issueWorkflowAssignments';
 const MODEL_OVERRIDE_STORAGE_KEY = 'ticketManager.issueModelOverrides';
 
-type AgentRuntimeProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+type AgentRuntimeProvider = AiProvider;
 
 export class AiSessionManager {
   private sessions: Map<string, AiAssignment>;
@@ -114,7 +114,7 @@ export class AiSessionManager {
 
   // ── Agent Session Management ───────────────────────────────────
 
-  /** Create a new Copilot agent session record for an issue. */
+  /** Create a new agent session record for an issue. */
   public createAgentSession(
     issueKey: string,
     sessionId: string,
@@ -205,6 +205,27 @@ export class AiSessionManager {
       void this.persistAgentSessions();
     }
     this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** Persist gateway conversation history for resume. */
+  public setAgentConversationHistory(
+    issueKey: string,
+    history: AgentSessionRecord['conversationHistory'],
+    options?: { persist?: boolean }
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    record.conversationHistory = history ? [...history] : undefined;
+    if (options?.persist ?? true) {
+      void this.persistAgentSessions();
+    }
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  public getAgentConversationHistory(issueKey: string): NonNullable<AgentSessionRecord['conversationHistory']> {
+    return [...(this.agentSessions.get(issueKey)?.conversationHistory ?? [])];
   }
 
   /** Update accumulated assistant output for an agent session. */

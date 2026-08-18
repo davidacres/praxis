@@ -37,12 +37,11 @@ test-failures.txt
 **/*.ts
 **/*.tsbuildinfo
 
-# Icons in media/ we don't surface (only marketplace-icon.png + icon.svg
-# become part of the .vsix + sidecar).
-media/activitybar-ticket.svg
+# Source / alternate icons not referenced by package.json contributes.
+# Keep activitybar-ticket.svg and ticket-manager-icons.woff — they are
+# required at runtime for the activity bar and status-bar product icon.
 media/activitybar-jira.svg
 media/search-active-light.svg
 media/search-active-dark.svg
 media/ticket.svg
-media/ticket-manager-icons.woff
 

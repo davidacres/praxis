@@ -184,11 +184,23 @@ export type AgentEventType =
   | 'info'
   | 'warning';
 
-/** Full persisted record for a Copilot agent session attached to an issue. */
+/** Persisted chat turn for gateway agent resume (OpenAI-compatible wire messages). */
+export interface AgentConversationMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string | null;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+  tool_call_id?: string;
+}
+
+/** Full persisted record for an AI agent session attached to an issue. */
 export interface AgentSessionRecord {
   issueKey: string;
   sessionId: string;
-  provider?: Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+  provider?: AiProvider;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;
@@ -196,6 +208,8 @@ export interface AgentSessionRecord {
   planText?: string;
   reasoningText?: string;
   responseText?: string;
+  /** Conversation history for vercel-gateway resume (excludes system prompt). */
+  conversationHistory?: AgentConversationMessage[];
   stepCount: number;
   startedAt: string;
   completedAt?: string;

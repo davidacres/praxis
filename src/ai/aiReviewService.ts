@@ -1,6 +1,6 @@
 import type { IssueDetails } from '../types';
 import type { AgentWorkflowReference } from './agentTypes';
-import { resolveCopilotClientOptions } from './copilotSdkRuntime';
+import { AnalysisCancelledError as GatewayAnalysisCancelledError, runGatewayPrompt } from './gatewayPrompt';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
 Analyze the ticket and provide concise, actionable feedback on:
@@ -42,13 +42,13 @@ Given a code review and security review, provide:
 
 Be concise and actionable. Format in markdown.`;
 
-const COPILOT_COMMENT_SYSTEM_PROMPT = `You are GitHub Copilot replying inside a ticket discussion.
+const GATEWAY_COMMENT_SYSTEM_PROMPT = `You are an AI assistant replying inside a ticket discussion.
 Respond directly to the user's request using the ticket details and recent comments as context.
 Be concise, practical, and collaborative.
 Do not claim to have taken actions you did not take.
 Format the response in markdown suitable for posting as a ticket comment.`;
 
-const COPILOT_CLARIFICATION_SYSTEM_PROMPT = `You are GitHub Copilot reviewing a ticket before implementation starts.
+const GATEWAY_CLARIFICATION_SYSTEM_PROMPT = `You are an AI assistant reviewing a ticket before implementation starts.
 
 Workflow packs are OPTIONAL. A ticket is allowed to proceed with no workflow pack assigned.
 Never ask the user to assign a workflow pack, never suggest workflow packs, and never block
@@ -82,7 +82,7 @@ Rules:
   non-workflow details. Do not mention workflow packs in the comment.
 - Do not include markdown headings, code fences outside the single JSON block, rationale,
 tool output, or claims that work has started.`;
-const COPILOT_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT = `You are an execution-planning assistant for a task designer canvas.
+const GATEWAY_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT = `You are an execution-planning assistant for a task designer canvas.
 Return exactly one JSON code block and nothing else.
 
 Schema:
@@ -104,23 +104,22 @@ Rules:
 - Prefer the minimum connectors needed for a clear start-to-finish flow.
 - Never include markdown outside the single JSON code block.`;
 
-const COPILOT_REPLY_COMMENT_LIMIT = 8;
-const COPILOT_PROMPT_TIMEOUT_MS = 5 * 60 * 1000;
-const COPILOT_STREAM_IDLE_TIMEOUT_MS = 90 * 1000;
+const GATEWAY_REPLY_COMMENT_LIMIT = 8;
 
 export interface ReviewStreamOptions {
   onUpdate?: (content: string) => void;
   model?: string;
   systemPrompt?: string;
   signal?: AbortSignal;
+  apiKey?: string;
+  gatewayUrl?: string;
 }
 
 export const ANALYSIS_CANCELLED_MESSAGE = 'Analysis cancelled.';
 
-export class AnalysisCancelledError extends Error {
+export class AnalysisCancelledError extends GatewayAnalysisCancelledError {
   public constructor() {
     super(ANALYSIS_CANCELLED_MESSAGE);
-    this.name = 'AnalysisCancelledError';
   }
 }
 
@@ -310,159 +309,31 @@ async function consumeSseStream(
   }
 }
 
-async function runCopilotPrompt(
+async function runReviewGatewayPrompt(
   prompt: string,
   options: {
-    cliPath?: string;
+    apiKey?: string;
+    gatewayUrl?: string;
     systemPrompt: string;
-    workingDirectory?: string;
-    timeoutMs?: number;
-    streamIdleTimeoutMs?: number;
     onUpdate?: (content: string) => void;
     model?: string;
     signal?: AbortSignal;
   }
 ): Promise<string> {
-  if (options.signal?.aborted) {
-    throw new AnalysisCancelledError();
-  }
-  const sdk = await import('@github/copilot-sdk');
-  const { clientOptions } = resolveCopilotClientOptions(options.cliPath);
-  const client = new sdk.CopilotClient(clientOptions);
-  let session:
-    | {
-        disconnect(): Promise<void>;
-        on?: (listener: (event: { type: string; data?: Record<string, unknown> }) => void) => () => void;
-        sendAndWait(
-          args: { prompt: string },
-          timeout?: number
-        ): Promise<{ data?: { content?: string } } | undefined>;
-      }
-    | undefined;
-  const timeoutMs = options.timeoutMs ?? COPILOT_PROMPT_TIMEOUT_MS;
-  let unsubscribe: (() => void) | undefined;
-  const messageBuffers = new Map<string, string>();
-  let resetIdleTimer: (() => void) | undefined;
   try {
-    await client.start();
-    session = await client.createSession({
-      clientName: 'ticket-manager-extension',
-      // Omit availableTools so the Copilot agent exposes its standard built-in
-      // toolset (file read, grep/search, shell, etc.). An empty array here would
-      // be an allow-list of nothing, disabling all tools.
-      infiniteSessions: { enabled: false },
-      streaming: true,
+    return await runGatewayPrompt(prompt, {
+      apiKey: options.apiKey,
+      gatewayUrl: options.gatewayUrl,
+      systemPrompt: options.systemPrompt,
+      onUpdate: options.onUpdate,
       model: options.model,
-      onPermissionRequest: sdk.approveAll,
-      systemMessage: {
-        content: options.systemPrompt
-      },
-      workingDirectory: options.workingDirectory
+      signal: options.signal
     });
-
-    unsubscribe = session.on?.((event) => {
-      const data = event.data ?? {};
-      // Keep the idle watchdog alive during tool execution and reasoning. With
-      // the standard toolset enabled the agent can spend time running tools
-      // (grep, file reads, shell) without emitting assistant message events.
-      if (
-        event.type.startsWith('tool.') ||
-        event.type === 'assistant.reasoning' ||
-        event.type === 'assistant.reasoning_delta' ||
-        event.type === 'assistant.streaming_delta' ||
-        event.type === 'assistant.turn_start'
-      ) {
-        resetIdleTimer?.();
-        return;
-      }
-      if (event.type === 'assistant.message_delta') {
-        const messageId = typeof data.messageId === 'string' ? data.messageId : 'message';
-        const deltaContent = typeof data.deltaContent === 'string' ? data.deltaContent : '';
-        if (!deltaContent) {
-          return;
-        }
-        const previous = messageBuffers.get(messageId) ?? '';
-        messageBuffers.set(messageId, previous + deltaContent);
-        const next = [...messageBuffers.values()].join('\n\n').trim();
-        if (next) {
-          options.onUpdate?.(next);
-        }
-        resetIdleTimer?.();
-        return;
-      }
-
-      if (event.type === 'assistant.message') {
-        const messageId = typeof data.messageId === 'string'
-          ? data.messageId
-          : `message-${messageBuffers.size + 1}`;
-        const content = typeof data.content === 'string' ? data.content : '';
-        messageBuffers.set(messageId, content);
-        const next = [...messageBuffers.values()].join('\n\n').trim();
-        if (next) {
-          options.onUpdate?.(next);
-        }
-        resetIdleTimer?.();
-      }
-    });
-
-    // Use a resettable idle timer so the timeout resets whenever streaming
-    // data arrives, preventing premature abort during long-running analysis.
-    let idleTimerId: ReturnType<typeof setTimeout> | undefined;
-    let rejectIdle: ((reason: Error) => void) | undefined;
-    const idleTimeoutMs = options.streamIdleTimeoutMs ?? COPILOT_STREAM_IDLE_TIMEOUT_MS;
-
-    const idlePromise = new Promise<never>((_resolve, reject) => {
-      rejectIdle = reject;
-      idleTimerId = setTimeout(() => {
-        reject(new Error(`Copilot response timed out after ${Math.round(timeoutMs / 1000)}s with no streaming activity for ${Math.round(idleTimeoutMs / 1000)}s.`));
-      }, timeoutMs);
-    });
-
-    resetIdleTimer = () => {
-      if (idleTimerId !== undefined) {
-        clearTimeout(idleTimerId);
-      }
-      idleTimerId = setTimeout(() => {
-        rejectIdle?.(new Error(`Copilot response stalled — no streaming data received for ${Math.round(idleTimeoutMs / 1000)}s.`));
-      }, idleTimeoutMs);
-    };
-
-    // Give sendAndWait a very generous ceiling — the resettable idle timer
-    // (via Promise.race) handles the real timeout logic, aborting only when
-    // no streaming data has arrived for idleTimeoutMs.
-    const sdkCeilingMs = 30 * 60 * 1000;
-    const sendPromise = session.sendAndWait({ prompt }, sdkCeilingMs);
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<never>((_resolve, reject) => {
-      if (!options.signal) {
-        return;
-      }
-      onAbort = () => reject(new AnalysisCancelledError());
-      options.signal.addEventListener('abort', onAbort, { once: true });
-    });
-
-    const response = await Promise.race([sendPromise, idlePromise, abortPromise]).finally(() => {
-      if (idleTimerId !== undefined) {
-        clearTimeout(idleTimerId);
-      }
-      if (onAbort) {
-        options.signal?.removeEventListener('abort', onAbort);
-      }
-    });
-    const streamedContent = [...messageBuffers.values()].join('\n\n').trim();
-    const content = streamedContent || response?.data?.content?.trim();
-    if (!content) {
-      throw new Error('Copilot returned an empty response.');
+  } catch (error) {
+    if (error instanceof GatewayAnalysisCancelledError) {
+      throw new AnalysisCancelledError();
     }
-
-    return content;
-  } finally {
-    unsubscribe?.();
-    if (session) {
-      await session.disconnect();
-    }
-    await client.stop();
+    throw error;
   }
 }
 
@@ -973,21 +844,20 @@ export async function reviewTicketWithClaude(
   return `## AI Review by ${agentName}\n\n${text}`;
 }
 
-export async function reviewTicketWithCopilot(
+export async function reviewTicketWithVercelGateway(
   issue: IssueDetails,
-  cliPath: string | undefined,
+  apiKey: string | undefined,
   agentName: string,
-  workingDirectory?: string,
   options?: ReviewStreamOptions
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
-  const content = await runCopilotPrompt(
+  const content = await runReviewGatewayPrompt(
     `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`,
     {
-      cliPath,
+      apiKey: options?.apiKey ?? apiKey,
+      gatewayUrl: options?.gatewayUrl,
       systemPrompt,
-      workingDirectory,
       onUpdate: options?.onUpdate,
       model: options?.model,
       signal: options?.signal
@@ -997,46 +867,68 @@ export async function reviewTicketWithCopilot(
   return `## AI Review by ${agentName}\n\n${content}`;
 }
 
-export async function respondToCopilotComment(
+/** @deprecated Use reviewTicketWithVercelGateway. */
+export async function reviewTicketWithCopilot(
   issue: IssueDetails,
-  cliPath: string | undefined,
-  request: string,
-  workingDirectory?: string
+  apiKey: string | undefined,
+  agentName: string,
+  _workingDirectory?: string,
+  options?: ReviewStreamOptions
 ): Promise<string> {
+  return reviewTicketWithVercelGateway(issue, apiKey, agentName, options);
+}
+
+export async function respondToGatewayComment(
+  issue: IssueDetails,
+  apiKey: string | undefined,
+  request: string,
+  options?: { gatewayUrl?: string; agentMention?: string }
+): Promise<string> {
+  const mention = options?.agentMention?.trim() || '@agent';
   const ticketContext = buildTicketContext(issue, {
-    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    recentCommentLimit: GATEWAY_REPLY_COMMENT_LIMIT,
     newestComments: true
   });
-  const content = await runCopilotPrompt(
-    `Reply to the latest @copilot mention in this ticket.\n\nUser request:\n${request}\n\nTicket context:\n${ticketContext}`,
+  const content = await runReviewGatewayPrompt(
+    `Reply to the latest ${mention} mention in this ticket.\n\nUser request:\n${request}\n\nTicket context:\n${ticketContext}`,
     {
-      cliPath,
-      systemPrompt: COPILOT_COMMENT_SYSTEM_PROMPT,
-      workingDirectory
+      apiKey,
+      gatewayUrl: options?.gatewayUrl,
+      systemPrompt: GATEWAY_COMMENT_SYSTEM_PROMPT
     }
   );
 
-  return `## @copilot reply\n\n${content}`;
+  return `## ${mention} reply\n\n${content}`;
 }
 
-export async function buildCopilotClarificationComment(
+/** @deprecated Use respondToGatewayComment. */
+export async function respondToCopilotComment(
   issue: IssueDetails,
-  cliPath: string | undefined,
-  workingDirectory?: string
+  apiKey: string | undefined,
+  request: string,
+  _workingDirectory?: string
+): Promise<string> {
+  return respondToGatewayComment(issue, apiKey, request);
+}
+
+export async function buildGatewayClarificationComment(
+  issue: IssueDetails,
+  apiKey: string | undefined,
+  options?: { gatewayUrl?: string }
 ): Promise<string | undefined> {
   const ticketContext = buildTicketContext(issue, {
-    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    recentCommentLimit: GATEWAY_REPLY_COMMENT_LIMIT,
     newestComments: true
   });
-  const content = await runCopilotPrompt(
+  const content = await runReviewGatewayPrompt(
     `Assess whether this ticket is specific enough to implement without making risky assumptions. Reply READY if no clarification is needed. Otherwise draft a concise Jira comment requesting the missing details.
 
 Ticket context:
 ${ticketContext}`,
     {
-      cliPath,
-      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
-      workingDirectory
+      apiKey,
+      gatewayUrl: options?.gatewayUrl,
+      systemPrompt: GATEWAY_CLARIFICATION_SYSTEM_PROMPT
     }
   );
 
@@ -1047,29 +939,38 @@ ${ticketContext}`,
 
   const normalizedBody = normalizeClarificationCommentBody(trimmed);
   if (!normalizedBody) {
-    throw new Error('Copilot clarification response did not contain any clarification questions.');
+    throw new Error('Gateway clarification response did not contain any clarification questions.');
   }
 
   return `**THIS IS AN AI-GENERATED MESSAGE.**
-Copilot clarification request
+AI clarification request
 
 ${normalizedBody}
 
 _Reply to the bot by starting your comment with \`#AIbot\` (e.g. \`#AIbot use the production cluster\`). Comments without that prefix are ignored._`;
 }
 
-export async function assessCopilotImplementationReadiness(
+/** @deprecated Use buildGatewayClarificationComment. */
+export async function buildCopilotClarificationComment(
   issue: IssueDetails,
-  cliPath: string | undefined,
+  apiKey: string | undefined,
+  _workingDirectory?: string
+): Promise<string | undefined> {
+  return buildGatewayClarificationComment(issue, apiKey);
+}
+
+export async function assessGatewayImplementationReadiness(
+  issue: IssueDetails,
+  apiKey: string | undefined,
   options?: {
-    workingDirectory?: string;
+    gatewayUrl?: string;
     availableWorkflows?: AgentWorkflowReference[];
     assignedWorkflow?: AgentWorkflowReference;
     stagedAttachments?: Array<{ fileName: string; localPath: string; mediaType?: string }>;
   }
 ): Promise<CopilotImplementationReadinessAssessment> {
   const ticketContext = buildTicketContext(issue, {
-    recentCommentLimit: COPILOT_REPLY_COMMENT_LIMIT,
+    recentCommentLimit: GATEWAY_REPLY_COMMENT_LIMIT,
     newestComments: true
   });
   const attachmentContext = options?.stagedAttachments?.length
@@ -1092,7 +993,7 @@ export async function assessCopilotImplementationReadiness(
     : 'Currently assigned workflow pack in Ticket Manager: none. (This is acceptable — workflow packs are optional.)';
   const workflowContext = buildWorkflowPromptContext(options?.availableWorkflows ?? []);
 
-  const content = await runCopilotPrompt(
+  const content = await runReviewGatewayPrompt(
     `Assess whether this ticket is specific enough to implement without making risky assumptions.
 
 ${assignedWorkflowContext}
@@ -1103,26 +1004,41 @@ ${attachmentContext}
 Ticket context:
 ${ticketContext}`,
     {
-      cliPath,
-      systemPrompt: COPILOT_CLARIFICATION_SYSTEM_PROMPT,
-      workingDirectory: options?.workingDirectory
+      apiKey,
+      gatewayUrl: options?.gatewayUrl,
+      systemPrompt: GATEWAY_CLARIFICATION_SYSTEM_PROMPT
     }
   );
 
   const assessment = parseCopilotImplementationReadinessAssessment(content);
   if (!assessment) {
-    throw new Error('Copilot readiness assessment did not return a valid JSON result.');
+    throw new Error('Gateway readiness assessment did not return a valid JSON result.');
   }
 
   return assessment;
 }
 
-export async function recommendTaskDesignerFlowWithCopilot(
+/** @deprecated Use assessGatewayImplementationReadiness. */
+export async function assessCopilotImplementationReadiness(
+  issue: IssueDetails,
+  apiKey: string | undefined,
+  options?: {
+    workingDirectory?: string;
+    gatewayUrl?: string;
+    availableWorkflows?: AgentWorkflowReference[];
+    assignedWorkflow?: AgentWorkflowReference;
+    stagedAttachments?: Array<{ fileName: string; localPath: string; mediaType?: string }>;
+  }
+): Promise<CopilotImplementationReadinessAssessment> {
+  return assessGatewayImplementationReadiness(issue, apiKey, options);
+}
+
+export async function recommendTaskDesignerFlowWithGateway(
   nodes: readonly TaskDesignerRecommendationNode[],
   connectors: readonly TaskDesignerRecommendationConnector[],
   options?: {
-    cliPath?: string;
-    workingDirectory?: string;
+    apiKey?: string;
+    gatewayUrl?: string;
   }
 ): Promise<TaskDesignerFlowRecommendation> {
   if (nodes.length === 0) {
@@ -1140,18 +1056,35 @@ export async function recommendTaskDesignerFlowWithCopilot(
     JSON.stringify(connectors, null, 2)
   ].join('\n');
 
-  const content = await runCopilotPrompt(prompt, {
-    cliPath: options?.cliPath,
-    systemPrompt: COPILOT_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT,
-    workingDirectory: options?.workingDirectory
+  const content = await runReviewGatewayPrompt(prompt, {
+    apiKey: options?.apiKey,
+    gatewayUrl: options?.gatewayUrl,
+    systemPrompt: GATEWAY_TASK_DESIGNER_RECOMMENDATION_SYSTEM_PROMPT
   });
 
   const parsed = parseTaskDesignerFlowRecommendation(content, nodes);
   if (!parsed) {
-    throw new Error('Copilot flow recommendation did not return a valid JSON result.');
+    throw new Error('Gateway flow recommendation did not return a valid JSON result.');
   }
 
   return parsed;
+}
+
+/** @deprecated Use recommendTaskDesignerFlowWithGateway. */
+export async function recommendTaskDesignerFlowWithCopilot(
+  nodes: readonly TaskDesignerRecommendationNode[],
+  connectors: readonly TaskDesignerRecommendationConnector[],
+  options?: {
+    cliPath?: string;
+    apiKey?: string;
+    gatewayUrl?: string;
+    workingDirectory?: string;
+  }
+): Promise<TaskDesignerFlowRecommendation> {
+  return recommendTaskDesignerFlowWithGateway(nodes, connectors, {
+    apiKey: options?.apiKey ?? options?.cliPath,
+    gatewayUrl: options?.gatewayUrl
+  });
 }
 
 // ── Local Peer Review (LPR) ──────────────────────────────────────
@@ -1166,15 +1099,22 @@ async function runLprSection(
   issue: IssueDetails,
   systemPrompt: string,
   userPrompt: string,
-  options: { cliPath?: string; workingDirectory?: string; provider: string; credential?: string; agentName?: string }
+  options: {
+    cliPath?: string;
+    workingDirectory?: string;
+    provider: string;
+    credential?: string;
+    agentName?: string;
+    gatewayUrl?: string;
+  }
 ): Promise<string> {
   const ticketContext = buildTicketContext(issue);
 
-  if (options.provider === 'copilot-cli') {
-    return runCopilotPrompt(`${userPrompt}\n\n${ticketContext}`, {
-      cliPath: options.cliPath,
-      systemPrompt,
-      workingDirectory: options.workingDirectory
+  if (options.provider === 'vercel-gateway' || options.provider === 'copilot-cli') {
+    return runReviewGatewayPrompt(`${userPrompt}\n\n${ticketContext}`, {
+      apiKey: options.credential ?? options.cliPath,
+      gatewayUrl: options.gatewayUrl,
+      systemPrompt
     });
   }
 
@@ -1228,7 +1168,14 @@ async function runLprSection(
 
 export async function runLocalPeerReview(
   issue: IssueDetails,
-  options: { cliPath?: string; workingDirectory?: string; provider: string; credential?: string; agentName?: string }
+  options: {
+    cliPath?: string;
+    workingDirectory?: string;
+    provider: string;
+    credential?: string;
+    agentName?: string;
+    gatewayUrl?: string;
+  }
 ): Promise<LprResult> {
   const codeReview = await runLprSection(
     issue,
