@@ -21,24 +21,25 @@ Total contributed commands: 61
 | Clear Filters | `ticketManager.clearFilters` | Ticket Manager | $(clear-all) |
 | Clear Parent Item Scope | `ticketManager.clearParentScope` | Ticket Manager | $(close) |
 | Configure AI | `ticketManager.configureAi` | Ticket Manager | $(hubot) |
+| AI Gateway Settings | `ticketManager.openAiGatewaySettings` | Ticket Manager | $(key) |
 | Configure Board Settings | `ticketManager.configureBoardColumns` | Ticket Manager | $(settings-gear) |
-| Configure Jira Cloud Connection | `ticketManager.configureConnection` | Ticket Manager | $(plug) |
+| Configure Jira MCP Connection | `ticketManager.configureConnection` | Ticket Manager | $(plug) |
 | Configure Project | `ticketManager.openSetup` | Ticket Manager | $(gear) |
 | Confirm Analysis Complete | `ticketManager.confirmAnalysisComplete` | Ticket Manager | $(pass) |
 | Copy Issue Key | `ticketManager.copyKey` | Ticket Manager | $(copy) |
-| Create Board | `ticketManager.createBoard` | Ticket Manager | $(new-folder) |
+| Create Board | `ticketManager.createBoard` | Ticket Manager | $(add) |
 | Create EPIC | `ticketManager.createEpic` | Ticket Manager | $(add) |
 | Create Idea | `ticketManager.createIdea` | Ticket Manager | $(lightbulb) |
 | Create Issue | `ticketManager.createIssue` | Ticket Manager | $(add) |
-| Delegate to Copilot Agent | `ticketManager.delegateToCopilot` | Ticket Manager | $(hubot) |
-| Disconnect Jira Cloud | `ticketManager.disconnectJiraCloud` | Ticket Manager | $(debug-disconnect) |
+| Delegate to AI Agent | `ticketManager.delegateToAiAgent` | Ticket Manager | $(hubot) |
+| Delegate to AI Agent (Deprecated) | `ticketManager.delegateToCopilot` | Ticket Manager | $(hubot) |
 | Import Markdown Files to Template Format | `ticketManager.importMarkdownFiles` | Ticket Manager | $(file-code) |
 | Import Plan from Markdown Features | `ticketManager.importMarkdownFeaturePlan` | Ticket Manager | $(file-code) |
-| Link Jira Cloud Board Query | `ticketManager.linkJiraCloudBoardQuery` | Ticket Manager | $(list-filter) |
-| Link Jira Cloud Epic | `ticketManager.linkJiraCloudEpic` | Ticket Manager | $(link) |
+| Link Jira MCP Board Query | `ticketManager.linkJiraMcpBoardQuery` | Ticket Manager | $(list-filter) |
+| Link Jira MCP Epic | `ticketManager.linkJiraMcpEpic` | Ticket Manager | $(link) |
 | Load More | `ticketManager.loadMore` | Ticket Manager | $(chevron-down) |
 | Local Peer Review (LPR) | `ticketManager.localPeerReview` | Ticket Manager | $(checklist) |
-| Migrate Live Folder to Jira Cloud | `ticketManager.migrateLiveFolderToJiraCloud` | Ticket Manager | $(cloud-upload) |
+| Migrate Live Folder to Jira | `ticketManager.migrateLiveFolderToJiraMcp` | Ticket Manager | $(cloud-upload) |
 | New Project | `ticketManager.newProject` | Ticket Manager | $(rocket) |
 | Open Analysis Window | `ticketManager.openAnalysisWindow` | Ticket Manager | $(comment) |
 | Open Board | `ticketManager.openBoard` | Ticket Manager | $(go-to-file) |

@@ -3,7 +3,7 @@ import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { AiSessionManager } from '../ai/aiSessionManager';
 import { issueTypePillInlineStyle } from '../board/issueTypeColors';
 import { FilterStore } from '../state/filterStore';
-import type { AiProvider, BackendMode, CreateIssueInput, IssueFilters, IssueSummary, Project } from '../types';
+import type { AiProvider, IssueFilters, IssueSummary } from '../types';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 
@@ -18,7 +18,6 @@ interface IssuesSidebarCallbacks {
   onAssignToAi: (issueKey: string, provider: AiProvider) => Promise<void>;
   onEditIssue: (issueKey: string) => Promise<void>;
   onDeleteIssue: (issueKey: string) => Promise<void>;
-  onCreateIssue: (input: CreateIssueInput) => Promise<void>;
   onSetSearchText?: (searchText: string) => Promise<void>;
   onSetStatuses?: (statuses: string[]) => Promise<void>;
   onLoadMore: () => Promise<void>;
@@ -117,15 +116,6 @@ function renderAssignmentBadge(issue: IssueSummary): string {
   return `<span class="type-badge type-badge--${token}" title="${escapeHtml(title)}">${label}</span>`;
 }
 
-const DEFAULT_CREATABLE_TYPES: Record<BackendMode, string[]> = {
-  jiracloud: ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  demo: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  github: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  gitlab: ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'],
-  livefolder: ['Feature', 'Idea', 'Story', 'Task', 'Bug'],
-  userworkspace: ['Feature', 'Idea', 'Story', 'Task', 'Bug']
-};
-
 export function buildIssueStatusMetadataFilters(filters: IssueFilters): IssueFilters {
   return {
     ...filters,
@@ -140,9 +130,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
   private view?: vscode.WebviewView;
   private selectedIssueKey?: string;
   private statusOptions: string[] = [];
-  private issueTypeOptions: string[] = [];
-  private projectOptions: Project[] = [];
-  private defaultCreateProjectKey?: string;
   private aiAssignOptions: IssueAiAssignmentOption[] = [];
   private supportingDataGeneration = 0;
   private readonly disposables: vscode.Disposable[] = [];
@@ -198,26 +185,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     this.render();
   }
 
-  public async openCreateIssueDialog(defaults?: Partial<CreateIssueInput>): Promise<boolean> {
-    if (!this.view) {
-      return false;
-    }
-    this.view.show?.(true);
-    await this.view.webview.postMessage({
-      type: 'openCreateIssueDialog',
-      defaults: {
-        issueType: defaults?.issueType ?? '',
-        projectKey: defaults?.projectKey ?? '',
-        summary: defaults?.summary ?? '',
-        description: defaults?.description ?? '',
-        parentKey: defaults?.parentKey ?? '',
-        ideaTranscript: defaults?.ideaTranscript ?? '',
-        boardId: defaults?.boardId ?? ''
-      }
-    });
-    return true;
-  }
-
   public async refresh(): Promise<void> {
     if (!this.view) {
       return;
@@ -227,36 +194,17 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     const filters = this.filterStore.getFilters();
     const snapshot = this.issuesProvider.getSnapshot();
 
+    // Only the status filter needs supporting data now — issue types and
+    // projects were for the removed create dialog.
     let statusOptions = unique([...filters.statuses, ...snapshot.issues.map(issue => issue.status)]);
-    let issueTypeOptions = unique([
-      ...snapshot.issues.map(issue => issue.issueType),
-      ...DEFAULT_CREATABLE_TYPES[this.backendService.mode]
-    ]);
-    let projectOptions: Project[] = [];
-    const selectedIssue = this.selectedIssueKey
-      ? snapshot.issues.find(issue => issue.key === this.selectedIssueKey)
-      : undefined;
-    const defaultCreateProjectKey =
-      selectedIssue?.projectKey ??
-      (filters.projectKeys.length === 1 ? filters.projectKeys[0] : undefined);
 
     try {
-      const [metadata, projects] = await Promise.all([
-        this.backendService.getFilterMetadata(
-          buildIssueStatusMetadataFilters(filters)
-        ),
-        this.backendService.getProjects()
-      ]);
+      const metadata = await this.backendService.getFilterMetadata(
+        buildIssueStatusMetadataFilters(filters)
+      );
       statusOptions = unique([...statusOptions, ...metadata.statuses]);
-      issueTypeOptions = unique([...issueTypeOptions, ...metadata.issueTypes]);
-      projectOptions = projects;
     } catch {
       statusOptions = unique([...filters.statuses, ...snapshot.issues.map(issue => issue.status)]);
-      issueTypeOptions = unique([
-        ...snapshot.issues.map(issue => issue.issueType),
-        ...DEFAULT_CREATABLE_TYPES[this.backendService.mode]
-      ]);
-      projectOptions = [];
     }
 
     if (generation !== this.supportingDataGeneration) {
@@ -264,9 +212,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
     }
 
     this.statusOptions = statusOptions;
-    this.issueTypeOptions = issueTypeOptions;
-    this.projectOptions = projectOptions;
-    this.defaultCreateProjectKey = defaultCreateProjectKey;
     this.render();
   }
 
@@ -338,41 +283,14 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         }
         return;
       }
-      case 'createIssue': {
-        const projectKey = typeof payload.projectKey === 'string' ? payload.projectKey.trim() : '';
+      // Creation always happens in the Issue Detail draft pane, so the sidebar
+      // only forwards the request and the issue type the button implies.
+      case 'openIssueDraft': {
         const issueType = typeof payload.issueType === 'string' ? payload.issueType.trim() : '';
-        const summary = typeof payload.summary === 'string' ? payload.summary.trim() : '';
-        const description = typeof payload.description === 'string' ? payload.description.trim() : '';
-        const parentKey = typeof payload.parentKey === 'string' ? payload.parentKey.trim() : '';
-        const ideaTranscript = typeof payload.ideaTranscript === 'string' ? payload.ideaTranscript.trim() : '';
-        const boardId = typeof payload.boardId === 'string' ? payload.boardId.trim() : '';
-        if (!projectKey || !issueType || !summary) {
-          await this.view?.webview.postMessage({
-            type: 'createIssueResult',
-            ok: false,
-            error: 'Project, issue type, and summary are required.'
-          });
-          return;
-        }
-
-        try {
-          await this.callbacks.onCreateIssue({
-            projectKey,
-            issueType,
-            summary,
-            description: description || undefined,
-            parentKey: parentKey || undefined,
-            ideaTranscript: ideaTranscript || undefined,
-            boardId: boardId || undefined
-          });
-          await this.view?.webview.postMessage({ type: 'createIssueResult', ok: true });
-        } catch (error) {
-          await this.view?.webview.postMessage({
-            type: 'createIssueResult',
-            ok: false,
-            error: error instanceof Error ? error.message : String(error)
-          });
-        }
+        await vscode.commands.executeCommand(
+          'ticketManager.createIssue',
+          issueType ? { issueType } : undefined
+        );
         return;
       }
       case 'loadMore':
@@ -817,113 +735,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       .load-more {
         align-self: flex-start;
       }
-      .create-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.35);
-        z-index: 1000;
-      }
-      .create-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 1001;
-        box-sizing: border-box;
-        width: min(540px, 100%);
-        max-height: calc(100vh - 32px);
-        padding: 0;
-        border: none;
-        border-radius: 0;
-        background: transparent;
-      }
-      #createIssueForm {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        box-sizing: border-box;
-        padding: 14px;
-        border: 1px solid var(--vscode-panel-border);
-        border-radius: 8px;
-        background: var(--vscode-editor-background, var(--vscode-sideBar-background));
-        max-height: calc(100vh - 64px);
-        overflow: auto;
-      }
-      .create-dialog-title {
-        margin: 0;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--vscode-descriptionForeground);
-      }
-      .form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .field-group {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .field-group--full {
-        grid-column: 1 / -1;
-      }
-      .field-label {
-        font-size: 12px;
-        color: var(--vscode-descriptionForeground);
-      }
-      .field-input,
-      .field-select,
-      .field-textarea {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 8px 10px;
-        border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-        border-radius: 6px;
-        background: var(--vscode-input-background);
-        color: var(--vscode-input-foreground);
-        font: inherit;
-      }
-      .field-select {
-        min-height: 36px;
-        background: var(--vscode-dropdown-background, var(--vscode-input-background));
-        color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
-        border-color: var(--vscode-dropdown-border, var(--vscode-panel-border));
-      }
-      .field-textarea {
-        min-height: 92px;
-        resize: vertical;
-        line-height: 1.45;
-        font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-      }
-      .field-help {
-        font-size: 11px;
-        color: var(--vscode-descriptionForeground);
-      }
-      .dialog-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .dialog-status {
-        min-height: 16px;
-        font-size: 11px;
-        color: var(--vscode-descriptionForeground);
-      }
-      .dialog-status.error {
-        color: var(--vscode-errorForeground);
-      }
-      .dialog-status.success {
-        color: var(--vscode-testing-iconPassed, var(--vscode-textLink-foreground));
-      }
-      .is-hidden {
-        display: none;
-      }
     </style>
   </head>
   <body>
@@ -941,52 +752,6 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="editIssue">Edit</button>
       <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="deleteIssue">Delete</button>
       <button type="button" class="issue-context-menu-item" role="menuitem" data-issue-menu-action="viewDetails">View Details</button>
-    </div>
-    <div id="createIssueBackdrop" class="create-backdrop" hidden></div>
-    <div id="createIssueDialog" class="create-dialog" hidden>
-      <form id="createIssueForm">
-        <h3 class="create-dialog-title">Create Issue</h3>
-        <div class="form-grid">
-          <label class="field-group">
-            <span class="field-label">Project</span>
-            <select id="createProjectSelect" class="field-select" required>
-              ${this.projectOptions
-                .map(project => `<option value="${escapeHtml(project.key)}" ${project.key === this.defaultCreateProjectKey ? 'selected' : ''}>${escapeHtml(project.key)}${project.name ? ` • ${escapeHtml(project.name)}` : ''}</option>`)
-                .join('')}
-            </select>
-          </label>
-          <label class="field-group">
-            <span class="field-label">Issue Type</span>
-            <select id="createIssueTypeSelect" class="field-select" required>
-              ${this.issueTypeOptions
-                .map(type => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`)
-                .join('')}
-            </select>
-          </label>
-          <label class="field-group field-group--full">
-            <span class="field-label">Summary</span>
-            <input id="createSummaryInput" class="field-input" type="text" placeholder="Issue summary" required />
-          </label>
-          <label class="field-group field-group--full">
-            <span class="field-label">Description</span>
-            <textarea id="createDescriptionInput" class="field-textarea" placeholder="Add a description"></textarea>
-          </label>
-          <label class="field-group field-group--full">
-            <span class="field-label">Parent Key</span>
-            <input id="createParentKeyInput" class="field-input" type="text" placeholder="Optional parent key (required for Subtask)" />
-          </label>
-          <label class="field-group field-group--full is-hidden" id="createIdeaTranscriptGroup">
-            <span class="field-label">AI Research Transcript</span>
-            <textarea id="createIdeaTranscriptInput" class="field-textarea" placeholder="Capture research chat and notes here"></textarea>
-            <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
-          </label>
-        </div>
-        <div class="dialog-actions">
-          <button class="text-button text-button--primary" id="submitCreateIssueButton" type="submit">Create</button>
-          <button class="text-button" id="cancelCreateIssueButton" type="button">Cancel</button>
-          <span class="dialog-status" id="createIssueStatus" aria-live="polite"></span>
-        </div>
-      </form>
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
@@ -1035,170 +800,15 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
         });
       }
 
+      // Both buttons open the Issue Detail draft pane; the sidebar no longer
+      // has a create form of its own.
       const createIssueButton = document.getElementById('createIssueButton');
       const createIdeaButton = document.getElementById('createIdeaButton');
-      const createIssueDialog = document.getElementById('createIssueDialog');
-      const createIssueForm = document.getElementById('createIssueForm');
-      const createProjectSelect = document.getElementById('createProjectSelect');
-      const createIssueTypeSelect = document.getElementById('createIssueTypeSelect');
-      const createSummaryInput = document.getElementById('createSummaryInput');
-      const createDescriptionInput = document.getElementById('createDescriptionInput');
-      const createParentKeyInput = document.getElementById('createParentKeyInput');
-      const createIdeaTranscriptGroup = document.getElementById('createIdeaTranscriptGroup');
-      const createIdeaTranscriptInput = document.getElementById('createIdeaTranscriptInput');
-      const cancelCreateIssueButton = document.getElementById('cancelCreateIssueButton');
-      const submitCreateIssueButton = document.getElementById('submitCreateIssueButton');
-      const createIssueStatus = document.getElementById('createIssueStatus');
-      let creatingIssue = false;
-      let createBoardId = '';
-
-      function setCreateIssueStatus(text, kind) {
-        if (!(createIssueStatus instanceof HTMLElement)) {
-          return;
-        }
-        createIssueStatus.textContent = text || '';
-        createIssueStatus.className = kind ? 'dialog-status ' + kind : 'dialog-status';
-      }
-
-      function refreshCreateIdeaVisibility() {
-        const issueType = createIssueTypeSelect instanceof HTMLSelectElement ? createIssueTypeSelect.value.trim().toLowerCase() : '';
-        if (createIdeaTranscriptGroup instanceof HTMLElement) {
-          createIdeaTranscriptGroup.classList.toggle('is-hidden', issueType !== 'idea');
-        }
-      }
-
-      function openCreateIssueDialog(defaults) {
-        const createIssueBackdrop = document.getElementById('createIssueBackdrop');
-        const createIssueDialog = document.getElementById('createIssueDialog');
-        if (createIssueBackdrop instanceof HTMLElement) {
-          createIssueBackdrop.hidden = false;
-        }
-        if (createIssueDialog instanceof HTMLElement) {
-          createIssueDialog.hidden = false;
-        }
-        if (createProjectSelect instanceof HTMLSelectElement && typeof defaults?.projectKey === 'string' && defaults.projectKey.trim()) {
-          createProjectSelect.value = defaults.projectKey.trim();
-        }
-        if (createIssueTypeSelect instanceof HTMLSelectElement && typeof defaults?.issueType === 'string' && defaults.issueType.trim()) {
-          createIssueTypeSelect.value = defaults.issueType.trim();
-        }
-        if (createSummaryInput instanceof HTMLInputElement) {
-          createSummaryInput.value = typeof defaults?.summary === 'string' ? defaults.summary : '';
-        }
-        if (createDescriptionInput instanceof HTMLTextAreaElement) {
-          createDescriptionInput.value = typeof defaults?.description === 'string' ? defaults.description : '';
-        }
-        if (createParentKeyInput instanceof HTMLInputElement) {
-          createParentKeyInput.value = typeof defaults?.parentKey === 'string' ? defaults.parentKey : '';
-        }
-        if (createIdeaTranscriptInput instanceof HTMLTextAreaElement) {
-          createIdeaTranscriptInput.value = typeof defaults?.ideaTranscript === 'string' ? defaults.ideaTranscript : '';
-        }
-        createBoardId = typeof defaults?.boardId === 'string' ? defaults.boardId : '';
-        refreshCreateIdeaVisibility();
-        setCreateIssueStatus('', '');
-        if (createSummaryInput instanceof HTMLInputElement) {
-          createSummaryInput.focus();
-          createSummaryInput.select();
-        }
-      }
-      function closeCreateIssueDialog() {
-        const createIssueBackdrop = document.getElementById('createIssueBackdrop');
-        const createIssueDialog = document.getElementById('createIssueDialog');
-        if (createIssueBackdrop instanceof HTMLElement) {
-          createIssueBackdrop.hidden = true;
-        }
-        if (createIssueDialog instanceof HTMLElement) {
-          createIssueDialog.hidden = true;
-        }
-        if (createIssueForm instanceof HTMLFormElement) {
-          createIssueForm.reset();
-        }
-      }
-
-      function closeCreateIssueDialog() {
-        const createIssueBackdrop = document.getElementById('createIssueBackdrop');
-        const createIssueDialog = document.getElementById('createIssueDialog');
-        if (createIssueBackdrop instanceof HTMLElement) {
-          createIssueBackdrop.hidden = true;
-        }
-        if (createIssueDialog instanceof HTMLElement) {
-          createIssueDialog.hidden = true;
-        }
-        creatingIssue = false;
-        createBoardId = '';
-        if (submitCreateIssueButton instanceof HTMLButtonElement) {
-          submitCreateIssueButton.disabled = false;
-        }
-      }
-
-      createIssueButton?.addEventListener('click', () => openCreateIssueDialog({}));
-      createIdeaButton?.addEventListener('click', () => openCreateIssueDialog({ issueType: 'Idea' }));
-      createIssueTypeSelect?.addEventListener('change', refreshCreateIdeaVisibility);
-      cancelCreateIssueButton?.addEventListener('click', () => closeCreateIssueDialog());
-      
-      const createBackdrop = document.getElementById('createIssueBackdrop');
-      createBackdrop?.addEventListener('click', () => closeCreateIssueDialog());
-
-      if (createIssueForm instanceof HTMLFormElement) {
-        createIssueForm.addEventListener('submit', event => {
-          event.preventDefault();
-          if (creatingIssue) {
-            return;
-          }
-          const projectKey = createProjectSelect instanceof HTMLSelectElement ? createProjectSelect.value.trim() : '';
-          const issueType = createIssueTypeSelect instanceof HTMLSelectElement ? createIssueTypeSelect.value.trim() : '';
-          const summary = createSummaryInput instanceof HTMLInputElement ? createSummaryInput.value.trim() : '';
-          const description = createDescriptionInput instanceof HTMLTextAreaElement ? createDescriptionInput.value : '';
-          const parentKey = createParentKeyInput instanceof HTMLInputElement ? createParentKeyInput.value.trim() : '';
-          const ideaTranscript = createIdeaTranscriptInput instanceof HTMLTextAreaElement ? createIdeaTranscriptInput.value : '';
-          if (!projectKey || !issueType || !summary) {
-            setCreateIssueStatus('Project, issue type, and summary are required.', 'error');
-            return;
-          }
-          if (issueType.toLowerCase() === 'subtask' && !parentKey) {
-            setCreateIssueStatus('Parent key is required for Subtask.', 'error');
-            return;
-          }
-          creatingIssue = true;
-          if (submitCreateIssueButton instanceof HTMLButtonElement) {
-            submitCreateIssueButton.disabled = true;
-          }
-          setCreateIssueStatus('Creating issue...', '');
-          vscodeApi.postMessage({
-            type: 'createIssue',
-            projectKey,
-            issueType,
-            summary,
-            description,
-            parentKey,
-            ideaTranscript,
-            boardId: createBoardId
-          });
-        });
-      }
-
-      window.addEventListener('message', event => {
-        const message = event.data;
-        if (!message || typeof message.type !== 'string') {
-          return;
-        }
-        if (message.type === 'openCreateIssueDialog') {
-          openCreateIssueDialog(message.defaults || {});
-          return;
-        }
-        if (message.type === 'createIssueResult') {
-          creatingIssue = false;
-          if (submitCreateIssueButton instanceof HTMLButtonElement) {
-            submitCreateIssueButton.disabled = false;
-          }
-          if (message.ok) {
-            setCreateIssueStatus('Created.', 'success');
-            closeCreateIssueDialog();
-          } else {
-            setCreateIssueStatus(typeof message.error === 'string' ? message.error : 'Unable to create issue.', 'error');
-          }
-        }
+      createIssueButton?.addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'openIssueDraft' });
+      });
+      createIdeaButton?.addEventListener('click', () => {
+        vscodeApi.postMessage({ type: 'openIssueDraft', issueType: 'Idea' });
       });
 
       const loadMoreButton = document.getElementById('loadMoreButton');

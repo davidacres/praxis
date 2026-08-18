@@ -84,9 +84,11 @@ Suggested filenames are listed in [docs/screenshots/README.md](screenshots/READM
 
 ## Supported backends
 
-### Jira Cloud (`jiracloud`)
+### Jira MCP (`jiracloud`)
 
-Primary hosted tracker mode.
+Primary hosted tracker mode. Backed by an external Jira MCP server
+(`atlassian-jira_*` from `jira-mcp-server` or `mcp_com_atlassian_*` from
+`mcp.com.atlassian`).
 
 Supported capabilities include:
 
@@ -94,10 +96,9 @@ Supported capabilities include:
 - board browsing and tracking,
 - comments,
 - status transitions,
-- attachments,
-- linked epic / linked board query setup,
-- Jira Cloud OAuth site metadata,
-- Jira polling and delivery workflow integration.
+- linked epic / linked board query setup (`ticketManager.jiraMcpEpicKey`,
+  `ticketManager.jiraMcpBoardJql`),
+- AI-driven delivery workflow that runs against the MCP connection.
 
 ### Demo (`demo`)
 
@@ -120,7 +121,7 @@ Capabilities include:
 - reading markdown issue structures,
 - optional local issue creation,
 - markdown import helpers,
-- migration support toward Jira Cloud.
+- migration support toward a configured Jira MCP server.
 
 ### User Workspace (`userworkspace`)
 
@@ -235,11 +236,11 @@ The extension includes:
 
 - `Import Plan from Markdown Features`
 - `Import Markdown Files to Template Format`
-- `Migrate Live Folder to Jira Cloud`
-- `Link Jira Cloud Epic`
-- `Link Jira Cloud Board Query`
+- `Migrate Live Folder to Jira`
+- `Link Jira MCP Epic`
+- `Link Jira MCP Board Query`
 
-Migration docs live under [docs/migrations](migrations/live-folder-to-jira-gitlab-github.md).
+Migration docs live under [docs/migrations](migrations/live-folder-to-jira-gitlab-github.md) and [docs/migrations/removed-jira-polling.md](migrations/removed-jira-polling.md).
 
 ## Command reference
 
@@ -248,9 +249,8 @@ This section is a grouped summary. The dedicated reference lives in [docs/comman
 ### Setup and navigation
 
 - `Ticket Manager: Refresh`
-- `Ticket Manager: Configure Jira Cloud Connection`
+- `Ticket Manager: Configure Jira MCP Connection`
 - `Ticket Manager: Check Connection`
-- `Ticket Manager: Disconnect Jira Cloud`
 - `Ticket Manager: Set Backend Mode`
 - `Ticket Manager: Configure Project`
 - `Ticket Manager: Open Settings`
@@ -315,9 +315,9 @@ This section is a grouped summary. The dedicated reference lives in [docs/comman
 - `Ticket Manager: Open Task Designer`
 - `Ticket Manager: Import Plan from Markdown Features`
 - `Ticket Manager: Import Markdown Files to Template Format`
-- `Ticket Manager: Migrate Live Folder to Jira Cloud`
-- `Ticket Manager: Link Jira Cloud Epic`
-- `Ticket Manager: Link Jira Cloud Board Query`
+- `Ticket Manager: Migrate Live Folder to Jira`
+- `Ticket Manager: Link Jira MCP Epic`
+- `Ticket Manager: Link Jira MCP Board Query`
 
 ## Live Folder mode
 

@@ -241,8 +241,6 @@ function normalizeChildIssueType(raw: string | undefined): 'Story' | 'Task' | 'B
   if (trimmed === 'idea') { return 'Idea'; }
   return undefined;
 }
-const MAX_PLAN_SEARCH_DEPTH = 6;
-const MAX_PLAN_SEARCH_DIRECTORIES = 500;
 const SEARCH_SKIP_DIRS = new Set([
   '.git',
   '.hg',
@@ -573,13 +571,22 @@ async function containsTypedMarkdownFiles(rootUri: vscode.Uri): Promise<boolean>
   return false;
 }
 
-async function identifyPlanFolderAtRoot(
+export async function identifyPlanFolderAtRoot(
   candidateRoot: vscode.Uri,
   rootEntries?: [string, vscode.FileType][]
 ): Promise<IdentifiedPlanFolder | undefined> {
   const featuresUri = vscode.Uri.joinPath(candidateRoot, 'features');
   const featureEntries = await readDirectorySafe(featuresUri);
   if (featureEntries && (await containsFeaturePlanFolders(featuresUri, featureEntries))) {
+    return {
+      plansRootUri: candidateRoot,
+      featuresRootUri: featuresUri,
+      featureEntries
+    };
+  }
+  // An empty features/ directory marks a brand-new plans root (Create Board
+  // initializes this when the user picks a folder with no existing plans).
+  if (featureEntries && featureEntries.length === 0) {
     return {
       plansRootUri: candidateRoot,
       featuresRootUri: featuresUri,
@@ -619,23 +626,20 @@ async function identifyPlanFolderAtRoot(
 }
 
 /**
- * Resolve a selected folder to the actual plans root and features folder.
+ * Discover every plans root under a selected folder (breadth-first).
  *
- * Search order:
- *  1. `<selected>/features/`
- *  2. `<selected>/`
- *  3. Nested subdirectories below `<selected>` (breadth-first, bounded search)
+ * - If the selected folder itself is a plans root, returns only that one.
+ * - Otherwise returns each distinct nested plans root (e.g. one per sub-repo).
+ *   Once a plans root is found, its children are not searched further so nested
+ *   `features/` trees are not reported as separate boards.
  */
-export async function identifyPlanFolder(
+export async function discoverPlanFolders(
   selectedRoot: vscode.Uri | string,
   onProgress?: (message: string) => void
-): Promise<IdentifiedPlanFolder> {
+): Promise<IdentifiedPlanFolder[]> {
   const selectedRootUri = toDirectoryUri(selectedRoot);
 
   const directMatch = await identifyPlanFolderAtRoot(selectedRootUri);
-  if (directMatch) {
-    return directMatch;
-  }
 
   const rootEntries = await readDirectorySafe(selectedRootUri);
   if (!rootEntries) {
@@ -644,54 +648,129 @@ export async function identifyPlanFolder(
     );
   }
 
+  const matches: IdentifiedPlanFolder[] = [];
   const seen = new Set<string>([selectedRootUri.toString()]);
   const queue = listSearchableSubdirectories(rootEntries).map(name => {
     const uri = vscode.Uri.joinPath(selectedRootUri, name);
     seen.add(uri.toString());
-    return { uri, depth: 1 };
+    return uri;
   });
 
-  let searchedDirectories = 1;
-  while (queue.length > 0 && searchedDirectories < MAX_PLAN_SEARCH_DIRECTORIES) {
+  while (queue.length > 0) {
     const current = queue.shift()!;
-    if (current.depth > MAX_PLAN_SEARCH_DEPTH) {
-      continue;
-    }
 
-    const currentEntries = await readDirectorySafe(current.uri);
+    const currentEntries = await readDirectorySafe(current);
     if (!currentEntries) {
       continue;
     }
-    searchedDirectories++;
-    onProgress?.(`Searching for plans in ${current.uri.fsPath}`);
+    onProgress?.(`Searching for plans in ${current.fsPath}`);
 
-    const identified = await identifyPlanFolderAtRoot(current.uri, currentEntries);
+    const identified = await identifyPlanFolderAtRoot(current, currentEntries);
     if (identified) {
-      return identified;
-    }
-
-    if (current.depth >= MAX_PLAN_SEARCH_DEPTH) {
+      matches.push(identified);
+      // Do not descend into a plans root — avoid duplicate nested boards.
       continue;
     }
 
     for (const name of listSearchableSubdirectories(currentEntries)) {
-      if (seen.size >= MAX_PLAN_SEARCH_DIRECTORIES) {
-        break;
-      }
-      const childUri = vscode.Uri.joinPath(current.uri, name);
+      const childUri = vscode.Uri.joinPath(current, name);
       const key = childUri.toString();
       if (seen.has(key)) {
         continue;
       }
       seen.add(key);
-      queue.push({ uri: childUri, depth: current.depth + 1 });
+      queue.push(childUri);
     }
   }
 
-  throw new Error(
-    `No plan folders were found under the selected path or its nested subdirectories. ` +
-      `Expected: directories containing .md files with front matter (e.g. **Type:** Story/Task/Bug), or directories containing feature.md.`
-  );
+  // A parent can look like a plans root because it contains loose markdown files
+  // while also containing repository plans roots. Prefer the nested repositories
+  // when any were found; otherwise retain the selected folder as a single board.
+  return matches.length > 0 ? matches : directMatch ? [directMatch] : [];
+}
+
+/**
+ * Discover Git repository roots below a selected folder, including the
+ * selected folder when it is itself a repository. This bootstraps empty
+ * repositories before they have a `features/` plans tree.
+ */
+export async function discoverRepositoryFolders(
+  selectedRoot: vscode.Uri | string,
+  onProgress?: (message: string) => void
+): Promise<vscode.Uri[]> {
+  const selectedRootUri = toDirectoryUri(selectedRoot);
+  const rootEntries = await readDirectorySafe(selectedRootUri);
+  if (!rootEntries) {
+    throw new Error(
+      buildUnreadablePathError(typeof selectedRoot === 'string' ? selectedRoot : selectedRootUri.fsPath)
+    );
+  }
+
+  const repositories: vscode.Uri[] = [];
+  const seen = new Set<string>([selectedRootUri.toString()]);
+  const queue = [selectedRootUri];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const entries = current === selectedRootUri ? rootEntries : await readDirectorySafe(current);
+    if (!entries) {
+      continue;
+    }
+    onProgress?.(`Searching for repositories in ${current.fsPath}`);
+
+    if (entries.some(([name]) => name.toLowerCase() === '.git')) {
+      repositories.push(current);
+    }
+
+    for (const name of listSearchableSubdirectories(entries)) {
+      const child = vscode.Uri.joinPath(current, name);
+      const key = child.toString();
+      if (!seen.has(key)) {
+        seen.add(key);
+        queue.push(child);
+      }
+    }
+  }
+
+  return repositories;
+}
+
+/**
+ * Resolve a selected folder to the actual plans root and features folder.
+ *
+ * Search order:
+ *  1. `<selected>/features/`
+ *  2. `<selected>/`
+ *  3. All searchable nested subdirectories below `<selected>` (breadth-first)
+ */
+export async function identifyPlanFolder(
+  selectedRoot: vscode.Uri | string,
+  onProgress?: (message: string) => void
+): Promise<IdentifiedPlanFolder> {
+  const selectedRootUri = toDirectoryUri(selectedRoot);
+  const directMatch = await identifyPlanFolderAtRoot(selectedRootUri);
+  if (directMatch) {
+    return directMatch;
+  }
+  const matches = await discoverPlanFolders(selectedRoot, onProgress);
+  if (matches.length > 0) {
+    return matches[0];
+  }
+
+  // A plans folder does not need any particular subfolder to be valid. Tickets
+  // are plain markdown files discovered anywhere in the tree, so an explicitly
+  // selected folder is a usable plans root as long as it can be read.
+  // Recursive discovery stays strict — only this explicit selection is accepted.
+  const selectedEntries = await readDirectorySafe(selectedRootUri);
+  if (selectedEntries) {
+    return {
+      plansRootUri: selectedRootUri,
+      featuresRootUri: vscode.Uri.joinPath(selectedRootUri, 'features'),
+      featureEntries: []
+    };
+  }
+
+  throw new Error(buildUnreadablePathError(selectedRootUri.fsPath));
 }
 
 /**

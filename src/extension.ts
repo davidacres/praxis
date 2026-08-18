@@ -15,14 +15,11 @@ import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { issueTypeHex } from './board/issueTypeColors';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
-import { FilterStore, shouldAdoptJiraCloudEpicIssueScope } from './state/filterStore';
-import { StartupPollingController } from './jira/startupPollingController';
-import { initializeJiraCloudOAuthService } from './jira/jiraCloudOAuthService';
+import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from './state/filterStore';
 import type {
   AiProvider,
   BackendMode,
   Board,
-  IssueComment,
   IssueDetails,
   IssueSummary,
   UpdateIssueInput,
@@ -33,21 +30,16 @@ import {
   buildTicketContext,
   recommendTaskDesignerFlowWithCopilot,
   respondToCopilotComment,
-  reviewTicketWithClaude,
   reviewTicketWithCopilot,
-  reviewTicketWithOpenAi,
   runLocalPeerReview
 } from './ai/aiReviewService';
-import { ClaudeAgentService, ClaudeAgentLogger } from './ai/claudeAgentService';
-import { reviewTicketWithClaudeCli } from './ai/claudeCliReview';
-import { reviewTicketWithWorkspaceLanguageModel, listWorkspaceLanguageModelOptions } from './ai/workspaceLanguageModelReview';
 import {
   AI_PROVIDER_LABELS,
   describeAiConfigurationResult,
   promptToConfigureDefaultAiProvider,
   sortAiOptionsByDefaultProvider
 } from './ai/aiProviderSetup';
-import { resolveBackendModeContextState } from './ui/backendModeContext';
+import { BackendModeContextState, resolveBackendModeContextState } from './ui/backendModeContext';
 import { initializeMcpOAuthManager } from './mcp/oauthManager';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
@@ -60,7 +52,9 @@ import { LocalPeerReviewPanel } from './views/localPeerReviewPanel';
 import { NewProjectWizardPanel } from './views/newProjectWizardPanel';
 import { WorkModeBoardsSidebarViewProvider } from './views/workModeBoardsSidebarViewProvider';
 import { SetupWizardPanel } from './views/setupWizardPanel';
+import { UserWorkspaceBoardWizardPanel } from './views/userWorkspaceBoardWizardPanel';
 import { ConnectionsManagerPanel } from './views/connectionsManagerPanel';
+import { AiGatewaySettingsPanel } from './views/aiGatewaySettingsPanel';
 import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarViewProvider';
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
@@ -68,14 +62,20 @@ import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
 import { IssueAnalysisPanelManager, type AnalysisRepositoryEntry } from './views/issueAnalysisPanelManager';
-import { CopilotAgentService, type CopilotAgentLogger } from './ai/copilotAgentService';
+import { VercelAgentService, type VercelAgentLogger } from './ai/vercelAgentService';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
 import type { AgentSessionRecord, AgentTaskDefinition, AgentWorkflowReference } from './ai/agentTypes';
-import { resolveCopilotCliOverride } from './ai/copilotSdkRuntime';
+import {
+  fetchModels,
+  normalizeInboundModelId,
+  resolveGatewayApiKeyFromEnv,
+  resolveGatewayUrlFromEnv
+} from './ai/gateway';
 import { getParentRule } from './issues/issueHierarchy';
 import {
   AI_COMMENT_HEADER,
+  COPILOT_AGENT_INPUT_REQUEST_MARKER,
   buildDeliveryAnalysisBlockedComment,
   buildDeliveryAnalysisTaskDefinition,
   buildDeliveryStartedComment,
@@ -198,89 +198,58 @@ interface AiModelOption {
 }
 
 const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
-  openai: [
-    { id: 'gpt-5.4', label: 'GPT 5.4' },
-    { id: 'gpt-5-mini', label: 'GPT 5 Mini' },
-    { id: 'gpt-4.1', label: 'GPT 4.1' },
-    { id: 'gpt-4.1-mini', label: 'GPT 4.1 Mini' },
-    { id: 'o3', label: 'o3' },
-    { id: 'o4-mini', label: 'o4 Mini' }
-  ],
-  claude: [
-    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
-  ],
-  'copilot-cli': [
+  'vercel-gateway': [
     { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
     { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
     { id: 'gpt-5.4', label: 'GPT 5.4' },
     { id: 'gpt-4.1', label: 'GPT 4.1' },
     { id: 'o3', label: 'o3' }
-  ],
-  'cursor-cli': [],
-  'claude-cli': [
-    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' }
   ]
 };
 
 /**
- * Live Copilot models discovered via the VS Code Language Model API
- * (`vscode.lm.selectChatModels`). This reflects whatever the user's Copilot
- * subscription exposes, so it stays in sync with VS Code's own model picker.
- * Populated asynchronously; falls back to the curated `copilot-cli` list until
- * the first refresh completes.
+ * Live Vercel AI Gateway models discovered via GET /v1/models.
+ * Falls back to the curated `vercel-gateway` list until the first refresh completes.
  */
-let copilotModelCache: AiModelOption[] = [];
-let workspaceLanguageModelCache: AiModelOption[] = [];
+let gatewayModelCache: AiModelOption[] = [];
 
-async function refreshCopilotModelCache(log?: (message: string) => void): Promise<void> {
+async function refreshGatewayModelCache(
+  options: { apiKey?: string; gatewayUrl?: string },
+  log?: (message: string) => void
+): Promise<void> {
   try {
-    if (!vscode.lm || typeof vscode.lm.selectChatModels !== 'function') {
+    const apiKey = resolveGatewayApiKeyFromEnv(options.apiKey);
+    if (!apiKey) {
       return;
     }
-    const models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    const models = await fetchModels({
+      url: resolveGatewayUrlFromEnv(options.gatewayUrl),
+      apiKey
+    });
     const seen = new Set<string>();
-    const options: AiModelOption[] = [];
+    const next: AiModelOption[] = [];
     for (const model of models) {
-      const id = model.id?.trim();
+      const id = normalizeInboundModelId(model.id).trim();
       if (!id || seen.has(id)) {
         continue;
       }
       seen.add(id);
-      options.push({ id, label: model.name?.trim() || id });
+      next.push({ id, label: model.name?.trim() || id });
     }
-    if (options.length > 0) {
-      copilotModelCache = options;
-      log?.(`[ai-models] Loaded ${options.length} Copilot model(s) from VS Code language model API.`);
-    }
-  } catch (error) {
-    log?.(`[ai-models] Failed to load Copilot models from VS Code: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function refreshWorkspaceLanguageModelCache(log?: (message: string) => void): Promise<void> {
-  try {
-    const options = await listWorkspaceLanguageModelOptions();
-    if (options.length > 0) {
-      workspaceLanguageModelCache = options;
-      log?.(`[ai-models] Loaded ${options.length} editor language model(s) for Cursor CLI analysis.`);
+    if (next.length > 0) {
+      gatewayModelCache = next;
+      log?.(`[ai-models] Loaded ${next.length} Vercel AI Gateway model(s).`);
     }
   } catch (error) {
-    log?.(`[ai-models] Failed to load editor language models: ${error instanceof Error ? error.message : String(error)}`);
+    log?.(
+      `[ai-models] Failed to load Vercel AI Gateway models: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
 function getModelOptionsForProvider(provider: AiProvider): AiModelOption[] {
-  if (provider === 'cursor-cli' && workspaceLanguageModelCache.length > 0) {
-    return workspaceLanguageModelCache;
-  }
-  if (provider === 'copilot-cli' && copilotModelCache.length > 0) {
-    return copilotModelCache;
+  if (provider === 'vercel-gateway' && gatewayModelCache.length > 0) {
+    return gatewayModelCache;
   }
   return ANALYSIS_MODEL_OPTIONS[provider] ?? [];
 }
@@ -883,12 +852,6 @@ function extractCopilotRequest(body: string, mentionNames: string[] = ['copilot'
 
 let deactivateHandler: (() => Promise<void>) | undefined;
 
-const COPILOT_CLARIFICATION_COMMENT_MARKER = 'Copilot clarification request';
-const COPILOT_REPLY_COMMENT_MARKER = '@copilot reply';
-const COPILOT_ANALYSIS_START_COMMENT = `${AI_COMMENT_HEADER}\nAnalysis starting`;
-const COPILOT_ANALYSIS_READY_COMMENT_MARKER = 'AI readiness analysis passed';
-const COPILOT_AGENT_INPUT_REQUEST_MARKER = 'Agent input requested';
-const WORKTREE_CONFLICT_COMMENT_MARKER = 'existing worktree/branch conflict';
 const DELIVERY_FORWARD_STATUS_PREFERENCES = [
   'ready for qa',
   'qa ready',
@@ -917,59 +880,10 @@ const DELIVERY_NON_PROGRESS_PATTERNS = [
   /hold/i
 ] as const;
 
-interface PollingIssueSnapshot {
-  key: string;
-  fields?: {
-    summary?: string;
-    updated?: string;
-    status?: {
-      name?: string;
-      statusCategory?: {
-        name?: string;
-      };
-    };
-  };
-}
-
-interface PollingSyncEvent {
-  /** Stable id of the connection (or `__global__` for legacy fallback) that emitted this event. */
-  connectionId?: string;
-  issues: PollingIssueSnapshot[];
-  newKeys: string[];
-  removedKeys: string[];
-  changedKeys: string[];
-  eligibleIssueKeys: string[];
-}
-
 interface ResolvedGitLabAutomation {
   client: GitLabApiService;
   baseUrl: string;
   projectPath: string;
-}
-
-function formatStatusSnapshot(status: string | undefined, statusCategory: string | undefined): string {
-  return JSON.stringify({
-    status: status?.trim() ?? '',
-    statusCategory: statusCategory?.trim() ?? ''
-  });
-}
-
-function parseStatusSnapshot(snapshot: string | undefined): { status?: string; statusCategory?: string } {
-  if (!snapshot?.trim()) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(snapshot) as { status?: unknown; statusCategory?: unknown };
-    return {
-      status: typeof parsed.status === 'string' ? parsed.status : undefined,
-      statusCategory: typeof parsed.statusCategory === 'string' ? parsed.statusCategory : undefined
-    };
-  } catch {
-    return {
-      status: snapshot
-    };
-  }
 }
 
 function buildMergeRequestDescription(
@@ -1044,304 +958,42 @@ export function selectNextDeliveryTransition(
   return candidates[0]?.transition;
 }
 
-function getCommentActivityTimestamp(comment: IssueComment): string {
-  return comment.updated ?? comment.created ?? '';
-}
-
-function sortCommentsChronologically(comments: IssueComment[]): IssueComment[] {
-  return [...comments].sort((left, right) => {
-    const timestampComparison = getCommentActivityTimestamp(left).localeCompare(
-      getCommentActivityTimestamp(right)
-    );
-    if (timestampComparison !== 0) {
-      return timestampComparison;
-    }
-
-    return (left.id ?? '').localeCompare(right.id ?? '');
-  });
-}
-
-function isCopilotGeneratedComment(comment: IssueComment): boolean {
-  return (
-    comment.body.includes(AI_COMMENT_HEADER) ||
-    comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER) ||
-    comment.body.includes(COPILOT_REPLY_COMMENT_MARKER)
-  );
-}
-
-function formatPollingClarificationComment(body: string, reporterMention?: string): string {
-  const trimmed = body.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-  if (trimmed.includes(COPILOT_CLARIFICATION_COMMENT_MARKER)) {
-    return trimmed;
-  }
-
-  const parts = [
-    AI_COMMENT_HEADER,
-    COPILOT_CLARIFICATION_COMMENT_MARKER,
-    ''
-  ];
-  if (reporterMention) {
-    parts.push(`${reporterMention},`);
-    parts.push('');
-  }
-  parts.push(trimmed);
-  return parts.join('\n');
-}
-
-function isAnalysisLifecycleComment(comment: IssueComment): boolean {
-  const normalizedBody = comment.body.trim();
-  return (
-    isCopilotGeneratedComment(comment)
-    || normalizedBody.includes(COPILOT_ANALYSIS_READY_COMMENT_MARKER)
-  );
-}
-
-function getCopilotCommentSignature(comment: IssueComment): string {
-  return `${comment.id ?? ''}|${getCommentActivityTimestamp(comment)}|${comment.body}`;
-}
-
-function getLatestCopilotCommentSignature(issue: IssueDetails): string | undefined {
-  const comments = sortCommentsChronologically(issue.comments ?? []);
-  for (let index = comments.length - 1; index >= 0; index -= 1) {
-    if (isCopilotGeneratedComment(comments[index])) {
-      return getCopilotCommentSignature(comments[index]);
-    }
-  }
-  return undefined;
-}
-
-export function extractPendingCopilotReplyRequest(issue: IssueDetails): string | undefined {
-  const comments = sortCommentsChronologically(issue.comments ?? []);
-  let lastCopilotCommentIndex = -1;
-
-  for (let index = 0; index < comments.length; index += 1) {
-    if (isCopilotGeneratedComment(comments[index])) {
-      lastCopilotCommentIndex = index;
-    }
-  }
-
-  if (lastCopilotCommentIndex < 0) {
-    return undefined;
-  }
-
-  const pendingReplies = comments
-    .slice(lastCopilotCommentIndex + 1)
-    .filter(comment => !isCopilotGeneratedComment(comment) && comment.body.trim().length > 0)
-    .map(comment => {
-      const stripped = stripAiBotPrefix(comment.body);
-      return stripped === undefined ? undefined : { comment, body: stripped };
-    })
-    .filter((entry): entry is { comment: IssueComment; body: string } => entry !== undefined);
-
-  if (pendingReplies.length === 0) {
-    return undefined;
-  }
-
-  return pendingReplies
-    .map(({ comment, body }) => `${comment.author?.trim() || 'User'}: ${body}`)
-    .join('\n\n');
-}
-
-/**
- * Jira polling only treats a comment as a reply to the Copilot agent when the
- * comment starts with the literal trigger `#AIbot`. Everything else is ignored
- * so the bot never responds to unrelated discussion on a ticket.
- *
- * Returns the comment body with the prefix removed when the trigger is present,
- * or `undefined` when the comment should be ignored.
- */
-export function stripAiBotPrefix(body: string): string | undefined {
-  const trimmed = body.trim();
-  const match = /^#aibot\b[\s:,-]*/i.exec(trimmed);
-  if (!match) {
-    return undefined;
-  }
-  const remainder = trimmed.slice(match[0].length).trim();
-  return remainder.length > 0 ? remainder : undefined;
-}
-
-/**
- * Returns true when the ticket already has at least one Copilot analysis
- * lifecycle comment (analysis start, readiness-ready marker, or any other
- * Copilot-generated comment). Used to detect "the bot has spoken once — do
- * not re-engage unless the user explicitly pings with #AIbot".
- */
-export function hasAnyAnalysisLifecycleComment(issue: Pick<IssueDetails, 'comments'>): boolean {
-  return (issue.comments ?? []).some(comment => isAnalysisLifecycleComment(comment));
-}
-
-/**
- * Returns true when there is at least one user comment starting with the
- * `#AIbot` trigger that was posted AFTER the most recent analysis lifecycle
- * comment. This is the only condition under which polling is allowed to
- * re-run analysis / delivery after the bot has already weighed in once.
- */
-export function hasPendingAiBotTrigger(issue: Pick<IssueDetails, 'comments'>): boolean {
-  const comments = sortCommentsChronologically(issue.comments ?? []);
-  let lastLifecycleIndex = -1;
-  for (let index = 0; index < comments.length; index += 1) {
-    if (isAnalysisLifecycleComment(comments[index])) {
-      lastLifecycleIndex = index;
-    }
-  }
-  if (lastLifecycleIndex < 0) {
-    return false;
-  }
-  for (let index = lastLifecycleIndex + 1; index < comments.length; index += 1) {
-    const comment = comments[index];
-    if (isAnalysisLifecycleComment(comment)) {
-      continue;
-    }
-    if (stripAiBotPrefix(comment.body) !== undefined) {
-      return true;
-    }
-  }
-  return false;
-}
-
-export function buildPollingAnalysisSignature(issue: Pick<
-  IssueDetails,
-  'key' | 'summary' | 'description' | 'status' | 'issueType' | 'priority' | 'parentIssue' | 'comments'
->): string {
-  // Only #AIbot-prefixed comments should be able to invalidate the analysis
-  // signature. Random user chatter on the ticket must never re-trigger
-  // analysis or delivery — the bot only reacts when explicitly addressed.
-  const relevantComments = sortCommentsChronologically(issue.comments ?? [])
-    .filter(comment => !isAnalysisLifecycleComment(comment))
-    .map(comment => {
-      const triggered = stripAiBotPrefix(comment.body);
-      if (triggered === undefined) {
-        return undefined;
-      }
-      return {
-        id: comment.id ?? '',
-        author: comment.author ?? '',
-        body: triggered,
-        timestamp: getCommentActivityTimestamp(comment)
-      };
-    })
-    .filter((entry): entry is { id: string; author: string; body: string; timestamp: string } => entry !== undefined);
-
-  return createHash('sha1')
-    .update(
-      JSON.stringify({
-        key: issue.key,
-        summary: issue.summary,
-        description: issue.description ?? '',
-        status: issue.status,
-        issueType: issue.issueType,
-        priority: issue.priority ?? '',
-        parentKey: issue.parentIssue?.key ?? '',
-        comments: relevantComments
-      })
-    )
-    .digest('hex');
-}
-
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
   initializeMcpOAuthManager(context);
 
-  const handledPollingReplyStateKey = 'ticketManager.handledPollingReplyThreads';
-  const handledPollingAnalysisStateKey = 'ticketManager.handledPollingAnalysis';
-  const pollingStatusSnapshotStateKey = 'ticketManager.pollingStatusSnapshots';
-  const handledPollingReplies: Record<string, string> =
-    context.workspaceState.get<Record<string, string>>(handledPollingReplyStateKey) ?? {};
-  const handledPollingAnalyses: Record<string, string> =
-    context.workspaceState.get<Record<string, string>>(handledPollingAnalysisStateKey) ?? {};
-  const pollingStatusSnapshots: Record<string, string> =
-    context.workspaceState.get<Record<string, string>>(pollingStatusSnapshotStateKey) ?? {};
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();
+  configStore.bindExtensionSecrets(context.secrets);
+  await configStore.refreshVercelApiKeyCache();
   await configStore.migrateAiProviderSettings();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
   const connectionStore = new ConnectionStore(context);
-  const startupPollingController = new StartupPollingController(
-    context,
-    configStore,
-    outputChannel,
-    async event => {
-      // Pin backend routing to the originating connection so any
-      // workflow kicked off by this event hits the correct backend
-      // even if the user has selected a different board in the sidebar.
-      const previousActiveConnection = backendService.getActiveConnectionId();
-      const shouldPin =
-        event.connectionId !== undefined &&
-        event.connectionId !== '__global__' &&
-        connectionStore.getConnection(event.connectionId) !== undefined;
-      if (shouldPin) {
-        backendService.setActiveConnection(event.connectionId);
-      }
-      try {
-        await processPollingClarificationRequests(event);
-        await processPollingClarificationReplies(event);
-        await processPollingAgentInputReplies(event);
-        await processPollingMergeRequestAutomation(event);
-
-        if (
-          event.newKeys.length === 0 &&
-          event.removedKeys.length === 0 &&
-          event.changedKeys.length === 0
-        ) {
-          return;
-        }
-
-        await refreshAndRestoreSelection();
-      } finally {
-        if (shouldPin) {
-          backendService.setActiveConnection(previousActiveConnection);
-        }
-      }
-    },
-    connectionStore
-  );
-  const copilotAgentLogger: CopilotAgentLogger = {
+  const vercelAgentLogger: VercelAgentLogger = {
     appendLine(message: string): void {
       outputChannel.appendLine(message);
     }
   };
-  const copilotAgentService = new CopilotAgentService(aiSessionManager, copilotAgentLogger);
-  const claudeAgentLogger: ClaudeAgentLogger = new ClaudeAgentLogger(outputChannel);
-  const claudeAgentService = new ClaudeAgentService(aiSessionManager, claudeAgentLogger);
+  const vercelAgentService = new VercelAgentService(aiSessionManager, vercelAgentLogger);
   const agentSessionController: AgentSessionController = {
     onDidChangeActiveTask(listener) {
-      const disposeCopilot = copilotAgentService.onDidChangeActiveTask(listener);
-      const disposeClaude = claudeAgentService.onDidChangeActiveTask(listener);
-      return () => {
-        disposeCopilot();
-        disposeClaude();
-      };
+      return vercelAgentService.onDidChangeActiveTask(listener);
     },
     respondToInput(issueKey, response) {
-      if (claudeAgentService.hasActiveTask(issueKey)) {
-        claudeAgentService.respondToInput(issueKey, response);
-        return;
-      }
-      copilotAgentService.respondToInput(issueKey, response);
+      vercelAgentService.respondToInput(issueKey, response);
     },
     respondToPermission(issueKey, decision) {
-      if (claudeAgentService.hasActiveTask(issueKey)) {
-        claudeAgentService.respondToPermission(issueKey, decision);
-        return;
-      }
-      copilotAgentService.respondToPermission(issueKey, decision);
+      vercelAgentService.respondToPermission(issueKey, decision);
     },
     hasActiveTask(issueKey) {
-      return copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey);
+      return vercelAgentService.hasActiveTask(issueKey);
     },
     getPendingPermissionDescriptions(issueKey) {
-      return claudeAgentService.hasActiveTask(issueKey)
-        ? claudeAgentService.getPendingPermissionDescriptions(issueKey)
-        : copilotAgentService.getPendingPermissionDescriptions(issueKey);
+      return vercelAgentService.getPendingPermissionDescriptions(issueKey);
     },
     getPendingPermissions(issueKey) {
-      return claudeAgentService.hasActiveTask(issueKey)
-        ? claudeAgentService.getPendingPermissions(issueKey)
-        : copilotAgentService.getPendingPermissions(issueKey);
+      return vercelAgentService.getPendingPermissions(issueKey);
     }
   };
   const copilotSessionPanelManager = new CopilotSessionPanelManager(
@@ -1363,6 +1015,7 @@ export async function activate(
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
   const newProjectWizardPanel = new NewProjectWizardPanel();
   const setupWizardPanel = new SetupWizardPanel();
+  const userWorkspaceBoardWizardPanel = new UserWorkspaceBoardWizardPanel();
   const setupSidebarViewProvider = new SetupSidebarViewProvider(context);
   const workModeSetupSidebarViewProvider = new SetupSidebarViewProvider(context);
   context.subscriptions.push(connectionStore);
@@ -1372,10 +1025,20 @@ export async function activate(
     connectionStore,
     backendService
   );
-  context.subscriptions.push(connectionsManagerPanel);
+  const aiGatewaySettingsPanel = new AiGatewaySettingsPanel(context, configStore, () => {
+    refreshAiAssignmentMenus();
+    refreshStatusBarInBackground();
+    void refreshGatewayModelCache(getVercelGatewayOptions(), message =>
+      outputChannel.appendLine(message)
+    );
+  });
+  context.subscriptions.push(connectionsManagerPanel, aiGatewaySettingsPanel);
   context.subscriptions.push(
     vscode.commands.registerCommand('ticketManager.openConnectionsManager', () => {
       connectionsManagerPanel.open();
+    }),
+    vscode.commands.registerCommand('ticketManager.openAiGatewaySettings', () => {
+      void aiGatewaySettingsPanel.open();
     }),
     vscode.commands.registerCommand('ticketManager.addConnection', () => {
       connectionsManagerPanel.open({ kind: 'addConnection' });
@@ -1403,6 +1066,36 @@ export async function activate(
   // First-run: auto-open the manager if no connections exist yet.
   if (!connectionStore.hasConnections()) {
     connectionsManagerPanel.open({ kind: 'addConnection' });
+  } else {
+    // Drop legacy placeholder tracked boards (boardId === connection id) that
+    // older builds invented for User Workspace and that cannot be opened.
+    void (async () => {
+      let removedSelected = false;
+      const selectedId = boardStore.getLastSelectedBoardId();
+      for (const connection of connectionStore.getConnections()) {
+        if (connection.mode !== 'userworkspace') {
+          continue;
+        }
+        for (const board of connectionStore.getTrackedBoardsForConnection(connection.id)) {
+          if (board.boardId === connection.id) {
+            await connectionStore.removeTrackedBoard({
+              connectionId: connection.id,
+              boardId: board.boardId
+            });
+            if (selectedId === board.boardId) {
+              removedSelected = true;
+            }
+          }
+        }
+      }
+      if (removedSelected) {
+        await boardStore.setLastSelectedTrackedBoard(undefined);
+      }
+    })().catch(error => {
+      outputChannel.appendLine(
+        `[prune-userworkspace-placeholders] ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
   }
   // Initialise active-connection routing from persisted last-selected board.
   {
@@ -1424,61 +1117,34 @@ export async function activate(
   let lastCloseWarningSignature: string | undefined;
   const permissionPromptSignatures = new Map<string, string>();
   const permissionPromptInFlight = new Set<string>();
-  const pollingClarificationInFlight = new Set<string>();
-  const pollingReplyInFlight = new Set<string>();
-  const pollingAgentInputReplyInFlight = new Set<string>();
   const deliveryFinalizationInFlight = new Set<string>();
   const mergeRequestAutomationInFlight = new Set<string>();
   let cachedGitLabAutomationKey: string | undefined;
   let cachedGitLabAutomation: ResolvedGitLabAutomation | undefined;
   let lastGitLabAutomationSkipReason: string | undefined;
 
-  async function setHandledPollingReply(issueKey: string, signature: string | undefined): Promise<void> {
-    if (signature) {
-      handledPollingReplies[issueKey] = signature;
-    } else {
-      delete handledPollingReplies[issueKey];
-    }
-    await context.workspaceState.update(handledPollingReplyStateKey, handledPollingReplies);
-  }
-
-  async function setHandledPollingAnalysis(issueKey: string, signature: string | undefined): Promise<void> {
-    if (signature) {
-      handledPollingAnalyses[issueKey] = signature;
-    } else {
-      delete handledPollingAnalyses[issueKey];
-    }
-    await context.workspaceState.update(handledPollingAnalysisStateKey, handledPollingAnalyses);
-  }
-
-  async function persistPollingStatusSnapshots(nextSnapshots: Record<string, string>): Promise<void> {
-    const keysToRemove = Object.keys(pollingStatusSnapshots).filter(key => !(key in nextSnapshots));
-    for (const key of keysToRemove) {
-      delete pollingStatusSnapshots[key];
-    }
-    for (const [issueKey, snapshot] of Object.entries(nextSnapshots)) {
-      pollingStatusSnapshots[issueKey] = snapshot;
-    }
-    await context.workspaceState.update(pollingStatusSnapshotStateKey, pollingStatusSnapshots);
-  }
-
   function reportError(error: unknown, scope?: string): void {
     logError(outputChannel, error, scope);
     ticketManagerStatusBar.recordError(error);
   }
 
-  function isCopilotSdkConfigured(): boolean {
+  function isVercelGatewayConfigured(): boolean {
     return (
-      configStore.getActiveAiProvider() === 'copilot-cli' &&
-      configStore.getConfiguredAiProviders().includes('copilot-cli')
+      configStore.getActiveAiProvider() === 'vercel-gateway' &&
+      configStore.getConfiguredAiProviders().includes('vercel-gateway')
     );
   }
 
-  function isClaudeSdkConfigured(): boolean {
-    return (
-      configStore.getActiveAiProvider() === 'claude-cli' &&
-      configStore.getConfiguredAiProviders().includes('claude-cli')
-    );
+  /** @deprecated Use isVercelGatewayConfigured. */
+  function isCopilotSdkConfigured(): boolean {
+    return isVercelGatewayConfigured();
+  }
+
+  function getVercelGatewayOptions(): { apiKey?: string; gatewayUrl?: string } {
+    return {
+      apiKey: configStore.getAiVercelGatewayApiKey() || undefined,
+      gatewayUrl: configStore.getAiVercelGatewayUrl() || undefined
+    };
   }
 
   function normalizeMentionName(name: string | undefined): string | undefined {
@@ -1487,8 +1153,8 @@ export async function activate(
   }
 
   function getProviderAgentDisplayName(provider: AiProvider): string {
-    if (provider === 'copilot-cli') {
-      return configStore.getAiCopilotAgentName().trim() || AI_PROVIDER_LABELS[provider];
+    if (provider === 'vercel-gateway') {
+      return configStore.getAiVercelAgentName().trim() || AI_PROVIDER_LABELS[provider];
     }
     return AI_PROVIDER_LABELS[provider] ?? provider;
   }
@@ -1538,7 +1204,7 @@ export async function activate(
     if (activeAgentName && activeAgentName.toLowerCase() !== 'copilot') {
       return `Write a comment (mention @${activeAgentName} for a reply)`;
     }
-    return 'Write a comment (mention @copilot for a reply)';
+    return 'Write a comment (mention @agent for a reply)';
   }
 
   function updateCommentPlaceholders(): void {
@@ -1547,70 +1213,11 @@ export async function activate(
     issueDetailsSidebarViewProvider?.setCommentPlaceholder(placeholder);
   }
 
-  function hasCopilotClarificationComment(issue: IssueDetails): boolean {
-    return issue.comments?.some(comment => comment.body.includes(COPILOT_CLARIFICATION_COMMENT_MARKER)) ?? false;
-  }
-
-  function hasCopilotAnalysisStartComment(issue: IssueDetails): boolean {
-    return issue.comments?.some(comment => comment.body.includes('Analysis starting')) ?? false;
-  }
-
   async function postCopilotReply(issueKey: string, request: string): Promise<void> {
-    const cliPath = getCopilotCliPathOverride();
+    const cliPath = getVercelGatewayApiKey();
     const issue = await backendService.getIssue(issueKey);
     const response = await respondToCopilotComment(issue, cliPath, request, workingDirectory);
     await backendService.addComment(issueKey, response);
-  }
-
-  async function handlePollingAnalysisReady(
-    issue: IssueDetails,
-    options?: {
-      analysisSignature?: string;
-      replySignature?: string;
-      forceCleanWorktree?: boolean;
-    }
-  ): Promise<void> {
-    // Route feature requests to the decomposition workflow
-    let started: boolean;
-    try {
-    if (isFeatureRequestTicket(issue)) {
-      outputChannel.appendLine(
-        `[Jira Polling] Detected feature request on ${issue.key}; routing to decomposition workflow.`
-      );
-      started = await startFeatureDecompositionWorkflow(issue, { forceCleanWorktree: options?.forceCleanWorktree });
-      if (started) {
-        outputChannel.appendLine(
-          `[Jira Polling] Feature decomposition workflow started for ${issue.key}.`
-        );
-      }
-    } else {
-      started = await startPollingDeliveryWorkflow(issue, { forceCleanWorktree: options?.forceCleanWorktree });
-      if (started) {
-        outputChannel.appendLine(
-          `[Jira Polling] Readiness analysis passed on ${issue.key}; delivery workflow started.`
-        );
-      }
-    }
-    } catch (error) {
-      if (error instanceof WorktreeConflictError) {
-        outputChannel.appendLine(
-          `[Jira Polling] Worktree conflict for ${issue.key}: ${error.worktreeName} already exists. Posting clarification comment.`
-        );
-        await backendService.addComment(
-          issue.key,
-          buildWorktreeConflictClarificationComment(error.worktreeName)
-        );
-        return;
-      }
-      throw error;
-    }
-
-    if (options?.analysisSignature !== undefined) {
-      await setHandledPollingAnalysis(issue.key, options.analysisSignature);
-    }
-    if (options?.replySignature !== undefined) {
-      await setHandledPollingReply(issue.key, options.replySignature);
-    }
   }
 
   function ensureWorkflowAssignedFromAnalysis(
@@ -1743,6 +1350,35 @@ export async function activate(
       );
     } catch (error) {
       reportError(error, `deliveryStartComment:${issue.key}`);
+    }
+  }
+
+  async function postAgentInputRequestComment(
+    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
+  ): Promise<void> {
+    const { issueKey } = record;
+    const lastInputEvent = [...record.events]
+      .reverse()
+      .find(event => event.type === 'user_input_requested');
+    const question = lastInputEvent?.summary ?? 'The AI agent needs your input to continue.';
+    const issue = await backendService.getIssue(issueKey);
+    const mentionLine = issue.reporterMention ? `${issue.reporterMention},\n\n` : '';
+    const commentBody = [
+      AI_COMMENT_HEADER,
+      COPILOT_AGENT_INPUT_REQUEST_MARKER,
+      '',
+      `${mentionLine}${question}`,
+      '',
+      'Reply with "#AIbot <your answer>" so the bot sees your response.'
+    ].join('\n');
+
+    try {
+      await backendService.addComment(issueKey, commentBody);
+      outputChannel.appendLine(
+        `[Agent Input] Posted input request comment on ${issueKey}: ${question.slice(0, 120)}`
+      );
+    } catch (error) {
+      reportError(error, `agentInputComment:${issueKey}`);
     }
   }
 
@@ -3028,405 +2664,6 @@ export async function activate(
     return true;
   }
 
-  async function processPollingClarificationRequests(event: {
-    newKeys: string[];
-    changedKeys: string[];
-    eligibleIssueKeys: string[];
-  }): Promise<void> {
-    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])].filter(issueKey =>
-      event.eligibleIssueKeys.includes(issueKey)
-    );
-
-    if (candidateKeys.length === 0) {
-      return;
-    }
-
-    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
-      outputChannel.appendLine(
-        '[Jira Polling] Clarification comments skipped because neither GitHub Copilot SDK nor Claude Code CLI is configured.'
-      );
-      return;
-    }
-
-    const clarificationEnabled = configStore.isJiraPollingClarificationAnalysisEnabled();
-    const cliPath = getCopilotCliPathOverride();
-    const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
-
-    for (const issueKey of candidateKeys) {
-      if (pollingClarificationInFlight.has(issueKey) || hasActiveAgentTask(issueKey)) {
-        continue;
-      }
-
-      pollingClarificationInFlight.add(issueKey);
-      try {
-        const issue = await backendService.getIssue(issueKey);
-        const analysisSignature = buildPollingAnalysisSignature(issue);
-
-        // If any bot comment is a worktree/branch conflict, the replies flow
-        // must handle the user's #AIbot response — not the requests flow.
-        // Skip here so we don't accidentally re-trigger delivery without
-        // forceCleanWorktree and post duplicate conflict comments.
-        const hasWorktreeConflict = issue.comments?.some(c => c.body.includes(WORKTREE_CONFLICT_COMMENT_MARKER)) ?? false;
-        if (hasWorktreeConflict) {
-          outputChannel.appendLine(
-            `[Jira Polling] Deferring ${issueKey} to reply handler: pending worktree conflict awaiting user response.`
-          );
-          continue;
-        }
-
-        if (!clarificationEnabled) {
-          // Clarification analysis is disabled — proceed directly to delivery
-          // with whatever information the ticket provides.
-          if (hasAnyAnalysisLifecycleComment(issue) && !hasPendingAiBotTrigger(issue)) {
-            await setHandledPollingAnalysis(issueKey, analysisSignature);
-            continue;
-          }
-          if (handledPollingAnalyses[issueKey] === analysisSignature) {
-            continue;
-          }
-
-          // Try to extract workflow reference from the ticket description/comments
-          const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
-          ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
-
-          outputChannel.appendLine(
-            `[Jira Polling] Clarification analysis disabled — proceeding directly to delivery for ${issueKey}.`
-          );
-          await handlePollingAnalysisReady(issue, { analysisSignature });
-          continue;
-        }
-
-        if (hasCopilotClarificationComment(issue)) {
-          continue;
-        }
-        // Hard gate: once any analysis lifecycle comment exists on the ticket
-        // (start, ready, clarification, or other Copilot reply), never re-run
-        // analysis unless the user has explicitly pinged the bot with an
-        // #AIbot-prefixed comment posted after the last bot comment. This is
-        // immune to state-cache drift and version upgrades.
-        if (hasAnyAnalysisLifecycleComment(issue) && !hasPendingAiBotTrigger(issue)) {
-          outputChannel.appendLine(
-            `[Jira Polling] Skipping re-analysis on ${issueKey}: no pending #AIbot trigger since last bot activity.`
-          );
-          await setHandledPollingAnalysis(issueKey, analysisSignature);
-          continue;
-        }
-        if (handledPollingAnalyses[issueKey] === analysisSignature) {
-          continue;
-        }
-
-        if (!hasCopilotAnalysisStartComment(issue)) {
-          await backendService.addComment(issueKey, COPILOT_ANALYSIS_START_COMMENT);
-        }
-
-        let stagedAttachments;
-        try {
-          stagedAttachments = await stageIssueAttachments({
-            issue,
-            backendService,
-            logger: outputChannel
-          });
-        } catch (error) {
-          outputChannel.appendLine(
-            `[Jira Polling] Warning: could not stage attachments for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-
-        const readinessAssessment = await assessCopilotImplementationReadiness(
-          issue,
-          cliPath,
-          {
-            workingDirectory,
-            availableWorkflows,
-            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow,
-            stagedAttachments
-          }
-        );
-        if (readinessAssessment.status === 'ready') {
-          ensureWorkflowAssignedFromAnalysis(
-            issueKey,
-            readinessAssessment.workflowReference,
-            availableWorkflows
-          );
-
-          await handlePollingAnalysisReady(issue, {
-            analysisSignature
-          });
-          continue;
-        }
-
-        if (!readinessAssessment.clarificationComment) {
-          outputChannel.appendLine(
-            `[Jira Polling] Readiness assessment on ${issueKey} returned needs_clarification without a comment body — skipping.`
-          );
-          await setHandledPollingAnalysis(issueKey, analysisSignature);
-          continue;
-        }
-        await backendService.addComment(
-          issueKey,
-          formatPollingClarificationComment(readinessAssessment.clarificationComment, issue.reporterMention)
-        );
-        await setHandledPollingAnalysis(issueKey, analysisSignature);
-        outputChannel.appendLine(
-          `[Jira Polling] Posted Copilot clarification request on ${issueKey}.`
-        );
-      } catch (error) {
-        reportError(error, `pollingClarification:${issueKey}`);
-      } finally {
-        pollingClarificationInFlight.delete(issueKey);
-      }
-    }
-  }
-
-  async function processPollingClarificationReplies(event: {
-    newKeys: string[];
-    changedKeys: string[];
-    eligibleIssueKeys: string[];
-  }): Promise<void> {
-    // Reply processing uses ALL changed/new keys — not just eligible ones.
-    // The status-based eligibility gate is only for initial analysis triggers.
-    // For replies, the explicit #AIbot prefix is the gating mechanism, and
-    // tickets may have transitioned away from RequiredStatus during delivery.
-    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])];
-
-    if (candidateKeys.length === 0) {
-      return;
-    }
-
-    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
-      outputChannel.appendLine(
-        '[Jira Polling] Clarification reply handling skipped because neither GitHub Copilot SDK nor Claude Code CLI is configured.'
-      );
-      return;
-    }
-
-    const clarificationEnabled = configStore.isJiraPollingClarificationAnalysisEnabled();
-    const availableWorkflows = await discoverWorkspaceAgentWorkflows(workingDirectory);
-
-    for (const issueKey of candidateKeys) {
-      if (pollingReplyInFlight.has(issueKey) || hasActiveAgentTask(issueKey)) {
-        continue;
-      }
-
-      pollingReplyInFlight.add(issueKey);
-      try {
-        const issue = await backendService.getIssue(issueKey);
-        const latestCopilotSignature = getLatestCopilotCommentSignature(issue);
-        // Primary #AIbot gate: if there is no #AIbot-prefixed comment posted
-        // after the last bot activity, do absolutely nothing. No analysis,
-        // no comments, no delivery. This is the single most important rule
-        // for polling-triggered work.
-        if (!hasPendingAiBotTrigger(issue)) {
-          outputChannel.appendLine(
-            `[Jira Polling] Skipping reply handling on ${issueKey}: no pending #AIbot trigger comment after last bot activity.`
-          );
-          continue;
-        }
-        const replyRequest = extractPendingCopilotReplyRequest(issue);
-        if (!replyRequest) {
-          outputChannel.appendLine(
-            `[Jira Polling] Skipping reply handling on ${issueKey}: #AIbot trigger present but no extractable reply body.`
-          );
-          continue;
-        }
-        if (latestCopilotSignature && handledPollingReplies[issueKey] === latestCopilotSignature) {
-          outputChannel.appendLine(
-            `[Jira Polling] Skipping reply handling on ${issueKey}: already handled the current Copilot comment signature.`
-          );
-          continue;
-        }
-        outputChannel.appendLine(
-          `[Jira Polling] Processing #AIbot reply on ${issueKey}: ${replyRequest.slice(0, 120)}`
-        );
-
-        // Check if this is a reply to a worktree conflict clarification
-        const hasWorktreeConflict = issue.comments?.some(c => c.body.includes(WORKTREE_CONFLICT_COMMENT_MARKER)) ?? false;
-        if (hasWorktreeConflict) {
-          const normalizedReply = replyRequest.trim().toLowerCase();
-          if (normalizedReply.includes('delete') || normalizedReply.includes('start fresh') || normalizedReply.includes('start over') || normalizedReply.includes('clean')) {
-            outputChannel.appendLine(
-              `[Jira Polling] Worktree conflict resolved for ${issueKey}: user chose to delete and start fresh.`
-            );
-            await backendService.addComment(
-              issueKey,
-              `${AI_COMMENT_HEADER}\nUnderstood — deleting the existing worktree/branch and starting a fresh delivery.`
-            );
-            const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
-            ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
-            await handlePollingAnalysisReady(issue, {
-              replySignature: latestCopilotSignature,
-              forceCleanWorktree: true
-            });
-            continue;
-          }
-          if (normalizedReply.includes('reuse') || normalizedReply.includes('continue') || normalizedReply.includes('keep')) {
-            outputChannel.appendLine(
-              `[Jira Polling] Worktree conflict resolved for ${issueKey}: user chose to reuse existing worktree. Manual intervention needed.`
-            );
-            await backendService.addComment(
-              issueKey,
-              `${AI_COMMENT_HEADER}\nUnderstood — keeping the existing worktree. Please start the delivery manually from the Ticket Manager task details view, or transition the ticket back to "To Do" and reply with \`#AIbot delete\` to start fresh.`
-            );
-            if (latestCopilotSignature) {
-              await setHandledPollingReply(issueKey, latestCopilotSignature);
-            }
-            continue;
-          }
-        }
-
-        if (!clarificationEnabled) {
-          // Clarification analysis is disabled — treat #AIbot replies as
-          // a direct instruction to proceed with delivery.
-          const ticketText = [issue.description ?? '', ...(issue.comments?.map(c => c.body) ?? [])].join('\n');
-          ensureWorkflowAssignedFromAnalysis(issueKey, ticketText, availableWorkflows);
-
-          outputChannel.appendLine(
-            `[Jira Polling] Clarification analysis disabled — proceeding directly to delivery for ${issueKey} after #AIbot reply.`
-          );
-          await handlePollingAnalysisReady(issue, {
-            replySignature: latestCopilotSignature
-          });
-          continue;
-        }
-
-        let replyStagedAttachments;
-        try {
-          replyStagedAttachments = await stageIssueAttachments({
-            issue,
-            backendService,
-            logger: outputChannel
-          });
-        } catch (error) {
-          outputChannel.appendLine(
-            `[Jira Polling] Warning: could not stage attachments for ${issueKey}: ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-
-        const readinessAssessment = await assessCopilotImplementationReadiness(
-          issue,
-          getCopilotCliPathOverride(),
-          {
-            workingDirectory,
-            availableWorkflows,
-            assignedWorkflow: aiSessionManager.getIssueWorkflowAssignment(issueKey)?.workflow,
-            stagedAttachments: replyStagedAttachments
-          }
-        );
-        if (readinessAssessment.status === 'needs_clarification') {
-          if (!readinessAssessment.clarificationComment) {
-            outputChannel.appendLine(
-              `[Jira Polling] Readiness assessment on ${issueKey} returned needs_clarification without a comment body — skipping.`
-            );
-            if (latestCopilotSignature) {
-              await setHandledPollingReply(issueKey, latestCopilotSignature);
-            }
-            continue;
-          }
-          await backendService.addComment(
-            issueKey,
-            formatPollingClarificationComment(readinessAssessment.clarificationComment)
-          );
-          if (latestCopilotSignature) {
-            await setHandledPollingReply(issueKey, latestCopilotSignature);
-          }
-          outputChannel.appendLine(
-            `[Jira Polling] Posted another Copilot clarification request on ${issueKey} after a user reply.`
-          );
-          continue;
-        }
-
-        ensureWorkflowAssignedFromAnalysis(
-          issueKey,
-          readinessAssessment.workflowReference,
-          availableWorkflows
-        );
-
-        await handlePollingAnalysisReady(issue, {
-          replySignature: latestCopilotSignature
-        });
-      } catch (error) {
-        reportError(error, `pollingClarificationReply:${issueKey}`);
-      } finally {
-        pollingReplyInFlight.delete(issueKey);
-      }
-    }
-  }
-
-  async function postAgentInputRequestComment(
-    record: AgentSessionRecord & { delivery: NonNullable<AgentSessionRecord['delivery']> }
-  ): Promise<void> {
-    const { issueKey } = record;
-    const lastInputEvent = [...record.events]
-      .reverse()
-      .find(event => event.type === 'user_input_requested');
-    const question = lastInputEvent?.summary ?? 'The AI agent needs your input to continue.';
-    const issue = await backendService.getIssue(issueKey);
-    const mentionLine = issue.reporterMention ? `${issue.reporterMention},\n\n` : '';
-    const commentBody = [
-      AI_COMMENT_HEADER,
-      COPILOT_AGENT_INPUT_REQUEST_MARKER,
-      '',
-      `${mentionLine}${question}`,
-      '',
-      'Reply with "#AIbot <your answer>" so the bot sees your response.'
-    ].join('\n');
-
-    try {
-      await backendService.addComment(issueKey, commentBody);
-      outputChannel.appendLine(
-        `[Agent Input] Posted input request comment on ${issueKey}: ${question.slice(0, 120)}`
-      );
-    } catch (error) {
-      reportError(error, `agentInputComment:${issueKey}`);
-    }
-  }
-
-  async function processPollingAgentInputReplies(event: {
-    newKeys: string[];
-    changedKeys: string[];
-  }): Promise<void> {
-    const candidateKeys = [...new Set([...event.newKeys, ...event.changedKeys])];
-    if (candidateKeys.length === 0) {
-      return;
-    }
-
-    const awaitingInputKeys = new Set<string>();
-    for (const [key, record] of aiSessionManager.getAllAgentSessions()) {
-      if (record.state === 'awaiting_input' && hasActiveAgentTask(key)) {
-        awaitingInputKeys.add(key);
-      }
-    }
-
-    for (const issueKey of candidateKeys) {
-      if (!awaitingInputKeys.has(issueKey)) {
-        continue;
-      }
-      if (pollingAgentInputReplyInFlight.has(issueKey)) {
-        continue;
-      }
-
-      pollingAgentInputReplyInFlight.add(issueKey);
-      try {
-        const issue = await backendService.getIssue(issueKey);
-        if (!hasPendingAiBotTrigger(issue)) {
-          continue;
-        }
-        const replyBody = extractPendingCopilotReplyRequest(issue);
-        if (!replyBody) {
-          continue;
-        }
-        outputChannel.appendLine(
-          `[Agent Input] Routing #AIbot reply to awaiting agent on ${issueKey}: ${replyBody.slice(0, 120)}`
-        );
-        agentSessionController.respondToInput(issueKey, replyBody);
-      } catch (error) {
-        reportError(error, `pollingAgentInputReply:${issueKey}`);
-      } finally {
-        pollingAgentInputReplyInFlight.delete(issueKey);
-      }
-    }
-  }
-
   async function revealActiveSessionsView(): Promise<void> {
     try {
       await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
@@ -3455,7 +2692,7 @@ export async function activate(
     signature?: string;
     detail?: string;
   } {
-    const descriptions = copilotAgentService
+    const descriptions = vercelAgentService
       .getPendingPermissionDescriptions(issueKey)
       .filter(description => description.trim().length > 0);
     if (descriptions.length > 0) {
@@ -3497,33 +2734,20 @@ export async function activate(
     return Promise.resolve();
   }
 
-  function getCopilotCliPathOverride(options?: { showWarning?: boolean }): string | undefined {
-    const { cliPath, warning } = resolveCopilotCliOverride(configStore.getAiCopilotCliPath());
-    if (warning) {
-      outputChannel.appendLine(`[Copilot SDK] ${warning}`);
-      if (options?.showWarning) {
-        void vscode.window.showWarningMessage(warning);
-      }
+  function getVercelGatewayApiKey(options?: { showWarning?: boolean }): string | undefined {
+    const apiKey = getVercelGatewayOptions().apiKey;
+    if (!apiKey && options?.showWarning) {
+      void vscode.window.showWarningMessage(
+        'Vercel AI Gateway API key is not configured. Run Ticket Manager: Configure AI.'
+      );
     }
-    return cliPath;
+    return apiKey;
   }
 
-  function getClaudeCliPathOverride(options?: { showWarning?: boolean }): string | undefined {
-    const cliPath = configStore.getAiClaudeCliPath();
-    if (cliPath) {
-      return cliPath;
-    }
-    return process.platform === 'win32' ? 'claude.exe' : 'claude';
-  }
-
-  type AgentRuntimeProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+  type AgentRuntimeProvider = AiProvider;
 
   function isAgentRuntimeProvider(provider: AiProvider | undefined): provider is AgentRuntimeProvider {
-    return provider === 'copilot-cli' || provider === 'claude-cli';
-  }
-
-  function isAgentRuntimeConfigured(provider: AgentRuntimeProvider): boolean {
-    return provider === 'claude-cli' ? isClaudeSdkConfigured() : isCopilotSdkConfigured();
+    return provider === 'vercel-gateway';
   }
 
   function resolvePreferredAgentProvider(
@@ -3531,66 +2755,54 @@ export async function activate(
     record?: AgentSessionRecord,
     issue?: Pick<IssueDetails, 'description' | 'comments'>
   ): AgentRuntimeProvider | undefined {
+    if (!isCopilotSdkConfigured()) {
+      return undefined;
+    }
+
     const assignmentProvider = aiSessionManager.getSession(issueKey)?.provider;
-    if (isAgentRuntimeProvider(assignmentProvider) && isAgentRuntimeConfigured(assignmentProvider)) {
+    if (isAgentRuntimeProvider(assignmentProvider)) {
       return assignmentProvider;
     }
 
-    if (record?.provider && isAgentRuntimeConfigured(record.provider)) {
+    if (record?.provider && isAgentRuntimeProvider(record.provider)) {
       return record.provider;
     }
 
-    // Check if the Jira ticket specifies which agent to use
     if (issue) {
       const ticketDirective = extractAgentProviderDirective(issue);
-      if (ticketDirective && isAgentRuntimeConfigured(ticketDirective)) {
+      if (ticketDirective) {
         return ticketDirective;
       }
     }
 
     const defaultProvider = configStore.getAiDefaultProvider();
-    if (defaultProvider !== 'none' && isAgentRuntimeProvider(defaultProvider) && isAgentRuntimeConfigured(defaultProvider)) {
+    if (defaultProvider !== 'none' && isAgentRuntimeProvider(defaultProvider)) {
       return defaultProvider;
     }
 
-    if (isCopilotSdkConfigured()) {
-      return 'copilot-cli';
-    }
-    if (isClaudeSdkConfigured()) {
-      return 'claude-cli';
-    }
-    return undefined;
+    return 'vercel-gateway';
   }
 
-  function getAgentDisplayName(provider: AgentRuntimeProvider): string {
-    return provider === 'claude-cli' ? 'Claude Code' : 'GitHub Copilot';
+  function getAgentDisplayName(_provider: AgentRuntimeProvider): string {
+    return 'Vercel AI Gateway';
   }
 
   function hasActiveAgentTask(issueKey: string): boolean {
-    return copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey);
+    return vercelAgentService.hasActiveTask(issueKey);
   }
 
   function getActiveAgentTaskIssueKeys(): string[] {
-    return [...new Set([
-      ...copilotAgentService.getActiveTaskIssueKeys(),
-      ...claudeAgentService.getActiveTaskIssueKeys()
-    ])];
+    return vercelAgentService.getActiveTaskIssueKeys();
   }
 
   async function abortActiveAgentTask(issueKey: string): Promise<void> {
-    if (claudeAgentService.hasActiveTask(issueKey)) {
-      await claudeAgentService.abortTask(issueKey);
-    }
-    if (copilotAgentService.hasActiveTask(issueKey)) {
-      await copilotAgentService.abortTask(issueKey);
+    if (vercelAgentService.hasActiveTask(issueKey)) {
+      await vercelAgentService.abortTask(issueKey);
     }
   }
 
   async function pauseAllAgentTasks(reason: string): Promise<void> {
-    await Promise.all([
-      copilotAgentService.pauseAllTasks(reason),
-      claudeAgentService.pauseAllTasks(reason)
-    ]);
+    await vercelAgentService.pauseAllTasks(reason);
   }
 
   function resolveModelOverride(
@@ -3622,7 +2834,7 @@ export async function activate(
   ): Promise<AgentRuntimeProvider> {
     const provider = options?.provider ?? resolvePreferredAgentProvider(issue.key, undefined, issue);
     if (!provider) {
-      throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
+      throw new Error('No AI agent is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.');
     }
 
     const model = resolveModelOverride(issue.key, issue);
@@ -3630,17 +2842,10 @@ export async function activate(
       outputChannel.appendLine(`[Agent] Using model override '${model}' for ${issue.key}.`);
     }
 
-    if (provider === 'claude-cli') {
-      await claudeAgentService.startTask(issue, taskDefinition, {
-        cliPath: getClaudeCliPathOverride({ showWarning: true }),
-        workingDirectory: options?.workingDirectory,
-        model
-      });
-      return provider;
-    }
-
-    await copilotAgentService.startTask(issue, taskDefinition, {
-      cliPath: getCopilotCliPathOverride({ showWarning: true }),
+    const gateway = getVercelGatewayOptions();
+    await vercelAgentService.startTask(issue, taskDefinition, {
+      apiKey: gateway.apiKey,
+      gatewayUrl: gateway.gatewayUrl,
       workingDirectory: options?.workingDirectory,
       model
     });
@@ -3653,22 +2858,15 @@ export async function activate(
   ): Promise<AgentRuntimeProvider> {
     const provider = resolvePreferredAgentProvider(issueKey, record);
     if (!provider) {
-      throw new Error('No CLI-backed AI agent is configured. Configure GitHub Copilot SDK or Claude Code CLI.');
+      throw new Error('No AI agent is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.');
     }
 
     const model = resolveModelOverride(issueKey);
     const workingDirectory = resolveAgentWorkingDirectory(record);
-    if (provider === 'claude-cli') {
-      await claudeAgentService.resumeTask(issueKey, {
-        cliPath: getClaudeCliPathOverride({ showWarning: true }),
-        workingDirectory,
-        model
-      });
-      return provider;
-    }
-
-    await copilotAgentService.resumeTask(issueKey, {
-      cliPath: getCopilotCliPathOverride({ showWarning: true }),
+    const gateway = getVercelGatewayOptions();
+    await vercelAgentService.resumeTask(issueKey, {
+      apiKey: gateway.apiKey,
+      gatewayUrl: gateway.gatewayUrl,
       workingDirectory,
       model
     });
@@ -3980,58 +3178,36 @@ export async function activate(
     }
   }
 
-  async function processPollingMergeRequestAutomation(event: PollingSyncEvent): Promise<void> {
-    const nextSnapshots = event.issues.reduce<Record<string, string>>((result, issue) => {
-      result[issue.key] = formatStatusSnapshot(
-        issue.fields?.status?.name,
-        issue.fields?.status?.statusCategory?.name
-      );
-      return result;
-    }, {});
-
-    const transitionCandidates = [...new Set([...event.newKeys, ...event.changedKeys])];
-    for (const issueKey of transitionCandidates) {
-      const currentSnapshot = parseStatusSnapshot(nextSnapshots[issueKey]);
-      const previousSnapshot = parseStatusSnapshot(pollingStatusSnapshots[issueKey]);
-      if (!shouldCreateMergeRequestForStatusChange({
-        previousStatus: previousSnapshot.status,
-        currentStatus: currentSnapshot.status,
-        currentStatusCategory: currentSnapshot.statusCategory
-      })) {
-        continue;
-      }
-
-      outputChannel.appendLine(
-        `[GitLab MR] ${issueKey} transitioned from ${previousSnapshot.status ?? 'unknown'} to ${currentSnapshot.status ?? 'unknown'}; preparing merge request automation.`
-      );
-      try {
-        await ensureMergeRequestForDoneIssue(issueKey);
-      } catch (error) {
-        reportError(error, `gitlabMergeRequestEnsure:${issueKey}`);
-      }
-    }
-
-    await syncTrackedMergeRequests();
-    await persistPollingStatusSnapshots(nextSnapshots);
-  }
-
   // Set mode context early so when-clauses on views evaluate correctly
   // before VS Code tries to resolve them.
   // !ticketManager.configured is true when the key is false OR doesn't exist,
   // which means the setup view shows by default before activate() even runs.
-  const getModeContextState = () => {
+  const getModeContextState = async (): Promise<BackendModeContextState> => {
+    // Connections & Boards is the canonical setup path. Any saved connection
+    // means the sidebar should leave the "Configure Project" welcome state.
+    if (connectionStore.hasConnections()) {
+      const trackedRef = boardStore.getLastSelectedTrackedBoard();
+      const connection =
+        (trackedRef ? connectionStore.getConnection(trackedRef.connectionId) : undefined) ??
+        connectionStore.getConnections()[0];
+      return {
+        mode: connection?.mode,
+        configured: true
+      };
+    }
+
     const resolved = resolveBackendModeContextState(
       configStore.getBackendMode(),
       configStore.hasJiraConnectionConfig(),
-      configStore.hasJiraCloudConfig()
+      await configStore.hasJiraMcpConfigPublic()
     );
     if (resolved.mode === 'livefolder' && configStore.getLiveFolderPath().trim().length === 0) {
       return { ...resolved, configured: false };
     }
     return resolved;
   };
-  const JIRA_CLOUD_SCOPE_MIGRATION_KEY = 'ticketManager.jiraCloudEpicIssueScopeMigrated';
-  const initialModeContext = getModeContextState();
+  const JIRA_MCP_SCOPE_MIGRATION_KEY = 'ticketManager.jiraMcpEpicIssueScopeMigrated';
+  const initialModeContext = await getModeContextState();
   await vscode.commands.executeCommand(
     'setContext', 'ticketManager.mode',
     initialModeContext.mode ?? 'unconfigured'
@@ -4121,7 +3297,7 @@ export async function activate(
   );
   boardColumnConfigPanel.setBoardSettingsUpdater(async (boardId, input) => {
     // Route the update through the board's own connection so per-connection
-    // Jira Cloud config (workspace JQL/epic) is read and written correctly.
+    // Jira MCP config (workspace JQL/epic) is read and written correctly.
     const board = await resolveBoardById(boardId);
     const service = board ? await resolveBoardService(board) : backendService;
     const updatedBoard = await service.updateBoard(boardId, input);
@@ -4144,14 +3320,22 @@ export async function activate(
     activeSessionsSidebarViewProvider?.setSelectedIssueKey(detailsProvider.getActiveIssue()?.key);
     await boardPanelManager.refresh();
     await issueDetailPanelManager.refreshIfShowing(detailsProvider.getActiveIssue()?.key ?? '');
+  }, async boardId => {
+    // Draft creation must reach the connection that owns the board, not just the
+    // router's active one. The active board is checked first so a board opened
+    // from a connection the tree has not loaded still resolves.
+    const activeBoard = boardPanelManager.getActiveBoard();
+    const board =
+      activeBoard?.id === boardId ? activeBoard : boardsProvider.getBoardById(boardId);
+    return board ? resolveBoardService(board) : undefined;
   });
   updateCommentPlaceholders();
   const taskDesignerPanelManager = new TaskDesignerPanelManager(
     backendService,
     context.workspaceState,
     async (nodes, connectors) => recommendTaskDesignerFlowWithCopilot(nodes, connectors, {
-      cliPath: getCopilotCliPathOverride(),
-      workingDirectory
+      apiKey: getVercelGatewayApiKey(),
+      gatewayUrl: getVercelGatewayOptions().gatewayUrl
     }),
     async (boardId) => {
       const activeBoard = boardPanelManager.getActiveBoard();
@@ -4211,9 +3395,9 @@ export async function activate(
     }
     return runLocalPeerReview(issue, {
       provider: chosen.provider,
-      credential: chosen.credential,
+      credential: chosen.credential ?? getVercelGatewayApiKey(),
       agentName: chosen.agentName ?? chosen.label,
-      cliPath: getCopilotCliPathOverride(),
+      gatewayUrl: getVercelGatewayOptions().gatewayUrl,
       workingDirectory
     });
   });
@@ -4299,49 +3483,17 @@ export async function activate(
         signal: input.signal
       };
 
-      if (chosen.provider === 'openai') {
-        return reviewTicketWithOpenAi(
-          issueForAnalysis,
-          chosen.credential ?? configStore.getAiOpenaiApiKey().trim(),
-          chosen.agentName ?? chosen.label,
-          reviewOptions
-        );
-      }
-
-      if (chosen.provider === 'claude') {
-        return reviewTicketWithClaude(
-          issueForAnalysis,
-          chosen.credential ?? configStore.getAiClaudeApiKey().trim(),
-          chosen.agentName ?? chosen.label,
-          reviewOptions
-        );
-      }
-
-      if (chosen.provider === 'copilot-cli') {
+      if (chosen.provider === 'vercel-gateway') {
         return reviewTicketWithCopilot(
           issueForAnalysis,
-          getCopilotCliPathOverride(),
+          getVercelGatewayApiKey(),
           chosen.agentName ?? chosen.label,
-          repositoryContext.workingDirectory ?? workingDirectory,
-          reviewOptions
-        );
-      }
-
-      if (chosen.provider === 'cursor-cli') {
-        return reviewTicketWithWorkspaceLanguageModel(
-          issueForAnalysis,
-          chosen.agentName ?? chosen.label,
-          reviewOptions
-        );
-      }
-
-      if (chosen.provider === 'claude-cli') {
-        return reviewTicketWithClaudeCli(
-          issueForAnalysis,
-          chosen.credential ?? configStore.getAiClaudeCliPath().trim(),
-          chosen.agentName ?? chosen.label,
-          repositoryContext.workingDirectory ?? workingDirectory,
-          reviewOptions
+          undefined,
+          {
+            ...reviewOptions,
+            apiKey: getVercelGatewayApiKey(),
+            gatewayUrl: getVercelGatewayOptions().gatewayUrl
+          }
         );
       }
 
@@ -4380,7 +3532,7 @@ export async function activate(
         void postAgentInputRequestComment(record);
       }
 
-      if (record.state === 'awaiting_approval' && copilotAgentService.hasActiveTask(record.issueKey)) {
+      if (record.state === 'awaiting_approval' && vercelAgentService.hasActiveTask(record.issueKey)) {
         void promptForPendingPermission(record.issueKey);
         return;
       }
@@ -4452,7 +3604,7 @@ export async function activate(
   }
 
   async function setModeContext(): Promise<void> {
-    const modeContext = getModeContextState();
+    const modeContext = await getModeContextState();
     await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
     await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
     await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
@@ -4487,11 +3639,11 @@ export async function activate(
   }
 
   function refreshBoardsInBackgroundAfterStartup(): void {
-    if (!getModeContextState().configured) {
-      return;
-    }
-
     void (async () => {
+      const modeContext = await getModeContextState();
+      if (!modeContext.configured) {
+        return;
+      }
       try {
         await boardsProvider.refresh();
         await boardPanelManager.refresh();
@@ -4566,27 +3718,27 @@ export async function activate(
     );
   }
 
-  async function ensureJiraCloudIssueScopeVisibility(modeContext: ReturnType<typeof getModeContextState>): Promise<void> {
+  async function ensureJiraMcpIssueScopeVisibility(modeContext: BackendModeContextState): Promise<void> {
     if (modeContext.mode !== 'jiracloud' || !modeContext.configured) {
       return;
     }
 
-    if (configStore.getJiraCloudEpicKey().trim().length === 0) {
+    if (configStore.getJiraMcpEpicKey().trim().length === 0) {
       return;
     }
 
-    if (context.workspaceState.get<boolean>(JIRA_CLOUD_SCOPE_MIGRATION_KEY) === true) {
+    if (context.workspaceState.get<boolean>(JIRA_MCP_SCOPE_MIGRATION_KEY) === true) {
       return;
     }
 
     const filters = filterStore.getFilters();
-    if (!shouldAdoptJiraCloudEpicIssueScope(filters)) {
-      await context.workspaceState.update(JIRA_CLOUD_SCOPE_MIGRATION_KEY, true);
+    if (!shouldAdoptJiraMcpEpicIssueScope(filters)) {
+      await context.workspaceState.update(JIRA_MCP_SCOPE_MIGRATION_KEY, true);
       return;
     }
 
     await filterStore.updateFilters({ assigneeMode: 'all' });
-    await context.workspaceState.update(JIRA_CLOUD_SCOPE_MIGRATION_KEY, true);
+    await context.workspaceState.update(JIRA_MCP_SCOPE_MIGRATION_KEY, true);
   }
 
   async function refreshSearchActionContexts(): Promise<void> {
@@ -4611,11 +3763,11 @@ export async function activate(
 
   async function setDefaultEpicForWorkspace(issueKey: string): Promise<void> {
     if (backendService.mode !== 'jiracloud') {
-      void vscode.window.showWarningMessage('Epic linking from the Epics view is available in Jira Cloud mode only.');
+      void vscode.window.showWarningMessage('Epic linking from the Epics view is available in Jira MCP mode only.');
       return;
     }
 
-    const currentLinkedEpicKey = configStore.getJiraCloudEpicKey();
+    const currentLinkedEpicKey = configStore.getJiraMcpEpicKey();
     if (currentLinkedEpicKey === issueKey) {
       void vscode.window.showInformationMessage(`${issueKey} is already set as the default EPIC for this workspace.`);
       return;
@@ -4625,7 +3777,7 @@ export async function activate(
       `Set ${issueKey} as the default EPIC for this repo?`,
       {
         modal: true,
-        detail: 'This sets the workspace Jira Cloud epic link. New Jira issue creation will use this epic as the default parent.'
+        detail: 'This sets the workspace Jira MCP epic link. New Jira issue creation will use this epic as the default parent.'
       },
       'Set Default EPIC',
       'Cancel'
@@ -4634,7 +3786,7 @@ export async function activate(
       return;
     }
 
-    await configStore.setJiraCloudEpicKey(issueKey);
+    await configStore.setJiraMcpEpicKey(issueKey);
     epicsSidebarViewProvider.setDefaultEpicKey(issueKey);
     await Promise.all([
       issuesProvider.refresh(),
@@ -4650,8 +3802,8 @@ export async function activate(
   async function promptForBackendMode(): Promise<BackendMode | undefined> {
     const options: Array<{ label: string; description: string; mode: BackendMode }> = [
       {
-        label: 'Jira Cloud',
-        description: 'Connect directly to Jira Cloud over OAuth.',
+        label: 'Jira MCP',
+        description: 'Connect to a Jira server via the configured MCP server.',
         mode: 'jiracloud'
       },
       {
@@ -4692,7 +3844,7 @@ export async function activate(
       return;
     }
 
-    let modeContext = getModeContextState();
+    let modeContext = await getModeContextState();
     await setModeContext();
 
     if (!modeContext.configured) {
@@ -5117,9 +4269,9 @@ export async function activate(
         return;
       }
       // Route through the board's own connection so per-connection config (e.g.
-      // the workspace JQL/epic that backs a Jira Cloud board) resolves correctly.
+      // the workspace JQL/epic that backs a Jira MCP board) resolves correctly.
       // Using the shared router would read the global config and fail with
-      // "Invalid Jira Cloud board identifier." for connection-scoped boards.
+      // "Invalid Jira MCP board identifier." for connection-scoped boards.
       const service = await resolveBoardService(board);
       const details = await service.getBoardDetails(board);
       const metadata = await service.getFilterMetadata({
@@ -5154,25 +4306,25 @@ export async function activate(
     await configStore.setGitLabSelectedBoardRefs(nextRefs);
   }
 
-  async function closeJiraCloudBoard(board: Board): Promise<void> {
+  async function closeJiraMcpBoard(board: Board): Promise<void> {
     if (board.id.startsWith('epic:')) {
       const epicKey = board.id.slice('epic:'.length).trim();
-      if (!epicKey || configStore.getJiraCloudEpicKey() !== epicKey) {
-        throw new Error('This Jira Cloud epic board is not linked through Ticket Manager settings.');
+      if (!epicKey || configStore.getJiraMcpEpicKey() !== epicKey) {
+        throw new Error('This Jira MCP epic board is not linked through Ticket Manager settings.');
       }
 
-      await configStore.setJiraCloudEpicKey(undefined);
-      await configStore.setJiraCloudEpicBoardName(undefined);
+      await configStore.setJiraMcpEpicKey(undefined);
+      await configStore.setJiraMcpEpicBoardName(undefined);
       return;
     }
 
     if (board.id === 'jql:workspace') {
-      await configStore.setJiraCloudBoardJql(undefined);
-      await configStore.setJiraCloudBoardName(undefined);
+      await configStore.setJiraMcpBoardJql(undefined);
+      await configStore.setJiraMcpBoardName(undefined);
       return;
     }
 
-    throw new Error('This Jira Cloud board cannot be closed individually.');
+    throw new Error('This Jira MCP board cannot be closed individually.');
   }
 
   async function removeBoardFromTicketManager(board: Board): Promise<void> {
@@ -5191,7 +4343,7 @@ export async function activate(
         await closeGitLabBoard(board);
         return;
       case 'jiracloud':
-        await closeJiraCloudBoard(board);
+        await closeJiraMcpBoard(board);
         return;
       default:
         await backendService.deleteBoard(board.id);
@@ -5251,10 +4403,10 @@ export async function activate(
             break;
           case 'jiracloud':
             await Promise.all([
-              configStore.setJiraCloudBoardJql(undefined),
-              configStore.setJiraCloudBoardName(undefined),
-              configStore.setJiraCloudEpicKey(undefined),
-              configStore.setJiraCloudEpicBoardName(undefined)
+              configStore.setJiraMcpBoardJql(undefined),
+              configStore.setJiraMcpBoardName(undefined),
+              configStore.setJiraMcpEpicKey(undefined),
+              configStore.setJiraMcpEpicBoardName(undefined)
             ]);
             break;
           default:
@@ -5345,7 +4497,7 @@ export async function activate(
     if (copilotRequest) {
       if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
-          'Comment added, but GitHub Copilot SDK is not configured for @copilot replies. Run Ticket Manager: Configure AI.'
+          'Comment added, but Vercel AI Gateway is not configured for @agent replies. Run Ticket Manager: Configure AI.'
         );
       } else {
         try {
@@ -5353,7 +4505,7 @@ export async function activate(
         } catch (error) {
           reportError(error);
           void vscode.window.showWarningMessage(
-            `Comment added, but @copilot could not respond: ${error instanceof Error ? error.message : String(error)}`
+            `Comment added, but @agent could not respond: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       }
@@ -5458,7 +4610,7 @@ export async function activate(
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
       await vscode.window.showWarningMessage(
-        'No AI providers are configured. Add API keys, a Cursor CLI path, or enable GitHub Copilot SDK in Settings → Ticket Manager → AI.'
+        'No AI provider is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.'
       );
       return undefined;
     }
@@ -5540,7 +4692,7 @@ export async function activate(
             ? AI_PROVIDER_LABELS[session.provider]
             : agentRecord?.provider
               ? AI_PROVIDER_LABELS[agentRecord.provider]
-              : AI_PROVIDER_LABELS['copilot-cli']);
+              : AI_PROVIDER_LABELS['vercel-gateway']);
         if (issue.assignee?.trim() === assignedLabel) {
           await updateIssueAndRefresh(issueKey, { assignee: null });
         } else {
@@ -5706,9 +4858,9 @@ export async function activate(
   }
 
   async function startNewCopilotSession(issueKey: string): Promise<void> {
-    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
+    if (!isCopilotSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'Neither GitHub Copilot SDK nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
+        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
       );
       return;
     }
@@ -5770,9 +4922,9 @@ export async function activate(
   }
 
   async function resumeCopilotSession(issueKey: string): Promise<void> {
-    if (!isCopilotSdkConfigured() && !isClaudeSdkConfigured()) {
+    if (!isCopilotSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'Neither GitHub Copilot SDK nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
+        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
       );
       return;
     }
@@ -5809,48 +4961,18 @@ export async function activate(
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
       throw new Error(
-        'No AI providers are configured. Add an OpenAI key, Claude key, Cursor CLI path, or enable GitHub Copilot SDK in Settings.'
+        'No AI provider is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.'
       );
     }
 
-    let chosen = options[0];
-    if (options.length > 1) {
-      const picked = await vscode.window.showQuickPick(
-        options.map(option => ({
-          label: option.label,
-          description: option.description,
-          option
-        })),
-        { title: `Review ${issueKey} with AI` }
-      );
-      if (!picked) {
-        return; // user cancelled
-      }
-      chosen = picked.option;
-    }
-
+    const chosen = options[0];
     const issue = await backendService.getIssue(issueKey);
-
-    let reviewText: string;
-    if (chosen.provider === 'openai') {
-      const apiKey = chosen.credential ?? configStore.getAiOpenaiApiKey().trim();
-      const agentName = chosen.agentName ?? AI_PROVIDER_LABELS.openai;
-      reviewText = await reviewTicketWithOpenAi(issue, apiKey, agentName);
-    } else if (chosen.provider === 'claude') {
-      const apiKey = chosen.credential ?? configStore.getAiClaudeApiKey().trim();
-      const agentName = chosen.agentName ?? AI_PROVIDER_LABELS.claude;
-      reviewText = await reviewTicketWithClaude(issue, apiKey, agentName);
-    } else if (chosen.provider === 'copilot-cli') {
-      reviewText = await reviewTicketWithCopilot(
-        issue,
-        getCopilotCliPathOverride(),
-        chosen.agentName ?? AI_PROVIDER_LABELS['copilot-cli'],
-        workingDirectory
-      );
-    } else {
-      // Claude Code CLI is only used for agent tasks, not for AI reviews
-      throw new Error(`AI review is not supported for provider: ${chosen.provider}`);
-    }
+    const reviewText = await reviewTicketWithCopilot(
+      issue,
+      getVercelGatewayApiKey(),
+      chosen.agentName ?? AI_PROVIDER_LABELS['vercel-gateway'],
+      workingDirectory
+    );
 
     await backendService.addComment(issueKey, reviewText);
     await syncIssueAfterMutation(issueKey);
@@ -5901,10 +5023,10 @@ export async function activate(
   });
 
   const refreshAndRestoreSelection = async (options?: { skipBoards?: boolean }): Promise<void> => {
-    const modeContext = getModeContextState();
+    const modeContext = await getModeContextState();
     await setModeContext();
-    await ensureJiraCloudIssueScopeVisibility(modeContext);
-    epicsSidebarViewProvider.setDefaultEpicKey(configStore.getJiraCloudEpicKey());
+    await ensureJiraMcpIssueScopeVisibility(modeContext);
+    epicsSidebarViewProvider.setDefaultEpicKey(configStore.getJiraMcpEpicKey());
 
     if (!modeContext.configured) {
       issuesSidebarViewProvider.setSelectedIssueKey(undefined);
@@ -6005,16 +5127,6 @@ export async function activate(
       onDeleteIssue: async issueKey => {
         await deleteIssue(issueKey);
       },
-      onCreateIssue: async input => {
-        const activeBoard = boardPanelManager.getActiveBoard();
-        const targetService =
-          input.boardId && activeBoard && activeBoard.id === input.boardId && activeBoard.connectionId
-            ? await backendService.serviceFor(activeBoard.connectionId)
-            : backendService;
-        const createdIssue = await targetService.createIssue(input);
-        await syncIssueAfterMutation(createdIssue.key);
-        await revealIssueDetailsInSidebar({ focus: false });
-      },
       onSetSearchText: async (searchText) => {
         await filterStore.updateFilters({ searchText });
         await refreshSearchActionContexts();
@@ -6035,13 +5147,12 @@ export async function activate(
   // Populate the live Copilot model list from VS Code's language model API in
   // the background so the model pickers match VS Code's own list. Refresh the
   // assignment menus once loaded.
-  void refreshCopilotModelCache(message => outputChannel.appendLine(message)).then(() => {
+  void refreshGatewayModelCache(getVercelGatewayOptions(), message => outputChannel.appendLine(message)).then(() => {
     refreshAiAssignmentMenus();
-    if (copilotModelCache.length > 0) {
-      issueDetailPanelManager.setKnownModels(copilotModelCache);
+    if (gatewayModelCache.length > 0) {
+      issueDetailPanelManager.setKnownModels(gatewayModelCache);
     }
   });
-  void refreshWorkspaceLanguageModelCache(message => outputChannel.appendLine(message));
   epicsSidebarViewProvider = new EpicsSidebarViewProvider(
     backendService,
     filterStore,
@@ -6131,10 +5242,8 @@ export async function activate(
         await resetGitLabConfig();
       },
       onAddBoard: async () => {
-        // Work mode's "Add board" opens the Connections & Boards manager screen,
-        // matching the classic Boards view toolbar. Route through the shared
-        // command so both modes use the exact same entry point.
-        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
+        // Same entry point as the classic Boards "+" toolbar action.
+        await vscode.commands.executeCommand('ticketManager.createBoard');
       },
       onOpenSession: async (issueKey, boardId) => {
         const sessionBoardId =
@@ -6172,7 +5281,7 @@ export async function activate(
   activeSessionsSidebarViewProvider = new ActiveSessionsSidebarViewProvider(
     backendService,
     aiSessionManager,
-    issueKey => copilotAgentService.hasActiveTask(issueKey) || claudeAgentService.hasActiveTask(issueKey),
+    issueKey => vercelAgentService.hasActiveTask(issueKey),
     {
       onOpenSession: async issueKey => {
         const sessionBoardId =
@@ -6411,18 +5520,6 @@ export async function activate(
         reportError(error, 'localPeerReview');
       }
     }),
-    vscode.commands.registerCommand('ticketManager.startClaudeSession', async (arg?: unknown) => {
-      try {
-        const issueKey = resolveIssueKeyFromArgOrActive(arg);
-        if (!issueKey) {
-          await vscode.window.showInformationMessage('Select an issue first.');
-          return;
-        }
-        await startNewCopilotSession(issueKey); // This will now prefer Claude Code
-      } catch (error) {
-        reportError(error);
-      }
-    }),
     vscode.commands.registerCommand('ticketManager.startSubTaskDelivery', async (parentIssueKey?: string, subTaskKey?: string) => {
       if (!parentIssueKey || !subTaskKey) {
         void vscode.window.showErrorMessage('Parent issue key and sub-task key are required.');
@@ -6435,28 +5532,6 @@ export async function activate(
         reportError(error, `startSubTaskDelivery:${subTaskKey}`);
         void vscode.window.showErrorMessage(
           `Failed to start sub-task delivery: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }),
-    vscode.commands.registerCommand('ticketManager.connectJiraCloud', async () => {
-      try {
-        const oauthService = initializeJiraCloudOAuthService(context, configStore);
-        const resource = await oauthService.connect();
-        void vscode.window.showInformationMessage(`Connected to ${resource.name}.`);
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Jira Cloud connection failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }),
-    vscode.commands.registerCommand('ticketManager.disconnectJiraCloud', async () => {
-      try {
-        const oauthService = initializeJiraCloudOAuthService(context, configStore);
-        await oauthService.disconnect();
-        void vscode.window.showInformationMessage('Disconnected from Jira Cloud.');
-      } catch (error) {
-        void vscode.window.showErrorMessage(
-          `Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }),
@@ -6483,10 +5558,14 @@ export async function activate(
     }),
     vscode.commands.registerCommand('ticketManager.configureAi', async () => {
       try {
-        const result = await promptToConfigureDefaultAiProvider();
+        const result = await promptToConfigureDefaultAiProvider({
+          openVercelGatewaySettings: () => aiGatewaySettingsPanel.open(),
+          configStore
+        });
         refreshAiAssignmentMenus();
         refreshStatusBarInBackground();
-        if (result.status !== 'cancelled') {
+        // Panel shows its own save confirmation; only toast when AI was disabled.
+        if (result.status === 'skipped') {
           await vscode.window.showInformationMessage(describeAiConfigurationResult(result));
         }
       } catch (error) {
@@ -6503,9 +5582,11 @@ export async function activate(
       backendService,
       filterStore,
       boardStore,
+      connectionStore,
       boardColumnConfigPanel,
       newProjectWizardPanel,
       setupWizardPanel,
+      userWorkspaceBoardWizardPanel,
       setupSidebarViewProvider,
       taskDesignerPanelManager,
       issuesProvider,
@@ -6515,13 +5596,19 @@ export async function activate(
       issueDetailPanelManager,
       revealIssueDetailsTree: () => revealIssueDetailsInSidebar({ focus: false }),
       revealSetupView,
-      openCreateIssueForm: defaults => issuesSidebarViewProvider.openCreateIssueDialog(defaults),
+      // Create in the main editor pane (Issue Detail draft mode), not the
+      // sidebar modal — the sidebar's own New Issue button still opens its
+      // in-webview dialog for quick adds.
+      openCreateIssueForm: async defaults => {
+        await issueDetailPanelManager.openDraft(defaults);
+        return true;
+      },
       output: outputChannel,
       onConnectionCheck: result => {
         ticketManagerStatusBar.recordConnectionResult(result);
       },
       reportError,
-      copilotAgentService,
+      vercelAgentService,
       copilotSessionPanelManager,
       aiSessionManager
     }),
@@ -6542,8 +5629,7 @@ export async function activate(
     activeSessionsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
     ticketManagerStatusBar,
-    startupPollingController,
-    copilotAgentService,
+    vercelAgentService,
     copilotSessionPanelManager,
     aiSessionManager,
     filterStore.onDidChange(() => {
@@ -6578,9 +5664,24 @@ export async function activate(
       void boardsProvider.refresh().catch(error => reportError(error));
     }),
     connectionStore.onDidChange(() => {
-      ticketManagerStatusBar.resync();
-      void boardsProvider.refresh().catch(error => reportError(error));
-      void startupPollingController.refresh().catch(error => reportError(error));
+      void (async () => {
+        try {
+          // Keep activity-bar when-clauses in sync (Configure Project <-> Boards).
+          await setModeContext();
+          if (!backendService.getActiveConnectionId() && connectionStore.hasConnections()) {
+            const firstTracked = connectionStore.getTrackedBoards()[0];
+            const connectionId =
+              firstTracked?.connectionId ?? connectionStore.getConnections()[0]?.id;
+            if (connectionId) {
+              backendService.setActiveConnection(connectionId);
+            }
+          }
+          ticketManagerStatusBar.resync();
+          await boardsProvider.refresh();
+        } catch (error) {
+          reportError(error, 'connection-store-change');
+        }
+      })();
     }),
     ...(context.extensionMode !== vscode.ExtensionMode.Test
       ? [
@@ -6697,7 +5798,6 @@ export async function activate(
                 try {
                   await backendService.reset();
                   await refreshAndRestoreSelection();
-                  await startupPollingController.refresh();
                   if (boardsModeChanged) {
                     await vscode.commands.executeCommand(getBoardsContainerCommand());
                   }
@@ -6718,7 +5818,7 @@ export async function activate(
   try {
     await ensureStartupConfiguration();
     await ensureBoardsContainerVisibleOnStartup();
-    if (getModeContextState().configured) {
+    if ((await getModeContextState()).configured) {
       try {
         await refreshStartupSelectionWithProgress();
       } catch (error) {
@@ -6734,9 +5834,6 @@ export async function activate(
         }
       }
     }
-    // Start polling in the background so activation is not blocked by
-    // per-connection startup checks.
-    void startupPollingController.refresh().catch(error => reportError(error, 'startup-polling'));
     refreshBoardsInBackgroundAfterStartup();
     refreshStatusBarInBackground();
 
@@ -6749,7 +5846,6 @@ export async function activate(
   }
 
   deactivateHandler = async () => {
-    await startupPollingController.stop();
     await pauseAllAgentTasks(
       'Session paused because VS Code is closing. Reopen VS Code and resume to continue.'
     );

@@ -3,7 +3,7 @@ import { filterBoardIssues } from '../board/boardIssueFilters';
 import { findTransitionToTargetStatus } from '../board/boardTransitionResolver';
 import { buildSwimLaneRows } from '../board/swimLanes';
 import { issueTypeHex, issueTypePillInlineStyle } from '../board/issueTypeColors';
-import { resolveStatusDotColor, statusPillInlineStyle } from '../board/statusColors';
+import { resolveStatusDotColor, statusLabelInlineStyle } from '../board/statusColors';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import type { BoardColumnStore } from '../state/boardColumnStore';
 import type { AiProvider, Board, BoardColumn, BoardDetails, IssueSummary } from '../types';
@@ -305,41 +305,12 @@ export class BoardPanelManager implements vscode.Disposable {
       return;
     }
 
-    if (type === 'showCreateMenu') {
-      const picked = await vscode.window.showQuickPick(
-        [
-          {
-            label: 'New issue',
-            description: 'Create a ticket (uses the current board when available)',
-            value: 'issue' as const
-          },
-          {
-            label: 'New board',
-            description: 'Create a board (Demo, File, or User Workspace mode)',
-            value: 'board' as const
-          },
-          {
-            label: 'Add board',
-            description: 'Add an existing board to Ticket Manager',
-            value: 'add-board' as const
-          }
-        ],
-        { title: 'Create' }
-      );
-      if (!picked) {
-        return;
-      }
-      if (picked.value === 'issue') {
-        await vscode.commands.executeCommand('ticketManager.createIssue', this.activeBoard);
-      } else if (picked.value === 'add-board') {
-        await vscode.commands.executeCommand('ticketManager.addBoard');
-      } else {
-        await vscode.commands.executeCommand('ticketManager.createBoard');
-      }
+    if (type === 'createIssue') {
+      await vscode.commands.executeCommand('ticketManager.createIssue', this.activeBoard);
       return;
     }
 
-    if (type === 'openColumnConfig') {
+if (type === 'openColumnConfig') {
       await vscode.commands.executeCommand('ticketManager.configureBoardColumns');
       return;
     }
@@ -577,8 +548,8 @@ export class BoardPanelManager implements vscode.Disposable {
                         <section class="column" data-column-status="${escapeHtml(column.name)}">
                           <header class="column-header">
                             <div class="column-title">
-                              <span class="status-pill" style="${escapeHtml(
-                                statusPillInlineStyle(column.name, prefs.statusColors)
+                              <span class="column-name" style="${escapeHtml(
+                                statusLabelInlineStyle(column.name, prefs.statusColors)
                               )}">${escapeHtml(column.name)}</span>
                             </div>
                             <span class="column-count">${column.issues.length}</span>
@@ -622,8 +593,8 @@ export class BoardPanelManager implements vscode.Disposable {
           <section class="list-group" draggable="true" data-group-status="${escapeHtml(column.name)}">
             <header class="list-group-header">
               <span class="drag-handle" aria-hidden="true">⠿</span>
-              <span class="status-pill" style="${escapeHtml(
-                statusPillInlineStyle(column.name, prefs.statusColors)
+              <span class="column-name" style="${escapeHtml(
+                statusLabelInlineStyle(column.name, prefs.statusColors)
               )}">${escapeHtml(column.name)}</span>
               <span class="column-count">${column.issues.length}</span>
             </header>
@@ -1059,7 +1030,7 @@ export class BoardPanelManager implements vscode.Disposable {
         justify-content: flex-start;
         align-items: center;
         gap: 8px;
-        padding: 8px 8px 6px;
+        padding: 12px 12px 10px;
         border-bottom: none;
       }
 
@@ -1070,24 +1041,24 @@ export class BoardPanelManager implements vscode.Disposable {
         min-width: 0;
       }
 
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
+      /* Jira-style flat column label: no pill, no background, no border. */
+      .column-name {
+        display: inline-block;
         max-width: 100%;
-        padding: 3px 10px;
-        border-radius: 999px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--vscode-descriptionForeground);
         font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
-        border: 1px solid transparent;
-        box-sizing: border-box;
+        letter-spacing: 0.06em;
       }
 
       .column-count {
         color: var(--vscode-descriptionForeground);
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 400;
         flex-shrink: 0;
       }
 
@@ -1448,7 +1419,8 @@ export class BoardPanelManager implements vscode.Disposable {
             <p>${headerMeta}</p>
           </div>
           <div class="header-actions">
-            ${renderIconButton('createMenuButton', 'Create issue or board', 'add')}
+            ${renderIconButton('newIssueButton', 'New issue', 'new-issue')}
+            ${renderIconButton('createMenuButton', 'New issue', 'add')}
             ${board ? renderIconButton('viewModeButton', viewMode === 'list' ? 'Switch to board view' : 'Switch to list view', viewMode === 'list' ? 'board-view' : 'list') : ''}
             ${renderIconButton('columnsButton', 'Configure board settings', 'columns')}
             ${renderIconButton('refreshButton', 'Refresh', 'refresh')}
@@ -1470,10 +1442,17 @@ export class BoardPanelManager implements vscode.Disposable {
     </div>
     <script nonce="${nonce}">
       const vscodeApi = acquireVsCodeApi();
+      const newIssueButton = document.getElementById('newIssueButton');
+      if (newIssueButton) {
+        newIssueButton.addEventListener('click', () => {
+          vscodeApi.postMessage({ type: 'createIssue' });
+        });
+      }
+
       const createMenuButton = document.getElementById('createMenuButton');
       if (createMenuButton) {
         createMenuButton.addEventListener('click', () => {
-          vscodeApi.postMessage({ type: 'showCreateMenu' });
+          vscodeApi.postMessage({ type: 'createIssue' });
         });
       }
 

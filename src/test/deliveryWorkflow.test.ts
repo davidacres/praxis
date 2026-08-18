@@ -253,12 +253,12 @@ suite('deliveryWorkflow', () => {
     assert.strictEqual(result, undefined);
   });
 
-  test('extractAgentProviderDirective detects "use claude code" in description', () => {
+  test('extractAgentProviderDirective maps "use claude code" to vercel-gateway', () => {
     const provider = extractAgentProviderDirective({
       description: 'Implement the new feature.\n\nuse claude code',
       comments: []
     });
-    assert.strictEqual(provider, 'claude-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 
   test('extractAgentProviderDirective detects "use copilot" in description', () => {
@@ -266,7 +266,7 @@ suite('deliveryWorkflow', () => {
       description: 'Ship this fix.\n\nuse copilot',
       comments: []
     });
-    assert.strictEqual(provider, 'copilot-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 
   test('extractAgentProviderDirective detects "Agent: claude" in a comment', () => {
@@ -276,17 +276,17 @@ suite('deliveryWorkflow', () => {
         { id: '1', body: 'Agent: claude', created: '2026-04-15T10:00:00.000Z' }
       ]
     });
-    assert.strictEqual(provider, 'claude-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 
   test('extractAgentProviderDirective prefers most recent comment over description', () => {
     const provider = extractAgentProviderDirective({
       description: 'use copilot',
       comments: [
-        { id: '1', body: 'use claude code', created: '2026-04-15T10:00:00.000Z' }
+        { id: '1', body: 'use vercel', created: '2026-04-15T10:00:00.000Z' }
       ]
     });
-    assert.strictEqual(provider, 'claude-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 
   test('extractAgentProviderDirective returns undefined when no directive found', () => {
@@ -302,7 +302,7 @@ suite('deliveryWorkflow', () => {
       description: 'Use GitHub Copilot for this task.',
       comments: []
     });
-    assert.strictEqual(provider, 'copilot-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 
   test('extractAgentProviderDirective detects "CLI: copilot" format', () => {
@@ -310,6 +310,6 @@ suite('deliveryWorkflow', () => {
       description: 'CLI: copilot\n\nImplement the feature.',
       comments: []
     });
-    assert.strictEqual(provider, 'copilot-cli');
+    assert.strictEqual(provider, 'vercel-gateway');
   });
 });

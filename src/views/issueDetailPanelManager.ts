@@ -5,14 +5,35 @@ import {
   discoverWorkspaceAgentWorkflows
 } from '../ai/agentWorkflowCatalog';
 import type { AgentWorkflowReference, FeatureSubTaskRecord } from '../ai/agentTypes';
-import type { AiProvider, IssueDetails, IssueSummary, SubTaskSummary, WorkflowTransition } from '../types';
+import type {
+  AiProvider,
+  BackendMode,
+  Board,
+  CreateIssueInput,
+  IssueDetails,
+  IssueSummary,
+  Project,
+  SubTaskSummary,
+  WorkflowTransition
+} from '../types';
 import {
   formatParentReference,
   getParentRule,
-  getResolvedParentLabel
+  getResolvedParentLabel,
+  type ParentRule
 } from '../issues/issueHierarchy';
 import { renderIconButton } from './webviewToolbarIcons';
 import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
+
+/** Editor tab title used while the pane holds an unsaved new issue. */
+const DRAFT_PANEL_TITLE = 'New Issue';
+
+/**
+ * Joins a parent's key and summary in its datalist suggestion text. Chromium's
+ * datalist only shows an option's `value` (not its label/text), so the summary
+ * is folded into the value itself and split back out client-side once picked.
+ */
+const PARENT_OPTION_SEPARATOR = '—';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -130,13 +151,37 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private aiAssignOptions: DetailAiAssignOption[] = [];
   private knownModels?: Array<{ id: string; label: string }>;
+  /**
+   * Draft mode: the panel renders the same Details form for an issue that does
+   * not exist yet, and Save creates it instead of updating. Everything that
+   * needs a real backend key (status transitions, comments, AI session,
+   * sub-tasks, linked items) is suppressed while this is true.
+   */
+  private draftMode = false;
+  private draftProjects: Project[] = [];
+  private draftDefaults?: Partial<CreateIssueInput>;
+  /**
+   * Mode of the service owning the board a draft will create into. In
+   * multi-connection setups that may differ from the router's active service,
+   * and the parent rules rendered into the form must follow the TARGET board
+   * (e.g. Feature-required live folder vs Epic-optional Jira).
+   */
+  private draftServiceMode?: BackendMode;
 
   private commentPlaceholder = 'Write a comment (mention @copilot for a reply)';
 
   public constructor(
     private readonly backendService: IssueTrackerService,
     private readonly aiSessionManager: AiSessionManager,
-    private readonly onAfterTransition: () => Promise<void>
+    private readonly onAfterTransition: () => Promise<void>,
+    /**
+     * Resolves the service owning a board, for multi-connection setups where the
+     * board being created into may not belong to the router's active connection.
+     * Omitted (tests, single-connection callers) means "use the default service".
+     */
+    private readonly resolveServiceForBoardId?: (
+      boardId: string
+    ) => Promise<IssueTrackerService | undefined>
   ) {
     this.disposables.push(
       this.aiSessionManager.onDidChangeWorkflowAssignment(({ issueKey }) => {
@@ -164,7 +209,223 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     this.knownModels = models.length > 0 ? [...models] : undefined;
   }
 
+  /**
+   * Open the details pane for a new, unsaved issue. Mirrors `open()` but has no
+   * key to fetch: project options are loaded first (the webview html must be set
+   * synchronously after panel creation — see CLAUDE.md), then a placeholder
+   * IssueDetails is synthesised so the normal form renderer can be reused.
+   */
+  public async openDraft(defaults?: Partial<CreateIssueInput>): Promise<void> {
+    this.draftMode = true;
+    this.draftDefaults = defaults;
+    this.activeIssueKey = undefined;
+    this.transitions = [];
+    this.parentItems = [];
+    this.availableWorkflows = [];
+    this.subTasks = [];
+    this.featureSubTaskRecords = [];
+    this.parentItemsError = undefined;
+    this.loading = false;
+    this.errorMessage = undefined;
+    this.requestGeneration += 1;
+
+    if (this.panel) {
+      const old = this.panel;
+      this.resetPanelState();
+      this.draftMode = true;
+      old.dispose(); // triggers onDidDispose → resetPanelState(), so restore after
+      this.draftDefaults = defaults;
+      this.draftMode = true;
+    }
+
+    const boards = await this.fetchDraftBoards();
+    this.draftProjects = this.deriveProjectsFromBoards(boards);
+    const projectKey = this.resolveDraftProjectKey(defaults, boards);
+    this.draftServiceMode = (await this.resolveDraftService()).mode;
+    this.details = this.buildDraftDetails(defaults, projectKey);
+    await this.fetchDraftParentItems(projectKey, this.details.issueType);
+
+    this.createPanelWithHtml(DRAFT_PANEL_TITLE);
+  }
+
+  /**
+   * Candidate parents for the draft's initial issue type, so the "Feature"/
+   * "Epic" field can offer a pick list instead of demanding an exact key the
+   * user has no way to look up (reported as "Feature is required..." /
+   * "Feature ... was not found." with no way to discover a valid one).
+   */
+  private async fetchDraftParentItems(projectKey: string, issueType: string): Promise<void> {
+    this.parentItems = [];
+    this.parentItemsError = undefined;
+    if (!projectKey) {
+      return;
+    }
+    try {
+      const service = await this.resolveDraftService();
+      if (!getParentRule(issueType, service.mode).canHaveParent) {
+        return;
+      }
+      this.parentItems = await service.getParentItems(
+        {
+          projectKeys: [projectKey],
+          statuses: [],
+          issueTypes: [],
+          searchText: '',
+          assigneeMode: 'all',
+          parentKey: undefined,
+          grouping: 'none'
+        },
+        undefined,
+        { childIssueType: issueType }
+      );
+    } catch (error) {
+      this.parentItems = [];
+      this.parentItemsError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  /**
+   * The tracked boards a draft can create into.
+   *
+   * `getProjects()` can return projects with no tracked board (especially on
+   * Jira), so the board list is the source for both the project dropdown and the
+   * preselected project — and it carries the project name the dropdown shows.
+   */
+  private async fetchDraftBoards(): Promise<Board[]> {
+    try {
+      const service = await this.resolveDraftService();
+      return await service.getBoards({ projectKeys: [], types: [], searchText: '' });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The project a new issue should start in.
+   *
+   * The caller's `projectKey` is preferred, but it is not required: a draft
+   * started from a board carries that board's id, so the project is looked up
+   * from the board itself when the key was not passed through (or the board
+   * object the command layer saw had no key on it). Only a draft with no board
+   * at all falls back to the first project in the list.
+   */
+  private resolveDraftProjectKey(
+    defaults: Partial<CreateIssueInput> | undefined,
+    boards: Board[]
+  ): string {
+    const explicit = defaults?.projectKey?.trim();
+    if (explicit) {
+      return explicit;
+    }
+
+    const boardId = defaults?.boardId?.trim();
+    const fromBoard = boardId
+      ? boards.find(board => board.id === boardId)?.projectKey?.trim()
+      : undefined;
+
+    return fromBoard || this.draftProjects[0]?.key || '';
+  }
+
+  /**
+   * The service a draft should talk to: the one owning the board it was started
+   * from, since in multi-connection setups that board may not belong to the
+   * router's active connection. Falls back to the default service whenever the
+   * board is unknown or its connection cannot be resolved.
+   */
+  private async resolveDraftService(): Promise<IssueTrackerService> {
+    const boardId = this.draftDefaults?.boardId;
+    if (!boardId || !this.resolveServiceForBoardId) {
+      return this.backendService;
+    }
+    try {
+      return (await this.resolveServiceForBoardId(boardId)) ?? this.backendService;
+    } catch {
+      return this.backendService;
+    }
+  }
+
+  /** De-duplicates boards down to their distinct projects, keyed on projectKey. */
+  private deriveProjectsFromBoards(boards: Board[]): Project[] {
+    const projects = new Map<string, Project>();
+    for (const board of boards) {
+      const key = board.projectKey?.trim();
+      if (!key || projects.has(key)) {
+        continue;
+      }
+      projects.set(key, { key, name: board.projectName?.trim() || key });
+    }
+    return [...projects.values()].sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  private buildDraftDetails(
+    defaults: Partial<CreateIssueInput> | undefined,
+    projectKey: string
+  ): IssueDetails {
+    return {
+      key: '',
+      summary: defaults?.summary ?? '',
+      status: 'Not created',
+      issueType: defaults?.issueType?.trim() || 'Task',
+      projectKey,
+      // Naming the key is better than an empty Project row when the key resolved
+      // but its board carried no display name.
+      projectName:
+        this.draftProjects.find(project => project.key === projectKey)?.name || projectKey,
+      description: defaults?.description ?? '',
+      ideaTranscript: defaults?.ideaTranscript ?? '',
+      parentKey: defaults?.parentKey ?? '',
+      priority: 'Medium',
+      transitions: [],
+      comments: [],
+      linkedIssues: []
+    };
+  }
+
+  /**
+   * The Project control for a draft.
+   *
+   * With two or more projects this is a real choice, so it renders a dropdown.
+   * With one — the normal case on the local backends, where each board defines
+   * exactly one project — a dropdown would imply a choice that does not exist,
+   * so the project is stated as a fact instead. With none, the same readonly row
+   * carries the reason and the fix.
+   *
+   * Dropping the `<select>` needs no other change: `handleDraftCreate` already
+   * falls back to the draft's own `projectKey` when the field is absent.
+   */
+  private buildDraftProjectField(d: IssueDetails): string {
+    if (this.draftProjects.length > 1) {
+      const options = this.draftProjects
+        .map(
+          project =>
+            `<option value="${escapeHtml(project.key)}"${
+              project.key === d.projectKey ? ' selected' : ''
+            }>${escapeHtml(project.name || project.key)}</option>`
+        )
+        .join('');
+      return `<label class="field-group" for="draftProjectSelect">
+          <span class="field-label">Project</span>
+          <select id="draftProjectSelect" class="field-select" required>${options}</select>
+        </label>`;
+    }
+
+    const value = d.projectName || d.projectKey || '';
+    const help =
+      this.draftProjects.length === 0 && !d.projectKey?.trim()
+        ? `<div class="field-help">${escapeHtml(
+            'No projects yet. Create a board first — each board defines its own project.'
+          )}</div>`
+        : '';
+    return `<div class="detail-row">
+          <div class="detail-label">Project</div>
+          <div class="detail-value detail-value--wrap">${escapeHtml(value || '—')}</div>
+        </div>${help}`;
+  }
+
   public async open(issueKey: string): Promise<void> {
+    this.draftMode = false;
+    this.draftDefaults = undefined;
+    this.draftProjects = [];
     this.activeIssueKey = issueKey;
     this.details = undefined;
     this.transitions = [];
@@ -238,6 +499,13 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       if (this.activeIssueKey) {
         await this.refreshIfShowing(this.activeIssueKey);
       }
+      return;
+    }
+
+    // Draft submits must be handled before the activeIssueKey guard below:
+    // a new issue has no key yet, so that guard would drop the message.
+    if (this.draftMode && type === 'saveIssueEdits') {
+      await this.handleDraftCreate(message);
       return;
     }
 
@@ -463,6 +731,102 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
   }
 
+  /**
+   * Create the issue described by the draft form, then reopen the pane on the
+   * real key so the user lands on the saved ticket.
+   *
+   * CreateIssueInput carries only projectKey/issueType/summary/description/
+   * parentKey/ideaTranscript, but the Details form also edits assignee,
+   * priority, severity, reportedBy and model. Those are applied as a follow-up
+   * updateIssue call, and only when they actually carry a value — a failed
+   * update must not lose the issue that was already created.
+   */
+  private async handleDraftCreate(message: Record<string, unknown>): Promise<void> {
+    const summary = asString(message.summary)?.trim() ?? '';
+    const projectKey = asString(message.projectKey)?.trim() || this.details?.projectKey?.trim() || '';
+    const issueType = asString(message.issueType)?.trim() ?? '';
+
+    const validationError = !summary
+      ? 'Summary is required.'
+      : !projectKey
+        ? this.draftProjects.length === 0
+          ? 'No project could be resolved. Open a board and use New Issue from its toolbar, or create a board if you have none.'
+          : 'Select a project before creating the issue.'
+        : !issueType
+          ? 'Ticket type is required.'
+          : undefined;
+    if (validationError) {
+      await this.panel?.webview.postMessage({
+        type: 'saveIssueEditsResult',
+        ok: false,
+        error: validationError
+      });
+      return;
+    }
+
+    // Create and its follow-up update must share the board's own service, and
+    // the same one the project list was read from.
+    const boardId = this.draftDefaults?.boardId;
+    const targetService = await this.resolveDraftService();
+
+    let createdKey: string;
+    try {
+      // The webview has already decided whether the parent field names an
+      // existing parent (parentKey) or a new feature to create inline
+      // (newParentSummary, livefolder/userworkspace drafts only) — it owns the
+      // datalist options needed to tell the two apart. Edit-mode saves never
+      // send newParentSummary, so reparenting cannot create folders.
+      const created = await targetService.createIssue({
+        projectKey,
+        issueType,
+        summary,
+        description: asString(message.description) ?? '',
+        ideaTranscript: asString(message.ideaTranscript) ?? '',
+        parentKey: asString(message.parentKey)?.trim() || undefined,
+        newParentSummary: asString(message.newParentSummary)?.trim() || undefined,
+        boardId
+      });
+      createdKey = created.key;
+    } catch (error) {
+      await this.panel?.webview.postMessage({
+        type: 'saveIssueEditsResult',
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return;
+    }
+
+    // Fields the create API does not accept, applied only when set. Failures
+    // here are surfaced but never discard the created issue.
+    const assignee = asString(message.assignee)?.trim() ?? '';
+    const priority = asString(message.priority)?.trim() ?? '';
+    const severity = asString(message.severity)?.trim() ?? '';
+    const reportedBy = asString(message.reportedBy)?.trim() ?? '';
+    const model = asString(message.model)?.trim() ?? '';
+    const followUp = {
+      ...(assignee ? { assignee } : {}),
+      ...(priority ? { priority } : {}),
+      ...(severity ? { severity } : {}),
+      ...(reportedBy ? { reportedBy } : {}),
+      ...(model ? { model } : {})
+    };
+    if (Object.keys(followUp).length > 0) {
+      try {
+        await targetService.updateIssue(createdKey, followUp);
+      } catch (error) {
+        void vscode.window.showWarningMessage(
+          `Created ${createdKey}, but some fields could not be applied: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+
+    await this.onAfterTransition();
+    // Replaces the draft pane with the real issue (also clears draft state).
+    await this.open(createdKey);
+  }
+
   private async fetchData(issueKey: string): Promise<void> {
     const generation = ++this.requestGeneration;
     this.loading = true;
@@ -609,7 +973,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           </select>
           <div class="field-help">
             ${hasWorkflowChoices
-              ? 'This workflow is used for Copilot delegation and Jira polling for this issue.'
+              ? 'This workflow is used for AI agent delegation and Jira polling for this issue.'
               : 'No workflow packs were found in .github/skills for this workspace.'}
           </div>
         </label>
@@ -715,6 +1079,10 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private resetPanelState(): void {
     this.panel = undefined;
     this.panelIssueKey = undefined;
+    this.draftMode = false;
+    this.draftDefaults = undefined;
+    this.draftProjects = [];
+    this.draftServiceMode = undefined;
   }
 
   private getHtml(nonce: string): string {
@@ -724,7 +1092,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     let headerTitle: string;
     let headerSubtitle = '';
 
-    if (this.loading) {
+    if (this.draftMode && this.details) {
+      documentTitle = DRAFT_PANEL_TITLE;
+      headerTitle = DRAFT_PANEL_TITLE;
+      headerSubtitle = 'Fill in the details, then choose Create.';
+      bodyContent = this.buildIssueBodyHtml(this.details);
+    } else if (this.loading) {
       documentTitle = `Loading ${issueKey}`;
       headerTitle = `Loading ${issueKey}...`;
       bodyContent = `<section class="empty-state"><h2>Loading ${escapeHtml(issueKey)}...</h2></section>`;
@@ -1259,6 +1632,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       if (!(editForm instanceof HTMLFormElement)) return;
 
       const summaryInput = document.getElementById('summaryInput');
+      const draftProjectSelect = document.getElementById('draftProjectSelect');
       const statusSelect = document.getElementById('statusSelect');
       const issueTypeSelect = document.getElementById('issueTypeSelect');
       const assigneeInput = document.getElementById('assigneeInput');
@@ -1287,47 +1661,63 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         return (value || '').trim().toLowerCase().replace(/[\\s_-]+/g, '');
       }
 
-      function getParentUi(issueType) {
-        const normalized = normalizeIssueType(issueType);
-        const mode = parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.mode : 'jira';
-        if (normalized === 'epic' || normalized === 'feature') {
-          return {
-            canHaveParent: false,
-            requiresParent: false,
-            label: 'Parent',
-            helper: (issueType || 'Issue') + ' items cannot have a parent.',
-            emptyText: (issueType || 'Issue') + ' items do not use a parent.',
-            placeholder: ''
-          };
+      // Datalist suggestions are "KEY — Summary" (Chromium only shows an
+      // option's value, not its label), so picking one leaves the summary in
+      // the input; pull the key back out before it's read or submitted.
+      function extractParentKey(raw) {
+        const value = (raw || '').trim();
+        const separatorIndex = value.indexOf(' ${PARENT_OPTION_SEPARATOR} ');
+        return separatorIndex === -1 ? value : value.slice(0, separatorIndex).trim();
+      }
+
+      // Parent rules are serialized by the host into the #parentRules data block
+      // so this script never re-implements getParentRule — the previous inline
+      // copy drifted (no livefolder branch) and blocked live folder creation.
+      let parentRulesCache;
+      function getParentRules() {
+        if (!parentRulesCache) {
+          try {
+            const rulesElement = document.getElementById('parentRules');
+            parentRulesCache = rulesElement ? JSON.parse(rulesElement.textContent || '{}') : {};
+          } catch {
+            parentRulesCache = {};
+          }
         }
-        if (normalized === 'subtask') {
+        return parentRulesCache;
+      }
+
+      function getParentUi(issueType) {
+        const rules = getParentRules();
+        const normalized = normalizeIssueType(issueType);
+        let rule = rules[issueType];
+        if (!rule) {
+          const matchKey = Object.keys(rules).find(key => normalizeIssueType(key) === normalized);
+          rule = matchKey ? rules[matchKey] : undefined;
+        }
+        if (rule) {
           return {
-            canHaveParent: true,
-            requiresParent: true,
-            label: 'Story',
-            helper: 'Subtasks can only belong to a story.',
-            emptyText: 'No story selected.',
-            placeholder: 'Enter a story key'
+            canHaveParent: Boolean(rule.canHaveParent),
+            requiresParent: Boolean(rule.requiresParent),
+            label: rule.defaultLabel || 'Parent',
+            helper: rule.helperText || '',
+            emptyText: rule.emptyText || '',
+            placeholder: rule.placeholder || ''
           };
         }
         return {
           canHaveParent: true,
           requiresParent: false,
-          label: 'Epic',
-          helper:
-            mode === 'jira'
-              || mode === 'jiracloud'
-              ? 'This item can only belong to an Epic.'
-              : 'This item can only belong to an Epic/Feature.',
-          emptyText: 'No epic selected.',
-          placeholder: 'Leave blank to clear the epic'
+          label: 'Parent',
+          helper: 'Select a parent item.',
+          emptyText: 'No parent selected.',
+          placeholder: ''
         };
       }
 
       function updateParentField() {
         const issueType = issueTypeSelect instanceof HTMLSelectElement ? issueTypeSelect.value.trim() : '';
         const parentUi = getParentUi(issueType);
-        const currentParentKey = parentInput instanceof HTMLInputElement ? parentInput.value.trim() : '';
+        const currentParentKey = parentInput instanceof HTMLInputElement ? extractParentKey(parentInput.value) : '';
         const initialParentKey =
           parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.initialParentKey || '' : '';
         const currentParentType =
@@ -1403,8 +1793,47 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               ? ideaTranscriptInput.value
               : '',
           parentKey:
-            parentUi.canHaveParent && parentInput instanceof HTMLInputElement ? parentInput.value : ''
+            parentUi.canHaveParent && parentInput instanceof HTMLInputElement
+              ? extractParentKey(parentInput.value)
+              : ''
         };
+      }
+
+      // Draft-only, livefolder/userworkspace only: decide whether the parent
+      // field names an EXISTING feature (datalist pick, exact key, or exact
+      // summary) or a NEW one to create inline alongside the issue. Edit mode
+      // never creates parents — it sends the key verbatim (the edit handler
+      // writes parentKey || null, so rerouting free text here would clear it).
+      function resolveParentSubmission(rawValue) {
+        const value = (rawValue || '').trim();
+        const isDraftForm = !editForm.dataset.issueKey;
+        const mode = parentFieldGroup instanceof HTMLElement ? parentFieldGroup.dataset.mode : '';
+        const canInlineCreate =
+          isDraftForm && (mode === 'livefolder' || mode === 'userworkspace');
+        if (!canInlineCreate || !value) {
+          return { parentKey: extractParentKey(value), newParentSummary: '' };
+        }
+        const options = parentItemsList instanceof HTMLDataListElement
+          ? Array.from(parentItemsList.options)
+          : [];
+        const lowered = value.toLowerCase();
+        const byKey = options.find(
+          option => extractParentKey(option.value).toLowerCase() === lowered
+        );
+        const bySummary =
+          !byKey &&
+          options.find(option => {
+            const separator = ' ${PARENT_OPTION_SEPARATOR} ';
+            const separatorIndex = option.value.indexOf(separator);
+            const summary =
+              separatorIndex === -1 ? '' : option.value.slice(separatorIndex + separator.length).trim();
+            return summary.length > 0 && summary.toLowerCase() === lowered;
+          });
+        const match = byKey || bySummary;
+        if (match) {
+          return { parentKey: extractParentKey(match.value), newParentSummary: '' };
+        }
+        return { parentKey: '', newParentSummary: value };
       }
 
       function isDirty() {
@@ -1432,7 +1861,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         const priority = prioritySelect instanceof HTMLSelectElement ? prioritySelect.value.trim() : '';
         if (priority.length === 0) return 'Priority is required.';
         const parentUi = getParentUi(issueType);
-        const parentKey = parentInput instanceof HTMLInputElement ? parentInput.value.trim() : '';
+        const parentKey = parentInput instanceof HTMLInputElement ? extractParentKey(parentInput.value) : '';
         if (parentUi.canHaveParent && parentUi.requiresParent && parentKey.length === 0) {
           return parentUi.label + ' is required.';
         }
@@ -1475,6 +1904,14 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       }
 
       function onFormInput() {
+        if (
+          parentInput instanceof HTMLInputElement &&
+          parentInput.value.indexOf(' ${PARENT_OPTION_SEPARATOR} ') !== -1
+        ) {
+          // Picking a datalist suggestion fills "KEY — Summary" into the input
+          // (Chromium has no separate label); collapse it to the key once picked.
+          parentInput.value = extractParentKey(parentInput.value);
+        }
         clearStatusOverride();
         updateParentField();
         updateIdeaTranscriptField();
@@ -1482,6 +1919,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       }
 
       summaryInput?.addEventListener('input', onFormInput);
+      draftProjectSelect?.addEventListener('change', onFormInput);
       statusSelect?.addEventListener('change', onFormInput);
       issueTypeSelect?.addEventListener('change', onFormInput);
       assigneeInput?.addEventListener('input', onFormInput);
@@ -1505,6 +1943,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
         saving = true;
         refreshActions();
         const currentState = readCurrentState();
+        const parentSubmission = resolveParentSubmission(currentState.parentKey);
           const payload = {
             type: 'saveIssueEdits',
             issueKey: editForm.dataset.issueKey,
@@ -1515,8 +1954,16 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             priority: currentState.priority,
             description: currentState.description,
             ideaTranscript: currentState.ideaTranscript,
-            parentKey: currentState.parentKey
+            parentKey: parentSubmission.parentKey
           };
+        if (parentSubmission.newParentSummary) {
+          payload.newParentSummary = parentSubmission.newParentSummary;
+        }
+        // Present only in draft mode; the extension falls back to the draft's
+        // own project key when this field is absent.
+        if (draftProjectSelect instanceof HTMLSelectElement) {
+          payload.projectKey = draftProjectSelect.value;
+        }
         if (currentState.model !== initialState.model) {
           payload.model = currentState.model;
         }
@@ -1935,25 +2382,47 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   }
 
   private buildIssueBodyHtml(d: IssueDetails): string {
-    const parentRule = getParentRule(d.issueType, this.backendService.mode);
+    const isDraft = this.draftMode;
+    // Parent rules must follow the service that will actually persist the
+    // issue: for a draft that is the board's own connection, which may differ
+    // from the router's active service in multi-connection setups.
+    const renderMode =
+      isDraft && this.draftServiceMode ? this.draftServiceMode : this.backendService.mode;
+    // Serialize the host-side parent rule for every selectable issue type so the
+    // webview script looks rules up instead of re-implementing them — the inline
+    // copy drifted once already (it never learned the livefolder Feature rule,
+    // which blocked issue creation with "Feature is required ...").
+    const inlineParentHint =
+      isDraft && (renderMode === 'livefolder' || renderMode === 'userworkspace')
+        ? ' Select an existing feature or type a new name to create one.'
+        : '';
+    const parentRuleFor = (issueType: string): ParentRule => {
+      const rule = getParentRule(issueType, renderMode);
+      return inlineParentHint ? { ...rule, helperText: rule.helperText + inlineParentHint } : rule;
+    };
+    const issueTypeNames = ['Epic', 'Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug', 'Issue'];
+    const parentRule = parentRuleFor(d.issueType);
     const resolvedParentLabel = getResolvedParentLabel(
       d.issueType,
-      this.backendService.mode,
+      renderMode,
       d.parentIssue
     );
     const parentReference = formatParentReference(d.parentIssue);
-    const readonlyRows = [
-      ['Project', d.projectName ? `${d.projectKey} • ${d.projectName}` : d.projectKey ?? '—'],
-      ['Created', formatDate(d.created)],
-      ['Updated', formatDate(d.updated)]
-    ]
-      .map(
-        ([label, value]) => `<div class="detail-row">
+    // A draft picks its project; a saved issue cannot move, so it stays readonly.
+    const readonlyRows = isDraft
+      ? this.buildDraftProjectField(d)
+      : [
+          ['Project', d.projectName ? `${d.projectKey} • ${d.projectName}` : d.projectKey ?? '—'],
+          ['Created', formatDate(d.created)],
+          ['Updated', formatDate(d.updated)]
+        ]
+          .map(
+            ([label, value]) => `<div class="detail-row">
           <div class="detail-label">${escapeHtml(label)}</div>
           <div class="detail-value detail-value--wrap">${escapeHtml(value)}</div>
         </div>`
-      )
-      .join('');
+          )
+          .join('');
     const statusOptions = `<option value="" selected>${escapeHtml(d.status)}</option>${this.transitions
       .map(
         transition =>
@@ -1962,16 +2431,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           )}</option>`
       )
       .join('')}`;
-        const issueTypeOptions = renderSelectOptions(d.issueType, [
-          'Epic',
-          'Feature',
-          'Idea',
-          'Story',
-          'Task',
-      'Subtask',
-      'Bug',
-      'Issue'
-    ]);
+        const issueTypeOptions = renderSelectOptions(d.issueType, issueTypeNames);
     const priorityOptions = renderSelectOptions(d.priority, [
       'Critical',
       'Highest',
@@ -2061,12 +2521,12 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               placeholder="Issue summary"
             />
           </label>
-          <label class="field-group" for="statusSelect">
+          ${isDraft ? '' : `<label class="field-group" for="statusSelect">
             <span class="field-label">Status</span>
             <select id="statusSelect" class="field-select" ${this.transitions.length === 0 ? 'disabled' : ''}>
               ${statusOptions}
             </select>
-          </label>
+          </label>`}
           <label class="field-group" for="issueTypeSelect">
             <span class="field-label">Ticket Type</span>
             <select id="issueTypeSelect" class="field-select">
@@ -2082,7 +2542,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               value="${escapeHtml(d.assignee ?? '')}"
               placeholder="Enter an assignee or leave blank"
             />
-            <div class="assign-actions">
+            ${isDraft ? '' : `<div class="assign-actions">
               <button type="button" class="assign-btn" id="assignToMeBtn">Assign to Me</button>
               ${this.aiAssignOptions.length > 0
                 ? this.aiAssignOptions.map(
@@ -2092,7 +2552,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               }
               <button type="button" class="assign-btn" id="openAnalysisBtn">Open Analysis</button>
             </div>
-            ${delegateDisabledHelp}
+            ${delegateDisabledHelp}`}
           </label>
           <label class="field-group" for="prioritySelect">
             <span class="field-label">Priority</span>
@@ -2124,18 +2584,18 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               placeholder="Source or reporter"
             />
           </label>
-          <div class="detail-row">
+          ${isDraft ? '' : `<div class="detail-row">
             <div class="detail-label">Branch</div>
             <div class="detail-value detail-value--wrap">${escapeHtml(d.branch || '—')}</div>
           </div>
           <div class="detail-row">
             <div class="detail-label">Complexity</div>
             <div class="detail-value detail-value--wrap">${escapeHtml(d.complexity || '—')}</div>
-          </div>
+          </div>`}
           <div
             class="field-group parent-group${parentRule.canHaveParent ? '' : ' is-hidden'}"
             id="parentFieldGroup"
-            data-mode="${escapeHtml(this.backendService.mode)}"
+            data-mode="${escapeHtml(renderMode)}"
             data-initial-parent-key="${escapeHtml(d.parentKey ?? '')}"
             data-current-parent-type="${escapeHtml(d.parentIssue?.issueType ?? '')}"
             data-current-parent-summary="${escapeHtml(d.parentIssue?.summary ?? '')}"
@@ -2146,9 +2606,16 @@ export class IssueDetailPanelManager implements vscode.Disposable {
               id="parentInput"
               class="field-input"
               type="text"
+              list="parentItemsList"
               value="${escapeHtml(d.parentKey ?? '')}"
               placeholder="${escapeHtml(parentRule.placeholder)}"
             />
+            <datalist id="parentItemsList">${this.parentItems
+              .map(
+                item =>
+                  `<option value="${escapeHtml(`${item.key} ${PARENT_OPTION_SEPARATOR} ${item.summary}`)}"></option>`
+              )
+              .join('')}</datalist>
             <div class="field-help" id="parentFieldHint">${escapeHtml(parentRule.helperText)}</div>
             <div class="parent-preview" id="parentPreview">
               <div class="parent-preview-summary" id="parentPreviewSummary">${escapeHtml(
@@ -2188,14 +2655,22 @@ export class IssueDetailPanelManager implements vscode.Disposable {
             <div class="field-help">Idea tickets keep research here instead of code delivery workflows.</div>
           </label>
           <div class="form-actions">
-            <button class="primary-button" id="saveButton" type="submit">Save</button>
+            <button class="primary-button" id="saveButton" type="submit">${isDraft ? 'Create' : 'Save'}</button>
             <button class="secondary-button" id="resetButton" type="button">Reset</button>
-            ${isIdea ? '' : '<button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>'}
-            ${isIdea ? '' : `<button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>`}
+            ${isIdea || isDraft ? '' : '<button class="secondary-button" id="lprButton" type="button">Local Peer Review</button>'}
+            ${isIdea || isDraft ? '' : `<button class="secondary-button" id="viewAiSessionBtn" type="button"${sessionBtnDisabled} title="${escapeHtml(sessionBtnTitle)}">AI Session</button>`}
             <span class="form-status" id="formStatus" aria-live="polite"></span>
           </div>
+          <script type="application/json" id="parentRules">${JSON.stringify(
+            Object.fromEntries(
+              issueTypeNames.map(type => [type, parentRuleFor(type)] as [string, ParentRule])
+            )
+          // script blocks are raw text: no HTML-escaping (it would corrupt the
+          // JSON), but neutralize "<" so a "</script>" can never break out.
+          ).replace(/</g, '\\u003c')}</script>
         </form>
       </section>
+      ${isDraft ? '' : `
       ${isIdea ? '' : this.renderWorkflowPackSection(d.key)}
       ${this.renderModelSection(d.key)}
       ${this.renderSubTasksSection(d.key)}
@@ -2233,6 +2708,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
           </div>
         </form>
       </section>
+      `}
     `;
   }
 }

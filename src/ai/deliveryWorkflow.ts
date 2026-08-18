@@ -7,6 +7,7 @@ const DELIVERY_ANALYSIS_RESULT_MARKER = 'DELIVERY_ANALYSIS_RESULT';
 const DELIVERY_RESULT_MARKER = 'DELIVERY_RESULT';
 
 export const AI_COMMENT_HEADER = '**THIS IS AN AI-GENERATED MESSAGE.**';
+export const COPILOT_AGENT_INPUT_REQUEST_MARKER = 'COPILOT_AGENT_INPUT_REQUEST';
 
 export interface DeliveryAnalysisResult {
   status: 'ready' | 'blocked';
@@ -111,17 +112,21 @@ export function extractDeliveryBaseBranch(issue: Pick<IssueDetails, 'description
   return extractBranchFromText(issue.description);
 }
 
-type AgentCliProvider = Extract<AiProvider, 'copilot-cli' | 'claude-cli'>;
+type AgentCliProvider = AiProvider;
 
+/** Ticket directives that request an agent — only Vercel Gateway is available. */
 const AGENT_PROVIDER_PATTERNS: Array<{ pattern: RegExp; provider: AgentCliProvider }> = [
-  { pattern: /\buse\s+claude\s*(?:code)?\b/i, provider: 'claude-cli' },
-  { pattern: /\bagent\s*:\s*claude\s*(?:code)?\b/i, provider: 'claude-cli' },
-  { pattern: /\bcli\s*:\s*claude\s*(?:code)?\b/i, provider: 'claude-cli' },
-  { pattern: /\buse\s+copilot\b/i, provider: 'copilot-cli' },
-  { pattern: /\bagent\s*:\s*copilot\b/i, provider: 'copilot-cli' },
-  { pattern: /\bcli\s*:\s*copilot\b/i, provider: 'copilot-cli' },
-  { pattern: /\buse\s+github\s+copilot\b/i, provider: 'copilot-cli' },
-  { pattern: /\bagent\s*:\s*github\s+copilot\b/i, provider: 'copilot-cli' }
+  { pattern: /\buse\s+claude\s*(?:code)?\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bagent\s*:\s*claude\s*(?:code)?\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bcli\s*:\s*claude\s*(?:code)?\b/i, provider: 'vercel-gateway' },
+  { pattern: /\buse\s+copilot\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bagent\s*:\s*copilot\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bcli\s*:\s*copilot\b/i, provider: 'vercel-gateway' },
+  { pattern: /\buse\s+github\s+copilot\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bagent\s*:\s*github\s+copilot\b/i, provider: 'vercel-gateway' },
+  { pattern: /\buse\s+vercel(?:\s+ai)?(?:\s+gateway)?\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bagent\s*:\s*vercel(?:\s+ai)?(?:\s+gateway)?\b/i, provider: 'vercel-gateway' },
+  { pattern: /\bcli\s*:\s*vercel(?:\s+ai)?(?:\s+gateway)?\b/i, provider: 'vercel-gateway' }
 ];
 
 function extractProviderFromText(text: string | undefined): AgentCliProvider | undefined {
@@ -138,10 +143,8 @@ function extractProviderFromText(text: string | undefined): AgentCliProvider | u
 
 /**
  * Scans the issue description and comments (most recent first) for a directive
- * indicating which CLI agent to use. Supports patterns like:
- *   - "use claude code" / "use copilot"
- *   - "Agent: claude code" / "Agent: copilot"
- *   - "CLI: claude" / "CLI: copilot"
+ * indicating an AI agent should run. All recognized directives resolve to
+ * Vercel AI Gateway (the only supported provider).
  */
 export function extractAgentProviderDirective(
   issue: Pick<IssueDetails, 'description' | 'comments'>

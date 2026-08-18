@@ -34,19 +34,19 @@ suite('TicketManagerStatusBar', () => {
         projectCount: 3,
         serverName: 'workspace-jira'
       },
-      aiProviders: ['openai'],
-      activeProvider: 'openai',
+      aiProviders: ['vercel-gateway'],
+      activeProvider: 'vercel-gateway',
       lastError: undefined,
       isChecking: false
     });
 
-    assert.strictEqual(getBackendModeLabel('jiracloud'), 'Jira Cloud');
+    assert.strictEqual(getBackendModeLabel('jiracloud'), 'Jira MCP');
     assert.strictEqual(presentation.tone, 'ok');
     assert.strictEqual(presentation.text, '$(ticket-manager-ticket)');
     assert.ok(presentation.accessibilityLabel.includes('3 providers'));
-    assert.ok(presentation.accessibilityLabel.includes('OpenAI'));
+    assert.ok(presentation.accessibilityLabel.includes('Vercel AI Gateway'));
     assert.ok(presentation.tooltipMarkdown.includes('Connected to 3 providers\\.'));
-    assert.ok(presentation.tooltipMarkdown.includes('Configured with OpenAI\\.'));
+    assert.ok(presentation.tooltipMarkdown.includes('Configured with Vercel AI Gateway\\.'));
     assert.ok(!presentation.tooltipMarkdown.includes('Projects: 3'));
   });
 
@@ -60,8 +60,8 @@ suite('TicketManagerStatusBar', () => {
         toolCount: 0,
         projectCount: 1
       },
-      aiProviders: ['claude'],
-      activeProvider: 'claude',
+      aiProviders: ['vercel-gateway'],
+      activeProvider: 'vercel-gateway',
       lastError: 'Failed to refresh issue details.',
       isChecking: false
     });
@@ -69,7 +69,7 @@ suite('TicketManagerStatusBar', () => {
     assert.strictEqual(presentation.tone, 'error');
     assert.strictEqual(presentation.text, '$(ticket-manager-ticket) $(error)');
     assert.ok(presentation.accessibilityLabel.includes('2 providers'));
-    assert.ok(presentation.accessibilityLabel.includes('Claude'));
+    assert.ok(presentation.accessibilityLabel.includes('Vercel AI Gateway'));
     assert.ok(presentation.tooltipMarkdown.includes('Connected to 2 providers\\.'));
     assert.ok(presentation.tooltipMarkdown.includes('Last error: Failed to refresh issue details\\.'));
   });
@@ -84,8 +84,8 @@ suite('TicketManagerStatusBar', () => {
         toolCount: 4,
         projectCount: 2
       },
-      aiProviders: ['copilot-cli'],
-      activeProvider: 'copilot-cli',
+      aiProviders: ['vercel-gateway'],
+      activeProvider: 'vercel-gateway',
       activeSessionCount: 3,
       approvalSessionCount: 1,
       pausedSessionCount: 2,
@@ -99,8 +99,8 @@ suite('TicketManagerStatusBar', () => {
     assert.ok(presentation.accessibilityLabel.includes('1 approval'));
     assert.ok(presentation.accessibilityLabel.includes('2 paused'));
     assert.ok(presentation.tooltipMarkdown.includes('Connected to 1 provider\\.'));
-    assert.ok(presentation.accessibilityLabel.includes('GitHub Copilot SDK'));
-    assert.ok(presentation.tooltipMarkdown.includes('Configured with GitHub Copilot SDK\\.'));
+    assert.ok(presentation.accessibilityLabel.includes('Vercel AI Gateway'));
+    assert.ok(presentation.tooltipMarkdown.includes('Configured with Vercel AI Gateway\\.'));
     assert.ok(presentation.tooltipMarkdown.includes('Active sessions: 3'));
     assert.ok(presentation.tooltipMarkdown.includes('Approval required: 1'));
     assert.ok(presentation.tooltipMarkdown.includes('Paused sessions: 2'));

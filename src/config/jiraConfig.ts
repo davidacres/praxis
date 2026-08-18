@@ -1,16 +1,19 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parse as parseJsonc } from 'jsonc-parser';
 import type {
   AiAgentRegistration,
   AiProvider,
   BackendMode,
-  ConfigureConnectionResult,
   ConnectionType,
   DeliveryWorkflowSettings,
   SecretConnectionValues
 } from '../types';
+import {
+  clearVercelApiKey,
+  migrateVercelCredentialToSecretStorage,
+  resolveVercelApiKey,
+  storeVercelApiKey
+} from '../ai/gatewaySecrets';
+import { resolveGatewayApiKeyFromEnv, resolveGatewayUrlFromEnv } from '../ai/gateway';
 import {
   buildAiProviderSettingsFromLegacy,
   isNestedAiProviderObject,
@@ -26,16 +29,8 @@ import {
 const CONFIG_ROOT = 'ticketManager';
 const SECRET_ENV_KEY = 'ticketManager.secretEnv';
 const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
-const POLLING_CONFIG_PATH = path.resolve(__dirname, '..', '..', 'JiraPollingService', 'appsettings.json');
 
-interface JiraPollingDefaults {
-  baseUrl: string;
-  token: string;
-  projectKey: string;
-  rapidViewId?: number;
-  internalDns: string;
-  preferredResolveIp: string;
-}
+const DEFAULT_JIRA_BASE_URL = 'https://jira.example.com';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -104,46 +99,64 @@ function parseJsonArray(input: string, label: string): string[] {
   return parsed;
 }
 
-let cachedJiraPollingDefaults: JiraPollingDefaults | undefined;
-
-function loadJiraPollingDefaults(): JiraPollingDefaults {
-  if (cachedJiraPollingDefaults) {
-    return cachedJiraPollingDefaults;
-  }
-
-  const fallback: JiraPollingDefaults = {
-    baseUrl: 'https://jira.example.com',
-    token: '',
-    projectKey: 'KAMAI',
-    rapidViewId: 9402,
-    internalDns: 'internal-Atlassian-Prod-LB-Jira-Internal-195841951.eu-west-1.elb.amazonaws.com',
-    preferredResolveIp: ''
-  };
-
-  try {
-    const rawText = fs.readFileSync(POLLING_CONFIG_PATH, 'utf8');
-    const parsed = parseJsonc(rawText);
-    const jiraPolling = isRecord(parsed) && isRecord(parsed.JiraPolling) ? parsed.JiraPolling : {};
-    cachedJiraPollingDefaults = {
-      baseUrl: asString(jiraPolling.BaseUrl)?.trim() || fallback.baseUrl,
-      token: asString(jiraPolling.Token)?.trim() || fallback.token,
-      projectKey: asString(jiraPolling.ProjectKey)?.trim() || fallback.projectKey,
-      internalDns: asString(jiraPolling.InternalDns)?.trim() || fallback.internalDns,
-      preferredResolveIp:
-        asString(jiraPolling.PreferredResolveIp)?.trim() || fallback.preferredResolveIp,
-      rapidViewId:
-        typeof jiraPolling.RapidViewId === 'number' && Number.isInteger(jiraPolling.RapidViewId)
-          ? jiraPolling.RapidViewId
-          : fallback.rapidViewId
-    };
-  } catch {
-    cachedJiraPollingDefaults = fallback;
-  }
-
-  return cachedJiraPollingDefaults;
-}
-
 export class AppConfigStore {
+  private secrets: vscode.SecretStorage | undefined;
+  /** Cached Vercel gateway API key from SecretStorage / migration / env. */
+  private vercelApiKeyCache = '';
+
+  /** Bind extension SecretStorage so gateway keys are not kept in settings.json. */
+  public bindExtensionSecrets(secrets: vscode.SecretStorage): void {
+    this.secrets = secrets;
+  }
+
+  /**
+   * Refresh the in-memory Vercel API key cache and migrate any legacy
+   * `ai.credential` value into SecretStorage.
+   */
+  public async refreshVercelApiKeyCache(): Promise<void> {
+    if (!this.secrets) {
+      this.vercelApiKeyCache = resolveGatewayApiKeyFromEnv() || '';
+      return;
+    }
+
+    const settings = this.getAiProviderSettings();
+    if (settings.provider === 'vercel-gateway' && settings.credential.trim()) {
+      const migrated = await migrateVercelCredentialToSecretStorage(
+        this.secrets,
+        settings.credential
+      );
+      if (migrated.migrated) {
+        await this.setAiProviderSettings({
+          ...settings,
+          credential: ''
+        });
+      }
+    }
+
+    const resolved = await resolveVercelApiKey(this.secrets, settings.credential);
+    this.vercelApiKeyCache = resolved ?? '';
+  }
+
+  public async storeVercelGatewayApiKey(apiKey: string): Promise<void> {
+    if (!this.secrets) {
+      throw new Error('SecretStorage is not available.');
+    }
+    await storeVercelApiKey(this.secrets, apiKey);
+    this.vercelApiKeyCache = apiKey.trim();
+  }
+
+  public async clearVercelGatewayApiKey(): Promise<void> {
+    if (!this.secrets) {
+      return;
+    }
+    await clearVercelApiKey(this.secrets);
+    this.vercelApiKeyCache = '';
+  }
+
+  public hasVercelGatewayApiKeyCached(): boolean {
+    return this.vercelApiKeyCache.trim().length > 0;
+  }
+
   public async getSecretValues(context: vscode.ExtensionContext): Promise<SecretConnectionValues> {
     const [storedEnv, storedHeaders] = await Promise.all([
       context.secrets.get(SECRET_ENV_KEY),
@@ -180,16 +193,6 @@ export class AppConfigStore {
     return config.get<string>('stdioCommand', '').trim().length > 0;
   }
 
-  public hasJiraCloudConfig(): boolean {
-    if (this.getJiraCloudId().length > 0) {
-      return true;
-    }
-    return (
-      this.getJiraCloudBaseUrl().trim().length > 0 &&
-      this.getJiraCloudToken().trim().length > 0
-    );
-  }
-
   public async setBackendMode(mode: BackendMode): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace.getConfiguration(CONFIG_ROOT).update('backendMode', mode, target);
@@ -203,91 +206,6 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<number>('defaultPageSize', 25);
   }
 
-  public getJiraCloudId(): string {
-    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
-    return config.get<string>('jiraCloudId', '').trim();
-  }
-
-  public getJiraCloudSiteUrl(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraCloudSiteUrl', '').trim();
-  }
-
-  public getJiraOAuthClientId(): string {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('jiraOAuthClientId', '').trim();
-  }
-
-  public async setJiraOAuthClientId(value: string): Promise<void> {
-    const target = this.configTarget();
-    await vscode.workspace.getConfiguration(CONFIG_ROOT).update('jiraOAuthClientId', value.trim(), target);
-  }
-
-  public getJiraOAuthClientSecret(): string {
-    return '';
-  }
-
-  public getJiraOAuthScopes(): string[] {
-    const requiredScopes = [
-      'offline_access',
-      'read:jira-work',
-      'write:jira-work',
-      'read:jira-user',
-      'read:me',
-      'read:board-scope:jira-software',
-      'read:project:jira',
-      'read:issue-details:jira'
-    ];
-
-    const configured = vscode.workspace
-      .getConfiguration(CONFIG_ROOT)
-      .get<string[]>('jiraOAuthScopes', [])
-      .map(scope => scope.trim())
-      .filter(scope => scope.length > 0);
-    if (configured.length > 0) {
-      const merged = new Set(configured);
-      for (const scope of requiredScopes) {
-        merged.add(scope);
-      }
-      return [...merged];
-    }
-
-    return requiredScopes;
-  }
-
-  public async setJiraCloudSite(
-    site:
-      | {
-          id: string;
-          name: string;
-          url: string;
-        }
-      | undefined
-  ): Promise<void> {
-    const target = this.configTarget();
-    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
-    const cloudId = site?.id.trim() ?? '';
-    const cloudName = site?.name.trim() ?? '';
-    const cloudUrl = site?.url.trim() ?? '';
-
-    await Promise.all([
-      config.update('jiraCloudId', cloudId, target),
-      config.update('jiraCloudSiteName', cloudName, target),
-      config.update('jiraCloudSiteUrl', cloudUrl, target)
-    ]);
-  }
-
-  public isJiraStartupPollingEnabled(): boolean {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.enabled', false);
-  }
-
-  public getJiraPollingRequiredLabel(): string {
-    const value = this.getWorkspaceScopedConfigValue<string>('jiraPolling.requiredLabel', 'syscfg');
-    return value.trim() || 'syscfg';
-  }
-
-  public isJiraPollingClarificationAnalysisEnabled(): boolean {
-    return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('jiraPolling.clarificationAnalysis', false);
-  }
-
   public getDeliveryDefaultBaseBranch(): string | undefined {
     const value = vscode.workspace.getConfiguration(CONFIG_ROOT).get<string>('delivery.defaultBaseBranch', '');
     return value.trim() || undefined;
@@ -297,78 +215,151 @@ export class AppConfigStore {
     return vscode.workspace.getConfiguration(CONFIG_ROOT).get<boolean>('delivery.autoMergeSubTasks', true);
   }
 
-  public getJiraPollingProjectKey(): string {
-    return loadJiraPollingDefaults().projectKey;
-  }
-
-  public getJiraPollingRapidViewId(): number | undefined {
-    return loadJiraPollingDefaults().rapidViewId;
+  /**
+   * Returns an optional default project key from `jiraMcp.defaultProjectKey`
+   * if it has been configured. Empty string otherwise.
+   */
+  public getJiraDefaultProjectKey(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcp.defaultProjectKey', '').trim();
   }
 
   public getJiraDefaultBaseUrl(): string {
-    return loadJiraPollingDefaults().baseUrl;
+    return DEFAULT_JIRA_BASE_URL;
   }
 
-  public getJiraCloudInternalDns(): string {
-    return loadJiraPollingDefaults().internalDns;
+  // ── Jira MCP ──────────────────────────────────────────────────────
+
+  public getJiraMcpSiteUrl(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcpSiteUrl', '').trim();
   }
 
-  public getJiraCloudPreferredResolveIp(): string {
-    return loadJiraPollingDefaults().preferredResolveIp;
-  }
-
-  public getJiraCloudBaseUrl(): string {
-    const configured = this.getWorkspaceScopedConfigValue<string>('jiraCloudBaseUrl', '').trim();
-    return configured || loadJiraPollingDefaults().baseUrl;
-  }
-
-  public getJiraCloudToken(): string {
-    const configured = this.getWorkspaceScopedConfigValue<string>('jiraCloudToken', '').trim();
-    return configured || process.env.JIRA_TOKEN?.trim() || loadJiraPollingDefaults().token;
-  }
-
-  public getJiraCloudEpicKey(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraCloudEpicKey', '').trim();
-  }
-
-  public getJiraCloudEpicBoardName(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraCloudEpicBoardName', '').trim();
-  }
-
-  public getJiraCloudBoardJql(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraCloudBoardJql', '').trim();
-  }
-
-  public getJiraCloudBoardName(): string {
-    return this.getWorkspaceScopedConfigValue<string>('jiraCloudBoardName', '').trim();
-  }
-
-  public async setJiraCloudEpicKey(value: string | undefined): Promise<void> {
+  public async setJiraMcpSiteUrl(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraCloudEpicKey', value?.trim() ?? '', target);
+      .update('jiraMcpSiteUrl', value?.trim() ?? '', target);
   }
 
-  public async setJiraCloudEpicBoardName(value: string | undefined): Promise<void> {
+  public getJiraMcpEpicKey(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcpEpicKey', '').trim();
+  }
+
+  public getJiraMcpEpicBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcpEpicBoardName', '').trim();
+  }
+
+  public getJiraMcpBoardJql(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcpBoardJql', '').trim();
+  }
+
+  public getJiraMcpBoardName(): string {
+    return this.getWorkspaceScopedConfigValue<string>('jiraMcpBoardName', '').trim();
+  }
+
+  public async setJiraMcpEpicKey(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraCloudEpicBoardName', value?.trim() ?? '', target);
+      .update('jiraMcpEpicKey', value?.trim() ?? '', target);
   }
 
-  public async setJiraCloudBoardJql(value: string | undefined): Promise<void> {
+  public async setJiraMcpEpicBoardName(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraCloudBoardJql', value?.trim() ?? '', target);
+      .update('jiraMcpEpicBoardName', value?.trim() ?? '', target);
   }
 
-  public async setJiraCloudBoardName(value: string | undefined): Promise<void> {
+  public async setJiraMcpBoardJql(value: string | undefined): Promise<void> {
     const target = this.configTarget();
     await vscode.workspace
       .getConfiguration(CONFIG_ROOT)
-      .update('jiraCloudBoardName', value?.trim() ?? '', target);
+      .update('jiraMcpBoardJql', value?.trim() ?? '', target);
+  }
+
+  public async setJiraMcpBoardName(value: string | undefined): Promise<void> {
+    const target = this.configTarget();
+    await vscode.workspace
+      .getConfiguration(CONFIG_ROOT)
+      .update('jiraMcpBoardName', value?.trim() ?? '', target);
+  }
+
+  /**
+   * Indicates whether a Jira MCP connection can be established. Defers to the
+   * `JiraMcpConnectionResolver` when available, otherwise falls back to a
+   * direct check against the legacy stdio/http settings.
+   */
+  public async hasJiraMcpConfigPublic(): Promise<boolean> {
+    const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
+
+    const connectionType = config.get<ConnectionType>('connectionType', 'stdio');
+    if (connectionType === 'http') {
+      if (config.get<string>('httpUrl', '').trim().length > 0) {
+        return true;
+      }
+    } else if (config.get<string>('stdioCommand', '').trim().length > 0) {
+      return true;
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const { parse: parseJsonc } = await import('jsonc-parser');
+      const mcpPath = path.join(workspaceFolder.uri.fsPath, '.vscode', 'mcp.json');
+      try {
+        const text = await fs.readFile(mcpPath, 'utf8');
+        const obj = parseJsonc(text, [], { allowTrailingComma: true }) as
+          | { servers?: Record<string, unknown>; mcpServers?: Record<string, unknown> }
+          | null;
+        const servers = obj?.servers ?? obj?.mcpServers;
+        if (servers && typeof servers === 'object') {
+          for (const [name, raw] of Object.entries(servers)) {
+            if (!isRecord(raw) || typeof raw.command !== 'string') {
+              continue;
+            }
+            if (name.toLowerCase().includes('jira')) {
+              return true;
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const homeMcpPath: string = (() => {
+      const override = process.env['JIRA_MINI_USER_MCP_PATHS'];
+      if (override && override.trim().length > 0) {
+        return override.trim();
+      }
+      const path = require('node:path') as typeof import('node:path');
+      const os = require('node:os') as typeof import('node:os');
+      return path.join(os.homedir(), '.vscode', 'mcp.json');
+    })();
+    try {
+      const fs = await import('node:fs/promises');
+      const { parse: parseJsonc } = await import('jsonc-parser');
+      const text = await fs.readFile(homeMcpPath, 'utf8');
+      const obj = parseJsonc(text, [], { allowTrailingComma: true }) as
+        | { servers?: Record<string, unknown>; mcpServers?: Record<string, unknown> }
+        | null;
+      const servers = obj?.servers ?? obj?.mcpServers;
+      if (servers && typeof servers === 'object') {
+        for (const [name, raw] of Object.entries(servers)) {
+          if (!isRecord(raw) || typeof raw.command !== 'string') {
+            continue;
+          }
+          if (name.toLowerCase().includes('jira')) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return false;
   }
 
   // ── GitHub settings ──────────────────────────────────────────────
@@ -471,12 +462,16 @@ export class AppConfigStore {
     const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
     const target = vscode.ConfigurationTarget.Global;
     const normalized = sanitizeAiProviderSettings(settings);
+    // Never persist the Vercel API key in settings.json — SecretStorage owns it.
+    const credential =
+      normalized.provider === 'vercel-gateway' ? '' : normalized.credential;
 
     await Promise.all([
       config.update('ai.provider', normalized.provider, target),
-      config.update('ai.credential', normalized.credential, target),
+      config.update('ai.credential', credential, target),
       config.update('ai.agentName', normalized.agentName, target),
-      config.update('ai.runtimePath', normalized.runtimePath, target)
+      config.update('ai.runtimePath', normalized.runtimePath, target),
+      config.update('ai.vercelUrl', normalized.vercelUrl, target)
     ]);
     await this.clearLegacyAiSettings();
   }
@@ -538,43 +533,63 @@ export class AppConfigStore {
       config.update('ai.provider', normalized.provider, target),
       config.update('ai.credential', normalized.credential, target),
       config.update('ai.agentName', normalized.agentName, target),
-      config.update('ai.runtimePath', normalized.runtimePath, target)
+      config.update('ai.runtimePath', normalized.runtimePath, target),
+      config.update('ai.vercelUrl', normalized.vercelUrl, target)
     ]);
     await this.clearLegacyAiSettings();
   }
 
+  /** @deprecated OpenAI is no longer a supported provider. */
   public getAiOpenaiApiKey(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'openai' ? settings.credential : '';
+    return '';
   }
 
+  /** @deprecated Claude API is no longer a supported provider. */
   public getAiClaudeApiKey(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'claude' ? settings.credential : '';
+    return '';
   }
 
+  /** @deprecated Cursor CLI is no longer a supported provider. */
   public getAiCursorCliPath(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'cursor-cli' ? settings.credential : '';
+    return '';
   }
 
+  public getAiVercelGatewayApiKey(): string {
+    const settings = this.getAiProviderSettings();
+    if (settings.provider !== 'vercel-gateway') {
+      return '';
+    }
+    return this.vercelApiKeyCache || settings.credential || resolveGatewayApiKeyFromEnv() || '';
+  }
+
+  public getAiVercelGatewayUrl(): string {
+    const settings = this.getAiProviderSettings();
+    return resolveGatewayUrlFromEnv(settings.vercelUrl);
+  }
+
+  public getAiVercelAgentName(): string {
+    const settings = this.getAiProviderSettings();
+    return settings.provider === 'vercel-gateway' ? settings.agentName : '';
+  }
+
+  /** @deprecated Use getAiVercelGatewayApiKey / getAiVercelAgentName. */
   public getAiCopilotCliPath(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'copilot-cli' ? settings.runtimePath : '';
+    return '';
   }
 
+  /** @deprecated Use getAiVercelAgentName. */
   public getAiCopilotAgentName(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'copilot-cli' ? settings.agentName : '';
+    return this.getAiVercelAgentName();
   }
 
+  /** @deprecated Claude Code CLI is no longer a supported provider. */
   public getAiClaudeCliPath(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'claude-cli' ? settings.credential : '';
+    return '';
   }
 
+  /** @deprecated Use active provider === vercel-gateway. */
   public getAiCopilotEnabled(): boolean {
-    return this.getAiProviderSettings().provider === 'copilot-cli';
+    return this.getAiProviderSettings().provider === 'vercel-gateway';
   }
 
   public getAiDefaultProvider(): AiProvider | 'none' {
@@ -591,7 +606,9 @@ export class AppConfigStore {
     if (settings.provider !== provider) {
       return false;
     }
-    return isAiProviderConfigured(settings);
+    return isAiProviderConfigured(settings, {
+      secretCredentialPresent: this.hasVercelGatewayApiKeyCached()
+    });
   }
 
   public getAiDefaultModel(): string {
@@ -621,14 +638,14 @@ export class AppConfigStore {
     return this.getAiAnalysisEnabled() && this.getAiAnalysisDefaultPrompt().trim().length > 0;
   }
 
+  /** @deprecated OpenAI is no longer a supported provider. */
   public getAiOpenaiAgentName(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'openai' ? settings.agentName : '';
+    return '';
   }
 
+  /** @deprecated Claude API is no longer a supported provider. */
   public getAiClaudeAgentName(): string {
-    const settings = this.getAiProviderSettings();
-    return settings.provider === 'claude' ? settings.agentName : '';
+    return '';
   }
 
   public getAiMentionName(): string {
@@ -650,7 +667,12 @@ export class AppConfigStore {
 
   public getConfiguredAiProviders(): AiProvider[] {
     const settings = this.getAiProviderSettings();
-    if (settings.provider === 'none' || !isAiProviderConfigured(settings)) {
+    if (
+      settings.provider === 'none' ||
+      !isAiProviderConfigured(settings, {
+        secretCredentialPresent: this.hasVercelGatewayApiKeyCached()
+      })
+    ) {
       return [];
     }
     return [settings.provider];
@@ -659,18 +681,11 @@ export class AppConfigStore {
   /** Returns the active API-backed agent when credential is configured. */
   public getConfiguredAiAgents(): AiAgentRegistration[] {
     const settings = this.getAiProviderSettings();
-    if (settings.provider === 'openai' && settings.credential.trim()) {
+    if (settings.provider === 'vercel-gateway' && this.getAiVercelGatewayApiKey()) {
       return [{
-        name: settings.agentName.trim() || 'OpenAI',
-        provider: 'openai',
-        apiKey: settings.credential.trim()
-      }];
-    }
-    if (settings.provider === 'claude' && settings.credential.trim()) {
-      return [{
-        name: settings.agentName.trim() || 'Claude (Anthropic)',
-        provider: 'claude',
-        apiKey: settings.credential.trim()
+        name: settings.agentName.trim() || 'Vercel AI Gateway',
+        provider: 'vercel-gateway',
+        apiKey: this.getAiVercelGatewayApiKey()
       }];
     }
     return [];
@@ -733,46 +748,15 @@ export class AppConfigStore {
     }
 
     if (this.getEffectiveBackendMode() === 'jiracloud') {
-      const baseUrl = this.getJiraCloudBaseUrl();
-      const epicKey = this.getJiraCloudEpicKey();
-      const boardJql = this.getJiraCloudBoardJql();
-      return baseUrl
-        ? `Jira Cloud (${baseUrl}${epicKey ? `; epic ${epicKey}` : ''}${boardJql ? '; jql board configured' : ''})`
-        : 'Jira Cloud (not configured)';
+      const siteUrl = this.getJiraMcpSiteUrl();
+      const epicKey = this.getJiraMcpEpicKey();
+      const boardJql = this.getJiraMcpBoardJql();
+      return siteUrl
+        ? `Jira MCP (${siteUrl}${epicKey ? `; epic ${epicKey}` : ''}${boardJql ? '; jql board configured' : ''})`
+        : 'Jira MCP (not configured)';
     }
 
     return 'Not configured';
-  }
-
-  public async configureConnection(
-    context: vscode.ExtensionContext
-  ): Promise<ConfigureConnectionResult> {
-    const clientId = await vscode.window.showInputBox({
-      title: 'Ticket Manager: Jira Cloud OAuth Client ID',
-      prompt: 'Enter the Atlassian OAuth client ID for Jira Cloud.',
-      value: this.getJiraOAuthClientId(),
-      ignoreFocusOut: true,
-      validateInput: value => (value.trim().length > 0 ? undefined : 'Client ID is required.')
-    });
-
-    if (clientId === undefined) {
-      return { saved: false, description: 'Cancelled' };
-    }
-
-    await Promise.all([
-      this.setJiraOAuthClientId(clientId),
-      this.setBackendMode('jiracloud'),
-      vscode.workspace.getConfiguration(CONFIG_ROOT).update('connectionType', undefined, this.configTarget()),
-      vscode.workspace.getConfiguration(CONFIG_ROOT).update('stdioCommand', undefined, this.configTarget()),
-      vscode.workspace.getConfiguration(CONFIG_ROOT).update('stdioArgs', undefined, this.configTarget()),
-      vscode.workspace.getConfiguration(CONFIG_ROOT).update('stdioCwd', undefined, this.configTarget()),
-      vscode.workspace.getConfiguration(CONFIG_ROOT).update('httpUrl', undefined, this.configTarget())
-    ]);
-
-    return {
-      saved: true,
-      description: 'Jira Cloud OAuth'
-    };
   }
 
 }

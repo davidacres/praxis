@@ -7,22 +7,28 @@ export interface AiProviderSettings {
   credential: string;
   agentName: string;
   runtimePath: string;
+  /** Vercel AI Gateway base URL. Empty means default / env fallback. */
+  vercelUrl: string;
 }
 
 export const DEFAULT_AI_PROVIDER_SETTINGS: AiProviderSettings = {
   provider: 'none',
   credential: '',
   agentName: '',
-  runtimePath: ''
+  runtimePath: '',
+  vercelUrl: ''
 };
 
-const VALID_PROVIDERS = new Set<ActiveAiProvider>([
-  'none',
+const VALID_PROVIDERS = new Set<ActiveAiProvider>(['none', 'vercel-gateway']);
+
+/** Former multi-provider values silently coerce to vercel-gateway. */
+const LEGACY_TO_VERCEL = new Set([
+  'copilot-cli',
   'openai',
   'claude',
   'cursor-cli',
-  'copilot-cli',
-  'claude-cli'
+  'claude-cli',
+  'vercel-gateway'
 ]);
 
 export const LEGACY_AI_SETTING_KEYS = [
@@ -46,9 +52,18 @@ function readString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function coerceProvider(value: string): ActiveAiProvider {
+  if (!value || value === 'none') {
+    return 'none';
+  }
+  if (LEGACY_TO_VERCEL.has(value) || VALID_PROVIDERS.has(value as ActiveAiProvider)) {
+    return value === 'none' ? 'none' : 'vercel-gateway';
+  }
+  return 'none';
+}
+
 function readProvider(value: unknown): ActiveAiProvider {
-  const provider = readString(value) as ActiveAiProvider;
-  return VALID_PROVIDERS.has(provider) ? provider : 'none';
+  return coerceProvider(readString(value));
 }
 
 export function sanitizeAiProviderSettings(raw: unknown): AiProviderSettings {
@@ -60,12 +75,16 @@ export function sanitizeAiProviderSettings(raw: unknown): AiProviderSettings {
     provider: readProvider(raw.provider),
     credential: readString(raw.credential),
     agentName: readString(raw.agentName),
-    runtimePath: readString(raw.runtimePath)
+    runtimePath: readString(raw.runtimePath),
+    vercelUrl: readString(raw.vercelUrl)
   };
 }
 
 export function isNestedAiProviderObject(raw: unknown): raw is Record<string, unknown> {
-  return isRecord(raw) && ('credential' in raw || 'agentName' in raw || 'runtimePath' in raw);
+  return (
+    isRecord(raw) &&
+    ('credential' in raw || 'agentName' in raw || 'runtimePath' in raw || 'vercelUrl' in raw)
+  );
 }
 
 export function readFlatAiProviderSettings(config: {
@@ -80,12 +99,13 @@ export function readFlatAiProviderSettings(config: {
     provider: readProvider(rawProvider),
     credential: readString(config.get<string>('ai.credential', '')),
     agentName: readString(config.get<string>('ai.agentName', '')),
-    runtimePath: readString(config.get<string>('ai.runtimePath', ''))
+    runtimePath: readString(config.get<string>('ai.runtimePath', '')),
+    vercelUrl: readString(config.get<string>('ai.vercelUrl', ''))
   };
 }
 
 export interface LegacyAiSettingsSnapshot {
-  defaultProvider: ActiveAiProvider;
+  defaultProvider: ActiveAiProvider | string;
   openaiApiKey: string;
   claudeApiKey: string;
   cursorCliPath: string;
@@ -100,87 +120,50 @@ export interface LegacyAiSettingsSnapshot {
 export function buildAiProviderSettingsFromLegacy(
   legacy: LegacyAiSettingsSnapshot
 ): AiProviderSettings | undefined {
-  let provider = legacy.defaultProvider;
-  if (provider === 'none') {
-    const priority: AiProvider[] = ['copilot-cli', 'claude-cli', 'cursor-cli', 'openai', 'claude'];
-    provider = priority.find(candidate => isLegacyProviderConfigured(candidate, legacy)) ?? 'none';
-  }
+  const hadAnyAi =
+    legacyAiSettingsHaveValues(legacy) ||
+    coerceProvider(String(legacy.defaultProvider)) === 'vercel-gateway';
 
-  if (provider === 'none') {
+  if (!hadAnyAi && coerceProvider(String(legacy.defaultProvider)) === 'none') {
     return undefined;
   }
 
-  switch (provider) {
-    case 'openai':
-      return {
-        provider,
-        credential: legacy.openaiApiKey,
-        agentName: legacy.openaiAgentName,
-        runtimePath: ''
-      };
-    case 'claude':
-      return {
-        provider,
-        credential: legacy.claudeApiKey,
-        agentName: legacy.claudeAgentName,
-        runtimePath: ''
-      };
-    case 'cursor-cli':
-      return {
-        provider,
-        credential: legacy.cursorCliPath,
-        agentName: '',
-        runtimePath: ''
-      };
-    case 'claude-cli':
-      return {
-        provider,
-        credential: legacy.claudeCliPath,
-        agentName: '',
-        runtimePath: ''
-      };
-    case 'copilot-cli':
-      return {
-        provider,
-        credential: '',
-        agentName: legacy.copilotAgentName,
-        runtimePath: legacy.copilotCliPath
-      };
-    default:
-      return undefined;
+  // Multi-provider legacy installs become Vercel Gateway; credentials must be
+  // entered again in AI Gateway Settings (except env fallbacks).
+  if (
+    legacy.copilotEnabled ||
+    legacy.copilotCliPath ||
+    legacy.openaiApiKey ||
+    legacy.claudeApiKey ||
+    legacy.cursorCliPath ||
+    legacy.claudeCliPath ||
+    coerceProvider(String(legacy.defaultProvider)) === 'vercel-gateway'
+  ) {
+    return {
+      provider: 'vercel-gateway',
+      credential: '',
+      agentName: legacy.copilotAgentName || legacy.openaiAgentName || legacy.claudeAgentName || '',
+      runtimePath: '',
+      vercelUrl: ''
+    };
   }
+
+  return undefined;
 }
 
-export function isAiProviderConfigured(settings: AiProviderSettings): boolean {
+export function isAiProviderConfigured(
+  settings: AiProviderSettings,
+  options?: { secretCredentialPresent?: boolean }
+): boolean {
   if (settings.provider === 'none') {
     return false;
   }
-  if (settings.provider === 'copilot-cli') {
-    return true;
-  }
-  return settings.credential.trim().length > 0;
-}
-
-function isLegacyProviderConfigured(provider: AiProvider, legacy: LegacyAiSettingsSnapshot): boolean {
-  switch (provider) {
-    case 'openai':
-      return legacy.openaiApiKey.length > 0;
-    case 'claude':
-      return legacy.claudeApiKey.length > 0;
-    case 'cursor-cli':
-      return legacy.cursorCliPath.length > 0;
-    case 'copilot-cli':
-      return legacy.copilotEnabled || legacy.copilotCliPath.length > 0;
-    case 'claude-cli':
-      return legacy.claudeCliPath.length > 0;
-    default:
-      return false;
-  }
+  return settings.credential.trim().length > 0 || Boolean(options?.secretCredentialPresent);
 }
 
 export function legacyAiSettingsHaveValues(legacy: LegacyAiSettingsSnapshot): boolean {
   return (
-    legacy.defaultProvider !== 'none' ||
+    String(legacy.defaultProvider) !== 'none' ||
     legacy.openaiApiKey.length > 0 ||
     legacy.claudeApiKey.length > 0 ||
     legacy.cursorCliPath.length > 0 ||

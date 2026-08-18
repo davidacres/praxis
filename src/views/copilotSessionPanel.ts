@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { PermissionInfo } from '../ai/copilotAgentService';
+import type { PermissionInfo } from '../ai/agentPrompt';
 import { AGENT_DEFAULTS, type AgentSessionRecord, type AgentEventSummary } from '../ai/agentTypes';
 import type { AiAssignment, AiProvider } from '../types';
 
@@ -49,11 +49,7 @@ function formatDate(value: string | undefined): string {
 }
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
-  openai: 'OpenAI',
-  claude: 'Claude',
-  'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK',
-  'claude-cli': 'Claude Code CLI'
+  'vercel-gateway': 'Vercel AI Gateway'
 };
 
 const STATE_LABELS: Record<string, { label: string; icon: string }> = {
@@ -103,7 +99,7 @@ function resolveAssignmentLabel(
     return PROVIDER_LABELS[record.provider] ?? record.provider;
   }
   if (record) {
-    return PROVIDER_LABELS['copilot-cli'];
+    return PROVIDER_LABELS['vercel-gateway'];
   }
   return 'AI Session';
 }
@@ -408,7 +404,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const sessionId = assignment?.sessionId ?? record?.sessionId ?? issueKey;
     const startedAt = assignment?.assignedAt ?? record?.startedAt;
     const hasLiveAgentSession = this.agentService.hasActiveTask(issueKey);
-    const supportsAgentSession = Boolean(record) || assignment?.provider === 'copilot-cli' || assignment?.provider === 'claude-cli';
+    const supportsAgentSession = Boolean(record) || assignment?.provider === 'vercel-gateway';
     const maxSteps = Number(task?.maxSteps ?? AGENT_DEFAULTS.maxSteps);
     const isTerminal = record ? this.isTerminal(record.state) : assignment?.status !== 'active';
     const badgeVariant = this.resolveBadgeVariant(record?.state ?? assignment?.status);

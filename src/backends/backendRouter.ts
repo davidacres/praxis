@@ -26,23 +26,32 @@ import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../con
 import { DemoService } from '../demo/demoService';
 import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
 import { GitLabBoardService } from '../gitlab/gitLabBoardService';
-import { JiraCloudService } from '../jira/jiraCloudService';
+import { JiraService } from '../jira/jiraService';
+import { JiraMcpConnectionResolver } from '../jira/jiraMcpConnectionResolver';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
 import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
 import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
 import type { IssueTrackerService } from './issueTrackerService';
 
-function buildUnsupportedBackendMessage(mode: 'github' | 'gitlab'): string {
-  const label = mode === 'gitlab' ? 'GitLab' : 'GitHub';
-  return `${label} project mode is not implemented yet. Current ${label} support is limited to setup metadata and repository automation helpers.`;
+function buildUnsupportedBackendMessage(mode: BackendMode): string {
+  if (mode === 'github') {
+    return 'GitHub project mode is not implemented yet. Current GitHub support is limited to setup metadata.';
+  }
+  if (mode === 'gitlab') {
+    return 'GitLab project mode is not implemented yet. Current GitLab support is limited to setup metadata and repository automation helpers.';
+  }
+  if (mode === 'jiracloud') {
+    return 'Jira MCP is not configured. Configure a Jira MCP server in `.vscode/mcp.json` (or `~/.vscode/mcp.json`) before performing this action.';
+  }
+  return `${mode} backend mode is not supported in this build.`;
 }
 
 class UnsupportedBackendService implements IssueTrackerService {
   public readonly mode: BackendMode;
-  private readonly unsupportedMode: 'github' | 'gitlab';
+  private readonly unsupportedMode: BackendMode;
 
   public constructor(
-    mode: 'github' | 'gitlab',
+    mode: BackendMode,
     private readonly defaultPageSize: number
   ) {
     this.unsupportedMode = mode;
@@ -340,7 +349,7 @@ export class BackendRouter implements IssueTrackerService {
 
   /**
    * Get a service scoped to a specific connection.
-  * This creates the appropriate service instance (JiraCloudService, LiveFolderService, etc.)
+   * This creates the appropriate service instance (JiraService, LiveFolderService, etc.)
    * using the connection's stored settings and secrets.
    */
   public async serviceFor(connectionId: string): Promise<IssueTrackerService> {
@@ -382,14 +391,19 @@ export class BackendRouter implements IssueTrackerService {
     } else if (mode === 'demo') {
       service = new DemoService(scopedConfigStore);
     } else if (mode === 'jiracloud') {
-      service = new JiraCloudService(this.context, scopedConfigStore, this.output);
+      const resolver = new JiraMcpConnectionResolver(this.context, scopedConfigStore);
+      const resolution = await resolver.resolve();
+      if (resolution) {
+        service = new JiraService(this.context, scopedConfigStore, this.output, resolution);
+      } else {
+        service = new UnsupportedBackendService('jiracloud', scopedConfigStore.getDefaultPageSize());
+      }
     } else if (mode === 'livefolder') {
       service = new LiveFolderService(scopedConfigStore);
     } else if (mode === 'userworkspace') {
       service = new UserWorkspaceService(scopedConfigStore, this.userWorkspaceStore);
     } else {
-      // Treat any remaining legacy Jira mode as Jira Cloud.
-      service = new JiraCloudService(this.context, scopedConfigStore, this.output);
+      service = new UnsupportedBackendService(mode, scopedConfigStore.getDefaultPageSize());
     }
 
     // Cache the service
@@ -412,6 +426,35 @@ export class BackendRouter implements IssueTrackerService {
 
     this.disposeActiveService();
     this.activeMode = configuredMode;
+
+    if (configuredMode === 'jiracloud') {
+      const resolver = new JiraMcpConnectionResolver(this.context, this.configStore);
+      try {
+        const resolution = await resolver.resolve();
+        if (resolution) {
+          this.activeService = new JiraService(
+            this.context,
+            this.configStore,
+            this.output,
+            resolution
+          );
+          return this.activeService;
+        }
+      } catch (error) {
+        this.output.appendLine(
+          `[backendRouter] Jira MCP resolver failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      // No MCP connection resolved — fall back to the unsupported placeholder so the UI
+      // can still report a consistent status instead of throwing on first use.
+      this.activeService = new UnsupportedBackendService(
+        configuredMode,
+        this.configStore.getDefaultPageSize()
+      );
+      return this.activeService;
+    }
+
     this.activeService =
       configuredMode === 'github'
         ? new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize())
@@ -425,13 +468,11 @@ export class BackendRouter implements IssueTrackerService {
               )
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)
-          : configuredMode === 'jiracloud'
-            ? new JiraCloudService(this.context, this.configStore, this.output)
           : configuredMode === 'livefolder'
             ? new LiveFolderService(this.configStore)
             : configuredMode === 'userworkspace'
               ? new UserWorkspaceService(this.configStore, this.userWorkspaceStore)
-              : new JiraCloudService(this.context, this.configStore, this.output);
+              : new UnsupportedBackendService(configuredMode, this.configStore.getDefaultPageSize());
     if (this.activeService instanceof LiveFolderService) {
       this.externalCommentSub = this.activeService.onDidReceiveExternalComment(event =>
         this._onDidReceiveExternalComment.fire(event)

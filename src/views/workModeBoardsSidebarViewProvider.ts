@@ -38,11 +38,7 @@ interface WorkModeSessionItem {
 }
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
-  openai: 'OpenAI',
-  claude: 'Claude',
-  'cursor-cli': 'Cursor CLI',
-  'copilot-cli': 'GitHub Copilot SDK',
-  'claude-cli': 'Claude Code CLI'
+  'vercel-gateway': 'Vercel AI Gateway'
 };
 
 function boardRemovalLabel(mode: BackendMode): string {
@@ -957,7 +953,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
     const resetConfigBtn = hasGitLabBoard
       ? `<button class="work-board-icon-btn" type="button" id="resetGitLabConfig" title="Reset config" aria-label="Reset config">${resetConfigIcon}</button>`
       : '';
-    const addBoardBtn = `<button class="work-board-icon-btn accent" type="button" id="addBoard" title="Add board" aria-label="Add board">${addBoardIcon}</button>`;
+    const addBoardBtn = `<button class="work-board-icon-btn accent" type="button" id="addBoard" title="Create board" aria-label="Create board">${addBoardIcon}</button>`;
     const groupByProvider = this.boardStore.getWorkModeGroupByProvider();
     const groupToggleBtn = `<button class="work-board-icon-btn ${groupByProvider ? 'active' : ''}" type="button" id="toggleGroupByProvider" aria-pressed="${groupByProvider ? 'true' : 'false'}" title="${groupByProvider ? 'Grouped by provider — manual ordering disabled' : 'Group boards by provider'}" aria-label="Group boards by provider">${groupTypeIcon}</button>`;
     const removeAllBtn = `<button class="work-board-icon-btn danger" type="button" id="removeAllBoards" title="Remove all boards" aria-label="Remove all boards">${removeAllIcon}</button>`;

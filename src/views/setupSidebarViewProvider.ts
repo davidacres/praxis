@@ -362,10 +362,6 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
           vscodeApi.postMessage({ type: 'save' });
         } else if (action === 'browse') {
           vscodeApi.postMessage({ type: 'browse' });
-        } else if (action === 'connectJiraCloud') {
-          vscodeApi.postMessage({ type: 'connectJiraCloud' });
-        } else if (action === 'disconnectJiraCloud') {
-          vscodeApi.postMessage({ type: 'disconnectJiraCloud' });
         }
       });
 
@@ -390,7 +386,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
   private renderStepZero(): string {
     const modes: Array<{ mode: string; emoji: string; title: string; desc: string }> = [
       { mode: 'livefolder', emoji: '📂', title: 'Live Folder', desc: 'Two-way sync with a markdown plans folder' },
-      { mode: 'jiracloud', emoji: '☁️', title: 'Jira Cloud', desc: 'Connect with Atlassian OAuth' },
+      { mode: 'jiracloud', emoji: '☁️', title: 'Jira MCP', desc: 'Connect to Jira via a configured MCP server' },
       { mode: 'demo', emoji: '🎭', title: 'Demo', desc: 'Try with sample data, no configuration needed' }
     ];
     if (!vscode.workspace.workspaceFolders?.length) {
@@ -433,7 +429,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         fields = this.renderUserWorkspaceFields();
         break;
       case 'jiracloud':
-        fields = this.renderJiraCloudFields();
+        fields = this.renderJiraFields();
         break;
       case 'demo':
         fields = '<p class="info-text">Demo mode uses sample data — no additional configuration needed.</p>';
@@ -480,8 +476,6 @@ ${fields}
     const connType = this.setupFields.jiraConnectionType ?? 'stdio';
     const stdioChecked = connType === 'stdio' ? ' checked' : '';
     const httpChecked = connType === 'http' ? ' checked' : '';
-    const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
-    const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
 
     let connFields = '';
     if (connType === 'stdio') {
@@ -516,74 +510,8 @@ ${fields}
       <label><input type="radio" name="jiraConnectionType" data-field="jiraConnectionType" value="http"${httpChecked} /> Jira via HTTP</label>
   </div>
 </div>
-<div class="settings-section">
-  <label>JIRA polling</label>
-  <div class="info-text">Polls Jira Cloud every 30 seconds to get tickets with the specified label.</div>
-  <div class="form-group">
-    <label>Label</label>
-    <input type="text" data-field="jiraPollingRequiredLabel" value="${pollingLabel}" placeholder="syscfg" />
-  </div>
-  <div class="form-group">
-    <label class="toggle-switch">
-      <input type="checkbox" data-field="jiraPollingEnabled" ${pollingEnabled ? 'checked' : ''} />
-      <span class="toggle-slider" aria-hidden="true"></span>
-      <span class="toggle-label">Enable JIRA polling</span>
-    </label>
-  </div>
-</div>
+<div class="info-text">Connects to the MCP-provided Jira server. The MCP server itself owns authentication, polling, and refresh cadence; configure those in your MCP servers file.</div>
 ${connFields}`;
-  }
-
-  private renderJiraCloudFields(): string {
-    const clientId = escapeHtml(this.setupFields.jiraOAuthClientId ?? '');
-    const siteName = escapeHtml(this.setupFields.jiraCloudSiteName ?? '');
-    const siteUrl = escapeHtml(this.setupFields.jiraCloudSiteUrl ?? '');
-    const epicKey = escapeHtml(this.setupFields.jiraCloudEpicKey ?? '');
-    const boardJql = escapeHtml(this.setupFields.jiraCloudBoardJql ?? '');
-    const pollingLabel = escapeHtml((this.setupFields.jiraPollingRequiredLabel ?? 'syscfg').toString());
-    const pollingEnabled = (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false';
-    const connectedSiteLabel = siteName || siteUrl;
-    const connectedSiteDetail = siteName ? ` (${siteUrl})` : '';
-    const connectionStatus = siteUrl
-      ? `<div class="info-text">Connected to <strong>${connectedSiteLabel}</strong>${connectedSiteDetail}.</div>`
-      : '<div class="info-text">Not connected. Configure the Ticket Manager Atlassian OAuth app client ID, then connect with Atlassian.</div>';
-
-    return `<div class="form-group">
-  <label>Atlassian OAuth Client ID</label>
-  <input type="text" data-field="jiraOAuthClientId" value="${clientId}" placeholder="Client ID from the Ticket Manager Atlassian app" />
-  <div class="help-text">The client secret is requested once during connection and stored in VS Code secret storage.</div>
-</div>
-<div class="settings-section">
-  <label>Jira Cloud connection</label>
-  ${connectionStatus}
-  <button class="btn btn-primary" data-action="connectJiraCloud">Connect with Atlassian</button>
-  ${siteUrl ? '<button class="btn btn-secondary" data-action="disconnectJiraCloud">Disconnect</button>' : ''}
-</div>
-<div class="form-group">
-  <label>Linked Epic Key</label>
-  <input type="text" data-field="jiraCloudEpicKey" value="${epicKey}" placeholder="Optional: e.g. KAMAI-123" />
-  <div class="help-text">Workspace-level epic associated with this repo. Jira Cloud issue creation uses it as the default parent, and an epic board is shown when set.</div>
-</div>
-<div class="form-group">
-  <label>Board JQL Query</label>
-  <input type="text" data-field="jiraCloudBoardJql" value="${boardJql}" placeholder="Optional: project = KAMAI AND issuetype in (Story, Task)" />
-  <div class="help-text">Optional workspace-level JQL query exposed as a Jira Cloud board.</div>
-</div>
-<div class="settings-section">
-  <label>AI execution gate</label>
-  <div class="info-text">The poller syncs all tasks linked to the epic. Only linked-epic tasks with this label and the configured todo-stage status are eligible for AI execution.</div>
-  <div class="form-group">
-    <label>Label</label>
-    <input type="text" data-field="jiraPollingRequiredLabel" value="${pollingLabel}" placeholder="syscfg" />
-  </div>
-  <div class="form-group">
-    <label class="toggle-switch">
-      <input type="checkbox" data-field="jiraPollingEnabled" ${pollingEnabled ? 'checked' : ''} />
-      <span class="toggle-slider" aria-hidden="true"></span>
-      <span class="toggle-label">Enable JIRA polling</span>
-    </label>
-  </div>
-</div>`;
   }
 
   private async handleMessage(message: unknown): Promise<void> {
@@ -605,13 +533,9 @@ ${connFields}`;
           this.setupStep = 1;
           if (mode === 'jiracloud') {
             const config = vscode.workspace.getConfiguration('ticketManager');
-            this.setupFields.jiraPollingRequiredLabel = config.get<string>('jiraPolling.requiredLabel', 'syscfg').trim() || 'syscfg';
-            this.setupFields.jiraPollingEnabled = String(config.get<boolean>('jiraPolling.enabled', false));
-            this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
-            this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
-            this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-            this.setupFields.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
-            this.setupFields.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
+            this.setupFields.jiraMcpSiteUrl = config.get<string>('jiraMcpSiteUrl', '');
+            this.setupFields.jiraMcpEpicKey = config.get<string>('jiraMcpEpicKey', '');
+            this.setupFields.jiraMcpBoardJql = config.get<string>('jiraMcpBoardJql', '');
           }
           this.render();
         }
@@ -662,25 +586,6 @@ ${connFields}`;
         }
         return;
       }
-      case 'connectJiraCloud':
-        try {
-          await this.saveJiraCloudSetupFields();
-          await vscode.commands.executeCommand('ticketManager.connectJiraCloud');
-          this.reloadJiraCloudSetupFields();
-          this.render();
-        } catch (error) {
-          void vscode.window.showErrorMessage(`Jira Cloud connect failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        return;
-      case 'disconnectJiraCloud':
-        try {
-          await vscode.commands.executeCommand('ticketManager.disconnectJiraCloud');
-          this.reloadJiraCloudSetupFields();
-          this.render();
-        } catch (error) {
-          void vscode.window.showErrorMessage(`Jira Cloud disconnect failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        return;
       case 'save':
         try {
           await this.saveSetupConfiguration();
@@ -730,17 +635,8 @@ ${connFields}`;
       case 'userworkspace':
         break;
       case 'jiracloud':
-        await updateSetting('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim());
-        await updateSetting('jiraCloudEpicKey', (this.setupFields.jiraCloudEpicKey ?? '').trim());
-        await updateSetting('jiraCloudBoardJql', (this.setupFields.jiraCloudBoardJql ?? '').trim());
-        await updateSetting(
-          'jiraPolling.requiredLabel',
-          (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg'
-        );
-        await updateSetting(
-          'jiraPolling.enabled',
-          (this.setupFields.jiraPollingEnabled ?? 'true') !== 'false'
-        );
+        await updateSetting('jiraMcpEpicKey', (this.setupFields.jiraMcpEpicKey ?? '').trim());
+        await updateSetting('jiraMcpBoardJql', (this.setupFields.jiraMcpBoardJql ?? '').trim());
         break;
     }
 
@@ -777,27 +673,4 @@ ${connFields}`;
     };
   }
 
-  private async saveJiraCloudSetupFields(): Promise<void> {
-    const config = vscode.workspace.getConfiguration('ticketManager');
-    const target = vscode.workspace.workspaceFolders?.length
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
-    await Promise.all([
-      config.update('backendMode', 'jiracloud', target),
-      config.update('jiraOAuthClientId', (this.setupFields.jiraOAuthClientId ?? '').trim(), target),
-      config.update('jiraCloudEpicKey', (this.setupFields.jiraCloudEpicKey ?? '').trim(), target),
-      config.update('jiraCloudBoardJql', (this.setupFields.jiraCloudBoardJql ?? '').trim(), target),
-      config.update('jiraPolling.requiredLabel', (this.setupFields.jiraPollingRequiredLabel ?? '').trim() || 'syscfg', target),
-      config.update('jiraPolling.enabled', (this.setupFields.jiraPollingEnabled ?? 'false') === 'true', target)
-    ]);
   }
-
-  private reloadJiraCloudSetupFields(): void {
-    const config = vscode.workspace.getConfiguration('ticketManager');
-    this.setupFields.jiraOAuthClientId = config.get<string>('jiraOAuthClientId', '');
-    this.setupFields.jiraCloudSiteName = config.get<string>('jiraCloudSiteName', '');
-    this.setupFields.jiraCloudSiteUrl = config.get<string>('jiraCloudSiteUrl', '');
-    this.setupFields.jiraCloudEpicKey = config.get<string>('jiraCloudEpicKey', '');
-    this.setupFields.jiraCloudBoardJql = config.get<string>('jiraCloudBoardJql', '');
-  }
-}

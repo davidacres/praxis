@@ -2,21 +2,21 @@ import * as assert from 'assert';
 import { resolveBackendModeContextState } from '../ui/backendModeContext';
 
 suite('backend mode context', () => {
-  test('treats configured Jira Cloud connections as configured without a stored workspace mode', () => {
+  test('treats configured Jira MCP connections as configured without a stored workspace mode', () => {
     assert.deepStrictEqual(resolveBackendModeContextState(undefined, false, true), {
       mode: 'jiracloud',
       configured: true
     });
   });
 
-  test('keeps Jira Cloud unconfigured when no connection details exist', () => {
+  test('keeps Jira MCP unconfigured when no connection details exist', () => {
     assert.deepStrictEqual(resolveBackendModeContextState('jiracloud', false, false), {
       mode: 'jiracloud',
       configured: false
     });
   });
 
-  test('treats configured Jira Cloud mode as configured', () => {
+  test('treats configured Jira MCP mode as configured', () => {
     assert.deepStrictEqual(resolveBackendModeContextState('jiracloud', false, true), {
       mode: 'jiracloud',
       configured: true

@@ -14,17 +14,12 @@ This file documents the settings currently contributed by the extension.
 
 | Setting | Type | Purpose |
 | --- | --- | --- |
-| `ticketManager.jiraCloudBaseUrl` | string | Jira Cloud polling/delivery base URL (legacy key name). |
-| `ticketManager.jiraCloudToken` | string | Jira Cloud polling/delivery bearer token (legacy key name). |
-| `ticketManager.jiraCloudEpicKey` | string | Linked Jira epic key. |
-| `ticketManager.jiraCloudEpicBoardName` | string | Friendly board name for the linked epic board. |
-| `ticketManager.jiraCloudBoardJql` | string | Jira board query/JQL used for linked board behavior. |
-| `ticketManager.jiraCloudBoardName` | string | Friendly name for the Jira Cloud board. |
-| `ticketManager.jiraOAuthClientId` | string | OAuth client id for Jira Cloud sign-in. |
-| `ticketManager.jiraOAuthScopes` | array | OAuth scopes requested during Jira Cloud auth. |
-| `ticketManager.jiraCloudId` | string | Jira Cloud site id captured after OAuth connection. |
-| `ticketManager.jiraCloudSiteName` | string | Jira Cloud site display name. |
-| `ticketManager.jiraCloudSiteUrl` | string | Jira Cloud site URL. |
+| `ticketManager.jiraMcpSiteUrl` | string | Base URL of the Jira instance that MCP tools connect to in Jira MCP mode. |
+| `ticketManager.jiraMcpDefaultProjectKey` | string | Default Jira project key for new issues created through the Jira MCP backend. |
+| `ticketManager.jiraMcpEpicKey` | string | Linked Jira epic key (MCP mode). |
+| `ticketManager.jiraMcpEpicBoardName` | string | Friendly board name for the linked epic board (MCP mode). |
+| `ticketManager.jiraMcpBoardJql` | string | Jira board query/JQL used for linked board behavior (MCP mode). |
+| `ticketManager.jiraMcpBoardName` | string | Friendly name for the Jira MCP board. |
 
 ## Sidebar mode and UI settings
 
@@ -53,9 +48,7 @@ This file documents the settings currently contributed by the extension.
 | --- | --- | --- |
 | `ticketManager.requestTimeoutMs` | number | Timeout for MCP/backend requests. |
 | `ticketManager.defaultPageSize` | number | Page size for issue fetching. |
-| `ticketManager.jiraPolling.enabled` | boolean | Starts the built-in Jira poller on activation in supported modes (disabled by default). |
-| `ticketManager.jiraPolling.requiredLabel` | string | Label gate used for AI execution eligibility. |
-| `ticketManager.jiraPolling.clarificationAnalysis` | boolean | Enables readiness analysis before AI execution. |
+| `ticketManager.jiraPolling.enabled` | boolean | **Removed.** The built-in Jira poller was retired in favor of MCP-driven flows. |
 | `ticketManager.delivery.defaultBaseBranch` | string | Default delivery workflow base branch. |
 | `ticketManager.delivery.autoMergeSubTasks` | boolean | Controls whether completed sub-tasks auto-merge into the feature branch. |
 | `ticketManager.workspaceMcpServerName` | string | Workspace MCP server name fallback. |
@@ -65,10 +58,11 @@ This file documents the settings currently contributed by the extension.
 
 | Setting | Type | Purpose |
 | --- | --- | --- |
-| `ticketManager.ai.provider` | string | Active AI provider (`none`, `openai`, `claude`, `cursor-cli`, `copilot-cli`, `claude-cli`). |
-| `ticketManager.ai.credential` | string | API key or CLI path for the active provider. |
+| `ticketManager.ai.provider` | string | Active AI provider (`none` or `vercel-gateway`). |
+| `ticketManager.ai.credential` | string | Deprecated for Vercel Gateway (API key lives in Secret Storage). Kept for migration. |
 | `ticketManager.ai.agentName` | string | Display and @mention name for the active provider. |
-| `ticketManager.ai.runtimePath` | string | Optional GitHub Copilot SDK runtime override. |
+| `ticketManager.ai.runtimePath` | string | Unused for Vercel Gateway (kept for migration). |
+| `ticketManager.ai.vercelUrl` | string | Base URL for the Vercel AI Gateway. |
 | `ticketManager.ai.defaultModel` | string | Default model recorded on newly created Live Folder tickets. |
 | `ticketManager.ai.analysisEnabled` | boolean | Enables the per-issue analysis gate before AI assignment. |
 | `ticketManager.ai.analysisDefaultPrompt` | string | Required default prompt for the Analysis Window. |

@@ -5,13 +5,11 @@ import type { AppConfigStore } from './jiraConfig';
 /**
  * Per-connection secret values resolved synchronously so the scoped config
  * store can satisfy the existing synchronous getter signatures on
- * `AppConfigStore` (e.g. `getJiraCloudToken(): string`).
+ * `AppConfigStore`.
  *
  * Populated by `loadConnectionSecrets()` before the scoped store is built.
  */
 export interface ConnectionSecretsSnapshot {
-  jiraCloudToken?: string;
-  oauthClientSecret?: string;
   gitlabApiKey?: string;
   githubPat?: string;
 }
@@ -48,15 +46,11 @@ export async function loadConnectionSecrets(
 ): Promise<ConnectionSecretsSnapshot> {
   const secretKey = (name: string): string =>
     `ticketManager.connection.${connection.id}.${name}`;
-  const [jiraCloudToken, oauthClientSecret, gitlabApiKey, githubPat] = await Promise.all([
-    context.secrets.get(secretKey('jiraCloudToken')).then(value => value ?? context.secrets.get(secretKey('token'))),
-    context.secrets
-      .get(secretKey('oauthClientSecret'))
-      .then(value => value ?? context.secrets.get(secretKey('jiraOAuthClientSecret'))),
+  const [gitlabApiKey, githubPat] = await Promise.all([
     context.secrets.get(secretKey('gitlabApiKey')).then(value => value ?? context.secrets.get(secretKey('apiKey'))),
     context.secrets.get(secretKey('githubPat')).then(value => value ?? context.secrets.get(secretKey('pat')))
   ]);
-  return { jiraCloudToken, oauthClientSecret, gitlabApiKey, githubPat };
+  return { gitlabApiKey, githubPat };
 }
 
 /**
@@ -66,7 +60,7 @@ export async function loadConnectionSecrets(
  * existing services accept it unchanged.
  *
  * Secrets are resolved synchronously from `secrets` so getters that need to
- * return a string (e.g. `getJiraCloudToken`) keep their existing signature.
+ * return a string keep their existing signature.
  */
 export function createConnectionScopedConfigStore(
   base: AppConfigStore,
@@ -82,46 +76,14 @@ export function createConnectionScopedConfigStore(
     getBackendMode: () => connection.mode,
     getEffectiveBackendMode: () => connection.mode,
 
-    // ── Jira Cloud ───────────────────────────────────────────────────
+    // ── Jira MCP ────────────────────────────────────────────────────
     getConnectionType: () => getString(settings, 'connectionType') ?? base.getConnectionType(),
-    getJiraCloudId: () => {
-      const cloudId = getString(settings, 'cloudId')?.trim();
-      return cloudId && cloudId.length > 0 ? cloudId : base.getJiraCloudId();
-    },
-    getJiraCloudSiteUrl: () => {
-      const url = getString(settings, 'url')?.trim();
-      return url && url.length > 0 ? url : base.getJiraCloudSiteUrl();
-    },
-    getJiraOAuthClientId: () => {
-      const clientId = getString(settings, 'clientId')?.trim();
-      return clientId && clientId.length > 0 ? clientId : base.getJiraOAuthClientId();
-    },
-    getJiraOAuthClientSecret: () => {
-      if (secrets.oauthClientSecret && secrets.oauthClientSecret.trim().length > 0) {
-        return secrets.oauthClientSecret;
-      }
-      const inline = getString(settings, 'oauthClientSecret')?.trim();
-      return inline && inline.length > 0 ? inline : base.getJiraOAuthClientSecret();
-    },
-
-    // ── Jira Cloud compatibility keys ───────────────────────────────
-    getJiraCloudBaseUrl: () => {
-      const value = getString(settings, 'baseUrl')?.trim();
-      return value && value.length > 0 ? value : base.getJiraCloudBaseUrl();
-    },
-    getJiraCloudToken: () => {
-      if (secrets.jiraCloudToken && secrets.jiraCloudToken.trim().length > 0) {
-        return secrets.jiraCloudToken;
-      }
-      const inline = getString(settings, 'token')?.trim();
-      return inline && inline.length > 0 ? inline : base.getJiraCloudToken();
-    },
-    getJiraCloudEpicKey: () => getString(settings, 'epicKey')?.trim() ?? base.getJiraCloudEpicKey(),
-    getJiraCloudEpicBoardName: () =>
-      getString(settings, 'epicBoardName')?.trim() ?? base.getJiraCloudEpicBoardName(),
-    getJiraCloudBoardJql: () => getString(settings, 'boardJql')?.trim() ?? base.getJiraCloudBoardJql(),
-    getJiraCloudBoardName: () =>
-      getString(settings, 'boardName')?.trim() ?? base.getJiraCloudBoardName(),
+    getJiraMcpSiteUrl: () => getString(settings, 'url')?.trim() ?? base.getJiraMcpSiteUrl(),
+    getJiraMcpEpicKey: () => getString(settings, 'epicKey')?.trim() ?? base.getJiraMcpEpicKey(),
+    getJiraMcpEpicBoardName: () =>
+      getString(settings, 'epicBoardName')?.trim() ?? base.getJiraMcpEpicBoardName(),
+    getJiraMcpBoardJql: () => getString(settings, 'boardJql')?.trim() ?? base.getJiraMcpBoardJql(),
+    getJiraMcpBoardName: () => getString(settings, 'boardName')?.trim() ?? base.getJiraMcpBoardName(),
 
     // ── GitLab ───────────────────────────────────────────────────────
     getGitLabUrl: () => getString(settings, 'url')?.trim() ?? '',
