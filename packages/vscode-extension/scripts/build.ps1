@@ -6,7 +6,7 @@
   1. Ensures build-time dev dependencies (typescript + esbuild + vsce) are
      installed. The org's private npm registry can't always resolve these,
      so the install falls back to the public npm registry when needed.
-  2. Bundles src/extension.ts via esbuild scripts/esbuild.mjs into out/.
+  2. Bundles src/extension.ts via esbuild esbuild.mjs into out/.
   3. Packages the extension into a .vsix using @vscode/vsce.
   4. Generates the Frosty-Store-style sidecars (.json + .svg + .md) under
      artifacts/ alongside the .vsix, derived from package.json + EXTENSION.md.
