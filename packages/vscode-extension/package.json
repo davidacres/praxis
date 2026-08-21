@@ -5,10 +5,10 @@
   "publisher": "kam-ai-team",
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
-  "homepage": "https://git.example.com/example/software/ai/tools/ticket-manager-extension",
+  "homepage": "https://github.com/davidacres/ticket-manager-extension",
   "repository": {
     "type": "git",
-    "url": "https://git.example.com/example/software/ai/tools/ticket-manager-extension.git"
+    "url": "https://github.com/davidacres/ticket-manager-extension.git"
   },
   "pricing": "Free",
   "type": "commonjs",
