@@ -6,6 +6,39 @@ It supports classic multi-view navigation, a board-centric Work Mode, task desig
 
 Current extension version: 0.0.30
 
+## Repository layout
+
+The project is an npm workspaces monorepo with four packages:
+
+```
+packages/
+├── core/                  shared types, stores, backend adapters, AI gateway
+├── frontend/              React/Vite SPA (the desktop app's UI)
+├── electron-app/          Electron host that bundles the frontend into a window
+└── vscode-extension/      the VS Code extension (this README's main subject)
+```
+
+```
+                  ┌────────────────────┐
+                  │ packages/core      │
+                  └───────▲──────▲─────┘
+              shared by │      │ shared by
+              ┌─────────┴──────┴─────────┐
+              │                          │
+   ┌──────────┴───────────┐    ┌──────────┴───────────┐
+   │ packages/frontend    │    │ packages/vscode-      │
+   │ React/Vite SPA       │    │ extension             │
+   └──────────┬───────────┘    └───────────────────────┘
+              │ vite build + copy-renderer
+              ▼
+   ┌──────────────────────┐  electron-builder  ┌──────────────┐
+   │ packages/electron-    │ ──────────────► │ *.msi installer │
+   │ app                   │                  └──────────────┘
+   └──────────────────────┘
+```
+
+`@ticket-manager/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
+
 ## What the extension includes
 
 - Connections & Boards management for multi-connection setups.
