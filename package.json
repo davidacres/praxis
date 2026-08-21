@@ -50,7 +50,7 @@
     "serialize-javascript": "^7.0.5"
   },
   "allowScripts": {
-    "electron@33.4.11": true,
+    "electron@43.4.1": true,
     "esbuild": true,
     "electron-builder": true
   },

@@ -19,8 +19,8 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "@types/node": "^25.5.0",
-    "electron": "^33.0.0",
-    "electron-builder": "^25.0.0",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
     "typescript": "^6.0.2"
   },
   "build": {
@@ -29,7 +29,7 @@
     "directories": {
       "output": "dist"
     },
-    "electronVersion": "33.4.11",
+    "electronVersion": "43.4.1",
     "files": [
       "out/**",
       "renderer/**",
