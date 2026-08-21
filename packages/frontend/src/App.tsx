@@ -6,11 +6,11 @@ import { TitleBar } from './TitleBar';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession } from './NewSession';
 import { BoardView } from './BoardView';
-import { WorkModeView } from './WorkModeView';
 import { BottomPanel } from './BottomPanel';
 import { Icon } from './Icon';
 import { backendModeMeta, boardTypeToken } from './boardMeta';
 import { useResizable } from './useResizable';
+import { findTransitionToTargetStatus } from './boardTransitionMatch';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -110,6 +110,46 @@ export function App() {
     }
   }, [selectedBoard]);
 
+  /**
+   * Resolves the workflow transition whose `toStatus` matches the column's
+   * display name. Returned as a hook so the move handler can `await` it.
+   * Returns undefined when the backend has no matching transition (the view's
+   * optimistic update never happens — the card stays put).
+   */
+  const getMoveTransition = useCallback(
+    async (issueKey: string, moveConnectionId: string | undefined, targetStatus: string) => {
+      const issue = await window.ticketManager.issue.get(issueKey, moveConnectionId);
+      const transitions = issue?.transitions ?? [];
+      return findTransitionToTargetStatus(transitions, targetStatus);
+    },
+    []
+  );
+
+  /**
+   * Moves a card to a different column by resolving a workflow transition and
+   * applying it through the same IPC the "Change Status" command uses.
+   */
+  const onIssueMove = useCallback(
+    (issueKey: string, targetStatus: string, moveConnectionId: string | undefined) => {
+      getMoveTransition(issueKey, moveConnectionId, targetStatus)
+        .then(transition => {
+          if (!transition) {
+            console.warn(
+              `[board] no workflow transition matches target status "${targetStatus}" for ${issueKey}`
+            );
+            return;
+          }
+          return window.ticketManager.issue
+            .transition(issueKey, transition.id, moveConnectionId)
+            .then(() => refreshBoardDetails());
+        })
+        .catch(error => {
+          console.error(`[board] failed to move ${issueKey} to "${targetStatus}"`, error);
+        });
+    },
+    [getMoveTransition, refreshBoardDetails]
+  );
+
   useEffect(() => {
     if (!selectedBoard) {
       setBoardDetails(undefined);
@@ -180,19 +220,9 @@ export function App() {
         </div>
       );
     }
-    if (mode === 'work') {
-      return (
-        <div className="view-scroll">
-          <WorkModeView
-            boards={boards}
-            connections={connections}
-            detailsByBoardId={detailsByBoardId}
-            onOpenBoard={board => navigate({ boardId: board.id })}
-            onOpenIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
-          />
-        </div>
-      );
-    }
+    // Work mode renders the board cards in the sidebar; the centre pane just
+    // shows whatever is currently routed (New Session when nothing's picked,
+    // BoardView for the selected board).
     if (!selectedBoard) {
       return (
         <NewSession
@@ -216,7 +246,9 @@ export function App() {
       <BoardView
         details={boardDetails}
         selectedIssueKey={route.issueKey}
+        connectionId={selectedBoard.connectionId}
         onOpenIssue={issueKey => navigate({ boardId: selectedBoard.id, issueKey })}
+        onIssueMove={onIssueMove}
       />
     );
   };
@@ -255,7 +287,9 @@ export function App() {
                 boards={boards}
                 connections={connections}
                 selectedBoardId={route.boardId}
+                detailsByBoardId={detailsByBoardId}
                 onSelectBoard={board => navigate({ boardId: board.id })}
+                onSelectIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
                 mode={mode}
                 onModeChange={setMode}
                 activeFeature={route.feature}

@@ -1218,10 +1218,37 @@ textarea {
   font-size: 12px;
 }
 
+/* Drag-and-drop cues for board moves.
+   - Cards advertise themselves as grabbable; the dragging class is held while
+     the OS is showing a drag ghost so the source card stays slightly muted.
+   - The drop target (a column scroll) lights up when the drag is over it. */
+.issue-card[draggable="true"] {
+  cursor: grab;
+}
+.issue-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+.issue-card.dragging-from {
+  opacity: 0.55;
+}
+.board-column-scroll.drag-over {
+  background: var(--row-hover);
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
 /* Cards carry the status colour as a left rail rather than a dot — that is how
-   a tracker signals category at a glance down a dense column. */
+   a tracker signals category at a glance down a dense column. The min-height
+   keeps every card in a column the same height so dense columns still line
+   up cleanly regardless of how short or long the underlying summary is; the
+   title is line-clamped to two lines so the overflow goes into ellipsis
+   rather than ballooning the tile. */
 .issue-card {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
@@ -1242,6 +1269,13 @@ textarea {
 .issue-card-title {
   color: var(--text);
   line-height: 1.4;
+
+  /* Clamp long summaries to two lines; the third line and beyond collapse into
+     an ellipsis so cards stay uniform height even when summaries run long. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .issue-card-status {

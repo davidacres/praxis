@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { Board, Connection } from '@ticket-manager/core';
+import type { Board, BoardDetails, Connection } from '@ticket-manager/core';
 import { Icon, type IconName } from './Icon';
 import { backendModeMeta, boardTypeIcon, boardTypeLabel } from './boardMeta';
+import { WorkModeView } from './WorkModeView';
 
 export type SidebarMode = 'classic' | 'work';
 
@@ -39,7 +40,9 @@ export interface SidebarProps {
   boards: Board[];
   connections: Connection[];
   selectedBoardId: string | undefined;
+  detailsByBoardId: Record<string, BoardDetails | undefined>;
   onSelectBoard: (board: Board) => void;
+  onSelectIssue: (board: Board, issueKey: string) => void;
   mode: SidebarMode;
   onModeChange: (mode: SidebarMode) => void;
   activeFeature: FeatureId | undefined;
@@ -62,7 +65,9 @@ export function Sidebar({
   boards,
   connections,
   selectedBoardId,
+  detailsByBoardId,
   onSelectBoard,
+  onSelectIssue,
   mode,
   onModeChange,
   activeFeature,
@@ -168,70 +173,82 @@ export function Sidebar({
       )}
 
       <div className="sidebar-scroll">
-        <button
-          className="sidebar-section-label sidebar-section-button"
-          data-testid="nav-board"
-          onClick={onShowBoards}
-        >
-          Boards
-        </button>
+        {mode === 'work' ? (
+          <WorkModeView
+            boards={boards}
+            connections={connections}
+            detailsByBoardId={detailsByBoardId}
+            onOpenBoard={onSelectBoard}
+            onOpenIssue={onSelectIssue}
+          />
+        ) : (
+          <>
+            <button
+              className="sidebar-section-label sidebar-section-button"
+              data-testid="nav-board"
+              onClick={onShowBoards}
+            >
+              Boards
+            </button>
 
-        {groups.length === 0 && (
-          <div style={{ padding: '4px 12px' }} className="placeholder-text">
-            No boards.
-          </div>
-        )}
+            {groups.length === 0 && (
+              <div style={{ padding: '4px 12px' }} className="placeholder-text">
+                No boards.
+              </div>
+            )}
 
-        {groups.map(group => {
-          const isCollapsed = collapsed[group.key] ?? false;
-          return (
-            <div key={group.key}>
-              <button
-                className="tree-row"
-                style={{ paddingLeft: 4 }}
-                aria-expanded={!isCollapsed}
-                onClick={() =>
-                  setCollapsed(current => ({ ...current, [group.key]: !isCollapsed }))
-                }
-              >
-                <span className={`tree-twisty${isCollapsed ? '' : ' open'}`}>
-                  <Icon name="chevron-right" size={13} />
-                </span>
-                <span className="tree-icon folder" style={{ color: group.tone }}>
-                  <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={15} />
-                </span>
-                <span className="tree-label">{group.label}</span>
-                <span className="tree-meta">{group.boards.length}</span>
-              </button>
-
-              {!isCollapsed &&
-                group.boards.map(board => (
+            {groups.map(group => {
+              const isCollapsed = collapsed[group.key] ?? false;
+              return (
+                <div key={group.key}>
                   <button
-                    key={`${group.key}:${board.id}`}
-                    data-testid="board-nav-item"
-                    className={`tree-row tree-row-stacked${
-                      board.id === selectedBoardId ? ' active' : ''
-                    }`}
-                    style={{ paddingLeft: 26 }}
-                    title={`${boardTypeLabel(board)} · ${board.projectKey ?? board.name}`}
-                    onClick={() => onSelectBoard(board)}
+                    className="tree-row"
+                    style={{ paddingLeft: 4 }}
+                    aria-expanded={!isCollapsed}
+                    onClick={() =>
+                      setCollapsed(current => ({ ...current, [group.key]: !isCollapsed }))
+                    }
                   >
-                    <span className="tree-icon" style={{ color: group.tone }}>
-                      <Icon name={boardTypeIcon(board)} size={15} />
+                    <span className={`tree-twisty${isCollapsed ? '' : ' open'}`}>
+                      <Icon name="chevron-right" size={13} />
                     </span>
-                    <span className="tree-stack">
-                      <span className="tree-label">{board.name}</span>
-                      <span className="tree-sub">
-                        <Icon name="folder" size={12} />
-                        {boardTypeLabel(board)}
-                        {board.projectKey ? ` · ${board.projectKey}` : ''}
-                      </span>
+                    <span className="tree-icon folder" style={{ color: group.tone }}>
+                      <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={15} />
                     </span>
+                    <span className="tree-label">{group.label}</span>
+                    <span className="tree-meta">{group.boards.length}</span>
                   </button>
-                ))}
-            </div>
-          );
-        })}
+
+                  {!isCollapsed &&
+                    group.boards.map(board => (
+                      <button
+                        key={`${group.key}:${board.id}`}
+                        data-testid="board-nav-item"
+                        className={`tree-row tree-row-stacked${
+                          board.id === selectedBoardId ? ' active' : ''
+                        }`}
+                        style={{ paddingLeft: 26 }}
+                        title={`${boardTypeLabel(board)} · ${board.projectKey ?? board.name}`}
+                        onClick={() => onSelectBoard(board)}
+                      >
+                        <span className="tree-icon" style={{ color: group.tone }}>
+                          <Icon name={boardTypeIcon(board)} size={15} />
+                        </span>
+                        <span className="tree-stack">
+                          <span className="tree-label">{board.name}</span>
+                          <span className="tree-sub">
+                            <Icon name="folder" size={12} />
+                            {boardTypeLabel(board)}
+                            {board.projectKey ? ` · ${board.projectKey}` : ''}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <div className="sidebar-footer">
