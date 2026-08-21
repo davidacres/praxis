@@ -1,4 +1,5 @@
 import type {
+  BoardColumn,
   IssueAttachment,
   IssueComment,
   IssueSummary,
@@ -7,6 +8,9 @@ import type {
   Project,
   WorkflowTransition
 } from '../types';
+import { buildBoardColumns as coreBuildBoardColumns } from '../board/boardColumns';
+
+export { commonStatusRank } from '../board/boardColumns';
 
 /**
  * Recursive JSON value type used across the codebase for tool result
@@ -427,25 +431,6 @@ export function statusCategoryRank(statusCategory: string | undefined): number {
   return 3;
 }
 
-export function commonStatusRank(statusName: string): number {
-  switch (statusName.toLowerCase()) {
-    case 'backlog':
-      return 0;
-    case 'to do':
-      return 1;
-    case 'selected for development':
-      return 2;
-    case 'in progress':
-      return 3;
-    case 'blocked':
-      return 4;
-    case 'done':
-      return 5;
-    default:
-      return Number.MAX_SAFE_INTEGER;
-  }
-}
-
 function appendUniqueStatusName(
   orderedStatuses: string[],
   seen: Set<string>,
@@ -503,50 +488,23 @@ export function buildBoardStatusOrder(
   return orderedStatuses;
 }
 
-function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
-  return [...issues].sort((left, right) => {
-    const leftUpdated = left.updated ?? '';
-    const rightUpdated = right.updated ?? '';
-    return rightUpdated.localeCompare(leftUpdated) || left.key.localeCompare(right.key);
+/**
+ * Builds the columns shown in a Jira board. When `columnStatusOrder` is
+ * supplied and non-empty, one column is emitted per canonical workflow status
+ * (with an empty `issues: []` placeholder for statuses that have no current
+ * issues) so drag-and-drop targets stay on screen even after the user moves
+ * every ticket into a single status. When `columnStatusOrder` is omitted the
+ * helper falls back to {@link coreBuildBoardColumns}'s rank-sorted behaviour
+ * keyed off {@link statusCategoryRank}.
+ */
+export function buildBoardColumns(
+  issues: IssueSummary[],
+  columnStatusOrder?: readonly string[]
+): BoardColumn[] {
+  return coreBuildBoardColumns(issues, {
+    columnStatusOrder,
+    rankStatus: statusCategoryRank
   });
-}
-
-export function buildBoardColumns(issues: IssueSummary[]): Array<{
-  id: string;
-  name: string;
-  statusCategory: string | undefined;
-  issues: IssueSummary[];
-}> {
-  const issuesByStatus = new Map<string, IssueSummary[]>();
-  const statusCategories = new Map<string, string | undefined>();
-
-  for (const issue of issues) {
-    const statusName = issue.status || 'Unknown';
-    const existing = issuesByStatus.get(statusName) ?? [];
-    existing.push(issue);
-    issuesByStatus.set(statusName, existing);
-
-    if (!statusCategories.has(statusName)) {
-      statusCategories.set(statusName, issue.statusCategory);
-    }
-  }
-
-  return [...issuesByStatus.entries()]
-    .sort((left, right) => {
-      const leftCategory = statusCategories.get(left[0]);
-      const rightCategory = statusCategories.get(right[0]);
-      return (
-        statusCategoryRank(leftCategory) - statusCategoryRank(rightCategory) ||
-        commonStatusRank(left[0]) - commonStatusRank(right[0]) ||
-        left[0].localeCompare(right[0])
-      );
-    })
-    .map(([statusName, statusIssues]) => ({
-      id: `status:${statusName}`,
-      name: statusName,
-      statusCategory: statusCategories.get(statusName),
-      issues: sortIssuesByUpdated(statusIssues)
-    }));
 }
 
 export { normalizeFieldName };

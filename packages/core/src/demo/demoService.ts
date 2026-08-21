@@ -28,6 +28,11 @@ import {
   isAllowedParentType,
   normalizeIssueTypeLabel
 } from '../issues/issueHierarchy';
+import {
+  buildBoardColumns,
+  commonStatusRank,
+  sortIssuesByUpdated
+} from '../board/boardColumns';
 
 type DemoAssigneeKind = 'me' | 'other' | 'none';
 
@@ -300,79 +305,6 @@ function toBoard(board: DemoBoard): Board {
   };
 }
 
-function sortIssuesByUpdated(issues: IssueSummary[]): IssueSummary[] {
-  return [...issues].sort((left, right) => {
-    const leftUpdated = left.updated ?? '';
-    const rightUpdated = right.updated ?? '';
-    return rightUpdated.localeCompare(leftUpdated) || left.key.localeCompare(right.key);
-  });
-}
-
-function statusCategoryRank(statusCategory?: string): number {
-  switch (statusCategory?.toLowerCase()) {
-    case 'todo':
-      return 0;
-    case 'indeterminate':
-      return 1;
-    case 'done':
-      return 2;
-    default:
-      return 3;
-  }
-}
-
-function commonStatusRank(statusName: string): number {
-  switch (statusName.toLowerCase()) {
-    case 'backlog':
-      return 0;
-    case 'to do':
-      return 1;
-    case 'selected for development':
-      return 2;
-    case 'in progress':
-      return 3;
-    case 'blocked':
-      return 4;
-    case 'done':
-      return 5;
-    default:
-      return Number.MAX_SAFE_INTEGER;
-  }
-}
-
-function buildBoardColumns(issues: IssueSummary[]): BoardColumn[] {
-  const issuesByStatus = new Map<string, IssueSummary[]>();
-  const statusCategories = new Map<string, string | undefined>();
-
-  for (const issue of issues) {
-    const statusName = issue.status || 'Unknown';
-    const existing = issuesByStatus.get(statusName) ?? [];
-    existing.push(issue);
-    issuesByStatus.set(statusName, existing);
-
-    if (!statusCategories.has(statusName)) {
-      statusCategories.set(statusName, issue.statusCategory);
-    }
-  }
-
-  return [...issuesByStatus.entries()]
-    .sort((left, right) => {
-      const leftCategory = statusCategories.get(left[0]);
-      const rightCategory = statusCategories.get(right[0]);
-      return (
-        statusCategoryRank(leftCategory) - statusCategoryRank(rightCategory) ||
-        commonStatusRank(left[0]) - commonStatusRank(right[0]) ||
-        left[0].localeCompare(right[0])
-      );
-    })
-    .map(([statusName, statusIssues]) => ({
-      id: `status:${statusName}`,
-      name: statusName,
-      statusCategory: statusCategories.get(statusName),
-      issues: sortIssuesByUpdated(statusIssues)
-    }));
-}
-
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(value => value.trim().length > 0))].sort((a, b) =>
     a.localeCompare(b)
@@ -521,7 +453,7 @@ export class DemoService implements IssueTrackerService {
     return {
       board: toBoard(matchingBoard),
       issues,
-      columns: buildBoardColumns(issues),
+      columns: buildBoardColumns(issues, { columnStatusOrder: DEMO_BOARD_STATUS_ORDER }),
       columnStatusOrder: [...DEMO_BOARD_STATUS_ORDER]
     };
   }
