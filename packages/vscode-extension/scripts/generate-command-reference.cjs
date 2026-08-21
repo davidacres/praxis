@@ -1,8 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const repoRoot = path.resolve(__dirname, '..');
-const packageJsonPath = path.join(repoRoot, 'package.json');
+const extensionRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(extensionRoot, '..', '..');
+const packageJsonPath = path.join(extensionRoot, 'package.json');
 const outputPath = path.join(repoRoot, 'docs', 'command-reference.md');
 
 function readPackageJson() {
@@ -39,7 +40,7 @@ function buildDocument(pkg) {
   const lines = [
     '# Ticket Manager Command Reference',
     '',
-    '> This file is generated from `package.json` by `node ./scripts/generate-command-reference.cjs`.',
+    '> This file is generated from `packages/vscode-extension/package.json` by `npm run docs:commands` (delegates to `node packages/vscode-extension/scripts/generate-command-reference.cjs`).',
     '',
     'This document lists the user-facing commands contributed through the extension manifest.',
     '',
