@@ -1,0 +1,1673 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Ticket Manager desktop shell — design tokens + component styles.
+
+   Theming runs on two independent attribute axes set on <html>:
+     data-mode="light|dark"      surface + text ramp
+     data-accent="violet|blue"   the single accent hue
+   Any combination composes; there are no duplicated 4-way blocks.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --font-sans: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --titlebar-height: 40px;
+
+  /* Folder/tree accents are deliberately outside the theme ramp — they read as
+     file-type colours (the seti palette VS Code uses) in both modes. */
+  --folder: #dcb67a;
+  --tone-jira: #3b82f6;
+  --tone-demo: #a855f7;
+  --tone-github: #8b7bb8;
+  --tone-gitlab: #e24329;
+  --tone-livefolder: #f59e0b;
+  --tone-workspace: #4ec9b0;
+  --tone-green: #3fb950;
+  --tone-amber: #d29922;
+  --tone-red: #f85149;
+}
+
+:root[data-mode='light'] {
+  --bg: #f6f6f6;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #ececec;
+  --bg-input: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(0, 0, 0, 0.09);
+  --border: #e0e0e0;
+  --border-strong: #cdcdcd;
+  --text: #1f1f1f;
+  --text-secondary: #616161;
+  --text-tertiary: #8b8b8b;
+  --danger: #b52d2d;
+  --caption-hover: rgba(0, 0, 0, 0.07);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+:root[data-mode='dark'] {
+  --bg: #1c1c1c;
+  --bg-elevated: #202020;
+  --bg-sunken: #181818;
+  --bg-input: #262626;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --border: #2e2e2e;
+  --border-strong: #3d3d3d;
+  --text: #e4e4e4;
+  --text-secondary: #9d9d9d;
+  /* Measured off the reference: its muted text peaks around #858585, not the
+     #6e6e6e this started at — the darker value read as disabled, not muted. */
+  --text-tertiary: #858585;
+  --danger: #f47067;
+  --caption-hover: rgba(255, 255, 255, 0.08);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-accent='violet'] {
+  --accent: #7c5cff;
+  --accent-hover: #6a4ce0;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(124, 92, 255, 0.16);
+  --accent-border: rgba(124, 92, 255, 0.4);
+}
+
+:root[data-accent='blue'] {
+  --accent: #0a84d8;
+  --accent-hover: #0a6cb0;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(10, 132, 216, 0.16);
+  --accent-border: rgba(10, 132, 216, 0.42);
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner,
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Window frame ───────────────────────────────────────────────────────── */
+
+.window-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.titlebar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  padding-left: var(--space-2);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-spacer {
+  flex: 1;
+}
+
+/* The centre "address bar" pill. */
+.titlebar-context {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* The reference pill is wide — roughly a third of the window. */
+  width: 34vw;
+  min-width: 220px;
+  max-width: 560px;
+  height: 26px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: no-drag;
+  cursor: default;
+}
+
+.titlebar-context:hover {
+  background: var(--bg-hover);
+}
+
+.titlebar-context-sep {
+  color: var(--text-tertiary);
+}
+
+.titlebar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-2);
+  background: var(--border);
+}
+
+.titlebar-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* App glyph sitting to the right of the run controls, as in the reference. */
+.titlebar-logo {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  color: var(--accent);
+}
+
+/* The appearance button reads as a colour wheel rather than a line icon. */
+.theme-orb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 210deg,
+    #f0736a,
+    #e8b84b,
+    #6fc46f,
+    #4aa3e0,
+    #8b6ee8,
+    #f0736a
+  );
+}
+
+/* Square 28px icon buttons used across the title bar and panel headers. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-btn.active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.icon-btn-sm {
+  width: 22px;
+  height: 22px;
+}
+
+/* Windows-style caption buttons: full-bleed, wider, no radius. */
+.caption-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-left: var(--space-2);
+  -webkit-app-region: no-drag;
+}
+
+.caption-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.caption-btn:hover {
+  background: var(--caption-hover);
+  color: var(--text);
+}
+
+.caption-btn.caption-close:hover {
+  background: #c42b1c;
+  color: #ffffff;
+}
+
+/* ── Shell / resizable panes ────────────────────────────────────────────── */
+
+.shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The sidebar sits a shade below the editor pane, as in the reference. */
+.pane-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+
+.pane-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elevated);
+  /* The reference rounds the top corners of every editor-level surface, so the
+     pane reads as a card docked to the bottom of the window. */
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow: hidden;
+}
+
+.pane-aux {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow: hidden;
+}
+
+/* 5px hit target, 1px visual line — the same trick VS Code uses so thin
+   dividers are still easy to grab. */
+.splitter {
+  position: relative;
+  flex: 0 0 5px;
+  margin: 0 -2px;
+  z-index: 5;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--accent);
+  transition: opacity 120ms ease 120ms;
+}
+
+.splitter:hover::after,
+.splitter.dragging::after {
+  opacity: 1;
+}
+
+/* The bottom panel docks under the editor and the aux pane but to the right of
+   the sidebar, so those three stack in their own column inside the shell. */
+.editor-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.splitter-h {
+  position: relative;
+  flex: 0 0 5px;
+  margin: -2px 0;
+  z-index: 5;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.splitter-h::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--accent);
+  transition: opacity 120ms ease 120ms;
+}
+
+.splitter-h:hover::after,
+.splitter-h.dragging::after {
+  opacity: 1;
+}
+
+/* ── Bottom panel ───────────────────────────────────────────────────────── */
+
+.panel-dock {
+  display: flex;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+.panel-dock > .bottom-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  overflow: hidden;
+}
+
+/* A borderless strip: the active tab is marked by an accent underline rather
+   than a frame, and the per-tab actions sit hard against the right edge. */
+.panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  height: 35px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+}
+
+.panel-tabs .spacer {
+  flex: 1;
+}
+
+.panel-tab {
+  position: relative;
+  padding: 0 var(--space-2);
+  height: 35px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.active {
+  color: var(--text);
+}
+
+.panel-tab.active::after {
+  content: '';
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: 0;
+  height: 1px;
+  background: var(--accent);
+}
+
+.panel-source {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.panel-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.panel-empty {
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+}
+
+/* A powerline prompt: chevron-joined segments, each tinted a step apart. */
+.terminal-line {
+  display: flex;
+  align-items: center;
+}
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 var(--space-2);
+  color: var(--accent-contrast);
+  font-size: 12px;
+}
+
+.seg-user {
+  background: var(--accent);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.seg-repo {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.seg-branch {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.terminal-caret {
+  width: 7px;
+  height: 15px;
+  margin-left: var(--space-2);
+  background: var(--text-secondary);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: var(--space-2);
+}
+
+/* Matches the reference's "Customizations" heading: normal body size, semibold,
+   sentence case — not a tiny uppercase label. */
+.sidebar-section-label {
+  margin: var(--space-3) 0 var(--space-1);
+  padding: 0 var(--space-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The "Boards" heading doubles as the button back to the board area. */
+.sidebar-section-button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-section-button:hover {
+  color: var(--text-secondary);
+}
+
+.sidebar-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  padding: var(--space-2) 0;
+}
+
+/* "New Ctrl+N" style compound pill in the sidebar header. */
+.new-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.new-pill:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-border);
+}
+
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* Classic / Work segmented control. */
+.segmented {
+  display: flex;
+  gap: 2px;
+  margin: 0 var(--space-3) var(--space-1);
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.segmented-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.segmented-btn:hover {
+  color: var(--text);
+}
+
+.segmented-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+/* ── Tree ───────────────────────────────────────────────────────────────── */
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  padding: 0 var(--space-3) 0 0;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-row:hover {
+  background: var(--bg-hover);
+}
+
+/* Two-line rows: title over a muted meta line, as the reference session list. */
+.tree-row-stacked {
+  height: auto;
+  align-items: flex-start;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.tree-row-stacked .tree-icon {
+  margin-top: 1px;
+}
+
+.tree-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.tree-row.active {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.tree-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform 120ms ease;
+}
+
+.tree-twisty.open {
+  transform: rotate(90deg);
+}
+
+.tree-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.tree-icon.folder {
+  color: var(--folder);
+}
+
+.tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-sub {
+  display: block;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-row.two-line {
+  height: 40px;
+  align-items: center;
+}
+
+.tree-row.two-line .tree-label {
+  line-height: 1.25;
+}
+
+/* ── Feature list (the "Customizations" idiom) ──────────────────────────── */
+
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.feature-row:hover {
+  background: var(--bg-hover);
+}
+
+.feature-row.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.feature-row .tree-icon {
+  color: var(--text-secondary);
+}
+
+.feature-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feature-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Main-panel scaffolding ─────────────────────────────────────────────── */
+
+.view-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.view-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.view-subtitle {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.placeholder-text {
+  color: var(--text-tertiary);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 100%;
+  color: var(--text-tertiary);
+}
+
+/* ── New Session view ───────────────────────────────────────────────────── */
+
+.session-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  min-height: 100%;
+  padding: var(--space-6) var(--space-5);
+}
+
+.session-inner {
+  width: 100%;
+  max-width: 960px;
+}
+
+.session-heading {
+  margin: 0 0 var(--space-4);
+  /* 22px, derived from the reference: its "New session in" run is 143px wide
+     with a 17px ascender, both of which put the size at ~22, not 27. */
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-align: left;
+}
+
+/* Inline dropdown chips inside the heading sentence: no frame, just the icon,
+   the value in full-strength text, and a chevron. */
+.heading-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 2px;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+
+.heading-chip:hover {
+  color: var(--accent);
+}
+
+.heading-chip svg:first-child {
+  color: var(--text-secondary);
+}
+
+.heading-chip svg:last-child {
+  color: var(--text-tertiary);
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-input);
+}
+
+.banner-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--tone-amber);
+}
+
+.banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.banner-text {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The composer: one rounded card holding the notice, the input and the
+   controls — the notice is a row of the card, not a detached banner. */
+.composer {
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-input);
+  transition: border-color 120ms ease;
+}
+
+.composer-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  /* The reference gives the notice noticeably more breathing room than the
+     rest of the card — ~20px above the title, not 12. */
+  padding: 20px var(--space-3) 20px var(--space-4);
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.composer-notice-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-secondary);
+}
+
+.composer-notice-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-notice-title {
+  margin-bottom: 2px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.composer-notice-text {
+  color: var(--text-secondary);
+}
+
+/* Inline call to action inside the notice — a link, not a button, so it does
+   not compete with the composer's own controls. */
+.notice-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.notice-link:hover {
+  text-decoration: underline;
+}
+
+.composer:focus-within {
+  border-color: var(--accent-border);
+}
+
+.composer-input {
+  display: block;
+  width: 100%;
+  min-height: 58px;
+  padding: var(--space-4) var(--space-3) 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  /* The composer prompt is the largest body text in the view — 16px in the
+     reference, where "What's the goal?" measures 119px wide. */
+  font-size: 16px;
+  resize: none;
+  outline: none;
+}
+
+.composer-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-2);
+}
+
+.composer-controls .spacer {
+  flex: 1;
+}
+
+.composer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.composer-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* Send is a plain glyph in the reference, not a filled accent circle. */
+.composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.composer-send:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.composer-send:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+/* Run options: borderless, left group and right group. */
+.session-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.session-footer .spacer {
+  flex: 1;
+}
+
+.footer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.footer-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ── Board (classic kanban) ─────────────────────────────────────────────── */
+
+/* The board owns the pane's full height and scrolls sideways; each column
+   scrolls its own cards. That keeps every column header visible and stops one
+   long column from stretching the board past the viewport. */
+.board-columns {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 274px;
+  min-height: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+
+.board-column-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.column-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-count {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.board-column-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--space-1) var(--space-1);
+  overflow-y: auto;
+}
+
+.column-empty {
+  padding: var(--space-3);
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Cards carry the status colour as a left rail rather than a dot — that is how
+   a tracker signals category at a glance down a dense column. */
+.issue-card {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.issue-card:hover {
+  background: var(--bg-hover);
+}
+
+.issue-card.active {
+  border-color: var(--accent-border);
+  background: var(--bg-active);
+}
+
+.issue-card-title {
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.issue-card-status {
+  margin-top: var(--space-1);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.issue-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.issue-card-foot .spacer {
+  flex: 1;
+}
+
+.issue-card-key {
+  font-variant-numeric: tabular-nums;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Work mode ──────────────────────────────────────────────────────────── */
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.work-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.work-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.work-card-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-card-body {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.work-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.session-row:hover {
+  background: var(--bg-hover);
+}
+
+.session-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.badge-progress {
+  color: var(--tone-amber);
+  border-color: rgba(210, 153, 34, 0.35);
+}
+.badge-done {
+  color: var(--tone-green);
+  border-color: rgba(63, 185, 80, 0.35);
+}
+.badge-blocked {
+  color: var(--tone-red);
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+/* ── Issue detail (main window, right pane) ─────────────────────────────── */
+
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.detail-section {
+  margin-top: var(--space-4);
+}
+
+.detail-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.comment-bubble {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.comment-author {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 2px;
+}
+
+/* ── Buttons, chips, inputs ─────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.chip {
+  height: 26px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chip-row {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.input,
+.select,
+.textarea {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.textarea {
+  width: 100%;
+  height: auto;
+  padding: var(--space-2);
+  resize: vertical;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Connections ────────────────────────────────────────────────────────── */
+
+.connections-page {
+  padding: var(--space-4);
+  max-width: 620px;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.list-row:hover {
+  background: var(--bg-hover);
+}
+
+.list-row.active {
+  background: var(--accent-soft);
+}
+
+.list-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.error-banner {
+  margin-bottom: var(--space-2);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.section-divider {
+  margin-top: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Theme switcher ─────────────────────────────────────────────────────── */
+
+.theme-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.theme-switcher-group {
+  display: flex;
+  gap: 4px;
+}
+
+.theme-mode-btn,
+.theme-accent-dot {
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  padding: 0;
+}
+
+.theme-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.theme-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-accent-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.theme-accent-dot.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Popover used by the title-bar theme wheel. */
+.popover {
+  position: absolute;
+  top: calc(var(--titlebar-height) - 4px);
+  right: var(--space-3);
+  z-index: 40;
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-panel);
+}
+
+.popover-label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}

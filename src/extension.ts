@@ -11,6 +11,8 @@ import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { ConnectionStore } from './config/connectionStore';
+import { VsCodeSettingsStore } from './adapters/vsCodeSettingsStore';
+import { VsCodeSecretsStore } from './adapters/vsCodeSecretsStore';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
 import { issueTypeHex } from './board/issueTypeColors';
 import { BoardColumnStore } from './state/boardColumnStore';
@@ -969,7 +971,20 @@ export async function activate(
   await configStore.refreshVercelApiKeyCache();
   await configStore.migrateAiProviderSettings();
   const aiSessionManager = new AiSessionManager(context.workspaceState);
-  const connectionStore = new ConnectionStore(context);
+  const connectionStore = new ConnectionStore(
+    new VsCodeSettingsStore('ticketManager'),
+    new VsCodeSecretsStore(context.secrets)
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (
+        event.affectsConfiguration('ticketManager.connections') ||
+        event.affectsConfiguration('ticketManager.boards')
+      ) {
+        connectionStore.notifyChanged();
+      }
+    })
+  );
   const vercelAgentLogger: VercelAgentLogger = {
     appendLine(message: string): void {
       outputChannel.appendLine(message);
