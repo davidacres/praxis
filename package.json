@@ -52,7 +52,8 @@
   "allowScripts": {
     "electron@43.4.1": true,
     "esbuild": true,
-    "electron-builder": true
+    "electron-builder": true,
+    "electron-winstaller": false
   },
   "devDependencies": {
     "typescript": "^6.0.2"
