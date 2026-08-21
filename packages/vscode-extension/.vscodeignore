@@ -16,9 +16,8 @@ out/**/*.map
 out/**/*.tsbuildinfo
 artifacts/**
 
-# Plans / speculative docs
+# Plans / speculative docs (now under docs/plans)
 docs/**
-plans/**
 .claude/**
 
 # Misc

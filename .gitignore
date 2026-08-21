@@ -17,6 +17,9 @@ artifacts/
 # VS Code extension test runner (downloaded VS Code + user data)
 .vscode-test/
 
+# Local scratch dir used by ad-hoc extension test runs
+.ticket-manager-test/
+
 # Local development scratch files (debug runs, installed-editor lister,
 # ad-hoc shell outputs from reproducing an issue). Never commit these.
 loc.txt
@@ -51,3 +54,6 @@ Desktop.ini
 .playwright-mcp/
 
 .tmp/
+
+# Claude Code local user state (per-user, never commit)
+.claude/settings.local.json
