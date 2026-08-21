@@ -4,6 +4,10 @@ node_modules/
 # TypeScript build output (extension entry: out/extension.js)
 out/
 dist/
+# Renderer staging area: packages/frontend/dist is copied here by the
+# electron-builder pipeline (see packages/electron-app/scripts/copy-renderer.cjs)
+# so the packaged app can load the renderer via a relative path inside the asar.
+packages/electron-app/renderer/
 *.tsbuildinfo
 
 # Packaged extension

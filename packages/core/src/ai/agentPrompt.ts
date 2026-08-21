@@ -1,0 +1,141 @@
+import type { IssueDetails } from '../types';
+import type { AgentTaskDefinition } from './agentTypes';
+
+const PLANNING_SYSTEM_PROMPT = `You are an autonomous coding agent operating under strict contracts.
+
+## Core Contract
+- Operate within the clearly defined scope provided.
+- Respect explicit permission boundaries — never bypass permission prompts.
+- Stop deterministically when the Definition of Done is satisfied.
+- Surface progress and intent continuously.
+- You must never improvise your own lifecycle.
+
+## Analysis-First Approach (MANDATORY)
+Before writing any code or making any changes, you MUST complete a thorough analysis phase:
+1. **Understand the system**: Read and explore the codebase to build a mental model of the architecture, key modules, data flow, and conventions already in use. Identify the entry points, services, and patterns the project relies on.
+2. **Understand the requirement**: Break the task requirement down into every discrete change that needs to happen. Identify all files, functions, types, tests, and configurations that will be affected.
+3. **Identify dependencies and side-effects**: Trace how the areas you plan to change are used elsewhere. Search for all call sites, imports, and references so you do not miss downstream impacts.
+4. **Form a plan**: Summarise your analysis as a clear, ordered implementation plan before you touch any file. State which files will be created or modified and why.
+5. **Then implement**: Only after steps 1–4 are complete should you begin making changes. Implement methodically, following your plan.
+
+Skipping or abbreviating this analysis phase is a failure condition, even if the resulting code happens to be correct.
+
+## Guardrails
+- Stopping correctly is a success condition.
+- Do not continuously replan or retry — if a step fails, report the failure.
+- Do not modify code outside the stated scope.
+- Do not fix pre-existing issues unrelated to the task.
+- Prefer the provided tools (read_file, write_file, list_dir, run_shell) for all workspace inspection and changes.
+`;
+
+function slugifyNamingSegment(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replaceAll(/[^\x00-\x7F]/g, '')
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, '-')
+    .replaceAll(/^-+|-+$/g, '');
+}
+
+function stripIssueKeyPrefix(value: string, issueKey: string): string {
+  const normalizedIssueKey = slugifyNamingSegment(issueKey);
+  if (!value || !normalizedIssueKey) {
+    return value;
+  }
+  if (value === normalizedIssueKey) {
+    return '';
+  }
+  if (value.startsWith(`${normalizedIssueKey}-`)) {
+    return value.slice(normalizedIssueKey.length + 1);
+  }
+  return value;
+}
+
+export function buildWorktreeName(issue: Pick<IssueDetails, 'key' | 'summary' | 'branch'>): string {
+  const source = issue.summary || issue.branch?.trim() || issue.key;
+  const normalizedSource = stripIssueKeyPrefix(slugifyNamingSegment(source), issue.key);
+  const suffix = normalizedSource.slice(0, 48).replaceAll(/-+$/g, '') || 'work-item';
+  return `${issue.key}-${suffix}`;
+}
+
+export function buildMsiVersionExample(
+  issueKey: string,
+  baseVersion = '1.0.0.1',
+  buildIdentifier = 'buildx'
+): string {
+  return `${baseVersion}-${issueKey}-${buildIdentifier}`;
+}
+
+export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails): string {
+  const workflow = task.workflow
+    ? [
+        '\n## Assigned Workflow Pack',
+        `- Name: ${task.workflow.name}`,
+        `- Instructions file: ${task.workflow.instructionsPath}`,
+        task.workflow.description ? `- Description: ${task.workflow.description}` : undefined,
+        task.workflow.link ? `- Reference link: ${task.workflow.link}` : undefined,
+        '- Treat this workflow pack as the execution playbook for this task.',
+        '- Read the instructions file before taking implementation actions.',
+        '- Follow the workflow ordering, sub-agent choices, and review gates unless they conflict with explicit user instructions or this task contract.'
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join('\n')
+    : '';
+  const attachments = task.attachments?.length
+    ? [
+        '\n## Issue Attachments',
+        '- The following issue attachments were downloaded locally before execution.',
+        '- Review any relevant screenshots, mockups, specs, or supporting files before implementation.',
+        ...task.attachments.map(attachment =>
+          [
+            `- ${attachment.fileName}: ${attachment.localPath}`,
+            attachment.mediaType ? `  media type: ${attachment.mediaType}` : undefined,
+            typeof attachment.sizeBytes === 'number' ? `  size bytes: ${attachment.sizeBytes}` : undefined,
+            attachment.sourceUrl ? `  source: ${attachment.sourceUrl}` : undefined
+          ]
+            .filter((line): line is string => Boolean(line))
+            .join('\n')
+        )
+      ].join('\n')
+    : '';
+  const nonGoals = task.nonGoals?.length
+    ? `\n## Non-Goals (do NOT touch)\n${task.nonGoals.map(g => `- ${g}`).join('\n')}`
+    : '';
+  const completionContract = task.completionContract?.trim()
+    ? `\n## Completion Contract\n${task.completionContract.trim()}`
+    : '';
+  const worktreeName = buildWorktreeName(issue);
+  const msiVersionExample = buildMsiVersionExample(issue.key);
+
+  return `${PLANNING_SYSTEM_PROMPT}
+## Task
+**Goal:** ${task.goal}
+**Scope:** ${task.scope}
+**Definition of Done:** ${task.definitionOfDone}
+${workflow}
+${attachments}
+${nonGoals}
+${completionContract}
+
+## Issue Context
+- Key: ${issue.key}
+- Summary: ${issue.summary}
+- Type: ${issue.issueType}
+- Status: ${issue.status}
+${issue.description ? `- Description:\n${issue.description.slice(0, 4000)}` : ''}
+
+## Execution Conventions
+- If you create a git worktree, its name MUST start with ${issue.key}.
+- Use a worktree name like: ${worktreeName}
+- If you publish a new MSI, keep the base version and append -${issue.key}-<build-id>.
+- Return that same <build-id> in DELIVERY_RESULT.buildIdentifier so the Jira upload name can match the MSI build.
+- Use an MSI version like: ${msiVersionExample}
+- Do not publish a generic MSI artifact name or version that omits the Jira issue key.
+`;
+}
+
+export interface PermissionInfo {
+  description: string;
+  kind: string;
+  detail?: string;
+}

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { SecretsStore } from '@ticket-manager/core';
 import type {
   AiAgentRegistration,
   AiProvider,
@@ -7,6 +8,7 @@ import type {
   DeliveryWorkflowSettings,
   SecretConnectionValues
 } from '../types';
+import { VsCodeSecretsStore } from '../adapters/vsCodeSecretsStore';
 import {
   clearVercelApiKey,
   migrateVercelCredentialToSecretStorage,
@@ -100,13 +102,13 @@ function parseJsonArray(input: string, label: string): string[] {
 }
 
 export class AppConfigStore {
-  private secrets: vscode.SecretStorage | undefined;
+  private secrets: SecretsStore | undefined;
   /** Cached Vercel gateway API key from SecretStorage / migration / env. */
   private vercelApiKeyCache = '';
 
   /** Bind extension SecretStorage so gateway keys are not kept in settings.json. */
   public bindExtensionSecrets(secrets: vscode.SecretStorage): void {
-    this.secrets = secrets;
+    this.secrets = new VsCodeSecretsStore(secrets);
   }
 
   /**

@@ -1,0 +1,58 @@
+{
+  "name": "@ticket-manager/electron-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "check-types": "tsc --noEmit -p .",
+    "compile": "tsc -p .",
+    "start": "npm run compile && electron .",
+    "test:e2e": "npm run compile && npx playwright test",
+    "copy-renderer": "node scripts/copy-renderer.cjs",
+    "predist": "npm run copy-renderer",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@ticket-manager/core": "*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^25.5.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^6.0.2"
+  },
+  "build": {
+    "appId": "com.ticketmanager.app",
+    "productName": "Ticket Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "electronVersion": "33.4.11",
+    "files": [
+      "out/**",
+      "renderer/**",
+      {
+        "from": "../core/out",
+        "to": "node_modules/@ticket-manager/core/out",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../core/package.json",
+        "to": "node_modules/@ticket-manager/core/package.json"
+      }
+    ],
+    "win": {
+      "target": "msi",
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    },
+    "msi": {
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ticket Manager"
+    }
+  }
+}
