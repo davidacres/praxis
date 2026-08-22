@@ -32,6 +32,7 @@ import type {
 } from '../types';
 import {
   type ParsedPlanFolder,
+  discoverPlanFolders,
   extractComments,
   parsePlanFolder,
   readUtf8,
@@ -39,6 +40,7 @@ import {
   stableFeatureKey,
   stableStoryKey
 } from './markdownPlanParser';
+import { toStoredFolderPath } from './pathUtils';
 import {
   appendCommentToMarkdownFile,
   appendFeatureItemTableRow,
@@ -51,6 +53,7 @@ import {
   writeReportedByToMarkdownFile,
   writeSeverityToMarkdownFile,
   writeStatusToMarkdownFile,
+  writeSummaryToMarkdownFile,
   writeIdeaTranscriptToMarkdownFile
 } from './markdownStatusWriter';
 import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
@@ -174,6 +177,30 @@ interface LiveIssue extends IssueSummary {
   featureDirName?: string;
 }
 
+// ── Multi-root boards ───────────────────────────────────────────────
+
+/**
+ * Stable short hash of a plans-root path, used to distinguish board ids when a
+ * live folder contains several plans roots. djb2 — a stable discriminator, not
+ * cryptographic.
+ */
+function hashRootPath(rootPath: string): string {
+  let hash = 5381;
+  const normalized = toStoredFolderPath(rootPath).toLowerCase();
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) + hash + normalized.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+/** One discovered plans root, backing one board. */
+interface LiveFolderBoardRoot {
+  id: string;
+  name: string;
+  rootPath: string;
+  featuresRootPath: string;
+}
+
 export interface LiveFolderConfigProvider {
   getDefaultPageSize(): number;
   getLiveFolderPath(): string;
@@ -201,8 +228,17 @@ export class LiveFolderService implements IssueTrackerService {
   private plansRootPath?: string;
   /** The resolved directory containing feature-NN-* folders (may differ from plansRootPath). */
   private featuresRootPath?: string;
+  /** The configured folder discovery started from (kept for reloads). */
+  private configuredPath?: string;
+  /**
+   * Every plans root discovered under the configured folder, primary root first.
+   * A single root yields exactly the legacy one-board shape; extra roots get
+   * path-hashed board ids.
+   */
+  private boardRoots: LiveFolderBoardRoot[] = [];
+  private issuesByRoot = new Map<string, LiveIssue[]>();
   private loaded = false;
-  private watcher?: FSWatcher;
+  private watchers: FSWatcher[] = [];
   private debounceTimer?: ReturnType<typeof setTimeout>;
   /** Track paths we just wrote to, so we can skip the watcher callback. */
   private recentWrites = new Set<string>();
@@ -224,12 +260,16 @@ export class LiveFolderService implements IssueTrackerService {
   public async reset(): Promise<void> {
     this.loaded = false;
     this.issues = [];
+    this.boardRoots = [];
+    this.issuesByRoot.clear();
     await this.ensureLoaded();
   }
 
   public dispose(): void {
-    void this.watcher?.close();
-    this.watcher = undefined;
+    for (const watcher of this.watchers) {
+      void watcher.close();
+    }
+    this.watchers = [];
     this._onDidReceiveExternalComment.dispose();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -342,25 +382,28 @@ export class LiveFolderService implements IssueTrackerService {
 
   public async getBoards(_filters: BoardFilters): Promise<Board[]> {
     await this.ensureLoaded();
-    return [
-      {
-        id: `livefolder-${this.projectKey.toLowerCase()}`,
-        name: `${this.projectName} (Live)`,
-        type: 'plan',
-        projectKey: this.projectKey,
-        projectName: this.projectName,
-        locationName: this.plansRootPath ?? ''
-      }
-    ];
+    return this.boardRoots.map(root => ({
+      id: root.id,
+      name: root.name,
+      type: 'plan',
+      projectKey: this.projectKey,
+      projectName: this.projectName,
+      locationName: root.rootPath
+    }));
   }
 
   public async getBoardDetails(board: Board): Promise<BoardDetails> {
     await this.ensureLoaded();
+    // Multi-root: scope the columns to the board's own plans root. An unknown
+    // id (e.g. a board constructed before a reload) falls back to every issue,
+    // matching the legacy single-root behavior.
+    const root = this.boardRoots.find(candidate => candidate.id === board.id);
+    const issues = root ? (this.issuesByRoot.get(root.rootPath) ?? []) : this.issues;
     const columnMap = new Map<string, IssueSummary[]>();
     for (const s of STATUS_NAMES) {
       columnMap.set(s, []);
     }
-    for (const issue of this.issues) {
+    for (const issue of issues) {
       const bucket = columnMap.get(issue.status) ?? columnMap.get('Backlog')!;
       bucket.push(issue);
     }
@@ -373,7 +416,7 @@ export class LiveFolderService implements IssueTrackerService {
     return {
       board,
       columns,
-      issues: [...this.issues],
+      issues: [...issues],
       columnStatusOrder: STATUS_NAMES
     };
   }
@@ -415,6 +458,16 @@ export class LiveFolderService implements IssueTrackerService {
     await this.ensureLoaded();
     if (!this.configStore.getLiveFolderAllowIssueCreation()) {
       throw new Error(LIVE_FOLDER_CREATION_DISABLED_ERROR);
+    }
+    // Multi-root v1: writes always land in the primary root. Refuse loudly when
+    // the caller targeted another root rather than silently misfiling the issue.
+    if (input.boardId && this.boardRoots.length > 1) {
+      const target = this.boardRoots.find(root => root.id === input.boardId);
+      if (target && target.id !== this.boardRoots[0]?.id) {
+        throw new Error(
+          'Creating issues in a specific plans root is not supported yet for multi-root live folders — create from the primary board instead.'
+        );
+      }
     }
     if (!this.featuresRootPath) {
       throw new Error('Live Folder features root is not configured.');
@@ -539,6 +592,20 @@ export class LiveFolderService implements IssueTrackerService {
 
     if (input.assignee !== undefined) {
       issue.assignee = input.assignee ?? undefined;
+    }
+
+    // Persist summary changes to the markdown `# ` title line
+    if (input.summary !== undefined && input.summary !== null) {
+      this.recentWrites.add(issue.sourcePath);
+      try {
+        const written = await writeSummaryToMarkdownFile(issue.sourcePath, input.summary);
+        if (!written && issue.summary !== input.summary.trim()) {
+          throw new Error(`Could not update summary in ${issue.sourcePath}.`);
+        }
+        issue.summary = input.summary.trim();
+      } finally {
+        setTimeout(() => this.recentWrites.delete(issue.sourcePath), 2000);
+      }
     }
 
     const updatesNeedIdeaTranscript =
@@ -825,6 +892,7 @@ export class LiveFolderService implements IssueTrackerService {
     this.projectKey = this.configStore.getLiveFolderProjectKey() || 'LIVE';
     this.projectName = this.configStore.getLiveFolderProjectName() || 'Live Folder';
     this.plansRootPath = undefined;
+    this.configuredPath = folderPath;
 
     await this.loadFromDisk(folderPath);
     await this.snapshotCommentCounts();
@@ -833,11 +901,14 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   private async loadFromDisk(folderPathOverride?: string): Promise<void> {
-    const folderPath = folderPathOverride ?? this.plansRootPath;
+    const folderPath = folderPathOverride ?? this.configuredPath ?? this.plansRootPath;
     if (!folderPath) {
       return;
     }
 
+    // Primary root: the legacy single-board path. parsePlanFolder throws the
+    // familiar "unreadable / not a plans folder" errors and its output drives
+    // the template-upgrade pass exactly as before.
     let parsed = await parsePlanFolder(folderPath);
     this.plansRootPath = parsed.plansRootPath;
     this.featuresRootPath = parsed.featuresRootPath;
@@ -852,7 +923,52 @@ export class LiveFolderService implements IssueTrackerService {
       this.featuresRootPath = parsed.featuresRootPath;
     }
 
-    this.issues = this.buildIssueModel(parsed);
+    // Multi-board discovery: every other plans root under the configured folder
+    // becomes its own board. Extra roots are parsed read-only (no template
+    // upgrade writes) so pointing at a parent folder never mutates sibling
+    // projects. Discovery/parse failures leave the primary root as the only
+    // board rather than failing the whole load.
+    const rootParses: ParsedPlanFolder[] = [parsed];
+    try {
+      const discovered = await discoverPlanFolders(folderPath);
+      const primaryKey = toStoredFolderPath(parsed.plansRootPath).toLowerCase();
+      for (const candidate of discovered) {
+        if (toStoredFolderPath(candidate.plansRootPath).toLowerCase() === primaryKey) {
+          continue;
+        }
+        try {
+          rootParses.push(await parsePlanFolder(candidate.plansRootPath));
+        } catch {
+          // A root that vanishes mid-scan is skipped, not fatal.
+        }
+      }
+    } catch {
+      // Discovery failure leaves the primary root as the only board.
+    }
+
+    this.issuesByRoot.clear();
+    this.boardRoots = rootParses.map((rootParsed, index) => {
+      this.issuesByRoot.set(rootParsed.plansRootPath, this.buildIssueModel(rootParsed));
+      if (index === 0) {
+        // The primary root keeps the legacy board id and name so existing
+        // tracked boards, tests, and habits survive the multi-board change.
+        return {
+          id: `livefolder-${this.projectKey.toLowerCase()}`,
+          name: `${this.projectName} (Live)`,
+          rootPath: rootParsed.plansRootPath,
+          featuresRootPath: rootParsed.featuresRootPath
+        };
+      }
+      return {
+        id: `livefolder-${this.projectKey.toLowerCase()}-${hashRootPath(rootParsed.plansRootPath)}`,
+        name: `${this.projectName} — ${path.basename(rootParsed.plansRootPath)} (Live)`,
+        rootPath: rootParsed.plansRootPath,
+        featuresRootPath: rootParsed.featuresRootPath
+      };
+    });
+    this.issues = rootParses.flatMap(
+      rootParsed => this.issuesByRoot.get(rootParsed.plansRootPath) ?? []
+    );
   }
 
   private async upgradeExistingFiles(parsed: ParsedPlanFolder): Promise<boolean> {
@@ -1089,18 +1205,12 @@ export class LiveFolderService implements IssueTrackerService {
   }
 
   private setupWatcher(): void {
-    if (this.watcher || !this.plansRootPath) {
+    if (this.watchers.length > 0 || this.boardRoots.length === 0) {
       return;
     }
 
-    this.watcher = chokidar.watch('**/*.md', {
-      cwd: this.plansRootPath,
-      ignoreInitial: true,
-      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
-    });
-
-    const handleChange = (relativePath: string) => {
-      const absolutePath = path.join(this.plansRootPath!, relativePath);
+    const handleChangeFor = (rootPath: string) => (relativePath: string) => {
+      const absolutePath = path.join(rootPath, relativePath);
       // Skip if we just wrote this file
       if (this.recentWrites.has(absolutePath)) {
         return;
@@ -1114,9 +1224,20 @@ export class LiveFolderService implements IssueTrackerService {
       }, 500);
     };
 
-    this.watcher.on('change', handleChange);
-    this.watcher.on('add', handleChange);
-    this.watcher.on('unlink', handleChange);
+    // One watcher per plans root. Roots discovered later (by a reload) are not
+    // watched until the next full load — a documented v1 limitation.
+    for (const root of this.boardRoots) {
+      const watcher = chokidar.watch('**/*.md', {
+        cwd: root.rootPath,
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
+      });
+      const handleChange = handleChangeFor(root.rootPath);
+      watcher.on('change', handleChange);
+      watcher.on('add', handleChange);
+      watcher.on('unlink', handleChange);
+      this.watchers.push(watcher);
+    }
   }
 
   private async reloadFromDisk(): Promise<void> {

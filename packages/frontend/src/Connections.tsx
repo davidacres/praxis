@@ -1,114 +1,311 @@
-import { useEffect, useState } from 'react';
-import type { BackendMode, Connection } from '@ticket-manager/core';
+import { useCallback, useEffect, useState } from 'react';
+import type { Board, Connection, TrackedBoard } from '@ticket-manager/core';
+import { backendModeMeta } from './boardMeta';
+import { Icon } from './Icon';
+import { BoardPicker } from './connections/BoardPicker';
+import { ConnectionForm } from './connections/ConnectionForm';
+import { CreateBoardWizard } from './connections/CreateBoardWizard';
+import { supportsManualBoardSelection } from './connections/connectionPolicy';
 
-const MODES: BackendMode[] = ['demo', 'jiracloud', 'github', 'gitlab', 'livefolder', 'userworkspace'];
+const EMPTY_UW_BOARD_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
-export function Connections() {
+export interface ConnectionsProps {
+  /** Notified after any mutation so the app shell can refresh boards/counts. */
+  onChanged?: () => void;
+}
+
+/**
+ * Two-pane connections manager: connection list left, detail right (the same
+ * idiom as the settings page). The detail pane is one of:
+ *   - the add/edit form for the selected connection,
+ *   - the board picker (for modes with discoverable remote boards),
+ *   - the User Workspace "create board" wizard,
+ *   - an empty prompt when nothing is selected.
+ */
+export function Connections({ onChanged }: ConnectionsProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [name, setName] = useState('');
-  const [mode, setMode] = useState<BackendMode>('demo');
-  const [path, setPath] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [creating, setCreating] = useState(false);
+  const [pickingBoardsFor, setPickingBoardsFor] = useState<string | undefined>();
+  const [wizardFor, setWizardFor] = useState<string | undefined>();
+  const [trackedBoards, setTrackedBoards] = useState<TrackedBoard[]>([]);
+  const [uwBoards, setUwBoards] = useState<Board[]>([]);
   const [error, setError] = useState<string | undefined>();
 
-  const reload = () => {
-    void window.ticketManager.connection.list().then(setConnections);
-  };
-
-  useEffect(() => {
-    reload();
+  const reload = useCallback(() => {
+    window.ticketManager.connection
+      .list()
+      .then(list => {
+        setConnections(list);
+        // A removed connection must not stay selected.
+        setSelectedId(current => (current && !list.some(c => c.id === current) ? undefined : current));
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
-  const addConnection = async () => {
-    if (!name.trim()) {
+  useEffect(reload, [reload]);
+
+  const selected = creating ? undefined : connections.find(c => c.id === selectedId);
+  const pickerConnection = pickingBoardsFor
+    ? connections.find(c => c.id === pickingBoardsFor)
+    : undefined;
+  const wizardConnection = wizardFor
+    ? connections.find(c => c.id === wizardFor)
+    : undefined;
+
+  const reloadTracked = useCallback(() => {
+    if (!selected) {
+      setTrackedBoards([]);
       return;
     }
-    setBusy(true);
-    setError(undefined);
-    try {
-      const id = name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
-      const settings = mode === 'livefolder' && path.trim() ? { path: path.trim() } : {};
-      await window.ticketManager.connection.add({ id, name: name.trim(), mode, settings });
-      setName('');
-      setPath('');
-      reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
+    window.ticketManager.connection
+      .getTrackedBoards(selected.id)
+      .then(setTrackedBoards)
+      .catch(() => setTrackedBoards([]));
+  }, [selected]);
+
+  useEffect(reloadTracked, [reloadTracked]);
+
+  const reloadUwBoards = useCallback(() => {
+    if (!selected || selected.mode !== 'userworkspace') {
+      setUwBoards([]);
+      return;
     }
+    window.ticketManager.board
+      .list(EMPTY_UW_BOARD_FILTERS, selected.id)
+      .then(setUwBoards)
+      .catch(() => setUwBoards([]));
+  }, [selected]);
+
+  useEffect(reloadUwBoards, [reloadUwBoards]);
+
+  const removeTracked = (board: TrackedBoard) => {
+    void window.ticketManager.connection
+      .removeTrackedBoard(board.connectionId, board.boardId)
+      .then(() => {
+        reloadTracked();
+        onChanged?.();
+      });
   };
 
-  const removeConnection = async (id: string) => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      await window.ticketManager.connection.remove(id);
-      reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
+  const removeUwBoard = (board: Board) => {
+    if (!selected) {
+      return;
     }
+    void window.ticketManager.userWorkspace
+      .deleteBoard(selected.id, board.id)
+      .then(() => {
+        reloadUwBoards();
+        onChanged?.();
+      });
+  };
+
+  const detail = () => {
+    if (wizardConnection) {
+      return (
+        <CreateBoardWizard
+          connection={wizardConnection}
+          onDone={() => {
+            setWizardFor(undefined);
+            reloadUwBoards();
+            onChanged?.();
+          }}
+        />
+      );
+    }
+    if (pickerConnection) {
+      return (
+        <BoardPicker
+          connection={pickerConnection}
+          onDone={() => {
+            setPickingBoardsFor(undefined);
+            reloadTracked();
+            onChanged?.();
+          }}
+        />
+      );
+    }
+    if (creating || selected) {
+      const isUserWorkspace = selected?.mode === 'userworkspace';
+      return (
+        <>
+          <ConnectionForm
+            key={creating ? 'new' : selected!.id}
+            existing={selected}
+            onPersisted={() => {
+              reload();
+              onChanged?.();
+            }}
+            onSaved={(connection, followUp) => {
+              setCreating(false);
+              setSelectedId(connection.id);
+              reload();
+              onChanged?.();
+              if (followUp === 'boards') {
+                setPickingBoardsFor(connection.id);
+              }
+            }}
+            onCancel={() => {
+              // Cancelling an edit deselects; cancelling a create just closes the form.
+              setCreating(false);
+              setSelectedId(undefined);
+            }}
+            onRemoved={() => {
+              setSelectedId(undefined);
+              setCreating(false);
+              reload();
+              onChanged?.();
+            }}
+          />
+          {selected && (
+            <section className="conn-boards" data-testid="conn-boards">
+              <div className="conn-boards-header">
+                <span className="conn-boards-title">Tracked boards</span>
+                {supportsManualBoardSelection(selected.mode) && (
+                  <button
+                    type="button"
+                    className="btn"
+                    data-testid="conn-pick-boards-btn"
+                    onClick={() => setPickingBoardsFor(selected.id)}
+                  >
+                    <Icon name="plus" size={13} />
+                    Pick boards…
+                  </button>
+                )}
+                {isUserWorkspace && (
+                  <button
+                    type="button"
+                    className="btn"
+                    data-testid="uw-create-board-btn"
+                    onClick={() => setWizardFor(selected.id)}
+                  >
+                    <Icon name="plus" size={13} />
+                    Create board…
+                  </button>
+                )}
+              </div>
+              {isUserWorkspace ? (
+                uwBoards.length === 0 ? (
+                  <p className="placeholder-text">No workspace boards yet.</p>
+                ) : (
+                  uwBoards.map(board => (
+                    <div key={board.id} className="list-row" data-testid="uw-board-row">
+                      <div>
+                        <div className="list-row-title">{board.name}</div>
+                        <div className="list-row-meta">
+                          {board.projectKey} — {board.locationName}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-icon"
+                        data-testid="uw-board-delete-btn"
+                        aria-label={`Delete board ${board.name}`}
+                        title="Delete this board"
+                        onClick={() => removeUwBoard(board)}
+                      >
+                        <Icon name="trash" size={13} />
+                      </button>
+                    </div>
+                  ))
+                )
+              ) : trackedBoards.length === 0 ? (
+                <p className="placeholder-text">No tracked boards yet.</p>
+              ) : (
+                trackedBoards.map(board => (
+                  <div key={board.boardId} className="list-row" data-testid="tracked-board-row">
+                    <div>
+                      <div className="list-row-title">{board.displayName ?? board.boardId}</div>
+                      <div className="list-row-meta">{board.boardId}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-icon"
+                      aria-label={`Stop tracking ${board.displayName ?? board.boardId}`}
+                      title="Stop tracking this board"
+                      onClick={() => removeTracked(board)}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </section>
+          )}
+        </>
+      );
+    }
+    return (
+      <div className="empty-state" data-testid="conn-empty">
+        <Icon name="plug" size={28} />
+        <span>Select a connection, or add a new one.</span>
+      </div>
+    );
   };
 
   return (
-    <div className="connections-page">
-      <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>Connections</h3>
-
-      {error && <div className="error-banner">{error}</div>}
-
-      <div style={{ marginBottom: 20 }}>
-        {connections.length === 0 && <p className="placeholder-text">No connections yet.</p>}
-        {connections.map(connection => (
-          <div key={connection.id} data-testid="connection-row" className="list-row" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <div className="list-row-title">{connection.name}</div>
-              <div className="list-row-meta">{connection.mode}</div>
-            </div>
-            <button className="btn" disabled={busy} onClick={() => void removeConnection(connection.id)}>
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div className="section-divider">
-        <strong style={{ fontSize: 13 }}>Add connection</strong>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <input
-            className="input"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            placeholder="Connection name"
-            style={{ flex: 1 }}
-          />
-          <select className="select" value={mode} onChange={event => setMode(event.target.value as BackendMode)}>
-            {MODES.map(m => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <button className="btn btn-primary" disabled={busy || !name.trim()} onClick={() => void addConnection()}>
+    <div className="connections-page" data-testid="connections-page">
+      <aside className="connections-list">
+        <div className="connections-list-header">
+          <span className="view-title">Connections</span>
+          <button
+            type="button"
+            className="btn"
+            data-testid="add-connection-btn"
+            onClick={() => {
+              setCreating(true);
+              setSelectedId(undefined);
+              setPickingBoardsFor(undefined);
+              setWizardFor(undefined);
+            }}
+          >
+            <Icon name="plus" size={13} />
             Add
           </button>
         </div>
-        {mode === 'livefolder' && (
-          <input
-            data-testid="livefolder-path-input"
-            className="input"
-            value={path}
-            onChange={event => setPath(event.target.value)}
-            placeholder="Live Folder path"
-            style={{ width: '100%', marginTop: 8 }}
-          />
-        )}
-      </div>
+        <div className="connections-list-scroll">
+          {error && <div className="error-banner">{error}</div>}
+          {connections.length === 0 && !error && (
+            <p className="placeholder-text" style={{ padding: '0 var(--space-2)' }}>
+              No connections yet.
+            </p>
+          )}
+          {connections.map(connection => {
+            const meta = backendModeMeta(connection.mode);
+            const isActive = !creating && connection.id === selectedId;
+            return (
+              <div
+                key={connection.id}
+                data-testid="connection-row"
+                className={`list-row${isActive ? ' active' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setCreating(false);
+                  setSelectedId(connection.id);
+                  setPickingBoardsFor(undefined);
+                  setWizardFor(undefined);
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    setCreating(false);
+                    setSelectedId(connection.id);
+                    setPickingBoardsFor(undefined);
+                    setWizardFor(undefined);
+                  }
+                }}
+              >
+                <span className="conn-mode-dot" style={{ background: meta.tone }} />
+                <div className="conn-row-text">
+                  <div className="list-row-title">{connection.name}</div>
+                  <div className="list-row-meta">{meta.label}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+      <section className="connections-detail">{detail()}</section>
     </div>
   );
 }

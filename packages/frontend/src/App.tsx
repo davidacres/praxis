@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Board, BoardDetails, Connection } from '@ticket-manager/core';
 import { IssueDetail } from './IssueDetail';
 import { Connections } from './Connections';
+import { SettingsPage } from './SettingsPage';
 import { TitleBar } from './TitleBar';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession } from './NewSession';
+import { NewIssuePage } from './NewIssuePage';
 import { BoardView } from './BoardView';
 import { BottomPanel } from './BottomPanel';
 import { Icon } from './Icon';
@@ -23,6 +25,8 @@ interface Route {
   feature?: FeatureId;
   boardId?: string;
   issueKey?: string;
+  /** Show the create-ticket form for `boardId` instead of the board. */
+  newIssue?: boolean;
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -82,12 +86,21 @@ export function App() {
     });
   }, []);
 
+  // Both refreshers swallow-and-log rather than leaving the promise unhandled:
+  // an IPC rejection used to silently leave the app on its previous (often
+  // empty) list with nothing in the console to explain it.
   const refreshBoards = useCallback(() => {
-    void window.ticketManager.board.list(EMPTY_FILTERS).then(setBoards);
+    void window.ticketManager.board
+      .list(EMPTY_FILTERS)
+      .then(setBoards)
+      .catch(error => console.error('Failed to load boards:', error));
   }, []);
 
   const refreshConnections = useCallback(() => {
-    void window.ticketManager.connection.list().then(setConnections);
+    void window.ticketManager.connection
+      .list()
+      .then(setConnections)
+      .catch(error => console.error('Failed to load connections:', error));
   }, []);
 
   useEffect(() => {
@@ -197,18 +210,56 @@ export function App() {
   );
 
   const connection = connections.find(candidate => candidate.id === selectedBoard?.connectionId);
-  const contextLabel = route.feature
-    ? FEATURE_TITLES[route.feature]
-    : selectedBoard?.name ?? 'New session';
+
+  /**
+   * Whether the selected board's backend accepts new tickets. Demo always can;
+   * live folder connections need their `allowIssueCreation` setting; the
+   * not-yet-ported modes (jiracloud/gitlab/github/userworkspace) resolve to a
+   * stub backend that throws, so the form would only error — the button is
+   * disabled up front instead, with the hint saying why.
+   */
+  const canCreateIssue = !connection
+    ? true
+    : connection.mode === 'demo'
+      ? true
+      : connection.mode === 'livefolder' || connection.mode === 'userworkspace'
+        ? connection.settings.allowIssueCreation === true
+        : false;
+  const createIssueHint =
+    !connection || connection.mode === 'demo'
+      ? undefined
+      : connection.mode === 'livefolder' || connection.mode === 'userworkspace'
+        ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
+        : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
+
+  const contextLabel = route.newIssue
+    ? 'New issue'
+    : route.feature
+      ? FEATURE_TITLES[route.feature]
+      : selectedBoard?.name ?? 'New session';
   const contextDetail = route.feature
     ? 'Ticket Manager'
     : connection?.name ?? backendModeMeta(selectedBoard?.connectionId ? undefined : 'demo').label;
 
   const centre = () => {
     if (route.feature === 'connections') {
+      // No view-scroll wrapper: the manager's two panes own their own scrolling.
+      return (
+        <Connections
+          onChanged={() => {
+            refreshConnections();
+            refreshBoards();
+          }}
+        />
+      );
+    }
+    if (route.feature === 'settings') {
       return (
         <div className="view-scroll">
-          <Connections />
+          <SettingsPage
+            connections={connections}
+            onOpenConnections={() => navigate({ feature: 'connections' })}
+          />
         </div>
       );
     }
@@ -238,6 +289,20 @@ export function App() {
         />
       );
     }
+    if (route.newIssue) {
+      return (
+        <NewIssuePage
+          board={selectedBoard}
+          connection={connection}
+          onCancel={() => navigate({ boardId: selectedBoard.id })}
+          onCreated={issueKey => {
+            refreshBoards();
+            refreshBoardDetails();
+            navigate({ boardId: selectedBoard.id, issueKey });
+          }}
+        />
+      );
+    }
     if (!boardDetails) {
       return <div className="empty-state">Loading board…</div>;
     }
@@ -248,6 +313,9 @@ export function App() {
         selectedIssueKey={route.issueKey}
         connectionId={selectedBoard.connectionId}
         onOpenIssue={issueKey => navigate({ boardId: selectedBoard.id, issueKey })}
+        onNewIssue={() => navigate({ boardId: selectedBoard.id, newIssue: true })}
+        canCreateIssue={canCreateIssue}
+        createIssueHint={createIssueHint}
         onIssueMove={onIssueMove}
       />
     );

@@ -88,7 +88,7 @@ ${definition.storyTitle} summary.
 }
 
 suite('UserWorkspaceService', () => {
-  let memento: vscode.Memento;
+  let memento: MemoryMemento;
   let store: UserWorkspaceStore;
   let service: UserWorkspaceService;
   let suiteRoot: vscode.Uri;
@@ -97,7 +97,7 @@ suite('UserWorkspaceService', () => {
     if (!WORKSPACE_ROOT_URI) {
       throw new Error('A workspace folder is required for user workspace tests.');
     }
-    memento = new MemoryMemento() as unknown as vscode.Memento;
+    memento = new MemoryMemento();
     store = new UserWorkspaceStore(memento);
     service = new UserWorkspaceService(
       {

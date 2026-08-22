@@ -1,26 +1,17 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
+import type { Page } from 'playwright';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
-let electronApp: ElectronApplication;
+let app: TestApp;
 let window: Page;
-let userDataDir: string;
 
 test.beforeEach(async () => {
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-e2e-'));
-  electronApp = await electron.launch({
-    args: [path.join(__dirname, '..'), `--user-data-dir=${userDataDir}`],
-    cwd: path.join(__dirname, '..')
-  });
-  window = await electronApp.firstWindow();
-  await window.waitForLoadState('domcontentloaded');
+  app = await launchTestApp();
+  window = app.window;
 });
 
 test.afterEach(async () => {
-  await electronApp.close();
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  await closeTestApp(app);
 });
 
 test('boards render on launch', async () => {
@@ -64,21 +55,26 @@ test('closing the issue detail panel hides it', async () => {
 
 test('navigating to Connections shows the connection management screen', async () => {
   await window.locator('[data-testid="nav-connections"]').click();
-  await expect(window.locator('h3', { hasText: 'Connections' })).toBeVisible();
-  await expect(window.getByPlaceholder('Connection name')).toBeVisible();
+  await expect(window.locator('[data-testid="connections-page"]')).toBeVisible();
+  await expect(window.locator('[data-testid="add-connection-btn"]')).toBeVisible();
+  await expect(window.locator('[data-testid="conn-empty"]')).toBeVisible();
 });
 
 test('adding and removing a connection updates the list', async () => {
   await window.locator('[data-testid="nav-connections"]').click();
+  await window.locator('[data-testid="add-connection-btn"]').click();
 
   const name = `e2e-connection-${Date.now()}`;
-  await window.getByPlaceholder('Connection name').fill(name);
-  await window.getByRole('button', { name: 'Add' }).click();
+  await window.locator('[data-testid="conn-field-name"]').fill(name);
+  // Mode defaults to demo — no other fields required.
+  await window.locator('[data-testid="conn-save-btn"]').click();
 
   const row = window.locator('[data-testid="connection-row"]', { hasText: name });
   await expect(row).toBeVisible();
 
-  await row.getByRole('button', { name: 'Remove' }).click();
+  // The saved connection stays selected; removal is a two-step confirm.
+  await window.locator('[data-testid="conn-remove-btn"]').click();
+  await window.locator('[data-testid="conn-remove-confirm-btn"]').click();
 
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).not.toBeVisible();
 });
