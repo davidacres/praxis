@@ -1,11 +1,43 @@
 import { ipcMain } from 'electron';
+import type {
+  CreateIssueInput,
+  IssueFilters,
+  ParentItemQueryOptions,
+  UpdateIssueInput
+} from '@ticket-manager/core';
 import { getServiceForConnection } from './serviceRegistry';
 
 export function registerIssueIpc(): void {
   ipcMain.handle(
     'issue:get',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, connectionId?: string) => {
-      return getServiceForConnection(connectionId).getIssue(issueKey);
+      return (await getServiceForConnection(connectionId)).getIssue(issueKey);
+    }
+  );
+
+  ipcMain.handle(
+    'issue:create',
+    async (_event: Electron.IpcMainInvokeEvent, input: CreateIssueInput, connectionId?: string) => {
+      return (await getServiceForConnection(connectionId)).createIssue(input);
+    }
+  );
+
+  ipcMain.handle(
+    'issue:update',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      input: UpdateIssueInput,
+      connectionId?: string
+    ) => {
+      return (await getServiceForConnection(connectionId)).updateIssue(issueKey, input);
+    }
+  );
+
+  ipcMain.handle(
+    'issue:delete',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, connectionId?: string) => {
+      await (await getServiceForConnection(connectionId)).deleteIssue(issueKey);
     }
   );
 
@@ -17,7 +49,7 @@ export function registerIssueIpc(): void {
       transitionId: string,
       connectionId?: string
     ) => {
-      await getServiceForConnection(connectionId).transitionIssue(issueKey, transitionId);
+      await (await getServiceForConnection(connectionId)).transitionIssue(issueKey, transitionId);
     }
   );
 
@@ -29,7 +61,27 @@ export function registerIssueIpc(): void {
       body: string,
       connectionId?: string
     ) => {
-      await getServiceForConnection(connectionId).addComment(issueKey, body);
+      await (await getServiceForConnection(connectionId)).addComment(issueKey, body);
+    }
+  );
+
+  ipcMain.handle(
+    'issue:getProjects',
+    async (_event: Electron.IpcMainInvokeEvent, connectionId?: string) => {
+      return (await getServiceForConnection(connectionId)).getProjects();
+    }
+  );
+
+  ipcMain.handle(
+    'issue:getParentItems',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      filters: IssueFilters,
+      searchText?: string,
+      options?: ParentItemQueryOptions,
+      connectionId?: string
+    ) => {
+      return (await getServiceForConnection(connectionId)).getParentItems(filters, searchText, options);
     }
   );
 }

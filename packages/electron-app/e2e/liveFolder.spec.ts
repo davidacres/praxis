@@ -2,11 +2,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
-import { _electron as electron, type ElectronApplication, type Page } from 'playwright';
+import type { Page } from 'playwright';
+import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
-let electronApp: ElectronApplication;
+let app: TestApp;
 let window: Page;
-let userDataDir: string;
 let liveFolderDir: string;
 
 function writeFixtureLiveFolder(root: string): void {
@@ -37,30 +37,25 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 test.beforeEach(async () => {
-  userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-e2e-'));
   liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-livefolder-'));
   writeFixtureLiveFolder(liveFolderDir);
 
-  electronApp = await electron.launch({
-    args: [path.join(__dirname, '..'), `--user-data-dir=${userDataDir}`],
-    cwd: path.join(__dirname, '..')
-  });
-  window = await electronApp.firstWindow();
-  await window.waitForLoadState('domcontentloaded');
+  app = await launchTestApp();
+  window = app.window;
 });
 
 test.afterEach(async () => {
-  await electronApp.close();
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  await closeTestApp(app);
   fs.rmSync(liveFolderDir, { recursive: true, force: true });
 });
 
 async function addLiveFolderConnection(name: string): Promise<void> {
   await window.locator('[data-testid="nav-connections"]').click();
-  await window.getByPlaceholder('Connection name').fill(name);
-  await window.locator('select').selectOption('livefolder');
-  await window.getByTestId('livefolder-path-input').fill(liveFolderDir);
-  await window.getByRole('button', { name: 'Add' }).click();
+  await window.locator('[data-testid="add-connection-btn"]').click();
+  await window.locator('[data-testid="conn-field-name"]').fill(name);
+  await window.locator('[data-testid="conn-field-mode"]').selectOption('livefolder');
+  await window.locator('[data-testid="conn-field-path"]').fill(liveFolderDir);
+  await window.locator('[data-testid="conn-save-btn"]').click();
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).toBeVisible();
 }
 

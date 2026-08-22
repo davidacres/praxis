@@ -277,6 +277,30 @@ export async function writeDescriptionToMarkdownFile(
   return true;
 }
 
+/**
+ * Updates the issue title — the first `# ` heading line — in a markdown file.
+ * Returns true if the file was modified. An empty summary is never written.
+ * Note: a task's title also appears in its feature's items table; that table
+ * row is cosmetic and is not rewritten here.
+ */
+export async function writeSummaryToMarkdownFile(
+  filePath: string,
+  newSummary: string
+): Promise<boolean> {
+  const trimmed = newSummary.trim();
+  if (!trimmed) {
+    return false;
+  }
+  const content = await readUtf8(filePath);
+  // `[^\r\n]*` keeps the existing line ending untouched.
+  const updated = content.replace(/^#[ \t]+[^\r\n]*/m, `# ${trimmed}`);
+  if (updated === content) {
+    return false;
+  }
+  await fs.writeFile(filePath, updated, 'utf-8');
+  return true;
+}
+
 export async function writeIdeaTranscriptToMarkdownFile(
   filePath: string,
   newDescription: string,

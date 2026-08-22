@@ -42,7 +42,8 @@ import {
   sortAiOptionsByDefaultProvider
 } from './ai/aiProviderSetup';
 import { BackendModeContextState, resolveBackendModeContextState } from './ui/backendModeContext';
-import { initializeMcpOAuthManager } from './mcp/oauthManager';
+import { initializeMcpOAuthManager, getMcpOAuthManager } from './mcp/oauthManager';
+import { setMcpOAuthProviderSource } from './mcp/clientFactory';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { ClassicBoardsSidebarViewProvider } from './views/classicBoardsSidebarViewProvider';
@@ -964,6 +965,8 @@ export async function activate(
   context: vscode.ExtensionContext
 ): Promise<TicketManagerExtensionApi> {
   initializeMcpOAuthManager(context);
+  // Let the core MCP client reach the extension's UriHandler-backed OAuth flow.
+  setMcpOAuthProviderSource(() => getMcpOAuthManager());
 
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();

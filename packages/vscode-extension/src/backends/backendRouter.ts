@@ -21,6 +21,7 @@ import type {
   WorkflowTransition
 } from '../types';
 import { AppConfigStore } from '../config/jiraConfig';
+import { VsCodeMementoStore } from '../adapters/vsCodeMementoStore';
 import type { ConnectionStore } from '../config/connectionStore';
 import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../config/connectionScopedConfigStore';
 import { DemoService } from '../demo/demoService';
@@ -186,7 +187,7 @@ export class BackendRouter implements IssueTrackerService {
     private readonly output: vscode.OutputChannel,
     private readonly connectionStore?: ConnectionStore
   ) {
-    this.userWorkspaceStore = new UserWorkspaceStore(context.globalState);
+    this.userWorkspaceStore = new UserWorkspaceStore(new VsCodeMementoStore(context.globalState));
   }
 
   public get mode(): BackendMode {
@@ -387,14 +388,23 @@ export class BackendRouter implements IssueTrackerService {
     if (mode === 'github') {
       service = new UnsupportedBackendService(mode, scopedConfigStore.getDefaultPageSize());
     } else if (mode === 'gitlab') {
-      service = new GitLabBoardService(scopedConfigStore, this.output, globalThis.fetch, inferGitLabProjectFromRepo, this.context);
+      service = new GitLabBoardService(
+        scopedConfigStore,
+        this.output,
+        globalThis.fetch,
+        inferGitLabProjectFromRepo,
+        {
+          getApiKeyFromSecrets: () => scopedConfigStore.getGitLabApiKeyFromSecrets(this.context),
+          getWorkspaceFolderPath: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+        }
+      );
     } else if (mode === 'demo') {
       service = new DemoService(scopedConfigStore);
     } else if (mode === 'jiracloud') {
       const resolver = new JiraMcpConnectionResolver(this.context, scopedConfigStore);
       const resolution = await resolver.resolve();
       if (resolution) {
-        service = new JiraService(this.context, scopedConfigStore, this.output, resolution);
+        service = new JiraService(scopedConfigStore, this.output, resolution);
       } else {
         service = new UnsupportedBackendService('jiracloud', scopedConfigStore.getDefaultPageSize());
       }
@@ -433,7 +443,6 @@ export class BackendRouter implements IssueTrackerService {
         const resolution = await resolver.resolve();
         if (resolution) {
           this.activeService = new JiraService(
-            this.context,
             this.configStore,
             this.output,
             resolution
@@ -464,7 +473,12 @@ export class BackendRouter implements IssueTrackerService {
                 this.output,
                 globalThis.fetch,
                 inferGitLabProjectFromRepo,
-                this.context
+                {
+                  getApiKeyFromSecrets: () =>
+                    this.configStore.getGitLabApiKeyFromSecrets(this.context),
+                  getWorkspaceFolderPath: () =>
+                    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+                }
               )
         : configuredMode === 'demo'
           ? new DemoService(this.configStore)

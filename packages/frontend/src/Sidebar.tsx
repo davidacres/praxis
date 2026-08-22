@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection } from '@ticket-manager/core';
+import type { BackendMode, Board, BoardDetails, Connection } from '@ticket-manager/core';
 import { Icon, type IconName } from './Icon';
 import { backendModeMeta, boardTypeIcon, boardTypeLabel } from './boardMeta';
+import { BrandModeIcon } from './BrandModeIcon';
+import { useSettings } from './useSettings';
 import { WorkModeView } from './WorkModeView';
 
 export type SidebarMode = 'classic' | 'work';
@@ -58,6 +60,8 @@ interface BoardGroup {
   label: string;
   icon: IconName;
   tone: string;
+  /** Owning connection's backend mode ('demo' for the built-in boards) — drives the brand icon. */
+  mode: BackendMode;
   boards: Board[];
 }
 
@@ -79,6 +83,12 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  // Brand artwork (extension parity) vs generic board-type glyphs — Appearance setting.
+  const { settings } = useSettings();
+  const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
+  // The "Ticket Manager" footer carries its own toggle, separate from the
+  // connection-group collapse map above, because it isn't tied to a folder key.
+  const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
 
   /**
    * Boards are flat in the data model, so the folder level is synthesised from
@@ -95,6 +105,7 @@ export function Sidebar({
     for (const board of visible) {
       const connection = connections.find(candidate => candidate.id === board.connectionId);
       const key = board.connectionId ?? 'demo';
+      const mode: BackendMode = connection?.mode ?? 'demo';
       const meta = backendModeMeta(connection?.mode ?? (board.connectionId ? undefined : 'demo'));
       const existing = byKey.get(key);
       if (existing) {
@@ -105,6 +116,7 @@ export function Sidebar({
           label: connection?.name ?? meta.label,
           icon: meta.icon,
           tone: meta.tone,
+          mode,
           boards: [board]
         });
       }
@@ -232,7 +244,11 @@ export function Sidebar({
                         onClick={() => onSelectBoard(board)}
                       >
                         <span className="tree-icon" style={{ color: group.tone }}>
-                          <Icon name={boardTypeIcon(board)} size={15} />
+                          {showBrandArtwork ? (
+                            <BrandModeIcon mode={group.mode} size={15} />
+                          ) : (
+                            <Icon name={boardTypeIcon(board)} size={15} />
+                          )}
                         </span>
                         <span className="tree-stack">
                           <span className="tree-label">{board.name}</span>
@@ -252,26 +268,37 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <div className="sidebar-section-label" style={{ marginTop: 0 }}>
-          Ticket Manager
-        </div>
-        {FEATURES.map(feature => (
-          <button
-            key={feature.id}
-            data-testid={`nav-${feature.id}`}
-            className={`feature-row${activeFeature === feature.id ? ' active' : ''}`}
-            onClick={() => onSelectFeature(feature.id)}
-          >
-            <span className="tree-icon">
-              <Icon name={feature.icon} size={15} />
-            </span>
-            <span className="feature-label">{feature.label}</span>
-            {/* The reference shows a count only where there is something to count. */}
-            {!!featureCounts[feature.id] && (
-              <span className="feature-count">{featureCounts[feature.id]}</span>
-            )}
-          </button>
-        ))}
+        <button
+          className="feature-section-toggle sidebar-section-button"
+          aria-expanded={!featuresCollapsed}
+          data-testid="toggle-features"
+          onClick={() => setFeaturesCollapsed(collapsed => !collapsed)}
+        >
+          <span className="sidebar-section-label" style={{ margin: 0 }}>
+            Ticket Manager
+          </span>
+          <span className={`tree-twisty${featuresCollapsed ? '' : ' open'}`}>
+            <Icon name="chevron-right" size={13} />
+          </span>
+        </button>
+        {!featuresCollapsed &&
+          FEATURES.map(feature => (
+            <button
+              key={feature.id}
+              data-testid={`nav-${feature.id}`}
+              className={`feature-row${activeFeature === feature.id ? ' active' : ''}`}
+              onClick={() => onSelectFeature(feature.id)}
+            >
+              <span className="tree-icon">
+                <Icon name={feature.icon} size={15} />
+              </span>
+              <span className="feature-label">{feature.label}</span>
+              {/* The reference shows a count only where there is something to count. */}
+              {!!featureCounts[feature.id] && (
+                <span className="feature-count">{featureCounts[feature.id]}</span>
+              )}
+            </button>
+          ))}
       </div>
     </nav>
   );

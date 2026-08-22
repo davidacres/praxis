@@ -52,10 +52,53 @@ export interface StdioConnectionConfig extends BaseConnectionConfig {
   env: Record<string, string>;
 }
 
+/**
+ * Pre-registered OAuth client credentials for servers where dynamic client
+ * registration is unavailable or blocked (e.g. an org-restricted Atlassian
+ * site that only trusts org-registered 3LO apps). When present, the host's
+ * OAuth provider skips DCR and authenticates with these credentials instead.
+ */
+export interface OAuthClientOverride {
+  clientId: string;
+  /** Confidential-client secret; omit for public (PKCE-only) apps. */
+  clientSecret?: string;
+  /** Redirect URL registered on the app; defaults to the host's own callback. */
+  redirectUrl?: string;
+  /** Scope string for the authorize request (e.g. Atlassian 3LO scopes). */
+  scope?: string;
+  /**
+   * Extra query params the authorization server requires on /authorize beyond
+   * the OAuth-standard set — e.g. Atlassian 3LO mandates
+   * `{ audience: 'api.atlassian.com', prompt: 'consent' }` and answers with a
+   * generic "internal error" page when audience is missing.
+   */
+  extraAuthorizeParams?: Record<string, string>;
+  /**
+   * Overrides the authorization-server endpoints the SDK would otherwise
+   * discover from the MCP server. Needed when the MCP server's own AS only
+   * knows its dynamically-registered clients — e.g. Atlassian's MCP server
+   * 500s on console-registered 3LO client ids, so those must authorize
+   * against `https://auth.atlassian.com` instead.
+   */
+  authorizationServer?: {
+    issuer: string;
+    authorizationEndpoint: string;
+    tokenEndpoint: string;
+  };
+}
+
 export interface HttpConnectionConfig extends BaseConnectionConfig {
   type: 'http';
   url: string;
   headers: Record<string, string>;
+  /**
+   * When false, a 401 from this server surfaces as a plain error instead of
+   * triggering the interactive OAuth browser flow. Used by API-token setups,
+   * where a 401 means "bad token", not "please sign in".
+   */
+  allowOAuth?: boolean;
+  /** Pre-registered OAuth client to use instead of dynamic registration. */
+  oauthClient?: OAuthClientOverride;
 }
 
 export type ConnectionConfig = StdioConnectionConfig | HttpConnectionConfig;

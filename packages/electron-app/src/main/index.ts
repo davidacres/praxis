@@ -3,9 +3,39 @@ import { app, BrowserWindow, Menu } from 'electron';
 import { registerBoardIpc } from './boardIpc';
 import { registerIssueIpc } from './issueIpc';
 import { registerConnectionIpc } from './connectionIpc';
+import { registerUserWorkspaceIpc } from './userWorkspaceIpc';
+import { registerLiveFolderIpc } from './liveFolderIpc';
+import { registerDialogIpc } from './dialogIpc';
+import { registerSettingsIpc } from './settingsIpc';
 import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
+import { initSettingsBackend } from './settingsBackendInstance';
+import { setMcpOAuthProviderSource } from '@ticket-manager/core';
+import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 
 const isMac = process.platform === 'darwin';
+
+/**
+ * Single instance: OAuth callbacks arrive as `ticketmanager://` URLs, which
+ * the OS delivers by launching a second process — forward its argv URL to the
+ * first instance's OAuth manager instead of opening another window. The lock
+ * is per userData dir, so parallel e2e instances don't collide.
+ */
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const url = argv.find(arg => arg.startsWith(`${OAUTH_SCHEME}:`));
+    if (url) {
+      getDesktopMcpOAuthManager().handleProtocolUrl(url);
+    }
+  });
+}
+
+// macOS delivers protocol URLs via open-url instead of a second process.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  getDesktopMcpOAuthManager().handleProtocolUrl(url);
+});
 
 function createMainWindow(): void {
   const win = new BrowserWindow({
@@ -40,14 +70,46 @@ function createMainWindow(): void {
   }
 }
 
-void app.whenReady().then(() => {
+// The settings backend is initialised (and one-time migrated) before any IPC
+// handler is registered so the very first `settings:get` resolves against the
+// up-to-date file.
+void app.whenReady().then(async () => {
+  await initSettingsBackend();
+
+  // Desktop OAuth for HTTP MCP servers (e.g. Atlassian Cloud): register the
+  // ticketmanager:// protocol so the OAuth redirect lands back in this app —
+  // a stable scheme URL is what org admins allowlist (a localhost port reads
+  // as an untrusted app to restricted Atlassian orgs). Dev/unpackaged runs
+  // need the explicit executable + app path in the registry entry. Falls back
+  // to the loopback listener when registration fails. Registered after
+  // whenReady because token storage uses safeStorage.
+  const schemeRegistered =
+    process.defaultApp && process.argv.length >= 2
+      ? app.setAsDefaultProtocolClient(OAUTH_SCHEME, process.execPath, [
+          path.resolve(process.argv[1])
+        ])
+      : app.setAsDefaultProtocolClient(OAUTH_SCHEME);
+  getDesktopMcpOAuthManager().setSchemeRedirectEnabled(schemeRegistered);
+  if (!schemeRegistered) {
+    console.warn('[oauth] ticketmanager:// registration failed; falling back to loopback redirect');
+  }
+
+  setMcpOAuthProviderSource(() => getDesktopMcpOAuthManager());
+  void getDesktopMcpOAuthManager()
+    .init()
+    .catch(error => console.error('[oauth] loopback listener failed to start:', error));
+
   // No File/Edit/View/Window/Help menubar — the custom title bar is the only chrome.
   Menu.setApplicationMenu(null);
 
   registerBoardIpc();
   registerIssueIpc();
   registerConnectionIpc();
+  registerUserWorkspaceIpc();
+  registerLiveFolderIpc();
+  registerDialogIpc();
   registerWindowIpc();
+  registerSettingsIpc();
   createMainWindow();
 
   app.on('activate', () => {

@@ -14,7 +14,9 @@
     "dist": "electron-builder"
   },
   "dependencies": {
-    "@ticket-manager/core": "*"
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "@ticket-manager/core": "*",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

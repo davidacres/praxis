@@ -8,6 +8,15 @@ export interface BoardViewProps {
   selectedIssueKey: string | undefined;
   connectionId: string | undefined;
   onOpenIssue: (issueKey: string) => void;
+  /** Opens the create-ticket form for this board. */
+  onNewIssue: () => void;
+  /**
+   * False when the board's backend cannot create tickets (e.g. a live folder
+   * connection without `allowIssueCreation`) — the button stays visible but
+   * disabled, with `createIssueHint` explaining why.
+   */
+  canCreateIssue: boolean;
+  createIssueHint: string | undefined;
   /**
    * Called when an issue card is dragged from one column onto another. The drop
    * target is identified by `targetStatus` (the column's display name, e.g.
@@ -40,6 +49,9 @@ export function BoardView({
   selectedIssueKey,
   connectionId,
   onOpenIssue,
+  onNewIssue,
+  canCreateIssue,
+  createIssueHint,
   onIssueMove
 }: BoardViewProps) {
   // Single dragged key per drag — the dataTransfer is the cross-process source
@@ -89,132 +101,156 @@ export function BoardView({
     return ordered;
   }, [details.columns, details.columnStatusOrder]);
 
+  const toolbar = (
+    <header className="view-header">
+      <span className="view-title">{details.board.name}</span>
+      <span className="spacer" />
+      <button
+        type="button"
+        className="btn"
+        data-testid="board-new-issue-btn"
+        disabled={!canCreateIssue}
+        title={canCreateIssue ? 'Create a new ticket on this board' : createIssueHint}
+        onClick={onNewIssue}
+      >
+        <Icon name="plus" size={13} />
+        New issue
+      </button>
+    </header>
+  );
+
   if (effectiveColumns.length === 0) {
     return (
-      <div className="empty-state" data-testid="board-view">
-        <Icon name="columns" size={28} />
-        <span>This board has no columns.</span>
+      <div className="board-shell" data-testid="board-view">
+        {toolbar}
+        <div className="empty-state">
+          <Icon name="columns" size={28} />
+          <span>This board has no columns.</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="board-columns" data-testid="board-view">
-      {effectiveColumns.map(column => (
-        <section key={column.id} className="board-column">
-          <header className="board-column-title">
-            <span className="column-name">{column.name}</span>
-            <span className="column-count">{column.issues.length}</span>
-          </header>
+    <div className="board-shell" data-testid="board-view">
+      {toolbar}
+      <div className="board-columns">
+        {effectiveColumns.map(column => (
+          <section key={column.id} className="board-column">
+            <header className="board-column-title">
+              <span className="column-name">{column.name}</span>
+              <span className="column-count">{column.issues.length}</span>
+            </header>
 
-          <div
-            className="board-column-scroll"
-            data-testid="board-column"
-            data-target-status={column.name}
-            onDragEnter={event => {
-              // Entering the column from outside. Fires for every child too, so
-              // guard against re-entering from a descendant by checking
-              // relatedTarget isn't already inside us.
-              if (
-                draggedKey !== null &&
-                !event.currentTarget.contains(event.relatedTarget as Node | null) &&
-                !event.currentTarget.classList.contains('drag-over')
-              ) {
-                event.currentTarget.classList.add('drag-over');
-              }
-            }}
-            onDragOver={event => {
-              // Required to mark the column as a valid drop target; without
-              // preventDefault here, the browser cancels the drop immediately.
-              if (draggedKey !== null) {
+            <div
+              className="board-column-scroll"
+              data-testid="board-column"
+              data-target-status={column.name}
+              onDragEnter={event => {
+                // Entering the column from outside. Fires for every child too, so
+                // guard against re-entering from a descendant by checking
+                // relatedTarget isn't already inside us.
+                if (
+                  draggedKey !== null &&
+                  !event.currentTarget.contains(event.relatedTarget as Node | null) &&
+                  !event.currentTarget.classList.contains('drag-over')
+                ) {
+                  event.currentTarget.classList.add('drag-over');
+                }
+              }}
+              onDragOver={event => {
+                // Required to mark the column as a valid drop target; without
+                // preventDefault here, the browser cancels the drop immediately.
+                if (draggedKey !== null) {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }
+              }}
+              onDragLeave={event => {
+                // Firing for every child makes a naive clear cause flicker; only
+                // clear when the drag has now exited the column entirely.
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  event.currentTarget.classList.remove('drag-over');
+                }
+              }}
+              onDrop={event => {
+                const target = event.currentTarget as HTMLElement;
+                target.classList.remove('drag-over');
+                const key = event.dataTransfer.getData('text/plain') || draggedKey;
+                const targetStatus = target.dataset.targetStatus;
+                if (!key || !targetStatus) {
+                  return;
+                }
+                // A drop onto the column the card already lives in is a no-op;
+                // we still let the browser's `dragend` settle so the ghost
+                // returns cleanly.
+                const sameColumn = details.columns.find(col => col.issues.some(issue => issue.key === key));
+                if (sameColumn?.name === targetStatus) {
+                  return;
+                }
                 event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-              }
-            }}
-            onDragLeave={event => {
-              // Firing for every child makes a naive clear cause flicker; only
-              // clear when the drag has now exited the column entirely.
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                event.currentTarget.classList.remove('drag-over');
-              }
-            }}
-            onDrop={event => {
-              const target = event.currentTarget as HTMLElement;
-              target.classList.remove('drag-over');
-              const key = event.dataTransfer.getData('text/plain') || draggedKey;
-              const targetStatus = target.dataset.targetStatus;
-              if (!key || !targetStatus) {
-                return;
-              }
-              // A drop onto the column the card already lives in is a no-op;
-              // we still let the browser's `dragend` settle so the ghost
-              // returns cleanly.
-              const sameColumn = details.columns.find(col => col.issues.some(issue => issue.key === key));
-              if (sameColumn?.name === targetStatus) {
-                return;
-              }
-              event.preventDefault();
-              void onIssueMove(key, targetStatus, connectionId);
-            }}
-          >
-            {column.issues.map(issue => {
-              const tone = statusTone(issue.statusCategory, issue.status);
-              return (
-                <article
-                  key={issue.key}
-                  data-testid="issue-card"
-                  className={`issue-card${issue.key === selectedIssueKey ? ' active' : ''}`}
-                  style={{ borderLeftColor: tone }}
-                  draggable={true}
-                  onDragStart={event => {
-                    // text/plain is what we read back on drop; effectAllowed
-                    // 'move' lights up the cursor and tells the OS this is a
-                    // move (not a copy). Don't use the issueKey as the id —
-                    // Jira keys contain letters/digits only but be defensive.
-                    event.dataTransfer.effectAllowed = 'move';
-                    event.dataTransfer.setData('text/plain', issue.key);
-                    setDraggedKey(issue.key);
-                    // Selecting the source card makes it visible while a
-                    // semi-transparent drag image is being shown.
-                    event.currentTarget.classList.add('dragging-from');
-                  }}
-                  onDragEnd={event => {
-                    event.currentTarget.classList.remove('dragging-from');
-                    // Drop targets may have been left class-dirty if the
-                    // dragend fires before dragleave clears them.
-                    document
-                      .querySelectorAll('.board-column-scroll.drag-over')
-                      .forEach(node => node.classList.remove('drag-over'));
-                    setDraggedKey(null);
-                  }}
-                  onClick={() => onOpenIssue(issue.key)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      onOpenIssue(issue.key);
-                    }
-                  }}
-                >
-                  <div className="issue-card-title">{issue.summary}</div>
-                  <div className="issue-card-status">{issue.status}</div>
-                  <div className="issue-card-foot">
-                    <Icon name="ticket" size={13} />
-                    <span className="issue-card-key">{issue.key}</span>
-                    <span className="spacer" />
-                    {issue.assignee && (
-                      <span className="avatar" title={issue.assignee}>
-                        {initials(issue.assignee)}
-                      </span>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-            {column.issues.length === 0 && <div className="column-empty">No work items</div>}
-          </div>
-        </section>
-      ))}
+                void onIssueMove(key, targetStatus, connectionId);
+              }}
+            >
+              {column.issues.map(issue => {
+                const tone = statusTone(issue.statusCategory, issue.status);
+                return (
+                  <article
+                    key={issue.key}
+                    data-testid="issue-card"
+                    className={`issue-card${issue.key === selectedIssueKey ? ' active' : ''}`}
+                    style={{ borderLeftColor: tone }}
+                    draggable={true}
+                    onDragStart={event => {
+                      // text/plain is what we read back on drop; effectAllowed
+                      // 'move' lights up the cursor and tells the OS this is a
+                      // move (not a copy). Don't use the issueKey as the id —
+                      // Jira keys contain letters/digits only but be defensive.
+                      event.dataTransfer.effectAllowed = 'move';
+                      event.dataTransfer.setData('text/plain', issue.key);
+                      setDraggedKey(issue.key);
+                      // Selecting the source card makes it visible while a
+                      // semi-transparent drag image is being shown.
+                      event.currentTarget.classList.add('dragging-from');
+                    }}
+                    onDragEnd={event => {
+                      event.currentTarget.classList.remove('dragging-from');
+                      // Drop targets may have been left class-dirty if the
+                      // dragend fires before dragleave clears them.
+                      document
+                        .querySelectorAll('.board-column-scroll.drag-over')
+                        .forEach(node => node.classList.remove('drag-over'));
+                      setDraggedKey(null);
+                    }}
+                    onClick={() => onOpenIssue(issue.key)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        onOpenIssue(issue.key);
+                      }
+                    }}
+                  >
+                    <div className="issue-card-title">{issue.summary}</div>
+                    <div className="issue-card-status">{issue.status}</div>
+                    <div className="issue-card-foot">
+                      <Icon name="ticket" size={13} />
+                      <span className="issue-card-key">{issue.key}</span>
+                      <span className="spacer" />
+                      {issue.assignee && (
+                        <span className="avatar" title={issue.assignee}>
+                          {initials(issue.assignee)}
+                        </span>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+              {column.issues.length === 0 && <div className="column-empty">No work items</div>}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
