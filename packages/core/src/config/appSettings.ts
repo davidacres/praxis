@@ -1,4 +1,5 @@
 import { parseHexRgb } from '../ui/hexColor';
+import type { AiProvider } from '../types';
 
 /**
  * Typed settings shape shared between the Electron desktop app and the VS Code
@@ -69,6 +70,16 @@ export interface McpServerSettings {
   userServerRef: string;
 }
 
+/** Non-secret per-provider config override. API keys never live here. */
+export interface AiProviderConfig {
+  /** `kind: 'api'` providers only — base URL override. */
+  baseUrl?: string;
+  /** `kind: 'api'` providers only — default model id override. */
+  defaultModel?: string;
+  /** `kind: 'cli-agent'` providers only — overrides the default PATH-resolved executable name. */
+  cliPath?: string;
+}
+
 export interface AiSettings {
   /** Vercel AI Gateway base URL. Empty means default / env fallback. */
   gatewayUrl: string;
@@ -85,7 +96,24 @@ export interface AiSettings {
   analysisPrompt: string;
   /** When true, an issue must have a confirmed analysis before it can be delegated. */
   analysisGateEnabled: boolean;
+  /** Which configured provider new sessions use by default. */
+  activeProvider: AiProvider;
+  /**
+   * Per-provider non-secret config, keyed by provider id. `vercel-gateway`'s
+   * effective config stays on the top-level `gatewayUrl`/`defaultModel`
+   * fields above for backward compatibility — this map is for the other
+   * providers only.
+   */
+  providers: Partial<Record<AiProvider, AiProviderConfig>>;
 }
+
+const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
+  'vercel-gateway',
+  'openai',
+  'anthropic',
+  'claude-code-cli',
+  'codex-cli'
+];
 
 export interface PreviewSettings {
   /** Enable the Create Idea command and button (preview). */
@@ -130,7 +158,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     agentName: '',
     workingDirectory: '',
     analysisPrompt: '',
-    analysisGateEnabled: false
+    analysisGateEnabled: false,
+    activeProvider: 'vercel-gateway',
+    providers: {}
   },
   jira: {
     siteUrl: '',
@@ -236,6 +266,39 @@ function readBoardsSidebarMode(value: unknown, fallback: BoardsSidebarMode): Boa
   return fallback;
 }
 
+function readAiProvider(value: unknown, fallback: AiProvider): AiProvider {
+  return typeof value === 'string' && (KNOWN_AI_PROVIDERS as readonly string[]).includes(value)
+    ? (value as AiProvider)
+    : fallback;
+}
+
+function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiProviderConfig>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const out: Partial<Record<AiProvider, AiProviderConfig>> = {};
+  for (const id of KNOWN_AI_PROVIDERS) {
+    const raw = value[id];
+    if (!isRecord(raw)) {
+      continue;
+    }
+    const config: AiProviderConfig = {};
+    if (typeof raw.baseUrl === 'string' && raw.baseUrl.trim()) {
+      config.baseUrl = raw.baseUrl;
+    }
+    if (typeof raw.defaultModel === 'string' && raw.defaultModel.trim()) {
+      config.defaultModel = raw.defaultModel;
+    }
+    if (typeof raw.cliPath === 'string' && raw.cliPath.trim()) {
+      config.cliPath = raw.cliPath;
+    }
+    if (Object.keys(config).length > 0) {
+      out[id] = config;
+    }
+  }
+  return out;
+}
+
 function readPriorityColors(value: unknown): Record<string, string> {
   if (!isRecord(value)) {
     return { ...DEFAULT_APP_SETTINGS.appearance.priorityColors };
@@ -268,9 +331,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         analysisGateEnabled: readBoolean(
           raw.ai.analysisGateEnabled,
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled
-        )
+        ),
+        activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider),
+        providers: readAiProviderConfigs(raw.ai.providers)
       }
-    : { ...DEFAULT_APP_SETTINGS.ai };
+    : { ...DEFAULT_APP_SETTINGS.ai, providers: { ...DEFAULT_APP_SETTINGS.ai.providers } };
 
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
     ? {
@@ -355,11 +420,32 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
   };
 }
 
+/** Merges per-provider config one level deep, so a patch touching one field of one provider doesn't drop its others. */
+function mergeAiProviderConfigs(
+  base: Partial<Record<AiProvider, AiProviderConfig>>,
+  patch: Partial<Record<AiProvider, AiProviderConfig>>
+): Partial<Record<AiProvider, AiProviderConfig>> {
+  const out: Partial<Record<AiProvider, AiProviderConfig>> = { ...base };
+  for (const id of KNOWN_AI_PROVIDERS) {
+    const patchConfig = patch[id];
+    if (patchConfig) {
+      out[id] = { ...base[id], ...patchConfig };
+    }
+  }
+  return out;
+}
+
 /** Deep-merge a patch over a base — returns a new object, never mutating inputs. */
 export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): AppSettings {
   const ai: AiSettings = {
     ...base.ai,
-    ...(patch.ai ?? {})
+    ...(patch.ai ?? {}),
+    providers: isRecord(patch.ai?.providers)
+      ? mergeAiProviderConfigs(
+          base.ai.providers,
+          patch.ai!.providers as Partial<Record<AiProvider, AiProviderConfig>>
+        )
+      : base.ai.providers
   };
 
   const jira: JiraSettings = {

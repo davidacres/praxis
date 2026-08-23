@@ -114,15 +114,15 @@ async function createBoardViaWizard(folderPath: string, boardName: string, proje
   await window.locator('[data-testid="uw-wizard-folder-input"]').fill(folderPath);
   await window.locator('[data-testid="uw-wizard-discover-btn"]').click();
 
-  // The fixture lays out exactly one plans root, so there is exactly one row
-  // to click. Discovery reads from the real filesystem, so the fixture dir
-  // must already exist on disk when the button is clicked.
-  const planRootRow = window.locator('[data-testid="uw-plan-root-row"]');
-  await expect(planRootRow).toHaveCount(1);
-  await planRootRow.click();
+  // The fixture lays out exactly one discoverable board candidate, so there
+  // is exactly one draft row to edit. Discovery reads from the real
+  // filesystem, so the fixture dir must already exist on disk when the
+  // button is clicked.
+  const draftRow = window.locator('[data-testid="uw-draft-row"]');
+  await expect(draftRow).toHaveCount(1);
 
-  await window.locator('[data-testid="uw-field-name"]').fill(boardName);
-  await window.locator('[data-testid="uw-field-projectKey"]').fill(projectKey);
+  await draftRow.locator('[data-testid="uw-draft-name"]').fill(boardName);
+  await draftRow.locator('[data-testid="uw-draft-projectKey"]').fill(projectKey);
   await window.locator('[data-testid="uw-wizard-submit-btn"]').click();
 
   // Wizard closes on success; the new board row appears under conn-boards.
@@ -172,11 +172,35 @@ test('discovering under a folder without plans folders shows the empty state', a
   await window.locator('[data-testid="uw-wizard-folder-input"]').fill(emptyDir);
   await window.locator('[data-testid="uw-wizard-discover-btn"]').click();
 
-  // No plans roots under an empty dir, so the empty state surfaces instead
-  // of any plan-root rows.
+  // No plans roots and no Git repositories under an empty dir, so the empty
+  // state surfaces instead of any draft rows.
   await expect(window.locator('[data-testid="uw-wizard-empty"]')).toBeVisible();
-  await expect(window.locator('[data-testid="uw-plan-root-row"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="uw-draft-row"]')).toHaveCount(0);
 
   await window.locator('[data-testid="uw-wizard-cancel-btn"]').click();
   await expect(window.locator('[data-testid="uw-wizard"]')).toHaveCount(0);
+});
+
+test('a Git repository with no plans content yet is still discoverable', async () => {
+  // Regression test: the wizard used to only scan for existing plans
+  // folders, so a brand-new repository with no features/ tree yet was
+  // invisible here even though the VS Code extension's "Find repositories"
+  // already found it via a separate .git scan.
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-uw-repo-'));
+  fs.mkdirSync(path.join(repoDir, '.git'), { recursive: true });
+
+  try {
+    await window.locator('[data-testid="nav-connections"]').click();
+    await window.locator('[data-testid="connection-row"]', { hasText: CONNECTION_NAME }).click();
+    await window.locator('[data-testid="uw-create-board-btn"]').click();
+
+    await window.locator('[data-testid="uw-wizard-folder-input"]').fill(repoDir);
+    await window.locator('[data-testid="uw-wizard-discover-btn"]').click();
+
+    const draftRow = window.locator('[data-testid="uw-draft-row"]');
+    await expect(draftRow).toHaveCount(1);
+    await expect(draftRow).not.toHaveClass(/already-added/);
+  } finally {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
 });

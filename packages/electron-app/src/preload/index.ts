@@ -4,17 +4,20 @@ import type {
   AgentWorkflowReference,
   AiAnalysisState,
   AiDelegateInput,
+  AiProvider,
   AiReviewProgress,
   AppSettings,
   AppSettingsPatch,
   Board,
   BoardColumnPreferences,
+  BoardDraftRow,
   BoardFilters,
   Connection,
   CreateBoardInput,
   CreateIssueInput,
   IssueFilters,
   ParentItemQueryOptions,
+  PermissionDecision,
   TaskDesignerPersistedState,
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode,
@@ -75,8 +78,10 @@ const ticketManager: TicketManagerIpc = {
       ipcRenderer.invoke('connection:hasSecret', connectionId, name)
   },
   userWorkspace: {
-    discoverPlans: (folderPath: string) =>
-      ipcRenderer.invoke('userWorkspace:discoverPlans', folderPath),
+    discoverBoardDrafts: (connectionId: string, folderPath: string) =>
+      ipcRenderer.invoke('userWorkspace:discoverBoardDrafts', connectionId, folderPath),
+    validateBoardDrafts: (connectionId: string, rows: BoardDraftRow[]) =>
+      ipcRenderer.invoke('userWorkspace:validateBoardDrafts', connectionId, rows),
     createBoard: (connectionId: string, input: CreateBoardInput) =>
       ipcRenderer.invoke('userWorkspace:createBoard', connectionId, input),
     deleteBoard: (connectionId: string, boardId: string) =>
@@ -132,9 +137,14 @@ const ticketManager: TicketManagerIpc = {
   ai: {
     getStatus: () => ipcRenderer.invoke('ai:getStatus'),
     setApiKey: (value: string) => ipcRenderer.invoke('ai:setApiKey', value),
+    listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
+    setProviderApiKey: (provider: AiProvider, value: string) =>
+      ipcRenderer.invoke('ai:setProviderApiKey', provider, value),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
+    respondToPermission: (issueKey: string, decision: PermissionDecision) =>
+      ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
     onSessionChanged: (listener: (record: AgentSessionRecord) => void) => {
       // Wrap so the raw IpcRendererEvent never crosses the context bridge.
       const handler = (_event: Electron.IpcRendererEvent, record: AgentSessionRecord) =>

@@ -167,6 +167,13 @@ textarea {
   user-select: none;
 }
 
+/* Clears the native traffic-light cluster (trafficLightPosition x:12 in the
+   main process, ~52px wide) so the sidebar-toggle group sits beside it
+   instead of underneath it. */
+.titlebar-mac {
+  padding-left: 78px;
+}
+
 .titlebar-group {
   display: flex;
   align-items: center;
@@ -1211,6 +1218,48 @@ textarea {
 .composer-chip:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+/* Provider picker dropdown. Rendered via a portal into `document.body`
+   (positioned inline as `fixed`, from the chip's `getBoundingClientRect()`)
+   rather than absolutely inside `.composer`, which clips overflow for its
+   rounded-card look and would otherwise cut the menu off. */
+.composer-provider-menu {
+  z-index: 40;
+  min-width: 220px;
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-panel);
+}
+
+.composer-provider-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-provider-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.composer-provider-option.active {
+  background: var(--bg-active);
+}
+
+.composer-provider-option:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
 }
 
 /* Send is a plain glyph in the reference, not a filled accent circle. */
@@ -2595,6 +2644,58 @@ button.detail-list-key:hover {
   white-space: nowrap;
 }
 
+.board-draft-list {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-y: auto;
+  max-height: 420px;
+}
+
+.board-draft-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 8px var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.board-draft-row:last-child {
+  border-bottom: none;
+}
+
+.board-draft-row.already-added {
+  opacity: 0.65;
+}
+
+.board-draft-info {
+  overflow: hidden;
+}
+
+.board-draft-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-draft-path {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-draft-badge {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .error-banner {
   margin-bottom: var(--space-2);
   color: var(--danger);
@@ -2793,6 +2894,41 @@ button.detail-list-key:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Blocking approval prompt — the agent is paused until Allow/Deny, so it
+   gets an accent border rather than the neutral `.composer-notice` look. */
+.session-permission-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  background: var(--bg-elevated);
+}
+
+.session-permission-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-permission-summary {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.session-permission-detail {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.session-permission-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
 }
 
 .session-events {

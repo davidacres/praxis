@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AgentSessionRecord, AiProviderStatus } from '@ticket-manager/core';
+import type { AgentEventSummary, AgentSessionRecord, AiProviderStatus, PermissionDecision } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import {
   agentEventIcon,
@@ -16,6 +16,19 @@ export interface SessionsPageProps {
   onSelect: (issueKey: string) => void;
   onNewSession: () => void;
   onOpenAiSettings: () => void;
+}
+
+/**
+ * The oldest still-unresolved `permission_requested` event — i.e. the next
+ * one `respondToPermission` will resolve (both hosts `.shift()` a FIFO
+ * queue). Neither host persists pending-permission detail on the session
+ * record itself, so this is derived from the event log instead of a
+ * separate fetch: everything after the last `permission_completed` event
+ * that hasn't been resolved yet.
+ */
+function pendingPermissionEvent(events: AgentEventSummary[]): AgentEventSummary | undefined {
+  const lastCompletedIndex = events.map(e => e.type).lastIndexOf('permission_completed');
+  return events.slice(lastCompletedIndex + 1).find(e => e.type === 'permission_requested');
 }
 
 function formatTime(iso: string): string {
@@ -50,6 +63,7 @@ export function SessionsPage({
   onOpenAiSettings
 }: SessionsPageProps) {
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
+  const [respondingTo, setRespondingTo] = useState<string | undefined>();
   const eventsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -161,6 +175,56 @@ export function SessionsPage({
                 </button>
               )}
             </div>
+
+            {selected.state === 'awaiting_approval' &&
+              (() => {
+                const pending = pendingPermissionEvent(selected.events);
+                if (!pending) {
+                  return null;
+                }
+                const respond = (decision: PermissionDecision) => {
+                  setRespondingTo(selected.issueKey);
+                  void window.ticketManager.ai
+                    .respondToPermission(selected.issueKey, decision)
+                    .finally(() => setRespondingTo(undefined));
+                };
+                const busy = respondingTo === selected.issueKey;
+                return (
+                  <div className="session-permission-card" data-testid="session-permission-card">
+                    <Icon name="shield" size={15} />
+                    <div className="session-permission-body">
+                      <div className="session-permission-summary">{pending.summary}</div>
+                      {pending.detail && <div className="session-permission-detail">{pending.detail}</div>}
+                    </div>
+                    <div className="session-permission-actions">
+                      <button
+                        className="btn"
+                        data-testid="session-permission-deny"
+                        disabled={busy}
+                        onClick={() => respond('deny')}
+                      >
+                        Deny
+                      </button>
+                      <button
+                        className="btn"
+                        data-testid="session-permission-allow-always"
+                        disabled={busy}
+                        onClick={() => respond('allow_always')}
+                      >
+                        Always allow
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        data-testid="session-permission-allow-once"
+                        disabled={busy}
+                        onClick={() => respond('allow_once')}
+                      >
+                        Allow
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
             <div className="session-events" ref={eventsRef} data-testid="session-events">
               {selected.events.length === 0 && (

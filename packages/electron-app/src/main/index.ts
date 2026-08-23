@@ -18,6 +18,8 @@ import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
 import { initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
+import { disposeAllServices } from './serviceRegistry';
+import { getAcpAgentHost } from './aiInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -139,4 +141,15 @@ app.on('window-all-closed', () => {
   if (!isMac) {
     app.quit();
   }
+});
+
+// Close any live-folder/user-workspace file watchers before the process
+// exits — an open chokidar watcher otherwise keeps the event loop alive and
+// hangs a graceful quit (see disposeAllServices' doc comment).
+app.on('before-quit', () => {
+  disposeAllServices();
+  // An ACP-hosted session's subprocess is a child of this process — leaving
+  // it running past quit is the exact same "process won't exit" hang as an
+  // unclosed chokidar watcher (see disposeAllServices' doc comment).
+  getAcpAgentHost().dispose();
 });

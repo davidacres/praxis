@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  AiProvider,
   AiProviderStatus,
   AppSettings,
   AppSettingsPatch,
@@ -55,7 +56,7 @@ const CATEGORIES: CategoryDef[] = [
     id: 'ai',
     label: 'AI Provider',
     icon: 'robot',
-    description: 'Vercel AI Gateway connection used to delegate issues to an AI agent.'
+    description: 'AI provider connections used to delegate issues to an AI agent.'
   },
   {
     id: 'performance',
@@ -374,6 +375,65 @@ function JiraSection({
  * it goes straight to the OS-keychain secrets store via `ai:setApiKey` and is
  * never read back over IPC; the status snapshot only reports the key source.
  */
+interface AiProviderMeta {
+  id: AiProvider;
+  kind: 'api' | 'cli-agent';
+  label: string;
+  keyLabel: string;
+  urlPlaceholder: string;
+  modelPlaceholder: string;
+  /** `kind: 'cli-agent'` only — default PATH-resolved executable name. */
+  defaultCommand?: string;
+}
+
+/** Display metadata for the settings UI — mirrors core's `PROVIDER_DESCRIPTORS`
+ *  (kept as a local literal, not imported: core drags in Node built-ins that
+ *  can't bundle into the renderer, same reason `settingsDefaults.ts` exists). */
+const AI_PROVIDERS: AiProviderMeta[] = [
+  {
+    id: 'vercel-gateway',
+    kind: 'api',
+    label: 'Vercel AI Gateway',
+    keyLabel: 'Vercel AI Gateway API key',
+    urlPlaceholder: 'https://ai-gateway.vercel.sh',
+    modelPlaceholder: 'e.g. anthropic/claude-sonnet-4.6'
+  },
+  {
+    id: 'openai',
+    kind: 'api',
+    label: 'OpenAI',
+    keyLabel: 'OpenAI API key',
+    urlPlaceholder: 'https://api.openai.com',
+    modelPlaceholder: 'e.g. gpt-4o-mini'
+  },
+  {
+    id: 'anthropic',
+    kind: 'api',
+    label: 'Anthropic',
+    keyLabel: 'Anthropic API key',
+    urlPlaceholder: 'https://api.anthropic.com',
+    modelPlaceholder: 'e.g. claude-sonnet-4-6'
+  },
+  {
+    id: 'claude-code-cli',
+    kind: 'cli-agent',
+    label: 'Claude Code (local)',
+    keyLabel: '',
+    urlPlaceholder: '',
+    modelPlaceholder: '',
+    defaultCommand: 'claude-agent-acp'
+  },
+  {
+    id: 'codex-cli',
+    kind: 'cli-agent',
+    label: 'Codex CLI (local)',
+    keyLabel: '',
+    urlPlaceholder: '',
+    modelPlaceholder: '',
+    defaultCommand: 'codex-acp'
+  }
+];
+
 function AiSection({
   settings,
   update
@@ -382,36 +442,34 @@ function AiSection({
   update: (patch: AppSettingsPatch) => Promise<void>;
 }) {
   const category = CATEGORIES.find(c => c.id === 'ai')!;
-  const [status, setStatus] = useState<AiProviderStatus | undefined>();
+  const [statuses, setStatuses] = useState<AiProviderStatus[]>([]);
+  const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  useEffect(() => {
-    let cancelled = false;
+  const reloadStatuses = () => {
     window.ticketManager.ai
-      .getStatus()
-      .then(next => {
-        if (!cancelled) {
-          setStatus(next);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      .listProviderStatuses()
+      .then(setStatuses)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+  };
+
+  useEffect(reloadStatuses, []);
+  useEffect(() => setKeyDraft(''), [selectedProviderId]);
+
+  const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
+  const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
+  const selectedConfig = settings.ai.providers[selectedProviderId] ?? {};
+  const isVercel = selectedProviderId === 'vercel-gateway';
+  const isApi = selectedMeta.kind === 'api';
 
   const applyKey = async (value: string) => {
     setBusy(true);
     setError(undefined);
     try {
-      const next = await window.ticketManager.ai.setApiKey(value);
-      setStatus(next);
+      await window.ticketManager.ai.setProviderApiKey(selectedProviderId, value);
+      reloadStatuses();
       setKeyDraft('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -420,85 +478,178 @@ function AiSection({
     }
   };
 
-  const statusText = !status
-    ? 'Checking…'
-    : status.configured
+  const statusText = (status: AiProviderStatus | undefined): string => {
+    if (!status) {
+      return 'Checking…';
+    }
+    if (status.keySource === 'none' && status.configured) {
+      // CLI-hosted providers: no API key, no "configured" gate — auth is the
+      // CLI's own (e.g. `claude login`), outside this app.
+      return `Runs "${status.gatewayUrl}" — sign in with the CLI's own auth if it asks.`;
+    }
+    return status.configured
       ? status.keySource === 'secret'
         ? 'Configured — API key stored in the OS keychain.'
         : 'Configured — API key resolved from the environment.'
       : 'Not configured — add an API key to enable AI sessions.';
+  };
+
+  const urlValue = isVercel ? settings.ai.gatewayUrl : selectedConfig.baseUrl ?? '';
+  const modelValue = isVercel ? settings.ai.defaultModel : selectedConfig.defaultModel ?? '';
+
+  const commitUrl = (value: string) =>
+    isVercel
+      ? update({ ai: { gatewayUrl: value } })
+      : update({
+          ai: {
+            providers: { [selectedProviderId]: { ...selectedConfig, baseUrl: value || undefined } }
+          }
+        });
+
+  const commitModel = (value: string) =>
+    isVercel
+      ? update({ ai: { defaultModel: value } })
+      : update({
+          ai: {
+            providers: {
+              [selectedProviderId]: { ...selectedConfig, defaultModel: value || undefined }
+            }
+          }
+        });
 
   return (
     <>
       <CategoryHeader category={category} />
       {error && <div className="error-banner">{error}</div>}
-      <div className="settings-list">
-        <div className="list-row">
-          <div>
-            <div className="list-row-title">Status</div>
-            <div className="list-row-meta" data-testid="ai-provider-status">
-              {statusText}
+
+      <div className="settings-list" data-testid="ai-provider-list">
+        {AI_PROVIDERS.map(meta => {
+          const rowStatus = statuses.find(s => s.provider === meta.id);
+          const isActive = settings.ai.activeProvider === meta.id;
+          const isSelected = selectedProviderId === meta.id;
+          return (
+            <div
+              key={meta.id}
+              className={`list-row${isSelected ? ' active' : ''}`}
+              role="button"
+              tabIndex={0}
+              data-testid={`ai-provider-row-${meta.id}`}
+              onClick={() => setSelectedProviderId(meta.id)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  setSelectedProviderId(meta.id);
+                }
+              }}
+            >
+              <div>
+                <div className="list-row-title">
+                  {meta.label}
+                  {isActive ? ' · Active' : ''}
+                </div>
+                <div
+                  className="list-row-meta"
+                  data-testid={isSelected ? 'ai-provider-status' : undefined}
+                >
+                  {statusText(rowStatus)}
+                </div>
+              </div>
+              <span className="spacer" />
+              <button
+                type="button"
+                className="btn btn-icon"
+                data-testid={`ai-provider-set-active-${meta.id}`}
+                aria-label={`Use ${meta.label} for new sessions`}
+                disabled={isActive}
+                onClick={event => {
+                  event.stopPropagation();
+                  void update({ ai: { activeProvider: meta.id } });
+                }}
+              >
+                <Icon name={isActive ? 'check' : 'dot'} size={13} />
+              </button>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
-      <FieldRow
-        label="API key"
-        description="Vercel AI Gateway key. Stored encrypted in the OS keychain; it is never shown again after saving."
-      >
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="password"
-            className="input"
-            data-testid="ai-api-key-input"
-            aria-label="Vercel AI Gateway API key"
-            placeholder={status?.configured ? '••••••••  (saved)' : 'Paste API key'}
-            value={keyDraft}
-            onChange={event => setKeyDraft(event.target.value)}
-            style={{ flex: 1 }}
+
+      {isApi && (
+        <>
+          <FieldRow
+            label="API key"
+            description={`${selectedMeta.keyLabel}. Stored encrypted in the OS keychain; it is never shown again after saving.`}
+          >
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                className="input"
+                data-testid="ai-api-key-input"
+                aria-label={selectedMeta.keyLabel}
+                placeholder={selectedStatus?.configured ? '••••••••  (saved)' : 'Paste API key'}
+                value={keyDraft}
+                onChange={event => setKeyDraft(event.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="ai-api-key-save"
+                disabled={busy || !keyDraft.trim()}
+                onClick={() => void applyKey(keyDraft)}
+              >
+                Save key
+              </button>
+              <button
+                type="button"
+                className="btn"
+                data-testid="ai-api-key-clear"
+                disabled={busy || !selectedStatus || selectedStatus.keySource !== 'secret'}
+                onClick={() => void applyKey('')}
+              >
+                Clear
+              </button>
+            </div>
+          </FieldRow>
+          <FieldRow
+            label={isVercel ? 'Gateway URL' : `${selectedMeta.label} base URL`}
+            description="Leave empty to use the default endpoint."
+          >
+            <DebouncedTextField
+              ariaLabel={isVercel ? 'AI gateway URL' : `${selectedMeta.label} base URL`}
+              value={urlValue}
+              onCommit={commitUrl}
+              placeholder={selectedStatus?.gatewayUrl ?? selectedMeta.urlPlaceholder}
+            />
+          </FieldRow>
+          <FieldRow
+            label={isVercel ? 'Default model' : `${selectedMeta.label} default model`}
+            description="Model id used for new agent sessions on this provider. Empty means the service default."
+          >
+            <DebouncedTextField
+              ariaLabel={isVercel ? 'AI default model' : `${selectedMeta.label} default model`}
+              value={modelValue}
+              onCommit={commitModel}
+              placeholder={selectedMeta.modelPlaceholder}
+            />
+          </FieldRow>
+        </>
+      )}
+      {!isApi && (
+        <FieldRow
+          label="CLI path"
+          description={`Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`}
+        >
+          <DebouncedTextField
+            ariaLabel={`${selectedMeta.label} CLI path`}
+            value={selectedConfig.cliPath ?? ''}
+            onCommit={value =>
+              update({
+                ai: { providers: { [selectedProviderId]: { ...selectedConfig, cliPath: value || undefined } } }
+              })
+            }
+            placeholder={selectedMeta.defaultCommand}
           />
-          <button
-            type="button"
-            className="btn btn-primary"
-            data-testid="ai-api-key-save"
-            disabled={busy || !keyDraft.trim()}
-            onClick={() => void applyKey(keyDraft)}
-          >
-            Save key
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-testid="ai-api-key-clear"
-            disabled={busy || !status || status.keySource !== 'secret'}
-            onClick={() => void applyKey('')}
-          >
-            Clear
-          </button>
-        </div>
-      </FieldRow>
-      <FieldRow
-        label="Gateway URL"
-        description="Leave empty to use the default Vercel AI Gateway endpoint."
-      >
-        <DebouncedTextField
-          ariaLabel="AI gateway URL"
-          value={settings.ai.gatewayUrl}
-          onCommit={value => update({ ai: { gatewayUrl: value } })}
-          placeholder={status?.gatewayUrl ?? 'https://ai-gateway.vercel.sh'}
-        />
-      </FieldRow>
-      <FieldRow
-        label="Default model"
-        description="Model id used for new agent sessions. Empty means the service default."
-      >
-        <DebouncedTextField
-          ariaLabel="AI default model"
-          value={settings.ai.defaultModel}
-          onCommit={value => update({ ai: { defaultModel: value } })}
-          placeholder="e.g. anthropic/claude-sonnet-4.6"
-        />
-      </FieldRow>
+        </FieldRow>
+      )}
       <FieldRow
         label="Agent display name"
         description="Used for agent attribution in comments and commits."

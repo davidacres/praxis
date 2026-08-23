@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Connection, IdentifiedPlanFolder } from '@ticket-manager/core';
+import type { BoardDraftRow, Connection } from '@ticket-manager/core';
 
 export interface CreateBoardWizardProps {
   connection: Connection;
@@ -13,10 +13,14 @@ export interface CreateBoardWizardProps {
 /**
  * Two-step "create board" wizard for a User Workspace connection.
  *
- * Step 1 — pick a folder containing plans roots and discover them via the
- * main-process scanner.
- * Step 2 — once at least one plans root is identified, choose one and fill in
- * the board/project metadata, then write the new board through the IPC.
+ * Step 1 — pick a parent folder and discover board candidates under it via
+ * the main-process scanner. Matches the VS Code extension's "Find
+ * repositories" behavior: every Git repository root becomes a row (even a
+ * brand-new repo with no plans content yet), with any bare plans-only
+ * folders as a fallback when no repositories are found.
+ * Step 2 — edit the auto-suggested name/project key/project name per row
+ * (already-added boards are shown but locked) and create every new row in
+ * one batch.
  *
  * Single component, single root with the `conn-form` shell so the wizard and
  * the existing picker share the same layout idiom (view header + body).
@@ -24,12 +28,9 @@ export interface CreateBoardWizardProps {
 export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps) {
   const [folderPath, setFolderPath] = useState('');
   const [discovering, setDiscovering] = useState(false);
-  const [plansRoots, setPlansRoots] = useState<IdentifiedPlanFolder[]>([]);
-  const [selectedRootPath, setSelectedRootPath] = useState<string | undefined>();
+  const [drafts, setDrafts] = useState<BoardDraftRow[]>([]);
+  const [step, setStep] = useState<'folder' | 'details'>('folder');
   const [emptyDiscovery, setEmptyDiscovery] = useState(false);
-  const [name, setName] = useState('');
-  const [projectKey, setProjectKey] = useState('');
-  const [projectName, setProjectName] = useState('');
   const [error, setError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,14 +40,15 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     }
     setDiscovering(true);
     setError(undefined);
-    setPlansRoots([]);
-    setSelectedRootPath(undefined);
     setEmptyDiscovery(false);
     try {
-      const found = await window.ticketManager.userWorkspace.discoverPlans(path);
-      setPlansRoots(found);
+      const found = await window.ticketManager.userWorkspace.discoverBoardDrafts(connection.id, path);
+      setDrafts(found);
       if (found.length === 0) {
         setEmptyDiscovery(true);
+        setStep('folder');
+      } else {
+        setStep('details');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -63,19 +65,37 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     }
   };
 
+  const updateDraft = (index: number, field: 'name' | 'projectKey' | 'projectName', value: string) => {
+    setDrafts(current =>
+      current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row))
+    );
+  };
+
+  const newCount = drafts.filter(row => !row.alreadyAdded).length;
+
   const onSubmit = async () => {
-    if (!selectedRootPath) {
+    const validationError = await window.ticketManager.userWorkspace.validateBoardDrafts(
+      connection.id,
+      drafts
+    );
+    if (validationError) {
+      setError(validationError);
       return;
     }
     setSubmitting(true);
     setError(undefined);
     try {
-      await window.ticketManager.userWorkspace.createBoard(connection.id, {
-        name: name.trim(),
-        projectKey: projectKey.trim(),
-        projectName: projectName.trim() || undefined,
-        liveFolderPath: selectedRootPath
-      });
+      for (const draft of drafts) {
+        if (draft.alreadyAdded) {
+          continue;
+        }
+        await window.ticketManager.userWorkspace.createBoard(connection.id, {
+          name: draft.name.trim(),
+          projectKey: draft.projectKey.trim(),
+          projectName: draft.projectName.trim() || undefined,
+          liveFolderPath: draft.liveFolderPath
+        });
+      }
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -84,23 +104,24 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     }
   };
 
-  const submitDisabled =
-    submitting || !name.trim() || !projectKey.trim() || !selectedRootPath;
+  const submitDisabled = submitting || newCount === 0;
 
   return (
     <div className="conn-form" data-testid="uw-wizard">
       <header className="view-header">
         <span className="view-title">Create board — {connection.name}</span>
         <span className="spacer" />
-        <button
-          type="button"
-          className="btn btn-primary"
-          data-testid="uw-wizard-submit-btn"
-          disabled={submitDisabled}
-          onClick={() => void onSubmit()}
-        >
-          {submitting ? 'Creating…' : 'Create board'}
-        </button>
+        {step === 'details' && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="uw-wizard-submit-btn"
+            disabled={submitDisabled}
+            onClick={() => void onSubmit()}
+          >
+            {submitting ? 'Creating…' : `Create ${newCount} board${newCount === 1 ? '' : 's'}`}
+          </button>
+        )}
         <button
           type="button"
           className="btn"
@@ -118,100 +139,113 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
           </div>
         )}
 
-        <div className="form-row">
-          <input
-            className="input"
-            type="text"
-            data-testid="uw-wizard-folder-input"
-            placeholder={'C:\\path\\to\\plans-parent'}
-            value={folderPath}
-            onChange={event => setFolderPath(event.target.value)}
-          />
-          <button
-            type="button"
-            className="btn"
-            data-testid="uw-wizard-pick-folder-btn"
-            onClick={() => void onBrowse()}
-          >
-            Browse…
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-testid="uw-wizard-discover-btn"
-            disabled={discovering}
-            onClick={() => void runDiscover(folderPath)}
-          >
-            {discovering ? 'Discovering…' : 'Discover plans'}
-          </button>
-        </div>
-
-        {discovering && (
-          <p className="placeholder-text" data-testid="uw-wizard-loading">
-            Scanning for plans folders…
-          </p>
-        )}
-
-        {!discovering && emptyDiscovery && (
-          <p className="placeholder-text" data-testid="uw-wizard-empty">
-            No plans folders found under that folder.
-          </p>
-        )}
-
-        {!discovering && plansRoots.length > 0 && (
+        {step === 'folder' && (
           <>
-            <div className="board-picker-list">
-              {plansRoots.map(root => (
-                <label
-                  key={root.plansRootPath}
-                  className="board-picker-row"
-                  data-testid="uw-plan-root-row"
+            <p className="placeholder-text">
+              Choose a parent folder. Every Git repository found below it becomes a board (a
+              brand-new repo with no plans yet is fine); plans-only folders are used as a fallback
+              when no repositories are found. Nothing is written to your repositories until you
+              create the boards.
+            </p>
+            <div className="form-row">
+              <input
+                className="input"
+                type="text"
+                data-testid="uw-wizard-folder-input"
+                placeholder={'C:\\path\\to\\plans-parent'}
+                value={folderPath}
+                onChange={event => setFolderPath(event.target.value)}
+              />
+              <button
+                type="button"
+                className="btn"
+                data-testid="uw-wizard-pick-folder-btn"
+                onClick={() => void onBrowse()}
+              >
+                Browse…
+              </button>
+              <button
+                type="button"
+                className="btn"
+                data-testid="uw-wizard-discover-btn"
+                disabled={discovering}
+                onClick={() => void runDiscover(folderPath)}
+              >
+                {discovering ? 'Finding…' : 'Find repositories'}
+              </button>
+            </div>
+
+            {discovering && (
+              <p className="placeholder-text" data-testid="uw-wizard-loading">
+                Searching for repositories and plans folders…
+              </p>
+            )}
+
+            {!discovering && emptyDiscovery && (
+              <p className="placeholder-text" data-testid="uw-wizard-empty">
+                No repositories or plans folders found under that folder.
+              </p>
+            )}
+          </>
+        )}
+
+        {step === 'details' && (
+          <>
+            <p className="placeholder-text">
+              Edit the board details below. Existing boards are shown but locked — they won't be
+              created again.
+            </p>
+            <div className="board-draft-list">
+              {drafts.map((row, index) => (
+                <div
+                  key={row.repositoryRootPath}
+                  className={`board-draft-row${row.alreadyAdded ? ' already-added' : ''}`}
+                  data-testid="uw-draft-row"
                 >
+                  <div className="board-draft-info">
+                    <div className="board-draft-name">{row.repositoryName}</div>
+                    <div className="board-draft-path">{row.liveFolderPath}</div>
+                    {row.alreadyAdded && <span className="board-draft-badge">Already added</span>}
+                  </div>
                   <input
-                    type="radio"
-                    name="uw-plan-root"
-                    checked={selectedRootPath === root.plansRootPath}
-                    onChange={() => setSelectedRootPath(root.plansRootPath)}
+                    className="input"
+                    type="text"
+                    aria-label="Project code"
+                    data-testid="uw-draft-projectKey"
+                    value={row.projectKey}
+                    disabled={row.alreadyAdded}
+                    onChange={event => updateDraft(index, 'projectKey', event.target.value)}
                   />
-                  <span className="board-picker-name">{root.plansRootPath}</span>
-                  <span className="board-picker-id">
-                    {root.featureEntries.length} features
-                  </span>
-                </label>
+                  <input
+                    className="input"
+                    type="text"
+                    aria-label="Project name"
+                    data-testid="uw-draft-projectName"
+                    value={row.projectName}
+                    disabled={row.alreadyAdded}
+                    onChange={event => updateDraft(index, 'projectName', event.target.value)}
+                  />
+                  <input
+                    className="input"
+                    type="text"
+                    aria-label="Board name"
+                    data-testid="uw-draft-name"
+                    value={row.name}
+                    disabled={row.alreadyAdded}
+                    onChange={event => updateDraft(index, 'name', event.target.value)}
+                  />
+                </div>
               ))}
             </div>
-
             <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                data-testid="uw-field-name"
-                placeholder="Board name"
-                value={name}
-                onChange={event => setName(event.target.value)}
-              />
-            </div>
-
-            <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                data-testid="uw-field-projectKey"
-                placeholder="PROJ"
-                value={projectKey}
-                onChange={event => setProjectKey(event.target.value)}
-              />
-            </div>
-
-            <div className="form-row">
-              <input
-                className="input"
-                type="text"
-                data-testid="uw-field-projectName"
-                placeholder="Project name (optional)"
-                value={projectName}
-                onChange={event => setProjectName(event.target.value)}
-              />
+              <button
+                type="button"
+                className="btn"
+                data-testid="uw-wizard-back-btn"
+                onClick={() => setStep('folder')}
+              >
+                Back
+              </button>
             </div>
           </>
         )}
