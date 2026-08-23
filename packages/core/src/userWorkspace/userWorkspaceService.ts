@@ -391,10 +391,23 @@ export class UserWorkspaceService implements IssueTrackerService {
   }
 
   private async collectIssues(filters: IssueFilters): Promise<IssueSummary[]> {
+    // Every workspace board lives in the same store and can share a project
+    // key, so a board-scoped query must collect only from that board's
+    // service — aggregating all boards would leak sibling boards' issues in.
+    const definitions = filters.boardId
+      ? this.userWorkspaceStore.getBoards().filter(board => board.id === filters.boardId)
+      : this.userWorkspaceStore.getBoards();
     const issueLists = await Promise.all(
-      this.userWorkspaceStore.getBoards().map(async definition => {
+      definitions.map(async definition => {
         const service = this.getOrCreateBoardService(definition);
-        const result = await service.getIssues(filters, 0, Number.MAX_SAFE_INTEGER);
+        // Strip boardId before delegating: the inner LiveFolderService keys its
+        // own root board as `livefolder-<projectKey>`, not the workspace board
+        // id, so passing it through would filter everything out.
+        const result = await service.getIssues(
+          { ...filters, boardId: undefined },
+          0,
+          Number.MAX_SAFE_INTEGER
+        );
         return result.issues;
       })
     );

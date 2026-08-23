@@ -142,3 +142,132 @@ test('live folder without allowIssueCreation shows a disabled create button with
     fs.rmSync(liveFolderDir, { recursive: true, force: true });
   }
 });
+
+test('the New idea button is hidden unless the preview setting is enabled', async () => {
+  app = await launchTestApp();
+  window = app.window;
+
+  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await expect(window.locator('[data-testid="board-new-issue-btn"]')).toBeVisible();
+  await expect(window.locator('[data-testid="board-new-idea-btn"]')).toHaveCount(0);
+});
+
+test('New idea opens the create form preset to Idea with the research transcript field', async () => {
+  app = await launchTestApp({ preview: { enableCreateIdea: true } });
+  window = app.window;
+
+  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await window.locator('[data-testid="board-new-idea-btn"]').click();
+  await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
+
+  // Type is pre-selected and the idea-only field is on the form.
+  await expect(window.locator('[data-testid="new-issue-type"]')).toHaveValue('Idea');
+  await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toBeVisible();
+
+  // Switching away from Idea hides the transcript field; switching back restores it.
+  await window.locator('[data-testid="new-issue-type"]').selectOption('Task');
+  await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toHaveCount(0);
+  await window.locator('[data-testid="new-issue-type"]').selectOption('Idea');
+  await expect(window.locator('[data-testid="new-issue-idea-transcript"]')).toBeVisible();
+
+  const summary = `e2e idea ${Date.now()}`;
+  await window.locator('[data-testid="new-issue-summary"]').fill(summary);
+  await window.locator('[data-testid="new-issue-idea-transcript"]').fill('Research notes from the agent.');
+  await window.locator('[data-testid="new-issue-submit"]').click();
+
+  await expect(window.locator('[data-testid="issue-card"]', { hasText: summary })).toBeVisible();
+  await expect(window.locator('[data-testid="new-issue-error"]')).toHaveCount(0);
+});
+
+test('creating a live folder idea writes the research transcript into the markdown', async () => {
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-newidea-'));
+  try {
+    writeFixtureLiveFolder(liveFolderDir);
+    app = await launchTestApp({
+      preview: { enableCreateIdea: true },
+      connections: [
+        {
+          id: 'e2e-live-idea',
+          name: 'e2e-livefolder-idea',
+          mode: 'livefolder',
+          settings: {
+            path: liveFolderDir,
+            projectKey: 'LIVE',
+            projectName: 'Live E2E',
+            allowIssueCreation: true
+          }
+        }
+      ]
+    });
+    window = app.window;
+    await window.locator('[data-testid="nav-board"]').click();
+    await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+
+    await window.locator('[data-testid="board-new-idea-btn"]').click();
+    await expect(window.locator('[data-testid="new-issue-type"]')).toHaveValue('Idea');
+
+    // Live folder ideas must still belong to a Feature — pick the fixture's.
+    const parentOptions = window.locator('#new-issue-parent-options option');
+    await expect(parentOptions).toHaveCount(1);
+    const parentValue = await parentOptions.first().getAttribute('value');
+    expect(parentValue).toBeTruthy();
+    await window.locator('[data-testid="new-issue-parent"]').fill(parentValue!);
+
+    const summary = `e2e live idea ${Date.now()}`;
+    await window.locator('[data-testid="new-issue-summary"]').fill(summary);
+    await window.locator('[data-testid="new-issue-idea-transcript"]').fill('Transcript: idea research log.');
+    await window.locator('[data-testid="new-issue-submit"]').click();
+
+    await expect(window.locator('[data-testid="issue-card"]', { hasText: summary })).toBeVisible();
+
+    // The backend writes idea-<seq>-<slug>.md under the feature folder with a
+    // Research Transcript section carrying the form's transcript.
+    const featureDir = path.join(liveFolderDir, 'features', 'feature-01-demo-feature');
+    const ideaFiles = () => fs.readdirSync(featureDir).filter(name => name.startsWith('idea-'));
+    await expect.poll(ideaFiles).toHaveLength(1);
+    const content = fs.readFileSync(path.join(featureDir, ideaFiles()[0]), 'utf-8');
+    expect(content).toContain('**Type:** Idea');
+    expect(content).toContain(summary);
+    expect(content).toContain('## Research Transcript');
+    expect(content).toContain('Transcript: idea research log.');
+  } finally {
+    fs.rmSync(liveFolderDir, { recursive: true, force: true });
+  }
+});
+
+test('the demo board offers Subtask with a required story/task/bug parent', async () => {
+  app = await launchTestApp();
+  window = app.window;
+
+  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await window.locator('[data-testid="board-new-issue-btn"]').click();
+  await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
+
+  // Subtask is one of the demo mode's creatable types.
+  await window.locator('[data-testid="new-issue-type"]').selectOption('Subtask');
+  const parentField = window.locator('[data-testid="new-issue-parent"]');
+  await expect(parentField).toBeVisible();
+  await expect(parentField).toHaveAttribute('placeholder', 'Enter a parent issue key');
+
+  // The parent is mandatory for subtasks.
+  await window.locator('[data-testid="new-issue-summary"]').fill(`e2e subtask ${Date.now()}`);
+  await window.locator('[data-testid="new-issue-submit"]').click();
+  await expect(window.locator('[data-testid="new-issue-error"]')).toHaveText(
+    'Parent is required for Subtask items.'
+  );
+
+  // The datalist offers the demo board's stories/tasks/bugs as parents.
+  // (datalist options are never "visible" — wait for them by count.)
+  const parentOptions = window.locator('#new-issue-parent-options option');
+  await expect.poll(() => parentOptions.count()).toBeGreaterThan(0);
+  const parentValue = await parentOptions.first().getAttribute('value');
+  expect(parentValue).toBeTruthy();
+  await parentField.fill(parentValue!);
+
+  const summary = `e2e subtask ${Date.now()}`;
+  await window.locator('[data-testid="new-issue-summary"]').fill(summary);
+  await window.locator('[data-testid="new-issue-submit"]').click();
+
+  await expect(window.locator('[data-testid="issue-card"]', { hasText: summary })).toBeVisible();
+  await expect(window.locator('[data-testid="new-issue-error"]')).toHaveCount(0);
+});

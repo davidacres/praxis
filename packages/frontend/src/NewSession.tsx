@@ -5,7 +5,8 @@ export interface NewSessionProps {
   workspaceName: string;
   agentName: string;
   branchName: string;
-  onSubmit: (goal: string) => void;
+  /** Starts the session; rejects (e.g. provider not configured) surface inline. */
+  onSubmit: (goal: string) => Promise<void>;
   /**
    * Number of configured tracker connections. Zero means every board on screen
    * comes from the built-in demo backend, which is worth saying out loud before
@@ -30,15 +31,25 @@ export function NewSession({
 }: NewSessionProps) {
   const [goal, setGoal] = useState('');
   const [dismissed, setDismissed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | undefined>();
   const noticeVisible = connectionCount === 0 && !dismissed;
 
-  const submit = () => {
+  const submit = async () => {
     const trimmed = goal.trim();
-    if (!trimmed) {
+    if (!trimmed || submitting) {
       return;
     }
-    onSubmit(trimmed);
-    setGoal('');
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await onSubmit(trimmed);
+      setGoal('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -60,6 +71,12 @@ export function NewSession({
         </h1>
 
         <div className="composer">
+          {error && (
+            <div className="error-banner" data-testid="new-session-error" style={{ margin: '8px 12px 0' }}>
+              {error}
+            </div>
+          )}
+
           {noticeVisible && (
             <div className="composer-notice" role="status">
               <span className="composer-notice-icon">
@@ -94,7 +111,7 @@ export function NewSession({
             onKeyDown={event => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
-                submit();
+                void submit();
               }
             }}
           />
@@ -118,8 +135,9 @@ export function NewSession({
             <button
               className="composer-send"
               aria-label="Start session"
-              disabled={!goal.trim()}
-              onClick={submit}
+              data-testid="new-session-submit"
+              disabled={!goal.trim() || submitting}
+              onClick={() => void submit()}
             >
               <Icon name="arrow-up" size={15} />
             </button>

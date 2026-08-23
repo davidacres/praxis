@@ -54,6 +54,12 @@ export interface DeliverySettings {
   defaultBaseBranch: string;
   /** When true (default), completed sub-task branches merge automatically into the feature branch. */
   autoMergeSubTasks: boolean;
+  /** Master switch for the delivery workflow — the run action validates this first. */
+  enabled: boolean;
+  /** Repo-specific publish command the delivery agent must run (e.g. the MSI publish script). */
+  publishCommand: string;
+  /** Artifact path or glob the delivery agent must identify after publishing. */
+  artifactPattern: string;
 }
 
 export interface McpServerSettings {
@@ -61,6 +67,24 @@ export interface McpServerSettings {
   workspaceServerName: string;
   /** User/profile MCP server reference to use when workspace MCP isn't selected. */
   userServerRef: string;
+}
+
+export interface AiSettings {
+  /** Vercel AI Gateway base URL. Empty means default / env fallback. */
+  gatewayUrl: string;
+  /** Default model id (e.g. 'anthropic/claude-sonnet-4.6'). Empty means the service default. */
+  defaultModel: string;
+  /** Display name used for agent attribution (comments, commits). */
+  agentName: string;
+  /**
+   * Default working directory for agent sessions (tool sandbox root, workflow-pack
+   * discovery, delivery runs). Empty means the app's own directory.
+   */
+  workingDirectory: string;
+  /** System prompt for issue analysis runs. Empty disables the analysis action. */
+  analysisPrompt: string;
+  /** When true, an issue must have a confirmed analysis before it can be delegated. */
+  analysisGateEnabled: boolean;
 }
 
 export interface PreviewSettings {
@@ -89,6 +113,7 @@ export interface AppearanceSettings {
 
 /** Top-level settings shape — one nested object per Settings-page category. */
 export interface AppSettings {
+  ai: AiSettings;
   jira: JiraSettings;
   performance: PerformanceSettings;
   delivery: DeliverySettings;
@@ -99,6 +124,14 @@ export interface AppSettings {
 
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
+  ai: {
+    gatewayUrl: '',
+    defaultModel: '',
+    agentName: '',
+    workingDirectory: '',
+    analysisPrompt: '',
+    analysisGateEnabled: false
+  },
   jira: {
     siteUrl: '',
     defaultProjectKey: '',
@@ -113,7 +146,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   delivery: {
     defaultBaseBranch: '',
-    autoMergeSubTasks: true
+    autoMergeSubTasks: true,
+    enabled: false,
+    publishCommand: '',
+    artifactPattern: ''
   },
   mcpServer: {
     workspaceServerName: '',
@@ -143,6 +179,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
+  ai?: Partial<AiSettings>;
   jira?: Partial<JiraSettings>;
   performance?: Partial<PerformanceSettings>;
   delivery?: Partial<DeliverySettings>;
@@ -221,6 +258,20 @@ function readPriorityColors(value: unknown): Record<string, string> {
  * or an empty record on first launch; nothing throws.
  */
 export function sanitizeAppSettings(raw: unknown): AppSettings {
+  const ai: AiSettings = isRecord(raw) && isRecord(raw.ai)
+    ? {
+        gatewayUrl: readString(raw.ai.gatewayUrl, DEFAULT_APP_SETTINGS.ai.gatewayUrl),
+        defaultModel: readString(raw.ai.defaultModel, DEFAULT_APP_SETTINGS.ai.defaultModel),
+        agentName: readString(raw.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName),
+        workingDirectory: readString(raw.ai.workingDirectory, DEFAULT_APP_SETTINGS.ai.workingDirectory),
+        analysisPrompt: readString(raw.ai.analysisPrompt, DEFAULT_APP_SETTINGS.ai.analysisPrompt),
+        analysisGateEnabled: readBoolean(
+          raw.ai.analysisGateEnabled,
+          DEFAULT_APP_SETTINGS.ai.analysisGateEnabled
+        )
+      }
+    : { ...DEFAULT_APP_SETTINGS.ai };
+
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
     ? {
         siteUrl: readString(raw.jira.siteUrl, DEFAULT_APP_SETTINGS.jira.siteUrl),
@@ -252,7 +303,10 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
   const delivery: DeliverySettings = isRecord(raw) && isRecord(raw.delivery)
     ? {
         defaultBaseBranch: readString(raw.delivery.defaultBaseBranch, DEFAULT_APP_SETTINGS.delivery.defaultBaseBranch),
-        autoMergeSubTasks: readBoolean(raw.delivery.autoMergeSubTasks, DEFAULT_APP_SETTINGS.delivery.autoMergeSubTasks)
+        autoMergeSubTasks: readBoolean(raw.delivery.autoMergeSubTasks, DEFAULT_APP_SETTINGS.delivery.autoMergeSubTasks),
+        enabled: readBoolean(raw.delivery.enabled, DEFAULT_APP_SETTINGS.delivery.enabled),
+        publishCommand: readString(raw.delivery.publishCommand, DEFAULT_APP_SETTINGS.delivery.publishCommand),
+        artifactPattern: readString(raw.delivery.artifactPattern, DEFAULT_APP_SETTINGS.delivery.artifactPattern)
       }
     : { ...DEFAULT_APP_SETTINGS.delivery };
 
@@ -291,6 +345,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       };
 
   return {
+    ai,
     jira,
     performance,
     delivery,
@@ -302,6 +357,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
 
 /** Deep-merge a patch over a base — returns a new object, never mutating inputs. */
 export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): AppSettings {
+  const ai: AiSettings = {
+    ...base.ai,
+    ...(patch.ai ?? {})
+  };
+
   const jira: JiraSettings = {
     ...base.jira,
     ...(patch.jira ?? {})
@@ -335,6 +395,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   };
 
   return {
+    ai,
     jira,
     performance,
     delivery,

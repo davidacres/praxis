@@ -11,6 +11,7 @@ import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { ConnectionStore } from './config/connectionStore';
+import { VsCodeMementoStore } from './adapters/vsCodeMementoStore';
 import { VsCodeSettingsStore } from './adapters/vsCodeSettingsStore';
 import { VsCodeSecretsStore } from './adapters/vsCodeSecretsStore';
 import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
@@ -973,7 +974,7 @@ export async function activate(
   configStore.bindExtensionSecrets(context.secrets);
   await configStore.refreshVercelApiKeyCache();
   await configStore.migrateAiProviderSettings();
-  const aiSessionManager = new AiSessionManager(context.workspaceState);
+  const aiSessionManager = new AiSessionManager(new VsCodeMementoStore(context.workspaceState));
   const connectionStore = new ConnectionStore(
     new VsCodeSettingsStore('ticketManager'),
     new VsCodeSecretsStore(context.secrets)

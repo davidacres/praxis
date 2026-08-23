@@ -49,6 +49,11 @@ export const PRIORITY_NAMES: readonly string[] = [
 
 /** Defaults for the runtime Settings shape — keep in sync with `DEFAULT_APP_SETTINGS` in core. */
 export const DEFAULT_APP_SETTINGS = {
+  ai: {
+    gatewayUrl: '',
+    defaultModel: '',
+    agentName: ''
+  },
   jira: {
     siteUrl: '',
     defaultProjectKey: '',

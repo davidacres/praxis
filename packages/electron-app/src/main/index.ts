@@ -7,6 +7,13 @@ import { registerUserWorkspaceIpc } from './userWorkspaceIpc';
 import { registerLiveFolderIpc } from './liveFolderIpc';
 import { registerDialogIpc } from './dialogIpc';
 import { registerSettingsIpc } from './settingsIpc';
+import { registerLogIpc } from './logIpc';
+import { getLogBus } from './logBusInstance';
+import { registerShellIpc } from './shellIpc';
+import { registerBoardPrefsIpc } from './boardPrefsIpc';
+import { registerAiIpc } from './aiIpc';
+import { registerAiWorkflowIpc } from './aiWorkflowIpc';
+import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
 import { initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
@@ -110,6 +117,15 @@ void app.whenReady().then(async () => {
   registerDialogIpc();
   registerWindowIpc();
   registerSettingsIpc();
+  registerLogIpc();
+  registerShellIpc();
+  registerBoardPrefsIpc();
+  registerAiIpc();
+  registerAiWorkflowIpc();
+  registerTaskDesignerIpc();
+  // Seed the Output panel with a launch marker — also gives e2e a
+  // deterministic first line to assert against.
+  getLogBus().appendLine(`[app] Ticket Manager ${app.getVersion()} started`);
   createMainWindow();
 
   app.on('activate', () => {

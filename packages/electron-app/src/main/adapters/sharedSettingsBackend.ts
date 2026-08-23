@@ -25,6 +25,8 @@ export class SharedSettingsBackend implements SettingsBackend {
   private suppressUntil = 0;
   private debounceTimer: NodeJS.Timeout | undefined;
   private disposed = false;
+  /** Serializes disk writes so two in-flight `write`s can't rename over each other. */
+  private persistQueue: Promise<void> = Promise.resolve();
 
   public constructor(filePath?: string) {
     this.filePath = filePath
@@ -43,10 +45,14 @@ export class SharedSettingsBackend implements SettingsBackend {
   }
 
   public async write(patch: AppSettingsPatch): Promise<AppSettings> {
+    // Merge and assign `current` synchronously: with the old order (assign after
+    // `await persist`), two overlapping writes both merged over the stale base
+    // and the slower write clobbered the faster one's fields on disk.
     const merged = mergeAppSettings(this.current, patch);
     const sanitized = sanitizeAppSettings(merged);
-    await this.persist(sanitized);
     this.current = sanitized;
+    this.persistQueue = this.persistQueue.then(() => this.persist(sanitized));
+    await this.persistQueue;
     // Suppress the imminent watcher event echoing back from disk.
     this.suppressUntil = Date.now() + 500;
     this.onDidChangeEmitter.fire(sanitized);

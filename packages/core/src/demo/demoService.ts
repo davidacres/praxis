@@ -14,7 +14,9 @@ import type {
   IssueFilters,
   ParentIssueReference,
   ParentItemQueryOptions,
+  LinkedIssueReference,
   IssueSummary,
+  SubTaskSummary,
   PagedIssues,
   Project,
   UpdateBoardInput,
@@ -61,6 +63,9 @@ interface DemoIssue {
   parent?: string;
   comments: DemoComment[];
   failTransition?: boolean;
+  subTasks?: SubTaskSummary[];
+  linkedIssues?: LinkedIssueReference[];
+  attachments?: IssueAttachment[];
 }
 
 interface DemoBoard {
@@ -111,6 +116,37 @@ function transitionSet(status: string): WorkflowTransition[] {
   }
 }
 
+/**
+ * Bulk filler issues on the Application Board so the board view's load-more
+ * paging has a second page to fetch (the demo page size is 25). Their
+ * created/updated dates predate the hand-written seeds so APP-101..103 stay at
+ * the top of the updated-descending sort.
+ */
+const BULK_SEED_KEYS = Array.from({ length: 30 }, (_, index) => `APP-${201 + index}`);
+
+function createBulkSeedIssues(): DemoIssue[] {
+  const statuses = ['To Do', 'In Progress', 'Done', 'Backlog', 'Blocked'];
+  return BULK_SEED_KEYS.map((key, index) => {
+    const mine = index % 2 === 0;
+    return {
+      id: `demo-bulk-${index + 1}`,
+      key,
+      summary: `Sprint backlog item ${index + 1}`,
+      status: statuses[index % statuses.length],
+      issueType: 'Task',
+      projectKey: 'APP',
+      projectName: 'Application Platform',
+      assigneeKind: mine ? ('me' as const) : ('other' as const),
+      assigneeDisplayName: mine ? 'Alex Agent' : 'Jordan Builder',
+      priority: 'Medium',
+      created: '2026-03-20T09:00:00.000Z',
+      updated: `2026-03-21T${String(9 + (index % 10)).padStart(2, '0')}:00:00.000Z`,
+      description: `Generated demo issue ${index + 1} so paging and filtering have data to chew on.`,
+      comments: []
+    };
+  });
+}
+
 function createSeedIssues(): DemoIssue[] {
   return [
     {
@@ -135,6 +171,62 @@ function createSeedIssues(): DemoIssue[] {
           created: '2026-03-27T20:05:00.000Z',
           updated: '2026-03-27T20:05:00.000Z'
         }
+      ],
+      subTasks: [
+        {
+          key: 'APP-101',
+          summary: 'Implement dependency-injected backend router',
+          status: 'To Do',
+          statusCategory: 'todo',
+          issueType: 'Story',
+          assignee: 'Alex Agent'
+        },
+        {
+          key: 'APP-102',
+          summary: 'Wire demo provider into the extension',
+          status: 'In Progress',
+          statusCategory: 'indeterminate',
+          issueType: 'Task',
+          assignee: 'Jordan Builder'
+        },
+        {
+          key: 'APP-103',
+          summary: 'Simulate workflow validation edge case',
+          status: 'Blocked',
+          statusCategory: 'indeterminate',
+          issueType: 'Bug',
+          assignee: 'Alex Agent'
+        }
+      ],
+      linkedIssues: [
+        {
+          key: 'OPS-200',
+          summary: 'Triage production incident',
+          status: 'To Do',
+          relationship: 'relates to',
+          browseUrl: 'https://example.com/ticket-manager-demo/OPS-200'
+        }
+      ],
+      attachments: [
+        {
+          id: 'demo-att-1',
+          fileName: 'platform-design-notes.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 248_400,
+          contentUrl: 'https://example.com/ticket-manager-demo/attachments/platform-design-notes.pdf',
+          created: '2026-03-27T19:45:00.000Z',
+          author: 'Alex Agent'
+        },
+        {
+          id: 'demo-att-2',
+          fileName: 'current-state-screenshot.png',
+          mimeType: 'image/png',
+          sizeBytes: 86_100,
+          contentUrl: 'https://example.com/ticket-manager-demo/attachments/current-state-screenshot.png',
+          thumbnailUrl: 'https://example.com/ticket-manager-demo/attachments/current-state-screenshot.png',
+          created: '2026-03-27T20:10:00.000Z',
+          author: 'Jordan Builder'
+        }
       ]
     },
     {
@@ -152,7 +244,16 @@ function createSeedIssues(): DemoIssue[] {
       updated: '2026-03-27T20:10:00.000Z',
       description: 'Add the service abstraction so the UI can swap providers.',
       parent: 'APP-100',
-      comments: []
+      comments: [],
+      linkedIssues: [
+        {
+          key: 'APP-103',
+          summary: 'Simulate workflow validation edge case',
+          status: 'Blocked',
+          relationship: 'is blocked by',
+          browseUrl: 'https://example.com/ticket-manager-demo/APP-103'
+        }
+      ]
     },
     {
       id: 'demo-3',
@@ -204,7 +305,8 @@ function createSeedIssues(): DemoIssue[] {
       updated: '2026-03-27T21:00:00.000Z',
       description: 'Investigate the latest customer-facing incident.',
       comments: []
-    }
+    },
+    ...createBulkSeedIssues()
   ];
 }
 
@@ -221,7 +323,7 @@ function createSeedBoards(): DemoBoard[] {
       projectKey: 'APP',
       projectName: 'Application Platform',
       locationName: 'Application Platform',
-      issueKeys: ['APP-101', 'APP-102', 'APP-103']
+      issueKeys: ['APP-101', 'APP-102', 'APP-103', ...BULK_SEED_KEYS]
     },
     {
       id: 'board-ops',
@@ -263,6 +365,7 @@ function toIssueSummary(issue: DemoIssue, issuesByKey?: Map<string, DemoIssue>):
     updated: issue.updated,
     browseUrl: `https://example.com/ticket-manager-demo/${issue.key}`,
     description: issue.description,
+    subTasks: issue.subTasks?.length ? issue.subTasks : undefined,
     raw: issue
   };
 }
@@ -289,7 +392,9 @@ function toIssueDetails(issue: DemoIssue, parentIssue?: DemoIssue): IssueDetails
     ...toIssueSummary(issue),
     parentIssue: toParentIssueReference(parentIssue),
     transitions: transitionSet(issue.status),
-    comments: toIssueComments(issue)
+    comments: toIssueComments(issue),
+    linkedIssues: issue.linkedIssues?.length ? issue.linkedIssues : undefined,
+    attachments: issue.attachments?.length ? issue.attachments : undefined
   };
 }
 
@@ -690,6 +795,15 @@ export class DemoService implements IssueTrackerService {
   public dispose(): void {}
 
   private matchesIssueFilters(issue: DemoIssue, filters: IssueFilters): boolean {
+    // Board scoping matters for demo because two boards share the APP project:
+    // projectKeys alone can't tell "Application Board" from "Platform Overview".
+    if (filters.boardId) {
+      const board = this.boards.find(candidate => candidate.id === filters.boardId);
+      if (!board || !board.issueKeys.includes(issue.key)) {
+        return false;
+      }
+    }
+
     if (filters.projectKeys.length > 0 && !filters.projectKeys.includes(issue.projectKey)) {
       return false;
     }

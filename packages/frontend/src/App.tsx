@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection } from '@ticket-manager/core';
+import type {
+  AgentSessionRecord,
+  Board,
+  BoardDetails,
+  Connection,
+  ConnectionCheck
+} from '@ticket-manager/core';
 import { IssueDetail } from './IssueDetail';
 import { Connections } from './Connections';
 import { SettingsPage } from './SettingsPage';
@@ -8,11 +14,17 @@ import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession } from './NewSession';
 import { NewIssuePage } from './NewIssuePage';
 import { BoardView } from './BoardView';
+import { AiReviewPage } from './AiReviewPage';
+import { AnalysisPage } from './AnalysisPage';
+import { LocalPeerReviewPage } from './LocalPeerReviewPage';
+import { TaskDesignerPage } from './TaskDesignerPage';
 import { BottomPanel } from './BottomPanel';
+import { SessionsPage } from './SessionsPage';
 import { Icon } from './Icon';
 import { backendModeMeta, boardTypeToken } from './boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from './boardTransitionMatch';
+import { isTerminalAgentState } from './aiSessionState';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -27,6 +39,12 @@ interface Route {
   issueKey?: string;
   /** Show the create-ticket form for `boardId` instead of the board. */
   newIssue?: boolean;
+  /** Pre-selected type for the create form (e.g. 'Idea' from New idea). */
+  newIssueType?: string;
+  /** Selected agent session when `feature === 'sessions'`. */
+  sessionKey?: string;
+  /** Centre-pane AI tooling view for `issueKey` (review page / analysis chat / peer review). */
+  view?: 'review' | 'analysis' | 'lpr' | 'designer';
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -48,8 +66,14 @@ export function App() {
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
+  const [agentSessions, setAgentSessions] = useState<AgentSessionRecord[]>([]);
   const [boardDetails, setBoardDetails] = useState<BoardDetails | undefined>();
   const [detailsByBoardId, setDetailsByBoardId] = useState<Record<string, BoardDetails | undefined>>({});
+  /** Latest health-check per connection id — feeds the sidebar status dots. */
+  const [connectionChecks, setConnectionChecks] = useState<
+    Record<string, ConnectionCheck | undefined>
+  >({});
   const [mode, setMode] = useState<SidebarMode>(
     () => (localStorage.getItem('tm-sidebar-mode') as SidebarMode | null) ?? 'classic'
   );
@@ -107,6 +131,74 @@ export function App() {
     refreshBoards();
     refreshConnections();
   }, [refreshBoards, refreshConnections]);
+
+  // Connection health dots: run `connection.check` lazily per non-demo
+  // connection, fire-and-forget. A dead or slow backend must never block (or
+  // blank) the board list — results land as they resolve.
+  useEffect(() => {
+    let cancelled = false;
+    setConnectionChecks(current => {
+      const ids = new Set(connections.map(connection => connection.id));
+      const kept: Record<string, ConnectionCheck | undefined> = {};
+      for (const id of Object.keys(current)) {
+        if (ids.has(id)) {
+          kept[id] = current[id];
+        }
+      }
+      return kept;
+    });
+    for (const connection of connections) {
+      if (connection.mode === 'demo') {
+        continue;
+      }
+      void window.ticketManager.connection
+        .check(connection.id)
+        .then(result => {
+          if (!cancelled) {
+            setConnectionChecks(current => ({ ...current, [connection.id]: result }));
+          }
+        })
+        .catch(error => {
+          if (!cancelled) {
+            setConnectionChecks(current => ({
+              ...current,
+              [connection.id]: {
+                status: 'error',
+                message: error instanceof Error ? error.message : String(error),
+                toolCount: 0
+              }
+            }));
+          }
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [connections]);
+
+  // Agent sessions: initial pull, then live-merge every pushed record (keyed by
+  // issueKey, kept most-recent-first to match `ai:listSessions` ordering).
+  useEffect(() => {
+    let cancelled = false;
+    void window.ticketManager.ai
+      .listSessions()
+      .then(sessions => {
+        if (!cancelled) {
+          setAgentSessions(sessions);
+        }
+      })
+      .catch(error => console.error('Failed to load AI sessions:', error));
+    const unsubscribe = window.ticketManager.ai.onSessionChanged(record => {
+      setAgentSessions(current => {
+        const rest = current.filter(session => session.issueKey !== record.issueKey);
+        return [record, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('tm-sidebar-mode', mode);
@@ -203,10 +295,11 @@ export function App() {
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
       epics: boards.filter(board => boardTypeToken(board) === 'epic').length,
+      sessions: agentSessions.filter(session => !isTerminalAgentState(session.state)).length,
       issues: boardDetails?.issues.length,
       connections: connections.length
     }),
-    [boards, boardDetails, connections]
+    [boards, boardDetails, connections, agentSessions]
   );
 
   const connection = connections.find(candidate => candidate.id === selectedBoard?.connectionId);
@@ -233,7 +326,9 @@ export function App() {
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
   const contextLabel = route.newIssue
-    ? 'New issue'
+    ? route.newIssueType === 'Idea'
+      ? 'New idea'
+      : 'New issue'
     : route.feature
       ? FEATURE_TITLES[route.feature]
       : selectedBoard?.name ?? 'New session';
@@ -263,12 +358,62 @@ export function App() {
         </div>
       );
     }
+    if (route.feature === 'sessions') {
+      // No view-scroll wrapper: the sessions list and console own their scrolling.
+      return (
+        <SessionsPage
+          sessions={agentSessions}
+          selectedKey={route.sessionKey}
+          onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+          onNewSession={() => navigate({})}
+          onOpenAiSettings={() => navigate({ feature: 'settings' })}
+        />
+      );
+    }
     if (route.feature) {
       return (
         <div className="empty-state">
           <Icon name="tools" size={28} />
           <span>{FEATURE_TITLES[route.feature]} is not wired up yet.</span>
         </div>
+      );
+    }
+    // AI tooling views take over the centre pane for the routed issue.
+    if (route.issueKey && route.view === 'review') {
+      return (
+        <AiReviewPage
+          issueKey={route.issueKey}
+          connectionId={selectedBoard?.connectionId}
+          onClose={() => navigate({ ...route, view: undefined })}
+        />
+      );
+    }
+    if (route.issueKey && route.view === 'analysis') {
+      return (
+        <AnalysisPage
+          issueKey={route.issueKey}
+          connectionId={selectedBoard?.connectionId}
+          onClose={() => navigate({ ...route, view: undefined })}
+        />
+      );
+    }
+    if (route.issueKey && route.view === 'lpr') {
+      return (
+        <LocalPeerReviewPage
+          issueKey={route.issueKey}
+          connectionId={selectedBoard?.connectionId}
+          onClose={() => navigate({ ...route, view: undefined })}
+        />
+      );
+    }
+    // Board-scoped AI tooling: the Task Designer takes over the centre pane.
+    if (route.boardId && route.view === 'designer' && selectedBoard) {
+      return (
+        <TaskDesignerPage
+          key={selectedBoard.id}
+          board={selectedBoard}
+          onClose={() => navigate({ ...route, view: undefined })}
+        />
       );
     }
     // Work mode renders the board cards in the sidebar; the centre pane just
@@ -280,7 +425,10 @@ export function App() {
           workspaceName="ticket-manager"
           agentName="Ticket Agent"
           branchName="main"
-          onSubmit={() => navigate({ feature: 'sessions' })}
+          onSubmit={async goal => {
+            const record = await window.ticketManager.ai.delegate({ goal });
+            navigate({ feature: 'sessions', sessionKey: record.issueKey });
+          }}
           connectionCount={connections.length}
           onOpenConnections={() => {
             refreshConnections();
@@ -294,6 +442,7 @@ export function App() {
         <NewIssuePage
           board={selectedBoard}
           connection={connection}
+          initialIssueType={route.newIssueType}
           onCancel={() => navigate({ boardId: selectedBoard.id })}
           onCreated={issueKey => {
             refreshBoards();
@@ -307,16 +456,21 @@ export function App() {
       return <div className="empty-state">Loading board…</div>;
     }
     // No scroll wrapper: the board's columns own the pane height themselves.
+    // Keyed by board id so the filter bar and paging state reset on a board
+    // switch instead of leaking the previous board's query into the new one.
     return (
       <BoardView
+        key={selectedBoard.id}
         details={boardDetails}
         selectedIssueKey={route.issueKey}
         connectionId={selectedBoard.connectionId}
         onOpenIssue={issueKey => navigate({ boardId: selectedBoard.id, issueKey })}
         onNewIssue={() => navigate({ boardId: selectedBoard.id, newIssue: true })}
+        onNewIdea={() => navigate({ boardId: selectedBoard.id, newIssue: true, newIssueType: 'Idea' })}
         canCreateIssue={canCreateIssue}
         createIssueHint={createIssueHint}
         onIssueMove={onIssueMove}
+        onOpenDesigner={() => navigate({ boardId: selectedBoard.id, view: 'designer' })}
       />
     );
   };
@@ -374,6 +528,9 @@ export function App() {
                   refreshConnections();
                   navigate({ boardId: route.boardId });
                 }}
+                selectedIssueKey={route.issueKey}
+                selectedIssueConnectionId={selectedBoard?.connectionId}
+                connectionChecks={connectionChecks}
               />
             </div>
             <div
@@ -409,6 +566,9 @@ export function App() {
                       connectionId={selectedBoard?.connectionId}
                       onClose={() => navigate({ ...route, issueKey: undefined })}
                       onChanged={refreshBoardDetails}
+                      onOpenIssue={key => navigate({ ...route, issueKey: key, view: undefined })}
+                      onOpenSession={key => navigate({ feature: 'sessions', sessionKey: key })}
+                      onOpenAiView={(key, view) => navigate({ ...route, issueKey: key, view })}
                     />
                   )}
                 </aside>

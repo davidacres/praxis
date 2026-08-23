@@ -38,6 +38,7 @@ export type IconName =
   | 'pencil'
   | 'trash'
   | 'ellipsis'
+  | 'refresh'
   | 'split-horizontal'
   | 'terminal'
   // structure
@@ -68,7 +69,19 @@ export type IconName =
   | 'graph'
   | 'organization'
   | 'archive'
-  | 'ticket';
+  | 'external-link'
+  | 'copy'
+  | 'link'
+  | 'paperclip'
+  | 'ticket'
+  // task designer
+  | 'cursor'
+  | 'note'
+  | 'globe'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'check'
+  | 'sparkles';
 
 const PATHS: Record<IconName, string | string[]> = {
   'sidebar-left': [
@@ -134,6 +147,7 @@ const PATHS: Record<IconName, string | string[]> = {
   columns: ['M2.1 2.9h3.4v10.2H2.1zM6.3 2.9h3.4v10.2H6.3zM10.5 2.9h3.4v10.2h-3.4z'],
   trash: ['M3.2 4.4h9.6', 'M5.4 4.4V2.9h5.2v1.5', 'M4.4 4.4l.7 8.7h5.8l.7-8.7'],
   ellipsis: ['M3.4 8h.01', 'M8 8h.01', 'M12.6 8h.01'],
+  refresh: ['M14 8a6 6 0 1 1-6-6c1.68 0 3.29.67 4.49 1.83L14 5.33', 'M14 2v3.33h-3.33'],
   'split-horizontal': ['M2.1 2.9h11.8v10.2H2.1z', 'M8 2.9v10.2'],
   terminal: ['M3.4 4.6L6.2 8l-2.8 3.4', 'M8.2 11.6h4.4'],
   list: 'M2.4 4.2h11.2M2.4 8h11.2M2.4 11.8h7.6',
@@ -145,7 +159,18 @@ const PATHS: Record<IconName, string | string[]> = {
   graph: ['M2.4 13.1V2.9', 'M2.4 13.1h11.2', 'M4.9 10.6l2.6-3 2.4 1.9 3.1-4'],
   organization: ['M6.4 1.9h3.2v3.2H6.4zM2.1 10.9h3.2v3.2H2.1zM10.7 10.9h3.2v3.2h-3.2z', 'M8 5.1v3.2M3.7 10.9V8.3h8.6v2.6'],
   archive: ['M1.9 2.9h12.2v2.9H1.9z', 'M3.1 5.8h9.8v7.3H3.1z', 'M6.4 8.6h3.2'],
-  ticket: ['M1.9 4.6h12.2v2.2a1.2 1.2 0 0 0 0 2.4v2.2H1.9V9.2a1.2 1.2 0 0 0 0-2.4z', 'M8 5.6v1.2M8 9.2v1.2']
+  'external-link': ['M6.4 3.4h6.2v6.2', 'M12.6 3.4 8 8', 'M10.6 9.6v3H3.4V5.4h3'],
+  copy: ['M5.6 5.6h7.4v7.4H5.6z', 'M10.4 5.6V3H3v7.4h2.6'],
+  link: ['M6.4 9.6a2.6 2.6 0 0 1 0-3.7l1.9-1.9a2.6 2.6 0 0 1 3.7 3.7l-1 1', 'M9.6 6.4a2.6 2.6 0 0 1 0 3.7l-1.9 1.9a2.6 2.6 0 0 1-3.7-3.7l1-1'],
+  paperclip: ['M11.8 7.6 6.9 12.5a2.8 2.8 0 0 1-4-4l5.6-5.6a1.9 1.9 0 0 1 2.7 2.7l-5.6 5.6a1 1 0 0 1-1.4-1.4l4.6-4.6'],
+  ticket: ['M1.9 4.6h12.2v2.2a1.2 1.2 0 0 0 0 2.4v2.2H1.9V9.2a1.2 1.2 0 0 0 0-2.4z', 'M8 5.6v1.2M8 9.2v1.2'],
+  cursor: 'M4.2 2.4 12 8.4l-4 .6-2.2 3.8z',
+  note: ['M2.9 2.4h10.2v8.6l-3.5 3.5H2.9z', 'M13.1 11H9.6v3.5'],
+  globe: ['M8 1.9a6.1 6.1 0 1 0 0 12.2A6.1 6.1 0 0 0 8 1.9z', 'M1.9 8h12.2', 'M8 1.9c-3.6 3.9-3.6 8.3 0 12.2 3.6-3.9 3.6-8.3 0-12.2z'],
+  'zoom-in': ['M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z', 'M10.6 10.6 14 14', 'M7.2 5.2v4M5.2 7.2h4'],
+  'zoom-out': ['M7.2 2.6a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z', 'M10.6 10.6 14 14', 'M5.2 7.2h4'],
+  check: 'M3.2 8.4 6.6 11.8 12.8 4.4',
+  sparkles: ['M8 2.4l1.4 3.4 3.4 1.4-3.4 1.4L8 12l-1.4-3.4-3.4-1.4 3.4-1.4z', 'M12.4 10.4l.7 1.7 1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7z']
 };
 
 /** Glyphs drawn as solid shapes rather than outlines. */

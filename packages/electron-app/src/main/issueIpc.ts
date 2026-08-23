@@ -9,6 +9,26 @@ import { getServiceForConnection } from './serviceRegistry';
 
 export function registerIssueIpc(): void {
   ipcMain.handle(
+    'issue:list',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      filters: IssueFilters,
+      startAt: number,
+      pageSize: number,
+      connectionId?: string
+    ) => {
+      return (await getServiceForConnection(connectionId)).getIssues(filters, startAt, pageSize);
+    }
+  );
+
+  ipcMain.handle(
+    'issue:getFilterMetadata',
+    async (_event: Electron.IpcMainInvokeEvent, filters: IssueFilters, connectionId?: string) => {
+      return (await getServiceForConnection(connectionId)).getFilterMetadata(filters);
+    }
+  );
+
+  ipcMain.handle(
     'issue:get',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, connectionId?: string) => {
       return (await getServiceForConnection(connectionId)).getIssue(issueKey);

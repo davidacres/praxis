@@ -1,8 +1,2 @@
-export {
-  runAgentLoop,
-  type AgentLoopEvent,
-  type AgentLoopOptions,
-  type AgentLoopResult,
-  type AgentToolExecutor,
-  type WireMessage
-} from './agentLoop';
+// Shim: the implementation moved to packages/core/src/ai (Phase D — shared with the Electron desktop app).
+export * from '@ticket-manager/core';

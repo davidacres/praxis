@@ -16,11 +16,25 @@ export const PRIORITY_OPTIONS = ['Critical', 'Highest', 'High', 'Medium', 'Low',
 
 export const SEVERITY_OPTIONS = ['Critical', 'High', 'Medium', 'Low'];
 
-/** Issue types the create form offers, per backend mode. */
+/**
+ * Issue types the create form offers, per backend mode. Mirrors the
+ * extension's `DEFAULT_CREATABLE_TYPES` (`commands/registerCommands.ts`):
+ * Jira Cloud's epic-level type is "Epic" where the file/backend modes use
+ * "Feature", and only the MCP-backed modes can file Subtasks.
+ */
 export function getCreatableTypes(mode: BackendMode): string[] {
-  return mode === 'livefolder' || mode === 'userworkspace'
-    ? ['Feature', 'Story', 'Task', 'Bug', 'Idea']
-    : ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
+  if (mode === 'jiracloud') {
+    return ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
+  }
+  if (mode === 'livefolder' || mode === 'userworkspace') {
+    return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
+  }
+  return ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
+}
+
+/** Idea tickets carry a research transcript instead of delivery workflows. */
+export function isIdeaDraftType(issueType: string | undefined): boolean {
+  return normalizeLoose(issueType) === 'idea';
 }
 
 export interface DraftParentRule {
@@ -58,6 +72,17 @@ export function getDraftParentRule(
       label: 'Parent',
       helperText: `${typeLabel} items cannot have a parent.`,
       placeholder: '',
+      allowsNewParent: false
+    };
+  }
+
+  if (normalizeLoose(issueType) === 'subtask') {
+    return {
+      canHaveParent: true,
+      requiresParent: true,
+      label: 'Parent',
+      helperText: 'Subtasks must belong to a story, task, or bug.',
+      placeholder: 'Enter a parent issue key',
       allowsNewParent: false
     };
   }
