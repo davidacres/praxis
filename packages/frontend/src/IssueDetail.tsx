@@ -1,12 +1,33 @@
 import { useEffect, useState } from 'react';
-import type { IssueDetails, UpdateIssueInput } from '@ticket-manager/core';
+import type {
+  AgentSessionRecord,
+  GitLabMergeRequest,
+  IssueDetails,
+  IssueWorkflowAssignment,
+  UpdateIssueInput
+} from '@ticket-manager/core';
 import { Icon } from './Icon';
+import { WorkflowPicker } from './WorkflowPicker';
+import {
+  agentStateBadgeClass,
+  agentStateLabel,
+  isTerminalAgentState
+} from './aiSessionState';
+
+/** Centre-pane AI tooling views the detail panel can hand off to. */
+export type IssueAiView = 'review' | 'analysis' | 'lpr';
 
 interface IssueDetailProps {
   issueKey: string;
   connectionId?: string;
   onClose: () => void;
   onChanged: () => void;
+  /** Navigates the panel to another issue (parent chip, sub-task, linked issue). */
+  onOpenIssue?: (issueKey: string) => void;
+  /** Opens the Sessions view focused on this issue's agent session. */
+  onOpenSession?: (issueKey: string) => void;
+  /** Opens a full-page AI tool (review / analysis chat) for this issue. */
+  onOpenAiView?: (issueKey: string, view: IssueAiView) => void;
 }
 
 interface EditDraft {
@@ -46,13 +67,32 @@ function draftFromIssue(issue: IssueDetails): EditDraft {
   };
 }
 
-export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: IssueDetailProps) {
+function formatBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function IssueDetail({ issueKey, connectionId, onClose, onChanged, onOpenIssue, onOpenSession, onOpenAiView }: IssueDetailProps) {
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [commentBody, setCommentBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft>(emptyDraft);
+  const [copied, setCopied] = useState(false);
+  /** This issue's agent session, if one exists — live via the push channel. */
+  const [agentSession, setAgentSession] = useState<AgentSessionRecord | undefined>();
+  /** Assigned workflow pack (if any) and the picker modal's visibility. */
+  const [workflowAssignment, setWorkflowAssignment] = useState<IssueWorkflowAssignment | undefined>();
+  const [showWorkflowPicker, setShowWorkflowPicker] = useState(false);
+  /** Merge requests for this issue, loaded on demand (GitLab connections only). */
+  const [mergeRequests, setMergeRequests] = useState<GitLabMergeRequest[] | undefined>();
+  const [mrError, setMrError] = useState<string | undefined>();
 
   const reload = () => {
     void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
@@ -67,6 +107,49 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [issueKey]);
 
+  // Track this issue's agent session: initial pull, then follow push updates
+  // for this key so the state chip and abort button stay live.
+  useEffect(() => {
+    let cancelled = false;
+    setAgentSession(undefined);
+    void window.ticketManager.ai
+      .listSessions()
+      .then(sessions => {
+        if (!cancelled) {
+          setAgentSession(sessions.find(session => session.issueKey === issueKey));
+        }
+      })
+      .catch(() => undefined);
+    const unsubscribe = window.ticketManager.ai.onSessionChanged(record => {
+      if (record.issueKey === issueKey) {
+        setAgentSession(record);
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [issueKey]);
+
+  // Workflow-pack assignment for this issue.
+  useEffect(() => {
+    let cancelled = false;
+    setWorkflowAssignment(undefined);
+    setMergeRequests(undefined);
+    setMrError(undefined);
+    void window.ticketManager.ai
+      .getWorkflowAssignment(issueKey)
+      .then(assignment => {
+        if (!cancelled) {
+          setWorkflowAssignment(assignment);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [issueKey]);
+
   const beginEdit = () => {
     if (!issue) {
       return;
@@ -74,6 +157,22 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
     setDraft(draftFromIssue(issue));
     setError(undefined);
     setEditing(true);
+  };
+
+  const copyKey = () => {
+    void navigator.clipboard
+      .writeText(issueKey)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+
+  const openInBrowser = (url: string | undefined) => {
+    if (url) {
+      void window.ticketManager.shell.openExternal(url);
+    }
   };
 
   const cancelEdit = () => {
@@ -141,6 +240,25 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
         <Icon name="ticket" size={14} />
         <h3 style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{issueKey}</h3>
         <span style={{ flex: 1 }} />
+        <button
+          className="icon-btn icon-btn-sm"
+          aria-label={copied ? 'Copied' : 'Copy issue key'}
+          title={copied ? 'Copied!' : 'Copy issue key'}
+          data-testid="issue-copy-key-btn"
+          onClick={copyKey}
+        >
+          <Icon name={copied ? 'check-square' : 'copy'} size={13} />
+        </button>
+        <button
+          className="icon-btn icon-btn-sm"
+          aria-label="Open in browser"
+          title={issue?.browseUrl ? 'Open in browser' : 'No browser link available'}
+          data-testid="issue-open-browser-btn"
+          onClick={() => openInBrowser(issue?.browseUrl)}
+          disabled={!issue?.browseUrl}
+        >
+          <Icon name="external-link" size={13} />
+        </button>
         <button
           className="icon-btn icon-btn-sm"
           aria-label="Edit issue"
@@ -278,6 +396,28 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
       )}
       {issue && !editing && (
         <>
+          {(issue.parentIssue || issue.parentKey) && (
+            <div className="detail-meta" style={{ marginBottom: 6 }}>
+              <span>Parent: </span>
+              {onOpenIssue ? (
+                <button
+                  className="chip"
+                  data-testid="issue-parent-link"
+                  title={issue.parentIssue?.summary ?? issue.parentKey}
+                  onClick={() => onOpenIssue(issue.parentIssue?.key ?? issue.parentKey ?? '')}
+                >
+                  {issue.parentIssue?.key ?? issue.parentKey}
+                  {issue.parentIssue?.summary ? ` — ${issue.parentIssue.summary}` : ''}
+                </button>
+              ) : (
+                <span data-testid="issue-parent-link">
+                  {issue.parentIssue?.key ?? issue.parentKey}
+                  {issue.parentIssue?.summary ? ` — ${issue.parentIssue.summary}` : ''}
+                </span>
+              )}
+            </div>
+          )}
+
           <h4 style={{ marginBottom: 4, fontSize: 14 }}>{issue.summary}</h4>
           <div className="detail-meta">
             {issue.issueType} · {issue.status} · {issue.projectKey}
@@ -288,6 +428,103 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
           )}
 
           {error && <div className="error-banner">{error}</div>}
+
+          {issue.subTasks && issue.subTasks.length > 0 && (
+            <div className="detail-section">
+              <div className="detail-section-label">Sub-tasks ({issue.subTasks.length})</div>
+              <div style={{ marginTop: 6 }}>
+                {issue.subTasks.map(subTask => (
+                  <div key={subTask.key} className="detail-list-row" data-testid="issue-subtask-row">
+                    {onOpenIssue ? (
+                      <button
+                        className="detail-list-key"
+                        title={subTask.summary}
+                        onClick={() => onOpenIssue(subTask.key)}
+                      >
+                        {subTask.key}
+                      </button>
+                    ) : (
+                      <span className="detail-list-key">{subTask.key}</span>
+                    )}
+                    <span className="detail-list-summary">{subTask.summary}</span>
+                    <span className="detail-meta">{subTask.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {issue.linkedIssues && issue.linkedIssues.length > 0 && (
+            <div className="detail-section">
+              <div className="detail-section-label">Linked issues ({issue.linkedIssues.length})</div>
+              <div style={{ marginTop: 6 }}>
+                {issue.linkedIssues.map(link => (
+                  <div
+                    key={`${link.relationship}-${link.key}`}
+                    className="detail-list-row"
+                    data-testid="issue-linked-row"
+                  >
+                    <span className="detail-meta" style={{ minWidth: 90 }}>{link.relationship}</span>
+                    {onOpenIssue ? (
+                      <button
+                        className="detail-list-key"
+                        title={link.summary ?? link.key}
+                        onClick={() => onOpenIssue(link.key)}
+                      >
+                        {link.key}
+                      </button>
+                    ) : (
+                      <span className="detail-list-key">{link.key}</span>
+                    )}
+                    <span className="detail-list-summary">{link.summary ?? ''}</span>
+                    {link.status && <span className="detail-meta">{link.status}</span>}
+                    {link.browseUrl && (
+                      <button
+                        className="icon-btn icon-btn-sm"
+                        aria-label={`Open ${link.key} in browser`}
+                        title="Open in browser"
+                        onClick={() => openInBrowser(link.browseUrl)}
+                      >
+                        <Icon name="external-link" size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {issue.attachments && issue.attachments.length > 0 && (
+            <div className="detail-section">
+              <div className="detail-section-label">Attachments ({issue.attachments.length})</div>
+              <div style={{ marginTop: 6 }}>
+                {issue.attachments.map((attachment, index) => (
+                  <div
+                    key={attachment.id ?? `${attachment.fileName}-${index}`}
+                    className="detail-list-row"
+                    data-testid="issue-attachment-row"
+                  >
+                    <Icon name="paperclip" size={12} />
+                    {attachment.contentUrl ? (
+                      <button
+                        className="detail-list-key"
+                        title="Open in browser"
+                        onClick={() => openInBrowser(attachment.contentUrl)}
+                      >
+                        {attachment.fileName}
+                      </button>
+                    ) : (
+                      <span className="detail-list-key">{attachment.fileName}</span>
+                    )}
+                    {attachment.sizeBytes !== undefined && (
+                      <span className="detail-meta">{formatBytes(attachment.sizeBytes)}</span>
+                    )}
+                    {attachment.author && <span className="detail-meta">{attachment.author}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="detail-section">
             <div className="detail-section-label">Transitions</div>
@@ -309,6 +546,290 @@ export function IssueDetail({ issueKey, connectionId, onClose, onChanged }: Issu
               {!issue.transitions?.length && <span className="placeholder-text">None available.</span>}
             </div>
           </div>
+
+          <div className="detail-section">
+            <div className="detail-section-label">AI agent</div>
+            <div style={{ marginTop: 6 }} data-testid="issue-ai-section">
+              <div className="workflow-assignment-row" data-testid="workflow-assignment-row">
+                <span className="detail-meta" style={{ flex: 1 }} data-testid="workflow-assignment-label">
+                  {workflowAssignment?.workflow
+                    ? `Workflow pack: ${workflowAssignment.workflow.name}`
+                    : 'No workflow pack assigned'}
+                </span>
+                <button
+                  className="chip"
+                  data-testid="workflow-assignment-change"
+                  onClick={() => setShowWorkflowPicker(true)}
+                >
+                  Change
+                </button>
+              </div>
+
+              <div className="chip-row" style={{ margin: '6px 0' }}>
+                {onOpenAiView && (
+                  <>
+                    <button
+                      className="chip"
+                      data-testid="issue-ai-review-btn"
+                      onClick={() => onOpenAiView(issueKey, 'review')}
+                    >
+                      Review
+                    </button>
+                    <button
+                      className="chip"
+                      data-testid="issue-ai-analyze-btn"
+                      onClick={() => onOpenAiView(issueKey, 'analysis')}
+                    >
+                      Analyze
+                    </button>
+                    <button
+                      className="chip"
+                      data-testid="issue-ai-lpr-btn"
+                      title="Run a local peer review (code + security + verdict)"
+                      onClick={() => onOpenAiView(issueKey, 'lpr')}
+                    >
+                      Peer review
+                    </button>
+                  </>
+                )}
+                <button
+                  className="chip"
+                  data-testid="issue-ai-delivery-btn"
+                  disabled={busy}
+                  title="Run the delivery workflow (requires delivery settings)"
+                  onClick={() =>
+                    void runAction(() =>
+                      window.ticketManager.ai.startDelivery(issueKey, connectionId).then(() => undefined)
+                    )
+                  }
+                >
+                  Start delivery
+                </button>
+                <button
+                  className="chip"
+                  data-testid="issue-ai-decompose-btn"
+                  disabled={busy}
+                  title="Break a feature request into sub-tasks"
+                  onClick={() =>
+                    void runAction(() =>
+                      window.ticketManager.ai.decomposeFeature(issueKey, connectionId).then(() => undefined)
+                    )
+                  }
+                >
+                  Decompose
+                </button>
+              </div>
+
+              {!agentSession && (
+                <>
+                  <p className="placeholder-text" style={{ margin: '0 0 6px' }}>
+                    Hand this issue to the AI agent to plan and execute it.
+                  </p>
+                  <button
+                    className="btn"
+                    data-testid="issue-ai-delegate-btn"
+                    disabled={busy}
+                    onClick={() =>
+                      void runAction(() =>
+                        window.ticketManager.ai.delegate({ issueKey, connectionId }).then(() => undefined)
+                      )
+                    }
+                  >
+                    <Icon name="robot" size={13} />
+                    Delegate to AI agent
+                  </button>
+                </>
+              )}
+              {agentSession && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span
+                      className={agentStateBadgeClass(agentSession.state)}
+                      data-testid="issue-ai-state"
+                    >
+                      {agentStateLabel(agentSession.state)}
+                    </span>
+                    <span className="detail-meta">
+                      {agentSession.stepCount} {agentSession.stepCount === 1 ? 'step' : 'steps'}
+                    </span>
+                    {agentSession.delivery && (
+                      <span className="chip" data-testid="issue-ai-delivery-phase">
+                        {agentSession.delivery.phase}
+                        {agentSession.delivery.finalizationState !== 'pending' &&
+                          ` · ${agentSession.delivery.finalizationState}`}
+                      </span>
+                    )}
+                  </div>
+                  {agentSession.delivery?.finalizationMessage && (
+                    <p
+                      className="detail-meta"
+                      data-testid="issue-ai-finalization-message"
+                      style={{ margin: '4px 0 0' }}
+                    >
+                      {agentSession.delivery.finalizationMessage}
+                    </p>
+                  )}
+                  <div className="chip-row" style={{ marginTop: 6 }}>
+                    {onOpenSession && (
+                      <button
+                        className="chip"
+                        data-testid="issue-ai-view-session"
+                        onClick={() => onOpenSession(issueKey)}
+                      >
+                        View session
+                      </button>
+                    )}
+                    {!isTerminalAgentState(agentSession.state) && (
+                      <button
+                        className="chip"
+                        data-testid="issue-ai-abort-btn"
+                        disabled={busy}
+                        onClick={() => void runAction(() => window.ticketManager.ai.abort(issueKey))}
+                      >
+                        Abort
+                      </button>
+                    )}
+                    {isTerminalAgentState(agentSession.state) && (
+                      <button
+                        className="chip"
+                        data-testid="issue-ai-restart-btn"
+                        disabled={busy}
+                        onClick={() =>
+                          void runAction(() =>
+                            window.ticketManager.ai
+                              .delegate({ issueKey, connectionId })
+                              .then(() => undefined)
+                          )
+                        }
+                      >
+                        Run again
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {agentSession?.delivery?.featureDecomposition && (
+                <div data-testid="decomposition-subtasks" style={{ marginTop: 8 }}>
+                  <div className="detail-section-label" style={{ marginBottom: 4 }}>
+                    Sub-tasks — {agentSession.delivery.featureDecomposition.featureBranch}
+                  </div>
+                  {[...agentSession.delivery.featureDecomposition.subTasks]
+                    .sort((a, b) => a.order - b.order)
+                    .map(subTask => (
+                      <div key={subTask.issueKey} className="subtask-row" data-testid={`subtask-${subTask.issueKey}`}>
+                        <button
+                          className="subtask-key"
+                          onClick={() => onOpenIssue?.(subTask.issueKey)}
+                        >
+                          {subTask.issueKey}
+                        </button>
+                        <span className="subtask-summary">{subTask.summary}</span>
+                        <span className="detail-meta">{subTask.deliveryState ?? 'pending'}</span>
+                        {(subTask.deliveryState ?? 'pending') === 'pending' && (
+                          <button
+                            className="chip"
+                            data-testid={`subtask-start-${subTask.issueKey}`}
+                            disabled={busy}
+                            onClick={() =>
+                              void runAction(() =>
+                                window.ticketManager.ai
+                                  .startSubTaskDelivery(issueKey, subTask.issueKey, connectionId)
+                                  .then(() => undefined)
+                              )
+                            }
+                          >
+                            Start
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {connectionId && (
+                <div data-testid="issue-mr-section" style={{ marginTop: 8 }}>
+                  <div className="chip-row">
+                    <button
+                      className="chip"
+                      data-testid="issue-mr-load-btn"
+                      disabled={busy}
+                      onClick={() => {
+                        setMrError(undefined);
+                        void window.ticketManager.ai
+                          .listMergeRequests(issueKey, connectionId)
+                          .then(setMergeRequests)
+                          .catch(err =>
+                            setMrError(err instanceof Error ? err.message : String(err))
+                          );
+                      }}
+                    >
+                      Merge requests
+                    </button>
+                    <button
+                      className="chip"
+                      data-testid="issue-mr-create-btn"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(() =>
+                          window.ticketManager.ai
+                            .createMergeRequest(issueKey, connectionId)
+                            .then(created => setMergeRequests(current => [...(current ?? []), created]))
+                        )
+                      }
+                    >
+                      Create MR
+                    </button>
+                    <button
+                      className="chip"
+                      data-testid="issue-mr-check-btn"
+                      disabled={busy}
+                      onClick={() =>
+                        void runAction(() =>
+                          window.ticketManager.ai
+                            .checkMergeRequestFeedback(issueKey, connectionId)
+                            .then(() => undefined)
+                        )
+                      }
+                    >
+                      Check feedback
+                    </button>
+                  </div>
+                  {mrError && <p className="error-banner" data-testid="issue-mr-error">{mrError}</p>}
+                  {mergeRequests?.map(mergeRequest => (
+                    <div key={mergeRequest.iid} className="subtask-row" data-testid={`mr-${mergeRequest.iid}`}>
+                      <button
+                        className="subtask-key"
+                        onClick={() => openInBrowser(mergeRequest.webUrl)}
+                      >
+                        !{mergeRequest.iid}
+                      </button>
+                      <span className="subtask-summary">{mergeRequest.title}</span>
+                      <span className="detail-meta">{mergeRequest.state}</span>
+                    </div>
+                  ))}
+                  {mergeRequests?.length === 0 && (
+                    <p className="placeholder-text">No merge requests reference {issueKey}.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {showWorkflowPicker && (
+            <WorkflowPicker
+              current={workflowAssignment?.workflow}
+              onClose={() => setShowWorkflowPicker(false)}
+              onSelect={workflow => {
+                setShowWorkflowPicker(false);
+                void window.ticketManager.ai
+                  .setWorkflowAssignment(issueKey, workflow)
+                  .then(() => window.ticketManager.ai.getWorkflowAssignment(issueKey))
+                  .then(setWorkflowAssignment)
+                  .catch(err => setError(err instanceof Error ? err.message : String(err)));
+              }}
+            />
+          )}
 
           <div className="detail-section">
             <div className="detail-section-label">Comments</div>

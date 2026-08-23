@@ -22,6 +22,7 @@ import type {
   WorkflowTransition
 } from '../types';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
+import { sortIssuesByUpdated } from '../board/boardColumns';
 import {
   GitLabApiService,
   inferGitLabProjectFromRepo,
@@ -423,18 +424,72 @@ export class GitLabBoardService implements IssueTrackerService {
     }));
   }
 
-  public async getIssues(_filters: IssueFilters, _startAt: number, _pageSize: number): Promise<PagedIssues> {
+  /**
+   * Filtered, paged issue query for the desktop board view's filter bar and
+   * load-more. GitLab's list API has no notion of our status/type/parent
+   * filters, so the board's full issue set is fetched (same calls as
+   * getBoardDetails) and filtered/paged in memory. Requires `filters.boardId`
+   * — without a board there are no lists to resolve statuses against.
+   */
+  public async getIssues(filters: IssueFilters, startAt: number, pageSize: number): Promise<PagedIssues> {
+    if (!filters.boardId) {
+      return { issues: [], total: 0, hasMore: false };
+    }
+
+    const { projectRef, boardId } = this.parseBoardReference({ id: filters.boardId } as Board);
+    const client = await this.getClient();
+    const [gitlabBoard, lists] = await Promise.all([
+      client.getBoard(boardId, projectRef),
+      client.listBoardLists(boardId, projectRef)
+    ]);
+    const boardIssues = buildBoardIssues(
+      gitlabBoard,
+      lists,
+      await client.listIssues(projectRef, {
+        state: 'all',
+        labels: gitlabBoard.labels,
+        assigneeUsername: gitlabBoard.assigneeUsername,
+        milestoneTitle: gitlabBoard.milestoneTitle,
+        weight: gitlabBoard.weight
+      })
+    );
+    for (const issue of boardIssues) {
+      this.boardContextByIssueKey.set(issue.key, { projectRef, board: gitlabBoard, lists });
+    }
+
+    const query = filters.searchText.trim().toLowerCase();
+    const matching = sortIssuesByUpdated(
+      boardIssues.filter(issue => {
+        if (filters.statuses.length > 0 && !filters.statuses.includes(issue.status)) {
+          return false;
+        }
+        if (filters.issueTypes.length > 0 && !filters.issueTypes.includes(issue.issueType)) {
+          return false;
+        }
+        if (filters.parentKey && issue.parentKey !== filters.parentKey) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+        const haystack = `${issue.key} ${issue.summary} ${issue.description ?? ''}`.toLowerCase();
+        return haystack.includes(query);
+      })
+    );
+
     return {
-      issues: [],
-      total: 0,
-      hasMore: false
+      issues: matching.slice(startAt, startAt + pageSize),
+      total: matching.length,
+      hasMore: startAt + pageSize < matching.length
     };
   }
 
-  public async getFilterMetadata(_filters: IssueFilters): Promise<FilterMetadata> {
+  public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> {
+    const metadataFilters: IssueFilters = { ...filters, statuses: [], issueTypes: [] };
+    const page = await this.getIssues(metadataFilters, 0, Number.MAX_SAFE_INTEGER);
     return {
-      statuses: [],
-      issueTypes: []
+      statuses: [...new Set(page.issues.map(issue => issue.status))].sort((a, b) => a.localeCompare(b)),
+      issueTypes: [...new Set(page.issues.map(issue => issue.issueType))].sort((a, b) => a.localeCompare(b))
     };
   }
 

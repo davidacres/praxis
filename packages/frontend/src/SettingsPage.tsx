@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AppSettings, AppSettingsPatch, BoardsSidebarMode, Connection } from '@ticket-manager/core';
+import type {
+  AiProviderStatus,
+  AppSettings,
+  AppSettingsPatch,
+  BoardsSidebarMode,
+  Connection
+} from '@ticket-manager/core';
 import {
   DEFAULT_APP_SETTINGS,
   normalizePriorityColor,
@@ -12,6 +18,7 @@ type SettingsCategory =
   | 'overview'
   | 'connections'
   | 'jira'
+  | 'ai'
   | 'performance'
   | 'delivery'
   | 'mcp'
@@ -43,6 +50,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Jira',
     icon: 'ticket',
     description: 'Jira MCP site URL, default project, and the optional epic/JQL boards.'
+  },
+  {
+    id: 'ai',
+    label: 'AI Provider',
+    icon: 'robot',
+    description: 'Vercel AI Gateway connection used to delegate issues to an AI agent.'
   },
   {
     id: 'performance',
@@ -120,6 +133,7 @@ export function SettingsPage({ connections, onOpenConnections }: SettingsPagePro
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
+        {active === 'ai' && <AiSection settings={settings} update={update} />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
@@ -167,13 +181,15 @@ function Toggle({
   onChange,
   label,
   description,
-  disabled
+  disabled,
+  testId
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label: string;
   description?: string;
   disabled?: boolean;
+  testId?: string;
 }) {
   return (
     <div className={`settings-toggle-row${disabled ? ' disabled' : ''}`}>
@@ -188,6 +204,7 @@ function Toggle({
         aria-label={label}
         className="switch"
         disabled={disabled}
+        data-testid={testId}
         onClick={() => onChange(!checked)}
       />
     </div>
@@ -352,6 +369,180 @@ function JiraSection({
   );
 }
 
+/**
+ * AI Provider section: Vercel AI Gateway setup. The API key is write-only —
+ * it goes straight to the OS-keychain secrets store via `ai:setApiKey` and is
+ * never read back over IPC; the status snapshot only reports the key source.
+ */
+function AiSection({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const category = CATEGORIES.find(c => c.id === 'ai')!;
+  const [status, setStatus] = useState<AiProviderStatus | undefined>();
+  const [keyDraft, setKeyDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  useEffect(() => {
+    let cancelled = false;
+    window.ticketManager.ai
+      .getStatus()
+      .then(next => {
+        if (!cancelled) {
+          setStatus(next);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const applyKey = async (value: string) => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const next = await window.ticketManager.ai.setApiKey(value);
+      setStatus(next);
+      setKeyDraft('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusText = !status
+    ? 'Checking…'
+    : status.configured
+      ? status.keySource === 'secret'
+        ? 'Configured — API key stored in the OS keychain.'
+        : 'Configured — API key resolved from the environment.'
+      : 'Not configured — add an API key to enable AI sessions.';
+
+  return (
+    <>
+      <CategoryHeader category={category} />
+      {error && <div className="error-banner">{error}</div>}
+      <div className="settings-list">
+        <div className="list-row">
+          <div>
+            <div className="list-row-title">Status</div>
+            <div className="list-row-meta" data-testid="ai-provider-status">
+              {statusText}
+            </div>
+          </div>
+        </div>
+      </div>
+      <FieldRow
+        label="API key"
+        description="Vercel AI Gateway key. Stored encrypted in the OS keychain; it is never shown again after saving."
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="password"
+            className="input"
+            data-testid="ai-api-key-input"
+            aria-label="Vercel AI Gateway API key"
+            placeholder={status?.configured ? '••••••••  (saved)' : 'Paste API key'}
+            value={keyDraft}
+            onChange={event => setKeyDraft(event.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary"
+            data-testid="ai-api-key-save"
+            disabled={busy || !keyDraft.trim()}
+            onClick={() => void applyKey(keyDraft)}
+          >
+            Save key
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-testid="ai-api-key-clear"
+            disabled={busy || !status || status.keySource !== 'secret'}
+            onClick={() => void applyKey('')}
+          >
+            Clear
+          </button>
+        </div>
+      </FieldRow>
+      <FieldRow
+        label="Gateway URL"
+        description="Leave empty to use the default Vercel AI Gateway endpoint."
+      >
+        <DebouncedTextField
+          ariaLabel="AI gateway URL"
+          value={settings.ai.gatewayUrl}
+          onCommit={value => update({ ai: { gatewayUrl: value } })}
+          placeholder={status?.gatewayUrl ?? 'https://ai-gateway.vercel.sh'}
+        />
+      </FieldRow>
+      <FieldRow
+        label="Default model"
+        description="Model id used for new agent sessions. Empty means the service default."
+      >
+        <DebouncedTextField
+          ariaLabel="AI default model"
+          value={settings.ai.defaultModel}
+          onCommit={value => update({ ai: { defaultModel: value } })}
+          placeholder="e.g. anthropic/claude-sonnet-4.6"
+        />
+      </FieldRow>
+      <FieldRow
+        label="Agent display name"
+        description="Used for agent attribution in comments and commits."
+      >
+        <DebouncedTextField
+          ariaLabel="AI agent display name"
+          value={settings.ai.agentName}
+          onCommit={value => update({ ai: { agentName: value } })}
+          placeholder="e.g. Ticket Agent"
+        />
+      </FieldRow>
+      <FieldRow
+        label="Working directory"
+        description="Default working directory for agent sessions and delivery runs; workflow packs are discovered under its .github/skills folder. Empty means the app's own directory."
+      >
+        <DebouncedTextField
+          ariaLabel="AI working directory"
+          value={settings.ai.workingDirectory}
+          onCommit={value => update({ ai: { workingDirectory: value } })}
+          placeholder="e.g. C:\\dev\\my-repo"
+        />
+      </FieldRow>
+      <FieldRow
+        label="Analysis system prompt"
+        description="System prompt used by the issue analysis chat. Empty disables the analysis action."
+      >
+        <DebouncedTextArea
+          ariaLabel="AI analysis system prompt"
+          value={settings.ai.analysisPrompt}
+          onCommit={value => update({ ai: { analysisPrompt: value } })}
+          placeholder="e.g. You are a senior engineer assessing implementation readiness…"
+        />
+      </FieldRow>
+      <Toggle
+        label="Require confirmed analysis"
+        description="When on, an issue must have a confirmed analysis before it can be delegated or delivered."
+        checked={settings.ai.analysisGateEnabled}
+        testId="ai-analysis-gate-toggle"
+        onChange={next => void update({ ai: { analysisGateEnabled: next } })}
+      />
+    </>
+  );
+}
+
 function PerformanceSection({
   settings,
   update
@@ -396,6 +587,35 @@ function DeliverySection({
     <>
       <CategoryHeader category={category} />
 
+      <Toggle
+        label="Enable delivery workflow"
+        description="Master switch for the AI delivery run action. Requires the publish command and artifact pattern below."
+        checked={settings.delivery.enabled}
+        testId="delivery-enabled-toggle"
+        onChange={next => void update({ delivery: { enabled: next } })}
+      />
+      <FieldRow
+        label="Publish command"
+        description="Repo-specific publish command the delivery agent must run (e.g. the MSI publish script). Wrapped to run against the working directory."
+      >
+        <DebouncedTextField
+          ariaLabel="Delivery publish command"
+          value={settings.delivery.publishCommand}
+          onCommit={value => update({ delivery: { publishCommand: value } })}
+          placeholder="e.g. .\\scripts\\publish-msi.ps1"
+        />
+      </FieldRow>
+      <FieldRow
+        label="Artifact pattern"
+        description="Artifact path or glob the delivery agent must identify after publishing."
+      >
+        <DebouncedTextField
+          ariaLabel="Delivery artifact pattern"
+          value={settings.delivery.artifactPattern}
+          onCommit={value => update({ delivery: { artifactPattern: value } })}
+          placeholder="e.g. dist\\*.msi"
+        />
+      </FieldRow>
       <FieldRow
         label="Default base branch"
         description="Used when a ticket does not specify one. Empty means the agent will ask."
@@ -772,6 +992,38 @@ interface DebouncedTextFieldProps {
   placeholder?: string;
   onCommit: (next: string) => void;
   delayMs?: number;
+}
+
+/** Multi-line variant of DebouncedTextField (e.g. the analysis system prompt). */
+function DebouncedTextArea({ ariaLabel, value, placeholder, onCommit, delayMs = 600 }: DebouncedTextFieldProps) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  useEffect(() => () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+    }
+  }, []);
+  const schedule = (next: string) => {
+    setDraft(next);
+    if (timer.current) {
+      clearTimeout(timer.current);
+    }
+    timer.current = setTimeout(() => onCommit(next), delayMs);
+  };
+  return (
+    <textarea
+      className="textarea"
+      value={draft}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      rows={4}
+      onChange={event => schedule(event.target.value)}
+      style={{ width: '100%' }}
+    />
+  );
 }
 
 function DebouncedTextField({ ariaLabel, value, placeholder, onCommit, delayMs = 400 }: DebouncedTextFieldProps) {

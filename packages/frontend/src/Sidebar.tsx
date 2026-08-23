@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { BackendMode, Board, BoardDetails, Connection } from '@ticket-manager/core';
+import type { BackendMode, Board, BoardDetails, Connection, ConnectionCheck } from '@ticket-manager/core';
 import { Icon, type IconName } from './Icon';
 import { backendModeMeta, boardTypeIcon, boardTypeLabel } from './boardMeta';
 import { BrandModeIcon } from './BrandModeIcon';
+import { ConnectionStatusDot } from './ConnectionStatusDot';
+import { IssuePeek } from './IssuePeek';
 import { useSettings } from './useSettings';
 import { WorkModeView } from './WorkModeView';
 
@@ -53,6 +55,11 @@ export interface SidebarProps {
   onNewSession: () => void;
   /** Clicking the "Boards" heading returns to the board area and refreshes the list. */
   onShowBoards: () => void;
+  /** Selected issue for the peek card pinned above the footer (classic mode). */
+  selectedIssueKey?: string;
+  selectedIssueConnectionId?: string;
+  /** Latest health-check per connection id — drives the group-row status dots. */
+  connectionChecks?: Record<string, ConnectionCheck | undefined>;
 }
 
 interface BoardGroup {
@@ -78,7 +85,10 @@ export function Sidebar({
   onSelectFeature,
   featureCounts,
   onNewSession,
-  onShowBoards
+  onShowBoards,
+  selectedIssueKey,
+  selectedIssueConnectionId,
+  connectionChecks
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
@@ -228,6 +238,11 @@ export function Sidebar({
                       <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={15} />
                     </span>
                     <span className="tree-label">{group.label}</span>
+                    {/* Health dot per real connection; the demo backend is
+                        always local, so its group carries no dot. */}
+                    {group.key !== 'demo' && (
+                      <ConnectionStatusDot check={connectionChecks?.[group.key]} />
+                    )}
                     <span className="tree-meta">{group.boards.length}</span>
                   </button>
 
@@ -266,6 +281,10 @@ export function Sidebar({
           </>
         )}
       </div>
+
+      {mode === 'classic' && selectedIssueKey && (
+        <IssuePeek issueKey={selectedIssueKey} connectionId={selectedIssueConnectionId} />
+      )}
 
       <div className="sidebar-footer">
         <button

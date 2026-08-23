@@ -48,7 +48,7 @@ suite('AiSessionManager — Agent Sessions', () => {
   };
 
   setup(() => {
-    const memento = new MemoryMemento() as unknown as import('vscode').Memento;
+    const memento = new MemoryMemento();
     manager = new AiSessionManager(memento);
   });
 

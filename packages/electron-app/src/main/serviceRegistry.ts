@@ -10,6 +10,7 @@ import {
 import { getConnectionStore } from './connectionStoreInstance';
 import { getDemoService } from './demoServiceInstance';
 import { getUserWorkspaceStore } from './userWorkspaceStoreInstance';
+import { getLogBus } from './logBusInstance';
 import { ElectronLiveFolderConfigProvider } from './adapters/electronLiveFolderConfigProvider';
 import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
@@ -21,13 +22,17 @@ const gitLabServices = new Map<string, GitLabBoardService>();
 const userWorkspaceServices = new Map<string, UserWorkspaceService>();
 const stubServices = new Map<BackendMode, StubBackendService>();
 
-const jiraLogSink: LogSink = {
-  appendLine: message => console.log(`[jira] ${message}`)
+/**
+ * Backend sinks tee into the shared log bus (the Output panel's source) while
+ * keeping their `[jira]`/`[gitlab]` prefixes on the console exactly as before.
+ */
+const consoleSink: LogSink = {
+  appendLine: line => console.log(line)
 };
 
-const gitLabLogSink: LogSink = {
-  appendLine: message => console.log(`[gitlab] ${message}`)
-};
+const jiraLogSink: LogSink = getLogBus().tee('jira', consoleSink);
+
+const gitLabLogSink: LogSink = getLogBus().tee('gitlab', consoleSink);
 
 /**
  * Scopes a pre-registered Atlassian 3LO app needs for the remote MCP server

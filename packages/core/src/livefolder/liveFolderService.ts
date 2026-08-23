@@ -238,6 +238,9 @@ export class LiveFolderService implements IssueTrackerService {
   private boardRoots: LiveFolderBoardRoot[] = [];
   private issuesByRoot = new Map<string, LiveIssue[]>();
   private loaded = false;
+  /** In-flight first load — concurrent callers share it instead of racing a
+   *  second `loadFromDisk` (whose template-upgrade pass rewrites files). */
+  private loadingPromise?: Promise<void>;
   private watchers: FSWatcher[] = [];
   private debounceTimer?: ReturnType<typeof setTimeout>;
   /** Track paths we just wrote to, so we can skip the watcher callback. */
@@ -312,6 +315,14 @@ export class LiveFolderService implements IssueTrackerService {
   ): Promise<PagedIssues> {
     await this.ensureLoaded();
     let list = [...this.issues];
+
+    // Multi-root connections expose one board per root but share a single
+    // projectKey, so board scoping has to go through the root's issue list —
+    // projectKeys alone would return every root's issues for every board.
+    if (filters.boardId) {
+      const root = this.boardRoots.find(candidate => candidate.id === filters.boardId);
+      list = root ? [...(this.issuesByRoot.get(root.rootPath) ?? [])] : [];
+    }
 
     if (filters.projectKeys.length > 0) {
       const pks = new Set(filters.projectKeys);
@@ -883,7 +894,17 @@ export class LiveFolderService implements IssueTrackerService {
     if (this.loaded) {
       return;
     }
+    if (!this.loadingPromise) {
+      this.loadingPromise = this.loadInitial();
+      // A failed load clears the memo so the next call retries from scratch.
+      this.loadingPromise.catch(() => {
+        this.loadingPromise = undefined;
+      });
+    }
+    return this.loadingPromise;
+  }
 
+  private async loadInitial(): Promise<void> {
     const folderPath = this.configStore.getLiveFolderPath();
     if (!folderPath) {
       throw new Error('Live Folder path is not configured. Set ticketManager.liveFolderPath.');

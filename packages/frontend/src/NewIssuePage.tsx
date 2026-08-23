@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import {
   getCreatableTypes,
   getDraftParentRule,
+  isIdeaDraftType,
   PRIORITY_OPTIONS,
   SEVERITY_OPTIONS
 } from './issueDraftFields';
@@ -12,6 +13,11 @@ interface NewIssuePageProps {
   board: Board;
   /** Undefined means the built-in demo backend. */
   connection: Connection | undefined;
+  /**
+   * Pre-selected issue type (e.g. 'Idea' from the board's New idea button).
+   * Ignored when the board's backend doesn't offer that type.
+   */
+  initialIssueType?: string;
   onCancel: () => void;
   onCreated: (issueKey: string) => void;
 }
@@ -45,14 +51,17 @@ function FieldRow({
  * discards the created ticket — the form shows the warning and offers to open
  * the ticket as created.
  */
-export function NewIssuePage({ board, connection, onCancel, onCreated }: NewIssuePageProps) {
+export function NewIssuePage({ board, connection, initialIssueType, onCancel, onCreated }: NewIssuePageProps) {
   const mode = connection?.mode ?? 'demo';
   const connectionId = connection?.id;
   const typeOptions = useMemo(() => getCreatableTypes(mode), [mode]);
 
-  const [issueType, setIssueType] = useState(typeOptions[0]);
+  const [issueType, setIssueType] = useState(
+    initialIssueType && typeOptions.includes(initialIssueType) ? initialIssueType : typeOptions[0]
+  );
   const [summary, setSummary] = useState('');
   const [description, setDescription] = useState('');
+  const [ideaTranscript, setIdeaTranscript] = useState('');
   const [parentText, setParentText] = useState('');
   const [priority, setPriority] = useState('');
   const [assignee, setAssignee] = useState('');
@@ -177,6 +186,11 @@ export function NewIssuePage({ board, connection, onCancel, onCreated }: NewIssu
           issueType,
           summary: trimmedSummary,
           description: description.trim() || undefined,
+          // Only sent for ideas, and only when filled — backends that don't
+          // support the field must never see it (GitLab rejects unknown keys).
+          ...(isIdeaDraftType(issueType) && ideaTranscript.trim()
+            ? { ideaTranscript: ideaTranscript.trim() }
+            : {}),
           parentKey: parent.parentKey,
           newParentSummary: parent.newParentSummary,
           boardId: board.id
@@ -217,6 +231,7 @@ export function NewIssuePage({ board, connection, onCancel, onCreated }: NewIssu
     projectKey,
     issueType,
     description,
+    ideaTranscript,
     resolveParent,
     board.id,
     connectionId,
@@ -315,6 +330,22 @@ export function NewIssuePage({ board, connection, onCancel, onCreated }: NewIssu
               onChange={event => setDescription(event.target.value)}
             />
           </FieldRow>
+
+          {isIdeaDraftType(issueType) && (
+            <FieldRow
+              label="Research transcript"
+              description="Idea tickets keep research here instead of code delivery workflows."
+            >
+              <textarea
+                className="textarea"
+                data-testid="new-issue-idea-transcript"
+                rows={5}
+                placeholder="Paste the AI research conversation or notes for this idea…"
+                value={ideaTranscript}
+                onChange={event => setIdeaTranscript(event.target.value)}
+              />
+            </FieldRow>
+          )}
 
           {parentRule.canHaveParent && (
             <FieldRow
