@@ -475,6 +475,10 @@ test('jiracloud oauth connection can use a pre-registered client (BYO)', async (
   expect(mock.lastAuthorizeQuery?.scope).toBe(
     'read:jira-work write:jira-work offline_access'
   );
+  // Atlassian 3LO mandates these on /authorize; `extraAuthorizeParams` in the
+  // BYO injection (serviceRegistry) is what puts them there.
+  expect(mock.lastAuthorizeQuery?.audience).toBe('api.atlassian.com');
+  expect(mock.lastAuthorizeQuery?.prompt).toBe('consent');
   // Redirect URI must point at one of the manager's registered callback
   // URLs — either the `ticketmanager://` scheme callback (when
   // `app.setAsDefaultProtocolClient` succeeded for this run) or the

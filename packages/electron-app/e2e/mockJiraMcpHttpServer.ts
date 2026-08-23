@@ -105,6 +105,8 @@ export interface MockJiraMcpHttpServer {
     redirect_uri?: string;
     state?: string;
     code_challenge?: string;
+    audience?: string;
+    prompt?: string;
   } | null;
   /** Client IDs that MUST present `Authorization: Basic …` on POST /token.
    *  Empty by default — the existing tests' DCR'd public client posts
@@ -137,6 +139,8 @@ interface MockState {
     redirect_uri?: string;
     state?: string;
     code_challenge?: string;
+    audience?: string;
+    prompt?: string;
   } | null;
   /** See the matching field on `MockJiraMcpHttpServer`. */
   confidentialClientIds: Set<string>;
@@ -660,7 +664,9 @@ async function route(
       scope: url.searchParams.get('scope') ?? undefined,
       redirect_uri: redirectUri ?? undefined,
       state: stateParam || undefined,
-      code_challenge: codeChallenge || undefined
+      code_challenge: codeChallenge || undefined,
+      audience: url.searchParams.get('audience') ?? undefined,
+      prompt: url.searchParams.get('prompt') ?? undefined
     };
     pushEvent(state, 'authorize');
     if (!redirectUri) {
