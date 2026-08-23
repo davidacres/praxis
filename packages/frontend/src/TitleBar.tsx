@@ -40,6 +40,11 @@ export function TitleBar({
   const [maximized, setMaximized] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
   const themeRef = useRef<HTMLDivElement | null>(null);
+  // macOS renders the native traffic lights on top of the page (see
+  // `trafficLightPosition` in the main process) rather than in the DOM, so
+  // nothing here reserves space for them by default — the leading button
+  // group needs an explicit inset to sit beside them instead of under them.
+  const isMac = navigator.platform.toLowerCase().includes('mac');
 
   useEffect(() => {
     void window.ticketManager.window.isMaximized().then(setMaximized);
@@ -60,7 +65,7 @@ export function TitleBar({
   }, [themeOpen]);
 
   return (
-    <header className="titlebar">
+    <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
       <div className="titlebar-group">
         <button
           className={`icon-btn${sidebarVisible ? ' active' : ''}`}
@@ -152,29 +157,34 @@ export function TitleBar({
         </div>
       </div>
 
-      <div className="caption-controls">
-        <button
-          className="caption-btn"
-          aria-label="Minimize"
-          onClick={() => void window.ticketManager.window.minimize()}
-        >
-          <Icon name="window-minimize" size={12} strokeWidth={1} />
-        </button>
-        <button
-          className="caption-btn"
-          aria-label={maximized ? 'Restore' : 'Maximize'}
-          onClick={() => void window.ticketManager.window.toggleMaximize()}
-        >
-          <Icon name={maximized ? 'window-restore' : 'window-maximize'} size={12} strokeWidth={1} />
-        </button>
-        <button
-          className="caption-btn caption-close"
-          aria-label="Close window"
-          onClick={() => void window.ticketManager.window.close()}
-        >
-          <Icon name="window-close" size={12} strokeWidth={1} />
-        </button>
-      </div>
+      {/* macOS already has the native traffic lights (see `titleBarStyle`/
+          `trafficLightPosition` in the main process) — these Windows-style
+          caption buttons would just duplicate them. */}
+      {!isMac && (
+        <div className="caption-controls">
+          <button
+            className="caption-btn"
+            aria-label="Minimize"
+            onClick={() => void window.ticketManager.window.minimize()}
+          >
+            <Icon name="window-minimize" size={12} strokeWidth={1} />
+          </button>
+          <button
+            className="caption-btn"
+            aria-label={maximized ? 'Restore' : 'Maximize'}
+            onClick={() => void window.ticketManager.window.toggleMaximize()}
+          >
+            <Icon name={maximized ? 'window-restore' : 'window-maximize'} size={12} strokeWidth={1} />
+          </button>
+          <button
+            className="caption-btn caption-close"
+            aria-label="Close window"
+            onClick={() => void window.ticketManager.window.close()}
+          >
+            <Icon name="window-close" size={12} strokeWidth={1} />
+          </button>
+        </div>
+      )}
     </header>
   );
 }

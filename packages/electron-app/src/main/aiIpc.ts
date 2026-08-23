@@ -1,24 +1,33 @@
 import { randomUUID } from 'node:crypto';
 import { BrowserWindow, ipcMain } from 'electron';
 import {
-  clearVercelApiKey,
+  clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
+  PROVIDER_DESCRIPTORS,
   reviewTicketWithVercelGateway,
   runLocalPeerReview,
-  storeVercelApiKey,
+  storeProviderApiKey,
   type AgentSessionRecord,
   type AgentTaskDefinition,
   type AgentWorkflowReference,
   type AiDelegateInput,
+  type AiProvider,
   type AiReviewProgress,
-  type IssueDetails
+  type IssueDetails,
+  type PermissionDecision
 } from '@ticket-manager/core';
 import {
+  abortActiveTask,
+  getAcpAgentHost,
   getAiAnalysisStore,
   getAiProviderStatus,
   getAiSessionManager,
   getVercelAgentService,
-  resolveGatewayOptions
+  listAiProviderStatuses,
+  resolveAcpStartOptions,
+  resolveConnectionOptions,
+  resolveGatewayOptions,
+  respondToActivePermission
 } from './aiInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -56,12 +65,30 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:getStatus', async () => getAiProviderStatus());
 
+  ipcMain.handle('ai:listProviderStatuses', async () => listAiProviderStatuses());
+
+  ipcMain.handle(
+    'ai:setProviderApiKey',
+    async (_event: Electron.IpcMainInvokeEvent, provider: AiProvider, value: string) => {
+      const trimmed = typeof value === 'string' ? value.trim() : '';
+      if (trimmed) {
+        await storeProviderApiKey(getSecretsStore(), provider, trimmed);
+      } else {
+        await clearProviderApiKey(getSecretsStore(), provider);
+      }
+      const statuses = await listAiProviderStatuses();
+      return statuses.find(s => s.provider === provider) ?? (await getAiProviderStatus());
+    }
+  );
+
+  // Back-compat: applies to the currently active provider.
   ipcMain.handle('ai:setApiKey', async (_event: Electron.IpcMainInvokeEvent, value: string) => {
+    const settings = getSettingsBackend().read();
     const trimmed = typeof value === 'string' ? value.trim() : '';
     if (trimmed) {
-      await storeVercelApiKey(getSecretsStore(), trimmed);
+      await storeProviderApiKey(getSecretsStore(), settings.ai.activeProvider, trimmed);
     } else {
-      await clearVercelApiKey(getSecretsStore());
+      await clearProviderApiKey(getSecretsStore(), settings.ai.activeProvider);
     }
     return getAiProviderStatus();
   });
@@ -75,11 +102,15 @@ export function registerAiIpc(): void {
   ipcMain.handle(
     'ai:delegate',
     async (_event: Electron.IpcMainInvokeEvent, input: AiDelegateInput) => {
-      const gateway = await resolveGatewayOptions();
-      if (!gateway.apiKey) {
-        throw new Error(
-          'No Vercel AI Gateway API key configured. Add one under Settings → AI Provider.'
-        );
+      const settings = getSettingsBackend().read();
+      const provider = input.provider ?? settings.ai.activeProvider;
+      const descriptor = PROVIDER_DESCRIPTORS[provider];
+
+      // Only `kind: 'api'` providers need an API key up front — CLI-hosted
+      // providers (Claude Code, Codex) authenticate themselves.
+      const gateway = descriptor.kind === 'api' ? await resolveConnectionOptions(provider) : undefined;
+      if (descriptor.kind === 'api' && !gateway?.apiKey) {
+        throw new Error(`No ${descriptor.label} API key configured. Add one under Settings → AI Provider.`);
       }
 
       let issue: IssueDetails;
@@ -103,8 +134,6 @@ export function registerAiIpc(): void {
         } as IssueDetails;
       }
 
-      const settings = getSettingsBackend().read();
-
       // Analysis gate: when enabled, an issue-bound delegation requires a
       // confirmed analysis first (mirrors the extension's assignIssueToAi gate).
       if (input.issueKey && settings.ai.analysisGateEnabled) {
@@ -126,12 +155,23 @@ export function registerAiIpc(): void {
       }
       const workingDirectory =
         input.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
-      await agentService.startTask(issue, taskDefinition, {
-        apiKey: gateway.apiKey,
-        gatewayUrl: gateway.gatewayUrl,
-        workingDirectory,
-        model: gateway.model
-      });
+
+      if (descriptor.kind === 'cli-agent') {
+        const { command, args } = resolveAcpStartOptions(provider);
+        await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
+          command,
+          args,
+          workingDirectory
+        });
+      } else {
+        await agentService.startTask(issue, taskDefinition, {
+          apiKey: gateway!.apiKey,
+          gatewayUrl: gateway!.gatewayUrl,
+          workingDirectory,
+          model: gateway!.model,
+          provider
+        });
+      }
       const record = sessionManager.getAgentSession(issue.key);
       if (!record) {
         throw new Error(`Session for ${issue.key} did not start.`);
@@ -141,8 +181,15 @@ export function registerAiIpc(): void {
   );
 
   ipcMain.handle('ai:abort', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
-    await agentService.abortTask(issueKey);
+    await abortActiveTask(issueKey);
   });
+
+  ipcMain.handle(
+    'ai:respondToPermission',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, decision: PermissionDecision) => {
+      respondToActivePermission(issueKey, decision);
+    }
+  );
 
   // ── Workflow packs ────────────────────────────────────────────────────────
 

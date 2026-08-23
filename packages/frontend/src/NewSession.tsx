@@ -1,12 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import type { AiProvider, AiProviderStatus } from '@ticket-manager/core';
 import { Icon } from './Icon';
+
+const PROVIDER_LABELS: Record<AiProvider, string> = {
+  'vercel-gateway': 'Vercel AI Gateway',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  'claude-code-cli': 'Claude Code (local)',
+  'codex-cli': 'Codex CLI (local)'
+};
 
 export interface NewSessionProps {
   workspaceName: string;
   agentName: string;
   branchName: string;
   /** Starts the session; rejects (e.g. provider not configured) surface inline. */
-  onSubmit: (goal: string) => Promise<void>;
+  onSubmit: (goal: string, provider?: AiProvider) => Promise<void>;
   /**
    * Number of configured tracker connections. Zero means every board on screen
    * comes from the built-in demo backend, which is worth saying out loud before
@@ -33,7 +43,54 @@ export function NewSession({
   const [dismissed, setDismissed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [providerStatuses, setProviderStatuses] = useState<AiProviderStatus[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<AiProvider | undefined>();
+  const [providerMenuPos, setProviderMenuPos] = useState<{ top: number; left: number } | undefined>();
+  const providerChipRef = useRef<HTMLButtonElement | null>(null);
+  const providerMenuRef = useRef<HTMLDivElement | null>(null);
   const noticeVisible = connectionCount === 0 && !dismissed;
+
+  useEffect(() => {
+    window.ticketManager.ai
+      .listProviderStatuses()
+      .then(setProviderStatuses)
+      .catch(() => setProviderStatuses([]));
+    // Default to the app's active provider (Settings → AI Provider), not
+    // just "whichever happens to be configured" — a CLI-hosted provider is
+    // always reported as "configured" (it needs no API key from us) even
+    // when its binary isn't installed, so auto-picking "first configured"
+    // could silently swap the session onto a provider the user never chose.
+    window.ticketManager.settings
+      .get()
+      .then(settings => setSelectedProvider(current => current ?? settings.ai.activeProvider))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!providerMenuPos) {
+      return;
+    }
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (providerMenuRef.current?.contains(target) || providerChipRef.current?.contains(target)) {
+        return;
+      }
+      setProviderMenuPos(undefined);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
+  }, [providerMenuPos]);
+
+  const toggleProviderMenu = () => {
+    if (providerMenuPos) {
+      setProviderMenuPos(undefined);
+      return;
+    }
+    const rect = providerChipRef.current?.getBoundingClientRect();
+    if (rect) {
+      setProviderMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+  };
 
   const submit = async () => {
     const trimmed = goal.trim();
@@ -43,7 +100,7 @@ export function NewSession({
     setSubmitting(true);
     setError(undefined);
     try {
-      await onSubmit(trimmed);
+      await onSubmit(trimmed, selectedProvider);
       setGoal('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -120,10 +177,51 @@ export function NewSession({
             <button className="composer-chip" aria-label="Attach">
               <Icon name="plus" size={16} />
             </button>
-            <button className="composer-chip">
-              <Icon name="pencil" size={14} />
-              Agent
+            <button
+              ref={providerChipRef}
+              className="composer-chip"
+              data-testid="new-session-provider-chip"
+              aria-haspopup="listbox"
+              aria-expanded={Boolean(providerMenuPos)}
+              onClick={toggleProviderMenu}
+            >
+              <Icon name="robot" size={14} />
+              {selectedProvider ? PROVIDER_LABELS[selectedProvider] : 'Provider'}
+              <Icon name="chevron-down" size={12} />
             </button>
+            {providerMenuPos &&
+              createPortal(
+                <div
+                  ref={providerMenuRef}
+                  className="composer-provider-menu"
+                  role="listbox"
+                  aria-label="AI provider"
+                  style={{ position: 'fixed', top: providerMenuPos.top, left: providerMenuPos.left }}
+                >
+                  {providerStatuses.length === 0 && (
+                    <div className="popover-label">No providers configured</div>
+                  )}
+                  {providerStatuses.map(status => (
+                    <button
+                      key={status.provider}
+                      type="button"
+                      className={`composer-provider-option${selectedProvider === status.provider ? ' active' : ''}`}
+                      data-testid={`new-session-provider-option-${status.provider}`}
+                      role="option"
+                      aria-selected={selectedProvider === status.provider}
+                      disabled={!status.configured}
+                      onClick={() => {
+                        setSelectedProvider(status.provider);
+                        setProviderMenuPos(undefined);
+                      }}
+                    >
+                      {PROVIDER_LABELS[status.provider]}
+                      {!status.configured ? ' (not configured)' : ''}
+                    </button>
+                  ))}
+                </div>,
+                document.body
+              )}
             <button className="composer-chip">
               <Icon name="robot" size={14} />
               Auto

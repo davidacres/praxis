@@ -286,3 +286,35 @@ export function resetServiceForConnection(connectionId: string): void {
     userWorkspace.dispose();
   }
 }
+
+/**
+ * Disposes every cached backend service (closing any live-folder/user-workspace
+ * chokidar watchers in particular) so the app process can exit cleanly.
+ *
+ * Must run on `before-quit`, not just `window-all-closed` — on macOS closing
+ * the last window doesn't quit the app, and a watcher left open otherwise
+ * keeps the process alive past window close, hanging a graceful shutdown
+ * (Electron/Node won't exit while an fs watcher — e.g. macOS FSEvents — is
+ * still active).
+ */
+export function disposeAllServices(): void {
+  for (const service of liveFolderServices.values()) {
+    service.dispose();
+  }
+  liveFolderServices.clear();
+
+  for (const service of userWorkspaceServices.values()) {
+    service.dispose();
+  }
+  userWorkspaceServices.clear();
+
+  for (const service of jiraServices.values()) {
+    service.dispose();
+  }
+  jiraServices.clear();
+
+  for (const service of gitLabServices.values()) {
+    service.dispose();
+  }
+  gitLabServices.clear();
+}

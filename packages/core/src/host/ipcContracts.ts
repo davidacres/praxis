@@ -1,4 +1,5 @@
 import type {
+  AiProvider,
   Board,
   BoardColumnPreferences,
   BoardDetails,
@@ -18,6 +19,7 @@ import type {
   UpdateIssueInput
 } from '../types';
 import type { IdentifiedPlanFolder } from '../livefolder/markdownPlanParser';
+import type { BoardDraftRow } from '../userWorkspace/boardDraftPlanner';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
 import type {
   AgentSessionRecord,
@@ -25,6 +27,7 @@ import type {
   AgentWorkflowReference,
   IssueWorkflowAssignment
 } from '../ai/agentTypes';
+import type { PermissionDecision } from '../ai/tools';
 import type { LprResult } from '../ai/aiReviewService';
 import type {
   TaskDesignerFlowRecommendation,
@@ -117,8 +120,15 @@ export interface ConnectionIpc {
  * to route to the right backend — the store itself is shared.
  */
 export interface UserWorkspaceIpc {
-  /** Discovers plan folders under a picked folder — step 2 of the create-board wizard. */
-  discoverPlans(folderPath: string): Promise<IdentifiedPlanFolder[]>;
+  /**
+   * Discovers board candidates under a picked folder — step 2 of the
+   * create-board wizard. Merges two scans (plan folders and Git repository
+   * roots) the same way the VS Code extension's "Find repositories" does,
+   * so a brand-new repo with no plans content yet still surfaces a row.
+   */
+  discoverBoardDrafts(connectionId: string, folderPath: string): Promise<BoardDraftRow[]>;
+  /** Re-validates edited draft rows (unique/well-formed project keys) before creation. */
+  validateBoardDrafts(connectionId: string, rows: BoardDraftRow[]): Promise<string | undefined>;
   createBoard(connectionId: string, input: CreateBoardInput): Promise<Board>;
   deleteBoard(connectionId: string, boardId: string): Promise<void>;
 }
@@ -248,11 +258,11 @@ export interface AiAnalysisState {
 export type AiKeySource = 'secret' | 'env' | 'none';
 
 export interface AiProviderStatus {
-  provider: 'vercel-gateway';
-  /** True when a usable gateway API key exists (secret store or env fallback). */
+  provider: AiProvider;
+  /** True when a usable API key exists (secret store or, for vercel-gateway, env fallback). */
   configured: boolean;
   keySource: AiKeySource;
-  /** Effective gateway URL — the configured value or the shipped default. */
+  /** Effective base URL — the configured value or the provider's shipped default. */
   gatewayUrl: string;
   defaultModel: string;
   agentName: string;
@@ -274,6 +284,8 @@ export interface AiDelegateInput {
   task?: Partial<AgentTaskDefinition>;
   /** Working directory the agent's local tools run in. Defaults to the app's cwd. */
   workingDirectory?: string;
+  /** Provider override for this session; defaults to `settings.ai.activeProvider`. */
+  provider?: AiProvider;
 }
 
 /**
@@ -283,16 +295,26 @@ export interface AiDelegateInput {
  * over the `ai:sessionChanged` push channel.
  */
 export interface AiIpc {
-  /** Provider configuration snapshot for the settings UI. */
+  /** Active provider's configuration snapshot — kept for back-compat callers. */
   getStatus(): Promise<AiProviderStatus>;
-  /** Stores the gateway API key encrypted; empty string clears it. */
+  /** Stores the active provider's API key encrypted; empty string clears it. */
   setApiKey(value: string): Promise<AiProviderStatus>;
+  /** Every configured provider's status snapshot, for the settings UI and the session picker. */
+  listProviderStatuses(): Promise<AiProviderStatus[]>;
+  /** Stores a specific provider's API key encrypted; empty string clears it. */
+  setProviderApiKey(provider: AiProvider, value: string): Promise<AiProviderStatus>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
   /** Starts a general agent task for an issue; resolves with the new session record. */
   delegate(input: AiDelegateInput): Promise<AgentSessionRecord>;
   /** Aborts the running task for an issue (no-op when none is active). */
   abort(issueKey: string): Promise<void>;
+  /**
+   * Resolves the oldest pending permission request for an issue's active
+   * task (no-op when none is pending). `'allow_always'` also resolves every
+   * other request currently queued for that task.
+   */
+  respondToPermission(issueKey: string, decision: PermissionDecision): Promise<void>;
   /** Subscribes to session record updates; returns an unsubscribe function. */
   onSessionChanged(listener: (record: AgentSessionRecord) => void): () => void;
 

@@ -10,6 +10,7 @@
     "compile": "tsc -p ."
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "chokidar": "^3.6.0",
     "jsonc-parser": "^3.3.1",

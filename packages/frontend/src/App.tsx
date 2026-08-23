@@ -425,8 +425,8 @@ export function App() {
           workspaceName="ticket-manager"
           agentName="Ticket Agent"
           branchName="main"
-          onSubmit={async goal => {
-            const record = await window.ticketManager.ai.delegate({ goal });
+          onSubmit={async (goal, provider) => {
+            const record = await window.ticketManager.ai.delegate({ goal, provider });
             navigate({ feature: 'sessions', sessionKey: record.issueKey });
           }}
           connectionCount={connections.length}

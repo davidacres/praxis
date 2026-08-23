@@ -1,14 +1,13 @@
 import {
   assistantMessageWithToolCalls,
-  buildChatRequest,
-  collectChatCompletion,
-  postChatStream,
   toolResultMessages,
+  type ChatCompletionResult,
   type ChatCompletionToolCall,
   type GatewayOptions,
   type GatewayToolDefinition,
   type WireMessage
 } from '../gateway';
+import type { ProviderAdapter } from '../providers/providerAdapter';
 
 export type AgentLoopEvent =
   | { type: 'text_delta'; text: string }
@@ -24,6 +23,8 @@ export interface AgentToolExecutor {
 }
 
 export interface AgentLoopOptions {
+  /** Provider wire adapter — the only per-provider seam in this loop. */
+  adapter: ProviderAdapter;
   gateway: GatewayOptions;
   modelId: string;
   systemPrompt: string;
@@ -99,14 +100,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         { role: 'system', content: options.systemPrompt },
         ...history
       ];
-      const body = buildChatRequest({
+      const body = options.adapter.buildChatRequest({
         modelId: options.modelId,
         messages,
         tools: options.tools
       });
 
-      const handle = await postChatStream(options.gateway, body, options.signal, idleTimeoutMs);
-      const completion = await collectChatCompletion(handle.lines, {
+      const handle = await options.adapter.postChatStream(
+        options.gateway,
+        body,
+        options.signal,
+        idleTimeoutMs
+      );
+      const completion = await collectChatCompletion(options.adapter, handle.lines, {
         signal: options.signal,
         onTextDelta: text => {
           touch();
@@ -183,6 +189,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       error: message
     };
   }
+}
+
+/** Collect a full completion from a stream (text + tool calls) via the provider's own stream parser. */
+async function collectChatCompletion(
+  adapter: ProviderAdapter,
+  lines: AsyncIterable<string>,
+  options?: {
+    signal?: AbortSignal;
+    onTextDelta?: (text: string) => void;
+  }
+): Promise<ChatCompletionResult> {
+  let final: ChatCompletionResult = { text: '', toolCalls: [] };
+  for await (const event of adapter.consumeChatStream(lines, options?.signal)) {
+    if (event.type === 'text_delta') {
+      options?.onTextDelta?.(event.text);
+    } else if (event.type === 'done') {
+      final = event.result;
+    }
+  }
+  return final;
 }
 
 function lastAssistantText(history: WireMessage[]): string {

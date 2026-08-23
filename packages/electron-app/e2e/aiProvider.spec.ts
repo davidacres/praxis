@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
+import { startMockAnthropicServer, type MockAnthropicServer } from './mockAnthropicServer';
 
 /**
  * Phase D — AI foundation. Covers the two halves of the desktop AI plumbing:
@@ -30,6 +31,7 @@ const NO_GATEWAY_ENV = {
 
 let app: TestApp | undefined;
 let mock: MockGatewayServer | undefined;
+let anthropicMock: MockAnthropicServer | undefined;
 
 test.afterEach(async () => {
   if (app) {
@@ -39,6 +41,10 @@ test.afterEach(async () => {
   if (mock) {
     await mock.close();
     mock = undefined;
+  }
+  if (anthropicMock) {
+    await anthropicMock.close();
+    anthropicMock = undefined;
   }
 });
 
@@ -214,4 +220,155 @@ test('abort stops an in-flight session', async () => {
   });
 
   await expect.poll(readState).toBe('aborted');
+});
+
+/** Configures one provider's base URL (as settings) and API key (as a keychain secret), matching how the Settings UI does it. */
+async function configureProvider(
+  win: TestApp['window'],
+  provider: 'openai' | 'anthropic',
+  baseUrl: string,
+  apiKey: string
+): Promise<void> {
+  await win.evaluate(
+    async ({ provider, baseUrl, apiKey }) => {
+      const w = window as unknown as {
+        ticketManager: {
+          settings: {
+            set: (patch: {
+              ai: { providers: Record<string, { baseUrl: string }> };
+            }) => Promise<unknown>;
+          };
+          ai: { setProviderApiKey: (provider: string, value: string) => Promise<unknown> };
+        };
+      };
+      await w.ticketManager.settings.set({ ai: { providers: { [provider]: { baseUrl } } } });
+      await w.ticketManager.ai.setProviderApiKey(provider, apiKey);
+    },
+    { provider, baseUrl, apiKey }
+  );
+}
+
+test('delegate completes against an OpenAI-provider mock (same wire format as Vercel)', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  const win = app.window;
+  await configureProvider(win, 'openai', mock.baseUrl, 'e2e-openai-key');
+
+  await win.evaluate(async () => {
+    const w = window as unknown as {
+      ticketManager: {
+        ai: {
+          delegate: (input: {
+            issueKey: string;
+            provider: string;
+            task: { goal: string; maxSteps: number; timeoutMs: number };
+          }) => Promise<{ sessionId: string }>;
+        };
+      };
+    };
+    await w.ticketManager.ai.delegate({
+      issueKey: 'APP-102',
+      provider: 'openai',
+      task: { goal: 'Smoke-test the OpenAI provider', maxSteps: 3, timeoutMs: 30000 }
+    });
+  });
+
+  await expect
+    .poll(async () =>
+      win.evaluate(async () => {
+        const w = window as unknown as {
+          ticketManager: {
+            ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
+          };
+        };
+        const sessions = await w.ticketManager.ai.listSessions();
+        return sessions.find(s => s.issueKey === 'APP-102')?.state;
+      })
+    )
+    .toBe('completed');
+
+  expect(mock.requests.length).toBeGreaterThan(0);
+  expect(mock.requests[0]!.authorization).toBe('Bearer e2e-openai-key');
+});
+
+test('delegate completes against an Anthropic-provider mock (Messages API wire format)', async () => {
+  anthropicMock = await startMockAnthropicServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  const win = app.window;
+  await configureProvider(win, 'anthropic', anthropicMock.baseUrl, 'e2e-anthropic-key');
+
+  await win.evaluate(async () => {
+    const w = window as unknown as {
+      ticketManager: {
+        ai: {
+          delegate: (input: {
+            issueKey: string;
+            provider: string;
+            task: { goal: string; maxSteps: number; timeoutMs: number };
+          }) => Promise<{ sessionId: string }>;
+        };
+      };
+    };
+    await w.ticketManager.ai.delegate({
+      issueKey: 'APP-103',
+      provider: 'anthropic',
+      task: { goal: 'Smoke-test the Anthropic provider', maxSteps: 3, timeoutMs: 30000 }
+    });
+  });
+
+  await expect
+    .poll(async () =>
+      win.evaluate(async () => {
+        const w = window as unknown as {
+          ticketManager: {
+            ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
+          };
+        };
+        const sessions = await w.ticketManager.ai.listSessions();
+        return sessions.find(s => s.issueKey === 'APP-103')?.state;
+      })
+    )
+    .toBe('completed');
+
+  expect(anthropicMock.requests.length).toBeGreaterThan(0);
+  expect(anthropicMock.requests[0]!.apiKey).toBe('e2e-anthropic-key');
+  expect(anthropicMock.requests[0]!.anthropicVersion).toBe('2023-06-01');
+  // Anthropic's request shape carries the system prompt as a top-level field, not a message.
+  const parsedBody = JSON.parse(anthropicMock.requests[0]!.body) as { system?: string; messages: unknown[] };
+  expect(parsedBody.system).toBeTruthy();
+});
+
+test('the New Session composer lists configured providers and can start a session on a non-default one', async () => {
+  anthropicMock = await startMockAnthropicServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  const win = app.window;
+  await configureProvider(win, 'anthropic', anthropicMock.baseUrl, 'e2e-anthropic-key');
+  // Reload so the composer's provider list picks up the freshly-configured provider.
+  await win.reload();
+  await win.waitForSelector('[data-testid="new-session-view"]');
+
+  await win.locator('[data-testid="new-session-provider-chip"]').click();
+  await win.locator('[data-testid="new-session-provider-option-anthropic"]').click();
+
+  const composer = win.locator('[data-testid="new-session-view"] textarea');
+  await composer.fill('Try the composer provider picker');
+  await win.locator('[data-testid="new-session-submit"]').click();
+
+  await expect
+    .poll(async () =>
+      win.evaluate(async () => {
+        const w = window as unknown as {
+          ticketManager: {
+            ai: {
+              listSessions: () => Promise<Array<{ state: string; issueKey: string }>>;
+            };
+          };
+        };
+        const sessions = await w.ticketManager.ai.listSessions();
+        return sessions.find(s => s.issueKey.startsWith('SESSION-'))?.state;
+      })
+    )
+    .toBe('completed');
+
+  expect(anthropicMock.requests.length).toBeGreaterThan(0);
 });

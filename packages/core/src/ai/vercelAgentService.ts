@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
-import type { IssueDetails } from '../types';
+import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireMessage } from './agentRuntime';
 import { buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import { AGENT_DEFAULTS, type AgentEventSummary, type AgentEventType, type AgentTaskDefinition } from './agentTypes';
@@ -12,10 +12,9 @@ import {
   toWireModelId,
   type GatewayOptions
 } from './gateway';
+import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
 import { LOCAL_TOOL_DEFINITIONS, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
-
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6';
 
 interface ActiveTask {
   issueKey: string;
@@ -54,6 +53,8 @@ export interface VercelAgentStartOptions {
   gatewayUrl?: string;
   workingDirectory?: string;
   model?: string;
+  /** Defaults to `'vercel-gateway'` for backward compatibility. */
+  provider?: AiProvider;
 }
 
 export class VercelAgentService {
@@ -91,13 +92,32 @@ export class VercelAgentService {
     this.sessionManager.appendAgentEvents(issueKey, [event], incrementSteps);
   }
 
-  private resolveGateway(options: VercelAgentStartOptions): GatewayOptions {
-    const apiKey = resolveGatewayApiKeyFromEnv(options.apiKey);
-    const url = resolveGatewayUrlFromEnv(options.gatewayUrl);
-    if (!apiKey) {
-      throw new Error('Vercel AI Gateway API key is not configured.');
+  /** Narrows to an `'api'`-kind descriptor — `'cli-agent'` providers never reach this service. */
+  private requireApiDescriptor(provider: AiProvider) {
+    const descriptor = PROVIDER_DESCRIPTORS[provider];
+    if (descriptor.kind !== 'api') {
+      throw new Error(`${descriptor.label} is a CLI-hosted provider — use AcpAgentHost, not VercelAgentService.`);
     }
-    return { url, apiKey };
+    return descriptor;
+  }
+
+  private resolveConnection(provider: AiProvider, options: VercelAgentStartOptions): GatewayOptions {
+    const descriptor = this.requireApiDescriptor(provider);
+    if (provider === 'vercel-gateway') {
+      // Preserves the existing env-var fallback chain (AI_GATEWAY_URL/KEY,
+      // VERCEL_AI_GATEWAY_URL, FROSTY_VERCEL_*) for backward compatibility.
+      const apiKey = resolveGatewayApiKeyFromEnv(options.apiKey);
+      const url = resolveGatewayUrlFromEnv(options.gatewayUrl);
+      if (!apiKey) {
+        throw new Error(`${descriptor.label} API key is not configured.`);
+      }
+      return { url, apiKey };
+    }
+    const apiKey = options.apiKey?.trim();
+    if (!apiKey) {
+      throw new Error(`${descriptor.label} API key is not configured.`);
+    }
+    return { url: options.gatewayUrl?.trim() || descriptor.defaultBaseUrl, apiKey };
   }
 
   private loadWorkflowInstructionsForPrompt(
@@ -266,6 +286,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       userPrompt?: string;
       history?: WireMessage[];
       gateway: GatewayOptions;
+      provider: AiProvider;
       model: string;
       workingDirectory: string;
       maxSteps: number;
@@ -284,6 +305,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     });
 
     const result = await runAgentLoop({
+      adapter: resolveProviderAdapter(options.provider),
       gateway: options.gateway,
       modelId: toWireModelId(options.model),
       systemPrompt: options.systemPrompt,
@@ -348,11 +370,12 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       await this.abortTask(issue.key);
     }
 
-    const gateway = this.resolveGateway(options);
+    const provider = options.provider ?? 'vercel-gateway';
+    const gateway = this.resolveConnection(provider, options);
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
     const maxSteps = taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
-    const model = options.model?.trim() || DEFAULT_MODEL;
+    const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const sessionId = randomUUID();
     const systemPrompt = buildSystemPrompt(taskDefinition, issue);
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
@@ -368,22 +391,26 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
-    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, 'vercel-gateway');
+    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider);
     this.sessionManager.updateAgentState(issue.key, 'planning');
-    this.appendEvent(issue.key, evt('session_start', 'Vercel gateway agent session started'));
+    this.appendEvent(
+      issue.key,
+      evt('session_start', `${PROVIDER_DESCRIPTORS[provider].label} agent session started`)
+    );
 
     task.timeoutHandle = setTimeout(() => {
       void this.failTaskForTimeout(issue.key, timeoutMs);
     }, timeoutMs);
 
     this.logger.appendLine(
-      `[VercelAgent] Starting session for ${issue.key} model=${model} cwd=${workingDirectory}`
+      `[VercelAgent] Starting session for ${issue.key} provider=${provider} model=${model} cwd=${workingDirectory}`
     );
 
     task.loopPromise = this.runLoopForIssue(issue.key, {
       systemPrompt,
       userPrompt,
       gateway,
+      provider,
       model,
       workingDirectory,
       maxSteps,
@@ -412,11 +439,12 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       throw new Error(`No agent session found for ${issueKey}`);
     }
 
-    const gateway = this.resolveGateway(options);
+    const provider = options.provider ?? record.provider ?? 'vercel-gateway';
+    const gateway = this.resolveConnection(provider, options);
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
-    const model = options.model?.trim() || DEFAULT_MODEL;
+    const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const history = this.sessionManager.getAgentConversationHistory(issueKey);
     const systemPrompt = buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
@@ -455,6 +483,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       userPrompt: resumePrompt,
       history,
       gateway,
+      provider,
       model,
       workingDirectory,
       maxSteps,
