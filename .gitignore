@@ -27,6 +27,13 @@ test-output.txt
 test-failures.txt
 test-*.txt
 
+# Ad-hoc screenshot/debug captures from local desktop/titlebar testing
+/current.png
+/screenshot.png
+/titlebar*.png
+/ascii-preview.ps1
+/row-preview.ps1
+
 # Test coverage
 coverage/
 .nyc_output/
