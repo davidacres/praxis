@@ -54,7 +54,7 @@ Other findings that shape the plan:
 | Agent sessions: list / view / abort | ✓ core move | Sessions sidebar + console view | Console needs the event-push channel |
 | Live session event stream | new IPC channel | console view | The one new plumbing piece |
 | Workflow packs (assign to issue) | ✓ core move | picker dialog | |
-| AI review (`aiReviewService`, 1,202 lines) | ✓ core move | review panel/page | Largest single file; check its webview ties during the move |
+| AI review (`aiReviewService`, 1,202 lines) | ✓ **verbatim core move** (verified: zero vscode/DOM imports; returns markdown strings via `onUpdate` callback seam) | review panel/page | Rendering already lives in the panels, not the service — see §4 risk 1 |
 | Issue analysis window | ✓ core logic | React page | |
 | Delivery workflow (publish command, artifact pattern) | ✓ core move | settings + run action | Runs user shell commands — same allowlist story |
 | Feature decomposition workflow | ✓ core move | action + progress surface | |
@@ -149,9 +149,17 @@ AI phases, mirroring `mockJiraMcpHttpServer`'s pattern).
 
 ## 4. Risks & open questions
 
-1. **AI review file size (1,202 lines)** — likely contains rendering helpers
-   entangled with the extension webview; budget a thin split (logic → core,
-   rendering → per-host UI) rather than a verbatim move.
+1. ~~AI review rendering entanglement~~ — **retired by direct analysis
+   (2026-08-23)**. `aiReviewService.ts` is pure logic: prompt constants,
+   `buildTicketContext`, response parsers, and provider functions returning
+   markdown strings (`LprResult` etc.); streaming goes through a host-agnostic
+   `onUpdate(content)` callback. The "Copilot" variants are aliases for the
+   Vercel gateway path. Rendering already lives in the panels
+   (`issueAnalysisPanelManager`, `localPeerReviewPanel`,
+   `copilotSessionPanel`) via `ui/markdownToHtml.ts` (markdown-it, itself
+   host-agnostic). So the service moves to core verbatim; the real port items
+   are the three panels (Tier 3) plus adopting markdown-it in the desktop
+   frontend for streamed markdown.
 2. **Event streaming volume** — agent sessions can be chatty; throttle/coalesce
    `ai:onSessionEvent` payloads rather than forwarding raw.
 3. **Shell tool trust model on desktop** — identical to the extension's (user's
