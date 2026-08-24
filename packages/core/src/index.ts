@@ -12,6 +12,7 @@ export * from './ai/providerSecrets';
 export * from './ai/providers/providerAdapter';
 export * from './ai/providers/registry';
 export * from './ai/acp/acpAgentHost';
+export * from './ai/copilot/copilotAgentHost';
 export * from './ai/agentTypes';
 export * from './ai/agentWorkflowCatalog';
 export * from './ai/agentPrompt';

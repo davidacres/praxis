@@ -33,6 +33,7 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
   'claude-code-cli': {
     id: 'claude-code-cli',
     kind: 'cli-agent',
+    hostKind: 'acp',
     label: 'Claude Code (local)',
     // @agentclientprotocol/claude-agent-acp's bin — an ACP-compatible
     // wrapper around the Claude Agent SDK. Confirmed on npm at
@@ -43,10 +44,22 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
   'codex-cli': {
     id: 'codex-cli',
     kind: 'cli-agent',
+    hostKind: 'acp',
     label: 'Codex CLI (local)',
     // @agentclientprotocol/codex-acp's bin — the official ACP adapter for
     // OpenAI's Codex CLI.
     defaultCommand: 'codex-acp'
+  },
+  'copilot-cli': {
+    id: 'copilot-cli',
+    kind: 'cli-agent',
+    hostKind: 'copilot-sdk',
+    label: 'GitHub Copilot (local)'
+    // No `defaultCommand`: @github/copilot-sdk spawns its own bundled
+    // `@github/copilot` runtime by default (RuntimeConnection.forStdio()),
+    // unlike the ACP providers above which need an external adapter binary
+    // on PATH. `AiProviderConfig.cliPath` still applies as an optional
+    // override — a path to a different runtime executable.
   }
 };
 

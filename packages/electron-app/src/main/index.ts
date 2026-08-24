@@ -19,7 +19,7 @@ import { initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
-import { getAcpAgentHost } from './aiInstance';
+import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -148,8 +148,10 @@ app.on('window-all-closed', () => {
 // hangs a graceful quit (see disposeAllServices' doc comment).
 app.on('before-quit', () => {
   disposeAllServices();
-  // An ACP-hosted session's subprocess is a child of this process — leaving
-  // it running past quit is the exact same "process won't exit" hang as an
-  // unclosed chokidar watcher (see disposeAllServices' doc comment).
+  // An ACP-hosted session's subprocess (or a Copilot SDK session's runtime
+  // process) is a child of this process — leaving either running past quit
+  // is the exact same "process won't exit" hang as an unclosed chokidar
+  // watcher (see disposeAllServices' doc comment).
   getAcpAgentHost().dispose();
+  getCopilotAgentHost().dispose();
 });
