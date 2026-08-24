@@ -16,8 +16,16 @@ export interface CliAgentProviderDescriptor {
   id: AiProvider;
   kind: 'cli-agent';
   label: string;
-  /** Executable spawned on PATH by default (e.g. `claude-agent-acp`); overridable via `AiProviderConfig.cliPath`. */
-  defaultCommand: string;
+  /**
+   * Which host drives this provider: `'acp'` spawns an ACP-compatible
+   * subprocess over stdio JSON-RPC (`AcpAgentHost`); `'copilot-sdk'` drives
+   * `@github/copilot-sdk`'s own bundled/spawned runtime (`CopilotAgentHost`).
+   * Both are `kind: 'cli-agent'` (no API key up front) but speak distinct
+   * wire protocols and are dispatched to different hosts.
+   */
+  hostKind: 'acp' | 'copilot-sdk';
+  /** Executable spawned on PATH by default (e.g. `claude-agent-acp`); overridable via `AiProviderConfig.cliPath`. `hostKind: 'acp'` only. */
+  defaultCommand?: string;
 }
 
 export type ProviderDescriptor = ApiProviderDescriptor | CliAgentProviderDescriptor;

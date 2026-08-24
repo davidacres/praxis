@@ -112,7 +112,8 @@ const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
   'openai',
   'anthropic',
   'claude-code-cli',
-  'codex-cli'
+  'codex-cli',
+  'copilot-cli'
 ];
 
 export interface PreviewSettings {

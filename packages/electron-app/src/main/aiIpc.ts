@@ -22,10 +22,12 @@ import {
   getAiAnalysisStore,
   getAiProviderStatus,
   getAiSessionManager,
+  getCopilotAgentHost,
   getVercelAgentService,
   listAiProviderStatuses,
   resolveAcpStartOptions,
   resolveConnectionOptions,
+  resolveCopilotStartOptions,
   resolveGatewayOptions,
   respondToActivePermission
 } from './aiInstance';
@@ -156,7 +158,14 @@ export function registerAiIpc(): void {
       const workingDirectory =
         input.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
 
-      if (descriptor.kind === 'cli-agent') {
+      if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
+        const { runtimePath, model } = resolveCopilotStartOptions(provider);
+        await getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
+          runtimePath,
+          model,
+          workingDirectory
+        });
+      } else if (descriptor.kind === 'cli-agent') {
         const { command, args } = resolveAcpStartOptions(provider);
         await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
           command,

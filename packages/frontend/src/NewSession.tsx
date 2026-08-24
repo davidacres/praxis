@@ -8,7 +8,8 @@ const PROVIDER_LABELS: Record<AiProvider, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   'claude-code-cli': 'Claude Code (local)',
-  'codex-cli': 'Codex CLI (local)'
+  'codex-cli': 'Codex CLI (local)',
+  'copilot-cli': 'GitHub Copilot (local)'
 };
 
 export interface NewSessionProps {

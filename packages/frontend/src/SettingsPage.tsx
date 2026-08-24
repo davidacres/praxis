@@ -382,8 +382,10 @@ interface AiProviderMeta {
   keyLabel: string;
   urlPlaceholder: string;
   modelPlaceholder: string;
-  /** `kind: 'cli-agent'` only — default PATH-resolved executable name. */
+  /** `kind: 'cli-agent'` only — default PATH-resolved executable name. Absent for the Copilot SDK's own bundled runtime. */
   defaultCommand?: string;
+  /** `kind: 'cli-agent'` only — overrides the generic "CLI path" field's description. */
+  cliPathDescription?: string;
 }
 
 /** Display metadata for the settings UI — mirrors core's `PROVIDER_DESCRIPTORS`
@@ -431,6 +433,16 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     defaultCommand: 'codex-acp'
+  },
+  {
+    id: 'copilot-cli',
+    kind: 'cli-agent',
+    label: 'GitHub Copilot (local)',
+    keyLabel: '',
+    urlPlaceholder: '',
+    modelPlaceholder: '',
+    cliPathDescription:
+      'Runs the bundled @github/copilot runtime automatically — auth comes from GITHUB_TOKEN/gh CLI login, not a stored key. Override with an absolute path only if you need a different runtime executable.'
   }
 ];
 
@@ -636,7 +648,10 @@ function AiSection({
       {!isApi && (
         <FieldRow
           label="CLI path"
-          description={`Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`}
+          description={
+            selectedMeta.cliPathDescription ??
+            `Executable to spawn — defaults to "${selectedMeta.defaultCommand}" on PATH. Override with an absolute path if it isn't on PATH.`
+          }
         >
           <DebouncedTextField
             ariaLabel={`${selectedMeta.label} CLI path`}
