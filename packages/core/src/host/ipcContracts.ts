@@ -39,6 +39,7 @@ import type {
   TaskDesignerTicketNode
 } from '../taskDesigner/taskDesignerState';
 import type { GitLabMergeRequest } from '../gitlab/gitLabApiService';
+import type { GitCommitDetails, GitDiffResult, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
@@ -394,6 +395,24 @@ export interface TicketManagerIpc {
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
   taskDesigner: TaskDesignerIpc;
+  git: GitIpc;
+}
+
+export interface GitIpc {
+  open(repositoryPath?: string): Promise<GitRepositorySnapshot>;
+  refresh(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  status(repositoryPath: string): Promise<GitStatusSnapshot>;
+  getCommit(repositoryPath: string, hash: string): Promise<GitCommitDetails>;
+  getDiff(repositoryPath: string, hash: string, filePath?: string): Promise<GitDiffResult>;
+  stage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  unstage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  commit(repositoryPath: string, message: string): Promise<GitRepositorySnapshot>;
+  createBranch(repositoryPath: string, name: string, startPoint?: string): Promise<GitRepositorySnapshot>;
+  checkout(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  deleteBranch(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  pull(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  fetch(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  push(repositoryPath: string): Promise<GitRepositorySnapshot>;
 }
 
 // ── Task Designer ────────────────────────────────────────────────────────────

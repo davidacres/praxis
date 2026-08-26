@@ -14,6 +14,7 @@ import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
+import { registerGitIpc } from './gitIpc';
 import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
 import { initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
@@ -125,6 +126,7 @@ void app.whenReady().then(async () => {
   registerAiIpc();
   registerAiWorkflowIpc();
   registerTaskDesignerIpc();
+  registerGitIpc();
   // Seed the Output panel with a launch marker — also gives e2e a
   // deterministic first line to assert against.
   getLogBus().appendLine(`[app] Ticket Manager ${app.getVersion()} started`);
