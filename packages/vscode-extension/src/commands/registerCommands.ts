@@ -1744,7 +1744,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       }
     }),
     vscode.commands.registerCommand('ticketManager.newProject', () => {
-      const enabled = vscode.workspace.getConfiguration('ticketManager').get<boolean>('enableNewProject', false);
+      const enabled = vscode.workspace.getConfiguration('ticketManager').get<boolean>('enableNewProject', true);
       if (!enabled) {
         vscode.window.showInformationMessage(
           'The New Project wizard is a preview feature. Enable it in Settings → Ticket Manager → Enable New Project.',
@@ -1952,6 +1952,5 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     })
   ];
 }
-
 
 

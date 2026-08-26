@@ -4,16 +4,23 @@ import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireMessage } from './agentRuntime';
 import { buildSystemPrompt, type PermissionInfo } from './agentPrompt';
-import { AGENT_DEFAULTS, type AgentEventSummary, type AgentEventType, type AgentTaskDefinition } from './agentTypes';
+import {
+  AGENT_DEFAULTS,
+  type AgentEventSummary,
+  type AgentEventType,
+  type AgentTaskDefinition,
+  type AgentToolMode
+} from './agentTypes';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   resolveGatewayApiKeyFromEnv,
   resolveGatewayUrlFromEnv,
   toWireModelId,
-  type GatewayOptions
+  type GatewayOptions,
+  type GatewayToolDefinition
 } from './gateway';
 import { PROVIDER_DESCRIPTORS, resolveProviderAdapter } from './providers/registry';
-import { LOCAL_TOOL_DEFINITIONS, LocalToolExecutor, type PermissionDecision } from './tools';
+import { localToolDefinitionsForMode, LocalToolExecutor, type PermissionDecision } from './tools';
 import { shouldAutoAllowToolPermission } from './tools/shellAllowlist';
 
 interface ActiveTask {
@@ -55,6 +62,17 @@ export interface VercelAgentStartOptions {
   model?: string;
   /** Defaults to `'vercel-gateway'` for backward compatibility. */
   provider?: AiProvider;
+  /** Host-enforced tool access. */
+  toolMode?: AgentToolMode;
+  /** Host-supplied tools such as the selected issue tracker's capabilities. */
+  toolExtension?: {
+    definitions: ReadonlyArray<GatewayToolDefinition>;
+    execute(
+      name: string,
+      args: Record<string, unknown>,
+      requestPermission: (request: { kind: string; description: string; detail?: string }) => Promise<PermissionDecision>
+    ): Promise<{ ok: boolean; content: string }>;
+  };
 }
 
 export class VercelAgentService {
@@ -253,7 +271,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
         break;
       }
       case 'tool_start':
-        this.appendEvent(issueKey, evt('tool_start', `Running tool: ${event.name}`));
+        this.appendEvent(
+          issueKey,
+          evt('tool_start', `Running tool: ${event.name}`, JSON.stringify(event.arguments, null, 2))
+        );
         break;
       case 'tool_complete':
         this.appendEvent(
@@ -289,8 +310,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       provider: AiProvider;
       model: string;
       workingDirectory: string;
+      toolMode: AgentToolMode;
       maxSteps: number;
       timeoutMs: number;
+      toolExtension?: VercelAgentStartOptions['toolExtension'];
     }
   ): Promise<void> {
     const task = this.activeTasks.get(issueKey);
@@ -300,17 +323,24 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
 
     const toolExecutor = new LocalToolExecutor({
       workingDirectory: options.workingDirectory,
+      toolMode: options.toolMode,
       shouldAutoAllow: shouldAutoAllowToolPermission,
       requestPermission: async request => this.requestPermission(issueKey, request)
     });
+    const compositeExecutor = {
+      execute: (name: string, args: Record<string, unknown>) =>
+        options.toolExtension?.definitions.some(tool => tool.name === name)
+          ? options.toolExtension.execute(name, args, request => this.requestPermission(issueKey, request))
+          : toolExecutor.execute(name, args)
+    };
 
     const result = await runAgentLoop({
       adapter: resolveProviderAdapter(options.provider),
       gateway: options.gateway,
       modelId: toWireModelId(options.model),
       systemPrompt: options.systemPrompt,
-      tools: LOCAL_TOOL_DEFINITIONS,
-      toolExecutor,
+      tools: [...localToolDefinitionsForMode(options.toolMode), ...(options.toolExtension?.definitions ?? [])],
+      toolExecutor: compositeExecutor,
       history: options.history,
       userPrompt: options.userPrompt,
       maxSteps: options.maxSteps,
@@ -373,11 +403,16 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     const provider = options.provider ?? 'vercel-gateway';
     const gateway = this.resolveConnection(provider, options);
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const maxSteps = taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const sessionId = randomUUID();
-    const systemPrompt = buildSystemPrompt(taskDefinition, issue);
+    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\n${
+      toolMode === 'read-only'
+        ? 'Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.'
+        : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
+    }`;
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
     const task: ActiveTask = {
@@ -391,7 +426,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
-    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider);
+    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, model, {
+      workingDirectory,
+      toolMode
+    });
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(
       issue.key,
@@ -413,8 +451,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       provider,
       model,
       workingDirectory,
+      toolMode,
       maxSteps,
-      timeoutMs
+      timeoutMs,
+      toolExtension: options.toolExtension
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[VercelAgent] Session failed for ${issue.key}: ${message}`);
@@ -430,7 +470,11 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     return sessionId;
   }
 
-  public async resumeTask(issueKey: string, options: VercelAgentStartOptions): Promise<void> {
+  public async resumeTask(
+    issueKey: string,
+    options: VercelAgentStartOptions,
+    followUpMessage?: string
+  ): Promise<void> {
     if (this.activeTasks.has(issueKey)) {
       return;
     }
@@ -441,42 +485,54 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
 
     const provider = options.provider ?? record.provider ?? 'vercel-gateway';
     const gateway = this.resolveConnection(provider, options);
-    const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || process.cwd();
+    const toolMode = record.toolMode ?? options.toolMode ?? 'full';
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const history = this.sessionManager.getAgentConversationHistory(issueKey);
-    const systemPrompt = buildSystemPrompt(record.taskDefinition, {
+    const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
       summary: record.taskDefinition.goal,
       issueType: 'Task',
       status: 'Unknown',
       description: record.taskDefinition.scope
-    } as IssueDetails);
+    } as IssueDetails)}\n\n${
+      toolMode === 'read-only'
+        ? 'Tool mode: READ ONLY. Do not change files, run commands, or mutate tickets.'
+        : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
+    }`;
 
     const task: ActiveTask = {
       issueKey,
       abortController: new AbortController(),
       pendingPermissions: [],
       allowPermissionsForTask: false,
-      messageBuffer: record.responseText ?? '',
+      messageBuffer: followUpMessage?.trim() ? '' : (record.responseText ?? ''),
       maxSteps
     };
     this.activeTasks.set(issueKey, task);
     this.emitActiveTaskChange(issueKey);
 
     this.sessionManager.updateAgentState(issueKey, 'executing');
-    this.appendEvent(issueKey, evt('session_start', 'Session resumed'));
+    const followUp = followUpMessage?.trim();
+    this.appendEvent(
+      issueKey,
+      followUp
+        ? evt('user_input_completed', 'You', followUp)
+        : evt('session_start', 'Session resumed')
+    );
     this.logger.appendLine(`[VercelAgent] Resumed session for ${issueKey}`);
 
     task.timeoutHandle = setTimeout(() => {
       void this.failTaskForTimeout(issueKey, timeoutMs);
     }, timeoutMs);
 
-    const resumePrompt =
+    const resumePrompt = followUp || (
       history.length === 0
         ? 'Continue the task from where you left off.'
-        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.';
+        : 'Continue the task. Use tools as needed and stop when the Definition of Done is met.'
+    );
 
     task.loopPromise = this.runLoopForIssue(issueKey, {
       systemPrompt,
@@ -486,8 +542,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       provider,
       model,
       workingDirectory,
+      toolMode,
       maxSteps,
-      timeoutMs
+      timeoutMs,
+      toolExtension: options.toolExtension
     }).catch(error => {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.appendLine(`[VercelAgent] Resume failed for ${issueKey}: ${message}`);

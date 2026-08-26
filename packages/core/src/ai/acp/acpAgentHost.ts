@@ -2,8 +2,16 @@ import { randomUUID } from 'node:crypto';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
 import { buildSystemPrompt } from '../agentPrompt';
-import { AGENT_DEFAULTS, type AgentEventSummary, type AgentEventType, type AgentTaskDefinition } from '../agentTypes';
+import {
+  AGENT_DEFAULTS,
+  type AgentEventSummary,
+  type AgentEventType,
+  type AgentSessionRecord,
+  type AgentTaskDefinition,
+  type AgentToolMode
+} from '../agentTypes';
 import type { AiSessionManager } from '../aiSessionManager';
+import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
 import { AcpClientWrapper, type AcpPermissionRequest } from './acpClient';
 
@@ -27,6 +35,15 @@ export interface AcpAgentStartOptions {
   args?: string[];
   env?: Record<string, string>;
   workingDirectory?: string;
+  /** Model id to select via `session/set_config_option` before prompting; omit to use the agent's own default. */
+  model?: string;
+  toolMode?: AgentToolMode;
+  runtimeSessionId?: string;
+}
+
+export interface AcpPromptOptions extends AcpAgentStartOptions {
+  signal?: AbortSignal;
+  onUpdate?: (content: string) => void;
 }
 
 interface ActiveAcpTask {
@@ -93,9 +110,94 @@ export class AcpAgentHost {
     return [...this.activeTasks.keys()];
   }
 
+  /**
+   * The agent's available models and current default, if it exposes a
+   * `model`-category `session/new` config option — e.g. Claude Code's
+   * Sonnet/Opus/Haiku/Fable or Codex's GPT-5.6 family. Spawns a throwaway
+   * connection+session purely to read this protocol data (no prompt is
+   * ever sent, so this costs nothing) and disposes it immediately.
+   * Returns `undefined` for agents that don't expose model selection.
+   */
+  public async listAvailableModels(options: AcpAgentStartOptions): Promise<ModelOptions | undefined> {
+    const client = new AcpClientWrapper({
+      command: options.command,
+      args: options.args,
+      env: options.env,
+      workingDirectory: options.workingDirectory?.trim() || process.cwd(),
+      requestPermission: () => Promise.resolve('deny'),
+      onSessionUpdate: () => {},
+      logSink: this.logger
+    });
+    try {
+      await client.connect();
+      const modelOption = await client.getModelOption();
+      if (!modelOption || modelOption.type !== 'select') {
+        return undefined;
+      }
+      // `options` is either a flat list, or grouped (e.g. models grouped by
+      // provider) — flatten either shape into one list for the picker.
+      const flatChoices = modelOption.options.flatMap(entry => ('group' in entry ? entry.options : [entry]));
+      return {
+        currentValue: modelOption.currentValue,
+        options: flatChoices.map(choice => ({
+          value: choice.value,
+          name: choice.name,
+          description: choice.description ?? undefined
+        }))
+      };
+    } finally {
+      client.dispose();
+    }
+  }
+
+  /** Runs a read-only, one-turn prompt without creating or replacing a tracked task session. */
+  public async promptOnce(prompt: string, options: AcpPromptOptions): Promise<string> {
+    let content = '';
+    const client = new AcpClientWrapper({
+      command: options.command,
+      args: options.args,
+      env: options.env,
+      workingDirectory: options.workingDirectory?.trim() || process.cwd(),
+      requestPermission: async () => 'deny',
+      onSessionUpdate: update => {
+        if (update.sessionUpdate !== 'agent_message_chunk' || update.content.type !== 'text') {
+          return;
+        }
+        content += update.content.text;
+        options.onUpdate?.(content);
+      },
+      logSink: this.logger
+    });
+    const cancel = () => void client.cancel();
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      await client.connect();
+      if (options.model) {
+        await client.setConfigOption('model', options.model);
+      }
+      await client.prompt(prompt);
+      if (!content.trim()) {
+        throw new Error('The CLI agent returned an empty response.');
+      }
+      return content.trim();
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      client.dispose();
+    }
+  }
+
   private requestPermission(issueKey: string, request: AcpPermissionRequest): Promise<PermissionDecision> {
     const task = this.activeTasks.get(issueKey);
     if (!task) {
+      return Promise.resolve('deny');
+    }
+    const record = this.sessionManager.getAgentSession(issueKey);
+    const permissionText = `${request.kind ?? ''} ${request.title}`.toLowerCase();
+    if (
+      (record?.toolMode === 'read-only' || record?.toolMode === 'project-only') &&
+      (record?.toolMode === 'project-only' || /(write|edit|delete|remove|shell|terminal|command|execute|create|update|transition|comment)/.test(permissionText))
+    ) {
+      this.appendEvent(issueKey, evt('warning', `Blocked by read-only tools: ${request.title}`));
       return Promise.resolve('deny');
     }
     if (task.allowPermissionsForTask) {
@@ -160,8 +262,13 @@ export class AcpAgentHost {
     }
 
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const sessionId = randomUUID();
-    const systemPrompt = buildSystemPrompt(taskDefinition, issue);
+    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
+      toolMode === 'read-only'
+        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
+        : 'FULL. Use tools as needed; honor every permission request.'
+    }`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
@@ -172,6 +279,7 @@ export class AcpAgentHost {
       args: options.args,
       env: options.env,
       workingDirectory,
+      toolMode,
       requestPermission: request => this.requestPermission(issue.key, request),
       onSessionUpdate: update => {
         const active = this.activeTasks.get(issue.key);
@@ -193,11 +301,14 @@ export class AcpAgentHost {
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
-    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider);
+    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, options.model, {
+      workingDirectory,
+      toolMode
+    });
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(issue.key, evt('session_start', 'CLI agent session started'));
     this.logger.appendLine(
-      `[AcpAgent] Starting session for ${issue.key} provider=${provider} command=${options.command} cwd=${workingDirectory}`
+      `[AcpAgent] Starting session for ${issue.key} provider=${provider} command=${options.command} cwd=${workingDirectory}${options.model ? ` model=${options.model}` : ''}`
     );
 
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
@@ -211,7 +322,13 @@ export class AcpAgentHost {
 
     task.promptPromise = (async () => {
       await client.connect();
+      if (options.model) {
+        await client.setConfigOption('model', options.model);
+      }
       const response = await client.prompt(combinedPrompt);
+      if (client.sessionId) {
+        this.sessionManager.updateAgentRuntime(issue.key, { runtimeSessionId: client.sessionId });
+      }
       const active = this.activeTasks.get(issue.key);
       if (!active || active.ending) {
         return;
@@ -242,6 +359,108 @@ export class AcpAgentHost {
       });
 
     return sessionId;
+  }
+
+  private buildConversationTranscript(events: AgentSessionRecord['events']): string | undefined {
+    const turns = events.flatMap(event => {
+      if (event.type === 'message' && event.detail?.trim()) {
+        return [`Assistant:\n${event.detail.trim()}`];
+      }
+      if (event.type === 'user_input_completed' && event.detail?.trim()) {
+        return [`User:\n${event.detail.trim()}`];
+      }
+      return [];
+    });
+    return turns.length > 0 ? `Previous conversation:\n\n${turns.join('\n\n')}` : undefined;
+  }
+
+  /** Continues through native ACP resume when available, with full transcript fallback. */
+  public async continueTask(
+    issueKey: string,
+    message: string,
+    options: AcpAgentStartOptions
+  ): Promise<void> {
+    if (this.activeTasks.has(issueKey)) {
+      throw new Error(`The agent is still working on ${issueKey}.`);
+    }
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    const followUp = message.trim();
+    if (!followUp) {
+      throw new Error('Enter a follow-up message.');
+    }
+    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || process.cwd();
+    const toolMode = record.toolMode ?? options.toolMode ?? 'full';
+    const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
+      key: issueKey,
+      summary: record.taskDefinition.goal,
+      issueType: 'Task',
+      status: 'In progress',
+      description: record.taskDefinition.scope
+    } as IssueDetails)}\n\nTool mode: ${
+      toolMode === 'read-only'
+        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
+        : 'FULL. Use tools as needed; honor every permission request.'
+    }`;
+    const prompt = [
+      systemPrompt,
+      this.buildConversationTranscript(record.events),
+      `User follow-up:\n${followUp}`
+    ].filter((part): part is string => Boolean(part)).join('\n\n');
+
+    const client = new AcpClientWrapper({
+      command: options.command,
+      args: options.args,
+      env: options.env,
+      workingDirectory,
+      toolMode,
+      resumeSessionId: record.runtimeSessionId,
+      requestPermission: request => this.requestPermission(issueKey, request),
+      onSessionUpdate: update => {
+        const active = this.activeTasks.get(issueKey);
+        if (active && !active.ending) this.handleSessionUpdate(issueKey, update, active);
+      },
+      logSink: this.logger
+    });
+    const task: ActiveAcpTask = {
+      issueKey,
+      client,
+      pendingPermissions: [],
+      allowPermissionsForTask: false,
+      messageBuffer: ''
+    };
+    this.activeTasks.set(issueKey, task);
+    this.emitActiveTaskChange(issueKey);
+    if (record.responseText) this.appendEvent(issueKey, evt('message', 'Assistant', record.responseText));
+    this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
+    this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
+    this.sessionManager.updateAgentState(issueKey, 'executing');
+
+    task.promptPromise = (async () => {
+      await client.connect();
+      if (options.model) await client.setConfigOption('model', options.model);
+      const response = await client.prompt(prompt);
+      if (client.sessionId) {
+        this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
+      }
+      const active = this.activeTasks.get(issueKey);
+      if (!active || active.ending) return;
+      this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer });
+      if (active.messageBuffer) this.appendEvent(issueKey, evt('message', 'Assistant', active.messageBuffer));
+      if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
+        this.sessionManager.updateAgentState(issueKey, 'completed');
+        this.appendEvent(issueKey, evt('task_complete', 'Agent completed the follow-up'));
+      } else {
+        this.sessionManager.updateAgentState(issueKey, 'failed');
+        this.appendEvent(issueKey, evt('error', `Agent stopped: ${response.stopReason}`));
+      }
+    })().catch(error => {
+      const text = error instanceof Error ? error.message : String(error);
+      this.sessionManager.updateAgentState(issueKey, 'failed');
+      this.appendEvent(issueKey, evt('error', text));
+    }).finally(() => void this.cleanupTask(issueKey));
   }
 
   public respondToPermission(issueKey: string, decision: PermissionDecision): void {

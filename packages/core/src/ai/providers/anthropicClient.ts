@@ -5,7 +5,8 @@ import {
   GatewayHttpError,
   isRetryableGatewayHttpStatus,
   type ChatStreamHandle,
-  type GatewayOptions
+  type GatewayOptions,
+  type RawGatewayModel
 } from '../gateway/gatewayClient';
 
 /**
@@ -37,6 +38,59 @@ function buildAnthropicHeaders(
     headers['x-api-key'] = opts.apiKey;
   }
   return headers;
+}
+
+/**
+ * Fetch the raw model list from `<url>/v1/models` — Anthropic's Models API.
+ * Same idea as `gateway/gatewayClient.ts`'s `fetchModels`, but with
+ * `x-api-key`/`anthropic-version` auth instead of Bearer, and Anthropic's
+ * `{data: [{id, display_name}]}` shape (mapped onto `RawGatewayModel.name`
+ * so callers don't need to know the difference).
+ */
+export function fetchAnthropicModels(opts: GatewayOptions, timeoutMs = 10000): Promise<RawGatewayModel[]> {
+  const target = `${opts.url.replace(/\/$/, '')}/v1/models`;
+  const isHttps = target.startsWith('https:');
+  const client = requestModule(target);
+  const u = new URL(target);
+
+  return new Promise((resolve, reject) => {
+    const req = client.request(
+      {
+        hostname: u.hostname,
+        port: u.port || (isHttps ? 443 : 80),
+        path: u.pathname + u.search,
+        method: 'GET',
+        headers: buildAnthropicHeaders(opts),
+        timeout: timeoutMs,
+        ...(isHttps ? { rejectUnauthorized: !opts.allowInsecureTls } : {})
+      },
+      res => {
+        let body = '';
+        res.on('data', c => {
+          body += c;
+        });
+        res.on('end', () => {
+          if ((res.statusCode ?? 0) < 200 || (res.statusCode ?? 0) >= 300) {
+            return reject(new GatewayHttpError(res.statusCode ?? 0, body));
+          }
+          try {
+            const json = JSON.parse(body) as { data?: Array<{ id?: unknown; display_name?: unknown }> };
+            const data = Array.isArray(json.data) ? json.data : [];
+            resolve(
+              data
+                .filter((m): m is { id: string; display_name?: unknown } => typeof m?.id === 'string')
+                .map(m => ({ id: m.id, name: typeof m.display_name === 'string' ? m.display_name : undefined }))
+            );
+          } catch (err) {
+            reject(new Error(`Failed to parse Anthropic model list: ${(err as Error).message}`));
+          }
+        });
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 /**

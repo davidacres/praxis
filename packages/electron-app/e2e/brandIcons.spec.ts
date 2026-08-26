@@ -52,11 +52,11 @@ test('seeded off, board rows use the generic board-type icons', async () => {
   await expect(demoRow.locator('.tree-icon svg').first()).toBeVisible();
 });
 
-test('toggling the Appearance setting swaps board icons live', async () => {
+test('toggling the Board Settings artwork option swaps board icons live', async () => {
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="nav-settings"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance"]').click();
 
   const toggle = window.getByRole('switch', { name: 'Brand artwork in board list' });
@@ -66,14 +66,16 @@ test('toggling the Appearance setting swaps board icons live', async () => {
   // Off: the push channel re-renders the sidebar without a reload.
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
   await window.locator('[data-testid="nav-board"]').click();
   await expect(window.locator('[data-testid="board-brand-icon"]')).toHaveCount(0);
 
   // Back on.
-  await window.locator('[data-testid="nav-settings"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance"]').click();
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
+  await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
   await window.locator('[data-testid="nav-board"]').click();
   await expect(
     window.locator('[data-testid="board-brand-icon"][data-mode="demo"]').first()

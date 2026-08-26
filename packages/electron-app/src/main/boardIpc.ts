@@ -2,6 +2,8 @@ import { ipcMain } from 'electron';
 import type { Board, BoardFilters } from '@ticket-manager/core';
 import { getDemoService } from './demoServiceInstance';
 import { getServiceForConnection, getSupportedConnections } from './serviceRegistry';
+import { getProjectManager } from './projectStoreInstance';
+import { projectConnectionId } from '@ticket-manager/core';
 
 export function registerBoardIpc(): void {
   ipcMain.handle(
@@ -15,6 +17,14 @@ export function registerBoardIpc(): void {
       }
 
       const demoBoards = await getDemoService().getBoards(filters);
+      const projectBoards = (await Promise.all(
+        getProjectManager().list().map(async project => {
+          const connectionId = projectConnectionId(project.id);
+          return (await getServiceForConnection(connectionId)).getBoards(filters).then(boards =>
+            boards.map(board => ({ ...board, connectionId }))
+          );
+        })
+      )).flat();
 
       // `allSettled`, not `all`: a connection whose backing store is unreachable —
       // a live folder on a disconnected drive, a deleted directory — must not take
@@ -41,7 +51,7 @@ export function registerBoardIpc(): void {
         }
       }
 
-      return [...demoBoards, ...connectionBoards];
+      return [...projectBoards, ...demoBoards, ...connectionBoards];
     }
   );
 

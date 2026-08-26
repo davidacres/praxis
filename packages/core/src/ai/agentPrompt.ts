@@ -28,6 +28,25 @@ Skipping or abbreviating this analysis phase is a failure condition, even if the
 - Prefer the provided tools (read_file, write_file, list_dir, run_shell) for all workspace inspection and changes.
 `;
 
+const ANALYSIS_SESSION_SYSTEM_PROMPT = `You are an engineering agent working in a continuing ticket conversation.
+
+## First-turn analysis contract
+- Your first turn is strictly read-only. Inspect the ticket, relevant repository files, architecture, tests, dependencies, and likely side effects.
+- Do not edit files, run mutating commands, create branches or commits, publish artifacts, or begin implementation.
+- Return a concrete analysis covering the requirement, current behaviour, affected components, risks, open questions, and an ordered implementation plan.
+- Stop after the analysis and wait for the user to confirm it.
+
+## Continuing conversation
+- Answer follow-up questions in the same session while preserving the ticket and repository context.
+- Do not make changes until the user explicitly confirms the analysis and asks you to proceed with implementation.
+- After that explicit approval, implement within the stated ticket scope, report progress, test the result, and stop when the definition of done is met.
+
+## Guardrails
+- Respect permission prompts and never bypass them.
+- Do not modify code outside the stated scope or fix unrelated pre-existing issues.
+- Surface failures clearly instead of repeatedly retrying or silently changing approach.
+`;
+
 function slugifyNamingSegment(value: string): string {
   return value
     .normalize('NFKD')
@@ -107,7 +126,9 @@ export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails
   const worktreeName = buildWorktreeName(issue);
   const msiVersionExample = buildMsiVersionExample(issue.key);
 
-  return `${PLANNING_SYSTEM_PROMPT}
+  const sessionPrompt = task.kind === 'analysis' ? ANALYSIS_SESSION_SYSTEM_PROMPT : PLANNING_SYSTEM_PROMPT;
+
+  return `${sessionPrompt}
 ## Task
 **Goal:** ${task.goal}
 **Scope:** ${task.scope}

@@ -181,4 +181,16 @@ test('tracked board renders issue cards and accepts a new comment via the mock',
   // successful add — confirm both fired at least once.
   await expect.poll(() => mock?.counters.getIssueHits ?? 0).toBeGreaterThanOrEqual(1);
   await expect.poll(() => mock?.counters.listIssueNotesHits ?? 0).toBeGreaterThanOrEqual(1);
+
+  // GitLab supports summary/description/assignee edits only. The desktop form
+  // keeps unsupported controls visibly read-only and sends a changed-field
+  // patch, so changing a title cannot be rejected because an untouched Jira
+  // or live-folder field leaked into the request.
+  await expect(window.locator('[data-testid="issue-edit-priority"]')).toBeDisabled();
+  await expect(window.locator('[data-testid="issue-edit-issueType"]')).toBeDisabled();
+  const summary = window.locator('[data-testid="issue-edit-summary"]');
+  await summary.fill('Updated from the desktop detail pane');
+  await window.locator('[data-testid="issue-edit-save-btn"]').click();
+  await expect.poll(() => mock?.counters.updateIssueHits ?? 0).toBeGreaterThanOrEqual(1);
+  await expect(summary).toHaveValue('Updated from the desktop detail pane');
 });

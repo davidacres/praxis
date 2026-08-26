@@ -78,6 +78,15 @@ export interface AiProviderConfig {
   defaultModel?: string;
   /** `kind: 'cli-agent'` providers only — overrides the default PATH-resolved executable name. */
   cliPath?: string;
+  /**
+   * Curated subset of the provider's fetched model catalog to offer in the
+   * composer's per-session Model picker (Settings → AI Provider → Models).
+   * `undefined` means "no curation yet — offer the whole catalog", not "none
+   * enabled"; an explicit `[]` means the user unchecked everything. Applies
+   * to every provider uniformly, including `vercel-gateway` — unlike
+   * `baseUrl`/`defaultModel`, this field has no legacy top-level equivalent.
+   */
+  enabledModelIds?: string[];
 }
 
 export interface AiSettings {
@@ -138,6 +147,30 @@ export interface AppearanceSettings {
    * both shapes.
    */
   priorityColors: Record<string, string>;
+  /** Selected named UI theme. The renderer validates the id against its gallery. */
+  themeId: string;
+  /** Whether the selected theme follows an explicit or system appearance mode. */
+  themeMode: 'light' | 'dark' | 'system';
+  /** Marketplace themes explicitly installed into this profile. */
+  installedThemeIds: string[];
+}
+
+export type TerminalCursorStyle = 'block' | 'underline' | 'bar';
+
+export interface TerminalSettings {
+  /** Profile id used when creating a terminal without an explicit selection. */
+  defaultProfileId: string;
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  cursorStyle: TerminalCursorStyle;
+  cursorBlink: boolean;
+  scrollback: number;
+  copyOnSelection: boolean;
+  confirmPaste: boolean;
+  bellSound: boolean;
+  shellIntegration: boolean;
+  gpuAcceleration: boolean;
 }
 
 /** Top-level settings shape — one nested object per Settings-page category. */
@@ -149,6 +182,7 @@ export interface AppSettings {
   mcpServer: McpServerSettings;
   preview: PreviewSettings;
   appearance: AppearanceSettings;
+  terminal: TerminalSettings;
 }
 
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
@@ -188,11 +222,14 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   preview: {
     enableCreateIdea: false,
-    enableNewProject: false,
+    enableNewProject: true,
     boardsSidebarMode: 'classic'
   },
   appearance: {
     showBrandArtwork: true,
+    themeId: 'tm-default-2',
+    themeMode: 'dark',
+    installedThemeIds: ['tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
     priorityColors: {
       Critical: '#DC2626',
       Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
@@ -201,6 +238,20 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
       Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
       Lowest: '#22C55E'
     }
+  },
+  terminal: {
+    defaultProfileId: '',
+    fontFamily: "Menlo, Monaco, 'SF Mono', 'Courier New', monospace",
+    fontSize: 13,
+    lineHeight: 1.1,
+    cursorStyle: 'block',
+    cursorBlink: true,
+    scrollback: 5000,
+    copyOnSelection: false,
+    confirmPaste: true,
+    bellSound: false,
+    shellIntegration: true,
+    gpuAcceleration: true
   }
 };
 
@@ -219,7 +270,11 @@ export interface AppSettingsPatch {
   appearance?: {
     showBrandArtwork?: boolean;
     priorityColors?: Record<string, string>;
+    themeId?: string;
+    themeMode?: 'light' | 'dark' | 'system';
+    installedThemeIds?: string[];
   };
+  terminal?: Partial<TerminalSettings>;
 }
 
 /** `true` when value is a plain object — guards against array/null confusion in the JSON loader. */
@@ -267,6 +322,20 @@ function readBoardsSidebarMode(value: unknown, fallback: BoardsSidebarMode): Boa
   return fallback;
 }
 
+function readThemeMode(value: unknown, fallback: AppearanceSettings['themeMode']): AppearanceSettings['themeMode'] {
+  return value === 'light' || value === 'dark' || value === 'system' ? value : fallback;
+}
+
+function readThemeIds(value: unknown, fallback: string[]): string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+    ? [...new Set(value as string[])]
+    : [...fallback];
+}
+
+function readTerminalCursorStyle(value: unknown, fallback: TerminalCursorStyle): TerminalCursorStyle {
+  return value === 'block' || value === 'underline' || value === 'bar' ? value : fallback;
+}
+
 function readAiProvider(value: unknown, fallback: AiProvider): AiProvider {
   return typeof value === 'string' && (KNOWN_AI_PROVIDERS as readonly string[]).includes(value)
     ? (value as AiProvider)
@@ -292,6 +361,12 @@ function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiPro
     }
     if (typeof raw.cliPath === 'string' && raw.cliPath.trim()) {
       config.cliPath = raw.cliPath;
+    }
+    // An empty array is a real, meaningful value here ("curated down to
+    // nothing") — unlike the string fields above, it must round-trip as
+    // `[]`, not collapse to "unset".
+    if (Array.isArray(raw.enabledModelIds) && raw.enabledModelIds.every(v => typeof v === 'string')) {
+      config.enabledModelIds = raw.enabledModelIds as string[];
     }
     if (Object.keys(config).length > 0) {
       out[id] = config;
@@ -404,11 +479,34 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.appearance.showBrandArtwork
         ),
         priorityColors: readPriorityColors(raw.appearance.priorityColors)
+        ,themeId: readString(raw.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId)
+        ,themeMode: readThemeMode(raw.appearance.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode)
+        ,installedThemeIds: readThemeIds(raw.appearance.installedThemeIds, DEFAULT_APP_SETTINGS.appearance.installedThemeIds)
       }
     : {
         showBrandArtwork: DEFAULT_APP_SETTINGS.appearance.showBrandArtwork,
         priorityColors: { ...DEFAULT_APP_SETTINGS.appearance.priorityColors }
+        ,themeId: DEFAULT_APP_SETTINGS.appearance.themeId
+        ,themeMode: DEFAULT_APP_SETTINGS.appearance.themeMode
+        ,installedThemeIds: [...DEFAULT_APP_SETTINGS.appearance.installedThemeIds]
       };
+
+  const terminal: TerminalSettings = isRecord(raw) && isRecord(raw.terminal)
+    ? {
+        defaultProfileId: readString(raw.terminal.defaultProfileId, DEFAULT_APP_SETTINGS.terminal.defaultProfileId),
+        fontFamily: readString(raw.terminal.fontFamily, DEFAULT_APP_SETTINGS.terminal.fontFamily),
+        fontSize: clampNumber(raw.terminal.fontSize, 9, 32, DEFAULT_APP_SETTINGS.terminal.fontSize),
+        lineHeight: clampNumber(raw.terminal.lineHeight, 0.9, 2, DEFAULT_APP_SETTINGS.terminal.lineHeight),
+        cursorStyle: readTerminalCursorStyle(raw.terminal.cursorStyle, DEFAULT_APP_SETTINGS.terminal.cursorStyle),
+        cursorBlink: readBoolean(raw.terminal.cursorBlink, DEFAULT_APP_SETTINGS.terminal.cursorBlink),
+        scrollback: clampNumber(raw.terminal.scrollback, 100, 100000, DEFAULT_APP_SETTINGS.terminal.scrollback),
+        copyOnSelection: readBoolean(raw.terminal.copyOnSelection, DEFAULT_APP_SETTINGS.terminal.copyOnSelection),
+        confirmPaste: readBoolean(raw.terminal.confirmPaste, DEFAULT_APP_SETTINGS.terminal.confirmPaste),
+        bellSound: readBoolean(raw.terminal.bellSound, DEFAULT_APP_SETTINGS.terminal.bellSound),
+        shellIntegration: readBoolean(raw.terminal.shellIntegration, DEFAULT_APP_SETTINGS.terminal.shellIntegration),
+        gpuAcceleration: readBoolean(raw.terminal.gpuAcceleration, DEFAULT_APP_SETTINGS.terminal.gpuAcceleration)
+      }
+    : { ...DEFAULT_APP_SETTINGS.terminal };
 
   return {
     ai,
@@ -417,7 +515,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     delivery,
     mcpServer,
     preview,
-    appearance
+    appearance,
+    terminal
   };
 }
 
@@ -476,9 +575,17 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
 
   const appearance: AppearanceSettings = {
     showBrandArtwork: patch.appearance?.showBrandArtwork ?? base.appearance.showBrandArtwork,
+    themeId: patch.appearance?.themeId ?? base.appearance.themeId,
+    themeMode: patch.appearance?.themeMode ?? base.appearance.themeMode,
+    installedThemeIds: patch.appearance?.installedThemeIds ? [...new Set(patch.appearance.installedThemeIds)] : [...base.appearance.installedThemeIds],
     priorityColors: isRecord(patch.appearance) && isRecord(patch.appearance.priorityColors)
       ? { ...base.appearance.priorityColors, ...patch.appearance.priorityColors }
       : { ...base.appearance.priorityColors }
+  };
+
+  const terminal: TerminalSettings = {
+    ...base.terminal,
+    ...(patch.terminal ?? {})
   };
 
   return {
@@ -488,7 +595,8 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     delivery,
     mcpServer,
     preview,
-    appearance
+    appearance,
+    terminal
   };
 }
 

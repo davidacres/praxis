@@ -2,6 +2,7 @@ import * as nodeFs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import * as nodeChildProcess from 'node:child_process';
 import type { GatewayToolDefinition } from '../gateway';
+import type { AgentToolMode } from '../agentTypes';
 import { PathSandboxError, resolveSandboxedPath } from './pathSandbox';
 
 export type PermissionDecision = 'allow_once' | 'allow_always' | 'deny';
@@ -15,6 +16,7 @@ export interface ToolPermissionRequest {
 
 export interface LocalToolContext {
   workingDirectory: string;
+  toolMode?: AgentToolMode;
   requestPermission: (request: ToolPermissionRequest) => Promise<PermissionDecision>;
   /** Optional always-allow check before prompting (e.g. shell allowlist). */
   shouldAutoAllow?: (request: ToolPermissionRequest) => boolean;
@@ -79,6 +81,15 @@ export const LOCAL_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   }
 ];
 
+const READ_ONLY_LOCAL_TOOLS = new Set(['read_file', 'list_dir']);
+
+export function localToolDefinitionsForMode(mode: AgentToolMode): GatewayToolDefinition[] {
+  if (mode === 'project-only') return [];
+  return mode === 'read-only'
+    ? LOCAL_TOOL_DEFINITIONS.filter(tool => READ_ONLY_LOCAL_TOOLS.has(tool.name))
+    : LOCAL_TOOL_DEFINITIONS;
+}
+
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -106,6 +117,12 @@ export class LocalToolExecutor {
   constructor(private readonly ctx: LocalToolContext) {}
 
   public async execute(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult> {
+    if (this.ctx.toolMode === 'project-only') {
+      return { ok: false, content: `${name} is unavailable without a project workspace folder.` };
+    }
+    if (this.ctx.toolMode === 'read-only' && !READ_ONLY_LOCAL_TOOLS.has(name)) {
+      return { ok: false, content: `${name} is unavailable in read-only tool mode.` };
+    }
     try {
       switch (name) {
         case 'read_file':

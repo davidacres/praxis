@@ -15,8 +15,15 @@ export class JsonKeyValueStore implements KeyValueStore {
   }
 
   public async update(key: string, value: unknown): Promise<void> {
+    const previous = this.data[key];
     this.data[key] = value;
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      if (previous === undefined) delete this.data[key];
+      else this.data[key] = previous;
+      throw error;
+    }
   }
 
   private load(): Record<string, unknown> {
@@ -30,6 +37,8 @@ export class JsonKeyValueStore implements KeyValueStore {
 
   private async persist(): Promise<void> {
     await fs.promises.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(this.data, null, 2), 'utf8');
+    const tempPath = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
+    await fs.promises.writeFile(tempPath, JSON.stringify(this.data, null, 2), 'utf8');
+    await fs.promises.rename(tempPath, this.filePath);
   }
 }

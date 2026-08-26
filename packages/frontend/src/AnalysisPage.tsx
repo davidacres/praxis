@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import type { AiAnalysisState, IssueDetails } from '@ticket-manager/core';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { AiAnalysisState, AiProvider, IssueDetails } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 
 interface AnalysisPageProps {
   issueKey: string;
   connectionId?: string;
+  provider?: AiProvider;
+  model?: string;
   onClose: () => void;
 }
 
@@ -14,17 +16,19 @@ interface AnalysisPageProps {
  * panel. The conversation persists in the main process (`ai-analysis.json`);
  * confirming the analysis satisfies the delegation gate when it's enabled.
  */
-export function AnalysisPage({ issueKey, connectionId, onClose }: AnalysisPageProps) {
+export function AnalysisPage({ issueKey, connectionId, provider, model, onClose }: AnalysisPageProps) {
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [state, setState] = useState<AiAnalysisState | undefined>();
   const [question, setQuestion] = useState('');
   const [error, setError] = useState<string | undefined>();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const autoStartedIssueRef = useRef<string | undefined>();
 
   useEffect(() => {
     setIssue(undefined);
     setState(undefined);
     setError(undefined);
+    autoStartedIssueRef.current = undefined;
     void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
     void window.ticketManager.ai.getAnalysis(issueKey).then(setState);
     const unsubscribe = window.ticketManager.ai.onAnalysisChanged(next => {
@@ -42,15 +46,30 @@ export function AnalysisPage({ issueKey, connectionId, onClose }: AnalysisPagePr
     }
   }, [state?.messages.length, state?.busy]);
 
-  const submit = async (text: string) => {
+  const submit = useCallback(async (text: string) => {
     setError(undefined);
     setQuestion('');
     try {
-      await window.ticketManager.ai.submitAnalysis(issueKey, text, connectionId);
+      await window.ticketManager.ai.submitAnalysis(issueKey, text, connectionId, provider, model);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  };
+  }, [issueKey, connectionId, provider, model]);
+
+  // Entering analysis from the state-aware ticket header is an action, not
+  // another navigation step: run the configured base analysis immediately.
+  useEffect(() => {
+    if (
+      !state ||
+      state.busy ||
+      state.messages.length > 0 ||
+      autoStartedIssueRef.current === issueKey
+    ) {
+      return;
+    }
+    autoStartedIssueRef.current = issueKey;
+    void submit('');
+  }, [state, issueKey, submit]);
 
   const busy = state?.busy ?? false;
   const messages = state?.messages ?? [];
@@ -61,6 +80,11 @@ export function AnalysisPage({ issueKey, connectionId, onClose }: AnalysisPagePr
         <Icon name="robot" size={14} />
         <h3>Analysis — {issueKey}</h3>
         <span className="detail-meta">{issue?.summary ?? ''}</span>
+        {(provider || model) && (
+          <span className="detail-meta" data-testid="analysis-runtime">
+            {[provider, model].filter(Boolean).join(' · ')}
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         <button className="icon-btn icon-btn-sm" aria-label="Close analysis" onClick={onClose}>
           <Icon name="close" size={13} />

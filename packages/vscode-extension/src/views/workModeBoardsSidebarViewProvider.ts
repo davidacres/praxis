@@ -38,7 +38,12 @@ interface WorkModeSessionItem {
 }
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
-  'vercel-gateway': 'Vercel AI Gateway'
+  'vercel-gateway': 'Vercel AI Gateway',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  'claude-code-cli': 'Claude Code CLI',
+  'codex-cli': 'Codex CLI',
+  'copilot-cli': 'GitHub Copilot CLI'
 };
 
 function boardRemovalLabel(mode: BackendMode): string {

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import type { IssueDetails } from '@ticket-manager/core';
+import type { AiProvider, IssueDetails } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 
 interface AiReviewPageProps {
   issueKey: string;
   connectionId?: string;
+  provider?: AiProvider;
+  model?: string;
   onClose: () => void;
 }
 
@@ -14,7 +16,7 @@ interface AiReviewPageProps {
  * arrives (via the `ai:reviewProgress` push channel) and can post the final
  * result back to the issue as a comment, like the extension's review command.
  */
-export function AiReviewPage({ issueKey, connectionId, onClose }: AiReviewPageProps) {
+export function AiReviewPage({ issueKey, connectionId, provider, model, onClose }: AiReviewPageProps) {
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [content, setContent] = useState('');
   const [running, setRunning] = useState(false);
@@ -63,7 +65,7 @@ export function AiReviewPage({ issueKey, connectionId, onClose }: AiReviewPagePr
     setPosted(false);
     setContent('');
     try {
-      const markdown = await window.ticketManager.ai.reviewIssue(issueKey, connectionId);
+      const markdown = await window.ticketManager.ai.reviewIssue(issueKey, connectionId, provider, model);
       setContent(markdown);
     } catch (err) {
       // The progress push also carries the error; this covers pre-stream failures.
@@ -92,6 +94,11 @@ export function AiReviewPage({ issueKey, connectionId, onClose }: AiReviewPagePr
         <Icon name="robot" size={14} />
         <h3>AI review — {issueKey}</h3>
         <span className="detail-meta">{issue?.summary ?? ''}</span>
+        {(provider || model) && (
+          <span className="detail-meta" data-testid="review-runtime">
+            {[provider, model].filter(Boolean).join(' · ')}
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         <button className="icon-btn icon-btn-sm" aria-label="Close review" onClick={onClose}>
           <Icon name="close" size={13} />

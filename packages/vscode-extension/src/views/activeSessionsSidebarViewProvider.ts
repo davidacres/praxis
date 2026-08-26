@@ -37,7 +37,12 @@ interface ActiveSessionListItem {
 type SessionFilter = 'active' | 'inactive' | 'all';
 
 const PROVIDER_LABELS: Record<AiProvider, string> = {
-  'vercel-gateway': 'Vercel AI Gateway'
+  'vercel-gateway': 'Vercel AI Gateway',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  'claude-code-cli': 'Claude Code CLI',
+  'codex-cli': 'Codex CLI',
+  'copilot-cli': 'GitHub Copilot CLI'
 };
 
 function escapeHtml(value: string): string {

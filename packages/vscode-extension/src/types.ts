@@ -8,7 +8,13 @@ export type BackendMode =
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
-export type AiProvider = 'vercel-gateway';
+export type AiProvider =
+  | 'vercel-gateway'
+  | 'openai'
+  | 'anthropic'
+  | 'claude-code-cli'
+  | 'codex-cli'
+  | 'copilot-cli';
 
 export interface AiAssignment {
   provider: AiProvider;

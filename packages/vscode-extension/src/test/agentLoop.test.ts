@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as http from 'node:http';
-import { runAgentLoop } from '../ai/agentRuntime';
+import { resolveProviderAdapter, runAgentLoop } from '../ai/agentRuntime';
 import type { GatewayToolDefinition } from '../ai/gateway';
 
 suite('agentLoop', () => {
@@ -56,6 +56,7 @@ suite('agentLoop', () => {
     const events: string[] = [];
     try {
       const result = await runAgentLoop({
+        adapter: resolveProviderAdapter('vercel-gateway'),
         gateway: { url: `http://127.0.0.1:${port}`, apiKey: 'test-key' },
         modelId: 'test/model',
         systemPrompt: 'You are a test agent.',

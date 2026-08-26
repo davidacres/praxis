@@ -15,6 +15,7 @@ import type {
   Connection,
   CreateBoardInput,
   CreateIssueInput,
+  CreateTerminalInput,
   IssueFilters,
   ParentItemQueryOptions,
   PermissionDecision,
@@ -25,6 +26,8 @@ import type {
   TrackedBoard,
   UpdateIssueInput
 } from '@ticket-manager/core';
+import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@ticket-manager/core';
+import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, UpdateProjectInput } from '@ticket-manager/core';
 
 const ticketManager: TicketManagerIpc = {
   board: {
@@ -49,6 +52,8 @@ const ticketManager: TicketManagerIpc = {
       ipcRenderer.invoke('issue:transition', issueKey, transitionId, connectionId),
     addComment: (issueKey: string, body: string, connectionId?: string) =>
       ipcRenderer.invoke('issue:addComment', issueKey, body, connectionId),
+    getSelfAssigneeLabel: (connectionId?: string) =>
+      ipcRenderer.invoke('issue:getSelfAssigneeLabel', connectionId),
     getProjects: (connectionId?: string) => ipcRenderer.invoke('issue:getProjects', connectionId),
     getParentItems: (
       filters: IssueFilters,
@@ -138,11 +143,19 @@ const ticketManager: TicketManagerIpc = {
     getStatus: () => ipcRenderer.invoke('ai:getStatus'),
     setApiKey: (value: string) => ipcRenderer.invoke('ai:setApiKey', value),
     listProviderStatuses: () => ipcRenderer.invoke('ai:listProviderStatuses'),
+    listCliModelOptions: (provider: AiProvider) => ipcRenderer.invoke('ai:listCliModelOptions', provider),
+    listApiModelOptions: (provider: AiProvider, forceRefresh?: boolean) =>
+      ipcRenderer.invoke('ai:listApiModelOptions', provider, forceRefresh),
     setProviderApiKey: (provider: AiProvider, value: string) =>
       ipcRenderer.invoke('ai:setProviderApiKey', provider, value),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
+    renameSession: (issueKey: string, title: string) =>
+      ipcRenderer.invoke('ai:renameSession', issueKey, title),
+    deleteSession: (issueKey: string) => ipcRenderer.invoke('ai:deleteSession', issueKey),
     delegate: (input: AiDelegateInput) => ipcRenderer.invoke('ai:delegate', input),
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
+    continueSession: (issueKey: string, message: string) =>
+      ipcRenderer.invoke('ai:continueSession', issueKey, message),
     respondToPermission: (issueKey: string, decision: PermissionDecision) =>
       ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
     onSessionChanged: (listener: (record: AgentSessionRecord) => void) => {
@@ -152,16 +165,21 @@ const ticketManager: TicketManagerIpc = {
       ipcRenderer.on('ai:sessionChanged', handler);
       return () => ipcRenderer.off('ai:sessionChanged', handler);
     },
+    onSessionDeleted: (listener: (issueKey: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, issueKey: string) => listener(issueKey);
+      ipcRenderer.on('ai:sessionDeleted', handler);
+      return () => ipcRenderer.off('ai:sessionDeleted', handler);
+    },
     listWorkflowPacks: () => ipcRenderer.invoke('ai:listWorkflowPacks'),
     getWorkflowAssignment: (issueKey: string) =>
       ipcRenderer.invoke('ai:getWorkflowAssignment', issueKey),
     setWorkflowAssignment: (issueKey: string, workflow: AgentWorkflowReference | null) =>
       ipcRenderer.invoke('ai:setWorkflowAssignment', issueKey, workflow),
-    reviewIssue: (issueKey: string, connectionId?: string) =>
-      ipcRenderer.invoke('ai:reviewIssue', issueKey, connectionId),
+    reviewIssue: (issueKey: string, connectionId?: string, provider?: AiProvider, model?: string) =>
+      ipcRenderer.invoke('ai:reviewIssue', issueKey, connectionId, provider, model),
     cancelReview: (issueKey: string) => ipcRenderer.invoke('ai:cancelReview', issueKey),
-    localPeerReview: (issueKey: string, connectionId?: string) =>
-      ipcRenderer.invoke('ai:localPeerReview', issueKey, connectionId),
+    localPeerReview: (issueKey: string, connectionId?: string, provider?: AiProvider, model?: string) =>
+      ipcRenderer.invoke('ai:localPeerReview', issueKey, connectionId, provider, model),
     onReviewProgress: (listener: (progress: AiReviewProgress) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, progress: AiReviewProgress) =>
         listener(progress);
@@ -169,8 +187,13 @@ const ticketManager: TicketManagerIpc = {
       return () => ipcRenderer.off('ai:reviewProgress', handler);
     },
     getAnalysis: (issueKey: string) => ipcRenderer.invoke('ai:getAnalysis', issueKey),
-    submitAnalysis: (issueKey: string, question: string, connectionId?: string) =>
-      ipcRenderer.invoke('ai:submitAnalysis', issueKey, question, connectionId),
+    submitAnalysis: (
+      issueKey: string,
+      question: string,
+      connectionId?: string,
+      provider?: AiProvider,
+      model?: string
+    ) => ipcRenderer.invoke('ai:submitAnalysis', issueKey, question, connectionId, provider, model),
     cancelAnalysis: (issueKey: string) => ipcRenderer.invoke('ai:cancelAnalysis', issueKey),
     setAnalysisConfirmed: (issueKey: string, confirmed: boolean) =>
       ipcRenderer.invoke('ai:setAnalysisConfirmed', issueKey, confirmed),
@@ -212,6 +235,53 @@ const ticketManager: TicketManagerIpc = {
       connectionId: string | undefined,
       state: TaskDesignerPersistedState
     ) => ipcRenderer.invoke('taskDesigner:generateMasterPlan', boardId, connectionId, state)
+  },
+  projects: {
+    list: () => ipcRenderer.invoke('projects:list'),
+    get: (projectId: string) => ipcRenderer.invoke('projects:get', projectId),
+    create: (input: CreateProjectInput) => ipcRenderer.invoke('projects:create', input),
+    update: (projectId: string, patch: UpdateProjectInput) => ipcRenderer.invoke('projects:update', projectId, patch),
+    inspectFolder: (folderPath: string) => ipcRenderer.invoke('projects:inspectFolder', folderPath),
+    attachFolder: (projectId: string, input: AttachProjectFolderInput) => ipcRenderer.invoke('projects:attachFolder', projectId, input),
+    linkBoard: (projectId: string, board: ProjectBoardReference) => ipcRenderer.invoke('projects:linkBoard', projectId, board),
+    unlinkBoard: (projectId: string, connectionId: string, boardId: string) => ipcRenderer.invoke('projects:unlinkBoard', projectId, connectionId, boardId)
+  },
+  terminal: {
+    listProfiles: () => ipcRenderer.invoke('terminal:listProfiles'),
+    list: () => ipcRenderer.invoke('terminal:list'),
+    create: (input: CreateTerminalInput) => ipcRenderer.invoke('terminal:create', input),
+    write: (sessionId: string, data: string) => ipcRenderer.invoke('terminal:write', sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) => ipcRenderer.invoke('terminal:resize', sessionId, cols, rows),
+    kill: (sessionId: string) => ipcRenderer.invoke('terminal:kill', sessionId),
+    getBuffer: (sessionId: string) => ipcRenderer.invoke('terminal:getBuffer', sessionId),
+    getContext: (sessionId: string) => ipcRenderer.invoke('terminal:getContext', sessionId),
+    listCommands: (sessionId: string) => ipcRenderer.invoke('terminal:listCommands', sessionId),
+    onOutput: (listener: (event: TerminalOutputEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, output: TerminalOutputEvent) => listener(output);
+      ipcRenderer.on('terminal:output', handler);
+      return () => ipcRenderer.off('terminal:output', handler);
+    },
+    onExit: (listener: (event: TerminalExitEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, exit: TerminalExitEvent) => listener(exit);
+      ipcRenderer.on('terminal:exit', handler);
+      return () => ipcRenderer.off('terminal:exit', handler);
+    },
+    onContextAvailability: (listener: (event: TerminalContextAvailabilityEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, availability: TerminalContextAvailabilityEvent) => listener(availability);
+      ipcRenderer.on('terminal:contextAvailability', handler);
+      return () => ipcRenderer.off('terminal:contextAvailability', handler);
+    },
+    onCommand: (listener: (event: TerminalCommandEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, command: TerminalCommandEvent) => listener(command);
+      ipcRenderer.on('terminal:command', handler);
+      return () => ipcRenderer.off('terminal:command', handler);
+    }
+  },
+  agentRuntime: {
+    list: () => ipcRenderer.invoke('agentRuntime:list'),
+    refresh: () => ipcRenderer.invoke('agentRuntime:refresh'),
+    start: (agentId: string) => ipcRenderer.invoke('agentRuntime:start', agentId),
+    activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName)
   }
 };
 

@@ -82,6 +82,13 @@ if ($SkipBuild) {
   Assert-Built (Join-Path $electronApp 'out/main/index.js') 'electron-app is not compiled'
   if (-not $Dev) {
     Assert-Built (Join-Path $frontend 'dist/index.html') 'frontend is not built'
+
+    # Refreshing renderer/ from frontend/dist is cheap — always run it so the
+    # -SkipBuild path still tracks any manual frontend rebuilds. Without this,
+    # win.loadFile('../../renderer/index.html') has nothing to load and the
+    # app window opens blank.
+    Write-Step 'Refreshing renderer/ from frontend/dist'
+    Invoke-Npm $electronApp 'copy-renderer'
   }
   Write-Ok 'Existing build output looks complete'
 } else {
@@ -98,6 +105,14 @@ if ($SkipBuild) {
   Write-Step 'Compiling packages/electron-app'
   Invoke-Npm $electronApp 'compile'
   Write-Ok 'electron-app -> out/'
+
+  if (-not $Dev) {
+    # win.loadFile('../../renderer/index.html') reads from packages/electron-app/renderer,
+    # not packages/frontend/dist directly — copy it across or the window opens blank.
+    Write-Step 'Copying frontend/dist into electron-app/renderer'
+    Invoke-Npm $electronApp 'copy-renderer'
+    Write-Ok 'renderer ready'
+  }
 }
 
 $viteProcess = $null

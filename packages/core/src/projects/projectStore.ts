@@ -1,0 +1,124 @@
+import type { KeyValueStore } from '../host/stateStore';
+import type {
+  ProjectBoardReference,
+  ProjectRecord,
+  UpdateProjectInput
+} from './projectTypes';
+
+const PROJECTS_KEY = 'ticketManager.projects.v1';
+
+export class ProjectStore {
+  public constructor(private readonly state: KeyValueStore) {}
+
+  public list(): ProjectRecord[] {
+    const value = this.state.get<ProjectRecord[]>(PROJECTS_KEY);
+    return Array.isArray(value) ? value.filter(isProjectRecord).map(cloneProject) : [];
+  }
+
+  public get(projectId: string): ProjectRecord | undefined {
+    const project = this.list().find(candidate => candidate.id === projectId);
+    return project ? cloneProject(project) : undefined;
+  }
+
+  public async create(project: ProjectRecord): Promise<ProjectRecord> {
+    const projects = this.list();
+    if (projects.some(candidate => candidate.id === project.id)) {
+      throw new Error(`Project ${project.id} already exists.`);
+    }
+    if (projects.some(candidate => candidate.key.toLowerCase() === project.key.toLowerCase())) {
+      throw new Error(`Project key ${project.key} is already in use.`);
+    }
+    projects.push(cloneProject(project));
+    await this.state.update(PROJECTS_KEY, projects);
+    return cloneProject(project);
+  }
+
+  public async replace(project: ProjectRecord): Promise<ProjectRecord> {
+    const projects = this.list();
+    const index = projects.findIndex(candidate => candidate.id === project.id);
+    if (index < 0) throw new Error(`Project ${project.id} was not found.`);
+    projects[index] = cloneProject(project);
+    await this.state.update(PROJECTS_KEY, projects);
+    return cloneProject(project);
+  }
+
+  public async update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord> {
+    const project = this.require(projectId);
+    const next: ProjectRecord = {
+      ...project,
+      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      ...(patch.type !== undefined ? { type: patch.type } : {}),
+      ...(patch.purpose !== undefined ? { purpose: patch.purpose.trim() } : {}),
+      ...(patch.brief !== undefined ? { brief: { ...patch.brief } } : {}),
+      ...(patch.workflowStages !== undefined ? { workflowStages: patch.workflowStages.map(stage => ({ ...stage })) } : {}),
+      ...(patch.defaultAiToolMode !== undefined ? { defaultAiToolMode: patch.defaultAiToolMode } : {}),
+      updatedAt: new Date().toISOString()
+    };
+    validateProjectRecord(next);
+    return this.replace(next);
+  }
+
+  public async linkBoard(projectId: string, board: ProjectBoardReference): Promise<ProjectRecord> {
+    for (const project of this.list()) {
+      const owner = project.linkedBoards.find(
+        item => item.connectionId === board.connectionId && item.boardId === board.boardId
+      );
+      if (owner && project.id !== projectId) {
+        throw new Error(`Board ${board.displayName} is already linked to ${project.name}.`);
+      }
+    }
+    const project = this.require(projectId);
+    if (!project.linkedBoards.some(item => item.connectionId === board.connectionId && item.boardId === board.boardId)) {
+      project.linkedBoards.push({ ...board });
+      project.updatedAt = new Date().toISOString();
+      await this.replace(project);
+    }
+    return project;
+  }
+
+  public async unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord> {
+    const project = this.require(projectId);
+    project.linkedBoards = project.linkedBoards.filter(
+      item => item.connectionId !== connectionId || item.boardId !== boardId
+    );
+    project.updatedAt = new Date().toISOString();
+    return this.replace(project);
+  }
+
+  private require(projectId: string): ProjectRecord {
+    const project = this.get(projectId);
+    if (!project) throw new Error(`Project ${projectId} was not found.`);
+    return project;
+  }
+}
+
+export function validateProjectRecord(project: ProjectRecord): void {
+  if (!project.name.trim()) throw new Error('Project name is required.');
+  if (!/^[A-Z][A-Z0-9_]{0,14}$/.test(project.key)) {
+    throw new Error('Project key must start with a letter and contain 1-15 uppercase letters, numbers, or underscores.');
+  }
+  if (project.workflowStages.length < 2 || project.workflowStages.some(stage => !stage.name.trim())) {
+    throw new Error('At least two named workflow stages are required.');
+  }
+  const stageNames = new Set(project.workflowStages.map(stage => stage.name.toLowerCase()));
+  if (stageNames.size !== project.workflowStages.length) throw new Error('Workflow stage names must be unique.');
+  if (project.workItems.some(item => !stageNames.has(item.status.toLowerCase()))) {
+    throw new Error('Every starter ticket must use one of the project workflow stages.');
+  }
+  if (!project.workspaceFolder && project.defaultAiToolMode !== 'project-only') {
+    throw new Error('Folderless projects must use project-board tools only.');
+  }
+  if (!project.workspaceFolder && (project.type === 'software' || project.type === 'experiment')) {
+    throw new Error('Software and Experiment projects require a workspace folder.');
+  }
+}
+
+function isProjectRecord(value: unknown): value is ProjectRecord {
+  const project = value as Partial<ProjectRecord> | undefined;
+  return !!project && typeof project.id === 'string' && typeof project.name === 'string' &&
+    typeof project.key === 'string' && Array.isArray(project.workflowStages) && Array.isArray(project.workItems);
+}
+
+function cloneProject(project: ProjectRecord): ProjectRecord {
+  return JSON.parse(JSON.stringify(project)) as ProjectRecord;
+}

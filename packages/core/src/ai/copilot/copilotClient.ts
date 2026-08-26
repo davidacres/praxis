@@ -40,6 +40,8 @@ export interface CopilotClientOptions {
   /** Overrides the bundled runtime executable; omit to use the SDK default. */
   runtimePath?: string;
   model?: string;
+  /** Provider-owned Copilot session to resume with complete native history. */
+  resumeSessionId?: string;
   requestPermission: (request: CopilotPermissionRequest) => Promise<PermissionDecision>;
   onMessageDelta: (text: string) => void;
   onToolEvent?: (event: CopilotToolEvent) => void;
@@ -101,6 +103,10 @@ export class CopilotClientWrapper {
 
   constructor(private readonly options: CopilotClientOptions) {}
 
+  public get sessionId(): string | undefined {
+    return this.session?.sessionId;
+  }
+
   /** Starts (or connects to) the Copilot runtime. Does not create a session yet — `prompt()` does that lazily on first use. */
   public async connect(): Promise<void> {
     const sdk: typeof copilotSdk = await import('@github/copilot-sdk');
@@ -122,12 +128,15 @@ export class CopilotClientWrapper {
       throw new Error('Copilot client is not connected.');
     }
     if (!this.session) {
-      this.session = await this.client.createSession({
+      const sessionConfig = {
         clientName: 'ticket-manager',
         model: this.options.model,
-        onPermissionRequest: async request =>
+        onPermissionRequest: async (request: copilotSdk.PermissionRequest) =>
           toPermissionResult(await this.options.requestPermission(summarizePermissionRequest(request)))
-      });
+      };
+      this.session = this.options.resumeSessionId
+        ? await this.client.resumeSession(this.options.resumeSessionId, sessionConfig)
+        : await this.client.createSession(sessionConfig);
       this.session.on('assistant.message_delta', event => {
         this.options.onMessageDelta(event.data.deltaContent);
       });

@@ -18,7 +18,12 @@ export interface AiProviderSetupOption {
 }
 
 export const AI_PROVIDER_LABELS: Record<Exclude<ConfigurableAiProvider, 'none'>, string> = {
-  'vercel-gateway': 'Vercel AI Gateway'
+  'vercel-gateway': 'Vercel AI Gateway',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  'claude-code-cli': 'Claude Code CLI',
+  'codex-cli': 'Codex CLI',
+  'copilot-cli': 'GitHub Copilot CLI'
 };
 
 export function buildAiProviderSetupOptions(): AiProviderSetupOption[] {

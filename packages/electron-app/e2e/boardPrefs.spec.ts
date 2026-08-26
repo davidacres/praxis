@@ -20,7 +20,6 @@ test.afterEach(async () => {
 async function openApplicationBoard(win: Page) {
   await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
-  await win.locator('[data-testid="board-filter-bar"]').waitFor();
   await win.locator('[data-testid="issue-card"]').first().waitFor();
 }
 
@@ -28,6 +27,30 @@ async function openDisplayMenu(win: Page) {
   await win.locator('[data-testid="board-settings-btn"]').click();
   await win.locator('[data-testid="board-settings-menu"]').waitFor();
 }
+
+test('board toolbar keeps creation actions left and icon-only tools right', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await openApplicationBoard(win);
+
+  const create = win.getByRole('button', { name: 'New issue' });
+  const designer = win.getByRole('button', { name: 'Designer' });
+  const settings = win.getByRole('button', { name: 'Board settings' });
+  await expect(create).toHaveText('');
+  await expect(designer).toHaveText('');
+  await expect(settings).toHaveText('');
+
+  const [createBox, designerBox, settingsBox] = await Promise.all([
+    create.boundingBox(),
+    designer.boundingBox(),
+    settings.boundingBox()
+  ]);
+  expect(createBox).not.toBeNull();
+  expect(designerBox).not.toBeNull();
+  expect(settingsBox).not.toBeNull();
+  expect(createBox!.x).toBeLessThan(designerBox!.x);
+  expect(designerBox!.x).toBeLessThan(settingsBox!.x);
+});
 
 test('list view persists across relaunch', async () => {
   app = await launchTestApp();

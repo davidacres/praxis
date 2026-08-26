@@ -40,8 +40,11 @@ function sseChunk(obj: unknown): string {
 export async function startMockAnthropicServer(options: {
   mode: 'complete' | 'hang';
   reply?: string;
+  /** `/v1/models` response — Anthropic's real shape, `{data:[{id,display_name}]}`. */
+  models?: Array<{ id: string; display_name?: string }>;
 }): Promise<MockAnthropicServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
+  const models = options.models ?? [{ id: 'mock-claude-model' }];
   const requests: MockAnthropicRequest[] = [];
   const openResponses = new Set<http.ServerResponse>();
 
@@ -84,6 +87,12 @@ export async function startMockAnthropicServer(options: {
           res.on('close', () => openResponses.delete(res));
         }
       });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url === '/v1/models') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ data: models }));
       return;
     }
 

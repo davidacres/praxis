@@ -43,15 +43,22 @@ async function configureCliProvider(win: TestApp['window'], provider: string, cl
   );
 }
 
-async function delegate(win: TestApp['window'], issueKey: string, provider: string, goal: string): Promise<void> {
+async function delegate(
+  win: TestApp['window'],
+  issueKey: string,
+  provider: string,
+  goal: string,
+  model?: string
+): Promise<void> {
   await win.evaluate(
-    async ({ issueKey, provider, goal }) => {
+    async ({ issueKey, provider, goal, model }) => {
       const w = window as unknown as {
         ticketManager: {
           ai: {
             delegate: (input: {
               issueKey: string;
               provider: string;
+              model?: string;
               task: { goal: string; maxSteps: number; timeoutMs: number };
             }) => Promise<unknown>;
           };
@@ -60,21 +67,53 @@ async function delegate(win: TestApp['window'], issueKey: string, provider: stri
       await w.ticketManager.ai.delegate({
         issueKey,
         provider,
+        model,
         task: { goal, maxSteps: 3, timeoutMs: 30000 }
       });
     },
-    { issueKey, provider, goal }
+    { issueKey, provider, goal, model }
   );
+}
+
+async function listCliModelOptions(
+  win: TestApp['window'],
+  provider: string
+): Promise<{ currentValue: string; options: Array<{ value: string; name: string }> } | undefined> {
+  return win.evaluate(async provider => {
+    const w = window as unknown as {
+      ticketManager: {
+        ai: {
+          listCliModelOptions: (
+            provider: string
+          ) => Promise<{ currentValue: string; options: Array<{ value: string; name: string }> } | undefined>;
+        };
+      };
+    };
+    return w.ticketManager.ai.listCliModelOptions(provider);
+  }, provider);
 }
 
 async function readSession(
   win: TestApp['window'],
   issueKey: string
-): Promise<{ state: string; responseText?: string } | undefined> {
+): Promise<{
+  state: string;
+  responseText?: string;
+  workingDirectory?: string;
+  toolMode?: string;
+  runtimeSessionId?: string;
+} | undefined> {
   return win.evaluate(async issueKey => {
     const w = window as unknown as {
       ticketManager: {
-        ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string; responseText?: string }>> };
+        ai: { listSessions: () => Promise<Array<{
+          issueKey: string;
+          state: string;
+          responseText?: string;
+          workingDirectory?: string;
+          toolMode?: string;
+          runtimeSessionId?: string;
+        }>> };
       };
     };
     const sessions = await w.ticketManager.ai.listSessions();
@@ -93,6 +132,67 @@ test('delegate completes a session against a real ACP agent subprocess', async (
 
   const session = await readSession(win, 'APP-202');
   expect(session?.responseText).toContain('Hello from the fake ACP agent');
+  expect(session?.workingDirectory).toBeTruthy();
+  expect(session?.toolMode).toBe('full');
+  expect(session?.runtimeSessionId).toBeTruthy();
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-202' }).click();
+  await win.locator('[data-testid="session-follow-up-input"]').fill('Explain that result.');
+  await win.locator('[data-testid="session-follow-up-send"]').click();
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText('Explain that result.');
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
+    timeout: 15000
+  });
+  await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
+    'Hello from the fake ACP agent'
+  );
+});
+
+test('ticket-selected Claude Code runs review and analysis without using Vercel', async () => {
+  app = await launchTestApp(undefined, undefined, {
+    AI_GATEWAY_API_KEY: undefined,
+    VERCEL_OIDC_TOKEN: undefined,
+    FROSTY_VERCEL_API_KEY: undefined
+  });
+  const win = app.window;
+  await win.evaluate(
+    async ({ cliPath }) => {
+      await window.ticketManager.settings.set({
+        ai: {
+          activeProvider: 'vercel-gateway',
+          analysisPrompt: 'Assess this ticket carefully.',
+          analysisGateEnabled: true,
+          providers: { 'claude-code-cli': { cliPath } }
+        }
+      });
+    },
+    { cliPath: FIXTURE_PATH }
+  );
+  await win.reload();
+  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await win.locator('[data-testid="issue-card"]').first().click();
+  const provider = win.locator('[data-testid="issue-detail-ai-provider"]');
+  await provider.selectOption('claude-code-cli');
+
+  await win.locator('[data-testid="issue-ai-review-btn"]').click();
+  await expect(win.locator('[data-testid="review-runtime"]')).toContainText('claude-code-cli');
+  await win.locator('[data-testid="ai-review-run"]').click();
+  await expect(win.locator('[data-testid="ai-review-content"]')).toContainText(
+    'Hello from the fake ACP agent',
+    { timeout: 15000 }
+  );
+  await win.locator('[aria-label="Close review"]').click();
+
+  await win.locator('[data-testid="issue-primary-ai-btn"]').click();
+  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-runtime"]')).toContainText('claude-code-cli');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(
+    'Hello from the fake ACP agent',
+    { timeout: 15000 }
+  );
+  await expect(win.locator('[data-testid="session-analysis-confirm"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-tool-mode"]')).toHaveText('Read-only tools');
 });
 
 test('abort kills the ACP agent subprocess cleanly', async () => {
@@ -122,4 +222,27 @@ test('abort kills the ACP agent subprocess cleanly', async () => {
   await expect
     .poll(() => execSync('ps aux').toString().includes('fakeAcpAgent.mjs'), { timeout: 10000 })
     .toBe(false);
+});
+
+test('listCliModelOptions reads the real model list from session/new', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  const options = await listCliModelOptions(win, 'claude-code-cli');
+  expect(options?.currentValue).toBe('fake-default');
+  expect(options?.options.map(o => o.value)).toEqual(['fake-default', 'fake-fast']);
+});
+
+test('delegating with a model override applies it via session/set_config_option', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-203', 'claude-code-cli', 'Say hello with a specific model', 'fake-fast');
+
+  await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
+
+  const session = await readSession(win, 'APP-203');
+  expect(session?.responseText).toContain('model=fake-fast');
 });

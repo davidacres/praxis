@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { BackendMode, Board, BoardDetails, Connection, ConnectionCheck } from '@ticket-manager/core';
+import type { BackendMode, Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord } from '@ticket-manager/core';
 import { Icon, type IconName } from './Icon';
 import { backendModeMeta, boardTypeIcon, boardTypeLabel } from './boardMeta';
 import { BrandModeIcon } from './BrandModeIcon';
@@ -16,8 +16,7 @@ export type FeatureId =
   | 'sessions'
   | 'issues'
   | 'connections'
-  | 'agents'
-  | 'settings';
+  | 'agents';
 
 interface FeatureDef {
   id: FeatureId;
@@ -36,12 +35,12 @@ const FEATURES: FeatureDef[] = [
   { id: 'sessions', label: 'Sessions', icon: 'robot' },
   { id: 'issues', label: 'Issues', icon: 'ticket' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
-  { id: 'agents', label: 'Agents', icon: 'zap' },
-  { id: 'settings', label: 'Settings', icon: 'gear' }
+  { id: 'agents', label: 'Agents', icon: 'zap' }
 ];
 
 export interface SidebarProps {
   boards: Board[];
+  projects: ProjectRecord[];
   connections: Connection[];
   selectedBoardId: string | undefined;
   detailsByBoardId: Record<string, BoardDetails | undefined>;
@@ -53,6 +52,10 @@ export interface SidebarProps {
   onSelectFeature: (feature: FeatureId) => void;
   featureCounts: Partial<Record<FeatureId, number>>;
   onNewSession: () => void;
+  onNewProject: () => void;
+  onAddExistingProject: () => void;
+  onSelectProject: (project: ProjectRecord) => void;
+  selectedProjectId?: string;
   /** Clicking the "Boards" heading returns to the board area and refreshes the list. */
   onShowBoards: () => void;
   /** Selected issue for the peek card pinned above the footer (classic mode). */
@@ -74,6 +77,7 @@ interface BoardGroup {
 
 export function Sidebar({
   boards,
+  projects,
   connections,
   selectedBoardId,
   detailsByBoardId,
@@ -85,6 +89,10 @@ export function Sidebar({
   onSelectFeature,
   featureCounts,
   onNewSession,
+  onNewProject,
+  onAddExistingProject,
+  onSelectProject,
+  selectedProjectId,
   onShowBoards,
   selectedIssueKey,
   selectedIssueConnectionId,
@@ -96,9 +104,11 @@ export function Sidebar({
   // Brand artwork (extension parity) vs generic board-type glyphs — Appearance setting.
   const { settings } = useSettings();
   const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
+  const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   // The "Ticket Manager" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
 
   /**
    * Boards are flat in the data model, so the folder level is synthesised from
@@ -108,8 +118,8 @@ export function Sidebar({
   const groups = useMemo<BoardGroup[]>(() => {
     const needle = query.trim().toLowerCase();
     const visible = needle
-      ? boards.filter(board => board.name.toLowerCase().includes(needle))
-      : boards;
+      ? boards.filter(board => board.name.toLowerCase().includes(needle) && !board.connectionId?.startsWith('project:'))
+      : boards.filter(board => !board.connectionId?.startsWith('project:'));
 
     const byKey = new Map<string, BoardGroup>();
     for (const board of visible) {
@@ -138,11 +148,18 @@ export function Sidebar({
     <nav className="sidebar" aria-label="Workspace">
       <div className="sidebar-header">
         <h2 className="sidebar-title">Workspace</h2>
-        <button className="new-pill" onClick={onNewSession} data-testid="new-session">
-          <Icon name="plus" size={13} />
-          New
-          <span className="kbd">Ctrl+N</span>
-        </button>
+        <div className="new-menu-anchor">
+          <button className="new-pill" onClick={() => setNewMenuOpen(open => !open)} data-testid="new-menu">
+            <Icon name="plus" size={13} />
+            New
+            <span className="kbd">Ctrl+N</span>
+          </button>
+          {newMenuOpen && <div className="new-menu" role="menu">
+            {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
+            {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Add Existing Project</strong><small>Bring an existing folder into Projects</small></span></button>}
+            <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start AI on an existing ticket</small></span></button>
+          </div>}
+        </div>
         <button className="icon-btn icon-btn-sm" aria-label="Filter">
           <Icon name="sliders" size={14} />
         </button>
@@ -205,6 +222,8 @@ export function Sidebar({
           />
         ) : (
           <>
+            {newProjectEnabled && <><button className="sidebar-section-label sidebar-section-button" onClick={onNewProject}>Projects <span className="tree-meta">{projects.length}</span></button>
+            {projects.length === 0 ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button> : projects.map(project => <button key={project.id} className={`tree-row tree-row-stacked${selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-nav-item" onClick={() => onSelectProject(project)}><span className="tree-icon"><Icon name="folder-open" size={15} /></span><span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span></button>)}</>}
             <button
               className="sidebar-section-label sidebar-section-button"
               data-testid="nav-board"

@@ -49,7 +49,7 @@ test.afterEach(async () => {
 });
 
 async function openAiSettings(win: TestApp['window']): Promise<void> {
-  await win.locator('[data-testid="nav-settings"]').click();
+  await win.locator('[data-testid="titlebar-settings"]').click();
   await win.locator('[data-testid="settings-nav-ai"]').click();
   await win.locator('[data-testid="ai-provider-status"]').waitFor({ state: 'visible' });
 }
@@ -338,6 +338,107 @@ test('delegate completes against an Anthropic-provider mock (Messages API wire f
   expect(parsedBody.system).toBeTruthy();
 });
 
+async function listApiModelOptions(
+  win: TestApp['window'],
+  provider: string
+): Promise<{ currentValue?: string; options: Array<{ value: string; name: string }> } | undefined> {
+  return win.evaluate(async provider => {
+    const w = window as unknown as {
+      ticketManager: {
+        ai: {
+          listApiModelOptions: (
+            provider: string
+          ) => Promise<{ currentValue?: string; options: Array<{ value: string; name: string }> } | undefined>;
+        };
+      };
+    };
+    return w.ticketManager.ai.listApiModelOptions(provider);
+  }, provider);
+}
+
+test('listApiModelOptions reads the real model list from the mock gateway\'s /v1/models', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [
+      { id: 'mock/model-a', name: 'Mock Model A' },
+      { id: 'mock/model-b', name: 'Mock Model B' }
+    ]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+
+  const options = await listApiModelOptions(app.window, 'vercel-gateway');
+  expect(options?.options.map(o => o.value).sort()).toEqual(['mock/model-a', 'mock/model-b']);
+  expect(options?.options.find(o => o.value === 'mock/model-a')?.name).toBe('Mock Model A');
+
+  // A second call reuses the cache — the mock only ever sees one /v1/models hit.
+  await listApiModelOptions(app.window, 'vercel-gateway');
+  expect(mock.modelsRequestCount).toBe(1);
+});
+
+test('listApiModelOptions reads Anthropic\'s /v1/models via x-api-key auth (not Bearer)', async () => {
+  anthropicMock = await startMockAnthropicServer({
+    mode: 'complete',
+    models: [{ id: 'claude-mock-1', display_name: 'Claude Mock 1' }]
+  });
+  app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
+  await configureProvider(app.window, 'anthropic', anthropicMock.baseUrl, 'e2e-anthropic-key');
+
+  const options = await listApiModelOptions(app.window, 'anthropic');
+  expect(options?.options).toEqual([{ value: 'claude-mock-1', name: 'Claude Mock 1' }]);
+});
+
+test('delegating with a model override sends that model in the gateway request', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  // Free-form session (no issueKey) — matches the composer's own path and
+  // sidesteps needing a valid seeded demo issue key.
+  const issueKey = await win.evaluate(async () => {
+    const w = window as unknown as {
+      ticketManager: {
+        ai: {
+          delegate: (input: {
+            goal: string;
+            model: string;
+            task: { maxSteps: number; timeoutMs: number };
+          }) => Promise<{ issueKey: string }>;
+        };
+      };
+    };
+    const record = await w.ticketManager.ai.delegate({
+      goal: 'Smoke-test the model override',
+      model: 'mock/model-override',
+      task: { maxSteps: 3, timeoutMs: 30000 }
+    });
+    return record.issueKey;
+  });
+
+  await expect
+    .poll(async () =>
+      win.evaluate(async issueKey => {
+        const w = window as unknown as {
+          ticketManager: { ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> } };
+        };
+        const sessions = await w.ticketManager.ai.listSessions();
+        return sessions.find(s => s.issueKey === issueKey)?.state;
+      }, issueKey)
+    )
+    .toBe('completed');
+
+  expect(mock.requests.length).toBeGreaterThan(0);
+  const body = JSON.parse(mock.requests[0]!.body) as { model?: string };
+  expect(body.model).toBe('mock/model-override');
+});
+
 test('the New Session composer lists configured providers and can start a session on a non-default one', async () => {
   anthropicMock = await startMockAnthropicServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, { ...NO_GATEWAY_ENV });
@@ -365,10 +466,63 @@ test('the New Session composer lists configured providers and can start a sessio
           };
         };
         const sessions = await w.ticketManager.ai.listSessions();
-        return sessions.find(s => s.issueKey.startsWith('SESSION-'))?.state;
+        return sessions[0]?.state;
       })
     )
     .toBe('completed');
 
   expect(anthropicMock.requests.length).toBeGreaterThan(0);
+});
+
+test('the model manager panel curates which models the composer offers', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [
+      { id: 'anthropic/claude-opus-5', name: 'Claude Opus 5' },
+      { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5' },
+      { id: 'openai/gpt-5.6', name: 'GPT-5.6' }
+    ]
+  });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.locator('[data-testid="titlebar-settings"]').click();
+  await win.locator('[data-testid="settings-nav-ai"]').click();
+  await win.locator('[data-testid="ai-provider-row-vercel-gateway"]').click();
+  await win.locator('[data-testid="ai-manage-models-btn"]').click();
+  await win.locator('[data-testid="model-manager-list"]').waitFor({ timeout: 10000 });
+
+  // Regression: two rapid clicks must both land, not race each other via a
+  // stale settings prop (see ModelManagerPanel's local-optimistic-state fix).
+  await win.locator('[data-testid="model-manager-select-none"]').click();
+  await win.locator('[data-testid="model-manager-checkbox-anthropic/claude-opus-5"]').click();
+  await win.locator('[data-testid="model-manager-checkbox-anthropic/claude-sonnet-5"]').click();
+  await expect(win.locator('[data-testid="model-manager-count"]')).toHaveText('2 of 3 selected');
+  await expect(win.locator('[data-testid="model-manager-checkbox-anthropic/claude-opus-5"]')).toBeChecked();
+  await expect(win.locator('[data-testid="model-manager-checkbox-anthropic/claude-sonnet-5"]')).toBeChecked();
+  await expect(win.locator('[data-testid="model-manager-checkbox-openai/gpt-5.6"]')).not.toBeChecked();
+
+  // Persists in the settings backend, independent of this window's state.
+  const persisted = await win.evaluate(async () => {
+    const w = window as unknown as { ticketManager: { settings: { get: () => Promise<{ ai: { providers: Record<string, { enabledModelIds?: string[] }> } }> } } };
+    const settings = await w.ticketManager.settings.get();
+    return settings.ai.providers['vercel-gateway']?.enabledModelIds;
+  });
+  expect(persisted?.sort()).toEqual(['anthropic/claude-opus-5', 'anthropic/claude-sonnet-5']);
+
+  await win.locator('[data-testid="model-manager-back"]').click();
+  await win.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
+
+  // The composer's Model picker only offers the curated subset.
+  await win.locator('[data-testid="new-session-view"]').waitFor();
+  await win.locator('[data-testid="new-session-model-chip"]').waitFor({ timeout: 10000 });
+  await win.locator('[data-testid="new-session-model-chip"]').click();
+  const menu = win.locator('[role="listbox"][aria-label="Model"]');
+  await expect(menu.locator('[data-testid="new-session-model-option-anthropic/claude-opus-5"]')).toBeVisible();
+  await expect(menu.locator('[data-testid="new-session-model-option-anthropic/claude-sonnet-5"]')).toBeVisible();
+  await expect(menu.locator('[data-testid="new-session-model-option-openai/gpt-5.6"]')).toHaveCount(0);
 });

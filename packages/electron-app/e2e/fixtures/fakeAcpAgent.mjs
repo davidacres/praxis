@@ -37,9 +37,34 @@ app.onRequest(acp.AGENT_METHODS.initialize, () => ({
   agentCapabilities: {}
 }));
 
+// Fake model selector for testing `AcpClientWrapper.getModelOption`/
+// `setConfigOption` and the composer's model picker (aiCliAgentHost.spec.ts's
+// model-selection coverage) without a real Claude Code/Codex CLI.
+let currentModel = 'fake-default';
+const modelConfigOption = () => ({
+  id: 'model',
+  name: 'Model',
+  description: 'Fake model selector',
+  category: 'model',
+  type: 'select',
+  currentValue: currentModel,
+  options: [
+    { value: 'fake-default', name: 'Fake Default' },
+    { value: 'fake-fast', name: 'Fake Fast' }
+  ]
+});
+
 app.onRequest(acp.AGENT_METHODS.session_new, () => ({
-  sessionId: 'fake-session-1'
+  sessionId: 'fake-session-1',
+  configOptions: [modelConfigOption()]
 }));
+
+app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
+  if (ctx.params.configId === 'model' && 'value' in ctx.params) {
+    currentModel = ctx.params.value;
+  }
+  return { configOptions: [modelConfigOption()] };
+});
 
 app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   const promptText = ctx.params.prompt
@@ -50,7 +75,7 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     sessionId: ctx.params.sessionId,
     update: {
       sessionUpdate: 'agent_message_chunk',
-      content: { type: 'text', text: 'Hello from the fake ACP agent.' }
+      content: { type: 'text', text: `Hello from the fake ACP agent. (model=${currentModel})` }
     }
   });
 

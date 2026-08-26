@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { AiProvider, IssueDetails } from '../../types';
 import { buildSystemPrompt } from '../agentPrompt';
-import { AGENT_DEFAULTS, type AgentEventSummary, type AgentEventType, type AgentTaskDefinition } from '../agentTypes';
+import {
+  AGENT_DEFAULTS,
+  type AgentEventSummary,
+  type AgentEventType,
+  type AgentSessionRecord,
+  type AgentTaskDefinition,
+  type AgentToolMode
+} from '../agentTypes';
 import type { AiSessionManager } from '../aiSessionManager';
 import type { PermissionDecision } from '../tools';
 import { CopilotClientWrapper, type CopilotPermissionRequest, type CopilotToolEvent } from './copilotClient';
@@ -24,6 +31,13 @@ export interface CopilotAgentStartOptions {
   runtimePath?: string;
   model?: string;
   workingDirectory?: string;
+  toolMode?: AgentToolMode;
+  runtimeSessionId?: string;
+}
+
+export interface CopilotPromptOptions extends CopilotAgentStartOptions {
+  signal?: AbortSignal;
+  onUpdate?: (content: string) => void;
 }
 
 interface ActiveCopilotTask {
@@ -95,6 +109,14 @@ export class CopilotAgentHost {
     if (!task) {
       return Promise.resolve('deny');
     }
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (
+      (record?.toolMode === 'project-only' || (record?.toolMode === 'read-only' &&
+      ['write', 'shell', 'mcp', 'custom-tool', 'extension-management', 'factory'].includes(request.kind)))
+    ) {
+      this.appendEvent(issueKey, evt('warning', `Blocked by read-only tools: ${request.title}`));
+      return Promise.resolve('deny');
+    }
     if (task.allowPermissionsForTask) {
       return Promise.resolve('allow_always');
     }
@@ -128,8 +150,13 @@ export class CopilotAgentHost {
     }
 
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
+    const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const sessionId = randomUUID();
-    const systemPrompt = buildSystemPrompt(taskDefinition, issue);
+    const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
+      toolMode === 'read-only'
+        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
+        : 'FULL. Use tools as needed; honor every permission request.'
+    }`;
     // The Copilot SDK's `session.send`/`sendAndWait` has no separate
     // system-role slot (like ACP's `ActiveSession.prompt(text)`) — the
     // runtime supplies its own persona, so the task's instructions travel
@@ -169,7 +196,10 @@ export class CopilotAgentHost {
     this.activeTasks.set(issue.key, task);
     this.emitActiveTaskChange(issue.key);
 
-    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider);
+    this.sessionManager.createAgentSession(issue.key, sessionId, taskDefinition, provider, options.model, {
+      workingDirectory,
+      toolMode
+    });
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(issue.key, evt('session_start', 'Copilot session started'));
     this.logger.appendLine(`[CopilotAgent] Starting session for ${issue.key} provider=${provider} cwd=${workingDirectory}`);
@@ -186,6 +216,7 @@ export class CopilotAgentHost {
     task.promptPromise = (async () => {
       await client.connect();
       const response = await client.prompt(combinedPrompt);
+      if (client.sessionId) this.sessionManager.updateAgentRuntime(issue.key, { runtimeSessionId: client.sessionId });
       const active = this.activeTasks.get(issue.key);
       if (!active || active.ending) {
         return;
@@ -214,6 +245,129 @@ export class CopilotAgentHost {
       });
 
     return sessionId;
+  }
+
+  /** Runs a read-only, one-turn prompt without creating or replacing a tracked task session. */
+  public async promptOnce(prompt: string, options: CopilotPromptOptions): Promise<string> {
+    let content = '';
+    const client = new CopilotClientWrapper({
+      workingDirectory: options.workingDirectory?.trim() || process.cwd(),
+      runtimePath: options.runtimePath,
+      model: options.model,
+      requestPermission: async () => 'deny',
+      onMessageDelta: text => {
+        content += text;
+        options.onUpdate?.(content);
+      },
+      logSink: this.logger
+    });
+    const cancel = () => void client.cancel();
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      await client.connect();
+      const response = await client.prompt(prompt);
+      const answer = content.trim() || response.content.trim();
+      if (!answer) {
+        throw new Error('GitHub Copilot returned an empty response.');
+      }
+      return answer;
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      client.dispose();
+    }
+  }
+
+  /** Continues a completed tracked session using a fresh Copilot transport plus saved task/response context. */
+  private buildConversationTranscript(events: AgentSessionRecord['events']): string | undefined {
+    const turns = events.flatMap(event => {
+      if (event.type === 'message' && event.detail?.trim()) return [`Assistant:\n${event.detail.trim()}`];
+      if (event.type === 'user_input_completed' && event.detail?.trim()) return [`User:\n${event.detail.trim()}`];
+      return [];
+    });
+    return turns.length > 0 ? `Previous conversation:\n\n${turns.join('\n\n')}` : undefined;
+  }
+
+  public async continueTask(
+    issueKey: string,
+    message: string,
+    options: CopilotAgentStartOptions
+  ): Promise<void> {
+    if (this.activeTasks.has(issueKey)) {
+      throw new Error(`The agent is still working on ${issueKey}.`);
+    }
+    const record = this.sessionManager.getAgentSession(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    const followUp = message.trim();
+    if (!followUp) throw new Error('Enter a follow-up message.');
+    const workingDirectory = record.workingDirectory?.trim() || options.workingDirectory?.trim() || process.cwd();
+    const toolMode = record.toolMode ?? options.toolMode ?? 'full';
+    const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
+      key: issueKey,
+      summary: record.taskDefinition.goal,
+      issueType: 'Task',
+      status: 'In progress',
+      description: record.taskDefinition.scope
+    } as IssueDetails)}\n\nTool mode: ${
+      toolMode === 'read-only'
+        ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
+        : 'FULL. Use tools as needed; honor every permission request.'
+    }`;
+    const prompt = [
+      systemPrompt,
+      this.buildConversationTranscript(record.events),
+      `User follow-up:\n${followUp}`
+    ].filter((part): part is string => Boolean(part)).join('\n\n');
+
+    const client = new CopilotClientWrapper({
+      workingDirectory,
+      runtimePath: options.runtimePath,
+      model: options.model,
+      resumeSessionId: record.runtimeSessionId,
+      requestPermission: request => this.requestPermission(issueKey, request),
+      onMessageDelta: text => {
+        const active = this.activeTasks.get(issueKey);
+        if (!active || active.ending) return;
+        active.messageBuffer += text;
+        this.sessionManager.updateAgentOutput(issueKey, { responseText: active.messageBuffer }, { persist: false });
+      },
+      onToolEvent: event => this.handleToolEvent(issueKey, event),
+      logSink: this.logger
+    });
+    const task: ActiveCopilotTask = {
+      issueKey,
+      client,
+      pendingPermissions: [],
+      allowPermissionsForTask: false,
+      messageBuffer: ''
+    };
+    this.activeTasks.set(issueKey, task);
+    this.emitActiveTaskChange(issueKey);
+    if (record.responseText) this.appendEvent(issueKey, evt('message', 'Assistant', record.responseText));
+    this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
+    this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
+    this.sessionManager.updateAgentState(issueKey, 'executing');
+
+    task.promptPromise = (async () => {
+      await client.connect();
+      const response = await client.prompt(prompt);
+      if (client.sessionId) this.sessionManager.updateAgentRuntime(issueKey, { runtimeSessionId: client.sessionId });
+      const active = this.activeTasks.get(issueKey);
+      if (!active || active.ending) return;
+      const answer = active.messageBuffer || response.content;
+      this.sessionManager.updateAgentOutput(issueKey, { responseText: answer });
+      if (answer) this.appendEvent(issueKey, evt('message', 'Assistant', answer));
+      if (response.errored) {
+        this.sessionManager.updateAgentState(issueKey, 'failed');
+        this.appendEvent(issueKey, evt('error', 'Copilot follow-up failed.'));
+      } else {
+        this.sessionManager.updateAgentState(issueKey, 'completed');
+        this.appendEvent(issueKey, evt('task_complete', 'Agent completed the follow-up'));
+      }
+    })().catch(error => {
+      const text = error instanceof Error ? error.message : String(error);
+      this.sessionManager.updateAgentState(issueKey, 'failed');
+      this.appendEvent(issueKey, evt('error', text));
+    }).finally(() => void this.cleanupTask(issueKey));
   }
 
   public respondToPermission(issueKey: string, decision: PermissionDecision): void {

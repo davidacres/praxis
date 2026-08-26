@@ -4,7 +4,7 @@ import { Icon } from './Icon';
 import { DEFAULT_BOARD_PREFS } from './boardPreferences';
 
 /**
- * Per-board view preferences popover (the board toolbar's gear button). Covers
+ * Per-board settings popover (the board toolbar's gear button). Covers
  * the desktop plan's Phase C rows: board/list layout, swim lanes, max-age,
  * column set + order, and status/type colors. Writes go through
  * `onChange` — the board view persists them via `boardPrefs:set` so they
@@ -135,14 +135,14 @@ export function BoardSettingsMenu({
     <div className="filter-menu-wrap board-prefs-wrap" ref={wrapRef}>
       <button
         type="button"
-        className="btn"
+        className="icon-btn icon-btn-sm"
         data-testid="board-settings-btn"
-        title="Board display preferences"
+        title="Board settings"
+        aria-label="Board settings"
         aria-expanded={open}
         onClick={() => setOpen(current => !current)}
       >
-        <Icon name="sliders" size={13} />
-        Display
+        <Icon name="gear" size={14} />
       </button>
       {open && (
         <div className="filter-menu-pop board-prefs-menu" data-testid="board-settings-menu">

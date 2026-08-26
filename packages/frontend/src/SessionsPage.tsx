@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AgentEventSummary, AgentSessionRecord, AiProviderStatus, PermissionDecision } from '@ticket-manager/core';
+import type {
+  AgentEventSummary,
+  AgentSessionRecord,
+  AiAnalysisState,
+  AiProviderStatus,
+  PermissionDecision,
+  TerminalSessionInfo
+} from '@ticket-manager/core';
 import { Icon } from './Icon';
 import {
   agentEventIcon,
@@ -8,6 +15,8 @@ import {
   agentStateLabel,
   isTerminalAgentState
 } from './aiSessionState';
+import { PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 
 export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
@@ -49,6 +58,24 @@ function formatStarted(iso: string): string {
   return sameDay ? date.toLocaleTimeString() : date.toLocaleString();
 }
 
+function sessionTitle(session: AgentSessionRecord): string {
+  return session.title?.trim() || session.taskDefinition.goal.split('\n')[0];
+}
+
+function decodeContextText(value: string): string {
+  return value.replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+}
+
+function parseTerminalContext(detail: string | undefined) {
+  const match = detail?.match(/^<terminal_context cwd="([^"]*)" captured_at="([^"]*)">\n([\s\S]*?)\n<\/terminal_context>\n\n([\s\S]*)$/);
+  return match ? {
+    cwd: decodeContextText(match[1]),
+    capturedAt: match[2],
+    output: decodeContextText(match[3]),
+    message: match[4]
+  } : undefined;
+}
+
 /**
  * The Sessions feature: every AI agent session the desktop app has run, newest
  * first, with a console for the selected one. The list is fed from the main
@@ -64,6 +91,18 @@ export function SessionsPage({
 }: SessionsPageProps) {
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
+  const [followUp, setFollowUp] = useState('');
+  const [followUpError, setFollowUpError] = useState<string | undefined>();
+  const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
+  const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
+  const [editingSessionKey, setEditingSessionKey] = useState<string | undefined>();
+  const [sessionTitleDraft, setSessionTitleDraft] = useState('');
+  const [sessionMutationKey, setSessionMutationKey] = useState<string | undefined>();
+  const [sessionListError, setSessionListError] = useState<string | undefined>();
+  const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
+  const [attachTerminalContext, setAttachTerminalContext] = useState(false);
   const eventsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,8 +120,46 @@ export function SessionsPage({
     };
   }, []);
 
+  useEffect(() => {
+    void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
+    const unsubscribeAvailability = window.ticketManager.terminal.onContextAvailability(event => {
+      setTerminalSessions(current => {
+        if (current.some(session => session.id === event.sessionId)) {
+          return current.map(session => session.id === event.sessionId
+            ? { ...session, hasContext: event.terminalHasContext }
+            : session);
+        }
+        void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
+        return current;
+      });
+    });
+    const unsubscribeExit = window.ticketManager.terminal.onExit(event => {
+      setTerminalSessions(current => current.map(session => session.id === event.sessionId
+        ? { ...session, exited: true }
+        : session));
+    });
+    const unsubscribeActive = onActiveTerminalChanged(sessionId => {
+      setActiveTerminalId(sessionId);
+      void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
+    });
+    return () => { unsubscribeAvailability(); unsubscribeExit(); unsubscribeActive(); };
+  }, []);
+
   const selected = sessions.find(session => session.issueKey === selectedKey) ?? sessions[0];
+  const terminalForContext = terminalSessions.find(session => session.id === activeTerminalId && session.hasContext)
+    ?? [...terminalSessions].reverse().find(session => session.hasContext && (
+      !selected?.workingDirectory || session.cwd === selected.workingDirectory
+    ));
   const selectedEventCount = selected?.events.length ?? 0;
+  const conversationEvents = selected?.events.filter(
+    event =>
+      ((event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail)) ||
+      event.type === 'tool_start' ||
+      event.type === 'tool_complete'
+  ) ?? [];
+  const latestEventResponse = [...conversationEvents]
+    .reverse()
+    .find(event => event.type === 'message')?.detail;
 
   // Follow the stream: whenever the selected session gains events, pin the
   // console to the latest one (the list replaces the record object on every
@@ -93,6 +170,115 @@ export function SessionsPage({
       node.scrollTop = node.scrollHeight;
     }
   }, [selected?.issueKey, selectedEventCount]);
+
+  useEffect(() => {
+    setFollowUp('');
+    setFollowUpError(undefined);
+  }, [selected?.issueKey]);
+
+  useEffect(() => {
+    setAnalysisState(undefined);
+    if (!selected || selected.taskDefinition.kind !== 'analysis') {
+      return;
+    }
+    let cancelled = false;
+    void window.ticketManager.ai.getAnalysis(selected.issueKey).then(next => {
+      if (!cancelled) setAnalysisState(next);
+    });
+    const unsubscribe = window.ticketManager.ai.onAnalysisChanged(next => {
+      if (next.issueKey === selected.issueKey) setAnalysisState(next);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [selected?.issueKey, selected?.taskDefinition.kind]);
+
+  const sendFollowUp = async () => {
+    if (!selected || !followUp.trim() || !isTerminalAgentState(selected.state)) return;
+    setSendingFollowUp(true);
+    setFollowUpError(undefined);
+    try {
+      let message = followUp.trim();
+      if (attachTerminalContext) {
+        if (!terminalForContext) throw new Error('The selected terminal has no recent output to attach.');
+        const context = await window.ticketManager.terminal.getContext(terminalForContext.id);
+        if (!context.output) throw new Error('The selected terminal has no recent output to attach.');
+        const escapeContext = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        message = `<terminal_context cwd="${escapeContext(context.cwd)}" captured_at="${context.capturedAt}">\n${escapeContext(context.output)}\n</terminal_context>\n\n${message}`;
+      }
+      await window.ticketManager.ai.continueSession(selected.issueKey, message);
+      setFollowUp('');
+      setAttachTerminalContext(false);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSendingFollowUp(false);
+    }
+  };
+
+  useEffect(() => {
+    setAttachTerminalContext(false);
+  }, [selected?.issueKey]);
+
+  const confirmAndContinue = async () => {
+    if (!selected || selected.taskDefinition.kind !== 'analysis' || selected.state !== 'completed') return;
+    setConfirmingAnalysis(true);
+    setFollowUpError(undefined);
+    try {
+      await window.ticketManager.ai.setAnalysisConfirmed(selected.issueKey, true);
+      await window.ticketManager.ai.continueSession(
+        selected.issueKey,
+        'I confirm the analysis and implementation plan. Continue in this same session and implement the ticket now. Test the result and report back.'
+      );
+    } catch (error) {
+      await window.ticketManager.ai.setAnalysisConfirmed(selected.issueKey, false).catch(() => undefined);
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConfirmingAnalysis(false);
+    }
+  };
+
+  const beginRename = (session: AgentSessionRecord) => {
+    setSessionListError(undefined);
+    setEditingSessionKey(session.issueKey);
+    setSessionTitleDraft(sessionTitle(session));
+  };
+
+  const commitRename = async (session: AgentSessionRecord) => {
+    const title = sessionTitleDraft.trim();
+    if (!title) {
+      setSessionListError('Session title cannot be empty.');
+      return;
+    }
+    if (title === sessionTitle(session)) {
+      setEditingSessionKey(undefined);
+      return;
+    }
+    setSessionMutationKey(session.issueKey);
+    setSessionListError(undefined);
+    try {
+      await window.ticketManager.ai.renameSession(session.issueKey, title);
+      setEditingSessionKey(undefined);
+    } catch (error) {
+      setSessionListError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSessionMutationKey(undefined);
+    }
+  };
+
+  const deleteSession = async (session: AgentSessionRecord) => {
+    setSessionMutationKey(session.issueKey);
+    setSessionListError(undefined);
+    try {
+      await window.ticketManager.ai.deleteSession(session.issueKey);
+      setEditingSessionKey(undefined);
+    } catch (error) {
+      setSessionListError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSessionMutationKey(undefined);
+    }
+  };
 
   return (
     <div className="sessions-layout" data-testid="sessions-view">
@@ -105,6 +291,11 @@ export function SessionsPage({
           </button>
         </div>
         <div className="sessions-list-scroll">
+          {sessionListError && (
+            <div className="error-banner session-list-error" data-testid="session-list-error">
+              {sessionListError}
+            </div>
+          )}
           {sessions.length === 0 && (
             <div className="empty-state" data-testid="sessions-empty" style={{ minHeight: 200 }}>
               <Icon name="robot" size={28} />
@@ -121,28 +312,93 @@ export function SessionsPage({
               )}
             </div>
           )}
-          {sessions.map(session => (
-            <button
-              key={session.issueKey}
-              className={`session-item${selected?.issueKey === session.issueKey ? ' active' : ''}`}
-              data-testid="session-list-row"
-              onClick={() => onSelect(session.issueKey)}
-            >
-              <span className="session-item-top">
-                <span className="session-item-key">{session.issueKey}</span>
-                <span className={agentStateBadgeClass(session.state)}>
-                  {agentStateLabel(session.state)}
+          {sessions.map(session => {
+            const editing = editingSessionKey === session.issueKey;
+            const mutating = sessionMutationKey === session.issueKey;
+            const title = sessionTitle(session);
+            return (
+              <div
+                key={session.issueKey}
+                className={`session-item${selected?.issueKey === session.issueKey ? ' active' : ''}`}
+                data-testid="session-list-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => !editing && onSelect(session.issueKey)}
+                onKeyDown={event => {
+                  if (!editing && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    onSelect(session.issueKey);
+                  }
+                }}
+              >
+                <span className="session-item-top">
+                  <span className="session-item-key">{session.issueKey}</span>
+                  <span className={agentStateBadgeClass(session.state)}>
+                    {agentStateLabel(session.state)}
+                  </span>
+                  <span className="session-item-actions">
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      aria-label={`Rename session ${session.issueKey}`}
+                      title="Rename session"
+                      data-testid="session-rename-btn"
+                      disabled={mutating}
+                      onClick={event => {
+                        event.stopPropagation();
+                        beginRename(session);
+                      }}
+                    >
+                      <Icon name="pencil" size={12} />
+                    </button>
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      aria-label={`Delete session ${session.issueKey}`}
+                      title="Delete session"
+                      data-testid="session-delete-btn"
+                      disabled={mutating}
+                      onClick={event => {
+                        event.stopPropagation();
+                        void deleteSession(session);
+                      }}
+                    >
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </span>
                 </span>
-              </span>
-              <span className="session-item-goal" title={session.taskDefinition.goal}>
-                {session.taskDefinition.goal.split('\n')[0]}
-              </span>
-              <span className="session-item-meta">
-                {formatStarted(session.startedAt)} · {session.stepCount}{' '}
-                {session.stepCount === 1 ? 'step' : 'steps'}
-              </span>
-            </button>
-          ))}
+                {editing ? (
+                  <input
+                    className="session-title-input"
+                    data-testid="session-title-input"
+                    aria-label={`Session title for ${session.issueKey}`}
+                    value={sessionTitleDraft}
+                    disabled={mutating}
+                    autoFocus
+                    onClick={event => event.stopPropagation()}
+                    onChange={event => setSessionTitleDraft(event.target.value)}
+                    onBlur={() => void commitRename(session)}
+                    onKeyDown={event => {
+                      event.stopPropagation();
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setEditingSessionKey(undefined);
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="session-item-goal" title={title} data-testid="session-title">
+                    {title}
+                  </span>
+                )}
+                <span className="session-item-meta">
+                  {formatStarted(session.startedAt)} · {session.stepCount}{' '}
+                  {session.stepCount === 1 ? 'step' : 'steps'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -157,13 +413,27 @@ export function SessionsPage({
           <>
             <div className="session-console-header">
               <Icon name="robot" size={14} />
-              <span className="session-console-title" title={selected.taskDefinition.goal}>
-                {selected.issueKey} — {selected.taskDefinition.goal.split('\n')[0]}
+              <span
+                className="session-console-title"
+                data-testid="session-console-title"
+                title={sessionTitle(selected)}
+              >
+                {selected.issueKey} — {sessionTitle(selected)}
               </span>
               <span className={agentStateBadgeClass(selected.state)} data-testid="session-state-badge">
                 {agentStateLabel(selected.state)}
               </span>
               <span className="session-item-meta">{selected.stepCount} steps</span>
+              {(selected.provider || selected.model) && (
+                <span className="session-item-meta" data-testid="session-runtime">
+                  {[selected.provider, selected.model].filter(Boolean).join(' · ')}
+                </span>
+              )}
+              <span className="session-item-meta" data-testid="session-tool-mode">
+                {selected.toolMode === 'project-only'
+                  ? 'Project-board tools only'
+                  : selected.toolMode === 'read-only' ? 'Read-only tools' : 'Full tools'}
+              </span>
               {!isTerminalAgentState(selected.state) && (
                 <button
                   className="btn"
@@ -175,6 +445,33 @@ export function SessionsPage({
                 </button>
               )}
             </div>
+
+            {selected.taskDefinition.kind === 'analysis' && (
+              <div className="session-analysis-banner" data-testid="session-analysis-banner">
+                <Icon name={analysisState?.confirmed ? 'check-square' : 'search'} size={15} />
+                <div>
+                  <strong>{analysisState?.confirmed ? 'Analysis confirmed' : 'Ticket analysis'}</strong>
+                  <span>
+                    {analysisState?.confirmed
+                      ? 'Implementation is continuing in this conversation.'
+                      : selected.state === 'completed'
+                        ? 'Review the analysis below, then confirm it to implement in this same session.'
+                        : 'The agent is analysing the ticket in this conversation.'}
+                  </span>
+                </div>
+                {!analysisState?.confirmed && selected.state === 'completed' && (
+                  <button
+                    className="btn btn-primary"
+                    data-testid="session-analysis-confirm"
+                    disabled={confirmingAnalysis}
+                    onClick={() => void confirmAndContinue()}
+                  >
+                    <Icon name="check-square" size={13} />
+                    {confirmingAnalysis ? 'Continuing…' : 'Confirm & implement'}
+                  </button>
+                )}
+              </div>
+            )}
 
             {selected.state === 'awaiting_approval' &&
               (() => {
@@ -226,30 +523,148 @@ export function SessionsPage({
                 );
               })()}
 
-            <div className="session-events" ref={eventsRef} data-testid="session-events">
-              {selected.events.length === 0 && (
-                <span className="placeholder-text">Waiting for the agent to start…</span>
-              )}
-              {selected.events.map((event, index) => (
-                <div className="event-row" key={`${event.timestamp}-${index}`} data-testid="session-event-row">
-                  <span className="event-time">{formatTime(event.timestamp)}</span>
-                  <span className={agentEventToneClass(event.type)}>
-                    <Icon name={agentEventIcon(event.type)} size={13} />
-                  </span>
-                  <span className="event-body">
-                    <span className="event-summary">{event.summary}</span>
-                    {event.detail && <div className="event-detail">{event.detail}</div>}
-                  </span>
+            <div className="session-chat-scroll" ref={eventsRef} data-testid="session-chat-thread">
+              <div className="session-chat-message is-user">
+                <div className="session-chat-author">You</div>
+                <div>{selected.taskDefinition.goal}</div>
+              </div>
+              {conversationEvents.map((event, index) => {
+                if (event.type === 'tool_start' || event.type === 'tool_complete') {
+                  return (
+                    <details
+                      className={`session-chat-tool ${event.type === 'tool_complete' ? 'is-complete' : 'is-running'}`}
+                      key={`${event.timestamp}-${index}`}
+                      data-testid="session-chat-tool"
+                    >
+                      <summary>
+                        <Icon name={event.type === 'tool_complete' ? 'check-square' : 'tools'} size={13} />
+                        <span>{event.summary}</span>
+                        <span className="session-chat-tool-time">{formatTime(event.timestamp)}</span>
+                      </summary>
+                      {event.detail && <pre>{event.detail}</pre>}
+                    </details>
+                  );
+                }
+                const terminalContext = event.type === 'user_input_completed' ? parseTerminalContext(event.detail) : undefined;
+                return (
+                  <div
+                    className={`session-chat-message ${event.type === 'message' ? 'is-assistant' : 'is-user'}`}
+                    key={`${event.timestamp}-${index}`}
+                    data-testid={event.type === 'message' ? 'session-chat-assistant' : 'session-chat-user'}
+                  >
+                    <div className="session-chat-author">{event.type === 'message' ? 'AI agent' : 'You'}</div>
+                    {terminalContext && (
+                      <details className="session-chat-terminal-context">
+                        <summary><Icon name="terminal" size={13} /> Recent terminal output <span>{terminalContext.cwd}</span></summary>
+                        <pre>{terminalContext.output}</pre>
+                      </details>
+                    )}
+                    <div>{terminalContext?.message ?? event.detail}</div>
+                  </div>
+                );
+              })}
+              {selected.responseText && selected.responseText !== latestEventResponse && (
+                <div className="session-chat-message is-assistant" data-testid="session-response">
+                  <div className="session-chat-author">AI agent</div>
+                  <div>{selected.responseText}</div>
                 </div>
-              ))}
+              )}
+              {!selected.responseText && conversationEvents.length === 0 && (
+                <span className="placeholder-text">Waiting for the agent to respond…</span>
+              )}
+
+              <details className="session-activity">
+                <summary>Activity log · {selected.events.length} events</summary>
+                <div className="session-events" data-testid="session-events">
+                  {selected.events.map((event, index) => (
+                    <div className="event-row" key={`${event.timestamp}-${index}`} data-testid="session-event-row">
+                      <span className="event-time">{formatTime(event.timestamp)}</span>
+                      <span className={agentEventToneClass(event.type)}>
+                        <Icon name={agentEventIcon(event.type)} size={13} />
+                      </span>
+                      <span className="event-body">
+                        <span className="event-summary">{event.summary}</span>
+                        {event.detail && <div className="event-detail">{event.detail}</div>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
 
-            {selected.responseText && (
-              <div className="session-plan" data-testid="session-response">
-                <div className="detail-section-label">Final response</div>
-                <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{selected.responseText}</div>
+            <div className="session-chat-composer">
+              {followUpError && <div className="error-banner" data-testid="session-follow-up-error">{followUpError}</div>}
+              <div className="composer session-follow-up-composer">
+                {attachTerminalContext && terminalForContext && (
+                  <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
+                    <Icon name="terminal" size={14} />
+                    <span>Recent terminal output</span>
+                    <span className="terminal-context-cwd" title={terminalForContext.cwd}>{terminalForContext.cwd}</span>
+                    <button className="icon-btn icon-btn-sm" aria-label="Remove terminal context" onClick={() => setAttachTerminalContext(false)}>
+                      <Icon name="close" size={12} />
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  className="composer-input"
+                  rows={2}
+                  data-testid="session-follow-up-input"
+                  value={followUp}
+                  disabled={!isTerminalAgentState(selected.state) || sendingFollowUp}
+                  placeholder={
+                    isTerminalAgentState(selected.state)
+                      ? 'Ask the agent to clarify, change, or continue…'
+                      : 'The agent is working…'
+                  }
+                  onChange={event => setFollowUp(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' && !event.shiftKey && followUp.trim()) {
+                      event.preventDefault();
+                      void sendFollowUp();
+                    }
+                  }}
+                />
+                <div className="composer-controls">
+                  {terminalForContext && (
+                    <button
+                      className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
+                      type="button"
+                      aria-pressed={attachTerminalContext}
+                      title={attachTerminalContext ? 'Remove terminal output from this message' : 'Attach recent terminal output'}
+                      data-testid="attach-terminal-context"
+                      onClick={() => setAttachTerminalContext(value => !value)}
+                    >
+                      <Icon name="terminal" size={14} />
+                      Terminal
+                      <span className="terminal-context-dot" aria-hidden="true" />
+                    </button>
+                  )}
+                  {selected.provider && (
+                    <span className="composer-chip session-runtime-chip" title="This session's AI provider">
+                      <Icon name={providerIconName(selected.provider)} size={14} />
+                      {PROVIDER_LABELS[selected.provider]}
+                    </span>
+                  )}
+                  {selected.model && (
+                    <span className="composer-chip session-runtime-chip" title="This session's AI model">
+                      <Icon name="sparkles" size={14} />
+                      {selected.model}
+                    </span>
+                  )}
+                  <span className="spacer" />
+                  <button
+                    className="composer-send"
+                    aria-label={sendingFollowUp ? 'Sending message' : 'Send message'}
+                    title={sendingFollowUp ? 'Sending…' : 'Send message'}
+                    data-testid="session-follow-up-send"
+                    disabled={!isTerminalAgentState(selected.state) || sendingFollowUp || !followUp.trim()}
+                    onClick={() => void sendFollowUp()}
+                  >
+                    <Icon name="arrow-up" size={15} />
+                  </button>
+                </div>
               </div>
-            )}
+            </div>
           </>
         )}
       </div>

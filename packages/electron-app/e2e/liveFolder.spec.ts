@@ -77,8 +77,10 @@ test('transitioning a live folder issue writes the new status back to markdown',
   await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
-  await window.getByRole('button', { name: 'Move to Done' }).click();
-  await expect(window.getByText(/·\s*Done\s*·/)).toBeVisible();
+  const status = window.locator('[data-testid="issue-edit-status"]');
+  await status.selectOption({ label: 'Done' });
+  await window.locator('[data-testid="issue-edit-save-btn"]').click();
+  await expect(status.locator('option:checked')).toHaveText('Done');
 
   const taskPath = path.join(liveFolderDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
   await expect

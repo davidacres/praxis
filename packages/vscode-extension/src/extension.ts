@@ -201,7 +201,7 @@ interface AiModelOption {
   label: string;
 }
 
-const ANALYSIS_MODEL_OPTIONS: Record<AiProvider, AiModelOption[]> = {
+const ANALYSIS_MODEL_OPTIONS: Partial<Record<AiProvider, AiModelOption[]>> = {
   'vercel-gateway': [
     { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
     { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
@@ -5892,4 +5892,3 @@ export async function deactivate(): Promise<void> {
   deactivateHandler = undefined;
   await handler?.();
 }
-

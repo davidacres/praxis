@@ -23,14 +23,26 @@ export const EMPTY_BOARD_FILTER: BoardFilterValue = {
   parentKey: undefined
 };
 
-function isFilterActive(value: BoardFilterValue): boolean {
+export function countActiveBoardFilters(value: BoardFilterValue): number {
   return (
-    value.searchText.trim().length > 0 ||
-    value.statuses.length > 0 ||
-    value.issueTypes.length > 0 ||
-    value.assigneeMode !== 'all' ||
-    value.parentKey !== undefined
+    (value.searchText.trim().length > 0 ? 1 : 0) +
+    value.statuses.length +
+    value.issueTypes.length +
+    (value.assigneeMode !== 'all' ? 1 : 0) +
+    (value.parentKey !== undefined ? 1 : 0)
   );
+}
+
+export function isFilterActive(value: BoardFilterValue): boolean {
+  return countActiveBoardFilters(value) > 0;
+}
+
+export interface BoardFilterPresentation {
+  statusOptions: string[];
+  issueTypeOptions: string[];
+  parentOptions: IssueSummary[];
+  shown: number;
+  total: number | undefined;
 }
 
 interface FilterMenuProps {
@@ -39,10 +51,11 @@ interface FilterMenuProps {
   options: string[];
   selected: string[];
   onToggle: (option: string) => void;
+  active: boolean;
 }
 
 /** Chip button that opens a checkbox dropdown; toggles apply immediately. */
-function FilterMenu({ label, testId, options, selected, onToggle }: FilterMenuProps) {
+function FilterMenu({ label, testId, options, selected, onToggle, active }: FilterMenuProps) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +71,12 @@ function FilterMenu({ label, testId, options, selected, onToggle }: FilterMenuPr
     document.addEventListener('mousedown', onDocumentClick);
     return () => document.removeEventListener('mousedown', onDocumentClick);
   }, [open]);
+
+  useEffect(() => {
+    if (!active) {
+      setOpen(false);
+    }
+  }, [active]);
 
   return (
     <div className="filter-menu-wrap" ref={wrapRef}>
@@ -102,6 +121,8 @@ export interface BoardFilterBarProps {
   /** Loaded vs. total matching issues, for the "x of y" readout. */
   shown: number;
   total: number | undefined;
+  /** Keeps nested menus closed while the title-bar popover is hidden. */
+  active?: boolean;
 }
 
 export function BoardFilterBar({
@@ -111,7 +132,8 @@ export function BoardFilterBar({
   issueTypeOptions,
   parentOptions,
   shown,
-  total
+  total,
+  active = true
 }: BoardFilterBarProps) {
   // The search box is debounced so each keystroke doesn't fire a backend query;
   // everything else (checkboxes, selects) applies immediately.
@@ -153,6 +175,7 @@ export function BoardFilterBar({
         options={statusOptions}
         selected={value.statuses}
         onToggle={option => onChange({ ...value, statuses: toggle(value.statuses, option) })}
+        active={active}
       />
       <FilterMenu
         label="Type"
@@ -160,6 +183,7 @@ export function BoardFilterBar({
         options={issueTypeOptions}
         selected={value.issueTypes}
         onToggle={option => onChange({ ...value, issueTypes: toggle(value.issueTypes, option) })}
+        active={active}
       />
 
       <select

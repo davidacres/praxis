@@ -18,12 +18,15 @@ import type {
   TrackedBoard,
   UpdateIssueInput
 } from '../types';
+import type { ModelOptions } from '../ai/providers/modelCatalog';
+import type { ActivatedSkill, AgentRuntimeSnapshot } from '../ai/agentRuntime';
 import type { IdentifiedPlanFolder } from '../livefolder/markdownPlanParser';
 import type { BoardDraftRow } from '../userWorkspace/boardDraftPlanner';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
 import type {
   AgentSessionRecord,
   AgentTaskDefinition,
+  AgentToolMode,
   AgentWorkflowReference,
   IssueWorkflowAssignment
 } from '../ai/agentTypes';
@@ -39,6 +42,15 @@ import type {
   TaskDesignerTicketNode
 } from '../taskDesigner/taskDesignerState';
 import type { GitLabMergeRequest } from '../gitlab/gitLabApiService';
+import type {
+  AttachProjectFolderInput,
+  AttachProjectFolderResult,
+  CreateProjectInput,
+  FolderInspection,
+  ProjectBoardReference,
+  ProjectRecord,
+  UpdateProjectInput
+} from '../projects/projectTypes';
 
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
@@ -75,6 +87,8 @@ export interface IssueIpc {
   delete(issueKey: string, connectionId?: string): Promise<void>;
   transition(issueKey: string, transitionId: string, connectionId?: string): Promise<void>;
   addComment(issueKey: string, body: string, connectionId?: string): Promise<void>;
+  /** Tracker-specific label for the authenticated user, used by "Assign to me". */
+  getSelfAssigneeLabel(connectionId?: string): Promise<string | undefined>;
   getProjects(connectionId?: string): Promise<Project[]>;
   /** Candidate parents for the create/edit form (Features for livefolder, Epics for Jira, …). */
   getParentItems(
@@ -222,6 +236,18 @@ export interface ShellIpc {
   openExternal(url: string): Promise<boolean>;
 }
 
+/** Durable app-managed projects and their default local boards. */
+export interface ProjectsIpc {
+  list(): Promise<ProjectRecord[]>;
+  get(projectId: string): Promise<ProjectRecord | undefined>;
+  create(input: CreateProjectInput): Promise<ProjectRecord>;
+  update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord>;
+  inspectFolder(folderPath: string): Promise<FolderInspection>;
+  attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;
+  linkBoard(projectId: string, board: ProjectBoardReference): Promise<ProjectRecord>;
+  unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord>;
+}
+
 /** Progress payload streamed on the `ai:reviewProgress` push channel while a review runs. */
 export interface AiReviewProgress {
   issueKey: string;
@@ -251,6 +277,8 @@ export interface AiAnalysisState {
   confirmedAt?: string;
   /** True while an analysis run is streaming. */
   busy: boolean;
+  /** Provider used by the latest analysis run. */
+  provider?: AiProvider;
   model?: string;
 }
 
@@ -286,6 +314,15 @@ export interface AiDelegateInput {
   workingDirectory?: string;
   /** Provider override for this session; defaults to `settings.ai.activeProvider`. */
   provider?: AiProvider;
+  /** Model id override for this session; omitted to use the selected provider's default. */
+  model?: string;
+  /** Host-enforced tool access for this session. Analysis always uses read-only. */
+  toolMode?: AgentToolMode;
+  /** Starts the issue's read-only analysis as the first turn of its normal chat session. */
+  purpose?: 'analysis';
+  /** Optional discovered runtime host and skills to use for this session. */
+  agentId?: string;
+  skillNames?: string[];
 }
 
 /**
@@ -301,14 +338,36 @@ export interface AiIpc {
   setApiKey(value: string): Promise<AiProviderStatus>;
   /** Every configured provider's status snapshot, for the settings UI and the session picker. */
   listProviderStatuses(): Promise<AiProviderStatus[]>;
+  /**
+   * The available models for a `hostKind: 'acp'` provider (Claude Code,
+   * Codex), read live from the agent's `session/new` response — a
+   * throwaway connection is spun up and immediately disposed, no prompt
+   * sent. `undefined` for providers with no model selector (including
+   * every non-ACP provider).
+   */
+  listCliModelOptions(provider: AiProvider): Promise<ModelOptions | undefined>;
+  /**
+   * The available models for a `kind: 'api'` provider (Vercel AI Gateway,
+   * OpenAI, Anthropic), read from its real `/v1/models`-style endpoint and
+   * cached (see `modelCatalog.ts`) — pass `forceRefresh: true` to bypass the
+   * cache (e.g. a "Refresh" button). `undefined` when no API key is
+   * configured or the fetch fails.
+   */
+  listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined>;
   /** Stores a specific provider's API key encrypted; empty string clears it. */
   setProviderApiKey(provider: AiProvider, value: string): Promise<AiProviderStatus>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
+  /** Renames a persisted session without changing its ticket binding or task goal. */
+  renameSession(issueKey: string, title: string): Promise<AgentSessionRecord>;
+  /** Aborts a running session if needed, then permanently removes its saved conversation. */
+  deleteSession(issueKey: string): Promise<void>;
   /** Starts a general agent task for an issue; resolves with the new session record. */
   delegate(input: AiDelegateInput): Promise<AgentSessionRecord>;
   /** Aborts the running task for an issue (no-op when none is active). */
   abort(issueKey: string): Promise<void>;
+  /** Sends a follow-up message and continues the existing recorded session. */
+  continueSession(issueKey: string, message: string): Promise<void>;
   /**
    * Resolves the oldest pending permission request for an issue's active
    * task (no-op when none is pending). `'allow_always'` also resolves every
@@ -317,6 +376,8 @@ export interface AiIpc {
   respondToPermission(issueKey: string, decision: PermissionDecision): Promise<void>;
   /** Subscribes to session record updates; returns an unsubscribe function. */
   onSessionChanged(listener: (record: AgentSessionRecord) => void): () => void;
+  /** Subscribes to session deletions; returns an unsubscribe function. */
+  onSessionDeleted(listener: (issueKey: string) => void): () => void;
 
   // ── Workflow packs ────────────────────────────────────────────────────────
   /** Workflow packs discovered under `<workingDirectory>/.github/skills`. */
@@ -328,7 +389,12 @@ export interface AiIpc {
 
   // ── Ticket review ─────────────────────────────────────────────────────────
   /** Runs the AI ticket review; streams `ai:reviewProgress` and resolves with the final markdown. */
-  reviewIssue(issueKey: string, connectionId?: string): Promise<string>;
+  reviewIssue(
+    issueKey: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<string>;
   /** Cancels a running review (no-op when none is active). */
   cancelReview(issueKey: string): Promise<void>;
   /** Subscribes to review progress; returns an unsubscribe function. */
@@ -339,7 +405,12 @@ export interface AiIpc {
    * Runs the three-section local peer review (code review, security review,
    * then a summarizing verdict). Resolves with the three markdown bodies.
    */
-  localPeerReview(issueKey: string, connectionId?: string): Promise<LprResult>;
+  localPeerReview(
+    issueKey: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<LprResult>;
 
   // ── Issue analysis (chat) ─────────────────────────────────────────────────
   /** The persisted analysis conversation + confirmation state for an issue. */
@@ -348,7 +419,13 @@ export interface AiIpc {
    * Asks a question (empty string runs the base analysis) and streams the answer
    * into the state; every mutation pushes `ai:analysisChanged`.
    */
-  submitAnalysis(issueKey: string, question: string, connectionId?: string): Promise<void>;
+  submitAnalysis(
+    issueKey: string,
+    question: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<void>;
   /** Cancels a running analysis (no-op when none is active). */
   cancelAnalysis(issueKey: string): Promise<void>;
   /** Marks the analysis confirmed (or un-confirms it) for the delegation gate. */
@@ -393,7 +470,103 @@ export interface TicketManagerIpc {
   shell: ShellIpc;
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
+  agentRuntime: AgentRuntimeIpc;
   taskDesigner: TaskDesignerIpc;
+  projects: ProjectsIpc;
+  terminal: TerminalIpc;
+}
+
+/** Discovery and skill-registry status for the desktop runtime. */
+export interface AgentRuntimeIpc {
+  list(): Promise<AgentRuntimeSnapshot>;
+  refresh(): Promise<AgentRuntimeSnapshot>;
+  start(agentId: string): Promise<AgentRuntimeSnapshot>;
+  activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
+}
+
+// ── Integrated terminal ─────────────────────────────────────────────────────
+
+export interface CreateTerminalInput {
+  cwd?: string;
+  cols: number;
+  rows: number;
+  profileId?: string;
+}
+
+export interface TerminalProfile {
+  id: string;
+  name: string;
+  shell: string;
+  isDefault: boolean;
+}
+
+export interface TerminalSessionInfo {
+  id: string;
+  title: string;
+  cwd: string;
+  shell: string;
+  profileId: string;
+  profileName: string;
+  hasContext: boolean;
+  exited: boolean;
+  lastCommand?: TerminalCommandRecord;
+}
+
+export interface TerminalCommandRecord {
+  id: string;
+  command: string;
+  cwd: string;
+  startedAt: string;
+  finishedAt?: string;
+  exitCode?: number;
+  output: string;
+  status: 'running' | 'success' | 'failed';
+}
+
+export interface TerminalCommandEvent {
+  sessionId: string;
+  command: TerminalCommandRecord;
+}
+
+export interface TerminalContext {
+  sessionId: string;
+  cwd: string;
+  /** ANSI-free recent output, capped main-side before it crosses IPC. */
+  output: string;
+  capturedAt: string;
+}
+
+export interface TerminalOutputEvent {
+  sessionId: string;
+  data: string;
+}
+
+export interface TerminalExitEvent {
+  sessionId: string;
+  exitCode: number;
+  signal?: number;
+}
+
+export interface TerminalContextAvailabilityEvent {
+  sessionId: string;
+  terminalHasContext: boolean;
+}
+
+export interface TerminalIpc {
+  listProfiles(): Promise<TerminalProfile[]>;
+  list(): Promise<TerminalSessionInfo[]>;
+  create(input: CreateTerminalInput): Promise<TerminalSessionInfo>;
+  write(sessionId: string, data: string): Promise<void>;
+  resize(sessionId: string, cols: number, rows: number): Promise<void>;
+  kill(sessionId: string): Promise<void>;
+  /** Raw xterm stream used to redraw a preserved terminal after the panel reopens. */
+  getBuffer(sessionId: string): Promise<string>;
+  getContext(sessionId: string): Promise<TerminalContext>;
+  listCommands(sessionId: string): Promise<TerminalCommandRecord[]>;
+  onOutput(listener: (event: TerminalOutputEvent) => void): () => void;
+  onExit(listener: (event: TerminalExitEvent) => void): () => void;
+  onContextAvailability(listener: (event: TerminalContextAvailabilityEvent) => void): () => void;
+  onCommand(listener: (event: TerminalCommandEvent) => void): () => void;
 }
 
 // ── Task Designer ────────────────────────────────────────────────────────────

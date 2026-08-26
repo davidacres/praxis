@@ -14,12 +14,12 @@ import {
   parseMergeRequestFeedbackResult,
   resolveDeliveryPublishCommand,
   resolveWorkflowReference,
-  reviewTicketWithVercelGateway,
   validateDeliveryWorkflowSettings,
   wrapTicketManagerManagedMergeRequestNote,
   type AgentSessionRecord,
   type AiAnalysisMessage,
   type AiAnalysisState,
+  type AiProvider,
   type DeliverySessionMetadata,
   type FeatureSubTaskRecord,
   type IssueDetails
@@ -30,6 +30,7 @@ import {
   getVercelAgentService,
   resolveGatewayOptions
 } from './aiInstance';
+import { reviewIssueWithRuntime } from './aiReviewRuntime';
 import type { JsonKeyValueStore } from './adapters/jsonKeyValueStore';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
 import { getConnectionStore } from './connectionStoreInstance';
@@ -43,6 +44,7 @@ interface StoredAnalysis {
   messages: AiAnalysisMessage[];
   confirmed: boolean;
   confirmedAt?: string;
+  provider?: AiProvider;
   model?: string;
 }
 
@@ -87,6 +89,7 @@ export function registerAiWorkflowIpc(): void {
       confirmed: stored?.confirmed ?? false,
       confirmedAt: stored?.confirmedAt,
       busy: busyAnalysis.has(issueKey),
+      provider: stored?.provider,
       model: stored?.model
     };
   }
@@ -111,19 +114,17 @@ export function registerAiWorkflowIpc(): void {
       _event: Electron.IpcMainInvokeEvent,
       issueKey: string,
       question: string,
-      connectionId?: string
+      connectionId?: string,
+      requestedProvider?: AiProvider,
+      requestedModel?: string
     ) => {
       const settings = getSettingsBackend().read();
       const analysisPrompt = settings.ai.analysisPrompt.trim();
       if (!analysisPrompt) {
         throw new Error('Set an analysis system prompt under Settings → AI Provider first.');
       }
-      const gateway = await resolveGatewayOptions();
-      if (!gateway.apiKey) {
-        throw new Error(
-          'No Vercel AI Gateway API key configured. Add one under Settings → AI Provider.'
-        );
-      }
+      const provider = requestedProvider ?? settings.ai.activeProvider;
+      const model = requestedModel?.trim() || undefined;
       if (busyAnalysis.has(issueKey)) {
         throw new Error(`An analysis run is already in progress for ${issueKey}.`);
       }
@@ -170,16 +171,12 @@ export function registerAiWorkflowIpc(): void {
           ...issue,
           description: [issue.description ?? '', appendedPrompt].filter(Boolean).join('\n\n')
         };
-        const answer = await reviewTicketWithVercelGateway(
-          issueForAnalysis,
-          gateway.apiKey,
-          settings.ai.agentName.trim() || 'AI Agent',
-          {
-            gatewayUrl: gateway.gatewayUrl,
-            model: gateway.model,
-            systemPrompt: analysisPrompt,
-            signal: controller.signal,
-            onUpdate: content => {
+        const answer = await reviewIssueWithRuntime(issueForAnalysis, {
+          provider,
+          model,
+          systemPrompt: analysisPrompt,
+          signal: controller.signal,
+          onUpdate: content => {
               // Stream into the trailing assistant message. Fire-and-forget:
               // writes are ordered by the single run per issue.
               void writeAnalysis(issueKey, stored => {
@@ -187,13 +184,12 @@ export function registerAiWorkflowIpc(): void {
                 messages[messages.length - 1] = { ...assistantMessage, text: content };
                 return { ...stored, messages };
               });
-            }
           }
-        );
+        });
         await writeAnalysis(issueKey, stored => {
           const messages = [...stored.messages];
           messages[messages.length - 1] = { ...assistantMessage, text: answer };
-          return { ...stored, messages, model: gateway.model };
+          return { ...stored, messages, provider, model };
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -226,6 +222,9 @@ export function registerAiWorkflowIpc(): void {
         confirmed,
         confirmedAt: confirmed ? new Date().toISOString() : undefined
       }));
+      if (confirmed) {
+        sessionManager.promoteAnalysisSession(issueKey);
+      }
     }
   );
 
@@ -400,7 +399,8 @@ export function registerAiWorkflowIpc(): void {
         baseBranch: decomposition.featureBranch,
         branchName,
         worktreePath: workingDirectory,
-        workflow: subTaskRecord.workflow
+        workflow:
+          sessionManager.getIssueWorkflowAssignment(subTaskKey)?.workflow ?? subTaskRecord.workflow
       });
       sessionConnections.set(subTaskKey, connectionId);
       await agentService.startTask(issue, taskDefinition, {

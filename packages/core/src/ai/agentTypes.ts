@@ -51,7 +51,7 @@ export interface AgentTaskAttachment {
 
 /** What the agent should do, with explicit guardrail boundaries. */
 export interface AgentTaskDefinition {
-  kind?: 'general' | 'jira-delivery';
+  kind?: 'general' | 'analysis' | 'jira-delivery';
   goal: string;
   scope: string;
   definitionOfDone: string;
@@ -196,11 +196,26 @@ export interface AgentConversationMessage {
   tool_call_id?: string;
 }
 
+/** Tool access granted to an agent session. Read-only is enforced by the host, not just prompted. */
+export type AgentToolMode = 'read-only' | 'full' | 'project-only';
+
 /** Full persisted record for an AI agent session attached to an issue. */
 export interface AgentSessionRecord {
   issueKey: string;
   sessionId: string;
+  /** User-editable display title. Falls back to the task goal for older records. */
+  title?: string;
   provider?: AiProvider;
+  /** Runtime model selected when the session started; reused for follow-up turns. */
+  model?: string;
+  /** Stable workspace root used for every turn in this session. */
+  workingDirectory?: string;
+  /** Host-enforced tool access. Older sessions default to full access. */
+  toolMode?: AgentToolMode;
+  /** Provider-owned identifier used when the runtime supports native resume. */
+  runtimeSessionId?: string;
+  /** Tracker connection bound when this issue session was created. */
+  connectionId?: string;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;

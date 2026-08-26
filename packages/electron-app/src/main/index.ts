@@ -20,6 +20,11 @@ import { setMcpOAuthProviderSource } from '@ticket-manager/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
 import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
+import { registerProjectIpc } from './projectIpc';
+import { registerTerminalIpc } from './terminalIpc';
+import { getTerminalManager } from './terminalManager';
+import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
+import { getAgentRuntimeManager } from './agentRuntimeInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -125,6 +130,22 @@ void app.whenReady().then(async () => {
   registerAiIpc();
   registerAiWorkflowIpc();
   registerTaskDesignerIpc();
+  registerProjectIpc();
+  registerTerminalIpc();
+  registerAgentRuntimeIpc();
+  void getAgentRuntimeManager().refresh().then(async snapshot => {
+    getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
+    for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
+      try {
+        await getAgentRuntimeManager().start(agent.manifest.id);
+        getLogBus().appendLine(`[agent-runtime] started ${agent.manifest.id}`);
+      } catch (error) {
+        getLogBus().appendLine(`[agent-runtime] failed to start ${agent.manifest.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }).catch(error => {
+    getLogBus().appendLine(`[agent-runtime] discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
   // Seed the Output panel with a launch marker — also gives e2e a
   // deterministic first line to assert against.
   getLogBus().appendLine(`[app] Ticket Manager ${app.getVersion()} started`);
@@ -154,4 +175,6 @@ app.on('before-quit', () => {
   // watcher (see disposeAllServices' doc comment).
   getAcpAgentHost().dispose();
   getCopilotAgentHost().dispose();
+  getTerminalManager().dispose();
+  void getAgentRuntimeManager().dispose();
 });

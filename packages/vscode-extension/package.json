@@ -2,7 +2,10 @@
   "name": "ticket-manager",
   "displayName": "Ticket Manager",
   "version": "0.2.1",
-  "publisher": "kam-ai-team",
+  "publisher": "davidacres",
+  "author": {
+    "name": "davidacres"
+  },
   "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
   "license": "MIT",
   "homepage": "https://github.com/davidacres/ticket-manager-extension",
@@ -52,6 +55,7 @@
     "uninstall:all": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install.ps1 -Uninstall",
     "build:install": "npm run build && npm run install:all",
     "publish:gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-gitlab.ps1",
+    "publish:github": "./scripts/publish-github.sh",
     "install:from-gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-from-gitlab.ps1",
     "open:ticket-manager": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-ticket-manager-vscode.ps1",
     "docs:commands": "node ./scripts/generate-command-reference.cjs",
@@ -995,7 +999,7 @@
         },
         "ticketManager.enableNewProject": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "scope": "window",
           "markdownDescription": "Enable the **New Project** wizard (preview). When disabled, the command is hidden from the Command Palette.",
           "tags": [

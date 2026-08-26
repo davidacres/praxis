@@ -64,6 +64,7 @@ test('allowing a pending permission lets the session continue to completion', as
   const card = win.locator('[data-testid="session-permission-card"]');
   await expect(card).toBeVisible();
   await expect(card).toContainText('Read a file');
+  await expect(win.locator('[data-testid="session-chat-tool"]')).toContainText('Running tool: Read a file');
 
   await win.locator('[data-testid="session-permission-allow-once"]').click();
 
@@ -72,6 +73,7 @@ test('allowing a pending permission lets the session continue to completion', as
   });
   // The approval card disappears once resolved.
   await expect(card).toHaveCount(0);
+  await expect(win.locator('[data-testid="session-chat-tool"]')).toHaveCount(2);
 });
 
 test('denying a pending permission is honored by the agent', async () => {

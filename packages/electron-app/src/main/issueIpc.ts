@@ -86,6 +86,13 @@ export function registerIssueIpc(): void {
   );
 
   ipcMain.handle(
+    'issue:getSelfAssigneeLabel',
+    async (_event: Electron.IpcMainInvokeEvent, connectionId?: string) => {
+      return (await getServiceForConnection(connectionId)).getSelfAssigneeLabel();
+    }
+  );
+
+  ipcMain.handle(
     'issue:getProjects',
     async (_event: Electron.IpcMainInvokeEvent, connectionId?: string) => {
       return (await getServiceForConnection(connectionId)).getProjects();
