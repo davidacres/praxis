@@ -29,10 +29,9 @@ import {
   computeNextConnectorIndex,
   computeNextNodeIndex,
   hasExistingConnector,
+  issueTypeHex,
   normalizeWebsitePreviewUrl,
   resolveConnectorDirections,
-  ticketHeaderStyle,
-  websiteHeaderBackground,
   websitePreviewTitle,
   wouldCreateCycle,
   type CanvasBox
@@ -41,6 +40,8 @@ import {
 interface TaskDesignerPageProps {
   board: Board;
   onClose: () => void;
+  onSelectionChange: (node: TaskDesignerCanvasNode | undefined) => void;
+  externalSelectionId?: string;
 }
 
 type ActiveTool = 'select' | 'link';
@@ -104,6 +105,20 @@ function nodeLabel(node: TaskDesignerCanvasNode | undefined): string {
   return websitePreviewTitle(node.url);
 }
 
+/** Inspector-relevant data only; moving a selected node must not rerender the whole app shell. */
+function nodeDetailSignature(node: TaskDesignerCanvasNode | undefined): string {
+  if (!node) {
+    return '';
+  }
+  if (node.type === 'ticket') {
+    return [node.id, node.issueKey, node.summary, node.issueType, node.status, node.assignee, node.priority, node.projectKey].join('\u0000');
+  }
+  if (node.type === 'note') {
+    return [node.id, node.title, node.content].join('\u0000');
+  }
+  return [node.id, node.url].join('\u0000');
+}
+
 /**
  * Task Designer — the desktop port of the extension's `taskDesignerPanelManager`
  * webview. Same canvas model (ticket/note/website nodes, directed bezier
@@ -114,12 +129,18 @@ function nodeLabel(node: TaskDesignerCanvasNode | undefined): string {
  * the latest, even inside the 160ms debounce window); React state mirrors it
  * for rendering.
  */
-export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
+export function TaskDesignerPage({
+  board,
+  onClose,
+  onSelectionChange,
+  externalSelectionId
+}: TaskDesignerPageProps) {
   const [canvas, setCanvas] = useState<TaskDesignerPersistedState>(emptyCanvasState);
   const [loaded, setLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | undefined>();
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
+  const [linkSourceNodeId, setLinkSourceNodeId] = useState<string | undefined>();
   const [linkPreview, setLinkPreview] = useState<LinkPreview | undefined>();
   const [entry, setEntry] = useState<{ open: boolean; mode: EntryMode }>({ open: false, mode: 'ticket' });
   const [entryValue, setEntryValue] = useState('');
@@ -140,6 +161,29 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
   const selectedConnectorRef = useRef<string | undefined>(undefined);
   const entryRef = useRef(entry);
   selectedConnectorRef.current = selectedConnectorId;
+
+  const selectedNode = selectedNodeId
+    ? canvas.nodes.find(node => node.id === selectedNodeId)
+    : undefined;
+  const selectedNodeDetails = nodeDetailSignature(selectedNode);
+
+  useEffect(() => {
+    if (externalSelectionId) {
+      return;
+    }
+    onSelectionChange(selectedNode);
+  }, [selectedNodeId, selectedNodeDetails, externalSelectionId, onSelectionChange]);
+
+  useEffect(() => () => onSelectionChange(undefined), [onSelectionChange]);
+
+  useEffect(() => {
+    if (externalSelectionId) {
+      setSelectedNodeId(undefined);
+      setSelectedConnectorId(undefined);
+      setLinkSourceNodeId(undefined);
+      setLinkPreview(undefined);
+    }
+  }, [externalSelectionId]);
   entryRef.current = entry;
 
   const applyCanvas = useCallback((next: TaskDesignerPersistedState) => {
@@ -359,9 +403,10 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       mutateCanvas(current => ({ ...current, nodes: [...current.nodes, node] }), 'now');
       setSelectedNodeId(node.id);
       setSelectedConnectorId(undefined);
+      onSelectionChange(node);
       return node;
     },
-    [board.connectionId, mutateCanvas]
+    [board.connectionId, mutateCanvas, onSelectionChange]
   );
 
   const addNoteNode = useCallback(() => {
@@ -385,8 +430,9 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
     mutateCanvas(current => ({ ...current, nodes: [...current.nodes, node] }), 'now');
     setSelectedNodeId(node.id);
     setSelectedConnectorId(undefined);
+    onSelectionChange(node);
     setFeedback('Note added.');
-  }, [mutateCanvas, visibleCanvasPoint, setFeedback]);
+  }, [mutateCanvas, visibleCanvasPoint, onSelectionChange, setFeedback]);
 
   const addWebsiteNode = useCallback(
     (url: string) => {
@@ -409,9 +455,10 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       mutateCanvas(current => ({ ...current, nodes: [...current.nodes, node] }), 'now');
       setSelectedNodeId(node.id);
       setSelectedConnectorId(undefined);
+      onSelectionChange(node);
       setFeedback('Website preview added.');
     },
-    [mutateCanvas, visibleCanvasPoint, setFeedback]
+    [mutateCanvas, visibleCanvasPoint, onSelectionChange, setFeedback]
   );
 
   const deleteNode = useCallback(
@@ -428,6 +475,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
         'now'
       );
       setSelectedNodeId(current => (current === node.id ? undefined : current));
+      setLinkSourceNodeId(current => (current === node.id ? undefined : current));
       setSelectedConnectorId(undefined);
       setLinkPreview(current => (current?.sourceNodeId === node.id ? undefined : current));
       setFeedback(
@@ -501,6 +549,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
     setSelectedNodeId(undefined);
     setSelectedConnectorId(undefined);
     setLinkPreview(undefined);
+    setLinkSourceNodeId(undefined);
     setActiveTool('select');
     mutateCanvas(state => ({ ...state, nodes: [], connectors: [] }), 'now');
     setFeedback('Canvas cleared.');
@@ -646,11 +695,12 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       void persistNow();
       setSelectedNodeId(mainNode.id);
       setSelectedConnectorId(undefined);
+      onSelectionChange(mainNode);
       setFeedback(
         includeRelated ? 'Dropped ticket added with related tickets and links.' : 'Dropped ticket added to the designer.'
       );
     },
-    [applyCanvas, persistNow, setFeedback]
+    [applyCanvas, persistNow, onSelectionChange, setFeedback]
   );
 
   const onCanvasDragOver = useCallback((event: ReactDragEvent) => {
@@ -947,6 +997,11 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
         deleteSelectedConnector();
         return;
       }
+      if (event.key === 'Escape' && linkSourceNodeId) {
+        setLinkSourceNodeId(undefined);
+        setFeedback('Link cancelled.');
+        return;
+      }
       if (event.key === 'Escape' && entryRef.current.open) {
         closeEntry();
       }
@@ -970,6 +1025,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
     createConnector,
     deleteSelectedConnector,
     closeEntry,
+    linkSourceNodeId,
     setFeedback
   ]);
 
@@ -992,10 +1048,15 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       if (event.button !== 0) {
         return;
       }
+      if (activeTool === 'link') {
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.closest('button') || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
         return;
       }
+      setSelectedNodeId(node.id);
+      setSelectedConnectorId(undefined);
       interactionRef.current = {
         kind: 'drag',
         pointerId: event.pointerId,
@@ -1008,17 +1069,39 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       };
       event.preventDefault();
     },
-    []
+    [activeTool]
   );
 
-  const onNodeClick = useCallback((node: TaskDesignerCanvasNode, event: ReactMouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('button') || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-      return;
-    }
-    setSelectedNodeId(node.id);
-    setSelectedConnectorId(undefined);
-  }, []);
+  const onNodeClick = useCallback(
+    (node: TaskDesignerCanvasNode, event: ReactMouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('button') || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      onSelectionChange(node);
+      if (activeTool === 'link') {
+        if (!linkSourceNodeId) {
+          setLinkSourceNodeId(node.id);
+          setSelectedNodeId(node.id);
+          setSelectedConnectorId(undefined);
+          setFeedback(`Link from ${nodeLabel(node)}. Select another item to connect it.`);
+          return;
+        }
+        if (linkSourceNodeId === node.id) {
+          setLinkSourceNodeId(undefined);
+          setFeedback('Link cancelled. Select a source item to start again.');
+          return;
+        }
+        if (createConnector(linkSourceNodeId, node.id)) {
+          setLinkSourceNodeId(undefined);
+        }
+        return;
+      }
+      setSelectedNodeId(node.id);
+      setSelectedConnectorId(undefined);
+    },
+    [activeTool, linkSourceNodeId, createConnector, onSelectionChange, setFeedback]
+  );
 
   const onResizePointerDown = useCallback(
     (node: TaskDesignerNoteNode | TaskDesignerWebsitePreviewNode, event: ReactPointerEvent) => {
@@ -1029,6 +1112,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       event.stopPropagation();
       setSelectedNodeId(node.id);
       setSelectedConnectorId(undefined);
+      setLinkSourceNodeId(undefined);
       interactionRef.current = {
         kind: 'resize',
         pointerId: event.pointerId,
@@ -1051,6 +1135,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       event.stopPropagation();
       setSelectedNodeId(node.id);
       setSelectedConnectorId(undefined);
+      setLinkSourceNodeId(undefined);
       const box = boxForNode(node);
       const anchor = anchorPoint(box, direction);
       const previewState: LinkPreview = {
@@ -1102,6 +1187,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       }
       setSelectedConnectorId(undefined);
       setSelectedNodeId(undefined);
+      setLinkSourceNodeId(undefined);
     },
     [closeEntry]
   );
@@ -1220,6 +1306,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       `designer-node--${node.type}`,
       selectedNodeId === node.id ? 'is-selected' : '',
       linkPreview?.sourceNodeId === node.id ? 'linking-source' : '',
+      linkSourceNodeId === node.id ? 'linking-source' : '',
       order !== undefined ? 'is-recommendation-preview' : ''
     ]
       .filter(Boolean)
@@ -1227,6 +1314,9 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
     const style: CSSProperties = {
       left: rendered.x,
       top: rendered.y,
+      ...(node.type === 'ticket'
+        ? ({ '--designer-node-accent': issueTypeHex(node.issueType) } as CSSProperties)
+        : {}),
       ...(node.type !== 'ticket' ? { width: node.width, height: node.height } : {})
     };
 
@@ -1243,19 +1333,16 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
       >
         <div
           className={`designer-node-header designer-node-header--${node.type}${order !== undefined ? ' has-order-badge' : ''}`}
-          style={
-            node.type === 'ticket'
-              ? ticketHeaderStyle(node.issueType)
-              : node.type === 'website'
-                ? { background: websiteHeaderBackground() }
-                : undefined
-          }
+          title="Drag to move"
         >
           {node.type === 'ticket' && order !== undefined && (
             <span className="designer-order-badge" data-testid="designer-order-badge" aria-label={`AI execution order ${order}`}>
               {order}
             </span>
           )}
+          <span className="designer-node-type-icon" aria-hidden="true">
+            <Icon name={node.type === 'ticket' ? 'ticket' : node.type === 'note' ? 'note' : 'globe'} size={13} />
+          </span>
           <div className="designer-node-title-wrap">
             {node.type === 'note' ? (
               <input
@@ -1378,27 +1465,10 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
         {node.type === 'ticket' && (
           <>
             <div className="designer-node-summary">{node.summary || '(no summary)'}</div>
-            <div className="designer-node-meta">
-              <div className="designer-node-meta-row">
-                <span>Type</span>
-                <span>{node.issueType}</span>
-              </div>
-              <div className="designer-node-meta-row">
-                <span>Status</span>
-                <span>{node.status}</span>
-              </div>
-              {node.assignee && (
-                <div className="designer-node-meta-row">
-                  <span>Assignee</span>
-                  <span>{node.assignee}</span>
-                </div>
-              )}
-              {node.priority && (
-                <div className="designer-node-meta-row">
-                  <span>Priority</span>
-                  <span>{node.priority}</span>
-                </div>
-              )}
+            <div className="designer-node-footer">
+              <span>{node.issueType}</span>
+              <span className="designer-node-footer-spacer" />
+              <span>{node.status}</span>
             </div>
           </>
         )}
@@ -1434,13 +1504,14 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
         <h3>Task Designer — {board.name}</h3>
         {recommendation && <span className="designer-source-pill">previewing {recommendation.sourceLabel}</span>}
         <span style={{ flex: 1 }} />
-        <button className="icon-btn icon-btn-sm" aria-label="Close designer" data-testid="designer-close" onClick={onClose}>
-          <Icon name="close" size={13} />
+        <button className="btn btn-compact" aria-label="Exit Designer" data-testid="designer-close" onClick={onClose}>
+          <Icon name="arrow-left" size={13} />
+          Exit Designer
         </button>
       </div>
 
       <div
-        className={`designer-canvas${linkPreview ? ' is-linking' : ''}`}
+        className={`designer-canvas${linkPreview || linkSourceNodeId ? ' is-linking' : ''}`}
         data-testid="designer-canvas"
         ref={element => {
           surfaceRef.current = element;
@@ -1456,11 +1527,11 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
           style={{ transform: `scale(${zoom})` }}
         >
           <defs>
-            <marker id="designer-arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 8 3, 0 6" className="designer-arrowhead" />
+            <marker id="designer-arrowhead" markerWidth="7" markerHeight="5" refX="6.5" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+              <polygon points="0 0, 7 2.5, 0 5" className="designer-arrowhead" />
             </marker>
-            <marker id="designer-arrowhead-selected" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-              <polygon points="0 0, 8 3, 0 6" className="designer-arrowhead-selected" />
+            <marker id="designer-arrowhead-selected" markerWidth="7" markerHeight="5" refX="6.5" refY="2.5" orient="auto" markerUnits="userSpaceOnUse">
+              <polygon points="0 0, 7 2.5, 0 5" className="designer-arrowhead-selected" />
             </marker>
           </defs>
           {connectorPaths.map(({ connector, selected, d }) => (
@@ -1510,20 +1581,26 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
             return (
               <article
                 key={`ghost-${node.id}`}
-                className="designer-node designer-node--ticket designer-ghost-node"
-                data-testid="designer-ghost-node"
-                style={{ left: node.x, top: node.y }}
+              className="designer-node designer-node--ticket designer-ghost-node"
+              data-testid="designer-ghost-node"
+              style={{
+                left: node.x,
+                top: node.y,
+                '--designer-node-accent': issueTypeHex(node.issueType)
+              } as CSSProperties}
+            >
+              <div
+                className={`designer-node-header designer-node-header--ticket${order !== undefined ? ' has-order-badge' : ''}`}
               >
-                <div
-                  className={`designer-node-header designer-node-header--ticket${order !== undefined ? ' has-order-badge' : ''}`}
-                  style={ticketHeaderStyle(node.issueType)}
-                >
                   {order !== undefined && (
                     <span className="designer-order-badge" aria-label={`AI execution order ${order}`}>
                       {order}
                     </span>
-                  )}
-                  <div className="designer-node-title-wrap">
+                )}
+                <span className="designer-node-type-icon" aria-hidden="true">
+                  <Icon name="ticket" size={13} />
+                </span>
+                <div className="designer-node-title-wrap">
                     <div className="designer-node-key">{node.issueKey}</div>
                   </div>
                 </div>
@@ -1551,6 +1628,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
               active: activeTool === 'select',
               onClick: () => {
                 setActiveTool('select');
+                setLinkSourceNodeId(undefined);
                 setLinkPreview(undefined);
                 linkPreviewRef.current = undefined;
                 closeEntry();
@@ -1569,6 +1647,7 @@ export function TaskDesignerPage({ board, onClose }: TaskDesignerPageProps) {
               active: activeTool === 'link',
               onClick: () => {
                 setActiveTool('link');
+                setLinkSourceNodeId(undefined);
                 closeEntry();
                 setFeedback('Link mode active. Select source node, then target node.');
               }

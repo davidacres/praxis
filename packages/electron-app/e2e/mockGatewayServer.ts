@@ -30,6 +30,8 @@ export interface MockGatewayRequest {
 export interface MockGatewayServer {
   baseUrl: string;
   requests: MockGatewayRequest[];
+  /** Number of `GET /v1/models` hits — lets a test assert the model catalog cache is actually being reused. */
+  modelsRequestCount: number;
   close(): Promise<void>;
 }
 
@@ -45,10 +47,16 @@ export async function startMockGatewayServer(options: {
    *  workflow run that must end with a DELIVERY_RESULT / FEATURE_DECOMPOSITION_RESULT
    *  JSON block for the completion watcher to parse). */
   reply?: string;
+  /** `/v1/models` response — defaults to a single `mock/model` entry. */
+  models?: Array<{ id: string; name?: string }>;
+  /** Optional first-turn tool call; the following request receives `reply`. */
+  toolCall?: { name: string; arguments: Record<string, unknown> };
 }): Promise<MockGatewayServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
+  const models = options.models ?? [{ id: 'mock/model' }];
   const requests: MockGatewayRequest[] = [];
   const openResponses = new Set<http.ServerResponse>();
+  let modelsRequestCount = 0;
 
   const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/chat/completions') {
@@ -64,26 +72,36 @@ export async function startMockGatewayServer(options: {
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive'
         });
-        res.write(
-          sseChunk({
-            id: 'chatcmpl-mock',
-            object: 'chat.completion.chunk',
-            choices: [
-              {
-                index: 0,
-                delta: { role: 'assistant', content: reply },
-                finish_reason: null
-              }
-            ]
-          })
-        );
+        const shouldCallTool = options.toolCall && requests.length === 1;
+        res.write(sseChunk({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion.chunk',
+          choices: [{
+            index: 0,
+            delta: shouldCallTool
+              ? {
+                  role: 'assistant',
+                  tool_calls: [{
+                    index: 0,
+                    id: 'call_tracker_1',
+                    type: 'function',
+                    function: {
+                      name: options.toolCall!.name,
+                      arguments: JSON.stringify(options.toolCall!.arguments)
+                    }
+                  }]
+                }
+              : { role: 'assistant', content: reply },
+            finish_reason: null
+          }]
+        }));
 
         if (options.mode === 'complete') {
           res.write(
             sseChunk({
               id: 'chatcmpl-mock',
               object: 'chat.completion.chunk',
-              choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+              choices: [{ index: 0, delta: {}, finish_reason: shouldCallTool ? 'tool_calls' : 'stop' }]
             })
           );
           res.write('data: [DONE]\n\n');
@@ -98,8 +116,9 @@ export async function startMockGatewayServer(options: {
     }
 
     if (req.method === 'GET' && req.url === '/v1/models') {
+      modelsRequestCount++;
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ data: [{ id: 'mock/model' }] }));
+      res.end(JSON.stringify({ data: models }));
       return;
     }
 
@@ -113,6 +132,9 @@ export async function startMockGatewayServer(options: {
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     requests,
+    get modelsRequestCount() {
+      return modelsRequestCount;
+    },
     close: () =>
       new Promise<void>(resolve => {
         for (const res of openResponses) {

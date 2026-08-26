@@ -22,6 +22,9 @@ test.afterEach(async () => {
 async function openApplicationBoard(win: Page) {
   await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
+  await win.locator('[data-testid="issue-card"]').first().waitFor();
+  await win.locator('[data-testid="titlebar-context"]').click();
+  await win.locator('[data-testid="titlebar-filter-popover"]').waitFor();
   await win.locator('[data-testid="board-filter-bar"]').waitFor();
 }
 
@@ -64,6 +67,14 @@ test('search and status filters narrow the board', async () => {
   await expect(cards).toHaveCount(7);
   await expect(window.locator('[data-testid="board-filter-status"]')).toContainText('Status (1)');
 
+  // The criteria stay active when the title-bar popover is closed, and the
+  // badge makes the hidden filter discoverable.
+  await window.locator('[data-testid="titlebar-context"]').click();
+  await expect(window.locator('[data-testid="titlebar-filter-popover"]')).toBeHidden();
+  await expect(window.locator('[data-testid="titlebar-filter-count"]')).toHaveText('1');
+  await window.locator('[data-testid="titlebar-context"]').click();
+  await expect(window.locator('[data-testid="board-filter-status"]')).toContainText('Status (1)');
+
   // Clear restores the full first page.
   await window.locator('[data-testid="board-filter-clear"]').click();
   await expect(cards).toHaveCount(25);
@@ -87,4 +98,25 @@ test('assignee and parent scope filters narrow the board', async () => {
   await window.locator('[data-testid="board-filter-parent"]').selectOption('APP-100');
   await expect(cards).toHaveCount(3);
   await expect(window.locator('[data-testid="board-filter-count"]')).toHaveText('3 items');
+});
+
+test('switching boards resets hidden title-bar criteria', async () => {
+  app = await launchTestApp();
+  window = app.window;
+  await openApplicationBoard(window);
+
+  await window.locator('[data-testid="board-filter-status"]').click();
+  await window
+    .locator('[data-testid="board-filter-status-option"]', { hasText: 'Blocked' })
+    .click();
+  await expect(window.locator('[data-testid="issue-card"]')).toHaveCount(7);
+
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Operations Board' }).click();
+  await window.locator('[data-testid="issue-card"]').first().waitFor();
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
+  await expect(window.locator('[data-testid="issue-card"]')).toHaveCount(25);
+
+  await window.locator('[data-testid="titlebar-context"]').click();
+  await expect(window.locator('[data-testid="board-filter-status"]')).toHaveText('Status');
+  await expect(window.locator('[data-testid="titlebar-filter-count"]')).toHaveCount(0);
 });

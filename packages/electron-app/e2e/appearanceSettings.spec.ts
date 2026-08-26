@@ -22,10 +22,65 @@ test.afterEach(async () => {
 });
 
 async function openAppearance(): Promise<void> {
-  await window.locator('[data-testid="nav-settings"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance"]').click();
+  await expect(window.locator('.settings-section-title')).toHaveText('Board Settings');
   await window.locator('.priority-color-list').waitFor({ state: 'visible' });
 }
+
+test('opens Settings from the title bar as a dismissible popover dialog', async () => {
+  await expect(window.locator('[data-testid="nav-settings"]')).toHaveCount(0);
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  const dialog = window.getByRole('dialog', { name: 'Settings' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('Changes are saved automatically.')).toBeVisible();
+  await expect(window.locator('[data-testid="titlebar-settings"]')).toHaveAttribute('aria-expanded', 'true');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(dialog).not.toBeVisible();
+});
+
+test('theme gallery previews and persists the selected complete palette', async () => {
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(19);
+  await expect(window.locator('[data-testid="theme-card-tm-default-2"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(window).toHaveScreenshot('theme-gallery.png');
+
+  await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  await expect(window.locator('[data-testid="theme-card-humanist-light"]')).toHaveAttribute('aria-pressed', 'true');
+
+  await window.reload();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('github');
+  await expect(window.locator('[data-testid^="theme-card-github-"]')).toHaveCount(2);
+  await expect(window.locator('[data-testid^="theme-card-humanist-"]')).toHaveCount(0);
+});
+
+test('persists the selected theme and mode through app settings', async () => {
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="theme-card-anthropic-dark"]').click();
+  await window.getByRole('button', { name: 'System' }).click();
+  await window.waitForTimeout(300);
+  const appearance = await window.evaluate(() => window.ticketManager.settings.get().then(settings => settings.appearance));
+  expect(appearance.themeId).toBe('anthropic-dark');
+  expect(appearance.themeMode).toBe('system');
+  await window.reload();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', /anthropic-(light|dark)/);
+});
+
+test('installs a marketplace theme and makes it available on reload', async () => {
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  const marketplace = window.locator('[data-testid="theme-card-dracula-dark"]');
+  await expect(marketplace).toHaveAttribute('aria-label', /available in marketplace/);
+  await marketplace.click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+  await window.reload();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await expect(window.locator('[data-testid="theme-card-dracula-dark"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(window.locator('[data-testid="theme-card-dracula-dark"] .theme-card-installed')).toHaveText('Installed');
+});
 
 test('gradient priorities expose a picker per stop plus a direction control', async () => {
   await openAppearance();
@@ -38,6 +93,25 @@ test('gradient priorities expose a picker per stop plus a direction control', as
   // Solid priorities get a single picker and no direction control.
   await expect(window.getByLabel('Lowest priority color')).toHaveValue('#22c55e');
   await expect(window.getByLabel('Lowest gradient direction')).toHaveCount(0);
+});
+
+test('terminal settings expose detected profiles and persist appearance preferences', async () => {
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  await window.locator('[data-testid="settings-nav-terminal"]').click();
+  const dialog = window.getByRole('dialog', { name: 'Settings' });
+  await expect(dialog.locator('.settings-section-title')).toHaveText('Terminal');
+  await expect(dialog.getByLabel('Terminal default profile').locator('option')).not.toHaveCount(0);
+  await dialog.getByLabel('Terminal font size').fill('16');
+  await dialog.getByLabel('Terminal cursor style').selectOption('underline');
+  await dialog.getByRole('switch', { name: 'Copy on selection' }).click();
+  await window.waitForTimeout(500);
+
+  await window.reload();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  await window.locator('[data-testid="settings-nav-terminal"]').click();
+  await expect(window.getByLabel('Terminal font size')).toHaveValue('16');
+  await expect(window.getByLabel('Terminal cursor style')).toHaveValue('underline');
+  await expect(window.getByRole('switch', { name: 'Copy on selection' })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('solid and gradient round trip through the mode toggle and survive a reload', async () => {

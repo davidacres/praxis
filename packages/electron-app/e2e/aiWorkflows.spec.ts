@@ -158,8 +158,10 @@ test('review page streams the review markdown and posts it as a comment', async 
   const win = app.window;
 
   await openFirstDemoIssue(win);
+  await win.locator('[data-testid="issue-expand-btn"]').click();
   await win.locator('[data-testid="issue-ai-review-btn"]').click();
   await win.locator('[data-testid="ai-review-page"]').waitFor();
+  await expect(win.locator('[data-testid="main-content-pane"]')).toBeVisible();
 
   await win.locator('[data-testid="ai-review-run"]').click();
   await expect(win.locator('[data-testid="ai-review-content"]')).toContainText(
@@ -182,8 +184,14 @@ test('review page streams the review markdown and posts it as a comment', async 
   await expect(win.locator('.comment-bubble').last()).toContainText('Mock gateway reply');
 });
 
-test('analysis chat answers and confirms; the gate blocks delegation until then', async () => {
-  mock = await startMockGatewayServer({ mode: 'complete' });
+test('analysis uses the selected runtime and continues implementation in the same session', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [
+      { id: 'mock/fast', name: 'Mock Fast' },
+      { id: 'mock/thorough', name: 'Mock Thorough' }
+    ]
+  });
   app = await launchTestApp(
     { ai: { analysisPrompt: 'You are a senior engineer assessing readiness.', analysisGateEnabled: true } },
     undefined,
@@ -193,31 +201,106 @@ test('analysis chat answers and confirms; the gate blocks delegation until then'
 
   await openFirstDemoIssue(win);
 
-  // Gate on: delegation is refused with a clear message.
-  await win.locator('[data-testid="issue-ai-delegate-btn"]').click();
-  await expect(win.locator('.error-banner')).toContainText('must be confirmed', {
-    timeout: 10000
-  });
+  // Runtime provider/model selection stays visible on the ticket details and
+  // is passed to the analysis call — it is not hidden in the delegation modal.
+  const provider = win.locator('[data-testid="issue-detail-ai-provider"]');
+  const model = win.locator('[data-testid="issue-detail-ai-model"]');
+  await expect(provider).toHaveValue('vercel-gateway');
+  // Analysis gating must not silently remove configured implementation agents
+  // from the provider list. Copilot's bundled runtime is always available.
+  await expect(provider.locator('option[value="copilot-cli"]')).toHaveText('GitHub Copilot');
+  await provider.selectOption('copilot-cli');
+  await expect(provider).toHaveValue('copilot-cli');
+  await provider.selectOption('vercel-gateway');
+  await expect(model).toHaveValue('mock/fast');
+  await model.selectOption('mock/thorough');
 
-  // Run the base analysis in the chat view.
-  await win.locator('[data-testid="issue-ai-analyze-btn"]').click();
-  await win.locator('[data-testid="analysis-page"]').waitFor();
-  await win.locator('[data-testid="analysis-run-base"]').click();
-  await expect(win.locator('[data-testid="analysis-message-assistant"]')).toContainText(
+  // The gate turns the primary header action into Analyze ticket. It starts a
+  // normal ticket session whose first turn is the configured read-only analysis.
+  const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
+  await expect(primaryAi).toHaveAttribute('data-ai-mode', 'analysis');
+  await primaryAi.click();
+  await win.locator('[data-testid="sessions-view"]').waitFor();
+  await expect(win.locator('[data-testid="session-runtime"]')).toContainText(
+    'vercel-gateway · mock/thorough'
+  );
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
+    'Mock gateway reply',
+    { timeout: 15000 }
+  );
+  expect(JSON.parse(mock.requests[0].body).model).toBe('mock/thorough');
+  expect(mock.requests[0].body).toContain('You are a senior engineer assessing readiness.');
+  await expect(win.locator('[data-testid="session-analysis-banner"]')).toContainText(
+    'Review the analysis below'
+  );
+
+  // Confirmation is a second turn in the same recorded conversation, not a
+  // separate analysis view followed by a replacement implementation session.
+  const originalTitle = await win.locator('[data-testid="session-console-title"]').textContent();
+  await win.locator('[data-testid="session-analysis-confirm"]').click();
+  await expect.poll(() => mock!.requests.length, { timeout: 15000 }).toBe(2);
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
+    timeout: 15000
+  });
+  await expect(win.locator('[data-testid="session-analysis-banner"]')).toContainText(
+    'Implementation is continuing in this conversation.'
+  );
+  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText(originalTitle ?? '');
+  await expect(win.locator('[data-testid="session-chat-user"]').last()).toContainText(
+    'I confirm the analysis and implementation plan'
+  );
+  expect(mock.requests[1].body).toContain('I confirm the analysis and implementation plan');
+});
+
+test('configured CLI agents remain available in ticket details when analysis is gated', async () => {
+  app = await launchTestApp(
+    { ai: { analysisPrompt: 'Assess this ticket.', analysisGateEnabled: true } },
+    undefined,
+    { ...NO_GATEWAY_ENV }
+  );
+  const win = app.window;
+
+  await openFirstDemoIssue(win);
+  await expect(win.locator('[data-testid="issue-ai-runtime-options"]')).toBeVisible();
+  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveValue(/-cli$/);
+  await win.locator('[data-testid="issue-ai-configure-btn"]').click();
+  await expect(win.locator('[data-testid="settings-nav-ai"]')).toHaveClass(/active/);
+  await expect(win.locator('.settings-section-title')).toHaveText('AI Provider');
+});
+
+test('analysis runs through the selected OpenAI provider and model', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    models: [{ id: 'gpt-e2e-analysis', name: 'GPT E2E Analysis' }]
+  });
+  app = await launchTestApp(
+    {
+      ai: {
+        analysisPrompt: 'Assess this ticket using the selected runtime.',
+        analysisGateEnabled: true,
+        activeProvider: 'openai',
+        providers: { openai: { baseUrl: mock.baseUrl } }
+      }
+    },
+    undefined,
+    { ...NO_GATEWAY_ENV }
+  );
+  const win = app.window;
+  await win.evaluate(() => window.ticketManager.ai.setProviderApiKey('openai', 'openai-e2e-key'));
+
+  await openFirstDemoIssue(win);
+  await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveValue('openai');
+  await expect(win.locator('[data-testid="issue-detail-ai-model"]')).toHaveValue('gpt-e2e-analysis');
+  await win.locator('[data-testid="issue-primary-ai-btn"]').click();
+  await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
     'Mock gateway reply',
     { timeout: 15000 }
   );
 
-  // Confirm, go back, delegate — now the session starts.
-  await win.locator('[data-testid="analysis-confirm-btn"]').click();
-  await expect(win.locator('[data-testid="analysis-confirm-btn"]')).toHaveText(
-    'Analysis confirmed'
-  );
-  await win.locator('[aria-label="Close analysis"]').click();
-  await win.locator('[data-testid="issue-ai-delegate-btn"]').click();
-  await expect(win.locator('[data-testid="issue-ai-state"]')).toHaveText('Completed', {
-    timeout: 15000
-  });
+  expect(mock.requests).toHaveLength(1);
+  expect(mock.requests[0].authorization).toBe('Bearer openai-e2e-key');
+  expect(JSON.parse(mock.requests[0].body).model).toBe('gpt-e2e-analysis');
 });
 
 test('delivery run completes and the watcher finalizes it from the DELIVERY_RESULT block', async () => {
@@ -258,10 +341,11 @@ test('delivery refuses to start when the workflow is disabled in settings', asyn
   const win = app.window;
 
   await openFirstDemoIssue(win);
-  await win.locator('[data-testid="issue-ai-delivery-btn"]').click();
-  await expect(win.locator('.error-banner')).toContainText('Delivery workflow is disabled', {
-    timeout: 10000
-  });
+  await expect(win.locator('[data-testid="issue-ai-delivery-btn"]')).toBeDisabled();
+  await expect(win.locator('[data-testid="issue-ai-delivery-btn"]')).toHaveAttribute(
+    'title',
+    'Configure and enable the delivery workflow in Settings first'
+  );
 });
 
 test('feature decomposition creates the sub-task issues and lists them', async () => {
@@ -347,6 +431,14 @@ test('local peer review runs the three sections against the gateway', async () =
   const win = app.window;
 
   await openFirstDemoIssue(win);
+  await win.locator('[data-testid="issue-primary-ai-btn"]').click();
+  await win.locator('[data-testid="issue-session-start"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
+    timeout: 15000
+  });
+  await win.locator('[data-testid="nav-board"]').click();
+  await win.locator('[data-testid="board-nav-item"]').first().click();
+  await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-lpr-btn"]').click();
   await win.locator('[data-testid="lpr-page"]').waitFor();
 
@@ -364,9 +456,14 @@ test('local peer review runs the three sections against the gateway', async () =
   );
   await expect(win.locator('[data-testid="lpr-summary"]')).toContainText('Mock gateway reply');
 
-  // Three prompts hit the gateway: code review, security review, summary.
-  expect(mock.requests).toHaveLength(3);
-  expect(mock.requests[0].authorization).toBe('Bearer e2e-gateway-key');
+  // Delegation establishes the completed implementation first; the final three
+  // prompts are the code review, security review, and summary verdict.
+  expect(mock.requests).toHaveLength(4);
+  const peerReviewRequests = mock.requests.slice(-3);
+  expect(peerReviewRequests.every(request => request.authorization === 'Bearer e2e-gateway-key')).toBe(true);
+  expect(peerReviewRequests[0].body).toContain('senior software engineer');
+  expect(peerReviewRequests[1].body).toContain('security engineer');
+  expect(peerReviewRequests[2].body).toContain('technical lead');
 });
 
 test('merge requests list empty, then create after a delivery recorded a branch', async () => {

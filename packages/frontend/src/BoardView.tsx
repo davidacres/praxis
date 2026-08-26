@@ -9,7 +9,7 @@ import type {
 } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { statusTone } from './boardMeta';
-import { BoardFilterBar, EMPTY_BOARD_FILTER, type BoardFilterValue } from './BoardFilterBar';
+import type { BoardFilterPresentation, BoardFilterValue } from './BoardFilterBar';
 import { BoardSettingsMenu } from './BoardSettingsMenu';
 import { useSettings } from './useSettings';
 import {
@@ -25,6 +25,8 @@ export interface BoardViewProps {
   details: BoardDetails;
   selectedIssueKey: string | undefined;
   connectionId: string | undefined;
+  filters: BoardFilterValue;
+  onFilterPresentationChange: (boardId: string, presentation: BoardFilterPresentation) => void;
   onOpenIssue: (issueKey: string) => void;
   /** Opens the create-ticket form for this board. */
   onNewIssue: () => void;
@@ -129,6 +131,8 @@ export function BoardView({
   details,
   selectedIssueKey,
   connectionId,
+  filters,
+  onFilterPresentationChange,
   onOpenIssue,
   onNewIssue,
   onNewIdea,
@@ -145,7 +149,6 @@ export function BoardView({
   // cursor without re-reading .dataTransfer in every dragover event.
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
 
-  const [filters, setFilters] = useState<BoardFilterValue>(EMPTY_BOARD_FILTER);
   const [issues, setIssues] = useState<IssueSummary[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState<number | undefined>(undefined);
@@ -260,6 +263,16 @@ export function BoardView({
       cancelled = true;
     };
   }, [scopedFilters, connectionId]);
+
+  useEffect(() => {
+    onFilterPresentationChange(boardId, {
+      statusOptions: metadata.statuses,
+      issueTypeOptions: metadata.issueTypes,
+      parentOptions,
+      shown: issues.length,
+      total
+    });
+  }, [boardId, metadata, parentOptions, issues.length, total, onFilterPresentationChange]);
 
   const loadMore = useCallback(() => {
     const generation = generationRef.current;
@@ -549,50 +562,52 @@ export function BoardView({
   );
 
   const toolbar = (
-    <header className="view-header">
-      <span className="view-title">{details.board.name}</span>
-      <span className="spacer" />
-      <button
-        type="button"
-        className="btn"
-        data-testid="board-designer-btn"
-        title="Open this board in the Task Designer"
-        onClick={onOpenDesigner}
-      >
-        <Icon name="graph" size={13} />
-        Designer
-      </button>
-      <BoardSettingsMenu
-        prefs={prefs}
-        onChange={updatePrefs}
-        statusOrder={statusOrder}
-        baseStatusOrder={details.columnStatusOrder ?? []}
-        issueTypeOptions={metadata.issueTypes}
-      />
-      {showNewIdea && (
+    <header className="view-header board-toolbar">
+      <div className="board-toolbar-group board-toolbar-left">
+        {showNewIdea && (
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm"
+            data-testid="board-new-idea-btn"
+            aria-label="New idea"
+            disabled={!canCreateIssue}
+            title={canCreateIssue ? 'Create a new idea ticket on this board' : createIssueHint}
+            onClick={onNewIdea}
+          >
+            <Icon name="lightbulb" size={14} />
+          </button>
+        )}
         <button
           type="button"
-          className="btn"
-          data-testid="board-new-idea-btn"
+          className="icon-btn icon-btn-sm"
+          data-testid="board-new-issue-btn"
+          aria-label="New issue"
           disabled={!canCreateIssue}
-          title={canCreateIssue ? 'Create a new idea ticket on this board' : createIssueHint}
-          onClick={onNewIdea}
+          title={canCreateIssue ? 'Create a new ticket on this board' : createIssueHint}
+          onClick={onNewIssue}
         >
-          <Icon name="lightbulb" size={13} />
-          New idea
+          <Icon name="plus" size={14} />
         </button>
-      )}
-      <button
-        type="button"
-        className="btn"
-        data-testid="board-new-issue-btn"
-        disabled={!canCreateIssue}
-        title={canCreateIssue ? 'Create a new ticket on this board' : createIssueHint}
-        onClick={onNewIssue}
-      >
-        <Icon name="plus" size={13} />
-        New issue
-      </button>
+      </div>
+      <div className="board-toolbar-group board-toolbar-right">
+        <button
+          type="button"
+          className="icon-btn icon-btn-sm"
+          data-testid="board-designer-btn"
+          aria-label="Designer"
+          title="Open this board in the Task Designer"
+          onClick={onOpenDesigner}
+        >
+          <Icon name="graph" size={14} />
+        </button>
+        <BoardSettingsMenu
+          prefs={prefs}
+          onChange={updatePrefs}
+          statusOrder={statusOrder}
+          baseStatusOrder={details.columnStatusOrder ?? []}
+          issueTypeOptions={metadata.issueTypes}
+        />
+      </div>
     </header>
   );
 
@@ -609,18 +624,9 @@ export function BoardView({
   }
 
   return (
-    <div className="board-shell" data-testid="board-view">
-      {toolbar}
-      <BoardFilterBar
-        value={filters}
-        onChange={setFilters}
-        statusOptions={metadata.statuses}
-        issueTypeOptions={metadata.issueTypes}
-        parentOptions={parentOptions}
-        shown={issues.length}
-        total={total}
-      />
-      {listError && <div className="board-list-error">{listError}</div>}
+      <div className="board-shell" data-testid="board-view">
+        {toolbar}
+        {listError && <div className="board-list-error">{listError}</div>}
       {loading && issues.length === 0 && !listError && (
         <div className="empty-state">
           <span>Loading issues…</span>

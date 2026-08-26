@@ -76,11 +76,14 @@ export const DEFAULT_APP_SETTINGS = {
   },
   preview: {
     enableCreateIdea: false,
-    enableNewProject: false,
+    enableNewProject: true,
     boardsSidebarMode: 'classic' as 'classic' | 'work'
   },
   appearance: {
     showBrandArtwork: true,
+    themeId: 'tm-default-2',
+    themeMode: 'dark' as 'light' | 'dark' | 'system',
+    installedThemeIds: ['tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'] as string[],
     priorityColors: {
       Critical: '#DC2626',
       Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',

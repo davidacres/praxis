@@ -665,9 +665,10 @@ export async function reviewTicketWithOpenAi(
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'gpt-4o-mini';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
+  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.openai.com').replace(/\/+$/, '')}/v1/chat/completions`;
 
   if (options?.onUpdate) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -716,7 +717,7 @@ export async function reviewTicketWithOpenAi(
     return `## AI Review by ${agentName}\n\n${trimmed}`;
   }
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -758,9 +759,10 @@ export async function reviewTicketWithClaude(
   const userMessage = `Please review this ticket and provide feedback on its completeness and clarity:\n\n${ticketContext}`;
   const model = options?.model?.trim() || 'claude-haiku-4-5-20251001';
   const systemPrompt = options?.systemPrompt?.trim() || REVIEW_SYSTEM_PROMPT;
+  const endpoint = `${(options?.gatewayUrl?.trim() || 'https://api.anthropic.com').replace(/\/+$/, '')}/v1/messages`;
 
   if (options?.onUpdate) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
@@ -810,7 +812,7 @@ export async function reviewTicketWithClaude(
     return `## AI Review by ${agentName}\n\n${trimmed}`;
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'x-api-key': apiKey,

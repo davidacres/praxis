@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import { ThemeSwitcher } from './ThemeSwitcher';
+import {
+  BoardFilterBar,
+  countActiveBoardFilters,
+  type BoardFilterPresentation,
+  type BoardFilterValue
+} from './BoardFilterBar';
+
+export interface TitleBarBoardFilter extends BoardFilterPresentation {
+  value: BoardFilterValue;
+  onChange: (next: BoardFilterValue) => void;
+}
 
 export interface TitleBarProps {
   contextLabel: string;
@@ -15,6 +25,11 @@ export interface TitleBarProps {
   onBack: () => void;
   canGoForward: boolean;
   onForward: () => void;
+  boardFilter?: TitleBarBoardFilter;
+  onOpenWhatsNew: () => void;
+  settingsOpen: boolean;
+  onOpenSettings: () => void;
+  onOpenThemes: () => void;
 }
 
 /**
@@ -35,11 +50,17 @@ export function TitleBar({
   canGoBack,
   onBack,
   canGoForward,
-  onForward
+  onForward,
+  boardFilter,
+  onOpenWhatsNew,
+  settingsOpen,
+  onOpenSettings,
+  onOpenThemes
 }: TitleBarProps) {
   const [maximized, setMaximized] = useState(false);
-  const [themeOpen, setThemeOpen] = useState(false);
-  const themeRef = useRef<HTMLDivElement | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement | null>(null);
+  const contextButtonRef = useRef<HTMLButtonElement | null>(null);
   // macOS renders the native traffic lights on top of the page (see
   // `trafficLightPosition` in the main process) rather than in the DOM, so
   // nothing here reserves space for them by default — the leading button
@@ -52,17 +73,43 @@ export function TitleBar({
   }, []);
 
   useEffect(() => {
-    if (!themeOpen) {
+    if (!filterOpen) {
       return;
     }
     const onDocumentPointerDown = (event: PointerEvent) => {
-      if (!themeRef.current?.contains(event.target as Node)) {
-        setThemeOpen(false);
+      if (!filterRef.current?.contains(event.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    const onDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setFilterOpen(false);
+        contextButtonRef.current?.focus();
       }
     };
     document.addEventListener('pointerdown', onDocumentPointerDown);
-    return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
-  }, [themeOpen]);
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
+      document.removeEventListener('keydown', onDocumentKeyDown);
+    };
+  }, [filterOpen]);
+
+  useEffect(() => {
+    if (!boardFilter) {
+      setFilterOpen(false);
+    }
+  }, [boardFilter]);
+
+  useEffect(() => {
+    if (filterOpen) {
+      requestAnimationFrame(() => {
+        filterRef.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+      });
+    }
+  }, [filterOpen]);
+
+  const activeFilterCount = boardFilter ? countActiveBoardFilters(boardFilter.value) : 0;
 
   return (
     <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
@@ -94,16 +141,65 @@ export function TitleBar({
           <Icon name="arrow-right" />
         </button>
 
-        <div
-          className="titlebar-context"
-          data-testid="titlebar-context"
-          title={`${contextLabel} · ${contextDetail}`}
-        >
-          <Icon name="ticket" size={13} />
-          <span>{contextLabel}</span>
-          <span className="titlebar-context-sep">·</span>
-          <span>{contextDetail}</span>
-        </div>
+        {boardFilter ? (
+          <div className="titlebar-context-wrap" ref={filterRef}>
+            <button
+              ref={contextButtonRef}
+              type="button"
+              className={`titlebar-context titlebar-context-button${filterOpen ? ' active' : ''}`}
+              data-testid="titlebar-context"
+              title={`Filter issues on ${contextLabel}`}
+              aria-label={`Filter issues on ${contextLabel}`}
+              aria-haspopup="dialog"
+              aria-expanded={filterOpen}
+              onClick={() => setFilterOpen(open => !open)}
+            >
+              <Icon name="ticket" size={13} />
+              <span className="titlebar-context-label">{contextLabel}</span>
+              <span className="titlebar-context-sep">·</span>
+              <span className="titlebar-context-detail">{contextDetail}</span>
+              {activeFilterCount > 0 && (
+                <span className="titlebar-filter-badge" data-testid="titlebar-filter-count">
+                  {activeFilterCount}
+                </span>
+              )}
+              <Icon name={filterOpen ? 'chevron-up' : 'chevron-down'} size={11} />
+            </button>
+            <div
+              className="titlebar-filter-popover"
+              data-testid="titlebar-filter-popover"
+              role="dialog"
+              aria-label={`Filter issues on ${contextLabel}`}
+              hidden={!filterOpen}
+            >
+              <div className="titlebar-filter-heading">
+                <span>Filter issues</span>
+                <span>{contextLabel}</span>
+              </div>
+              <BoardFilterBar
+                value={boardFilter.value}
+                onChange={boardFilter.onChange}
+                statusOptions={boardFilter.statusOptions}
+                issueTypeOptions={boardFilter.issueTypeOptions}
+                parentOptions={boardFilter.parentOptions}
+                shown={boardFilter.shown}
+                total={boardFilter.total}
+                active={filterOpen}
+              />
+            </div>
+          </div>
+        ) : (
+          <div
+            className="titlebar-context"
+            data-testid="titlebar-context"
+            title={`${contextLabel} · ${contextDetail}`}
+          >
+            <Icon name="ticket" size={13} />
+            <span className="titlebar-context-label">{contextLabel}</span>
+            <span className="titlebar-context-sep">·</span>
+            <span className="titlebar-context-detail">{contextDetail}</span>
+          </div>
+        )}
 
         <button className="icon-btn" aria-label="Run">
           <Icon name="play" size={13} />
@@ -135,26 +231,33 @@ export function TitleBar({
         >
           <Icon name="sidebar-right" />
         </button>
+        <button
+          className={`icon-btn${settingsOpen ? ' active' : ''}`}
+          aria-label="Settings"
+          aria-haspopup="dialog"
+          aria-expanded={settingsOpen}
+          data-testid="titlebar-settings"
+          title="Settings"
+          onClick={onOpenSettings}
+        >
+          <Icon name="gear" />
+        </button>
+        <button className="icon-btn" aria-label="What's new" title="What's new" onClick={onOpenWhatsNew}>
+          <Icon name="sparkles" />
+        </button>
         <button className="icon-btn" aria-label="Remote">
           <Icon name="radio-tower" />
         </button>
 
-        <div ref={themeRef}>
-          <button
-            className={`icon-btn${themeOpen ? ' active' : ''}`}
-            aria-label="Theme"
-            aria-expanded={themeOpen}
-            onClick={() => setThemeOpen(open => !open)}
-          >
-            <span className="theme-orb" />
-          </button>
-          {themeOpen && (
-            <div className="popover" role="dialog" aria-label="Theme">
-              <div className="popover-label">Appearance</div>
-              <ThemeSwitcher />
-            </div>
-          )}
-        </div>
+        <button
+          className={`icon-btn${settingsOpen ? ' active' : ''}`}
+          aria-label="Themes"
+          aria-haspopup="dialog"
+          data-testid="titlebar-themes"
+          onClick={onOpenThemes}
+        >
+          <span className="theme-orb" />
+        </button>
       </div>
 
       {/* macOS already has the native traffic lights (see `titleBarStyle`/

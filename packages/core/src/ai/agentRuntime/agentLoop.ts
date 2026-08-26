@@ -62,7 +62,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   let stepCount = 0;
 
   const history: WireMessage[] = [...(options.history ?? [])];
-  if (history.length === 0 && options.userPrompt?.trim()) {
+  const lastHistoryRole = history.at(-1)?.role;
+  if (
+    options.userPrompt?.trim() &&
+    (history.length === 0 || lastHistoryRole === 'assistant')
+  ) {
     history.push({ role: 'user', content: options.userPrompt });
   }
 

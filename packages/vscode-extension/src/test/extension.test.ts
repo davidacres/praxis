@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { TicketManagerExtensionApi } from '../extension';
 
-const EXTENSION_ID_CANDIDATES = ['kam-ai-team.ticket-manager', 'local-dev.ticket-manager'];
+const EXTENSION_ID_CANDIDATES = ['davidacres.ticket-manager', 'local-dev.ticket-manager'];
 const WORKSPACE_MCP_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'mcp.json')
   : undefined;

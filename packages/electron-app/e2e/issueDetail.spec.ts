@@ -18,7 +18,7 @@ test.afterEach(async () => {
  * back-reference, so the new sections can be asserted end-to-end without a
  * live tracker.
  */
-test('issue detail shows sub-tasks, linked issues, attachments and header actions', async () => {
+test('issue detail shows sub-tasks, linked issues, attachments and essential header actions', async () => {
   app = await launchTestApp();
   window = app.window;
 
@@ -26,9 +26,36 @@ test('issue detail shows sub-tasks, linked issues, attachments and header action
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 
-  // Header actions: copy key and open-in-browser (every demo issue has a browseUrl).
-  await expect(window.locator('[data-testid="issue-copy-key-btn"]')).toBeVisible();
-  await expect(window.locator('[data-testid="issue-open-browser-btn"]')).toBeEnabled();
+  await expect(window.locator('[data-testid="issue-copy-key-btn"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="issue-open-browser-btn"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="issue-refresh-btn"]')).toBeVisible();
+  await expect(window.locator('[data-testid="issue-primary-ai-btn"]')).toHaveAttribute('data-ai-mode', 'start');
+  await expect(window.locator('[data-testid="issue-ai-delegate-btn"]')).toHaveCount(0);
+  const expandButton = window.locator('[data-testid="issue-expand-btn"]');
+  await expect(expandButton).toHaveAttribute('aria-pressed', 'false');
+  await expandButton.click();
+  await expect(expandButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(window.locator('[data-testid="main-content-pane"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="issue-details-pane"]')).toHaveClass(/is-expanded/);
+  await expandButton.click();
+  await expect(window.locator('[data-testid="main-content-pane"]')).toBeVisible();
+
+  // Desktop-native detail actions remain in the narrow auxiliary pane.
+  await expect(window.locator('[data-testid="issue-assign-me-btn"]')).toBeVisible();
+  const description = window.locator('[data-testid="issue-description"]');
+  await expect(description).toBeVisible();
+  await description.click();
+  const descriptionEditor = window.locator('[data-testid="issue-edit-description"]');
+  await expect(descriptionEditor).toBeFocused();
+  await descriptionEditor.press('Tab');
+  await expect(description).toBeVisible();
+
+  const assignee = window.locator('[data-testid="issue-edit-assignee"]');
+  await assignee.fill('Someone Else');
+  await window.locator('[data-testid="issue-edit-save-btn"]').click();
+  await expect(assignee).toHaveValue('Someone Else');
+  await window.locator('[data-testid="issue-assign-me-btn"]').click();
+  await expect(assignee).toHaveValue('Alex Agent');
 
   // The seeded sub-tasks, linked issue and attachments render as list rows.
   await expect(window.locator('[data-testid="issue-subtask-row"]')).toHaveCount(3);
@@ -46,7 +73,7 @@ test('issue detail shows sub-tasks, linked issues, attachments and header action
     .locator('button')
     .first()
     .click();
-  await expect(window.locator('.detail-panel h4')).toHaveText(
+  await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue(
     'Implement dependency-injected backend router'
   );
 
@@ -54,6 +81,6 @@ test('issue detail shows sub-tasks, linked issues, attachments and header action
   const parentLink = window.locator('[data-testid="issue-parent-link"]');
   await expect(parentLink).toContainText('APP-100');
   await parentLink.click();
-  await expect(window.locator('.detail-panel h4')).toHaveText('Core platform feature');
+  await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Core platform feature');
   await expect(window.locator('[data-testid="issue-subtask-row"]')).toHaveCount(3);
 });

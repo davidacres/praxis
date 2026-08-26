@@ -5,7 +5,8 @@ import {
   JiraService,
   LiveFolderService,
   StubBackendService,
-  UserWorkspaceService
+  UserWorkspaceService,
+  ProjectIssueTrackerService
 } from '@ticket-manager/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getDemoService } from './demoServiceInstance';
@@ -15,12 +16,14 @@ import { ElectronLiveFolderConfigProvider } from './adapters/electronLiveFolderC
 import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
 import { DesktopUserWorkspaceConfigProvider } from './adapters/desktopUserWorkspaceConfigProvider';
+import { getProjectStore } from './projectStoreInstance';
 
 const liveFolderServices = new Map<string, LiveFolderService>();
 const jiraServices = new Map<string, JiraService>();
 const gitLabServices = new Map<string, GitLabBoardService>();
 const userWorkspaceServices = new Map<string, UserWorkspaceService>();
 const stubServices = new Map<BackendMode, StubBackendService>();
+const projectServices = new Map<string, ProjectIssueTrackerService>();
 
 /**
  * Backend sinks tee into the shared log bus (the Output panel's source) while
@@ -204,6 +207,15 @@ function createGitLabService(connectionId: string): IssueTrackerService {
 export async function getServiceForConnection(
   connectionId: string | undefined
 ): Promise<IssueTrackerService> {
+  if (connectionId?.startsWith('project:')) {
+    const projectId = connectionId.slice('project:'.length);
+    let service = projectServices.get(projectId);
+    if (!service) {
+      service = new ProjectIssueTrackerService(getProjectStore(), projectId);
+      projectServices.set(projectId, service);
+    }
+    return service;
+  }
   if (!connectionId) {
     return getDemoService();
   }

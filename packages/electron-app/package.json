@@ -10,13 +10,15 @@
     "start": "npm run compile && electron .",
     "test:e2e": "npm run compile && npx playwright test",
     "copy-renderer": "node scripts/copy-renderer.cjs",
+    "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "predist": "npm run copy-renderer",
     "dist": "electron-builder"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@ticket-manager/core": "*",
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "^3.3.1",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
@@ -32,6 +34,11 @@
       "output": "dist"
     },
     "electronVersion": "43.4.1",
+    "npmRebuild": true,
+    "buildDependenciesFromSource": true,
+    "asarUnpack": [
+      "node_modules/node-pty/**"
+    ],
     "files": [
       "out/**",
       "renderer/**",

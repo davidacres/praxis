@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   AgentSessionRecord,
+  AiProvider,
   Board,
   BoardDetails,
   Connection,
-  ConnectionCheck
+  ConnectionCheck,
+  IssueSummary,
+  TaskDesignerCanvasNode,
+  TaskDesignerTicketNode
+  , ProjectRecord
 } from '@ticket-manager/core';
 import { IssueDetail } from './IssueDetail';
 import { Connections } from './Connections';
-import { SettingsPage } from './SettingsPage';
+import { SettingsPage, type SettingsCategory } from './SettingsPage';
 import { TitleBar } from './TitleBar';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession } from './NewSession';
 import { NewIssuePage } from './NewIssuePage';
 import { BoardView } from './BoardView';
 import { AiReviewPage } from './AiReviewPage';
-import { AnalysisPage } from './AnalysisPage';
 import { LocalPeerReviewPage } from './LocalPeerReviewPage';
 import { TaskDesignerPage } from './TaskDesignerPage';
+import { TaskDesignerItemDetail } from './TaskDesignerItemDetail';
+import { TaskDesignerSidebar } from './TaskDesignerSidebar';
 import { BottomPanel } from './BottomPanel';
 import { SessionsPage } from './SessionsPage';
 import { Icon } from './Icon';
@@ -25,6 +31,16 @@ import { backendModeMeta, boardTypeToken } from './boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from './boardTransitionMatch';
 import { isTerminalAgentState } from './aiSessionState';
+import { WhatsNewDialog } from './WhatsNewDialog';
+import { NewProjectWizard } from './NewProjectWizard';
+import { ProjectHome } from './ProjectHome';
+import { OverviewPage } from './OverviewPage';
+import { useSettings } from './useSettings';
+import {
+  EMPTY_BOARD_FILTER,
+  type BoardFilterPresentation,
+  type BoardFilterValue
+} from './BoardFilterBar';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -34,6 +50,7 @@ const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
  * plain index into a list of routes.
  */
 interface Route {
+  projectId?: string;
   feature?: FeatureId;
   boardId?: string;
   issueKey?: string;
@@ -43,8 +60,11 @@ interface Route {
   newIssueType?: string;
   /** Selected agent session when `feature === 'sessions'`. */
   sessionKey?: string;
-  /** Centre-pane AI tooling view for `issueKey` (review page / analysis chat / peer review). */
-  view?: 'review' | 'analysis' | 'lpr' | 'designer';
+  /** Centre-pane AI tooling view for `issueKey` (review / peer review / designer). */
+  view?: 'review' | 'lpr' | 'designer';
+  /** Per-ticket runtime selected before opening an AI tool. */
+  aiProvider?: AiProvider;
+  aiModel?: string;
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -53,11 +73,12 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   sessions: 'Sessions',
   issues: 'Issues',
   connections: 'Connections',
-  agents: 'Agents',
-  settings: 'Settings'
+  agents: 'Agents'
 };
 
 export function App() {
+  const { settings } = useSettings();
+  const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   const [nav, setNav] = useState<{ entries: Route[]; index: number }>({
     entries: [{}],
     index: 0
@@ -65,6 +86,8 @@ export function App() {
   const route = nav.entries[nav.index];
 
   const [boards, setBoards] = useState<Board[]>([]);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [composerBoardId, setComposerBoardId] = useState<string>();
   const [connections, setConnections] = useState<Connection[]>([]);
   /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
   const [agentSessions, setAgentSessions] = useState<AgentSessionRecord[]>([]);
@@ -80,6 +103,32 @@ export function App() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [auxVisible, setAuxVisible] = useState(true);
   const [panelVisible, setPanelVisible] = useState(false);
+  const [detailExpanded, setDetailExpanded] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
+  const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
+  const [selectedDesignerNode, setSelectedDesignerNode] = useState<TaskDesignerCanvasNode>();
+  const [boardFilterState, setBoardFilterState] = useState<{
+    boardId: string;
+    value: BoardFilterValue;
+  }>();
+  const [boardFilterPresentation, setBoardFilterPresentation] = useState<{
+    boardId: string;
+    value: BoardFilterPresentation;
+  }>();
+
+  useEffect(() => {
+    if (!settingsDialogCategory) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingsDialogCategory(undefined);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [settingsDialogCategory]);
 
   const sidebar = useResizable({
     storageKey: 'tm-pane-sidebar',
@@ -110,6 +159,38 @@ export function App() {
     });
   }, []);
 
+  const handleFilterPresentationChange = useCallback(
+    (boardId: string, value: BoardFilterPresentation) => {
+      setBoardFilterPresentation({ boardId, value });
+    },
+    []
+  );
+
+  const handleDesignerSelectionChange = useCallback((node: TaskDesignerCanvasNode | undefined) => {
+    setSelectedDesignerNode(node);
+    if (node) {
+      setAuxVisible(true);
+    }
+  }, []);
+
+  const handleDesignerBoardTicketSelect = useCallback((issue: IssueSummary) => {
+    const node: TaskDesignerTicketNode = {
+      type: 'ticket',
+      id: `board-ticket:${issue.key}`,
+      issueKey: issue.key,
+      summary: issue.summary,
+      issueType: issue.issueType,
+      status: issue.status,
+      assignee: issue.assignee,
+      priority: issue.priority,
+      projectKey: issue.projectKey,
+      x: 0,
+      y: 0
+    };
+    setSelectedDesignerNode(node);
+    setAuxVisible(true);
+  }, []);
+
   // Both refreshers swallow-and-log rather than leaving the promise unhandled:
   // an IPC rejection used to silently leave the app on its previous (often
   // empty) list with nothing in the console to explain it.
@@ -127,10 +208,15 @@ export function App() {
       .catch(error => console.error('Failed to load connections:', error));
   }, []);
 
+  const refreshProjects = useCallback(() => {
+    void window.ticketManager.projects.list().then(setProjects).catch(error => console.error('Failed to load projects:', error));
+  }, []);
+
   useEffect(() => {
     refreshBoards();
     refreshConnections();
-  }, [refreshBoards, refreshConnections]);
+    refreshProjects();
+  }, [refreshBoards, refreshConnections, refreshProjects]);
 
   // Connection health dots: run `connection.check` lazily per non-demo
   // connection, fire-and-forget. A dead or slow backend must never block (or
@@ -188,15 +274,19 @@ export function App() {
         }
       })
       .catch(error => console.error('Failed to load AI sessions:', error));
-    const unsubscribe = window.ticketManager.ai.onSessionChanged(record => {
+    const unsubscribeChanged = window.ticketManager.ai.onSessionChanged(record => {
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
         return [record, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       });
     });
+    const unsubscribeDeleted = window.ticketManager.ai.onSessionDeleted(issueKey => {
+      setAgentSessions(current => current.filter(session => session.issueKey !== issueKey));
+    });
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribeChanged();
+      unsubscribeDeleted();
     };
   }, []);
 
@@ -204,10 +294,33 @@ export function App() {
     localStorage.setItem('tm-sidebar-mode', mode);
   }, [mode]);
 
+  useEffect(() => {
+    if (!route.issueKey) {
+      setDetailExpanded(false);
+    }
+  }, [route.issueKey]);
+
   const selectedBoard = useMemo(
     () => boards.find(board => board.id === route.boardId),
     [boards, route.boardId]
   );
+  const selectedProject = projects.find(project => project.id === route.projectId);
+
+  // Match BoardView's previous keyed-local-state behaviour: selecting another
+  // board starts with a clean query instead of reviving criteria from the last
+  // board visited.
+  useEffect(() => {
+    setBoardFilterState(undefined);
+    setBoardFilterPresentation(undefined);
+  }, [selectedBoard?.id]);
+
+  useEffect(() => {
+    if (route.view !== 'designer') {
+      setSelectedDesignerNode(undefined);
+    } else {
+      setSidebarVisible(true);
+    }
+  }, [route.view, route.boardId]);
 
   const refreshBoardDetails = useCallback(() => {
     if (selectedBoard) {
@@ -329,14 +442,35 @@ export function App() {
     ? route.newIssueType === 'Idea'
       ? 'New idea'
       : 'New issue'
+    : selectedProject ? selectedProject.name
     : route.feature
       ? FEATURE_TITLES[route.feature]
       : selectedBoard?.name ?? 'New session';
   const contextDetail = route.feature
     ? 'Ticket Manager'
     : connection?.name ?? backendModeMeta(selectedBoard?.connectionId ? undefined : 'demo').label;
+  const selectedBoardFilters =
+    boardFilterState && boardFilterState.boardId === selectedBoard?.id
+      ? boardFilterState.value
+      : EMPTY_BOARD_FILTER;
+  const selectedBoardFilterPresentation =
+    boardFilterPresentation && boardFilterPresentation.boardId === selectedBoard?.id
+      ? boardFilterPresentation.value
+      : {
+          statusOptions: [],
+          issueTypeOptions: [],
+          parentOptions: [],
+          shown: 0,
+          total: undefined
+        };
 
   const centre = () => {
+    if (selectedProject) {
+      return <ProjectHome project={selectedProject} boards={boards} onChanged={project => {
+        setProjects(current => current.map(item => item.id === project.id ? project : item));
+        refreshBoards();
+      }} onOpenBoard={boardId => navigate({ boardId })} />;
+    }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
       return (
@@ -348,14 +482,22 @@ export function App() {
         />
       );
     }
-    if (route.feature === 'settings') {
+    if (route.feature === 'overview') {
       return (
-        <div className="view-scroll">
-          <SettingsPage
-            connections={connections}
-            onOpenConnections={() => navigate({ feature: 'connections' })}
-          />
-        </div>
+        <OverviewPage
+          projects={projects}
+          boards={boards}
+          connections={connections}
+          sessions={agentSessions}
+          connectionChecks={connectionChecks}
+          onNewProject={() => setProjectWizardMode('create')}
+          onNewSession={() => navigate({})}
+          onOpenProjects={() => navigate({})}
+          onOpenSessions={() => navigate({ feature: 'sessions' })}
+          onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
+          onOpenBoard={board => navigate({ boardId: board.id })}
+          onOpenProject={project => navigate({ projectId: project.id })}
+        />
       );
     }
     if (route.feature === 'sessions') {
@@ -366,7 +508,7 @@ export function App() {
           selectedKey={route.sessionKey}
           onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
           onNewSession={() => navigate({})}
-          onOpenAiSettings={() => navigate({ feature: 'settings' })}
+          onOpenAiSettings={() => setSettingsDialogCategory('ai')}
         />
       );
     }
@@ -384,15 +526,8 @@ export function App() {
         <AiReviewPage
           issueKey={route.issueKey}
           connectionId={selectedBoard?.connectionId}
-          onClose={() => navigate({ ...route, view: undefined })}
-        />
-      );
-    }
-    if (route.issueKey && route.view === 'analysis') {
-      return (
-        <AnalysisPage
-          issueKey={route.issueKey}
-          connectionId={selectedBoard?.connectionId}
+          provider={route.aiProvider}
+          model={route.aiModel}
           onClose={() => navigate({ ...route, view: undefined })}
         />
       );
@@ -402,6 +537,8 @@ export function App() {
         <LocalPeerReviewPage
           issueKey={route.issueKey}
           connectionId={selectedBoard?.connectionId}
+          provider={route.aiProvider}
+          model={route.aiModel}
           onClose={() => navigate({ ...route, view: undefined })}
         />
       );
@@ -413,6 +550,12 @@ export function App() {
           key={selectedBoard.id}
           board={selectedBoard}
           onClose={() => navigate({ ...route, view: undefined })}
+          onSelectionChange={handleDesignerSelectionChange}
+          externalSelectionId={
+            selectedDesignerNode?.id.startsWith('board-ticket:')
+              ? selectedDesignerNode.id
+              : undefined
+          }
         />
       );
     }
@@ -422,11 +565,21 @@ export function App() {
     if (!selectedBoard) {
       return (
         <NewSession
-          workspaceName="ticket-manager"
-          agentName="Ticket Agent"
-          branchName="main"
-          onSubmit={async (goal, provider) => {
-            const record = await window.ticketManager.ai.delegate({ goal, provider });
+          boards={boards}
+          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode }) => {
+            const project = board.connectionId?.startsWith('project:')
+              ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))
+              : undefined;
+            const record = await window.ticketManager.ai.delegate({
+              issueKey,
+              connectionId: board.connectionId,
+              task: { goal },
+              provider,
+              model,
+              toolMode: project?.defaultAiToolMode ?? toolMode,
+              workingDirectory: project?.workspaceFolder
+            });
+            await window.ticketManager.ai.renameSession(record.issueKey, title);
             navigate({ feature: 'sessions', sessionKey: record.issueKey });
           }}
           connectionCount={connections.length}
@@ -434,6 +587,12 @@ export function App() {
             refreshConnections();
             navigate({ feature: 'connections' });
           }}
+          projectCount={projects.length}
+          onNewProject={newProjectEnabled ? () => setProjectWizardMode('create') : undefined}
+          toolModeForBoard={board => board.connectionId?.startsWith('project:')
+            ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))?.defaultAiToolMode
+            : undefined}
+          onSelectedBoardChange={board => setComposerBoardId(current => current === board?.id ? current : board?.id)}
         />
       );
     }
@@ -464,6 +623,8 @@ export function App() {
         details={boardDetails}
         selectedIssueKey={route.issueKey}
         connectionId={selectedBoard.connectionId}
+        filters={selectedBoardFilters}
+        onFilterPresentationChange={handleFilterPresentationChange}
         onOpenIssue={issueKey => navigate({ boardId: selectedBoard.id, issueKey })}
         onNewIssue={() => navigate({ boardId: selectedBoard.id, newIssue: true })}
         onNewIdea={() => navigate({ boardId: selectedBoard.id, newIssue: true, newIssueType: 'Idea' })}
@@ -477,13 +638,48 @@ export function App() {
 
   // The secondary sidebar is a pane the title-bar button owns outright, like the
   // bottom panel — selecting an issue fills it, it does not summon it.
-  const showAux = auxVisible;
+  // Project creation/home are dedicated main-content surfaces; the issue pane
+  // has no relevant selection there and would unnecessarily squeeze the forms.
+  const showAux = auxVisible && !route.projectId && route.feature !== 'overview';
+  const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
+  const selectedAgentSession = route.feature === 'sessions'
+    ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]
+    : undefined;
+  const terminalBoard = selectedBoard ?? (!route.feature && !route.projectId
+    ? boards.find(board => board.id === composerBoardId)
+    : undefined);
+  const boardProject = terminalBoard?.connectionId?.startsWith('project:')
+    ? projects.find(project => project.id === terminalBoard.connectionId?.slice('project:'.length))
+    : undefined;
+  const terminalProject = selectedProject ?? boardProject;
+  const terminalWorkingDirectory = selectedAgentSession?.workingDirectory
+    ?? terminalProject?.workspaceFolder
+    ?? settings?.ai.workingDirectory
+    ?? undefined;
+  const terminalDisabledReason = terminalProject && !terminalProject.workspaceFolder
+    ? 'Attach a workspace folder to this project to use file and terminal tools.'
+    : selectedAgentSession?.toolMode === 'project-only' && !selectedAgentSession.workingDirectory
+      ? 'This folderless project session does not allow terminal tools.'
+      : undefined;
 
   return (
     <div className="window-root">
       <TitleBar
         contextLabel={contextLabel}
         contextDetail={contextDetail}
+        onOpenWhatsNew={() => setWhatsNewOpen(true)}
+        settingsOpen={settingsDialogCategory !== undefined}
+        onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
+        onOpenThemes={() => setSettingsDialogCategory('themes')}
+        boardFilter={
+          selectedBoard && boardDetails && !route.feature && !route.newIssue && !route.view
+            ? {
+                value: selectedBoardFilters,
+                ...selectedBoardFilterPresentation,
+                onChange: value => setBoardFilterState({ boardId: selectedBoard.id, value })
+              }
+            : undefined
+        }
         sidebarVisible={sidebarVisible}
         onToggleSidebar={() => setSidebarVisible(visible => !visible)}
         auxVisible={auxVisible}
@@ -505,33 +701,51 @@ export function App() {
         {sidebarVisible && (
           <>
             <div className="pane-sidebar" style={{ width: sidebar.size }}>
-              <Sidebar
-                boards={boards}
-                connections={connections}
-                selectedBoardId={route.boardId}
-                detailsByBoardId={detailsByBoardId}
-                onSelectBoard={board => navigate({ boardId: board.id })}
-                onSelectIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
-                mode={mode}
-                onModeChange={setMode}
-                activeFeature={route.feature}
-                onSelectFeature={feature => {
-                  if (feature === 'connections') {
-                    refreshConnections();
+              {route.view === 'designer' && selectedBoard && boardDetails ? (
+                <TaskDesignerSidebar
+                  board={selectedBoard}
+                  issues={boardDetails.issues}
+                  selectedIssueKey={
+                    selectedDesignerNode?.type === 'ticket'
+                      ? selectedDesignerNode.issueKey
+                      : undefined
                   }
-                  navigate({ feature });
-                }}
-                featureCounts={featureCounts}
-                onNewSession={() => navigate({})}
-                onShowBoards={() => {
-                  refreshBoards();
-                  refreshConnections();
-                  navigate({ boardId: route.boardId });
-                }}
-                selectedIssueKey={route.issueKey}
-                selectedIssueConnectionId={selectedBoard?.connectionId}
-                connectionChecks={connectionChecks}
-              />
+                  onSelectIssue={handleDesignerBoardTicketSelect}
+                />
+              ) : (
+                <Sidebar
+                  boards={boards}
+                  projects={projects}
+                  connections={connections}
+                  selectedBoardId={route.boardId}
+                  detailsByBoardId={detailsByBoardId}
+                  onSelectBoard={board => navigate({ boardId: board.id })}
+                  onSelectIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
+                  mode={mode}
+                  onModeChange={setMode}
+                  activeFeature={route.feature}
+                  onSelectFeature={feature => {
+                    if (feature === 'connections') {
+                      refreshConnections();
+                    }
+                    navigate({ feature });
+                  }}
+                  featureCounts={featureCounts}
+                  onNewSession={() => navigate({})}
+                  onNewProject={() => setProjectWizardMode('create')}
+                  onAddExistingProject={() => setProjectWizardMode('existing')}
+                  onSelectProject={project => navigate({ projectId: project.id })}
+                  selectedProjectId={route.projectId}
+                  onShowBoards={() => {
+                    refreshBoards();
+                    refreshConnections();
+                    navigate({ boardId: route.boardId });
+                  }}
+                  selectedIssueKey={route.issueKey}
+                  selectedIssueConnectionId={selectedBoard?.connectionId}
+                  connectionChecks={connectionChecks}
+                />
+              )}
             </div>
             <div
               className={`splitter${sidebar.dragging ? ' dragging' : ''}`}
@@ -544,18 +758,36 @@ export function App() {
         {/* The panel docks under the editor and issue pane but stays right of
             the sidebar, so those three share a column inside the shell. */}
         <div className="editor-stack">
-          <div className="pane-row">
-            <main className="pane-main">{centre()}</main>
+          <div className={`pane-row${detailIsExpanded ? ' detail-expanded' : ''}`}>
+            {!detailIsExpanded && <main className="pane-main" data-testid="main-content-pane">{centre()}</main>}
 
             {showAux && (
               <>
-                <div
-                  className={`splitter${aux.dragging ? ' dragging' : ''}`}
-                  aria-label="Resize issue panel"
-                  {...aux.handleProps}
-                />
-                <aside className="pane-aux" style={{ width: aux.size }}>
-                  {route.issueKey === undefined ? (
+                {!detailIsExpanded && (
+                  <div
+                    className={`splitter${aux.dragging ? ' dragging' : ''}`}
+                    aria-label="Resize issue panel"
+                    {...aux.handleProps}
+                  />
+                )}
+                <aside
+                  className={`pane-aux${detailIsExpanded ? ' is-expanded' : ''}`}
+                  data-testid="issue-details-pane"
+                  style={detailIsExpanded ? undefined : { width: aux.size }}
+                >
+                  {route.view === 'designer' ? (
+                    selectedDesignerNode ? (
+                      <TaskDesignerItemDetail
+                        node={selectedDesignerNode}
+                        onClose={() => setAuxVisible(false)}
+                      />
+                    ) : (
+                      <div className="empty-state" data-testid="designer-item-empty">
+                        <Icon name="cursor" size={28} />
+                        <span>Select a designer item to see its details.</span>
+                      </div>
+                    )
+                  ) : route.issueKey === undefined ? (
                     <div className="empty-state" data-testid="aux-empty">
                       <Icon name="ticket" size={28} />
                       <span>Select a work item to see its details.</span>
@@ -564,11 +796,29 @@ export function App() {
                     <IssueDetail
                       issueKey={route.issueKey}
                       connectionId={selectedBoard?.connectionId}
-                      onClose={() => navigate({ ...route, issueKey: undefined })}
+                      expanded={detailIsExpanded}
+                      onToggleExpanded={() => setDetailExpanded(expanded => !expanded)}
+                      onClose={() => {
+                        setDetailExpanded(false);
+                        navigate({ ...route, issueKey: undefined });
+                      }}
                       onChanged={refreshBoardDetails}
                       onOpenIssue={key => navigate({ ...route, issueKey: key, view: undefined })}
                       onOpenSession={key => navigate({ feature: 'sessions', sessionKey: key })}
-                      onOpenAiView={(key, view) => navigate({ ...route, issueKey: key, view })}
+                      onOpenAiView={(key, view, runtime) => {
+                        setDetailExpanded(false);
+                        navigate({
+                          ...route,
+                          issueKey: key,
+                          view,
+                          aiProvider: runtime?.provider,
+                          aiModel: runtime?.model
+                        });
+                      }}
+                      onOpenAiSettings={() => {
+                        setDetailExpanded(false);
+                        setSettingsDialogCategory('ai');
+                      }}
                     />
                   )}
                 </aside>
@@ -576,7 +826,7 @@ export function App() {
             )}
           </div>
 
-          {panelVisible && (
+          {panelVisible && !detailIsExpanded && (
             <>
               <div
                 className={`splitter-h${panel.dragging ? ' dragging' : ''}`}
@@ -584,12 +834,112 @@ export function App() {
                 {...panel.handleProps}
               />
               <div className="panel-dock" style={{ height: panel.size }}>
-                <BottomPanel onClose={() => setPanelVisible(false)} />
+                <BottomPanel
+                  onClose={() => setPanelVisible(false)}
+                  workingDirectory={terminalWorkingDirectory}
+                  terminalDisabledReason={terminalDisabledReason}
+                  onTerminalAi={async (prompt, sessionId) => {
+                    const context = await window.ticketManager.terminal.getContext(sessionId);
+                    const commands = await window.ticketManager.terminal.listCommands(sessionId);
+                    const lastCommand = commands[commands.length - 1];
+                    const goal = [
+                      prompt,
+                      '',
+                      'Terminal context:',
+                      `Working directory: ${context.cwd}`,
+                      lastCommand
+                        ? `Last command: ${lastCommand.command || '(shell command not detected)'}\nExit code: ${lastCommand.exitCode ?? 'running'}`
+                        : 'Last command: unavailable',
+                      context.output || '(no recent output captured)'
+                    ].join('\n');
+                    return window.ticketManager.ai.delegate({
+                      goal,
+                      workingDirectory: context.cwd,
+                      toolMode: 'read-only'
+                    });
+                  }}
+                />
               </div>
             </>
           )}
         </div>
       </div>
+
+      {projectWizardMode && newProjectEnabled && (
+        <div className="project-dialog-backdrop" data-testid="project-dialog-backdrop">
+          <div
+            className="project-dialog-shell"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-project-dialog-title"
+          >
+            <NewProjectWizard
+              mode={projectWizardMode}
+              onCancel={() => setProjectWizardMode(undefined)}
+              onCreated={project => {
+                setProjectWizardMode(undefined);
+                setProjects(current => [...current.filter(item => item.id !== project.id), project]);
+                refreshBoards();
+                navigate({ projectId: project.id });
+              }}
+            />
+          </div>
+        </div>
+      )}
+      {settingsDialogCategory && (
+        <div
+          className="settings-dialog-backdrop"
+          data-testid="settings-dialog-backdrop"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) {
+              setSettingsDialogCategory(undefined);
+            }
+          }}
+        >
+          <section
+            className="settings-dialog-shell"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-dialog-title"
+            data-testid="settings-dialog"
+          >
+            <header className="settings-dialog-header">
+              <div className="settings-dialog-heading">
+                <span className="settings-dialog-mark"><Icon name="gear" size={18} /></span>
+                <div>
+                  <h1 id="settings-dialog-title">Settings</h1>
+                  <p>Configure Ticket Manager for this device.</p>
+                </div>
+              </div>
+              <button
+                className="project-dialog-close"
+                type="button"
+                aria-label="Close settings"
+                onClick={() => setSettingsDialogCategory(undefined)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="settings-dialog-body">
+              <SettingsPage
+                key={settingsDialogCategory}
+                connections={connections}
+                initialCategory={settingsDialogCategory}
+                onOpenConnections={() => {
+                  setSettingsDialogCategory(undefined);
+                  refreshConnections();
+                  navigate({ feature: 'connections' });
+                }}
+              />
+            </div>
+            <footer className="settings-dialog-footer">
+              <span>Changes are saved automatically.</span>
+              <button className="btn btn-primary" type="button" onClick={() => setSettingsDialogCategory(undefined)}>Done</button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {whatsNewOpen && <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />}
     </div>
   );
 }

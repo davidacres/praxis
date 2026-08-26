@@ -47,7 +47,7 @@ function FieldRow({
  * (`issueDetailPanelManager.handleDraftCreate`): `issue.create` takes the
  * structural fields (project, type, summary, description, parent), then a
  * follow-up `issue.update` applies the metadata create doesn't accept
- * (assignee, priority, severity, reportedBy, model). A failed follow-up never
+ * (assignee, priority, severity, reportedBy). A failed follow-up never
  * discards the created ticket — the form shows the warning and offers to open
  * the ticket as created.
  */
@@ -66,7 +66,6 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
   const [priority, setPriority] = useState('');
   const [assignee, setAssignee] = useState('');
   const [severity, setSeverity] = useState('');
-  const [model, setModel] = useState('');
   const [reportedBy, setReportedBy] = useState('');
 
   const [projectKey, setProjectKey] = useState(board.projectKey ?? '');
@@ -204,8 +203,7 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
         ...(assignee.trim() ? { assignee: assignee.trim() } : {}),
         ...(priority ? { priority } : {}),
         ...(severity ? { severity } : {}),
-        ...(reportedBy.trim() ? { reportedBy: reportedBy.trim() } : {}),
-        ...(model.trim() ? { model: model.trim() } : {})
+        ...(reportedBy.trim() ? { reportedBy: reportedBy.trim() } : {})
       };
       if (Object.keys(followUp).length > 0) {
         try {
@@ -239,7 +237,6 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
     priority,
     severity,
     reportedBy,
-    model,
     onCreated
   ]);
 
@@ -407,16 +404,6 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
                 </option>
               ))}
             </select>
-          </FieldRow>
-
-          <FieldRow label="Model" description="AI model recorded on the ticket for agent sessions.">
-            <input
-              className="input new-issue-grow"
-              data-testid="new-issue-model"
-              placeholder="e.g. claude-sonnet-4-5"
-              value={model}
-              onChange={event => setModel(event.target.value)}
-            />
           </FieldRow>
 
           <FieldRow label="Reported by">

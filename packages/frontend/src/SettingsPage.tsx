@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type {
   AiProvider,
   AiProviderStatus,
+  AgentRuntimeSnapshot,
   AppSettings,
   AppSettingsPatch,
   BoardsSidebarMode,
@@ -13,18 +14,24 @@ import {
   PRIORITY_NAMES
 } from './settingsDefaults';
 import { Icon, type IconName } from './Icon';
+import { ModelManagerPanel } from './ModelManagerPanel';
+import { MODEL_PROVIDERS } from './modelProviders';
 import { useSettings } from './useSettings';
+import { applyThemePreference, getInitialThemeId, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
 
-type SettingsCategory =
+export type SettingsCategory =
   | 'overview'
   | 'connections'
   | 'jira'
   | 'ai'
+  | 'agent-runtime'
   | 'performance'
   | 'delivery'
   | 'mcp'
   | 'preview'
-  | 'appearance';
+  | 'themes'
+  | 'appearance'
+  | 'terminal';
 
 interface CategoryDef {
   id: SettingsCategory;
@@ -39,6 +46,18 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Overview',
     icon: 'home',
     description: 'Quick summary of where settings live and what is currently configured.'
+  },
+  {
+    id: 'themes',
+    label: 'Themes',
+    icon: 'theme',
+    description: 'Choose a complete color palette for the Ticket Manager interface.'
+  },
+  {
+    id: 'terminal',
+    label: 'Terminal',
+    icon: 'terminal',
+    description: 'Profiles, appearance, and behaviour for interactive terminal sessions.'
   },
   {
     id: 'connections',
@@ -57,6 +76,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'AI Provider',
     icon: 'robot',
     description: 'AI provider connections used to delegate issues to an AI agent.'
+  },
+  {
+    id: 'agent-runtime',
+    label: 'Agent Runtime',
+    icon: 'robot',
+    description: 'Discovered agent hosts, capabilities, and progressively indexed skills.'
   },
   {
     id: 'performance',
@@ -84,19 +109,20 @@ const CATEGORIES: CategoryDef[] = [
   },
   {
     id: 'appearance',
-    label: 'Appearance',
-    icon: 'star',
-    description: 'Colors used by ticket cards to indicate priority.'
+    label: 'Board Settings',
+    icon: 'columns',
+    description: 'Board presentation, brand artwork, and colors used by ticket cards.'
   }
 ];
 
 interface SettingsPageProps {
   connections: Connection[];
   onOpenConnections: () => void;
+  initialCategory?: SettingsCategory;
 }
 
-export function SettingsPage({ connections, onOpenConnections }: SettingsPageProps) {
-  const [active, setActive] = useState<SettingsCategory>('overview');
+export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview' }: SettingsPageProps) {
+  const [active, setActive] = useState<SettingsCategory>(initialCategory);
   const { settings, update, error } = useSettings();
 
   if (!settings) {
@@ -135,13 +161,95 @@ export function SettingsPage({ connections, onOpenConnections }: SettingsPagePro
         )}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} />}
+        {active === 'agent-runtime' && <AgentRuntimeSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
         {active === 'preview' && <PreviewSection settings={settings} update={update} />}
+        {active === 'themes' && <ThemesSection settings={settings} update={update} />}
         {active === 'appearance' && <AppearanceSection settings={settings} update={update} />}
+        {active === 'terminal' && <TerminalSection settings={settings} update={update} />}
       </div>
     </div>
+  );
+}
+
+function AgentRuntimeSection() {
+  const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
+  const [error, setError] = useState<string>();
+  const [activated, setActivated] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    setBusy(true);
+    try {
+      setSnapshot(await window.ticketManager.agentRuntime.refresh());
+      setError(undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void window.ticketManager.agentRuntime.list().then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+  }, []);
+
+  return (
+    <section data-testid="settings-agent-runtime">
+      <CategoryHeader category={CATEGORIES.find(category => category.id === 'agent-runtime')!} />
+      <div className="settings-list">
+        <div className="settings-field-row">
+          <div className="settings-field-label">
+            <strong>Registry</strong>
+            <div className="settings-field-help">Discovery is read-only until you explicitly start a trusted host.</div>
+          </div>
+          <div className="settings-field-control">
+            <button className="btn" type="button" onClick={() => void refresh()} disabled={busy} data-testid="agent-runtime-refresh">
+              {busy ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        </div>
+        {error && <div className="error-banner">{error}</div>}
+        {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
+        {snapshot && (
+          <>
+            <div className="settings-section-description">Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.agents.length} agents · {snapshot.skills.length} skills</div>
+            {snapshot.agents.map(agent => (
+              <div className="settings-field-row" key={agent.manifest.id} data-testid={`agent-runtime-agent-${agent.manifest.id}`}>
+                <div className="settings-field-label">
+                  <strong>{agent.manifest.name}</strong>
+                  <div className="settings-field-help">{agent.manifest.type} · {agent.trusted ? 'trusted' : 'approval required'}{agent.errors.length ? ` · ${agent.errors.map(item => item.message).join('; ')}` : ''}</div>
+                </div>
+                <div className="settings-field-control">
+                  <button className="btn" type="button" disabled={!agent.trusted || agent.errors.length > 0 || busy} onClick={() => void window.ticketManager.agentRuntime.start(agent.manifest.id).then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))}>
+                    Start
+                  </button>
+                </div>
+              </div>
+            ))}
+            {snapshot.skills.map(skill => (
+              <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
+                <div className="settings-field-label"><strong>{skill.metadata.name}</strong><div className="settings-field-help">{skill.metadata.description}</div></div>
+                <div className="settings-field-control">
+                  {skill.error ? <span className="settings-field-help">Invalid: {skill.error}</span> : (
+                    <>
+                      <span className="settings-field-help">{activated === skill.metadata.name ? 'Activated' : skill.trusted ? 'Indexed' : 'Approval required'}</span>
+                      {snapshot.agents.find(agent => agent.trusted && agent.errors.length === 0) && <button className="btn" type="button" disabled={!skill.trusted || busy} onClick={() => {
+                        const agent = snapshot.agents.find(candidate => candidate.trusted && candidate.errors.length === 0);
+                        if (!agent) return;
+                        void window.ticketManager.agentRuntime.activateSkill(agent.manifest.id, skill.metadata.name).then(() => setActivated(skill.metadata.name)).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+                      }}>Activate</button>}
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -386,6 +494,8 @@ interface AiProviderMeta {
   defaultCommand?: string;
   /** `kind: 'cli-agent'` only — overrides the generic "CLI path" field's description. */
   cliPathDescription?: string;
+  /** `kind: 'cli-agent'` only — shown when the real, free PATH-resolution check finds nothing to spawn. */
+  notInstalledHint?: string;
 }
 
 /** Display metadata for the settings UI — mirrors core's `PROVIDER_DESCRIPTORS`
@@ -423,7 +533,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     keyLabel: '',
     urlPlaceholder: '',
     modelPlaceholder: '',
-    defaultCommand: 'claude-agent-acp'
+    defaultCommand: 'claude-agent-acp',
+    notInstalledHint: 'Not found on PATH — run "npm install -g @agentclientprotocol/claude-agent-acp".'
   },
   {
     id: 'codex-cli',
@@ -432,7 +543,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     keyLabel: '',
     urlPlaceholder: '',
     modelPlaceholder: '',
-    defaultCommand: 'codex-acp'
+    defaultCommand: 'codex-acp',
+    notInstalledHint: 'Not found on PATH — run "npm install -g @agentclientprotocol/codex-acp".'
   },
   {
     id: 'copilot-cli',
@@ -442,7 +554,8 @@ const AI_PROVIDERS: AiProviderMeta[] = [
     urlPlaceholder: '',
     modelPlaceholder: '',
     cliPathDescription:
-      'Runs the bundled @github/copilot runtime automatically — auth comes from GITHUB_TOKEN/gh CLI login, not a stored key. Override with an absolute path only if you need a different runtime executable.'
+      'Runs the bundled @github/copilot runtime automatically — auth comes from GITHUB_TOKEN/gh CLI login, not a stored key. Override with an absolute path only if you need a different runtime executable.',
+    notInstalledHint: 'The custom runtime path above was not found.'
   }
 ];
 
@@ -459,6 +572,7 @@ function AiSection({
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [managingModels, setManagingModels] = useState(false);
 
   const reloadStatuses = () => {
     window.ticketManager.ai
@@ -468,7 +582,10 @@ function AiSection({
   };
 
   useEffect(reloadStatuses, []);
-  useEffect(() => setKeyDraft(''), [selectedProviderId]);
+  useEffect(() => {
+    setKeyDraft('');
+    setManagingModels(false);
+  }, [selectedProviderId]);
 
   const selectedMeta = AI_PROVIDERS.find(p => p.id === selectedProviderId)!;
   const selectedStatus = statuses.find(s => s.provider === selectedProviderId);
@@ -490,14 +607,17 @@ function AiSection({
     }
   };
 
-  const statusText = (status: AiProviderStatus | undefined): string => {
+  const statusText = (status: AiProviderStatus | undefined, meta: AiProviderMeta): string => {
     if (!status) {
       return 'Checking…';
     }
-    if (status.keySource === 'none' && status.configured) {
-      // CLI-hosted providers: no API key, no "configured" gate — auth is the
-      // CLI's own (e.g. `claude login`), outside this app.
-      return `Runs "${status.gatewayUrl}" — sign in with the CLI's own auth if it asks.`;
+    if (meta.kind === 'cli-agent') {
+      // No API key concept — `configured` here is a real, free check that
+      // the command actually resolves to a spawnable executable (no ACP
+      // handshake, no LLM call).
+      return status.configured
+        ? `Runs "${status.gatewayUrl}" — sign in with the CLI's own auth if it asks.`
+        : (meta.notInstalledHint ?? `Not found: "${status.gatewayUrl}".`);
     }
     return status.configured
       ? status.keySource === 'secret'
@@ -528,6 +648,19 @@ function AiSection({
             }
           }
         });
+
+  if (managingModels) {
+    return (
+      <ModelManagerPanel
+        providerId={selectedProviderId}
+        providerLabel={selectedMeta.label}
+        enabledModelIds={selectedConfig.enabledModelIds}
+        providerConfig={selectedConfig}
+        onBack={() => setManagingModels(false)}
+        update={update}
+      />
+    );
+  }
 
   return (
     <>
@@ -562,7 +695,7 @@ function AiSection({
                   className="list-row-meta"
                   data-testid={isSelected ? 'ai-provider-status' : undefined}
                 >
-                  {statusText(rowStatus)}
+                  {statusText(rowStatus, meta)}
                 </div>
               </div>
               <span className="spacer" />
@@ -663,6 +796,25 @@ function AiSection({
             }
             placeholder={selectedMeta.defaultCommand}
           />
+        </FieldRow>
+      )}
+      {MODEL_PROVIDERS.has(selectedProviderId) && (
+        <FieldRow
+          label="Models"
+          description={
+            selectedConfig.enabledModelIds
+              ? `${selectedConfig.enabledModelIds.length} of the fetched catalog selected for the composer's Model picker.`
+              : "Every fetched model is offered in the composer's Model picker (no curation set)."
+          }
+        >
+          <button
+            type="button"
+            className="btn"
+            data-testid="ai-manage-models-btn"
+            onClick={() => setManagingModels(true)}
+          >
+            Manage models…
+          </button>
         </FieldRow>
       )}
       <FieldRow
@@ -883,6 +1035,144 @@ function SidebarModeToggle({
   );
 }
 
+function ThemePreviewCard({
+  theme,
+  active,
+  onSelect,
+  installed = true,
+  onInstall
+}: {
+  theme: ThemeDefinition;
+  active: boolean;
+  onSelect: () => void;
+  installed?: boolean;
+  onInstall?: () => void;
+}) {
+  const colors = theme.preview;
+  const previewStyle = {
+    '--preview-canvas': colors.canvas,
+    '--preview-panel': colors.panel,
+    '--preview-raised': colors.raised,
+    '--preview-border': colors.border,
+    '--preview-text': colors.text,
+    '--preview-muted': colors.muted,
+    '--preview-accent': colors.accent,
+    '--preview-success': colors.success,
+    '--preview-warning': colors.warning,
+    '--preview-danger': colors.danger
+  } as CSSProperties;
+
+  return (
+    <button
+      type="button"
+      className={`theme-gallery-card${active ? ' active' : ''}${!installed ? ' marketplace' : ''}`}
+      style={previewStyle}
+      aria-pressed={active}
+      aria-label={`${theme.name}, ${theme.mode} theme${active ? ', active' : installed ? '' : ', available in marketplace'}`}
+      data-testid={`theme-card-${theme.id}`}
+      onClick={installed ? onSelect : onInstall}
+    >
+      <span className="theme-card-preview" aria-hidden="true">
+        {installed && <span className="theme-card-installed">Installed</span>}
+        <span className="theme-preview-titlebar"><i /><i /><i /><b /></span>
+        <span className="theme-preview-layout">
+          <span className="theme-preview-sidebar"><i className="wide" /><i /><i /><i className="short" /></span>
+          <span className="theme-preview-content">
+            <span className="theme-preview-heading"><i /><b /><b /></span>
+            <i className="line wide" /><i className="line" />
+            <span className="theme-preview-status"><i /><i /><i /></span>
+            <i className="line wide" /><i className="line short" />
+          </span>
+        </span>
+        <span className="theme-preview-spectrum"><i /><i /><i /><i /></span>
+      </span>
+      <span className="theme-card-meta">
+        <span><strong>{theme.name}</strong><small>{theme.mode}</small></span>
+        {active && <span className="theme-card-active">Active</span>}
+        {!installed && <span className="theme-card-install">Install</span>}
+      </span>
+      <span className="theme-card-description">{theme.description}</span>
+    </button>
+  );
+}
+
+function ThemesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
+  const category = CATEGORIES.find(c => c.id === 'themes')!;
+  const [selectedTheme, setSelectedTheme] = useState(() => settings.appearance.themeId || getInitialThemeId());
+  const [query, setQuery] = useState('');
+  const installedIds = settings.appearance.installedThemeIds ?? [];
+
+  useEffect(() => {
+    const syncTheme = (event: Event) => setSelectedTheme((event as CustomEvent<string>).detail);
+    window.addEventListener('tm-theme-changed', syncTheme);
+    return () => window.removeEventListener('tm-theme-changed', syncTheme);
+  }, []);
+
+  const visible = THEMES.filter(theme => {
+    const needle = query.trim().toLowerCase();
+    return !needle || `${theme.name} ${theme.family} ${theme.mode} ${theme.description}`.toLowerCase().includes(needle);
+  });
+
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <div className="theme-mode-toolbar" role="group" aria-label="Theme appearance mode">
+        <span>Appearance</span>
+        {(['system', 'light', 'dark'] as const).map(mode => (
+          <button key={mode} type="button" className={settings.appearance.themeMode === mode ? 'active' : ''}
+            onClick={() => {
+              applyThemePreference(selectedTheme, mode);
+              void update({ appearance: { themeMode: mode } });
+            }}>{mode === 'system' ? 'System' : mode[0]!.toUpperCase() + mode.slice(1)}</button>
+        ))}
+      </div>
+      <div className="theme-gallery-toolbar">
+        <label className="theme-gallery-search">
+          <Icon name="search" size={13} />
+          <input type="search" value={query} aria-label="Search themes" placeholder={`Search ${THEMES.length} themes…`} onChange={event => setQuery(event.target.value)} />
+        </label>
+        <span>{visible.length} themes</span>
+      </div>
+      {(['Recent', 'Staff picks'] as const).map(section => {
+        const sectionThemes = visible.filter(theme => theme.section === section && (!theme.source || installedIds.includes(theme.id)));
+        if (sectionThemes.length === 0) return null;
+        return (
+          <section className="theme-gallery-section" key={section}>
+            <h4>{section}</h4>
+            <div className="theme-gallery-grid">
+              {sectionThemes.map(theme => (
+                <ThemePreviewCard key={theme.id} theme={theme} installed={!theme.source || installedIds.includes(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
+                  setSelectedTheme(theme.id);
+                  applyThemePreference(theme.id, theme.mode);
+                  void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
+                }} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+      {visible.some(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)) && (
+        <section className="theme-gallery-section theme-marketplace-section">
+          <div className="theme-marketplace-heading">
+            <div><h4>Marketplace</h4><p>Install community-curated palettes into this workspace.</p></div>
+            <span className="theme-marketplace-count">{visible.filter(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)).length} available</span>
+          </div>
+          <div className="theme-gallery-grid">
+            {visible.filter(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)).map(theme => (
+              <ThemePreviewCard key={theme.id} theme={theme} active={false} installed={false} onSelect={() => undefined}
+                onInstall={() => void update({ appearance: { installedThemeIds: [...installedIds, theme.id], themeId: theme.id, themeMode: theme.mode } }).then(() => {
+                  setSelectedTheme(theme.id);
+                  applyThemePreference(theme.id, theme.mode);
+                })} />
+            ))}
+          </div>
+        </section>
+      )}
+      {visible.length === 0 && <div className="placeholder-text">No themes match “{query}”.</div>}
+    </>
+  );
+}
+
 function AppearanceSection({
   settings,
   update
@@ -914,6 +1204,144 @@ function AppearanceSection({
           />
         ))}
       </div>
+    </>
+  );
+}
+
+function TerminalSection({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const category = CATEGORIES.find(c => c.id === 'terminal')!;
+  const [profiles, setProfiles] = useState<Array<{ id: string; name: string; shell: string; isDefault: boolean }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    void window.ticketManager.terminal.listProfiles().then(next => {
+      if (active) setProfiles(next);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const updateTerminal = (patch: Partial<AppSettings['terminal']>) => void update({ terminal: patch });
+  const profileId = settings.terminal.defaultProfileId || profiles.find(profile => profile.isDefault)?.id || '';
+
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <div className="settings-subsection-title">Profiles</div>
+      <FieldRow
+        label="Default profile"
+        description="Used when you click New terminal without choosing a profile."
+      >
+        <select
+          className="select"
+          aria-label="Terminal default profile"
+          value={profileId}
+          onChange={event => updateTerminal({ defaultProfileId: event.target.value })}
+        >
+          {profiles.length === 0 && <option value="">Detecting profiles…</option>}
+          {profiles.map(profile => (
+            <option key={profile.id} value={profile.id}>{profile.name} · {profile.shell}</option>
+          ))}
+        </select>
+      </FieldRow>
+      <div className="settings-subsection-title">Appearance</div>
+      <FieldRow label="Font family" description="A comma-separated CSS font stack used by terminal sessions.">
+        <DebouncedTextField
+          ariaLabel="Terminal font family"
+          value={settings.terminal.fontFamily}
+          onCommit={value => updateTerminal({ fontFamily: value })}
+          placeholder="Menlo, Monaco, monospace"
+        />
+      </FieldRow>
+      <FieldRow label="Font size" description="Terminal text size in pixels.">
+        <input
+          className="input settings-number-input"
+          aria-label="Terminal font size"
+          type="number"
+          min={9}
+          max={32}
+          value={settings.terminal.fontSize}
+          onChange={event => updateTerminal({ fontSize: Number(event.target.value) })}
+        />
+      </FieldRow>
+      <FieldRow label="Line height" description="Multiplier applied to each terminal row.">
+        <input
+          className="input settings-number-input"
+          aria-label="Terminal line height"
+          type="number"
+          min={0.9}
+          max={2}
+          step={0.05}
+          value={settings.terminal.lineHeight}
+          onChange={event => updateTerminal({ lineHeight: Number(event.target.value) })}
+        />
+      </FieldRow>
+      <FieldRow label="Cursor" description="Choose the cursor shape used in terminal sessions.">
+        <select
+          className="select"
+          aria-label="Terminal cursor style"
+          value={settings.terminal.cursorStyle}
+          onChange={event => updateTerminal({ cursorStyle: event.target.value as AppSettings['terminal']['cursorStyle'] })}
+        >
+          <option value="block">Block</option>
+          <option value="bar">Line</option>
+          <option value="underline">Underline</option>
+        </select>
+      </FieldRow>
+      <Toggle
+        label="Blinking cursor"
+        description="Animate the cursor while the terminal is focused."
+        checked={settings.terminal.cursorBlink}
+        onChange={next => updateTerminal({ cursorBlink: next })}
+      />
+      <Toggle
+        label="GPU acceleration"
+        description="Use WebGL rendering when available for smoother terminal output."
+        checked={settings.terminal.gpuAcceleration}
+        onChange={next => updateTerminal({ gpuAcceleration: next })}
+      />
+      <div className="settings-subsection-title">Behaviour</div>
+      <FieldRow label="Scrollback" description="Number of terminal lines retained for scrolling and chat context.">
+        <input
+          className="input settings-number-input"
+          aria-label="Terminal scrollback"
+          type="number"
+          min={100}
+          max={100000}
+          step={100}
+          value={settings.terminal.scrollback}
+          onChange={event => updateTerminal({ scrollback: Number(event.target.value) })}
+        />
+      </FieldRow>
+      <Toggle
+        label="Copy on selection"
+        description="Copy selected terminal text immediately, like a native terminal."
+        checked={settings.terminal.copyOnSelection}
+        onChange={next => updateTerminal({ copyOnSelection: next })}
+      />
+      <Toggle
+        label="Confirm paste"
+        description="Ask before pasting multi-line text into a shell."
+        checked={settings.terminal.confirmPaste}
+        onChange={next => updateTerminal({ confirmPaste: next })}
+      />
+      <Toggle
+        label="Terminal bell"
+        description="Play a subtle sound when a shell emits a bell."
+        checked={settings.terminal.bellSound}
+        onChange={next => updateTerminal({ bellSound: next })}
+      />
+      <Toggle
+        label="Shell integration"
+        description="Advertise terminal capabilities to shells that support integration sequences."
+        checked={settings.terminal.shellIntegration}
+        onChange={next => updateTerminal({ shellIntegration: next })}
+      />
     </>
   );
 }

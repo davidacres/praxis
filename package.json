@@ -16,6 +16,7 @@
     "uninstall:all": "npm run uninstall:all --workspace=ticket-manager",
     "build:install": "npm run build:install --workspace=ticket-manager",
     "publish:gitlab": "npm run publish:gitlab --workspace=ticket-manager",
+    "publish:github": "npm run publish:github --workspace=ticket-manager",
     "install:from-gitlab": "npm run install:from-gitlab --workspace=ticket-manager",
     "install:vsix": "npm run install:vsix --workspace=ticket-manager",
     "install:code": "npm run install:code --workspace=ticket-manager",

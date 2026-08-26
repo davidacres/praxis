@@ -1,5 +1,6 @@
 export {
   LOCAL_TOOL_DEFINITIONS,
+  localToolDefinitionsForMode,
   LocalToolExecutor,
   PathSandboxError,
   type LocalToolContext,

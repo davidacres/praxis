@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { IssueDetails, LprResult } from '@ticket-manager/core';
+import type { AiProvider, IssueDetails, LprResult } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 
 interface LocalPeerReviewPageProps {
   issueKey: string;
   connectionId?: string;
+  provider?: AiProvider;
+  model?: string;
   onClose: () => void;
 }
 
@@ -20,7 +22,7 @@ type LprState =
  * summarizing verdict) via `ai:localPeerReview` and renders each markdown
  * section. Auto-runs on open, mirroring the extension command.
  */
-export function LocalPeerReviewPage({ issueKey, connectionId, onClose }: LocalPeerReviewPageProps) {
+export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, onClose }: LocalPeerReviewPageProps) {
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [state, setState] = useState<LprState>({ phase: 'running' });
 
@@ -32,7 +34,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, onClose }: LocalPe
   const runReview = useCallback(async () => {
     setState({ phase: 'running' });
     try {
-      const result = await window.ticketManager.ai.localPeerReview(issueKey, connectionId);
+      const result = await window.ticketManager.ai.localPeerReview(issueKey, connectionId, provider, model);
       setState({ phase: 'done', result });
     } catch (error) {
       setState({
@@ -40,7 +42,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, onClose }: LocalPe
         message: error instanceof Error ? error.message : String(error)
       });
     }
-  }, [issueKey, connectionId]);
+  }, [issueKey, connectionId, provider, model]);
 
   // The extension's LPR panel runs the review as soon as it opens.
   useEffect(() => {

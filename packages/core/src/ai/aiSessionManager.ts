@@ -120,12 +120,19 @@ export class AiSessionManager {
     issueKey: string,
     sessionId: string,
     taskDefinition: AgentTaskDefinition,
-    provider?: AgentRuntimeProvider
+    provider?: AgentRuntimeProvider,
+    model?: string,
+    runtime?: Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId'>
   ): AgentSessionRecord {
     const record: AgentSessionRecord = {
       issueKey,
       sessionId,
       provider,
+      model: model?.trim() || undefined,
+      workingDirectory: runtime?.workingDirectory?.trim() || undefined,
+      toolMode: runtime?.toolMode ?? 'full',
+      runtimeSessionId: runtime?.runtimeSessionId,
+      connectionId: runtime?.connectionId,
       state: 'not_started',
       taskDefinition,
       events: [],
@@ -139,6 +146,38 @@ export class AiSessionManager {
     return record;
   }
 
+  /** Update provider-owned runtime metadata after a native session is created or resumed. */
+  public updateAgentRuntime(
+    issueKey: string,
+    runtime: Partial<Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId'>>
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) return;
+    if (runtime.workingDirectory !== undefined) {
+      record.workingDirectory = runtime.workingDirectory.trim() || undefined;
+    }
+    if (runtime.toolMode !== undefined) record.toolMode = runtime.toolMode;
+    if (runtime.runtimeSessionId !== undefined) record.runtimeSessionId = runtime.runtimeSessionId;
+    if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** Promote a completed analysis conversation into its implementation phase. */
+  public promoteAnalysisSession(issueKey: string): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record || record.taskDefinition.kind !== 'analysis') return;
+    record.taskDefinition = {
+      ...record.taskDefinition,
+      definitionOfDone: 'Implement the confirmed plan, run the relevant tests, and report the completed result.',
+      nonGoals: undefined,
+      completionContract: 'Continue in this conversation until the confirmed implementation is complete and verified.'
+    };
+    record.toolMode = 'full';
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+  }
+
   /** Get the agent session for an issue, if one exists. */
   public getAgentSession(issueKey: string): AgentSessionRecord | undefined {
     return this.agentSessions.get(issueKey);
@@ -147,6 +186,22 @@ export class AiSessionManager {
   /** Get all agent sessions. */
   public getAllAgentSessions(): Map<string, AgentSessionRecord> {
     return new Map(this.agentSessions);
+  }
+
+  /** Persist a user-editable display title for an agent session. */
+  public renameAgentSession(issueKey: string, title: string): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      throw new Error(`No agent session found for ${issueKey}.`);
+    }
+    const trimmed = title.trim();
+    if (!trimmed) {
+      throw new Error('Session title cannot be empty.');
+    }
+    record.title = trimmed;
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
   }
 
   /** Update agent session state and optionally set completedAt. */
@@ -413,7 +468,10 @@ export class AiSessionManager {
         typeof value.state === 'string' &&
         typeof value.taskDefinition === 'object'
       ) {
-        result.set(key, value);
+        result.set(key, {
+          ...value,
+          toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full'
+        });
       }
     }
     return result;

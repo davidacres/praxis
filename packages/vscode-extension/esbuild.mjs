@@ -17,7 +17,7 @@ const ctx = await esbuild.context({
   minify: production,
   sourcesContent: !production,
   logLevel: 'info',
-  external: ['vscode'],
+  external: ['vscode', 'fsevents'],
   tsconfig: 'tsconfig.json'
 });
 

@@ -195,6 +195,12 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
               Edit the board details below. Existing boards are shown but locked — they won't be
               created again.
             </p>
+            <div className="board-draft-header">
+              <span>Repository</span>
+              <span>Project code</span>
+              <span>Project name</span>
+              <span>Board name</span>
+            </div>
             <div className="board-draft-list">
               {drafts.map((row, index) => (
                 <div

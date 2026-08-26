@@ -90,14 +90,14 @@ test('editing a live folder issue writes the priority back to markdown', async (
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
 
   await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();
-  await window.locator('[data-testid="issue-edit-btn"]').click();
 
-  // The form is prefilled from the loaded issue.
+  // The details form is visible immediately and prefilled from the loaded issue.
+  await expect(window.locator('[data-testid="issue-edit-form"]')).toBeVisible();
   await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Edit me task');
   await expect(window.locator('[data-testid="issue-edit-priority"]')).toHaveValue('Medium');
 
   await window.locator('[data-testid="issue-edit-summary"]').fill('Edited task title');
-  await window.locator('[data-testid="issue-edit-priority"]').fill('High');
+  await window.locator('[data-testid="issue-edit-priority"]').selectOption('High');
 
   const taskPath = path.join(
     liveFolderDir,
@@ -108,12 +108,12 @@ test('editing a live folder issue writes the priority back to markdown', async (
 
   await window.locator('[data-testid="issue-edit-save-btn"]').click();
 
-  // Save exits edit mode and surfaces the new priority on the markdown file.
-  await expect(window.locator('[data-testid="issue-edit-form"]')).toHaveCount(0);
+  // Save keeps the form visible and writes the new priority to the markdown file.
+  await expect(window.locator('[data-testid="issue-edit-form"]')).toBeVisible();
   await expect.poll(() => fs.readFileSync(taskPath, 'utf-8')).toMatch(/\*\*Priority:\*\*\s*High/);
 
   // The summary is persisted too: the `# ` title heading is rewritten and the
-  // reloaded detail view shows the new title.
+  // reloaded form shows the new title.
   await expect.poll(() => fs.readFileSync(taskPath, 'utf-8')).toMatch(/^# Edited task title$/m);
-  await expect(window.locator('.detail-panel h4')).toHaveText('Edited task title');
+  await expect(window.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Edited task title');
 });

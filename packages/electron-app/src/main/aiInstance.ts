@@ -4,15 +4,19 @@ import {
   AcpAgentHost,
   AiSessionManager,
   CopilotAgentHost,
+  listCatalogModels,
   PROVIDER_DESCRIPTORS,
+  resolveGatewayUrlFromEnv,
   VercelAgentService,
   getStoredProviderApiKey,
+  isExecutableAvailable,
   resolveProviderApiKey,
   type AcpAgentLogger,
   type AiKeySource,
   type AiProvider,
   type AiProviderStatus,
   type CopilotAgentLogger,
+  type ModelOptions,
   type PermissionDecision,
   type VercelAgentLogger
 } from '@ticket-manager/core';
@@ -140,6 +144,49 @@ export function resolveAcpStartOptions(provider: AiProvider): { command: string;
   return { command };
 }
 
+/** The available models for a `hostKind: 'acp'` provider, or `undefined` for any other provider/no selector. */
+export async function listCliModelOptions(provider: AiProvider) {
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'acp') {
+    return undefined;
+  }
+  const { command, args } = resolveAcpStartOptions(provider);
+  const settings = getSettingsBackend().read();
+  return getAcpAgentHost().listAvailableModels({
+    command,
+    args,
+    workingDirectory: settings.ai.workingDirectory.trim() || undefined
+  });
+}
+
+/**
+ * The available models for a `kind: 'api'` provider (Vercel AI Gateway,
+ * OpenAI, Anthropic), fetched from its real model-listing endpoint and
+ * cached by `listCatalogModels` — `undefined` when no API key is
+ * configured or the fetch fails (network error, endpoint not supported).
+ */
+export async function listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined> {
+  const descriptor = PROVIDER_DESCRIPTORS[provider];
+  if (descriptor.kind !== 'api') {
+    return undefined;
+  }
+  const { apiKey, gatewayUrl, model } = await resolveConnectionOptions(provider);
+  if (!apiKey) {
+    return undefined;
+  }
+  // vercel-gateway carries a legacy env-var fallback for the URL too
+  // (AI_GATEWAY_URL etc. — see resolveGatewayUrlFromEnv's callers), which
+  // the real completions path already honors; match it here so the model
+  // picker resolves against the same gateway a session would actually use.
+  const url = provider === 'vercel-gateway' ? resolveGatewayUrlFromEnv(gatewayUrl) : gatewayUrl || descriptor.defaultBaseUrl;
+  try {
+    const options = await listCatalogModels(provider, { apiKey, url }, forceRefresh);
+    return { currentValue: model, options };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Resolves the runtime override (if any) for a `hostKind: 'copilot-sdk'` provider. */
 export function resolveCopilotStartOptions(provider: AiProvider): { runtimePath?: string; model?: string } {
   const descriptor = PROVIDER_DESCRIPTORS[provider];
@@ -193,14 +240,21 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
   if (descriptor.kind === 'cli-agent') {
     // No API key concept — auth is the CLI's own (e.g. `claude login`, or
     // Copilot's `GITHUB_TOKEN`/logged-in-user auth), outside this app's
-    // purview. "Configured" just reflects whether a command/runtime
-    // override exists to try.
+    // purview. "Configured" reflects a real, free, cross-platform check
+    // that the command actually resolves to a spawnable executable (no ACP
+    // handshake, no LLM call — see `isExecutableAvailable`'s doc comment).
     const isCopilot = descriptor.hostKind === 'copilot-sdk';
+    const cliPathOverride = settings.ai.providers[provider]?.cliPath?.trim();
+    const command = cliPathOverride || descriptor.defaultCommand;
+    // Copilot's default (no override) needs no probe — @github/copilot-sdk
+    // bundles its own runtime as a dependency of this app, so it's always
+    // present unless the user has pointed it at a custom path.
+    const configured = command ? await isExecutableAvailable(command) : true;
     return {
       provider,
-      configured: true,
+      configured,
       keySource: 'none',
-      gatewayUrl: settings.ai.providers[provider]?.cliPath?.trim() || descriptor.defaultCommand || 'bundled runtime',
+      gatewayUrl: command || 'bundled runtime',
       defaultModel: '',
       agentName: settings.ai.agentName,
       activeTasks: isCopilot ? getCopilotAgentHost().getActiveTaskIssueKeys() : getAcpAgentHost().getActiveTaskIssueKeys()
