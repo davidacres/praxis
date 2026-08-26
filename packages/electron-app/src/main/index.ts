@@ -14,6 +14,7 @@ import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
+import { registerGitIpc } from './gitIpc';
 import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
 import { initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
@@ -133,6 +134,7 @@ void app.whenReady().then(async () => {
   registerProjectIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
+  registerGitIpc();
   void getAgentRuntimeManager().refresh().then(async snapshot => {
     getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
     for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {

@@ -51,6 +51,7 @@ import type {
   ProjectRecord,
   UpdateProjectInput
 } from '../projects/projectTypes';
+import type { GitCommitDetails, GitDiffResult, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
@@ -474,6 +475,7 @@ export interface TicketManagerIpc {
   taskDesigner: TaskDesignerIpc;
   projects: ProjectsIpc;
   terminal: TerminalIpc;
+  git: GitIpc;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */
@@ -567,6 +569,23 @@ export interface TerminalIpc {
   onExit(listener: (event: TerminalExitEvent) => void): () => void;
   onContextAvailability(listener: (event: TerminalContextAvailabilityEvent) => void): () => void;
   onCommand(listener: (event: TerminalCommandEvent) => void): () => void;
+}
+
+export interface GitIpc {
+  open(repositoryPath?: string): Promise<GitRepositorySnapshot>;
+  refresh(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  status(repositoryPath: string): Promise<GitStatusSnapshot>;
+  getCommit(repositoryPath: string, hash: string): Promise<GitCommitDetails>;
+  getDiff(repositoryPath: string, hash: string, filePath?: string): Promise<GitDiffResult>;
+  stage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  unstage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  commit(repositoryPath: string, message: string): Promise<GitRepositorySnapshot>;
+  createBranch(repositoryPath: string, name: string, startPoint?: string): Promise<GitRepositorySnapshot>;
+  checkout(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  deleteBranch(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  pull(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  fetch(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  push(repositoryPath: string): Promise<GitRepositorySnapshot>;
 }
 
 // ── Task Designer ────────────────────────────────────────────────────────────

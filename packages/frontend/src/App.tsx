@@ -41,6 +41,7 @@ import {
   type BoardFilterPresentation,
   type BoardFilterValue
 } from './BoardFilterBar';
+import { GitGraphPage } from './GitGraphPage';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -73,7 +74,8 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   sessions: 'Sessions',
   issues: 'Issues',
   connections: 'Connections',
-  agents: 'Agents'
+  agents: 'Agents',
+  git: 'Git Graph'
 };
 
 export function App() {
@@ -512,6 +514,9 @@ export function App() {
         />
       );
     }
+    if (route.feature === 'git') {
+      return <GitGraphPage />;
+    }
     if (route.feature) {
       return (
         <div className="empty-state">
@@ -639,8 +644,12 @@ export function App() {
   // The secondary sidebar is a pane the title-bar button owns outright, like the
   // bottom panel — selecting an issue fills it, it does not summon it.
   // Project creation/home are dedicated main-content surfaces; the issue pane
-  // has no relevant selection there and would unnecessarily squeeze the forms.
-  const showAux = auxVisible && !route.projectId && route.feature !== 'overview';
+  // has no relevant selection there. Git Graph owns its own inspector column,
+  // so the global issue pane would squeeze its topology into a narrow strip.
+  const showAux = auxVisible
+    && !route.projectId
+    && route.feature !== 'overview'
+    && route.feature !== 'git';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]

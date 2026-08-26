@@ -16,7 +16,8 @@ export type FeatureId =
   | 'sessions'
   | 'issues'
   | 'connections'
-  | 'agents';
+  | 'agents'
+  | 'git';
 
 interface FeatureDef {
   id: FeatureId;
@@ -35,7 +36,8 @@ const FEATURES: FeatureDef[] = [
   { id: 'sessions', label: 'Sessions', icon: 'robot' },
   { id: 'issues', label: 'Issues', icon: 'ticket' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
-  { id: 'agents', label: 'Agents', icon: 'zap' }
+  { id: 'agents', label: 'Agents', icon: 'zap' },
+  { id: 'git', label: 'Git Graph', icon: 'git-branch' }
 ];
 
 export interface SidebarProps {

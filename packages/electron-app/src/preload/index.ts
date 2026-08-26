@@ -282,6 +282,22 @@ const ticketManager: TicketManagerIpc = {
     refresh: () => ipcRenderer.invoke('agentRuntime:refresh'),
     start: (agentId: string) => ipcRenderer.invoke('agentRuntime:start', agentId),
     activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName)
+  },
+  git: {
+    open: (repositoryPath?: string) => ipcRenderer.invoke('git:open', repositoryPath),
+    refresh: (repositoryPath: string) => ipcRenderer.invoke('git:refresh', repositoryPath),
+    status: (repositoryPath: string) => ipcRenderer.invoke('git:status', repositoryPath),
+    getCommit: (repositoryPath: string, hash: string) => ipcRenderer.invoke('git:getCommit', repositoryPath, hash),
+    getDiff: (repositoryPath: string, hash: string, filePath?: string) => ipcRenderer.invoke('git:getDiff', repositoryPath, hash, filePath),
+    stage: (repositoryPath: string, paths: string[]) => ipcRenderer.invoke('git:stage', repositoryPath, paths),
+    unstage: (repositoryPath: string, paths: string[]) => ipcRenderer.invoke('git:unstage', repositoryPath, paths),
+    commit: (repositoryPath: string, message: string) => ipcRenderer.invoke('git:commit', repositoryPath, message),
+    createBranch: (repositoryPath: string, name: string, startPoint?: string) => ipcRenderer.invoke('git:createBranch', repositoryPath, name, startPoint),
+    checkout: (repositoryPath: string, name: string) => ipcRenderer.invoke('git:checkout', repositoryPath, name),
+    deleteBranch: (repositoryPath: string, name: string) => ipcRenderer.invoke('git:deleteBranch', repositoryPath, name),
+    pull: (repositoryPath: string) => ipcRenderer.invoke('git:pull', repositoryPath),
+    fetch: (repositoryPath: string) => ipcRenderer.invoke('git:fetch', repositoryPath),
+    push: (repositoryPath: string) => ipcRenderer.invoke('git:push', repositoryPath)
   }
 };
 

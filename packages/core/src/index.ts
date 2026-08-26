@@ -52,3 +52,5 @@ export * from './gitlab/gitLabBoardService';
 export * from './jira/jiraConfigStore';
 export * from './jira/jiraMcpConnectionResolver';
 export * from './jira/jiraService';
+export * from './git/gitGraph';
+export * from './git/gitParsing';

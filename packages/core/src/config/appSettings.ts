@@ -173,6 +173,19 @@ export interface TerminalSettings {
   gpuAcceleration: boolean;
 }
 
+export interface GitSettings {
+  executablePath: string;
+  defaultBranch: string;
+  fetchIntervalMinutes: number;
+}
+
+export interface GitVisualSettings {
+  branchColorsEnabled: boolean;
+  mergeMarkersEnabled: boolean;
+  orientation: 'vertical' | 'horizontal';
+  performanceMode: boolean;
+}
+
 /** Top-level settings shape — one nested object per Settings-page category. */
 export interface AppSettings {
   ai: AiSettings;
@@ -183,6 +196,8 @@ export interface AppSettings {
   preview: PreviewSettings;
   appearance: AppearanceSettings;
   terminal: TerminalSettings;
+  git: GitSettings;
+  gitVisual: GitVisualSettings;
 }
 
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
@@ -252,6 +267,17 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     bellSound: false,
     shellIntegration: true,
     gpuAcceleration: true
+  },
+  git: {
+    executablePath: '',
+    defaultBranch: '',
+    fetchIntervalMinutes: 0
+  },
+  gitVisual: {
+    branchColorsEnabled: true,
+    mergeMarkersEnabled: true,
+    orientation: 'vertical',
+    performanceMode: false
   }
 };
 
@@ -275,6 +301,8 @@ export interface AppSettingsPatch {
     installedThemeIds?: string[];
   };
   terminal?: Partial<TerminalSettings>;
+  git?: Partial<GitSettings>;
+  gitVisual?: Partial<GitVisualSettings>;
 }
 
 /** `true` when value is a plain object — guards against array/null confusion in the JSON loader. */
@@ -491,6 +519,23 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,installedThemeIds: [...DEFAULT_APP_SETTINGS.appearance.installedThemeIds]
       };
 
+  const git: GitSettings = isRecord(raw) && isRecord(raw.git)
+    ? {
+        executablePath: readString(raw.git.executablePath, DEFAULT_APP_SETTINGS.git.executablePath),
+        defaultBranch: readString(raw.git.defaultBranch, DEFAULT_APP_SETTINGS.git.defaultBranch),
+        fetchIntervalMinutes: clampNumber(raw.git.fetchIntervalMinutes, 0, 1440, DEFAULT_APP_SETTINGS.git.fetchIntervalMinutes)
+      }
+    : { ...DEFAULT_APP_SETTINGS.git };
+
+  const gitVisual: GitVisualSettings = isRecord(raw) && isRecord(raw.gitVisual)
+    ? {
+        branchColorsEnabled: readBoolean(raw.gitVisual.branchColorsEnabled, DEFAULT_APP_SETTINGS.gitVisual.branchColorsEnabled),
+        mergeMarkersEnabled: readBoolean(raw.gitVisual.mergeMarkersEnabled, DEFAULT_APP_SETTINGS.gitVisual.mergeMarkersEnabled),
+        orientation: raw.gitVisual.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+        performanceMode: readBoolean(raw.gitVisual.performanceMode, DEFAULT_APP_SETTINGS.gitVisual.performanceMode)
+      }
+    : { ...DEFAULT_APP_SETTINGS.gitVisual };
+
   const terminal: TerminalSettings = isRecord(raw) && isRecord(raw.terminal)
     ? {
         defaultProfileId: readString(raw.terminal.defaultProfileId, DEFAULT_APP_SETTINGS.terminal.defaultProfileId),
@@ -516,7 +561,9 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     mcpServer,
     preview,
     appearance,
-    terminal
+    terminal,
+    git,
+    gitVisual
   };
 }
 
@@ -587,6 +634,8 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     ...base.terminal,
     ...(patch.terminal ?? {})
   };
+  const git: GitSettings = { ...base.git, ...(patch.git ?? {}) };
+  const gitVisual: GitVisualSettings = { ...base.gitVisual, ...(patch.gitVisual ?? {}) };
 
   return {
     ai,
@@ -596,7 +645,9 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     mcpServer,
     preview,
     appearance,
-    terminal
+    terminal,
+    git,
+    gitVisual
   };
 }
 
