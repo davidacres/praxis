@@ -25,6 +25,7 @@ import { backendModeMeta, boardTypeToken } from './boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from './boardTransitionMatch';
 import { isTerminalAgentState } from './aiSessionState';
+import { GitGraphPage } from './GitGraphPage';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -54,7 +55,8 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   issues: 'Issues',
   connections: 'Connections',
   agents: 'Agents',
-  settings: 'Settings'
+  settings: 'Settings',
+  git: 'Git Graph'
 };
 
 export function App() {
@@ -370,6 +372,9 @@ export function App() {
         />
       );
     }
+    if (route.feature === 'git') {
+      return <GitGraphPage />;
+    }
     if (route.feature) {
       return (
         <div className="empty-state">
@@ -477,7 +482,9 @@ export function App() {
 
   // The secondary sidebar is a pane the title-bar button owns outright, like the
   // bottom panel — selecting an issue fills it, it does not summon it.
-  const showAux = auxVisible;
+  // Git Graph owns its own inspector column; keeping the global issue peek pane
+  // open here would squeeze the topology into a misleading narrow strip.
+  const showAux = auxVisible && route.feature !== 'git';
 
   return (
     <div className="window-root">

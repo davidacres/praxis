@@ -89,6 +89,17 @@ export const DEFAULT_APP_SETTINGS = {
       Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
       Lowest: '#22C55E'
     }
+  },
+  git: {
+    executablePath: '',
+    defaultBranch: '',
+    fetchIntervalMinutes: 0
+  },
+  gitVisual: {
+    branchColorsEnabled: true,
+    mergeMarkersEnabled: true,
+    orientation: 'vertical' as 'vertical' | 'horizontal',
+    performanceMode: false
   }
 } as const;
 
