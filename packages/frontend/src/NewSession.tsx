@@ -6,7 +6,8 @@ import type {
   AgentToolMode,
   Board,
   IssueSummary,
-  ModelOptions
+  ModelOptions,
+  SessionMode
 } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
@@ -36,13 +37,14 @@ export interface NewSessionProps {
   boards: Board[];
   /** Starts the session; rejects (e.g. provider not configured) surface inline. */
   onSubmit: (input: {
-    board: Board;
-    issueKey: string;
+    board?: Board;
+    issueKey?: string;
     title: string;
     goal: string;
     provider?: AiProvider;
     model?: string;
     toolMode: AgentToolMode;
+    mode: SessionMode;
   }) => Promise<void>;
   /**
    * Number of configured tracker connections. Zero means every board on screen
@@ -56,6 +58,8 @@ export interface NewSessionProps {
   toolModeForBoard?: (board: Board) => AgentToolMode | undefined;
   onSelectedBoardChange?: (board: Board | undefined) => void;
 }
+
+const FREEFORM_BOARD_ID = '__freeform__';
 
 /**
  * The default centre view. Laid out against the reference chrome: a muted
@@ -99,6 +103,7 @@ export function NewSession({
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
   const [toolMode, setToolMode] = useState<AgentToolMode>('full');
+  const [mode, setMode] = useState<SessionMode>('chat');
   const [modelFilter, setModelFilter] = useState('');
   const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
@@ -121,7 +126,7 @@ export function NewSession({
   }, [selectedBoard, toolModeForBoard]);
 
   useEffect(() => {
-    if (!boards.some(board => board.id === selectedBoardId)) {
+    if (selectedBoardId !== FREEFORM_BOARD_ID && !boards.some(board => board.id === selectedBoardId)) {
       setSelectedBoardId(boards[0]?.id ?? '');
     }
   }, [boards, selectedBoardId]);
@@ -160,7 +165,7 @@ export function NewSession({
   }, [selectedBoard]);
 
   useEffect(() => {
-    setSessionTitle(selectedIssueKey);
+    setSessionTitle(selectedIssueKey || 'New session');
     setEditingTitle(false);
   }, [selectedIssueKey]);
 
@@ -337,20 +342,21 @@ export function NewSession({
   const submit = async () => {
     const trimmed = goal.trim();
     const title = sessionTitle.trim();
-    if (!selectedBoard || !selectedIssueKey || !title || !trimmed || submitting) {
+    if (!title || !trimmed || submitting) {
       return;
     }
     setSubmitting(true);
     setError(undefined);
     try {
       await onSubmit({
-        board: selectedBoard,
-        issueKey: selectedIssueKey,
+        ...(selectedBoard ? { board: selectedBoard } : {}),
+        ...(selectedIssueKey ? { issueKey: selectedIssueKey } : {}),
         title,
         goal: trimmed,
         provider: selectedProvider,
         model: selectedModel,
-        toolMode
+        toolMode,
+        mode
       });
       setGoal('');
     } catch (err) {
@@ -370,7 +376,7 @@ export function NewSession({
           </div>
         )}
         <h1 className="session-heading">
-          New session in{' '}
+          {selectedBoard ? 'New session in' : 'New session'}{' '}
           <button
             ref={boardChipRef}
             className="heading-chip"
@@ -381,7 +387,7 @@ export function NewSession({
             onClick={() => toggleHeadingMenu('board', boardChipRef)}
           >
             <Icon name="folder" size={17} />
-            <span>{selectedBoard?.name ?? 'Select board'}</span>
+            <span>{selectedBoard?.name ?? 'No board · free-form chat'}</span>
             <Icon name="chevron-down" size={14} />
           </button>{' '}
           {boardMenuPos && createPortal(
@@ -392,6 +398,23 @@ export function NewSession({
               aria-label="Session board"
               style={{ position: 'fixed', top: boardMenuPos.top, left: boardMenuPos.left }}
             >
+              <button
+                type="button"
+                className={`composer-provider-option${selectedBoardId === FREEFORM_BOARD_ID ? ' active' : ''}`}
+                data-testid="new-session-no-board-option"
+                role="option"
+                aria-selected={selectedBoardId === FREEFORM_BOARD_ID}
+                onClick={() => {
+                  setSelectedBoardId(FREEFORM_BOARD_ID);
+                  setBoardMenuPos(undefined);
+                }}
+              >
+                <Icon name="chats" size={14} />
+                <span className="heading-option-body">
+                  <strong>No board</strong>
+                  <small>Start a completely free-form chat</small>
+                </span>
+              </button>
               {boards.length === 0 && <div className="popover-label">No boards available</div>}
               {boards.map(board => (
                 <button
@@ -423,11 +446,11 @@ export function NewSession({
             data-testid="new-session-ticket-select"
             aria-haspopup="listbox"
             aria-expanded={Boolean(ticketMenuPos)}
-            disabled={ticketsLoading || openTickets.length === 0}
+            disabled={ticketsLoading}
             onClick={() => toggleHeadingMenu('ticket', ticketChipRef)}
           >
             <Icon name="ticket" size={17} />
-            <span>{ticketsLoading ? 'Loading tickets…' : selectedIssueKey || 'No open tickets'}</span>
+            <span>{ticketsLoading ? 'Loading tickets…' : selectedIssueKey || 'No ticket · free-form chat'}</span>
             <Icon name="chevron-down" size={14} />
           </button>
           {ticketMenuPos && createPortal(
@@ -438,6 +461,23 @@ export function NewSession({
               aria-label="Open ticket"
               style={{ position: 'fixed', top: ticketMenuPos.top, left: ticketMenuPos.left }}
             >
+              <button
+                type="button"
+                className={`composer-provider-option${selectedIssueKey ? '' : ' active'}`}
+                data-testid="new-session-no-ticket-option"
+                role="option"
+                aria-selected={!selectedIssueKey}
+                onClick={() => {
+                  setSelectedIssueKey('');
+                  setTicketMenuPos(undefined);
+                }}
+              >
+                <Icon name="chats" size={14} />
+                <span className="heading-option-body">
+                  <strong>No ticket</strong>
+                  <small>Start a free-form chat session</small>
+                </span>
+              </button>
               {openTickets.map(issue => (
                 <button
                   key={issue.key}
@@ -474,7 +514,7 @@ export function NewSession({
               autoFocus
               onChange={event => setSessionTitle(event.target.value)}
               onBlur={() => {
-                setSessionTitle(current => current.trim() || selectedIssueKey);
+                setSessionTitle(current => current.trim() || selectedIssueKey || 'New session');
                 setEditingTitle(false);
               }}
               onKeyDown={event => {
@@ -489,14 +529,14 @@ export function NewSession({
               }}
             />
           ) : (
-            <strong data-testid="new-session-title">{sessionTitle || 'Select a ticket'}</strong>
+            <strong data-testid="new-session-title">{sessionTitle || 'New session'}</strong>
           )}
           <button
             className="icon-btn icon-btn-sm"
             aria-label="Edit session name"
             title="Edit session name"
             data-testid="new-session-title-edit"
-            disabled={!selectedIssueKey}
+            disabled={false}
             onClick={() => {
               titleBeforeEditRef.current = sessionTitle;
               setEditingTitle(true);
@@ -553,6 +593,20 @@ export function NewSession({
           />
 
           <div className="composer-controls">
+            <div className="session-mode-toggle" role="group" aria-label="Session mode">
+              {(['chat', 'analysis', 'review'] as SessionMode[]).map(option => (
+                <button
+                  key={option}
+                  type="button"
+                  className={mode === option ? 'active' : ''}
+                  data-testid={`new-session-mode-${option}`}
+                  aria-pressed={mode === option}
+                  onClick={() => setMode(option)}
+                >
+                  {option[0].toUpperCase() + option.slice(1)}
+                </button>
+              ))}
+            </div>
             <button className="composer-chip" aria-label="Attach">
               <Icon name="plus" size={16} />
             </button>
@@ -690,7 +744,7 @@ export function NewSession({
               className="composer-send"
               aria-label="Start session"
               data-testid="new-session-submit"
-              disabled={!selectedBoard || !selectedIssueKey || !sessionTitle.trim() || !goal.trim() || submitting}
+              disabled={!sessionTitle.trim() || !goal.trim() || submitting}
               onClick={() => void submit()}
             >
               <Icon name="arrow-up" size={15} />

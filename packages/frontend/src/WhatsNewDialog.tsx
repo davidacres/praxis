@@ -90,13 +90,13 @@ const RELEASES: Release[] = [
   {
     version: '0.1.0',
     label: 'First desktop preview',
-    summary: 'The first desktop home for Ticket Manager boards, tickets and sessions.',
+    summary: 'The first desktop home for Praxis boards, tickets and sessions.',
     sections: [
       {
         title: 'Features',
         icon: 'sparkles',
         items: [
-          'Open and navigate Ticket Manager boards in a dedicated desktop app.',
+          'Open and navigate Praxis boards in a dedicated desktop app.',
           'View ticket details alongside the active board.',
           'Use a resizable workspace with board, details and output panels.',
           'Choose an appearance theme and accent colour.'
@@ -108,9 +108,11 @@ const RELEASES: Release[] = [
 
 export interface WhatsNewDialogProps {
   onClose: () => void;
+  /** Replays the startup splash animation (worm-drawn "Praxis" wordmark) without restarting the app — a quick way to preview changes to it. */
+  onReplaySplash: () => void;
 }
 
-export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
+export function WhatsNewDialog({ onClose, onReplaySplash }: WhatsNewDialogProps) {
   const [selectedVersion, setSelectedVersion] = useState(RELEASES[0].version);
   const selected = RELEASES.find(release => release.version === selectedVersion) ?? RELEASES[0];
 
@@ -140,6 +142,15 @@ export function WhatsNewDialog({ onClose }: WhatsNewDialogProps) {
             <span>·</span>
             <span>Features, improvements and fixes</span>
           </div>
+          <button
+            className="icon-btn icon-btn-sm"
+            type="button"
+            aria-label="Replay startup splash"
+            title="Replay startup splash"
+            onClick={onReplaySplash}
+          >
+            <Icon name="play" size={14} />
+          </button>
           <button
             className="icon-btn icon-btn-sm whats-new-close"
             type="button"

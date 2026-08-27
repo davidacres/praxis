@@ -5,6 +5,7 @@ import type {
   AiAnalysisState,
   AiProviderStatus,
   PermissionDecision,
+  SessionMode,
   TerminalSessionInfo
 } from '@ticket-manager/core';
 import { Icon } from './Icon';
@@ -62,6 +63,12 @@ function sessionTitle(session: AgentSessionRecord): string {
   return session.title?.trim() || session.taskDefinition.goal.split('\n')[0];
 }
 
+function sessionMode(session: AgentSessionRecord): 'Chat' | 'Analysis' | 'Review' {
+  if (session.mode === 'analysis' || session.taskDefinition.kind === 'analysis') return 'Analysis';
+  if (session.mode === 'review' || session.taskDefinition.kind === 'review') return 'Review';
+  return 'Chat';
+}
+
 function decodeContextText(value: string): string {
   return value.replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
 }
@@ -94,12 +101,14 @@ export function SessionsPage({
   const [followUp, setFollowUp] = useState('');
   const [followUpError, setFollowUpError] = useState<string | undefined>();
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [abortingSession, setAbortingSession] = useState(false);
   const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
   const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
   const [editingSessionKey, setEditingSessionKey] = useState<string | undefined>();
   const [sessionTitleDraft, setSessionTitleDraft] = useState('');
   const [sessionMutationKey, setSessionMutationKey] = useState<string | undefined>();
   const [sessionListError, setSessionListError] = useState<string | undefined>();
+  const [switchingMode, setSwitchingMode] = useState(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
@@ -153,9 +162,7 @@ export function SessionsPage({
   const selectedEventCount = selected?.events.length ?? 0;
   const conversationEvents = selected?.events.filter(
     event =>
-      ((event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail)) ||
-      event.type === 'tool_start' ||
-      event.type === 'tool_complete'
+      (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_start' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
   ) ?? [];
   const latestEventResponse = [...conversationEvents]
     .reverse()
@@ -169,7 +176,7 @@ export function SessionsPage({
     if (node) {
       node.scrollTop = node.scrollHeight;
     }
-  }, [selected?.issueKey, selectedEventCount]);
+  }, [selected?.issueKey, selectedEventCount, selected?.responseText, latestEventResponse]);
 
   useEffect(() => {
     setFollowUp('');
@@ -214,6 +221,38 @@ export function SessionsPage({
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setSendingFollowUp(false);
+    }
+  };
+
+  const abortSession = async () => {
+    if (!selected || isTerminalAgentState(selected.state)) return;
+    setAbortingSession(true);
+    setFollowUpError(undefined);
+    try {
+      await window.ticketManager.ai.abort(selected.issueKey);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAbortingSession(false);
+    }
+  };
+
+  const switchMode = async (mode: SessionMode) => {
+    if (!selected || mode === (selected.mode ?? 'chat') || !isTerminalAgentState(selected.state)) return;
+    setSwitchingMode(true);
+    setFollowUpError(undefined);
+    try {
+      await window.ticketManager.ai.switchSessionMode(selected.issueKey, mode);
+      const transition = mode === 'analysis'
+        ? 'Switch this conversation into Analysis mode. Inspect the relevant ticket and workspace read-only, then return a concrete analysis and implementation plan. Do not make changes.'
+        : mode === 'review'
+          ? 'Switch this conversation into Review mode. Review the relevant ticket, workspace, and current implementation read-only, then report findings, risks, and actionable recommendations. Do not make changes.'
+          : 'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.';
+      await window.ticketManager.ai.continueSession(selected.issueKey, transition);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSwitchingMode(false);
     }
   };
 
@@ -333,6 +372,7 @@ export function SessionsPage({
               >
                 <span className="session-item-top">
                   <span className="session-item-key">{session.issueKey}</span>
+                  <span className="session-mode-badge">{sessionMode(session)}</span>
                   <span className={agentStateBadgeClass(session.state)}>
                     {agentStateLabel(session.state)}
                   </span>
@@ -423,6 +463,23 @@ export function SessionsPage({
               <span className={agentStateBadgeClass(selected.state)} data-testid="session-state-badge">
                 {agentStateLabel(selected.state)}
               </span>
+              <span className="session-mode-badge" data-testid="session-mode-badge">{sessionMode(selected)}</span>
+              {isTerminalAgentState(selected.state) && (
+                <div className="session-mode-switch" role="group" aria-label="Switch session mode">
+                  {(['chat', 'analysis', 'review'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={selected.mode === mode || (!selected.mode && mode === 'chat') ? 'active' : ''}
+                      disabled={switchingMode}
+                      onClick={() => void switchMode(mode)}
+                      data-testid={`session-switch-mode-${mode}`}
+                    >
+                      {mode[0].toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="session-item-meta">{selected.stepCount} steps</span>
               {(selected.provider || selected.model) && (
                 <span className="session-item-meta" data-testid="session-runtime">
@@ -532,12 +589,13 @@ export function SessionsPage({
                 if (event.type === 'tool_start' || event.type === 'tool_complete') {
                   return (
                     <details
-                      className={`session-chat-tool ${event.type === 'tool_complete' ? 'is-complete' : 'is-running'}`}
+                      className={`session-chat-tool${event.type === 'tool_start' ? ' is-running' : ''}`}
                       key={`${event.timestamp}-${index}`}
                       data-testid="session-chat-tool"
+                      open={event.type === 'tool_complete'}
                     >
                       <summary>
-                        <Icon name={event.type === 'tool_complete' ? 'check-square' : 'tools'} size={13} />
+                        <Icon name={event.type === 'tool_start' ? 'tools' : 'check-square'} size={13} />
                         <span>{event.summary}</span>
                         <span className="session-chat-tool-time">{formatTime(event.timestamp)}</span>
                       </summary>
@@ -624,7 +682,7 @@ export function SessionsPage({
                     }
                   }}
                 />
-                <div className="composer-controls">
+              <div className="composer-controls">
                   {terminalForContext && (
                     <button
                       className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
@@ -653,14 +711,20 @@ export function SessionsPage({
                   )}
                   <span className="spacer" />
                   <button
-                    className="composer-send"
-                    aria-label={sendingFollowUp ? 'Sending message' : 'Send message'}
-                    title={sendingFollowUp ? 'Sending…' : 'Send message'}
+                    className={`composer-send${!isTerminalAgentState(selected.state) ? ' composer-send-cancel' : ''}`}
+                    aria-label={!isTerminalAgentState(selected.state) ? 'Cancel response' : sendingFollowUp ? 'Sending message' : 'Send message'}
+                    title={!isTerminalAgentState(selected.state) ? (abortingSession ? 'Cancelling…' : 'Cancel response') : sendingFollowUp ? 'Sending…' : 'Send message'}
                     data-testid="session-follow-up-send"
-                    disabled={!isTerminalAgentState(selected.state) || sendingFollowUp || !followUp.trim()}
-                    onClick={() => void sendFollowUp()}
+                    disabled={abortingSession || (isTerminalAgentState(selected.state) && (sendingFollowUp || !followUp.trim()))}
+                    onClick={() => {
+                      if (!isTerminalAgentState(selected.state)) {
+                        void abortSession();
+                      } else {
+                        void sendFollowUp();
+                      }
+                    }}
                   >
-                    <Icon name="arrow-up" size={15} />
+                    <Icon name={!isTerminalAgentState(selected.state) ? 'close' : 'arrow-up'} size={15} />
                   </button>
                 </div>
               </div>

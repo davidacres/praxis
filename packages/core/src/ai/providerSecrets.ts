@@ -18,6 +18,14 @@ export function secretKeyForProvider(provider: AiProvider): string {
   return provider === 'vercel-gateway' ? SECRET_VERCEL_API_KEY : `ticketManager.${provider}ApiKey`;
 }
 
+/** Providers whose credentials are stored in the AI provider secrets namespace. */
+const API_KEY_PROVIDERS: AiProvider[] = ['vercel-gateway', 'openai', 'anthropic'];
+
+/** Clears all AI provider keys without touching connection or OAuth secrets. */
+export async function resetProviderApiKeys(secrets: SecretsStore): Promise<void> {
+  await Promise.all(API_KEY_PROVIDERS.map(provider => clearProviderApiKey(secrets, provider)));
+}
+
 export async function getStoredProviderApiKey(
   secrets: SecretsStore,
   provider: AiProvider

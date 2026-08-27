@@ -34,14 +34,97 @@ export interface GitRepositorySnapshot {
   loadedAt: string;
 }
 
+export type GitRepositoryPreflightStatus =
+  | 'no-workspace'
+  | 'missing-folder'
+  | 'inaccessible-folder'
+  | 'not-a-repository'
+  | 'repository'
+  | 'worktree'
+  | 'bare-repository';
+
+export interface GitRepositoryPreflight {
+  status: GitRepositoryPreflightStatus;
+  requestedPath?: string;
+  repositoryPath?: string;
+  repositoryName?: string;
+  message: string;
+}
+
 export interface GitCommitDetails extends GitCommitNode {
   body: string;
   changedFiles: Array<{ path: string; additions: number; deletions: number; status: string }>;
 }
 
+export type GitComparisonKind = 'working' | 'staged' | 'commit' | 'compare';
+
+export interface GitDiffRequest {
+  kind: GitComparisonKind;
+  /** Commit/ref for a commit diff, or the left side of a comparison. */
+  left?: string;
+  /** Right side of a two-ref comparison. */
+  right?: string;
+  path?: string;
+  contextLines?: number;
+  ignoreWhitespace?: boolean;
+}
+
+export type GitDiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'binary' | 'unknown';
+export type GitDiffLineKind = 'context' | 'addition' | 'deletion' | 'notice';
+
+export interface GitDiffLine {
+  kind: GitDiffLineKind;
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+
+export interface GitDiffHunk {
+  id: string;
+  header: string;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: GitDiffLine[];
+  /** A self-contained patch used for safe hunk-level working-tree operations. */
+  patch: string;
+}
+
+export interface GitDiffFile {
+  id: string;
+  oldPath?: string;
+  newPath?: string;
+  displayPath: string;
+  status: GitDiffFileStatus;
+  additions: number;
+  deletions: number;
+  isBinary: boolean;
+  hunks: GitDiffHunk[];
+}
+
+export interface GitDiffDocument {
+  request: GitDiffRequest;
+  title: string;
+  subtitle: string;
+  additions: number;
+  deletions: number;
+  files: GitDiffFile[];
+  generatedAt: string;
+}
+
+/** Legacy raw-patch contract retained for existing integrations while the structured viewer rolls out. */
 export interface GitDiffResult {
   commit: string;
   path?: string;
+  patch: string;
+}
+
+export type GitHunkAction = 'stage' | 'unstage' | 'discard';
+
+export interface GitHunkActionRequest {
+  action: GitHunkAction;
+  path: string;
   patch: string;
 }
 
@@ -50,8 +133,39 @@ export interface GitChangedFile {
   indexStatus: string;
   worktreeStatus: string;
   staged: boolean;
+  conflicted?: boolean;
   additions?: number;
   deletions?: number;
+}
+
+export interface GitConflictFile {
+  path: string;
+  base: string;
+  current: string;
+  incoming: string;
+  result: string;
+  isBinary: boolean;
+}
+
+export type GitConflictResolution =
+  | { strategy: 'current' | 'incoming' }
+  | { strategy: 'manual'; content: string };
+
+export interface GitFileHistoryEntry {
+  hash: string;
+  shortHash: string;
+  author: string;
+  date: string;
+  message: string;
+}
+
+export interface GitBlameLine {
+  lineNumber: number;
+  commit: string;
+  shortHash: string;
+  author: string;
+  date: string;
+  content: string;
 }
 
 export interface GitStatusSnapshot {
@@ -60,6 +174,7 @@ export interface GitStatusSnapshot {
   ahead: number;
   behind: number;
   files: GitChangedFile[];
+  operation?: 'merge' | 'rebase' | 'cherry-pick' | 'revert';
 }
 
 export function buildCommitGraph(

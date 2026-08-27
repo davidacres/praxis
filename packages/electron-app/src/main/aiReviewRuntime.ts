@@ -26,6 +26,7 @@ export interface AiReviewRuntimeOptions {
   systemPrompt?: string;
   signal?: AbortSignal;
   onUpdate?: (markdown: string) => void;
+  userPrompt?: string;
 }
 
 /** Runs ticket review/analysis through the exact runtime selected in ticket details. */
@@ -36,7 +37,9 @@ export async function reviewIssueWithRuntime(
   const settings = getSettingsBackend().read();
   const descriptor = PROVIDER_DESCRIPTORS[options.provider];
   const agentName = settings.ai.agentName.trim() || descriptor.label;
-  const systemPrompt = options.systemPrompt?.trim() || DEFAULT_REVIEW_PROMPT;
+  const systemPrompt = [options.systemPrompt?.trim() || DEFAULT_REVIEW_PROMPT, options.userPrompt?.trim() ? `User follow-up:\n${options.userPrompt.trim()}` : undefined]
+    .filter((value): value is string => Boolean(value))
+    .join('\n\n');
 
   if (descriptor.kind === 'api') {
     const connection = await resolveConnectionOptions(options.provider);

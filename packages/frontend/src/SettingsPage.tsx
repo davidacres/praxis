@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
 import type {
   AiProvider,
   AiProviderStatus,
@@ -17,7 +17,8 @@ import { Icon, type IconName } from './Icon';
 import { ModelManagerPanel } from './ModelManagerPanel';
 import { MODEL_PROVIDERS } from './modelProviders';
 import { useSettings } from './useSettings';
-import { applyThemePreference, getInitialThemeId, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
+import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
+import { SURFACE_PACKS, type SurfacePackDefinition } from './surfacePacks';
 
 export type SettingsCategory =
   | 'overview'
@@ -51,7 +52,7 @@ const CATEGORIES: CategoryDef[] = [
     id: 'themes',
     label: 'Themes',
     icon: 'theme',
-    description: 'Choose a complete color palette for the Ticket Manager interface.'
+    description: 'Choose a complete color palette for the Praxis interface.'
   },
   {
     id: 'terminal',
@@ -571,6 +572,7 @@ function AiSection({
   const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resettingKeys, setResettingKeys] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [managingModels, setManagingModels] = useState(false);
 
@@ -604,6 +606,21 @@ function AiSection({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const resetProviderKeys = async () => {
+    if (!window.confirm('Reset all saved AI provider keys? You will need to enter them again.')) return;
+    setResettingKeys(true);
+    setError(undefined);
+    try {
+      await window.ticketManager.ai.resetProviderApiKeys();
+      setStatuses([]);
+      reloadStatuses();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setResettingKeys(false);
     }
   };
 
@@ -665,7 +682,22 @@ function AiSection({
   return (
     <>
       <CategoryHeader category={category} />
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          <span>{error}</span>
+          {error.includes('safeStorage.decryptString') && (
+            <button
+              type="button"
+              className="btn"
+              data-testid="ai-reset-provider-keys"
+              disabled={resettingKeys}
+              onClick={() => void resetProviderKeys()}
+            >
+              {resettingKeys ? 'Resetting…' : 'Reset encrypted provider keys'}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="settings-list" data-testid="ai-provider-list">
         {AI_PROVIDERS.map(meta => {
@@ -1040,13 +1072,15 @@ function ThemePreviewCard({
   active,
   onSelect,
   installed = true,
-  onInstall
+  onInstall,
+  onEdit
 }: {
   theme: ThemeDefinition;
   active: boolean;
   onSelect: () => void;
   installed?: boolean;
   onInstall?: () => void;
+  onEdit?: () => void;
 }) {
   const colors = theme.preview;
   const previewStyle = {
@@ -1071,6 +1105,8 @@ function ThemePreviewCard({
       aria-label={`${theme.name}, ${theme.mode} theme${active ? ', active' : installed ? '' : ', available in marketplace'}`}
       data-testid={`theme-card-${theme.id}`}
       onClick={installed ? onSelect : onInstall}
+      onDoubleClick={onEdit}
+      title={onEdit ? 'Double-click to edit custom theme' : undefined}
     >
       <span className="theme-card-preview" aria-hidden="true">
         {installed && <span className="theme-card-installed">Installed</span>}
@@ -1096,19 +1132,160 @@ function ThemePreviewCard({
   );
 }
 
+/**
+ * A surface-pack card. The swatch renders the pack's material *over the live
+ * theme tokens*, so the preview is the real pack × theme combination rather
+ * than a generic mock.
+ */
+function SurfacePackCard({
+  pack,
+  active,
+  onSelect
+}: {
+  pack: SurfacePackDefinition;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`surface-pack-card${active ? ' active' : ''}`}
+      aria-pressed={active}
+      aria-label={`${pack.name} surface${active ? ', active' : ''}`}
+      data-testid={`surface-card-${pack.id}`}
+      onClick={onSelect}
+    >
+      <span className="surface-pack-swatch" aria-hidden="true">
+        <span className="surface-pack-swatch-canvas" style={{ background: pack.swatch.canvas ?? 'var(--bg)' }} />
+        <span
+          className="surface-pack-swatch-panel"
+          style={{
+            backgroundColor: 'var(--bg-elevated)',
+            backgroundImage: pack.swatch.panel ?? 'none',
+            mixBlendMode: (pack.swatch.blend as CSSProperties['mixBlendMode']) ?? 'normal'
+          }}
+        />
+      </span>
+      <span className="surface-pack-meta">
+        <strong>{pack.name}</strong>
+        {active && <span className="surface-pack-active">Active</span>}
+      </span>
+      <span className="surface-pack-description">{pack.description}</span>
+    </button>
+  );
+}
+
+const CUSTOM_COLOR_FIELDS = [
+  ['canvas', 'Canvas'], ['panel', 'Panel'], ['raised', 'Raised'], ['border', 'Border'], ['text', 'Text'],
+  ['muted', 'Muted text'], ['accent', 'Accent'], ['success', 'Success'], ['warning', 'Warning'], ['danger', 'Danger']
+] as const;
+
+function CustomThemeEditor({
+  theme, onChange, onSave, onDelete, onCancel, onDuplicate, onExport
+}: {
+  theme: ThemeDefinition & { source: 'custom' };
+  onChange: (theme: ThemeDefinition & { source: 'custom' }) => void;
+  onSave: () => void;
+  onDelete?: () => void;
+  onCancel: () => void;
+  onDuplicate?: () => void;
+  onExport?: () => void;
+}) {
+  const update = (patch: Partial<ThemeDefinition>) => onChange({ ...theme, ...patch, source: 'custom' });
+  const updateColor = (key: string, value: string) => onChange({ ...theme, source: 'custom', preview: { ...theme.preview, [key]: value } });
+  return <div className="custom-theme-editor" role="region" aria-label="Custom theme editor">
+    <div className="custom-theme-editor-heading"><div><strong>{theme.id.startsWith('custom-') ? 'Custom theme' : 'Edit custom theme'}</strong><span>Changes preview live after saving.</span></div><button type="button" className="icon-btn icon-btn-sm" aria-label="Close custom theme editor" onClick={onCancel}>×</button></div>
+    <div className="custom-theme-editor-grid">
+      <label>Name<input value={theme.name} onChange={event => update({ name: event.target.value })} maxLength={80} /></label>
+      <label>Mode<select value={theme.mode} onChange={event => update({ mode: event.target.value as 'light' | 'dark' })}><option value="light">Light</option><option value="dark">Dark</option></select></label>
+      <label className="wide">Description<input value={theme.description} onChange={event => update({ description: event.target.value })} maxLength={240} /></label>
+    </div>
+    <div className="custom-theme-color-grid">{CUSTOM_COLOR_FIELDS.map(([key, label]) => <label key={key}>{label}<span><input type="color" value={/^#[0-9a-f]{6}$/i.test(theme.preview[key]) ? theme.preview[key] : '#7c5cff'} onChange={event => updateColor(key, event.target.value)} /><input value={theme.preview[key]} onChange={event => updateColor(key, event.target.value)} /></span></label>)}</div>
+    <div className="custom-theme-editor-actions"><button type="button" onClick={onCancel}>Cancel</button>{onExport && <button type="button" onClick={onExport}>Export</button>}{onDuplicate && <button type="button" onClick={onDuplicate}>Duplicate</button>}{onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}<button type="button" className="primary" onClick={onSave} disabled={!theme.name.trim()}>Save theme</button></div>
+  </div>;
+}
+
 function ThemesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
   const category = CATEGORIES.find(c => c.id === 'themes')!;
   const [selectedTheme, setSelectedTheme] = useState(() => settings.appearance.themeId || getInitialThemeId());
   const [query, setQuery] = useState('');
+  const [editing, setEditing] = useState<ThemeDefinition & { source: 'custom' }>();
+  const [, refreshCustomThemes] = useState(0);
   const installedIds = settings.appearance.installedThemeIds ?? [];
+  const custom = settings.appearance.customThemes ?? [];
 
+  const surfaceId = settings.appearance.surfacePackId;
+  const surfaceOpts = settings.appearance.surface;
+  const applySurface = (id: string, opts: typeof surfaceOpts) =>
+    applySurfacePack(id, { intensity: opts.intensity, texture: opts.texture, translucency: opts.translucency });
+
+  useEffect(() => {
+    registerCustomThemes(custom);
+    refreshCustomThemes(value => value + 1);
+  }, [custom]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const draft = { id: editing.id, name: editing.name, mode: editing.mode, description: editing.description, preview: { ...editing.preview } as Record<string, string> };
+    registerCustomThemes([...custom.filter(theme => theme.id !== draft.id), draft]);
+    applyThemePreference(editing.id, editing.mode);
+  }, [editing]);
+
+  const createCustom = () => setEditing({
+    id: `custom-${Date.now().toString(36)}`, name: 'My Theme', family: 'Praxis', section: 'Recent', source: 'custom', mode: 'dark',
+    description: 'A custom Praxis theme.',
+    preview: { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' }
+  });
+
+  const saveCustom = async () => {
+    if (!editing) return;
+    const draft = editing;
+    if (!draft.name.trim()) return;
+    const record = { id: draft.id, name: draft.name.trim(), mode: draft.mode, description: draft.description.trim(), preview: { ...draft.preview } as Record<string, string> };
+    const next = [...custom.filter(theme => theme.id !== record.id), record];
+    await update({ appearance: { customThemes: next, installedThemeIds: [...new Set([...installedIds, record.id])], themeId: record.id, themeMode: record.mode } });
+    registerCustomThemes(next);
+    applyThemePreference(record.id, record.mode);
+    setSelectedTheme(record.id);
+    setEditing(undefined);
+  };
+
+  const importCustom = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const raw = JSON.parse(await file.text()) as Partial<ThemeDefinition>;
+      if (typeof raw.name !== 'string' || !raw.preview || typeof raw.preview !== 'object') throw new Error('Invalid theme file');
+      setEditing({ id: `custom-${Date.now().toString(36)}`, name: raw.name, family: 'Praxis', section: 'Recent', source: 'custom', mode: raw.mode === 'light' ? 'light' : 'dark', description: typeof raw.description === 'string' ? raw.description : 'Imported custom theme.', preview: raw.preview as ThemeDefinition['preview'] });
+    } catch { /* Invalid files are ignored without changing the current editor. */ }
+  };
+
+  const exportCustom = () => {
+    if (!editing) return;
+    const blob = new Blob([JSON.stringify({ name: editing.name, mode: editing.mode, description: editing.description, preview: editing.preview }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${editing.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'custom-theme'}.json`; anchor.click(); URL.revokeObjectURL(url);
+  };
+
+  const deleteCustom = async () => {
+    if (!editing) return;
+    const next = custom.filter(theme => theme.id !== editing.id);
+    const fallback = selectedTheme === editing.id ? 'praxis-dark' : selectedTheme;
+    await update({ appearance: { customThemes: next, installedThemeIds: installedIds.filter(id => id !== editing.id), ...(selectedTheme === editing.id ? { themeId: fallback, themeMode: 'dark' } : {}) } });
+    registerCustomThemes(next);
+    if (selectedTheme === editing.id) { setSelectedTheme(fallback); applyThemePreference(fallback, 'dark'); }
+    setEditing(undefined);
+  };
+
+  const themes = allThemes();
   useEffect(() => {
     const syncTheme = (event: Event) => setSelectedTheme((event as CustomEvent<string>).detail);
     window.addEventListener('tm-theme-changed', syncTheme);
     return () => window.removeEventListener('tm-theme-changed', syncTheme);
   }, []);
 
-  const visible = THEMES.filter(theme => {
+  const visible = themes.filter(theme => {
     const needle = query.trim().toLowerCase();
     return !needle || `${theme.name} ${theme.family} ${theme.mode} ${theme.description}`.toLowerCase().includes(needle);
   });
@@ -1116,6 +1293,8 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
   return (
     <>
       <CategoryHeader category={category} />
+      <div className="custom-theme-toolbar"><button type="button" className="btn btn-secondary" onClick={createCustom}>＋ Create custom theme</button><label className="btn btn-secondary">Import theme<input type="file" accept="application/json,.json" hidden onChange={event => void importCustom(event)} /></label><span>Design your own palette with a live preview.</span></div>
+      {editing && <CustomThemeEditor theme={editing} onChange={setEditing} onSave={() => void saveCustom()} onDelete={custom.some(theme => theme.id === editing.id) ? () => void deleteCustom() : undefined} onDuplicate={() => setEditing({ ...editing, id: `custom-${Date.now().toString(36)}`, name: `${editing.name} Copy` })} onExport={exportCustom} onCancel={() => { setEditing(undefined); applyThemePreference(selectedTheme, settings.appearance.themeMode as ThemeModePreference); }} />}
       <div className="theme-mode-toolbar" role="group" aria-label="Theme appearance mode">
         <span>Appearance</span>
         {(['system', 'light', 'dark'] as const).map(mode => (
@@ -1129,7 +1308,7 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
       <div className="theme-gallery-toolbar">
         <label className="theme-gallery-search">
           <Icon name="search" size={13} />
-          <input type="search" value={query} aria-label="Search themes" placeholder={`Search ${THEMES.length} themes…`} onChange={event => setQuery(event.target.value)} />
+          <input type="search" value={query} aria-label="Search themes" placeholder={`Search ${themes.length} themes…`} onChange={event => setQuery(event.target.value)} />
         </label>
         <span>{visible.length} themes</span>
       </div>
@@ -1141,11 +1320,11 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
             <h4>{section}</h4>
             <div className="theme-gallery-grid">
               {sectionThemes.map(theme => (
-                <ThemePreviewCard key={theme.id} theme={theme} installed={!theme.source || installedIds.includes(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
+                <ThemePreviewCard key={theme.id} theme={theme} installed={theme.source !== 'marketplace' || installedIds.includes(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
                   setSelectedTheme(theme.id);
                   applyThemePreference(theme.id, theme.mode);
                   void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
-                }} />
+                }} onEdit={theme.source === 'custom' ? () => setEditing(theme as ThemeDefinition & { source: 'custom' }) : undefined} />
               ))}
             </div>
           </section>
@@ -1169,6 +1348,57 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
         </section>
       )}
       {visible.length === 0 && <div className="placeholder-text">No themes match “{query}”.</div>}
+
+      <section className="theme-gallery-section surface-section" data-testid="surface-section">
+        <div className="theme-marketplace-heading">
+          <div><h4>Surface</h4><p>A material layer — texture, grain, depth — on top of the theme above. Composes with any theme.</p></div>
+        </div>
+        <div className="theme-gallery-grid surface-pack-grid">
+          {SURFACE_PACKS.map(pack => (
+            <SurfacePackCard
+              key={pack.id}
+              pack={pack}
+              active={surfaceId === pack.id}
+              onSelect={() => {
+                applySurface(pack.id, surfaceOpts);
+                void update({ appearance: { surfacePackId: pack.id } });
+              }}
+            />
+          ))}
+        </div>
+        <div className="surface-dials">
+          <label className="surface-dial">
+            <span className="surface-dial-label">Intensity <em>{Math.round(surfaceOpts.intensity * 100)}%</em></span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(surfaceOpts.intensity * 100)}
+              aria-label="Surface intensity"
+              data-testid="surface-intensity"
+              disabled={surfaceId === 'flat'}
+              onChange={event => {
+                const next = { ...surfaceOpts, intensity: Number(event.target.value) / 100 };
+                applySurface(surfaceId, next);
+                void update({ appearance: { surface: { intensity: next.intensity } } });
+              }}
+            />
+          </label>
+        </div>
+        <Toggle
+          label="Texture"
+          description="Paper fibre, brushed metal, and other grain layers. Turn off for flat panels while keeping the pack's depth and edges."
+          checked={surfaceOpts.texture}
+          disabled={surfaceId === 'flat'}
+          testId="surface-texture-toggle"
+          onChange={next => {
+            const updated = { ...surfaceOpts, texture: next };
+            applySurface(surfaceId, updated);
+            void update({ appearance: { surface: { texture: next } } });
+          }}
+        />
+      </section>
     </>
   );
 }

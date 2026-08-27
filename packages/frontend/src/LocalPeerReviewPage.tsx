@@ -16,6 +16,8 @@ type LprState =
   | { phase: 'done'; result: LprResult }
   | { phase: 'error'; message: string };
 
+type LprMessage = { role: 'user' | 'assistant'; text: string };
+
 /**
  * Local Peer Review — the desktop port of the extension's
  * `localPeerReviewPanel`. Runs the three-pass review (code, security, then a
@@ -25,6 +27,10 @@ type LprState =
 export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, onClose }: LocalPeerReviewPageProps) {
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [state, setState] = useState<LprState>({ phase: 'running' });
+  const [followUp, setFollowUp] = useState('');
+  const [followUps, setFollowUps] = useState<LprMessage[]>([]);
+  const [sendingFollowUp, setSendingFollowUp] = useState(false);
+  const [followUpError, setFollowUpError] = useState<string>();
 
   useEffect(() => {
     setIssue(undefined);
@@ -33,6 +39,9 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
 
   const runReview = useCallback(async () => {
     setState({ phase: 'running' });
+    setFollowUps([]);
+    setFollowUp('');
+    setFollowUpError(undefined);
     try {
       const result = await window.ticketManager.ai.localPeerReview(issueKey, connectionId, provider, model);
       setState({ phase: 'done', result });
@@ -43,6 +52,23 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
       });
     }
   }, [issueKey, connectionId, provider, model]);
+
+  const sendFollowUp = async () => {
+    const message = followUp.trim();
+    if (!message || state.phase !== 'done' || sendingFollowUp) return;
+    setSendingFollowUp(true);
+    setFollowUpError(undefined);
+    setFollowUps(current => [...current, { role: 'user', text: message }]);
+    setFollowUp('');
+    try {
+      const response = await window.ticketManager.ai.localPeerReviewFollowUp(issueKey, message, connectionId, provider, model);
+      setFollowUps(current => [...current, { role: 'assistant', text: response }]);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSendingFollowUp(false);
+    }
+  };
 
   // The extension's LPR panel runs the review as soon as it opens.
   useEffect(() => {
@@ -135,6 +161,48 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
           </>
         )}
       </div>
+      {state.phase === 'done' && (
+        <div className="lpr-follow-up" data-testid="lpr-chat-composer">
+          {followUps.map((message, index) => (
+            <div className={`lpr-follow-up-message ${message.role}`} key={`${message.role}-${index}`}>
+              <strong>{message.role === 'user' ? 'You' : 'AI agent'}</strong>
+              <Markdown text={message.text} />
+            </div>
+          ))}
+          {followUpError && <div className="error-banner" data-testid="lpr-follow-up-error">{followUpError}</div>}
+          <div className="composer lpr-follow-up-composer">
+            <textarea
+              className="composer-input"
+              rows={2}
+              data-testid="lpr-follow-up-input"
+              value={followUp}
+              disabled={sendingFollowUp}
+              placeholder="Ask a follow-up about this review…"
+              onChange={event => setFollowUp(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && followUp.trim()) {
+                  event.preventDefault();
+                  void sendFollowUp();
+                }
+              }}
+            />
+            <div className="composer-controls">
+              <span className="spacer" />
+              <button
+                className="composer-send"
+                type="button"
+                aria-label="Send follow-up"
+                title="Send follow-up"
+                data-testid="lpr-follow-up-send"
+                disabled={sendingFollowUp || !followUp.trim()}
+                onClick={() => void sendFollowUp()}
+              >
+                <Icon name="arrow-up" size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

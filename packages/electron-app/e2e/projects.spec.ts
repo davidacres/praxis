@@ -13,6 +13,8 @@ test.afterEach(async () => { await closeTestApp(app); });
 
 test('creates a folderless Product project through the six-step wizard and opens its board', async () => {
   const page = app.window;
+  await page.getByTestId('startup-splash').click();
+  await expect(page.getByTestId('startup-splash')).not.toBeVisible();
   await expect(page.getByTestId('project-empty-state')).toBeVisible();
   await expect(page).toHaveScreenshot('project-empty-state.png');
   await page.getByTestId('new-menu').click();
@@ -36,14 +38,31 @@ test('creates a folderless Product project through the six-step wizard and opens
   await page.getByRole('button', { name: 'Create project' }).click();
 
   await expect(page.getByTestId('project-home')).toContainText('Customer Portal');
+  const projectTree = page.getByTestId('project-tree').filter({ hasText: 'Customer Portal' });
+  await expect(page.getByTestId('nav-board')).toHaveCount(0);
+  await expect(page.getByTestId('board-nav-item').filter({ hasText: 'Customer Portal Board' })).toHaveCount(0);
+  await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Customer Portal Board');
+  await expect(projectTree.getByText('Default', { exact: true })).toBeVisible();
+  const themedColors = await projectTree.evaluate(tree => ({
+    accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+    projectIcon: getComputedStyle(tree.querySelector('.project-icon')!).color,
+    boardIcon: getComputedStyle(tree.querySelector('.project-board-icon')!).color
+  }));
+  expect(themedColors.projectIcon).toBe('rgb(198, 67, 31)');
+  expect(themedColors.accent).toBe('#c6431f');
+  expect(themedColors.boardIcon).toBe('rgb(205, 191, 174)');
   await expect(page).toHaveScreenshot('project-home.png');
   const stored = await page.evaluate(() => window.ticketManager.projects.list());
-  expect(stored).toHaveLength(1);
-  expect(stored[0].defaultAiToolMode).toBe('project-only');
-  expect(stored[0].workItems).toHaveLength(5);
+  const created = stored.find(project => project.key === 'CUSTOMER');
+  expect(created?.defaultAiToolMode).toBe('project-only');
+  expect(created?.workItems).toHaveLength(5);
 
-  await page.getByRole('button', { name: 'Open default board' }).click();
+  await projectTree.getByTestId('project-default-board-nav-item').click();
   await expect(page.getByTestId('issue-card')).toHaveCount(5);
+  await page.getByTestId('mode-work').click();
+  const workProject = page.getByTestId('work-project').filter({ hasText: 'Customer Portal' });
+  await expect(workProject).toContainText('1 board');
+  await expect(workProject.getByTestId('work-card')).toContainText('Customer Portal Board');
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-session').click();
   await expect(page.getByTestId('project-empty-state')).toContainText('Create a new project');
@@ -188,4 +207,89 @@ test('attaches a folder later and enforces one-project ownership for linked boar
     expect(result.linkedCountAfterUnlink).toBe(0);
     expect(fs.existsSync(path.join(folder, 'PROJECT.md'))).toBe(true);
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
+});
+
+test('nests unlinked boards under the sidebar "Boards" heading', async () => {
+  const page = app.window;
+
+  // The built-in demo boards belong to no project, so they render in the
+  // standalone "Boards" section rather than inside a project tree.
+  const boardsHeading = page.getByTestId('toggle-boards');
+  await expect(boardsHeading).toBeVisible();
+  await expect(boardsHeading).toHaveAttribute('aria-expanded', 'true');
+
+  const boardTree = page.locator('.external-board-tree');
+  const boardRow = boardTree.getByTestId('board-nav-item').first();
+  await expect(boardRow).toBeVisible();
+
+  // The row must be indented under the heading, not flush with the sidebar
+  // edge — this was the "unlinked boards not nested" regression.
+  const rowPaddingLeft = await boardRow.evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
+  expect(rowPaddingLeft).toBeGreaterThanOrEqual(24);
+
+  // The row's glyph should sit at (roughly) the same x as the heading label,
+  // so the section reads as a tree with the boards as children of "Boards"
+  // (glyph under parent label, row label indented one glyph further — the
+  // same idiom as the project tree).
+  const headingLabelX = await boardsHeading.locator('span', { hasText: 'Boards' }).first().evaluate(el => el.getBoundingClientRect().x);
+  const rowIconX = await boardRow.locator('.tree-icon').evaluate(el => el.getBoundingClientRect().x);
+  const rowLabelX = await boardRow.locator('.tree-label').evaluate(el => el.getBoundingClientRect().x);
+  const sidebarX = await page.locator('.sidebar').evaluate(el => el.getBoundingClientRect().x);
+  expect(rowIconX).toBeGreaterThan(sidebarX + 20);
+  expect(rowLabelX).toBeGreaterThan(rowIconX);
+  expect(Math.abs(rowIconX - headingLabelX)).toBeLessThanOrEqual(12);
+
+  // Collapsing the heading hides its nested children.
+  await boardsHeading.click();
+  await expect(boardTree).toHaveCount(0);
+});
+
+test('shows a connected board only beneath its owning Praxis project', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-linked-board-'));
+  const featureFolder = path.join(folder, 'features', 'feature-01-linked');
+  fs.mkdirSync(featureFolder, { recursive: true });
+  fs.writeFileSync(path.join(featureFolder, 'feature.md'), [
+    '# Linked delivery', '', '**Status:** 🚧 In Progress', '**Type:** Feature', '',
+    '## Description', '', 'Connected project work.', ''
+  ].join('\n'));
+
+  await closeTestApp(app);
+  app = await launchTestApp({ connections: [{
+    id: 'linked-live-folder', name: 'Linked delivery source', mode: 'livefolder',
+    settings: { path: folder, projectKey: 'LINKED', projectName: 'Linked Delivery' }
+  }] });
+
+  try {
+    await app.window.evaluate(async projectFolder => {
+      const project = await window.ticketManager.projects.create({
+        name: 'Delivery Workspace', key: 'DELIVERY', type: 'software', purpose: 'Ship linked work', brief: {},
+        startingPoint: 'existing-folder', folderPath: projectFolder, workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'Starter', description: '', issueType: 'Task', status: 'To do' }], defaultAiToolMode: 'read-only'
+      });
+      const boards = await window.ticketManager.board.list({ projectKeys: [], types: [], searchText: '' });
+      const connected = boards.find(board => board.connectionId === 'linked-live-folder');
+      if (!connected?.connectionId) throw new Error('Expected connected live-folder board.');
+      await window.ticketManager.projects.linkBoard(project.id, {
+        connectionId: connected.connectionId, boardId: connected.id, displayName: connected.name
+      });
+    }, folder);
+    await app.window.reload();
+
+    await expect(app.window.getByTestId('nav-board')).toHaveCount(0);
+    await expect(app.window.getByTestId('board-nav-item').filter({ hasText: 'Delivery Workspace' })).toHaveCount(0);
+    const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Delivery Workspace' });
+    const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
+    await expect(linkedBoard).toContainText('Linked Delivery (Live)');
+    await expect(linkedBoard).toContainText('Linked');
+    await linkedBoard.click();
+    await expect(app.window.getByTestId('issue-card')).toContainText('Linked delivery');
+
+    await app.window.getByTestId('mode-work').click();
+    const workProject = app.window.getByTestId('work-project').filter({ hasText: 'Delivery Workspace' });
+    await expect(workProject).toContainText('2 boards');
+    await expect(workProject.getByTestId('work-card')).toHaveCount(2);
+    await expect(workProject).toContainText('Linked Delivery (Live)');
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
 });

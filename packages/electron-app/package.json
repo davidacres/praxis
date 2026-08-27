@@ -1,6 +1,9 @@
 {
   "name": "@ticket-manager/electron-app",
-  "version": "0.0.0",
+  "version": "0.2.1",
+  "description": "Praxis desktop workspace for planning, tickets, and delivery.",
+  "author": "Praxis",
+  "repository": "https://github.com/davidacres/ticket-manager-extension.git",
   "private": true,
   "type": "commonjs",
   "main": "./out/main/index.js",
@@ -13,7 +16,9 @@
     "copy-renderer": "node scripts/copy-renderer.cjs",
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "predist": "npm run copy-renderer",
-    "dist": "electron-builder"
+    "dist": "electron-builder --publish never",
+    "dist:mac": "electron-builder --mac dmg --publish never",
+    "dist:win": "electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
@@ -29,8 +34,8 @@
     "typescript": "^6.0.2"
   },
   "build": {
-    "appId": "com.ticketmanager.app",
-    "productName": "Ticket Manager",
+    "appId": "com.praxis.app",
+    "productName": "Praxis",
     "directories": {
       "output": "dist"
     },
@@ -55,14 +60,48 @@
         "to": "node_modules/@ticket-manager/core/package.json"
       }
     ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "dmg": {
+      "background": "build/dmg-background.png",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "iconSize": 96,
+      "iconTextSize": 12,
+      "contents": [
+        {
+          "x": 130,
+          "y": 225,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 225,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
     "win": {
-      "target": "msi",
+      "target": "nsis",
       "artifactName": "${productName}-${version}-setup.${ext}"
     },
-    "msi": {
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ticket Manager"
+      "shortcutName": "Praxis",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/installerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "artifactName": "${productName}-${version}-setup.${ext}"
     }
   }
 }

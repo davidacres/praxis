@@ -1,5 +1,7 @@
 export type ThemeMode = 'light' | 'dark';
 export type ThemeModePreference = ThemeMode | 'system';
+import type { AppearanceSettings } from '@ticket-manager/core';
+import { DEFAULT_SURFACE_PACK_ID, findSurfacePack, type SurfacePackDefinition } from './surfacePacks';
 
 export interface ThemePreviewColors {
   canvas: string;
@@ -17,9 +19,9 @@ export interface ThemePreviewColors {
 export interface ThemeDefinition {
   id: string;
   name: string;
-  family: 'Ticket Manager' | 'Inspired palettes';
+  family: 'Praxis' | 'Inspired palettes';
   section: 'Recent' | 'Staff picks';
-  source?: 'built-in' | 'marketplace';
+  source?: 'built-in' | 'marketplace' | 'custom';
   mode: ThemeMode;
   description: string;
   preview: ThemePreviewColors;
@@ -34,8 +36,18 @@ const GITHUB_DARK_TERMINAL = { black: '#010409', red: '#f85149', green: '#3fb950
 
 const BUILT_IN_THEMES: ThemeDefinition[] = [
   {
-    id: 'tm-default-1', name: 'TMDefault1', family: 'Ticket Manager', section: 'Recent', mode: 'light',
-    description: 'The original Ticket Manager light palette.',
+    id: 'praxis-light', name: 'Praxis Light', family: 'Praxis', section: 'Recent', mode: 'light',
+    description: 'Warm parchment surfaces with the original Praxis terracotta accent.',
+    preview: { canvas: '#f5f2eb', panel: '#fffdf8', raised: '#ebe7de', border: '#d5c8b8', text: '#2c2620', muted: '#74695e', accent: '#c6431f', success: '#467a5b', warning: '#9b6b22', danger: '#b94a48' }
+  },
+  {
+    id: 'praxis-dark', name: 'Praxis Dark', family: 'Praxis', section: 'Recent', mode: 'dark',
+    description: 'The original Praxis splash palette: warm charcoal, parchment, and terracotta.',
+    preview: { canvas: '#100e0b', panel: '#2c2620', raised: '#0b0907', border: '#443a30', text: '#f0e7d8', muted: '#cdbfae', accent: '#c6431f', success: '#7aa88d', warning: '#d4a27f', danger: '#e2766d' }
+  },
+  {
+    id: 'tm-default-1', name: 'TMDefault1', family: 'Praxis', section: 'Recent', mode: 'light',
+    description: 'The original Praxis light palette.',
     preview: { canvas: '#f6f6f6', panel: '#ffffff', raised: '#ececec', border: '#cdcdcd', text: '#1f1f1f', muted: '#8b8b8b', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#b52d2d' }
   },
   {
@@ -49,8 +61,8 @@ const BUILT_IN_THEMES: ThemeDefinition[] = [
     preview: { canvas: '#191919', panel: '#262625', raised: '#363633', border: '#4a4945', text: '#f0f0eb', muted: '#bfbfba', accent: '#d48668', success: '#7aa88d', warning: '#d4a27f', danger: '#e2766d' }
   },
   {
-    id: 'tm-default-2', name: 'TMDefault2', family: 'Ticket Manager', section: 'Recent', mode: 'dark',
-    description: 'The original Ticket Manager dark palette.',
+    id: 'tm-default-2', name: 'TMDefault2', family: 'Praxis', section: 'Recent', mode: 'dark',
+    description: 'The original Praxis dark palette.',
     preview: { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' }
   },
   {
@@ -76,6 +88,12 @@ const BUILT_IN_THEMES: ThemeDefinition[] = [
 ];
 
 const MARKETPLACE_THEMES: ThemeDefinition[] = [
+  { id: 'vscode-dark-plus', name: 'VS Code Dark+', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'dark', description: 'The familiar VS Code Dark+ workbench with its signature blue focus color.', preview: { canvas: '#1e1e1e', panel: '#252526', raised: '#181818', border: '#454545', text: '#d4d4d4', muted: '#a6a6a6', accent: '#007acc', success: '#4ec9b0', warning: '#dcdcaa', danger: '#f14c4c' }, terminal: { black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510', blue: '#2472c8', magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5', brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b', brightYellow: '#f5f543', brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#ffffff' } },
+  { id: 'vscode-light-plus', name: 'VS Code Light+', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'light', description: 'A clean VS Code Light+ workbench with crisp blue selection and focus states.', preview: { canvas: '#ffffff', panel: '#f3f3f3', raised: '#e8e8e8', border: '#c8c8c8', text: '#333333', muted: '#616161', accent: '#007acc', success: '#16825d', warning: '#bf8803', danger: '#e51400' }, terminal: { black: '#000000', red: '#cd3131', green: '#00bc00', yellow: '#949800', blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555555', brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14', brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc', brightCyan: '#0598bc', brightWhite: '#a5a5a5' } },
+  { id: 'xcode-light', name: 'Xcode Light', family: 'Inspired palettes', section: 'Recent', source: 'marketplace', mode: 'light', description: 'Bright macOS-native surfaces with Xcode blue and restrained source-editor contrast.', preview: { canvas: '#ffffff', panel: '#f2f2f7', raised: '#e5e5ea', border: '#c7c7cc', text: '#1d1d1f', muted: '#6e6e73', accent: '#0a84ff', success: '#248a3d', warning: '#b25000', danger: '#d70015' }, terminal: { black: '#1d1d1f', red: '#d70015', green: '#248a3d', yellow: '#b25000', blue: '#0066cc', magenta: '#8944ab', cyan: '#0071a4', white: '#f2f2f7', brightBlack: '#6e6e73', brightRed: '#ff375f', brightGreen: '#30d158', brightYellow: '#ff9f0a', brightBlue: '#0a84ff', brightMagenta: '#bf5af2', brightCyan: '#64d2ff', brightWhite: '#ffffff' } },
+  { id: 'xcode-dark', name: 'Xcode Dark', family: 'Inspired palettes', section: 'Recent', source: 'marketplace', mode: 'dark', description: 'Xcode-inspired graphite surfaces with macOS blue focus and vivid semantic colors.', preview: { canvas: '#1e1e1e', panel: '#292929', raised: '#151515', border: '#3f3f3f', text: '#f2f2f7', muted: '#98989d', accent: '#0a84ff', success: '#30d158', warning: '#ff9f0a', danger: '#ff453a' }, terminal: { black: '#000000', red: '#ff453a', green: '#30d158', yellow: '#ffd60a', blue: '#0a84ff', magenta: '#bf5af2', cyan: '#64d2ff', white: '#f2f2f7', brightBlack: '#636366', brightRed: '#ff6961', brightGreen: '#66e27f', brightYellow: '#ffe45e', brightBlue: '#409cff', brightMagenta: '#d58aff', brightCyan: '#8ee7ff', brightWhite: '#ffffff' } },
+  { id: 'rider-dark', name: 'Rider Dark', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'dark', description: 'A Rider-inspired Darcula workspace with cool panels and confident blue focus.', preview: { canvas: '#2b2b2b', panel: '#3c3f41', raised: '#252526', border: '#515151', text: '#dfe1e5', muted: '#a9b0b8', accent: '#4a88c7', success: '#6aab73', warning: '#d6b656', danger: '#db5c5c' }, terminal: { black: '#000000', red: '#cc6666', green: '#6aab73', yellow: '#d6b656', blue: '#4a88c7', magenta: '#9876aa', cyan: '#4db6ac', white: '#dfe1e5', brightBlack: '#808080', brightRed: '#db5c5c', brightGreen: '#89c791', brightYellow: '#e8cc78', brightBlue: '#6ea6dd', brightMagenta: '#b69ac5', brightCyan: '#71d0c6', brightWhite: '#ffffff' } },
+  { id: 'christmas-workshop', name: 'Christmas Workshop', family: 'Inspired palettes', section: 'Recent', source: 'marketplace', mode: 'dark', description: 'Evergreen panels, cranberry focus, candlelight gold, and snow-bright text.', preview: { canvas: '#10251b', panel: '#173326', raised: '#0b1b13', border: '#315b45', text: '#f7f2e7', muted: '#b8c8bd', accent: '#d64045', success: '#62a96b', warning: '#e0b84f', danger: '#ff6b6b' }, terminal: { black: '#08120d', red: '#d64045', green: '#62a96b', yellow: '#e0b84f', blue: '#6fa8a1', magenta: '#c77d9c', cyan: '#78c6b0', white: '#e8e1d2', brightBlack: '#547063', brightRed: '#ff6b6b', brightGreen: '#89d18f', brightYellow: '#f6d675', brightBlue: '#91c7c1', brightMagenta: '#e5a0ba', brightCyan: '#9be4d0', brightWhite: '#fffdf7' } },
   { id: 'dracula-dark', name: 'Dracula', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'dark', description: 'A high-contrast purple dark theme with vivid syntax colors.', preview: { canvas: '#282a36', panel: '#44475a', raised: '#21222c', border: '#6272a4', text: '#f8f8f2', muted: '#bd93f9', accent: '#ff79c6', success: '#50fa7b', warning: '#f1fa8c', danger: '#ff5555' } },
   { id: 'nord-dark', name: 'Nord', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'dark', description: 'Arctic blue-gray surfaces with calm frost accents.', preview: { canvas: '#2e3440', panel: '#3b4252', raised: '#242933', border: '#4c566a', text: '#eceff4', muted: '#d8dee9', accent: '#88c0d0', success: '#a3be8c', warning: '#ebcb8b', danger: '#bf616a' } },
   { id: 'one-dark', name: 'One Dark', family: 'Inspired palettes', section: 'Staff picks', source: 'marketplace', mode: 'dark', description: 'A balanced editor-dark palette inspired by Atom.', preview: { canvas: '#282c34', panel: '#21252b', raised: '#1b1d23', border: '#3e4451', text: '#abb2bf', muted: '#7f848e', accent: '#61afef', success: '#98c379', warning: '#e5c07b', danger: '#e06c75' } },
@@ -91,21 +109,56 @@ const MARKETPLACE_THEMES: ThemeDefinition[] = [
 
 export const THEMES: ThemeDefinition[] = [...BUILT_IN_THEMES, ...MARKETPLACE_THEMES];
 export const BUILT_IN_THEME_IDS = BUILT_IN_THEMES.map(theme => theme.id);
+let customThemes: ThemeDefinition[] = [];
 
-export const DEFAULT_THEME_ID = 'tm-default-2';
+export function registerCustomThemes(records: AppearanceSettings['customThemes']): void {
+  const fallback = { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' };
+  customThemes = records.map(record => ({ ...record, family: 'Praxis' as const, section: 'Recent' as const, source: 'custom' as const, preview: { ...fallback, ...record.preview } as ThemePreviewColors }));
+}
+
+function findTheme(themeId: string): ThemeDefinition | undefined {
+  return THEMES.find(theme => theme.id === themeId) ?? customThemes.find(theme => theme.id === themeId);
+}
+
+export function allThemes(): ThemeDefinition[] {
+  return [...THEMES, ...customThemes];
+}
+
+export const DEFAULT_THEME_ID = 'praxis-dark';
 
 export function getInitialThemeId(): string {
   const saved = localStorage.getItem('tm-theme-id');
-  if (saved && THEMES.some(theme => theme.id === saved)) return saved;
+  if (saved && findTheme(saved)) return saved;
   return localStorage.getItem('tm-theme-mode') === 'light' ? 'tm-default-1' : DEFAULT_THEME_ID;
 }
 
 export function applyTheme(themeId: string, modeOverride?: ThemeMode): ThemeDefinition {
-  const theme = THEMES.find(candidate => candidate.id === themeId) ?? THEMES.find(candidate => candidate.id === DEFAULT_THEME_ID)!;
+  const theme = findTheme(themeId) ?? findTheme(DEFAULT_THEME_ID)!;
   document.documentElement.setAttribute('data-theme', theme.id);
   document.documentElement.setAttribute('data-mode', modeOverride ?? theme.mode);
+  const customTokens = ['--bg', '--bg-elevated', '--bg-sunken', '--bg-input', '--border', '--border-strong', '--text', '--text-secondary', '--text-tertiary', '--accent', '--accent-hover', '--accent-soft', '--accent-border', '--accent-contrast', '--danger'];
+  for (const token of customTokens) document.documentElement.style.removeProperty(token);
   localStorage.setItem('tm-theme-id', theme.id);
   localStorage.setItem('tm-theme-mode', modeOverride ?? theme.mode);
+  if (theme.source === 'custom') {
+    const colors = theme.preview;
+    const root = document.documentElement;
+    root.style.setProperty('--bg', colors.canvas);
+    root.style.setProperty('--bg-elevated', colors.panel);
+    root.style.setProperty('--bg-sunken', colors.raised);
+    root.style.setProperty('--bg-input', colors.panel);
+    root.style.setProperty('--border', colors.border);
+    root.style.setProperty('--border-strong', colors.border);
+    root.style.setProperty('--text', colors.text);
+    root.style.setProperty('--text-secondary', colors.muted);
+    root.style.setProperty('--text-tertiary', colors.muted);
+    root.style.setProperty('--accent', colors.accent);
+    root.style.setProperty('--accent-hover', colors.accent);
+    root.style.setProperty('--accent-soft', `${colors.accent}2b`);
+    root.style.setProperty('--accent-border', `${colors.accent}80`);
+    root.style.setProperty('--accent-contrast', modeOverride === 'light' ? '#111111' : '#ffffff');
+    root.style.setProperty('--danger', colors.danger);
+  }
   window.dispatchEvent(new CustomEvent('tm-theme-changed', { detail: theme.id }));
   return theme;
 }
@@ -121,10 +174,10 @@ export function applyThemePreference(themeId: string, preference: ThemeModePrefe
   systemThemeListener = undefined;
   const apply = () => {
     const mode = resolveThemeMode(preference);
-    const base = THEMES.find(candidate => candidate.id === themeId) ?? THEMES.find(candidate => candidate.id === DEFAULT_THEME_ID)!;
+    const base = findTheme(themeId) ?? findTheme(DEFAULT_THEME_ID)!;
     const family = base.id.replace(/-(?:light|dark|1|2)$/, '');
-    const variant = THEMES.find(candidate => candidate.id === `${family}-${mode}`)
-      ?? (family === 'tm-default' ? THEMES.find(candidate => candidate.id === (mode === 'light' ? 'tm-default-1' : 'tm-default-2')) : undefined)
+    const variant = findTheme(`${family}-${mode}`)
+      ?? (family === 'tm-default' ? findTheme(mode === 'light' ? 'tm-default-1' : 'tm-default-2') : undefined)
       ?? base;
     return applyTheme(variant.id, mode);
   };
@@ -139,7 +192,56 @@ export function applyThemePreference(themeId: string, preference: ThemeModePrefe
 }
 
 export function terminalColorsForTheme(themeId: string, mode: ThemeMode): ThemeDefinition['terminal'] {
-  const theme = THEMES.find(candidate => candidate.id === themeId && candidate.mode === mode)
-    ?? THEMES.find(candidate => candidate.id === themeId);
+  const theme = allThemes().find(candidate => candidate.id === themeId && candidate.mode === mode)
+    ?? findTheme(themeId);
   return theme?.terminal;
+}
+
+/* ── Surface packs ─────────────────────────────────────────────────────────
+   The premium material layer, applied on the independent `data-surface` axis.
+   It composes with whatever theme is active and survives theme changes, so it
+   has its own apply function and localStorage keys mirroring the theme ones. */
+
+export interface SurfaceOpts {
+  /** 0..1 multiplier on texture strength / glow. */
+  intensity: number;
+  /** Gate the texture / grain layers. */
+  texture: boolean;
+  /** Gate the translucency / backdrop-blur path (phase 2+). */
+  translucency: boolean;
+}
+
+const DEFAULT_SURFACE_OPTS: SurfaceOpts = { intensity: 1, texture: true, translucency: true };
+
+export function getInitialSurfaceId(): string {
+  const saved = localStorage.getItem('tm-surface-id');
+  return saved && findSurfacePack(saved) ? saved : DEFAULT_SURFACE_PACK_ID;
+}
+
+export function getInitialSurfaceOpts(): SurfaceOpts {
+  try {
+    const raw = JSON.parse(localStorage.getItem('tm-surface-opts') ?? '{}') as Partial<SurfaceOpts>;
+    return {
+      intensity: typeof raw.intensity === 'number' && raw.intensity >= 0 && raw.intensity <= 1
+        ? raw.intensity : DEFAULT_SURFACE_OPTS.intensity,
+      texture: typeof raw.texture === 'boolean' ? raw.texture : DEFAULT_SURFACE_OPTS.texture,
+      translucency: typeof raw.translucency === 'boolean' ? raw.translucency : DEFAULT_SURFACE_OPTS.translucency
+    };
+  } catch {
+    return { ...DEFAULT_SURFACE_OPTS };
+  }
+}
+
+export function applySurfacePack(packId: string, opts: SurfaceOpts = DEFAULT_SURFACE_OPTS): SurfacePackDefinition {
+  const pack = findSurfacePack(packId) ?? findSurfacePack('flat')!;
+  const root = document.documentElement;
+  root.setAttribute('data-surface', pack.id);
+  const intensity = Math.min(1, Math.max(0, opts.intensity));
+  root.style.setProperty('--surface-intensity', String(intensity));
+  root.style.setProperty('--surface-texture', opts.texture ? '1' : '0');
+  root.style.setProperty('--surface-translucency', opts.translucency ? '1' : '0');
+  localStorage.setItem('tm-surface-id', pack.id);
+  localStorage.setItem('tm-surface-opts', JSON.stringify({ intensity, texture: opts.texture, translucency: opts.translucency }));
+  window.dispatchEvent(new CustomEvent('tm-surface-changed', { detail: pack.id }));
+  return pack;
 }

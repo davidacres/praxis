@@ -206,6 +206,11 @@ export class VercelAgentService {
     const worktreeLine = workingDirectory
       ? `\nWorktree (run ALL git and build commands from here): ${workingDirectory}`
       : '';
+    if (taskDefinition.sessionMode === 'chat') {
+      return `Respond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless the user explicitly asks you to.
+
+User request: ${taskDefinition.goal}`;
+    }
     return `Execute the task described in the system prompt.
 
 Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;

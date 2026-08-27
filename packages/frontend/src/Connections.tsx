@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Board, Connection, TrackedBoard } from '@ticket-manager/core';
 import { backendModeMeta } from './boardMeta';
 import { Icon } from './Icon';
@@ -31,11 +31,14 @@ export function Connections({ onChanged }: ConnectionsProps) {
   const [trackedBoards, setTrackedBoards] = useState<TrackedBoard[]>([]);
   const [uwBoards, setUwBoards] = useState<Board[]>([]);
   const [error, setError] = useState<string | undefined>();
+  const reloadSequence = useRef(0);
 
   const reload = useCallback(() => {
+    const sequence = ++reloadSequence.current;
     window.ticketManager.connection
       .list()
       .then(list => {
+        if (sequence !== reloadSequence.current) return;
         setConnections(list);
         // A removed connection must not stay selected.
         setSelectedId(current => (current && !list.some(c => c.id === current) ? undefined : current));
@@ -44,6 +47,15 @@ export function Connections({ onChanged }: ConnectionsProps) {
   }, []);
 
   useEffect(reload, [reload]);
+
+  // Connection settings can also be changed by the VS Code companion (or by
+  // another window) while this view is open. A lightweight refresh keeps the
+  // list truthful even when the originating form has been unmounted before
+  // its async remove callback completes.
+  useEffect(() => {
+    const timer = window.setInterval(reload, 500);
+    return () => window.clearInterval(timer);
+  }, [reload]);
 
   const selected = creating ? undefined : connections.find(c => c.id === selectedId);
   const pickerConnection = pickingBoardsFor
@@ -150,10 +162,12 @@ export function Connections({ onChanged }: ConnectionsProps) {
               setCreating(false);
               setSelectedId(undefined);
             }}
-            onRemoved={() => {
+            onRemoved={removedId => {
               setSelectedId(undefined);
               setCreating(false);
-              reload();
+              if (removedId) {
+                setConnections(current => current.filter(connection => connection.id !== removedId));
+              }
               onChanged?.();
             }}
           />

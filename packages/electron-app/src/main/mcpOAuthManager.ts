@@ -60,12 +60,12 @@ function parseJsonValue<T>(value: string | undefined): T | undefined {
 const CALLBACK_PAGE_OK =
   '<!doctype html><html><body style="font-family:sans-serif;background:#1c1c1c;color:#ddd;' +
   'display:flex;align-items:center;justify-content:center;height:100vh;margin:0">' +
-  '<p>Sign-in complete — you can close this tab and return to Ticket Manager.</p></body></html>';
+  '<p>Sign-in complete — you can close this tab and return to Praxis.</p></body></html>';
 
 const CALLBACK_PAGE_ERROR =
   '<!doctype html><html><body style="font-family:sans-serif;background:#1c1c1c;color:#ddd;' +
   'display:flex;align-items:center;justify-content:center;height:100vh;margin:0">' +
-  '<p>Sign-in failed — return to Ticket Manager for details.</p></body></html>';
+  '<p>Sign-in failed — return to Praxis for details.</p></body></html>';
 
 class DesktopMcpOAuthProvider implements OAuthClientProvider {
   private codeVerifierValue: string | undefined;
@@ -84,7 +84,7 @@ class DesktopMcpOAuthProvider implements OAuthClientProvider {
 
   public get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: 'Ticket Manager',
+      client_name: 'Praxis',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],

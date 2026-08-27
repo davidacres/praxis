@@ -153,6 +153,43 @@ export interface AppearanceSettings {
   themeMode: 'light' | 'dark' | 'system';
   /** Marketplace themes explicitly installed into this profile. */
   installedThemeIds: string[];
+  /** User-created themes stored in the shared settings document. */
+  customThemes: Array<{
+    id: string;
+    name: string;
+    mode: 'light' | 'dark';
+    description: string;
+    preview: Record<string, string>;
+  }>;
+  /**
+   * Active surface pack — the premium texture / material layer composed *over*
+   * the theme (it never defines colour). Composes with `themeId`/`themeMode`.
+   * Ships `'parchment'`; `'flat'` is the inert opt-out.
+   */
+  surfacePackId: string;
+  /** User dials that scale the active surface pack. */
+  surface: {
+    /** 0..1 multiplier on texture strength and glow. */
+    intensity: number;
+    /** Gate the translucency / backdrop-blur path (phase 2+). */
+    translucency: boolean;
+    /** Gate the texture / grain layers. */
+    texture: boolean;
+    /** Opt in to native OS window vibrancy (phase 3+). */
+    windowVibrancy: boolean;
+  };
+  /** Surface packs available in this profile (built-ins are always present). */
+  installedSurfacePackIds: string[];
+  /** User-created surface packs stored in the shared settings document. */
+  customSurfacePacks: Array<{
+    id: string;
+    name: string;
+    description: string;
+    /** Optional built-in pack to inherit tokens from before applying overrides. */
+    basePackId?: string;
+    /** `--surface-*` custom-property overrides; validated against a whitelist. */
+    tokens: Record<string, string>;
+  }>;
 }
 
 export type TerminalCursorStyle = 'block' | 'underline' | 'bar';
@@ -242,9 +279,14 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   appearance: {
     showBrandArtwork: true,
-    themeId: 'tm-default-2',
+    themeId: 'praxis-dark',
     themeMode: 'dark',
-    installedThemeIds: ['tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
+    customThemes: [],
+    surfacePackId: 'parchment',
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint'],
+    customSurfacePacks: [],
     priorityColors: {
       Critical: '#DC2626',
       Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
@@ -299,6 +341,11 @@ export interface AppSettingsPatch {
     themeId?: string;
     themeMode?: 'light' | 'dark' | 'system';
     installedThemeIds?: string[];
+    customThemes?: AppearanceSettings['customThemes'];
+    surfacePackId?: string;
+    surface?: Partial<AppearanceSettings['surface']>;
+    installedSurfacePackIds?: string[];
+    customSurfacePacks?: AppearanceSettings['customSurfacePacks'];
   };
   terminal?: Partial<TerminalSettings>;
   git?: Partial<GitSettings>;
@@ -358,6 +405,87 @@ function readThemeIds(value: unknown, fallback: string[]): string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string')
     ? [...new Set(value as string[])]
     : [...fallback];
+}
+
+function readCustomThemes(value: unknown): AppearanceSettings['customThemes'] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(item => isRecord(item)
+    && typeof item.id === 'string' && /^custom-[a-z0-9-]+$/.test(item.id)
+    && typeof item.name === 'string' && item.name.trim().length > 0
+    && (item.mode === 'light' || item.mode === 'dark')
+    && typeof item.description === 'string'
+    && isRecord(item.preview)
+  ).map(item => ({
+    id: item.id as string,
+    name: (item.name as string).trim().slice(0, 80),
+    mode: item.mode as 'light' | 'dark',
+    description: (item.description as string).slice(0, 240),
+    preview: Object.fromEntries(Object.entries(item.preview as Record<string, unknown>).filter(([, value]) => typeof value === 'string').slice(0, 40)) as Record<string, string>
+  }));
+}
+
+/** The only custom-property keys a custom surface pack may set. */
+const SURFACE_TOKEN_KEYS: ReadonlySet<string> = new Set([
+  '--surface-app-bg-image', '--surface-app-bg-size', '--surface-app-bg-blend',
+  '--surface-texture-image', '--surface-texture-size', '--surface-texture-opacity', '--surface-texture-blend',
+  '--surface-panel-border-color', '--surface-radius-boost', '--surface-accent-glow',
+  '--surface-panel-opacity', '--surface-panel-blur', '--surface-panel-saturate'
+]);
+
+function readSurface(value: unknown, fallback: AppearanceSettings['surface']): AppearanceSettings['surface'] {
+  if (!isRecord(value)) return { ...fallback };
+  return {
+    intensity: clampNumber(value.intensity, 0, 1, fallback.intensity),
+    translucency: readBoolean(value.translucency, fallback.translucency),
+    texture: readBoolean(value.texture, fallback.texture),
+    windowVibrancy: readBoolean(value.windowVibrancy, fallback.windowVibrancy)
+  };
+}
+
+function readCustomSurfacePacks(value: unknown): AppearanceSettings['customSurfacePacks'] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(item => isRecord(item)
+    && typeof item.id === 'string' && /^custom-[a-z0-9-]+$/.test(item.id)
+    && typeof item.name === 'string' && item.name.trim().length > 0
+    && typeof item.description === 'string'
+    && isRecord(item.tokens)
+  ).map(item => {
+    const base = typeof item.basePackId === 'string' && /^[a-z0-9-]+$/.test(item.basePackId)
+      ? { basePackId: item.basePackId }
+      : {};
+    return {
+      id: item.id as string,
+      name: (item.name as string).trim().slice(0, 80),
+      description: (item.description as string).slice(0, 240),
+      ...base,
+      tokens: Object.fromEntries(
+        Object.entries(item.tokens as Record<string, unknown>)
+          .filter(([key, val]) => SURFACE_TOKEN_KEYS.has(key) && typeof val === 'string')
+      ) as Record<string, string>
+    };
+  });
+}
+
+/**
+ * Pre-feature profiles carry no `surfacePackId`. Move an *untouched* appearance
+ * to the shipped default pack so existing users get the new signature look;
+ * leave a *customised* appearance on `'flat'` so nobody's chosen theme changes
+ * shape under them. New installs never hit this — they write `DEFAULT_APP_SETTINGS`.
+ */
+function migratedSurfacePackId(appearance: Record<string, unknown>): string {
+  const d = DEFAULT_APP_SETTINGS.appearance;
+  const untouched =
+    readString(appearance.themeId, d.themeId) === d.themeId &&
+    readThemeMode(appearance.themeMode, d.themeMode) === d.themeMode &&
+    readBoolean(appearance.showBrandArtwork, d.showBrandArtwork) === d.showBrandArtwork &&
+    (!Array.isArray(appearance.customThemes) || appearance.customThemes.length === 0) &&
+    JSON.stringify(readPriorityColors(appearance.priorityColors)) === JSON.stringify(d.priorityColors);
+  return untouched ? d.surfacePackId : 'flat';
+}
+
+function readSurfacePackId(value: unknown, appearance: Record<string, unknown>): string {
+  if (typeof value === 'string' && /^[a-z0-9-]+$/.test(value)) return value;
+  return migratedSurfacePackId(appearance);
 }
 
 function readTerminalCursorStyle(value: unknown, fallback: TerminalCursorStyle): TerminalCursorStyle {
@@ -510,6 +638,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,themeId: readString(raw.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId)
         ,themeMode: readThemeMode(raw.appearance.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode)
         ,installedThemeIds: readThemeIds(raw.appearance.installedThemeIds, DEFAULT_APP_SETTINGS.appearance.installedThemeIds)
+        ,customThemes: readCustomThemes(raw.appearance.customThemes)
+        ,surfacePackId: readSurfacePackId(raw.appearance.surfacePackId, raw.appearance)
+        ,surface: readSurface(raw.appearance.surface, DEFAULT_APP_SETTINGS.appearance.surface)
+        ,installedSurfacePackIds: readThemeIds(raw.appearance.installedSurfacePackIds, DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds)
+        ,customSurfacePacks: readCustomSurfacePacks(raw.appearance.customSurfacePacks)
       }
     : {
         showBrandArtwork: DEFAULT_APP_SETTINGS.appearance.showBrandArtwork,
@@ -517,6 +650,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,themeId: DEFAULT_APP_SETTINGS.appearance.themeId
         ,themeMode: DEFAULT_APP_SETTINGS.appearance.themeMode
         ,installedThemeIds: [...DEFAULT_APP_SETTINGS.appearance.installedThemeIds]
+        ,customThemes: []
+        ,surfacePackId: DEFAULT_APP_SETTINGS.appearance.surfacePackId
+        ,surface: { ...DEFAULT_APP_SETTINGS.appearance.surface }
+        ,installedSurfacePackIds: [...DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds]
+        ,customSurfacePacks: []
       };
 
   const git: GitSettings = isRecord(raw) && isRecord(raw.git)
@@ -625,6 +763,11 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     themeId: patch.appearance?.themeId ?? base.appearance.themeId,
     themeMode: patch.appearance?.themeMode ?? base.appearance.themeMode,
     installedThemeIds: patch.appearance?.installedThemeIds ? [...new Set(patch.appearance.installedThemeIds)] : [...base.appearance.installedThemeIds],
+    customThemes: patch.appearance?.customThemes ? [...patch.appearance.customThemes] : [...base.appearance.customThemes],
+    surfacePackId: patch.appearance?.surfacePackId ?? base.appearance.surfacePackId,
+    surface: { ...base.appearance.surface, ...(patch.appearance?.surface ?? {}) },
+    installedSurfacePackIds: patch.appearance?.installedSurfacePackIds ? [...new Set(patch.appearance.installedSurfacePackIds)] : [...base.appearance.installedSurfacePackIds],
+    customSurfacePacks: patch.appearance?.customSurfacePacks ? [...patch.appearance.customSurfacePacks] : [...base.appearance.customSurfacePacks],
     priorityColors: isRecord(patch.appearance) && isRecord(patch.appearance.priorityColors)
       ? { ...base.appearance.priorityColors, ...patch.appearance.priorityColors }
       : { ...base.appearance.priorityColors }

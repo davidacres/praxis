@@ -1,0 +1,117 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Surface packs — the premium material layer.
+
+   A fourth theming axis, orthogonal to data-mode / data-accent / data-theme:
+     data-surface="flat|parchment|graphite|blueprint"
+
+   Packs set ONLY --surface-* custom properties (texture, panel material,
+   translucency, glow) — never a colour token — so any pack composes with any
+   theme. theme.css reads these tokens on the structural shells; the inert
+   :root block below guarantees an unset / "flat" surface is a total no-op.
+
+   Phase 1: four opaque packs (no backdrop-filter, no window transparency).
+   The translucency tokens are defined inert here so phase 2 only adds values.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Canvas (behind the whole window) */
+  --surface-app-bg-image: none;
+  --surface-app-bg-size: auto;
+  --surface-app-bg-blend: normal;
+
+  /* Texture / grain layer painted over each panel shell */
+  --surface-texture-image: none;
+  --surface-texture-size: auto;
+  --surface-texture-opacity: 0;
+  --surface-texture-blend: soft-light;
+
+  /* Panel material */
+  --surface-panel-border-color: var(--border);
+  --surface-radius-boost: 0px;
+  --surface-accent-glow: none;
+
+  /* Translucency — inert until phase 2 */
+  --surface-panel-opacity: 1;
+  --surface-panel-blur: 0px;
+  --surface-panel-saturate: 1;
+
+  /* User dials, also mirrored inline by applySurfacePack() */
+  --surface-intensity: 1;
+  --surface-texture: 1;
+  --surface-translucency: 1;
+
+  /* Swatch helpers for the Settings gallery cards (see surfacePacks.ts) */
+  --surface-swatch-fibre:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23f)' opacity='0.5'/%3E%3C/svg%3E");
+  --surface-swatch-brushed:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014 0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23b)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* ── flat ─────────────────────────────────────────────────────────────────
+   Explicit no-op. Present so the gallery has a real "off" card and so an
+   author can force it regardless of any inherited value. */
+:root[data-surface='flat'] {
+  --surface-app-bg-image: none;
+  --surface-texture-image: none;
+  --surface-texture-opacity: 0;
+  --surface-panel-border-color: var(--border);
+  --surface-radius-boost: 0px;
+}
+
+/* ── parchment (default) ─────────────────────────────────────────────────
+   Paper-fibre grain on panels + a warm accent-tinted vignette on the canvas.
+   The fibre tile is an SVG-turbulence placeholder — swap the url() for a
+   photographic WebP tile without touching anything else. */
+:root[data-surface='parchment'] {
+  --surface-app-bg-image:
+    radial-gradient(135% 95% at 12% -5%, var(--accent-soft), transparent 55%),
+    radial-gradient(120% 90% at 100% 100%, color-mix(in srgb, var(--text) 6%, transparent), transparent 60%);
+  --surface-texture-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.5' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23p)' opacity='0.6'/%3E%3C/svg%3E");
+  --surface-texture-size: 200px 200px;
+  --surface-texture-opacity: 0.09;
+  --surface-texture-blend: soft-light;
+  --surface-panel-border-color: color-mix(in srgb, var(--border) 78%, var(--accent) 10%);
+  --surface-radius-boost: 1px;
+}
+
+/* ── graphite ───────────────────────────────────────────────────────────
+   Anisotropic brushed-metal micro-texture + a bright hairline bevel and a
+   deeper shadow. Cool and precise; strong over GitHub / Xcode / Rider. */
+:root[data-surface='graphite'] {
+  --surface-app-bg-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--text) 4%, transparent), transparent 40%);
+  --surface-texture-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.014 0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='120' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E");
+  --surface-texture-size: 240px 120px;
+  --surface-texture-opacity: 0.12;
+  --surface-texture-blend: overlay;
+  --surface-panel-border-color: color-mix(in srgb, var(--border) 70%, var(--text) 6%);
+  --surface-accent-glow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* ── blueprint ──────────────────────────────────────────────────────────
+   Drafting grid on the canvas only; panels stay clean and opaque so text
+   contrast is untouched. Grid is procedural and tints from the accent. */
+:root[data-surface='blueprint'] {
+  --surface-app-bg-image:
+    linear-gradient(color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 9%, transparent) 1px, transparent 1px);
+  --surface-app-bg-size: 96px 96px, 96px 96px, 16px 16px, 16px 16px;
+  --surface-texture-image: none;
+  --surface-texture-opacity: 0;
+  --surface-radius-boost: 0px;
+}
+
+/* ── OS accessibility preferences ───────────────────────────────────────
+   Reduced transparency collapses the (phase 2) glass path to opaque; reduced
+   motion is a no-op in phase 1 but declared so later ambient animation has a
+   single off-switch. */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --surface-panel-opacity: 1;
+    --surface-panel-blur: 0px;
+  }
+}

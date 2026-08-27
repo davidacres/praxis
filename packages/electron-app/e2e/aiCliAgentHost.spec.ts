@@ -170,6 +170,7 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
     { cliPath: FIXTURE_PATH }
   );
   await win.reload();
+  await win.locator('[data-testid="nav-overview"]').click();
   await win.locator('[data-testid="board-nav-item"]').first().click();
   await win.locator('[data-testid="issue-card"]').first().click();
   const provider = win.locator('[data-testid="issue-detail-ai-provider"]');

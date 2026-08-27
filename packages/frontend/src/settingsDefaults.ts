@@ -81,9 +81,14 @@ export const DEFAULT_APP_SETTINGS = {
   },
   appearance: {
     showBrandArtwork: true,
-    themeId: 'tm-default-2',
+    themeId: 'praxis-dark',
     themeMode: 'dark' as 'light' | 'dark' | 'system',
-    installedThemeIds: ['tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'] as string[],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'] as string[],
+    customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
+    surfacePackId: 'parchment',
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint'] as string[],
+    customSurfacePacks: [] as Array<{ id: string; name: string; description: string; basePackId?: string; tokens: Record<string, string> }>,
     priorityColors: {
       Critical: '#DC2626',
       Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',

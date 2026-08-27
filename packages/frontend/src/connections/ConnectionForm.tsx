@@ -25,7 +25,7 @@ export interface ConnectionFormProps {
    */
   onPersisted?: () => void;
   onCancel: () => void;
-  onRemoved: () => void;
+  onRemoved: (connectionId: string) => void;
 }
 
 type FormValues = Record<string, string | boolean>;
@@ -342,7 +342,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     setSaveError(undefined);
     try {
       await window.ticketManager.connection.remove(persistedId);
-      onRemoved();
+      onRemoved(persistedId);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
       setConfirmingRemove(false);

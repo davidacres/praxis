@@ -8,7 +8,7 @@
 
 ## Outcome
 
-Give Ticket Manager a clear, editor-sized view of repository history that helps non-expert Git users understand what happened, where work split, and where it came back together. The feature uses the installed system Git executable and keeps repository mutations explicit and recoverable.
+Give Praxis a clear, editor-sized view of repository history and a clean, easy diff workspace that helps non-expert Git users understand what changed, where work split, where it came back together, and what safe action to take next. The feature uses the installed system Git executable and keeps repository mutations explicit and recoverable.
 
 ## Fit decision
 
@@ -27,16 +27,22 @@ The existing desktop service/IPC patterns are reused, but the new Git layer must
 5. Open a full-width Git Graph editor with branch/ref rail, graph canvas, timeline controls, and commit inspector.
 6. Support selection, branch focus, merge-only filtering, date filtering, zoom, pan, refresh, and opening changed files/diffs.
 
-### Follow-on slices
+### Delivered follow-on slice: FX-BE-004
 
-1. Status and stage/unstage UI.
-2. Commit creation with an explicit staged-file review.
-3. Branch create/delete/checkout.
-4. Pull/push with progress, authentication guidance, and conflict-safe failure states.
+1. Structured Inline, Split, and Hunk comparisons for working, staged, commit, range, branch, and ref changes.
+2. WIP navigation plus file, hunk, and selected-line stage/unstage/discard workflows.
+3. Commit creation; branch create/delete/checkout/rename/merge/rebase; stash/pop; cherry-pick; revert; pull/push.
+4. File history, blame, smart branch visibility, pinned branches, and commit context actions.
+5. Three-pane conflict resolution with current/incoming choices, line selection, editable output, marker validation, and safe abort.
 
-### Out of scope for the first slice
+### Still out of scope
 
-Rebase/reset/cherry-pick/merge execution, remote hosting APIs, CI badges, line-level staging, and automatic destructive operations.
+Reset and force-push workflows, remote hosting APIs, CI badges, pull-request review, patch-file import/export, and automatic destructive operations.
+
+## Story map
+
+- `FX-BE-003` — Desktop Git graph foundation and editor shell. **Complete.**
+- `FX-BE-004` — Praxis diff workspace and safe Git workflows. **Complete.**
 
 ## Visual direction
 
@@ -76,6 +82,13 @@ Use structured separators and machine-readable formats wherever Git provides the
 3. Graph tests cover linear, split, merge, criss-cross, detached HEAD, and multiple refs on one commit. **Complete, including the 5,000-commit benchmark.**
 4. Renderer tests cover selection, filters, zoom/pan, inspector, empty/error/loading states, and reduced motion. **Wide, narrow/reduced-motion, and horizontal timeline Electron visual tests complete; keyboard commit selection and settings persistence are covered.**
 5. Core, Electron, and frontend type checks plus a focused Electron visual pass are green on the current repository. **Complete.**
+6. Structured diff parsing and partial patch application are proven against temporary repositories. **Complete.**
+7. Wide/narrow diff workspaces and a real conflicted repository are captured and verified in packaged Electron. **Complete.**
+8. The complete Git Graph Electron spec passes after the production renderer is rebuilt and copied. **Complete: 3/3 current Git desktop scenarios pass, including responsive reduced-motion and a real conflicted repository.**
+
+## Validation note
+
+The broader Electron suite was also attempted on 2026-08-27. It is not green in the current shared worktree because legacy board tests still expect the removed root `Boards` navigation and unrelated AI-provider tests fail against current session/secret state. Those failures neither exercise nor contradict this Git feature; the independently runnable core, real-repository service, type/build, copied-renderer, and complete Git Graph Electron suites are green.
 
 ## Close conditions
 

@@ -31,11 +31,28 @@ packages/
    └──────────┬───────────┘    └───────────────────────┘
               │ vite build + copy-renderer
               ▼
-   ┌──────────────────────┐  electron-builder  ┌──────────────┐
-   │ packages/electron-    │ ──────────────► │ *.msi installer │
-   │ app                   │                  └──────────────┘
-   └──────────────────────┘
+   ┌──────────────────────┐  electron-builder  ┌──────────────────┐
+   │ packages/electron-    │ ──────────────► │ branded installers │
+   │ app                   │                  │ .dmg / setup.exe   │
+   └──────────────────────┘                  └──────────────────┘
 ```
+
+Build the Praxis desktop installer with `npm run app:dist:mac` on macOS or
+`npm run app:dist:win` on Windows. Artifacts are written to
+`packages/electron-app/dist/`. The macOS DMG and Windows assisted installer use
+the same warm charcoal, parchment, and terracotta visual language as the app.
+
+### Praxis desktop Git workspace
+
+Praxis includes a native Git Graph and diff workspace backed by the installed
+Git executable. The Electron main process owns repository discovery and Git
+commands; the sandboxed renderer receives typed commit, file, hunk, line,
+history, blame, and conflict records through preload IPC.
+
+The desktop workflow supports working/staged/commit/ref comparisons, Inline,
+Split, and Hunk views, file/hunk/selected-line staging, confirmed discard,
+branch and commit actions, stash workflows, and three-way conflict resolution.
+Focused evidence is captured under `packages/electron-app/output/playwright/`.
 
 `@ticket-manager/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
 

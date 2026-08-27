@@ -117,6 +117,7 @@ const DECOMPOSITION_REPLY = [
 
 /** Open the first demo board's first issue in the aux detail pane. */
 async function openFirstDemoIssue(win: import('playwright').Page): Promise<void> {
+  await win.locator('[data-testid="nav-overview"]').click();
   await win.locator('[data-testid="board-nav-item"]').first().click();
   await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-section"]').waitFor();
