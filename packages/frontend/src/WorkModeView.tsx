@@ -1,9 +1,13 @@
-import type { Board, BoardDetails, Connection, IssueSummary } from '@ticket-manager/core';
+import type { Board, BoardDetails, Connection, IssueSummary, ProjectBoardReference, ProjectRecord } from '@ticket-manager/core';
 import { Icon } from './Icon';
 import { backendModeMeta, boardTypeIcon, boardTypeLabel, statusTone } from './boardMeta';
 
 export interface WorkModeViewProps {
-  boards: Board[];
+  projects: Array<{
+    project: ProjectRecord;
+    defaultBoard?: Board;
+    linkedBoards: Array<{ link: ProjectBoardReference; board: Board }>;
+  }>;
   connections: Connection[];
   detailsByBoardId: Record<string, BoardDetails | undefined>;
   onOpenBoard: (board: Board) => void;
@@ -38,35 +42,39 @@ function activeIssues(details: BoardDetails | undefined): IssueSummary[] {
 }
 
 /**
- * Board-centric layout: every board is a card, and the work currently in flight
- * on it is nested underneath — the Work Mode idiom from the VS Code extension.
+ * Project-centric layout: boards and their active tickets always remain nested
+ * beneath the Praxis project that owns them.
  */
 export function WorkModeView({
-  boards,
+  projects,
   connections,
   detailsByBoardId,
   onOpenBoard,
   onOpenIssue
 }: WorkModeViewProps) {
-  if (boards.length === 0) {
+  if (projects.length === 0) {
     return (
       <div className="empty-state">
         <Icon name="columns" size={28} />
-        <span>No boards yet.</span>
+        <span>No projects yet.</span>
       </div>
     );
   }
 
   return (
     <div className="work-grid" data-testid="work-mode-view">
-      {boards.map(board => {
+      {projects.map(({ project, defaultBoard, linkedBoards }) => {
+        const projectBoards = [defaultBoard, ...linkedBoards.map(item => item.board)].filter((board): board is Board => Boolean(board));
+        return <section className="work-project" key={project.id} data-testid="work-project">
+          <header className="work-project-header"><Icon name="folder-open" size={15} /><strong>{project.name}</strong><span>{projectBoards.length} {projectBoards.length === 1 ? 'board' : 'boards'}</span></header>
+          {projectBoards.map(board => {
         const connection = connections.find(candidate => candidate.id === board.connectionId);
         const meta = backendModeMeta(connection?.mode ?? (board.connectionId ? undefined : 'demo'));
         const details = detailsByBoardId[board.id];
         const active = activeIssues(details);
 
         return (
-          <article className="work-card" key={board.id} data-testid="work-card">
+          <article className="work-card" key={`${board.connectionId ?? 'local'}:${board.id}`} data-testid="work-card">
             <header className="work-card-header">
               <span className="tree-icon" style={{ color: meta.tone }}>
                 <Icon name={boardTypeIcon(board)} />
@@ -117,6 +125,8 @@ export function WorkModeView({
             </div>
           </article>
         );
+          })}
+        </section>;
       })}
     </div>
   );

@@ -14,21 +14,43 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
+test('groups all layout toggles on the right side of the title bar', async () => {
+  const group = window.locator('.titlebar-layout-toggles');
+  await expect(group.getByRole('button', { name: 'Toggle sidebar' })).toBeVisible();
+  await expect(group.getByRole('button', { name: 'Toggle panel' })).toBeVisible();
+  await expect(group.getByRole('button', { name: 'Toggle secondary sidebar' })).toBeVisible();
+  const labels = await group.locator('button').evaluateAll(buttons => buttons.slice(0, 3).map(button => button.getAttribute('aria-label')));
+  expect(labels).toEqual([
+    'Toggle sidebar',
+    'Toggle panel',
+    'Toggle secondary sidebar'
+  ]);
+
+  await group.getByRole('button', { name: 'Toggle sidebar' }).click();
+  await expect(window.locator('.pane-sidebar')).toHaveCount(0);
+});
+
+test('displays the running Praxis version in the title bar', async () => {
+  const version = await window.evaluate(() => window.ticketManager.app.getVersion());
+  expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+  await expect(window.locator('.titlebar-version')).toHaveText(`v${version}`);
+});
+
 test('boards render on launch', async () => {
-  await expect(window.locator('nav')).toContainText('Boards');
-  const boardItems = window.locator('[data-testid="board-nav-item"]');
-  await expect(boardItems.first()).toBeVisible();
+  await window.locator('[data-testid="nav-overview"]').click();
+  await expect(window.locator('.overview-board-card').first()).toBeVisible();
 });
 
 test('selecting a board renders its columns and issue cards', async () => {
-  const boardItems = window.locator('[data-testid="board-nav-item"]');
-  await boardItems.first().click();
+  await window.locator('[data-testid="nav-overview"]').click();
+  await window.locator('.overview-board-card').first().click();
   const issueCards = window.locator('[data-testid="issue-card"]');
   await expect(issueCards.first()).toBeVisible();
 });
 
 test('opening an issue card shows the issue detail panel', async () => {
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await window.locator('[data-testid="nav-overview"]').click();
+  await window.locator('.overview-board-card').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
   // `exact` matters now: the frameless title bar also has a "Close window" button.
   await expect(window.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
@@ -36,7 +58,8 @@ test('opening an issue card shows the issue detail panel', async () => {
 });
 
 test('adding a comment appears in the issue detail panel', async () => {
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await window.locator('[data-testid="nav-overview"]').click();
+  await window.locator('.overview-board-card').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
 
   const commentBody = `e2e comment ${Date.now()}`;
@@ -47,7 +70,8 @@ test('adding a comment appears in the issue detail panel', async () => {
 });
 
 test('closing the issue detail panel hides it', async () => {
-  await window.locator('[data-testid="board-nav-item"]').first().click();
+  await window.locator('[data-testid="nav-overview"]').click();
+  await window.locator('.overview-board-card').first().click();
   await window.locator('[data-testid="issue-card"]').first().click();
   await window.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(window.getByRole('button', { name: 'Close', exact: true })).not.toBeVisible();
@@ -75,6 +99,5 @@ test('adding and removing a connection updates the list', async () => {
   // The saved connection stays selected; removal is a two-step confirm.
   await window.locator('[data-testid="conn-remove-btn"]').click();
   await window.locator('[data-testid="conn-remove-confirm-btn"]').click();
-
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).not.toBeVisible();
 });

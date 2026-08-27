@@ -35,6 +35,8 @@
     "app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1",
     "app:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1 -Dev",
     "app:dist": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-app.ps1",
+    "app:dist:mac": "./scripts/build-app.sh --target mac",
+    "app:dist:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-app.ps1 -Target nsis",
     "app:dist:portable": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-app.ps1 -Target portable",
     "app:dist:dir": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-app.ps1 -Target dir",
     "frontend:dev": "npm run dev --workspace=@ticket-manager/frontend",

@@ -47,6 +47,13 @@ const ANALYSIS_SESSION_SYSTEM_PROMPT = `You are an engineering agent working in 
 - Surface failures clearly instead of repeatedly retrying or silently changing approach.
 `;
 
+const CHAT_SESSION_SYSTEM_PROMPT = `You are a helpful AI assistant in a free-form chat session.
+
+Answer the user's request directly and conversationally. Do not begin with a mandatory ticket-analysis phase, do not require an analysis confirmation, and do not assume the conversation is about a ticket. Use workspace or ticket context only when it is relevant to the user's request.
+
+Respect explicit permission boundaries and stop when the user's request is answered or the requested work is complete.
+`;
+
 function slugifyNamingSegment(value: string): string {
   return value
     .normalize('NFKD')
@@ -126,7 +133,20 @@ export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails
   const worktreeName = buildWorktreeName(issue);
   const msiVersionExample = buildMsiVersionExample(issue.key);
 
-  const sessionPrompt = task.kind === 'analysis' ? ANALYSIS_SESSION_SYSTEM_PROMPT : PLANNING_SYSTEM_PROMPT;
+  const sessionPrompt = task.sessionMode === 'chat'
+    ? CHAT_SESSION_SYSTEM_PROMPT
+    : task.kind === 'analysis'
+      ? ANALYSIS_SESSION_SYSTEM_PROMPT
+      : PLANNING_SYSTEM_PROMPT;
+
+  if (task.sessionMode === 'chat') {
+    return `${sessionPrompt}
+## User Request
+${task.goal}
+## Scope
+${task.scope}
+${nonGoals}${completionContract}`;
+  }
 
   return `${sessionPrompt}
 ## Task

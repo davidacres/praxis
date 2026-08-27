@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Build the Ticket Manager Electron desktop app and package it as a Windows
-  MSI installer via electron-builder.
+  Build the Praxis Electron desktop app and package it as a branded Windows
+  NSIS installer via electron-builder.
 
 .DESCRIPTION
   Orchestrates the full pipeline:
@@ -12,17 +12,17 @@
     4. copy-renderer step     -> packages/frontend/dist -> packages/electron-app/renderer
                                  (so `loadFile('../../renderer/index.html')` resolves
                                  inside the asar — see packages/electron-app/src/main/index.ts)
-    5. electron-builder       -> produces packages/electron-app/dist/Ticket Manager-*-setup.msi
+    5. electron-builder       -> produces packages/electron-app/dist/Praxis-*-setup.exe
 
-  The .msi lands in packages/electron-app/dist/ and can be double-clicked (or
-  distributed via Group Policy / SCCM) to install Ticket Manager.
+  The setup executable lands in packages/electron-app/dist/ and can be
+  double-clicked to install Praxis.
 
 .PARAMETER SkipBuild
   Skip the workspace compile/copy steps and run electron-builder against the
   already-built artifacts. Fails fast if any required input is missing.
 
 .PARAMETER Target
-  Optional electron-builder target override. Defaults to the MSI target
+  Optional electron-builder target override. Defaults to the NSIS target
   configured in packages/electron-app/package.json (build.win.target). Pass
   'nsis' or 'portable' to produce alternative formats, or 'dir' to produce
   an unpacked directory (useful for smoke-testing the launcher without
@@ -113,12 +113,12 @@ if ($Target) {
   Write-Step "Running electron-builder (target: $Target)"
 } else {
   $ebArgs = @()
-  Write-Step 'Running electron-builder (target from package.json: msi)'
+  Write-Step 'Running electron-builder (target from package.json: nsis)'
 }
 
 Push-Location $electronApp
 try {
-  npx electron-builder @ebArgs
+  npx electron-builder @ebArgs --publish never
   if ($LASTEXITCODE -ne 0) {
     throw "electron-builder failed (exit $LASTEXITCODE)"
   }
@@ -132,7 +132,7 @@ if (-not (Test-Path $distDir)) {
 }
 
 # The -Target dir output goes one level deeper (e.g. dist\win-unpacked\*.exe).
-# MSI/NSIS installers land directly in dist\. Find whichever layout matches.
+# Installer artifacts land directly in dist\. Find whichever layout matches.
 $installerRoot = $distDir
 if ($Target -eq 'dir') {
   # Windows unpacked layout is dist\win-unpacked\ — any platform-specific
@@ -143,7 +143,7 @@ if ($Target -eq 'dir') {
 }
 
 $artifacts = Get-ChildItem $installerRoot -File -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -match '\.(msi|exe)$' } |
+  Where-Object { $_.Name -match '\.exe$' } |
   Sort-Object LastWriteTime -Descending
 
 Write-Host ''
@@ -160,10 +160,9 @@ if ($Target -eq 'dir') {
   Write-Host 'To launch the unpacked build:' -ForegroundColor Cyan
   Write-Host "  & `"$($artifacts[0].FullName)`"" -ForegroundColor Cyan
 } elseif ($artifacts) {
-  $firstMsi = $artifacts | Where-Object { $_.Name -like '*.msi' } | Select-Object -First 1
-  if ($firstMsi) {
-    Write-Host 'To install locally:' -ForegroundColor Cyan
-    Write-Host "  msiexec /i `"$($firstMsi.FullName)`"" -ForegroundColor Cyan
-    Write-Host 'Or just double-click the .msi in the output folder above.' -ForegroundColor Cyan
+  $installer = $artifacts | Where-Object { $_.Name -like '*setup.exe' } | Select-Object -First 1
+  if ($installer) {
+    Write-Host 'To install locally, open:' -ForegroundColor Cyan
+    Write-Host "  $($installer.FullName)" -ForegroundColor Cyan
   }
 }

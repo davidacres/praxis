@@ -24,7 +24,7 @@ interface ManagedTerminal {
   commands: TerminalCommandRecord[];
   commandRemainder: string;
   activeCommand?: TerminalCommandRecord;
-  integrationBootstrapped: boolean;
+  integrationDir?: string;
 }
 
 function findOnPath(executable: string): string | undefined {
@@ -135,9 +135,16 @@ export class TerminalManager {
     if (!profile) throw new Error(input.profileId
       ? `Terminal profile '${input.profileId}' is not installed.`
       : 'No supported terminal shell was found.');
+    if (input.reuseExisting) {
+      const existing = [...this.sessions.values()].find(session =>
+        !session.info.exited && session.info.cwd === cwd && session.info.profileId === profile.id
+      );
+      if (existing) return { ...existing.info };
+    }
     const shell = profile.shell;
+    const integration = this.prepareShellIntegration(profile.id);
     const id = randomUUID();
-    const child = pty.spawn(shell, [], {
+    const child = pty.spawn(shell, integration.args, {
       name: 'xterm-256color',
       cols: Math.max(2, Math.floor(input.cols || 80)),
       rows: Math.max(2, Math.floor(input.rows || 24)),
@@ -153,7 +160,8 @@ export class TerminalManager {
           : {}),
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
-        TERM_PROGRAM: 'Ticket Manager'
+        TERM_PROGRAM: 'Praxis',
+        ...integration.env
       } as Record<string, string>
     });
     const title = profile.name;
@@ -163,19 +171,12 @@ export class TerminalManager {
         hasContext: false, exited: false
       },
       process: child,
-        recent: Buffer.alloc(0)
-      , commands: [], commandRemainder: '', integrationBootstrapped: false
+      recent: Buffer.alloc(0),
+      commands: [], commandRemainder: '', integrationDir: integration.directory
     };
     this.sessions.set(id, session);
 
     child.onData(data => {
-      if (!session.integrationBootstrapped) {
-        session.integrationBootstrapped = true;
-        // Let the shell finish its startup files and draw its first prompt
-        // before writing the hook command; this prevents fast user input from
-        // being interleaved with the bootstrap line.
-        setTimeout(() => this.bootstrapShellIntegration(session, profile.id), 150);
-      }
       session.recent = appendBounded(session.recent, data);
       this.consumeShellIntegration(session, data);
       if (!session.info.hasContext && terminalOutputToPlainText(session.recent.toString('utf8'))) {
@@ -186,6 +187,7 @@ export class TerminalManager {
     });
     child.onExit(({ exitCode, signal }) => {
       session.info.exited = true;
+      this.cleanupIntegration(session);
       this.exitListener?.({ sessionId: id, exitCode, signal: signal || undefined });
     });
     return { ...session.info };
@@ -205,6 +207,7 @@ export class TerminalManager {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     if (!session.info.exited) session.process.kill();
+    this.cleanupIntegration(session);
     this.sessions.delete(sessionId);
     this.contextListener?.({ sessionId, terminalHasContext: false });
   }
@@ -229,6 +232,7 @@ export class TerminalManager {
   public dispose(): void {
     for (const session of this.sessions.values()) {
       if (!session.info.exited) session.process.kill();
+      this.cleanupIntegration(session);
     }
     this.sessions.clear();
   }
@@ -239,26 +243,31 @@ export class TerminalManager {
     return session;
   }
 
-  /**
-   * Install ephemeral OSC 633 hooks in the child shell.  This deliberately
-   * avoids touching the user's dotfiles: every terminal gets its own hooks
-   * and they disappear with the process.  The command is entered with echo
-   * disabled so the setup never pollutes the visible session transcript.
-   */
-  private bootstrapShellIntegration(session: ManagedTerminal, profileId: string): void {
+  /** Install hooks through a per-session startup file, never by typing setup
+   * commands into an already-echoing interactive prompt. */
+  private prepareShellIntegration(profileId: string): { args: string[]; env: Record<string, string>; directory?: string } {
     const esc = '\\033';
     const bell = '\\007';
-    const command = profileId === 'zsh'
-      ? `stty -echo; function __tm_precmd(){ local s=$?; printf '${esc}]633;D;%s${bell}${esc}]633;A${bell}' $s; }; precmd_functions+=(__tm_precmd); function __tm_preexec(){ printf '${esc}]633;C${bell}${esc}]633;E;%s${bell}' "$1"; }; preexec_functions+=(__tm_preexec); stty echo`
-      : profileId === 'bash'
-        ? `stty -echo; __tm_preexec(){ printf '${esc}]633;C${bell}${esc}]633;E;%s${bell}' "$1"; }; trap '__tm_preexec "$BASH_COMMAND"' DEBUG; __tm_prompt(){ local s=$?; printf '${esc}]633;D;%s${bell}${esc}]633;A${bell}' $s; }; PROMPT_COMMAND="__tm_prompt\${PROMPT_COMMAND:+;\$PROMPT_COMMAND}"; stty echo`
-        : '';
-    if (!command) return;
-    try {
-      session.process.write(`${command}\r`);
-    } catch {
-      // A shell can exit between its first output chunk and hook setup.
-    }
+    if (profileId !== 'zsh' && profileId !== 'bash') return { args: [], env: {} };
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-terminal-'));
+    const hook = profileId === 'zsh'
+      ? `function __tm_precmd(){ local s=$?; printf '${esc}]633;D;%s${bell}${esc}]633;A${bell}' $s; }; precmd_functions+=(__tm_precmd); function __tm_preexec(){ printf '${esc}]633;C${bell}${esc}]633;E;%s${bell}' "$1"; }; preexec_functions+=(__tm_preexec)`
+      : `__tm_preexec(){ printf '${esc}]633;C${bell}${esc}]633;E;%s${bell}' "$1"; }; trap '__tm_preexec "$BASH_COMMAND"' DEBUG; __tm_prompt(){ local s=$?; printf '${esc}]633;D;%s${bell}${esc}]633;A${bell}' $s; }; PROMPT_COMMAND="__tm_prompt\${PROMPT_COMMAND:+;\$PROMPT_COMMAND}"`;
+    const original = profileId === 'zsh'
+      ? path.join(process.env.ZDOTDIR || os.homedir(), '.zshrc')
+      : path.join(process.env.HOME || os.homedir(), '.bashrc');
+    const rc = profileId === 'zsh' ? path.join(directory, '.zshrc') : path.join(directory, '.bashrc');
+    const source = `if [ -f ${JSON.stringify(original)} ]; then source ${JSON.stringify(original)}; fi\n`;
+    fs.writeFileSync(rc, `${source}${hook}\n`, { mode: 0o600 });
+    return profileId === 'zsh'
+      ? { args: [], env: { ZDOTDIR: directory }, directory }
+      : { args: ['--rcfile', rc], env: {}, directory };
+  }
+
+  private cleanupIntegration(session: ManagedTerminal): void {
+    if (!session.integrationDir) return;
+    try { fs.rmSync(session.integrationDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    session.integrationDir = undefined;
   }
 
   private consumeShellIntegration(session: ManagedTerminal, data: string): void {

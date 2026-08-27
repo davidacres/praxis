@@ -18,7 +18,15 @@ export class ElectronSecretsStore implements SecretsStore {
     if (!safeStorage.isEncryptionAvailable()) {
       return undefined;
     }
-    return safeStorage.decryptString(Buffer.from(encoded, 'base64'));
+    try {
+      return safeStorage.decryptString(Buffer.from(encoded, 'base64'));
+    } catch {
+      // A blob may have been encrypted under a previous app identity (for
+      // example, before the Praxis rename). Treat it as unavailable and let
+      // the user replace it; never let one stale credential prevent the app
+      // from loading provider/connection settings.
+      return undefined;
+    }
   }
 
   public async store(key: string, value: string): Promise<void> {

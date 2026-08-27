@@ -51,7 +51,9 @@ export interface AgentTaskAttachment {
 
 /** What the agent should do, with explicit guardrail boundaries. */
 export interface AgentTaskDefinition {
-  kind?: 'general' | 'analysis' | 'jira-delivery';
+  kind?: 'general' | 'analysis' | 'review' | 'jira-delivery';
+  /** Explicit composer mode, when a task was created from a session composer. */
+  sessionMode?: SessionMode;
   goal: string;
   scope: string;
   definitionOfDone: string;
@@ -199,6 +201,9 @@ export interface AgentConversationMessage {
 /** Tool access granted to an agent session. Read-only is enforced by the host, not just prompted. */
 export type AgentToolMode = 'read-only' | 'full' | 'project-only';
 
+/** Explicit purpose of a user-facing AI session. */
+export type SessionMode = 'chat' | 'analysis' | 'review';
+
 /** Full persisted record for an AI agent session attached to an issue. */
 export interface AgentSessionRecord {
   issueKey: string;
@@ -229,6 +234,8 @@ export interface AgentSessionRecord {
   startedAt: string;
   completedAt?: string;
   boardId?: string;
+  /** Explicit session purpose; older records derive this from taskDefinition.kind. */
+  mode?: SessionMode;
 }
 
 /** Default guardrail limits. */

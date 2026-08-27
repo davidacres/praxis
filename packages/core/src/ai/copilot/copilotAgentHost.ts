@@ -161,7 +161,9 @@ export class CopilotAgentHost {
     // system-role slot (like ACP's `ActiveSession.prompt(text)`) — the
     // runtime supplies its own persona, so the task's instructions travel
     // as one combined prompt.
-    const combinedPrompt = `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${issue.key} — ${issue.summary}`;
+    const combinedPrompt = taskDefinition.sessionMode === 'chat'
+      ? `${systemPrompt}\n\nRespond directly to the user's request. Do not start a ticket analysis or inspect a ticket unless explicitly asked.`
+      : `${systemPrompt}\n\nExecute the task described above.\n\nIssue: ${issue.key} — ${issue.summary}`;
 
     const client = new CopilotClientWrapper({
       workingDirectory,

@@ -10,6 +10,10 @@ function senderWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null 
 }
 
 export function registerWindowIpc(): void {
+  ipcMain.handle('window:reload', async (event: Electron.IpcMainInvokeEvent) => {
+    senderWindow(event)?.webContents.reload();
+  });
+
   ipcMain.handle('window:minimize', async (event: Electron.IpcMainInvokeEvent) => {
     senderWindow(event)?.minimize();
   });

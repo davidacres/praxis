@@ -41,8 +41,8 @@ test('opens Settings from the title bar as a dismissible popover dialog', async 
 
 test('theme gallery previews and persists the selected complete palette', async () => {
   await window.locator('[data-testid="titlebar-themes"]').click();
-  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(19);
-  await expect(window.locator('[data-testid="theme-card-tm-default-2"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(27);
+  await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
 
   await window.locator('[data-testid="theme-card-humanist-light"]').click();
@@ -69,6 +69,42 @@ test('persists the selected theme and mode through app settings', async () => {
   await expect(window.locator('html')).toHaveAttribute('data-theme', /anthropic-(light|dark)/);
 });
 
+test('startup splash inherits the saved app theme', async () => {
+  await window.locator('[data-testid="startup-splash"]').click();
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  await window.reload();
+
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  const colors = await window.locator('[data-testid="startup-splash"]').evaluate(splash => {
+    const root = getComputedStyle(document.documentElement);
+    const resolveColor = (value: string) => {
+      const probe = document.createElement('span');
+      probe.style.color = value;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    };
+    const trail = splash.querySelector('.startup-splash-trail-thin')!;
+    const dot = splash.querySelector('.startup-splash-dot-core')!;
+    return {
+      themeBackground: resolveColor(root.getPropertyValue('--bg').trim()),
+      themeElevated: resolveColor(root.getPropertyValue('--bg-elevated').trim()),
+      themeText: resolveColor(root.getPropertyValue('--text').trim()),
+      themeAccent: resolveColor(root.getPropertyValue('--accent').trim()),
+      splashBackground: getComputedStyle(splash).backgroundImage,
+      trail: getComputedStyle(trail).stroke,
+      dot: getComputedStyle(dot).stopColor
+    };
+  });
+
+  expect(colors.splashBackground).toContain(colors.themeBackground);
+  expect(colors.splashBackground).toContain(colors.themeElevated);
+  expect(colors.trail).toBe(colors.themeText);
+  expect(colors.dot).toBe(colors.themeAccent);
+});
+
 test('installs a marketplace theme and makes it available on reload', async () => {
   await window.locator('[data-testid="titlebar-themes"]').click();
   const marketplace = window.locator('[data-testid="theme-card-dracula-dark"]');
@@ -77,9 +113,20 @@ test('installs a marketplace theme and makes it available on reload', async () =
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
   await window.reload();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dracula-dark');
+});
+
+test('creates a custom theme with editable colors and persists it', async () => {
   await window.locator('[data-testid="titlebar-themes"]').click();
-  await expect(window.locator('[data-testid="theme-card-dracula-dark"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect(window.locator('[data-testid="theme-card-dracula-dark"] .theme-card-installed')).toHaveText('Installed');
+  await window.getByRole('button', { name: /Create custom theme/ }).click();
+  const editor = window.getByRole('region', { name: 'Custom theme editor' });
+  await editor.getByLabel('Name').fill('Ocean Custom');
+  await editor.getByLabel('Accent').last().fill('#149eca');
+  await editor.getByRole('button', { name: 'Save theme' }).click();
+  const custom = await window.evaluate(() => window.ticketManager.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
+  expect(custom?.name).toBe('Ocean Custom');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', custom!.id);
+  await window.reload();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', custom!.id);
 });
 
 test('gradient priorities expose a picker per stop plus a direction control', async () => {

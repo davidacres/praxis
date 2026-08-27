@@ -23,16 +23,16 @@ const CREATE_STEP_COPY = [
   { title: 'Shape the brief', detail: 'Capture enough context to make the first work items useful and focused.' },
   { title: 'Set up the initial plan', detail: 'Review the workflow and starter tickets. Everything remains editable later.' },
   { title: 'Choose tool access', detail: 'Set the default permissions for future sessions without starting AI now.' },
-  { title: 'Review and create', detail: 'Confirm exactly what Ticket Manager will create.' }
+  { title: 'Review and create', detail: 'Confirm exactly what Praxis will create.' }
 ] as const;
 
 const EXISTING_STEP_COPY = [
-  { title: 'Choose the existing folder', detail: 'Ticket Manager will inspect this folder without changing it.' },
+  { title: 'Choose the existing folder', detail: 'Praxis will inspect this folder without changing it.' },
   { title: 'Describe the project', detail: 'Confirm its type and identity. Detected files remain untouched.' },
   { title: 'Shape the brief', detail: 'Capture the context that is not obvious from the repository itself.' },
-  { title: 'Set up the initial plan', detail: 'Review the local workflow and starter tickets added to Ticket Manager.' },
+  { title: 'Set up the initial plan', detail: 'Review the local workflow and starter tickets added to Praxis.' },
   { title: 'Choose tool access', detail: 'Set the default permissions for future sessions without starting AI now.' },
-  { title: 'Review and add', detail: 'Confirm what Ticket Manager will record alongside the existing folder.' }
+  { title: 'Review and add', detail: 'Confirm what Praxis will record alongside the existing folder.' }
 ] as const;
 
 export function NewProjectWizard({ mode = 'create', onCancel, onCreated }: { mode?: 'create' | 'existing'; onCancel: () => void; onCreated: (project: ProjectRecord) => void }) {

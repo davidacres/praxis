@@ -1,9 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { BackendMode, Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord } from '@ticket-manager/core';
+import type { Board, BoardDetails, Connection, ProjectRecord } from '@ticket-manager/core';
 import { Icon, type IconName } from './Icon';
-import { backendModeMeta, boardTypeIcon, boardTypeLabel } from './boardMeta';
-import { BrandModeIcon } from './BrandModeIcon';
-import { ConnectionStatusDot } from './ConnectionStatusDot';
 import { IssuePeek } from './IssuePeek';
 import { useSettings } from './useSettings';
 import { WorkModeView } from './WorkModeView';
@@ -37,7 +34,6 @@ const FEATURES: FeatureDef[] = [
   { id: 'issues', label: 'Issues', icon: 'ticket' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
   { id: 'agents', label: 'Agents', icon: 'zap' },
-  { id: 'git', label: 'Git Graph', icon: 'git-branch' }
 ];
 
 export interface SidebarProps {
@@ -57,24 +53,11 @@ export interface SidebarProps {
   onNewProject: () => void;
   onAddExistingProject: () => void;
   onSelectProject: (project: ProjectRecord) => void;
+  onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
   selectedProjectId?: string;
-  /** Clicking the "Boards" heading returns to the board area and refreshes the list. */
-  onShowBoards: () => void;
   /** Selected issue for the peek card pinned above the footer (classic mode). */
   selectedIssueKey?: string;
   selectedIssueConnectionId?: string;
-  /** Latest health-check per connection id — drives the group-row status dots. */
-  connectionChecks?: Record<string, ConnectionCheck | undefined>;
-}
-
-interface BoardGroup {
-  key: string;
-  label: string;
-  icon: IconName;
-  tone: string;
-  /** Owning connection's backend mode ('demo' for the built-in boards) — drives the brand icon. */
-  mode: BackendMode;
-  boards: Board[];
 }
 
 export function Sidebar({
@@ -94,67 +77,63 @@ export function Sidebar({
   onNewProject,
   onAddExistingProject,
   onSelectProject,
+  onSelectGit,
   selectedProjectId,
-  onShowBoards,
   selectedIssueKey,
-  selectedIssueConnectionId,
-  connectionChecks
+  selectedIssueConnectionId
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  // Brand artwork (extension parity) vs generic board-type glyphs — Appearance setting.
   const { settings } = useSettings();
-  const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   // The "Ticket Manager" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  const [boardsCollapsed, setBoardsCollapsed] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
 
-  /**
-   * Boards are flat in the data model, so the folder level is synthesised from
-   * the owning connection — boards with no connectionId come from the built-in
-   * demo backend.
-   */
-  const groups = useMemo<BoardGroup[]>(() => {
+  const projectEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const visible = needle
-      ? boards.filter(board => board.name.toLowerCase().includes(needle) && !board.connectionId?.startsWith('project:'))
-      : boards.filter(board => !board.connectionId?.startsWith('project:'));
-
-    const byKey = new Map<string, BoardGroup>();
-    for (const board of visible) {
-      const connection = connections.find(candidate => candidate.id === board.connectionId);
-      const key = board.connectionId ?? 'demo';
-      const mode: BackendMode = connection?.mode ?? 'demo';
-      const meta = backendModeMeta(connection?.mode ?? (board.connectionId ? undefined : 'demo'));
-      const existing = byKey.get(key);
-      if (existing) {
-        existing.boards.push(board);
-      } else {
-        byKey.set(key, {
-          key,
-          label: connection?.name ?? meta.label,
-          icon: meta.icon,
-          tone: meta.tone,
-          mode,
-          boards: [board]
-        });
-      }
-    }
-    return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [boards, connections, query]);
+    return projects.map(project => {
+      const defaultBoard = boards.find(board => board.id === project.defaultBoardId && board.connectionId === `project:${project.id}`);
+      const linkedBoards = project.linkedBoards.flatMap(link => {
+        const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
+        return board ? [{ link, board }] : [];
+      });
+      const matchesProject = !needle || `${project.name} ${project.key} ${project.type}`.toLowerCase().includes(needle);
+      const matchesDefault = defaultBoard?.name.toLowerCase().includes(needle);
+      const matchingLinkedBoards = needle && !matchesProject
+        ? linkedBoards.filter(({ link, board }) => `${link.displayName} ${board.name}`.toLowerCase().includes(needle))
+        : linkedBoards;
+      return {
+        project,
+        defaultBoard: !needle || matchesProject || matchesDefault ? defaultBoard : undefined,
+        linkedBoards: matchingLinkedBoards,
+        visible: matchesProject || Boolean(matchesDefault) || matchingLinkedBoards.length > 0
+      };
+    }).filter(entry => entry.visible);
+  }, [boards, projects, query]);
+  const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ project, defaultBoard, linkedBoards }) => [
+    ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
+    ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
+  ])), [projectEntries]);
+  const externalBoards = boards.filter(board => !projectBoardKeys.has(`${board.connectionId ?? ''}:${board.id}`));
 
   return (
     <nav className="sidebar" aria-label="Workspace">
       <div className="sidebar-header">
         <h2 className="sidebar-title">Workspace</h2>
         <div className="new-menu-anchor">
-          <button className="new-pill" onClick={() => setNewMenuOpen(open => !open)} data-testid="new-menu">
+          <button
+            className="new-pill new-pill-icon"
+            aria-label="New"
+            title="New (Ctrl+N)"
+            onClick={() => setNewMenuOpen(open => !open)}
+            data-testid="new-menu"
+          >
             <Icon name="plus" size={13} />
-            New
-            <span className="kbd">Ctrl+N</span>
           </button>
           {newMenuOpen && <div className="new-menu" role="menu">
             {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
@@ -216,7 +195,7 @@ export function Sidebar({
       <div className="sidebar-scroll">
         {mode === 'work' ? (
           <WorkModeView
-            boards={boards}
+            projects={projectEntries}
             connections={connections}
             detailsByBoardId={detailsByBoardId}
             onOpenBoard={onSelectBoard}
@@ -224,81 +203,87 @@ export function Sidebar({
           />
         ) : (
           <>
-            {newProjectEnabled && <><button className="sidebar-section-label sidebar-section-button" onClick={onNewProject}>Projects <span className="tree-meta">{projects.length}</span></button>
-            {projects.length === 0 ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button> : projects.map(project => <button key={project.id} className={`tree-row tree-row-stacked${selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-nav-item" onClick={() => onSelectProject(project)}><span className="tree-icon"><Icon name="folder-open" size={15} /></span><span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span></button>)}</>}
-            <button
-              className="sidebar-section-label sidebar-section-button"
-              data-testid="nav-board"
-              onClick={onShowBoards}
-            >
-              Boards
-            </button>
-
-            {groups.length === 0 && (
-              <div style={{ padding: '4px 12px' }} className="placeholder-text">
-                No boards.
+            {newProjectEnabled && <>
+              <div className="sidebar-section-heading">
+                <button
+                  className="sidebar-section-label sidebar-section-button sidebar-section-toggle"
+                  aria-expanded={!projectsCollapsed}
+                  data-testid="toggle-projects"
+                  onClick={() => setProjectsCollapsed(value => !value)}
+                >
+                  <span className={`tree-twisty${projectsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span>
+                  <span>Projects</span>
+                  <span className="tree-meta">{projects.length}</span>
+                </button>
+                <button className="sidebar-section-add" aria-label="Add project" onClick={onNewProject}><Icon name="plus" size={13} /></button>
               </div>
-            )}
-
-            {groups.map(group => {
-              const isCollapsed = collapsed[group.key] ?? false;
-              return (
-                <div key={group.key}>
-                  <button
-                    className="tree-row"
-                    style={{ paddingLeft: 4 }}
-                    aria-expanded={!isCollapsed}
-                    onClick={() =>
-                      setCollapsed(current => ({ ...current, [group.key]: !isCollapsed }))
-                    }
-                  >
-                    <span className={`tree-twisty${isCollapsed ? '' : ' open'}`}>
-                      <Icon name="chevron-right" size={13} />
-                    </span>
-                    <span className="tree-icon folder" style={{ color: group.tone }}>
-                      <Icon name={isCollapsed ? 'folder' : 'folder-open'} size={15} />
-                    </span>
-                    <span className="tree-label">{group.label}</span>
-                    {/* Health dot per real connection; the demo backend is
-                        always local, so its group carries no dot. */}
-                    {group.key !== 'demo' && (
-                      <ConnectionStatusDot check={connectionChecks?.[group.key]} />
-                    )}
-                    <span className="tree-meta">{group.boards.length}</span>
-                  </button>
-
-                  {!isCollapsed &&
-                    group.boards.map(board => (
-                      <button
-                        key={`${group.key}:${board.id}`}
-                        data-testid="board-nav-item"
-                        className={`tree-row tree-row-stacked${
-                          board.id === selectedBoardId ? ' active' : ''
-                        }`}
-                        style={{ paddingLeft: 26 }}
-                        title={`${boardTypeLabel(board)} · ${board.projectKey ?? board.name}`}
-                        onClick={() => onSelectBoard(board)}
-                      >
-                        <span className="tree-icon" style={{ color: group.tone }}>
-                          {showBrandArtwork ? (
-                            <BrandModeIcon mode={group.mode} size={15} />
-                          ) : (
-                            <Icon name={boardTypeIcon(board)} size={15} />
-                          )}
-                        </span>
-                        <span className="tree-stack">
-                          <span className="tree-label">{board.name}</span>
-                          <span className="tree-sub">
-                            <Icon name="folder" size={12} />
-                            {boardTypeLabel(board)}
-                            {board.projectKey ? ` · ${board.projectKey}` : ''}
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                </div>
-              );
-            })}
+              {!projectsCollapsed && (projects.length === 0
+                ? <button className="sidebar-empty-project" onClick={onNewProject}>+ New Project</button>
+                : projectEntries.map(({ project, defaultBoard, linkedBoards }) => {
+                    const projectCollapsed = collapsed[`project:${project.id}`] ?? false;
+                    const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
+                    const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
+                    const projectGitCollapsed = collapsed[`project:${project.id}:git`] ?? false;
+                    return <div className="project-tree" key={project.id} data-testid="project-tree">
+                      <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`}>
+                        <button
+                          className="project-tree-toggle"
+                          aria-label={`${projectCollapsed ? 'Expand' : 'Collapse'} ${project.name}`}
+                          aria-expanded={!projectCollapsed}
+                          onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
+                        ><span className={`tree-twisty${projectCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span></button>
+                        <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
+                          <span className="tree-icon project-icon"><Icon name="folder-open" size={15} /></span>
+                          <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span>
+                          <span className="tree-meta">{childCount}</span>
+                        </button>
+                      </div>
+                      {!projectCollapsed && <div className="project-tree-children">
+                        <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
+                          <span className={`tree-twisty${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={11} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
+                        </button>
+                        {!projectBoardsCollapsed && <>
+                        {defaultBoard && <button
+                          className={`tree-row project-board-row${defaultBoard.id === selectedBoardId ? ' active' : ''}`}
+                          data-testid="project-default-board-nav-item"
+                          onClick={() => onSelectBoard(defaultBoard)}
+                        >
+                          <span className="tree-icon project-board-icon"><Icon name="columns" size={14} /></span>
+                          <span className="tree-label">{defaultBoard.name}</span>
+                          <span className="tree-badge">Default</span>
+                        </button>}
+                        {linkedBoards.map(({ link, board }) => <button
+                          key={`${link.connectionId}:${link.boardId}`}
+                          className={`tree-row project-board-row${board.id === selectedBoardId ? ' active' : ''}`}
+                          data-testid="project-linked-board-nav-item"
+                          onClick={() => onSelectBoard(board)}
+                        >
+                          <span className="tree-icon linked-board-icon"><Icon name="link" size={14} /></span>
+                          <span className="tree-label">{link.displayName}</span>
+                          <span className="tree-badge">Linked</span>
+                        </button>)}
+                        </>}
+                        <button className="sidebar-subsection-toggle" aria-expanded={!projectGitCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:git`]: !projectGitCollapsed }))}>
+                          <span className={`tree-twisty${projectGitCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={11} /></span><span>Git</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
+                        </button>
+                        {!projectGitCollapsed && <button
+                          className={`tree-row project-git-row${activeFeature === 'git' && selectedProjectId === project.id ? ' active' : ''}`}
+                          data-testid="project-git-nav-item"
+                          disabled={!project.workspaceFolder}
+                          title={!project.workspaceFolder ? 'Attach a workspace folder to enable Git' : undefined}
+                          onClick={() => onSelectGit(project, 'graph')}
+                        ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
+                        {!projectGitCollapsed && project.workspaceFolder && <button className="tree-row project-git-child" data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
+                      </div>}
+                    </div>;
+                  }))}
+            </>}
+            <div className="sidebar-section-heading">
+              <button className="sidebar-section-label sidebar-section-button sidebar-section-toggle" aria-expanded={!boardsCollapsed} data-testid="toggle-boards" onClick={() => setBoardsCollapsed(value => !value)}>
+                <span className={`tree-twisty${boardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
+              </button>
+            </div>
+            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" onClick={() => onSelectBoard(board)}><span className="tree-icon"><Icon name="columns" size={14} /></span><span className="tree-label">{board.name}</span></button>)}</div>}
           </>
         )}
       </div>
@@ -315,7 +300,7 @@ export function Sidebar({
           onClick={() => setFeaturesCollapsed(collapsed => !collapsed)}
         >
           <span className="sidebar-section-label" style={{ margin: 0 }}>
-            Ticket Manager
+            Praxis
           </span>
           <span className={`tree-twisty${featuresCollapsed ? '' : ' open'}`}>
             <Icon name="chevron-right" size={13} />

@@ -32,8 +32,10 @@ import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from './boardTransitionMatch';
 import { isTerminalAgentState } from './aiSessionState';
 import { WhatsNewDialog } from './WhatsNewDialog';
+import { StartupSplash } from './StartupSplash';
 import { NewProjectWizard } from './NewProjectWizard';
 import { ProjectHome } from './ProjectHome';
+import { ProjectWorkspace } from './ProjectWorkspace';
 import { OverviewPage } from './OverviewPage';
 import { useSettings } from './useSettings';
 import {
@@ -66,6 +68,7 @@ interface Route {
   /** Per-ticket runtime selected before opening an AI tool. */
   aiProvider?: AiProvider;
   aiModel?: string;
+  gitView?: 'graph' | 'changes' | 'conflicts';
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -80,7 +83,11 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
 
 export function App() {
   const { settings } = useSettings();
+  const [appVersion, setAppVersion] = useState<string>();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
+  useEffect(() => {
+    void window.ticketManager.app.getVersion().then(setAppVersion).catch(() => setAppVersion(undefined));
+  }, []);
   const [nav, setNav] = useState<{ entries: Route[]; index: number }>({
     entries: [{}],
     index: 0
@@ -107,6 +114,8 @@ export function App() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
   const [selectedDesignerNode, setSelectedDesignerNode] = useState<TaskDesignerCanvasNode>();
@@ -449,7 +458,7 @@ export function App() {
       ? FEATURE_TITLES[route.feature]
       : selectedBoard?.name ?? 'New session';
   const contextDetail = route.feature
-    ? 'Ticket Manager'
+    ? 'Praxis'
     : connection?.name ?? backendModeMeta(selectedBoard?.connectionId ? undefined : 'demo').label;
   const selectedBoardFilters =
     boardFilterState && boardFilterState.boardId === selectedBoard?.id
@@ -467,11 +476,8 @@ export function App() {
         };
 
   const centre = () => {
-    if (selectedProject) {
-      return <ProjectHome project={selectedProject} boards={boards} onChanged={project => {
-        setProjects(current => current.map(item => item.id === project.id ? project : item));
-        refreshBoards();
-      }} onOpenBoard={boardId => navigate({ boardId })} />;
+    if (selectedProject && route.feature !== 'git') {
+      return <ProjectWorkspace project={selectedProject} boards={boards} onOpenBoard={boardId => navigate({ boardId })} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />;
     }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
@@ -515,7 +521,7 @@ export function App() {
       );
     }
     if (route.feature === 'git') {
-      return <GitGraphPage />;
+      return <GitGraphPage repositoryPath={selectedProject?.workspaceFolder} initialView={route.gitView} />;
     }
     if (route.feature) {
       return (
@@ -571,13 +577,14 @@ export function App() {
       return (
         <NewSession
           boards={boards}
-          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode }) => {
-            const project = board.connectionId?.startsWith('project:')
+          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode }) => {
+            const project = board?.connectionId?.startsWith('project:')
               ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))
               : undefined;
             const record = await window.ticketManager.ai.delegate({
-              issueKey,
-              connectionId: board.connectionId,
+              ...(issueKey ? { issueKey } : {}),
+              mode,
+              ...(board?.connectionId ? { connectionId: board.connectionId } : {}),
               task: { goal },
               provider,
               model,
@@ -643,11 +650,10 @@ export function App() {
 
   // The secondary sidebar is a pane the title-bar button owns outright, like the
   // bottom panel — selecting an issue fills it, it does not summon it.
-  // Project creation/home are dedicated main-content surfaces; the issue pane
-  // has no relevant selection there. Git Graph owns its own inspector column,
-  // so the global issue pane would squeeze its topology into a narrow strip.
+  // Project workspaces use the secondary pane for editable project details.
+  // Git Graph owns its own inspector column, so the global issue pane remains
+  // hidden there to preserve topology and diff width.
   const showAux = auxVisible
-    && !route.projectId
     && route.feature !== 'overview'
     && route.feature !== 'git';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
@@ -674,6 +680,7 @@ export function App() {
   return (
     <div className="window-root">
       <TitleBar
+        appVersion={appVersion}
         contextLabel={contextLabel}
         contextDetail={contextDetail}
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
@@ -737,7 +744,7 @@ export function App() {
                     if (feature === 'connections') {
                       refreshConnections();
                     }
-                    navigate({ feature });
+                    navigate(feature === 'git' && selectedProject ? { projectId: selectedProject.id, feature } : { feature });
                   }}
                   featureCounts={featureCounts}
                   onNewSession={() => navigate({})}
@@ -745,14 +752,9 @@ export function App() {
                   onAddExistingProject={() => setProjectWizardMode('existing')}
                   onSelectProject={project => navigate({ projectId: project.id })}
                   selectedProjectId={route.projectId}
-                  onShowBoards={() => {
-                    refreshBoards();
-                    refreshConnections();
-                    navigate({ boardId: route.boardId });
-                  }}
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
-                  connectionChecks={connectionChecks}
+                  onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
                 />
               )}
             </div>
@@ -796,6 +798,11 @@ export function App() {
                         <span>Select a designer item to see its details.</span>
                       </div>
                     )
+                  ) : selectedProject && route.issueKey === undefined ? (
+                    <ProjectHome project={selectedProject} boards={boards} onChanged={project => {
+                      setProjects(current => current.map(item => item.id === project.id ? project : item));
+                      refreshBoards();
+                    }} onOpenBoard={boardId => navigate({ boardId })} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />
                   ) : route.issueKey === undefined ? (
                     <div className="empty-state" data-testid="aux-empty">
                       <Icon name="ticket" size={28} />
@@ -917,7 +924,7 @@ export function App() {
                 <span className="settings-dialog-mark"><Icon name="gear" size={18} /></span>
                 <div>
                   <h1 id="settings-dialog-title">Settings</h1>
-                  <p>Configure Ticket Manager for this device.</p>
+                  <p>Configure Praxis for this device.</p>
                 </div>
               </div>
               <button
@@ -948,7 +955,16 @@ export function App() {
           </section>
         </div>
       )}
-      {whatsNewOpen && <WhatsNewDialog onClose={() => setWhatsNewOpen(false)} />}
+      {whatsNewOpen && (
+        <WhatsNewDialog
+          onClose={() => setWhatsNewOpen(false)}
+          onReplaySplash={() => {
+            setSplashReplayKey(key => key + 1);
+            setShowSplash(true);
+          }}
+        />
+      )}
+      {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
     </div>
   );
 }

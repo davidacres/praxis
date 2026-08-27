@@ -1,5 +1,6 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
 import { registerBoardIpc } from './boardIpc';
 import { registerIssueIpc } from './issueIpc';
 import { registerConnectionIpc } from './connectionIpc';
@@ -30,6 +31,86 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 const isMac = process.platform === 'darwin';
 
 /**
+ * Renamed from Electron's unpackaged default (the npm package name,
+ * "@ticket-manager/electron-app") to the "Praxis" product name — this is what
+ * shows in the macOS menu bar, Force Quit, Alt-Tab, etc. Capture the old
+ * default before renaming so `migrateLegacyUserData` (below) can find it.
+ */
+const legacyAppName = app.getName();
+app.setName('Praxis');
+
+/**
+ * Packaged builds get their icon baked into the .app/.exe by electron-builder
+ * from `build/icon.png` at build time, so this only matters for unpackaged
+ * dev runs (`npm start` / `electron .`), which otherwise show Electron's
+ * default icon.
+ */
+function getDevAppIcon() {
+  if (app.isPackaged) return undefined;
+  return nativeImage.createFromPath(path.join(__dirname, '../../build/icon.png'));
+}
+
+/**
+ * One-time migration for the Praxis rename: `app.getPath('userData')` is
+ * derived from the app name, so renaming it orphans everything already on
+ * disk under the old name — projects.json, board-preferences.json,
+ * task-designer.json, ai-sessions.json, ai-analysis.json, and
+ * userWorkspace.json. Copy those forward before anything reads or writes
+ * userData. Secrets are deliberately excluded below because safeStorage
+ * ciphertext is scoped to the old app identity on macOS and cannot be
+ * decrypted after the rename.
+ *
+ * Only copies the flat `*.json` store files, not Electron's own internal
+ * subdirectories (Cache, session partition, Local State, singleton-lock
+ * files) — those are disposable, and copying a directory onto one Electron
+ * already created for the new name throws EEXIST (`fs.cpSync` won't merge
+ * into an existing destination directory).
+ *
+ * Can't gate on "does the new userData directory exist" — Electron itself
+ * creates it (SingletonLock, session partition files) as a side effect of
+ * `app.requestSingleInstanceLock()`, which runs at module load, well before
+ * this does. So this uses an explicit marker file instead.
+ *
+ * Does not touch the shared settings.json (see `resolveSharedSettingsPath` in
+ * `@ticket-manager/core`) — that lives at a fixed, name-independent path
+ * shared with the VS Code extension and is unaffected by this rename.
+ *
+ * Users whose credentials were stored under the old app identity must
+ * reconnect or re-enter them once after upgrading. The secrets adapter also
+ * fails closed if it encounters an unreadable legacy blob.
+ */
+function migrateLegacyUserData(): void {
+  if (legacyAppName === app.getName()) return;
+  // Playwright and other callers may intentionally supply an isolated profile.
+  // Never populate an explicitly selected profile with the developer's old
+  // application data.
+  if (process.argv.some(argument => argument.startsWith('--user-data-dir='))) return;
+  const newPath = app.getPath('userData');
+  const marker = path.join(newPath, '.praxis-rename-migration-checked');
+  if (fs.existsSync(marker)) return;
+  fs.mkdirSync(newPath, { recursive: true });
+  const legacyPath = path.join(app.getPath('appData'), legacyAppName);
+  try {
+    if (fs.existsSync(legacyPath)) {
+      const jsonFiles = fs.readdirSync(legacyPath)
+        .filter(name => name.endsWith('.json'))
+        .filter(name => name !== 'secrets.json');
+      for (const name of jsonFiles) {
+        fs.copyFileSync(path.join(legacyPath, name), path.join(newPath, name));
+      }
+      if (jsonFiles.length > 0) {
+        console.log(
+          `[startup] migrated ${jsonFiles.length} userData file(s) from "${legacyAppName}" to "${app.getName()}": ${jsonFiles.join(', ')}`
+        );
+      }
+    }
+    fs.writeFileSync(marker, new Date().toISOString());
+  } catch (error) {
+    console.warn('[startup] userData migration failed:', error);
+  }
+}
+
+/**
  * Single instance: OAuth callbacks arrive as `ticketmanager://` URLs, which
  * the OS delivers by launching a second process — forward its argv URL to the
  * first instance's OAuth manager instead of opening another window. The lock
@@ -58,6 +139,7 @@ function createMainWindow(): void {
     height: 840,
     minWidth: 720,
     minHeight: 480,
+    icon: getDevAppIcon(),
     // The renderer draws the whole chrome, so paint the shell colour behind it to avoid a
     // white flash between window creation and first paint.
     backgroundColor: '#1c1c1c',
@@ -89,6 +171,13 @@ function createMainWindow(): void {
 // handler is registered so the very first `settings:get` resolves against the
 // up-to-date file.
 void app.whenReady().then(async () => {
+  migrateLegacyUserData();
+
+  if (isMac) {
+    const devIcon = getDevAppIcon();
+    if (devIcon) app.dock?.setIcon(devIcon);
+  }
+
   await initSettingsBackend();
 
   // Desktop OAuth for HTTP MCP servers (e.g. Atlassian Cloud): register the
@@ -135,6 +224,7 @@ void app.whenReady().then(async () => {
   registerTerminalIpc();
   registerAgentRuntimeIpc();
   registerGitIpc();
+  ipcMain.handle('app:getVersion', () => app.getVersion());
   void getAgentRuntimeManager().refresh().then(async snapshot => {
     getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
     for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
@@ -150,7 +240,7 @@ void app.whenReady().then(async () => {
   });
   // Seed the Output panel with a launch marker — also gives e2e a
   // deterministic first line to assert against.
-  getLogBus().appendLine(`[app] Ticket Manager ${app.getVersion()} started`);
+  getLogBus().appendLine(`[app] Praxis ${app.getVersion()} started`);
   createMainWindow();
 
   app.on('activate', () => {

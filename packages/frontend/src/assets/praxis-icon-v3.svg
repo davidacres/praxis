@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="#2c2620"/>
+      <stop offset="55%" stop-color="#1e1a15"/>
+      <stop offset="100%" stop-color="#100e0b"/>
+    </linearGradient>
+
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="letter" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0%" stop-color="#fbf5e8"/>
+      <stop offset="100%" stop-color="#ddd0b6"/>
+    </linearGradient>
+
+    <radialGradient id="dot" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0%" stop-color="#ef6a3f"/>
+      <stop offset="55%" stop-color="#c6431f"/>
+      <stop offset="100%" stop-color="#9c3417"/>
+    </radialGradient>
+
+    <clipPath id="panelClip">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+
+    <filter id="letterShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+
+    <filter id="dotShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+
+    <filter id="innerShade" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="18" result="blur"/>
+      <feOffset in="blur" dx="0" dy="-22" result="offsetBlur"/>
+      <feComposite in="offsetBlur" in2="SourceAlpha" operator="in" result="innerShadow"/>
+      <feFlood flood-color="#000000" flood-opacity="0.35" result="color"/>
+      <feComposite in="color" in2="innerShadow" operator="in"/>
+    </filter>
+  </defs>
+
+  <!-- background panel -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+
+  <!-- subtle top-edge inner shade for panel depth -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="#000" opacity="0" filter="url(#innerShade)" clip-path="url(#panelClip)"/>
+
+  <!-- glyph, drawn with drop shadow so it lifts off the panel -->
+  <g filter="url(#letterShadow)">
+    <path d="M 452 792
+             L 452 296
+             C 452 296 610 292 668 336
+             C 718 374 718 458 668 496
+             C 614 538 470 534 452 532"
+          fill="none"
+          stroke="url(#letter)"
+          stroke-width="132"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+  </g>
+
+  <!-- faint drafting baseline -->
+  <g stroke="#F0E7D8" stroke-width="3" opacity="0.3">
+    <line x1="382" y1="882" x2="762" y2="882"/>
+    <line x1="382" y1="864" x2="382" y2="900"/>
+    <line x1="762" y1="864" x2="762" y2="900"/>
+  </g>
+
+  <!-- vermillion accent: pen-nib pivot, raised with its own shadow + gloss -->
+  <g filter="url(#dotShadow)">
+    <circle cx="452" cy="296" r="40" fill="url(#dot)"/>
+  </g>
+
+  <!-- glass gloss sweep across the top of the panel -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#gloss)" clip-path="url(#panelClip)"/>
+</svg>

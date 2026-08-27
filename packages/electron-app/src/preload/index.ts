@@ -19,6 +19,7 @@ import type {
   IssueFilters,
   ParentItemQueryOptions,
   PermissionDecision,
+  SessionMode,
   TaskDesignerPersistedState,
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode,
@@ -30,6 +31,9 @@ import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalEx
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, UpdateProjectInput } from '@ticket-manager/core';
 
 const ticketManager: TicketManagerIpc = {
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion')
+  },
   board: {
     list: (filters: BoardFilters, connectionId?: string) =>
       ipcRenderer.invoke('board:list', filters, connectionId),
@@ -97,6 +101,7 @@ const ticketManager: TicketManagerIpc = {
       ipcRenderer.invoke('liveFolder:discoverPlans', connectionId)
   },
   window: {
+    reload: () => ipcRenderer.invoke('window:reload'),
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close'),
@@ -148,6 +153,7 @@ const ticketManager: TicketManagerIpc = {
       ipcRenderer.invoke('ai:listApiModelOptions', provider, forceRefresh),
     setProviderApiKey: (provider: AiProvider, value: string) =>
       ipcRenderer.invoke('ai:setProviderApiKey', provider, value),
+    resetProviderApiKeys: () => ipcRenderer.invoke('ai:resetProviderApiKeys'),
     listSessions: () => ipcRenderer.invoke('ai:listSessions'),
     renameSession: (issueKey: string, title: string) =>
       ipcRenderer.invoke('ai:renameSession', issueKey, title),
@@ -156,6 +162,8 @@ const ticketManager: TicketManagerIpc = {
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
     continueSession: (issueKey: string, message: string) =>
       ipcRenderer.invoke('ai:continueSession', issueKey, message),
+    switchSessionMode: (issueKey: string, mode: SessionMode) =>
+      ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),
     respondToPermission: (issueKey: string, decision: PermissionDecision) =>
       ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
     onSessionChanged: (listener: (record: AgentSessionRecord) => void) => {
@@ -180,6 +188,8 @@ const ticketManager: TicketManagerIpc = {
     cancelReview: (issueKey: string) => ipcRenderer.invoke('ai:cancelReview', issueKey),
     localPeerReview: (issueKey: string, connectionId?: string, provider?: AiProvider, model?: string) =>
       ipcRenderer.invoke('ai:localPeerReview', issueKey, connectionId, provider, model),
+    localPeerReviewFollowUp: (issueKey: string, message: string, connectionId?: string, provider?: AiProvider, model?: string) =>
+      ipcRenderer.invoke('ai:localPeerReviewFollowUp', issueKey, message, connectionId, provider, model),
     onReviewProgress: (listener: (progress: AiReviewProgress) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, progress: AiReviewProgress) =>
         listener(progress);
@@ -284,17 +294,35 @@ const ticketManager: TicketManagerIpc = {
     activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName)
   },
   git: {
+    preflight: (repositoryPath?: string) => ipcRenderer.invoke('git:preflight', repositoryPath),
+    initialize: (repositoryPath: string) => ipcRenderer.invoke('git:initialize', repositoryPath),
+    clone: (repositoryUrl: string, targetParent: string, targetName?: string) => ipcRenderer.invoke('git:clone', repositoryUrl, targetParent, targetName),
     open: (repositoryPath?: string) => ipcRenderer.invoke('git:open', repositoryPath),
     refresh: (repositoryPath: string) => ipcRenderer.invoke('git:refresh', repositoryPath),
     status: (repositoryPath: string) => ipcRenderer.invoke('git:status', repositoryPath),
     getCommit: (repositoryPath: string, hash: string) => ipcRenderer.invoke('git:getCommit', repositoryPath, hash),
     getDiff: (repositoryPath: string, hash: string, filePath?: string) => ipcRenderer.invoke('git:getDiff', repositoryPath, hash, filePath),
+    getComparison: (repositoryPath, request) => ipcRenderer.invoke('git:getComparison', repositoryPath, request),
+    applyHunk: (repositoryPath, request) => ipcRenderer.invoke('git:applyHunk', repositoryPath, request),
     stage: (repositoryPath: string, paths: string[]) => ipcRenderer.invoke('git:stage', repositoryPath, paths),
     unstage: (repositoryPath: string, paths: string[]) => ipcRenderer.invoke('git:unstage', repositoryPath, paths),
+    discard: (repositoryPath: string, paths: string[]) => ipcRenderer.invoke('git:discard', repositoryPath, paths),
     commit: (repositoryPath: string, message: string) => ipcRenderer.invoke('git:commit', repositoryPath, message),
     createBranch: (repositoryPath: string, name: string, startPoint?: string) => ipcRenderer.invoke('git:createBranch', repositoryPath, name, startPoint),
     checkout: (repositoryPath: string, name: string) => ipcRenderer.invoke('git:checkout', repositoryPath, name),
     deleteBranch: (repositoryPath: string, name: string) => ipcRenderer.invoke('git:deleteBranch', repositoryPath, name),
+    renameBranch: (repositoryPath, oldName, newName) => ipcRenderer.invoke('git:renameBranch', repositoryPath, oldName, newName),
+    merge: (repositoryPath, source) => ipcRenderer.invoke('git:merge', repositoryPath, source),
+    rebase: (repositoryPath, target) => ipcRenderer.invoke('git:rebase', repositoryPath, target),
+    getConflict: (repositoryPath, path) => ipcRenderer.invoke('git:getConflict', repositoryPath, path),
+    resolveConflict: (repositoryPath, path, resolution) => ipcRenderer.invoke('git:resolveConflict', repositoryPath, path, resolution),
+    abortConflict: (repositoryPath) => ipcRenderer.invoke('git:abortConflict', repositoryPath),
+    getFileHistory: (repositoryPath, path, ref) => ipcRenderer.invoke('git:getFileHistory', repositoryPath, path, ref),
+    getBlame: (repositoryPath, path, ref) => ipcRenderer.invoke('git:getBlame', repositoryPath, path, ref),
+    cherryPick: (repositoryPath, commit) => ipcRenderer.invoke('git:cherryPick', repositoryPath, commit),
+    revert: (repositoryPath, commit) => ipcRenderer.invoke('git:revert', repositoryPath, commit),
+    stash: (repositoryPath, message) => ipcRenderer.invoke('git:stash', repositoryPath, message),
+    popStash: (repositoryPath) => ipcRenderer.invoke('git:popStash', repositoryPath),
     pull: (repositoryPath: string) => ipcRenderer.invoke('git:pull', repositoryPath),
     fetch: (repositoryPath: string) => ipcRenderer.invoke('git:fetch', repositoryPath),
     push: (repositoryPath: string) => ipcRenderer.invoke('git:push', repositoryPath)

@@ -27,6 +27,7 @@ import type {
   AgentSessionRecord,
   AgentTaskDefinition,
   AgentToolMode,
+  SessionMode,
   AgentWorkflowReference,
   IssueWorkflowAssignment
 } from '../ai/agentTypes';
@@ -51,7 +52,7 @@ import type {
   ProjectRecord,
   UpdateProjectInput
 } from '../projects/projectTypes';
-import type { GitCommitDetails, GitDiffResult, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
+import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
@@ -163,6 +164,8 @@ export interface LiveFolderIpc {
  * owns the caption buttons and needs to drive the native window itself.
  */
 export interface WindowIpc {
+  /** Reloads the current renderer window without quitting the desktop process. */
+  reload(): Promise<void>;
   minimize(): Promise<void>;
   /** Toggles between maximized and restored; resolves with the state after the toggle. */
   toggleMaximize(): Promise<boolean>;
@@ -237,6 +240,10 @@ export interface ShellIpc {
   openExternal(url: string): Promise<boolean>;
 }
 
+export interface AppIpc {
+  getVersion(): Promise<string>;
+}
+
 /** Durable app-managed projects and their default local boards. */
 export interface ProjectsIpc {
   list(): Promise<ProjectRecord[]>;
@@ -300,6 +307,8 @@ export interface AiProviderStatus {
 }
 
 export interface AiDelegateInput {
+  /** Explicit session purpose; defaults to chat for ordinary new sessions. */
+  mode?: SessionMode;
   /**
    * Issue to delegate. Omit for a free-form session: `goal` is then required and
    * the main process synthesizes a session key (the session is not bound to any
@@ -357,6 +366,8 @@ export interface AiIpc {
   listApiModelOptions(provider: AiProvider, forceRefresh?: boolean): Promise<ModelOptions | undefined>;
   /** Stores a specific provider's API key encrypted; empty string clears it. */
   setProviderApiKey(provider: AiProvider, value: string): Promise<AiProviderStatus>;
+  /** Clears all AI provider API keys so credentials can be re-entered after a keychain migration. */
+  resetProviderApiKeys(): Promise<void>;
   /** Every persisted agent session, most recently started first. */
   listSessions(): Promise<AgentSessionRecord[]>;
   /** Renames a persisted session without changing its ticket binding or task goal. */
@@ -369,6 +380,8 @@ export interface AiIpc {
   abort(issueKey: string): Promise<void>;
   /** Sends a follow-up message and continues the existing recorded session. */
   continueSession(issueKey: string, message: string): Promise<void>;
+  /** Switches the active phase of a session and continues it with that mode's contract. */
+  switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
   /**
    * Resolves the oldest pending permission request for an issue's active
    * task (no-op when none is pending). `'allow_always'` also resolves every
@@ -412,6 +425,14 @@ export interface AiIpc {
     provider?: AiProvider,
     model?: string
   ): Promise<LprResult>;
+  /** Continues a local peer review with a follow-up question. */
+  localPeerReviewFollowUp(
+    issueKey: string,
+    message: string,
+    connectionId?: string,
+    provider?: AiProvider,
+    model?: string
+  ): Promise<string>;
 
   // ── Issue analysis (chat) ─────────────────────────────────────────────────
   /** The persisted analysis conversation + confirmation state for an issue. */
@@ -459,6 +480,7 @@ export interface AiIpc {
 }
 
 export interface TicketManagerIpc {
+  app: AppIpc;
   board: BoardIpc;
   issue: IssueIpc;
   connection: ConnectionIpc;
@@ -493,6 +515,8 @@ export interface CreateTerminalInput {
   cols: number;
   rows: number;
   profileId?: string;
+  /** Reuse an active matching terminal during automatic panel initialisation. */
+  reuseExisting?: boolean;
 }
 
 export interface TerminalProfile {
@@ -572,17 +596,35 @@ export interface TerminalIpc {
 }
 
 export interface GitIpc {
+  preflight(repositoryPath?: string): Promise<GitRepositoryPreflight>;
+  initialize(repositoryPath: string): Promise<GitRepositoryPreflight>;
+  clone(repositoryUrl: string, targetParent: string, targetName?: string): Promise<GitRepositoryPreflight>;
   open(repositoryPath?: string): Promise<GitRepositorySnapshot>;
   refresh(repositoryPath: string): Promise<GitRepositorySnapshot>;
   status(repositoryPath: string): Promise<GitStatusSnapshot>;
   getCommit(repositoryPath: string, hash: string): Promise<GitCommitDetails>;
   getDiff(repositoryPath: string, hash: string, filePath?: string): Promise<GitDiffResult>;
+  getComparison(repositoryPath: string, request: GitDiffRequest): Promise<GitDiffDocument>;
+  applyHunk(repositoryPath: string, request: GitHunkActionRequest): Promise<GitStatusSnapshot>;
   stage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
   unstage(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
+  discard(repositoryPath: string, paths: string[]): Promise<GitStatusSnapshot>;
   commit(repositoryPath: string, message: string): Promise<GitRepositorySnapshot>;
   createBranch(repositoryPath: string, name: string, startPoint?: string): Promise<GitRepositorySnapshot>;
   checkout(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
   deleteBranch(repositoryPath: string, name: string): Promise<GitRepositorySnapshot>;
+  renameBranch(repositoryPath: string, oldName: string, newName: string): Promise<GitRepositorySnapshot>;
+  merge(repositoryPath: string, source: string): Promise<GitRepositorySnapshot>;
+  rebase(repositoryPath: string, target: string): Promise<GitRepositorySnapshot>;
+  getConflict(repositoryPath: string, path: string): Promise<GitConflictFile>;
+  resolveConflict(repositoryPath: string, path: string, resolution: GitConflictResolution): Promise<GitStatusSnapshot>;
+  abortConflict(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  getFileHistory(repositoryPath: string, path: string, ref?: string): Promise<GitFileHistoryEntry[]>;
+  getBlame(repositoryPath: string, path: string, ref?: string): Promise<GitBlameLine[]>;
+  cherryPick(repositoryPath: string, commit: string): Promise<GitRepositorySnapshot>;
+  revert(repositoryPath: string, commit: string): Promise<GitRepositorySnapshot>;
+  stash(repositoryPath: string, message?: string): Promise<GitRepositorySnapshot>;
+  popStash(repositoryPath: string): Promise<GitRepositorySnapshot>;
   pull(repositoryPath: string): Promise<GitRepositorySnapshot>;
   fetch(repositoryPath: string): Promise<GitRepositorySnapshot>;
   push(repositoryPath: string): Promise<GitRepositorySnapshot>;

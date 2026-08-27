@@ -8,7 +8,7 @@
   "scripts": {
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
-    "test": "tsc -p . && node --test out/git/gitGraph.test.js out/git/gitParsing.test.js"
+    "test": "tsc -p . && node --test out/git/gitGraph.test.js out/git/gitParsing.test.js out/config/appSettings.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.4.0",

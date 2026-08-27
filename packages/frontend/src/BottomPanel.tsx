@@ -41,7 +41,7 @@ function xtermTheme() {
     brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#ffffff'
   };
   const themedAnsi = terminalColorsForTheme(
-    document.documentElement.getAttribute('data-theme') ?? 'tm-default-2',
+    document.documentElement.getAttribute('data-theme') ?? 'praxis-dark',
     light ? 'light' : 'dark'
   );
   return {
@@ -77,7 +77,9 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
   const [lastCommand, setLastCommand] = useState<TerminalCommandRecord>();
   const outputRef = useRef<HTMLDivElement>(null);
   const terminalHostRef = useRef<HTMLDivElement>(null);
+  const terminalInstanceRef = useRef<Terminal | undefined>(undefined);
   const terminalAiInputRef = useRef<HTMLInputElement>(null);
+  const creatingTerminalRef = useRef(false);
 
   const selectTerminal = useCallback((sessionId: string | undefined) => {
     setActiveId(sessionId);
@@ -102,16 +104,19 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     }));
   }, [activeId]);
 
-  const createTerminal = useCallback(async (profileId?: string) => {
-    if (terminalDisabledReason) return;
+  const createTerminal = useCallback(async (profileId?: string, reuseExisting = false) => {
+    if (terminalDisabledReason || creatingTerminalRef.current) return;
+    creatingTerminalRef.current = true;
     setTerminalError(undefined);
     try {
       const selectedProfile = profileId || terminalSettings?.defaultProfileId || undefined;
-      const created = await window.ticketManager.terminal.create({ cwd: workingDirectory, cols: 100, rows: 24, profileId: selectedProfile });
+      const created = await window.ticketManager.terminal.create({ cwd: workingDirectory, cols: 100, rows: 24, profileId: selectedProfile, reuseExisting });
       setSessions(current => [...current.filter(item => item.id !== created.id), created]);
       selectTerminal(created.id);
     } catch (error) {
       setTerminalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      creatingTerminalRef.current = false;
     }
   }, [selectTerminal, terminalDisabledReason, terminalSettings?.defaultProfileId, workingDirectory]);
 
@@ -125,7 +130,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
       const selected = existing.find(item => item.id === remembered) ?? [...existing].reverse().find(item => !item.exited);
       if (selected) selectTerminal(selected.id);
       if (selected?.lastCommand) setLastCommand(selected.lastCommand);
-      else void createTerminal();
+      else void createTerminal(undefined, true);
     }).catch(error => setTerminalError(error instanceof Error ? error.message : String(error)));
     return () => { cancelled = true; };
   }, [createTerminal, selectTerminal, terminalDisabledReason]);
@@ -184,6 +189,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(host);
+    terminalInstanceRef.current = terminal;
     terminal.attachCustomKeyEventHandler(event => {
       if (event.type === 'keydown' && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'i' && onTerminalAi) {
         setTerminalAiOpen(true);
@@ -238,6 +244,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     return () => {
       observer.disconnect(); input.dispose(); selection.dispose(); resize.dispose(); unsubscribeOutput(); unsubscribeExit();
       window.removeEventListener('tm-theme-changed', updateTheme); terminal.dispose();
+      terminalInstanceRef.current = undefined;
     };
   }, [activeId, activeSessionSettings, tab, terminalDisabledReason]);
 
@@ -405,7 +412,13 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
       <div className={`panel-body${tab === 'terminal' ? ' is-terminal' : ''}`} role="tabpanel">
         {tab === 'terminal' ? terminalDisabledReason ? (
           <div className="terminal-unavailable"><Icon name="terminal" size={20} /><span>{terminalDisabledReason}</span></div>
-        ) : <><div className="xterm-host" ref={terminalHostRef} data-testid="integrated-terminal" />
+        ) : <><div
+          className="xterm-host"
+          ref={terminalHostRef}
+          data-testid="integrated-terminal"
+          onMouseDown={() => terminalInstanceRef.current?.focus()}
+          onClick={() => terminalInstanceRef.current?.focus()}
+        />
           {lastCommand?.status === 'failed' && onTerminalAi && (
             <div className="terminal-command-failure" data-testid="terminal-command-failure">
               <Icon name="sparkles" size={12} />

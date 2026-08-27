@@ -88,7 +88,15 @@ export class SharedSettingsBackend implements SettingsBackend {
 
   private async persist(settings: AppSettings): Promise<void> {
     await fsp.mkdir(path.dirname(this.filePath), { recursive: true });
-    const text = JSON.stringify(settings, null, 2);
+    // The connection/board store shares this JSON document but owns a few
+    // extension keys that are intentionally outside AppSettings.  Merge the
+    // latest on-disk record immediately before our atomic write so a settings
+    // update cannot resurrect a connection that was just removed.
+    const disk = this.readFromDisk();
+    const next = isRecord(disk)
+      ? { ...disk, ...settings }
+      : settings;
+    const text = JSON.stringify(next, null, 2);
     await fsp.writeFile(this.tmpPath, text, 'utf8');
     await fsp.rename(this.tmpPath, this.filePath);
   }
@@ -129,4 +137,8 @@ export class SharedSettingsBackend implements SettingsBackend {
     this.current = next;
     this.onDidChangeEmitter.fire(next);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

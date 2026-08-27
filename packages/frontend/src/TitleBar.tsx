@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { PraxisWordmark } from './StartupSplash';
 import {
   BoardFilterBar,
   countActiveBoardFilters,
@@ -13,6 +14,7 @@ export interface TitleBarBoardFilter extends BoardFilterPresentation {
 }
 
 export interface TitleBarProps {
+  appVersion?: string;
   contextLabel: string;
   contextDetail: string;
   sidebarVisible: boolean;
@@ -39,6 +41,7 @@ export interface TitleBarProps {
  * `.icon-btn` / `.titlebar-group`.
  */
 export function TitleBar({
+  appVersion,
   contextLabel,
   contextDetail,
   sidebarVisible,
@@ -63,13 +66,24 @@ export function TitleBar({
   const contextButtonRef = useRef<HTMLButtonElement | null>(null);
   // macOS renders the native traffic lights on top of the page (see
   // `trafficLightPosition` in the main process) rather than in the DOM, so
-  // nothing here reserves space for them by default — the leading button
-  // group needs an explicit inset to sit beside them instead of under them.
+  // nothing here reserves space for them by default, so the title bar keeps a
+  // leading inset even though all layout toggles now live together at right.
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   useEffect(() => {
     void window.ticketManager.window.isMaximized().then(setMaximized);
     return window.ticketManager.window.onMaximizeChange(setMaximized);
+  }, []);
+
+  useEffect(() => {
+    const onReloadShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        void window.ticketManager.window.reload();
+      }
+    };
+    window.addEventListener('keydown', onReloadShortcut);
+    return () => window.removeEventListener('keydown', onReloadShortcut);
   }, []);
 
   useEffect(() => {
@@ -113,17 +127,6 @@ export function TitleBar({
 
   return (
     <header className={`titlebar${isMac ? ' titlebar-mac' : ''}`}>
-      <div className="titlebar-group">
-        <button
-          className={`icon-btn${sidebarVisible ? ' active' : ''}`}
-          aria-label="Toggle sidebar"
-          aria-pressed={sidebarVisible}
-          onClick={onToggleSidebar}
-        >
-          <Icon name="sidebar-left" />
-        </button>
-      </div>
-
       <div className="titlebar-spacer" />
 
       {/* Back / forward sit against the context pill, and the whole block is
@@ -207,14 +210,23 @@ export function TitleBar({
         <button className="icon-btn icon-btn-sm" aria-label="Run options">
           <Icon name="chevron-down" size={13} />
         </button>
-        <span className="titlebar-logo" aria-hidden="true">
-          <Icon name="ticket" size={15} />
+        <span className="titlebar-logo">
+          <PraxisWordmark className="praxis-wordmark" />
         </span>
+        {appVersion && <span className="titlebar-version">v{appVersion}</span>}
       </div>
 
       <div className="titlebar-spacer" />
 
-      <div className="titlebar-group">
+      <div className="titlebar-group titlebar-layout-toggles">
+        <button
+          className={`icon-btn${sidebarVisible ? ' active' : ''}`}
+          aria-label="Toggle sidebar"
+          aria-pressed={sidebarVisible}
+          onClick={onToggleSidebar}
+        >
+          <Icon name="sidebar-left" />
+        </button>
         <button
           className={`icon-btn${panelVisible ? ' active' : ''}`}
           aria-label="Toggle panel"
@@ -241,6 +253,15 @@ export function TitleBar({
           onClick={onOpenSettings}
         >
           <Icon name="gear" />
+        </button>
+        <button
+          className="icon-btn"
+          aria-label="Reload window"
+          title="Reload window (⌘R / Ctrl+R)"
+          data-testid="titlebar-reload"
+          onClick={() => void window.ticketManager.window.reload()}
+        >
+          <Icon name="refresh" />
         </button>
         <button className="icon-btn" aria-label="What's new" title="What's new" onClick={onOpenWhatsNew}>
           <Icon name="sparkles" />

@@ -135,6 +135,7 @@ export class AiSessionManager {
       connectionId: runtime?.connectionId,
       state: 'not_started',
       taskDefinition,
+      mode: taskDefinition.sessionMode ?? (taskDefinition.kind === 'analysis' ? 'analysis' : taskDefinition.kind === 'review' ? 'review' : 'chat'),
       events: [],
       stepCount: 0,
       startedAt: new Date().toISOString(),
@@ -181,6 +182,22 @@ export class AiSessionManager {
   /** Get the agent session for an issue, if one exists. */
   public getAgentSession(issueKey: string): AgentSessionRecord | undefined {
     return this.agentSessions.get(issueKey);
+  }
+
+  /** Change the active phase for a persisted conversation before continuing it. */
+  public setAgentSessionMode(issueKey: string, mode: AgentSessionRecord['mode']): AgentSessionRecord {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    record.mode = mode;
+    record.taskDefinition = {
+      ...record.taskDefinition,
+      sessionMode: mode,
+      kind: mode === 'analysis' ? 'analysis' : mode === 'review' ? 'review' : 'general'
+    };
+    record.toolMode = mode === 'chat' ? 'full' : 'read-only';
+    void this.persistAgentSessions();
+    this._onDidChangeAgentSession.fire(record);
+    return record;
   }
 
   /** Get all agent sessions. */

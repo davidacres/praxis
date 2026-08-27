@@ -6,6 +6,7 @@ import {
   PROVIDER_DESCRIPTORS,
   stageIssueAttachments,
   storeProviderApiKey,
+  resetProviderApiKeys,
   type AgentSessionRecord,
   type AgentTaskDefinition,
   type AgentToolMode,
@@ -16,6 +17,7 @@ import {
   type IssueDetails,
   type IssueTrackerService,
   type PermissionDecision,
+  type SessionMode,
   type VercelAgentStartOptions
 } from '@ticket-manager/core';
 import {
@@ -58,6 +60,37 @@ function buildDefaultTask(
     ...(overrides?.maxSteps ? { maxSteps: overrides.maxSteps } : {}),
     ...(overrides?.timeoutMs ? { timeoutMs: overrides.timeoutMs } : {})
   };
+}
+
+function buildModeTask(
+  mode: SessionMode,
+  issue: { key: string; summary: string },
+  analysisPrompt: string,
+  overrides?: Partial<AgentTaskDefinition>
+): AgentTaskDefinition {
+  if (mode === 'analysis') {
+    return {
+      kind: 'analysis',
+      sessionMode: 'analysis',
+      goal: [analysisPrompt, overrides?.goal ?? `Analyze ${issue.key} — ${issue.summary}.`, 'This is a read-only analysis; do not implement anything yet.'].join('\n\n'),
+      scope: 'Read-only analysis of the supplied goal and relevant workspace context.',
+      definitionOfDone: 'A clear analysis and ordered implementation plan is presented for review.',
+      nonGoals: ['Do not edit files or change external state during analysis.'],
+      completionContract: 'Stop after presenting the analysis and wait for confirmation.'
+    };
+  }
+  if (mode === 'review') {
+    return {
+      kind: 'review',
+      sessionMode: 'review',
+      goal: overrides?.goal ?? `Review ${issue.key} — ${issue.summary}.`,
+      scope: 'Read-only review of the supplied goal, implementation, tests, and relevant workspace context.',
+      definitionOfDone: 'A concise review identifies strengths, risks, and actionable findings.',
+      nonGoals: ['Do not edit files or implement fixes during review.'],
+      completionContract: 'Stop after presenting review findings and wait for the user.'
+    };
+  }
+  return { ...buildDefaultTask(issue, overrides), sessionMode: 'chat' };
 }
 
 const TRACKER_READ_TOOLS = [
@@ -212,6 +245,10 @@ export function registerAiIpc(): void {
     }
   );
 
+  ipcMain.handle('ai:resetProviderApiKeys', async () => {
+    await resetProviderApiKeys(getSecretsStore());
+  });
+
   // Back-compat: applies to the currently active provider.
   ipcMain.handle('ai:setApiKey', async (_event: Electron.IpcMainInvokeEvent, value: string) => {
     const settings = getSettingsBackend().read();
@@ -254,10 +291,8 @@ export function registerAiIpc(): void {
     'ai:delegate',
     async (_event: Electron.IpcMainInvokeEvent, input: AiDelegateInput) => {
       const settings = getSettingsBackend().read();
-      const isAnalysisSession = input.purpose === 'analysis';
-      if (isAnalysisSession && !input.issueKey) {
-        throw new Error('Ticket analysis requires an issue key.');
-      }
+      const mode: SessionMode = input.mode ?? (input.purpose === 'analysis' ? 'analysis' : 'chat');
+      const isAnalysisSession = mode === 'analysis' || input.purpose === 'analysis';
       const analysisPrompt = settings.ai.analysisPrompt.trim();
       if (isAnalysisSession && !analysisPrompt) {
         throw new Error('Set an analysis system prompt under Settings → AI Provider first.');
@@ -295,7 +330,11 @@ export function registerAiIpc(): void {
 
       // Analysis gate: when enabled, an issue-bound delegation requires a
       // confirmed analysis first (mirrors the extension's assignIssueToAi gate).
-      if (input.issueKey && settings.ai.analysisGateEnabled && !isAnalysisSession) {
+      // Explicit Chat sessions are allowed to discuss an issue without first
+      // running the analysis workflow. Keep the gate for legacy callers that
+      // do not send a mode (for example delivery/delegation actions launched
+      // from issue detail), so those existing safeguards remain intact.
+      if (input.issueKey && settings.ai.analysisGateEnabled && input.mode === undefined && !isAnalysisSession) {
         if (!isAnalysisConfirmed(getAiAnalysisStore(), input.issueKey)) {
           throw new Error(
             `Analysis for ${input.issueKey} must be confirmed before delegating (the analysis gate is enabled in Settings → AI Provider).`
@@ -303,24 +342,14 @@ export function registerAiIpc(): void {
         }
       }
 
-      const taskDefinition: AgentTaskDefinition = isAnalysisSession
-        ? {
-            kind: 'analysis',
-            goal: [
-              analysisPrompt,
-              `Analyze ${issue.key} — ${issue.summary}.`,
-              'This is the first, read-only turn of the ticket session. Do not implement anything yet.'
-            ].join('\n\n'),
-            scope: 'Read-only analysis of this ticket and the relevant repository code, tests, dependencies and risks.',
-            definitionOfDone:
-              'A clear analysis and ordered implementation plan is posted in this session for the user to review.',
-            nonGoals: [
-              'Do not edit files or change external state during this first turn.',
-              'Do not begin implementation until the user confirms the analysis in this session.'
-            ],
-            completionContract: 'Stop after presenting the analysis and wait for confirmation in this same conversation.'
-          }
-        : buildDefaultTask(issue, input.task);
+      // An explicit composer mode owns the task contract. In particular, do
+      // not let the goal override turn Chat back into the legacy planning
+      // prompt (which starts with a mandatory ticket-analysis phase).
+      const taskDefinition: AgentTaskDefinition = input.mode
+        ? buildModeTask(mode, issue, analysisPrompt, input.task)
+        : input.task
+          ? buildDefaultTask(issue, input.task)
+          : buildModeTask(mode, issue, analysisPrompt);
       // Workflow pack: an explicit task.workflow wins; otherwise apply the
       // issue's assigned pack so delegation and delivery behave the same.
       if (!taskDefinition.workflow && input.issueKey) {
@@ -399,6 +428,21 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:abort', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     await abortActiveTask(issueKey);
   });
+
+  ipcMain.handle(
+    'ai:switchSessionMode',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, mode: SessionMode) => {
+      if (mode !== 'chat' && mode !== 'analysis' && mode !== 'review') {
+        throw new Error('Invalid session mode.');
+      }
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      if (record.state !== 'completed' && record.state !== 'failed' && record.state !== 'aborted') {
+        throw new Error('Wait for the current session turn to finish before switching mode.');
+      }
+      sessionManager.setAgentSessionMode(issueKey, mode);
+    }
+  );
 
   ipcMain.handle(
     'ai:continueSession',
@@ -574,6 +618,30 @@ export function registerAiIpc(): void {
         }
       );
       return { codeReview, securityReview, summary };
+    }
+  );
+
+  ipcMain.handle(
+    'ai:localPeerReviewFollowUp',
+    async (
+      _event: Electron.IpcMainInvokeEvent,
+      issueKey: string,
+      message: string,
+      connectionId?: string,
+      requestedProvider?: AiProvider,
+      requestedModel?: string
+    ) => {
+      const followUp = message.trim();
+      if (!followUp) throw new Error('Enter a follow-up question.');
+      const issue = await (await getServiceForConnection(connectionId)).getIssue(issueKey);
+      const settings = getSettingsBackend().read();
+      const provider = requestedProvider ?? settings.ai.activeProvider;
+      return reviewIssueWithRuntime(issue, {
+        provider,
+        model: requestedModel,
+        userPrompt: followUp,
+        systemPrompt: 'You are continuing a local peer review conversation. Answer the user\'s follow-up directly and concisely. Keep the discussion grounded in the reviewed local project and do not modify files.'
+      });
     }
   );
 

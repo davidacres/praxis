@@ -243,7 +243,7 @@ function StartAiSessionDialog({
             <p className="detail-ai-provider-hint">
               <Icon name={providerIconName(selectedProvider)} size={12} />
               {selectedStatus?.configured
-                ? `The shared Ticket Manager execution prompt will run with ${PROVIDER_LABELS[selectedProvider]}${selectedModel ? ` · ${selectedModel}` : ''}.`
+                ? `The shared Praxis execution prompt will run with ${PROVIDER_LABELS[selectedProvider]}${selectedModel ? ` · ${selectedModel}` : ''}.`
                 : `${PROVIDER_LABELS[selectedProvider]} is not configured. Open Settings → AI Provider.`}
             </p>
           )}

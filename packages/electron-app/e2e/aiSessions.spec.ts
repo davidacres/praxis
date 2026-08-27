@@ -178,8 +178,8 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
   const win = app.window;
 
   // Open a demo issue in the aux detail pane.
-  await win.locator('[data-testid="nav-board"]').click();
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
+  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
   const dialog = win.locator('[data-testid="issue-session-dialog"]');
@@ -224,16 +224,16 @@ test('issue detail starts a prompted ticket session and opens its console', asyn
 
   // Reopening the ticket does not silently overwrite the stored session: the
   // setup identifies it and offers a direct route back to the existing console.
-  await win.locator('[data-testid="nav-board"]').click();
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
+  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   const primaryAi = win.locator('[data-testid="issue-primary-ai-btn"]');
   await expect(primaryAi).toHaveAttribute('data-ai-mode', 'session');
   await primaryAi.click();
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
 
-  await win.locator('[data-testid="nav-board"]').click();
-  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
+  await win.locator('[data-testid="nav-overview"]').click();
+  await win.locator('.overview-board-card', { hasText: 'Platform Overview' }).click();
   await win.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
   await win.locator('[data-testid="issue-ai-restart-btn"]').click();
   await expect(win.locator('[data-testid="issue-session-existing-warning"]')).toContainText('aborted session');

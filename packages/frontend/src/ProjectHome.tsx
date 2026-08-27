@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { AgentToolMode, Board, ProjectRecord, ProjectStartingPoint, ProjectType } from '@ticket-manager/core';
 import { PROJECT_BRIEF_FIELDS } from '@ticket-manager/core/out/projects/projectTemplates';
 
-export function ProjectHome({ project, boards, onChanged, onOpenBoard }: { project: ProjectRecord; boards: Board[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void }) {
+export function ProjectHome({ project, boards, onChanged, onOpenBoard, onOpenGit }: { project: ProjectRecord; boards: Board[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
   const [editing, setEditing] = useState(false); const [type, setType] = useState<ProjectType>(project.type); const [toolMode, setToolMode] = useState<AgentToolMode>(project.defaultAiToolMode); const [purpose, setPurpose] = useState(project.purpose); const [brief, setBrief] = useState(project.brief); const [error, setError] = useState<string>(); const [attachMode, setAttachMode] = useState<ProjectStartingPoint>('existing-folder'); const [attachPath, setAttachPath] = useState(''); const [folderName, setFolderName] = useState('');
   const defaultBoard = boards.find(board => board.id === project.defaultBoardId);
   const candidates = boards.filter(board => !board.connectionId?.startsWith('project:') && board.connectionId && !project.linkedBoards.some(link => link.connectionId === board.connectionId && link.boardId === board.id));
