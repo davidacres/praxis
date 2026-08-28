@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-044]
-validation: ["npm run test --workspace @ticket-manager/core", "npm run test:git --workspace @ticket-manager/electron-app"]
+validation: ["npm run test --workspace @praxis/core", "npm run test:git --workspace @praxis/desktop-main"]
 ---
 
 ## Implement Electron repository classification and safe initialization/open actions

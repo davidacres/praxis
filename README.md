@@ -8,38 +8,46 @@ Current extension version: 0.0.30
 
 ## Repository layout
 
-The project is an npm workspaces monorepo with four packages:
+The project is an npm workspaces monorepo. Two products sit in `apps/`, and the
+code they share sits in `packages/`:
 
 ```
-packages/
-├── core/                  shared types, stores, backend adapters, AI gateway
-├── frontend/              React/Vite SPA (the desktop app's UI)
-├── electron-app/          Electron host that bundles the frontend into a window
+apps/
+├── praxis-desktop/
+│   ├── main/              Electron main + preload, e2e suite, packaging
+│   └── renderer/          React/Vite SPA — the desktop app's UI
 └── vscode-extension/      the VS Code extension (this README's main subject)
+
+packages/
+└── core/                  shared types, stores, backend adapters, AI gateway
 ```
 
 ```
-                  ┌────────────────────┐
-                  │ packages/core      │
-                  └───────▲──────▲─────┘
-              shared by │      │ shared by
-              ┌─────────┴──────┴─────────┐
-              │                          │
-   ┌──────────┴───────────┐    ┌──────────┴───────────┐
-   │ packages/frontend    │    │ packages/vscode-      │
-   │ React/Vite SPA       │    │ extension             │
-   └──────────┬───────────┘    └───────────────────────┘
+                     ┌──────────────────────┐
+                     │ packages/core        │
+                     │ @praxis/core         │
+                     └──────▲────────▲──────┘
+                  shared by │        │ shared by
+              ┌─────────────┘        └─────────────┐
+              │                                    │
+   ┌──────────┴────────────┐          ┌────────────┴──────────┐
+   │ praxis-desktop/       │          │ vscode-extension      │
+   │ renderer  (React SPA) │          │ (webview panels)      │
+   └──────────┬────────────┘          └───────────────────────┘
               │ vite build + copy-renderer
               ▼
-   ┌──────────────────────┐  electron-builder  ┌──────────────────┐
-   │ packages/electron-    │ ──────────────► │ branded installers │
-   │ app                   │                  │ .dmg / setup.exe   │
-   └──────────────────────┘                  └──────────────────┘
+   ┌───────────────────────┐  electron-builder  ┌────────────────────┐
+   │ praxis-desktop/main   │ ─────────────────► │ branded installers │
+   │ (Electron host)       │                    │ .dmg / setup.exe   │
+   └───────────────────────┘                    └────────────────────┘
 ```
+
+The extension is published as `davidacres.ticket-manager`, so its npm name stays
+`ticket-manager` rather than moving under the `@praxis` scope.
 
 Build the Praxis desktop installer with `npm run app:dist:mac` on macOS or
 `npm run app:dist:win` on Windows. Artifacts are written to
-`packages/electron-app/dist/`. The macOS DMG and Windows assisted installer use
+`apps/praxis-desktop/main/dist/`. The macOS DMG and Windows assisted installer use
 the same warm charcoal, parchment, and terracotta visual language as the app.
 
 ### Praxis desktop Git workspace
@@ -52,9 +60,9 @@ history, blame, and conflict records through preload IPC.
 The desktop workflow supports working/staged/commit/ref comparisons, Inline,
 Split, and Hunk views, file/hunk/selected-line staging, confirmed discard,
 branch and commit actions, stash workflows, and three-way conflict resolution.
-Focused evidence is captured under `packages/electron-app/output/playwright/`.
+Focused evidence is captured under `apps/praxis-desktop/main/output/playwright/`.
 
-`@ticket-manager/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
+`@praxis/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
 
 ## What the extension includes
 
@@ -204,11 +212,17 @@ Expected asset names live in [docs/screenshots/README.md](docs/screenshots/READM
 
 ## Development
 
+Root scripts are prefixed by the surface they act on, so it is always clear what
+a command will build or test. Unprefixed `build`, `test`, and `check-types` cover
+every workspace.
+
 ### Build
 
 ```powershell
 npm install
-npm run compile
+npm run build            # everything, in dependency order
+npm run build:vscode     # just the extension
+npm run build:core       # just the shared core
 ```
 
 Press `F5` in VS Code to launch the Extension Development Host.
@@ -216,34 +230,34 @@ Press `F5` in VS Code to launch the Extension Development Host.
 ### Typecheck
 
 ```powershell
-npm run check-types
+npm run check-types      # every workspace
 ```
 
 ### Tests
 
 ```powershell
-npm test
+npm test                 # core + desktop + extension
+npm run test:core
+npm run test:desktop     # Playwright e2e
+npm run test:vscode      # launches a real VS Code
 ```
 
-If test sources changed, run this first so the test output is refreshed:
-
-```powershell
-npx tsc -p ./
-```
+`npm run test:vscode` needs a GUI session and a VS Code download; see AGENTS.md
+for the macOS arm64 caveat that stops it running on some machines.
 
 ### Package
 
 ```powershell
-npm run package
+npm run package:vscode
 ```
 
 ## Utility scripts
 
-- `npm run open:ticket-manager`
-- `npm run install:vsix`
-- `npm run install:code`
-- `npm run install:insiders`
-- `npm run install:cursor`
+- `npm run vscode:open`
+- `npm run vscode:install:vsix`
+- `npm run vscode:install:code`
+- `npm run vscode:install:insiders`
+- `npm run vscode:install:cursor`
 - `npm run jira-mr-polling`
 - `npm run jira-mr-polling:once`
 - `npm run jira-mr-polling:test`

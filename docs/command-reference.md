@@ -1,6 +1,6 @@
 # Ticket Manager Command Reference
 
-> This file is generated from `packages/vscode-extension/package.json` by `npm run docs:commands` (delegates to `node packages/vscode-extension/scripts/generate-command-reference.cjs`).
+> This file is generated from `apps/vscode-extension/package.json` by `npm run docs:commands` (delegates to `node apps/vscode-extension/scripts/generate-command-reference.cjs`).
 
 This document lists the user-facing commands contributed through the extension manifest.
 

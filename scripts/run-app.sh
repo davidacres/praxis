@@ -5,9 +5,9 @@
 # Compiles the three workspaces in dependency order and starts Electron:
 #
 #   1. packages/core          -> tsc, produces out/ that the main process imports
-#   2. packages/frontend      -> vite build, produces dist/ that the window loads
-#   3. packages/electron-app  -> tsc, produces out/main + out/preload
-#   4. copy-renderer          -> packages/frontend/dist -> packages/electron-app/renderer
+#   2. apps/praxis-desktop/renderer      -> vite build, produces dist/ that the window loads
+#   3. apps/praxis-desktop/main  -> tsc, produces out/main + out/preload
+#   4. copy-renderer          -> apps/praxis-desktop/renderer/dist -> apps/praxis-desktop/main/renderer
 #                                 (win.loadFile('../../renderer/index.html') reads from here,
 #                                 not from frontend/dist directly — skip this and the window
 #                                 opens blank)
@@ -45,8 +45,8 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE="$REPO_ROOT/packages/core"
-FRONTEND="$REPO_ROOT/packages/frontend"
-ELECTRON_APP="$REPO_ROOT/packages/electron-app"
+FRONTEND="$REPO_ROOT/apps/praxis-desktop/renderer"
+ELECTRON_APP="$REPO_ROOT/apps/praxis-desktop/main"
 NODE_PTY_BINARY="$REPO_ROOT/node_modules/node-pty/build/Release/pty.node"
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
@@ -94,12 +94,12 @@ else
   ok 'core -> out/'
 
   if [[ "$DEV" -eq 0 ]]; then
-    step 'Building packages/frontend'
+    step 'Building apps/praxis-desktop/renderer'
     invoke_npm "$FRONTEND" build
     ok 'frontend -> dist/'
   fi
 
-  step 'Compiling packages/electron-app'
+  step 'Compiling apps/praxis-desktop/main'
   invoke_npm "$ELECTRON_APP" compile
   ok 'electron-app -> out/'
 

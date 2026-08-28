@@ -3,7 +3,7 @@
 Legend: **✓** complete · **?** partial / not finished · **✗** missing
 
 Scope notes: the desktop app (Electron) reuses `packages/core` backends and the
-shared `packages/frontend` React UI; the extension uses its own webview panels and
+shared `apps/praxis-desktop/renderer` React UI; the extension uses its own webview panels and
 tree views. Backend *engines* are near-identical — the gaps are almost all in UI
 surface and host integrations. Last audited: 2026-08-23.
 

@@ -6,8 +6,8 @@
   Compiles the three workspaces in dependency order and starts Electron:
 
     1. packages/core          -> tsc, produces out/ that the main process imports
-    2. packages/frontend      -> vite build, produces dist/ that the window loads
-    3. packages/electron-app  -> tsc, produces out/main + out/preload
+    2. apps/praxis-desktop/renderer      -> vite build, produces dist/ that the window loads
+    3. apps/praxis-desktop/main  -> tsc, produces out/main + out/preload
     4. electron .             -> opens the frameless window
 
   In -Dev mode step 2 is replaced by the Vite dev server: the script starts it,
@@ -48,8 +48,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $core = Join-Path $repoRoot 'packages/core'
-$frontend = Join-Path $repoRoot 'packages/frontend'
-$electronApp = Join-Path $repoRoot 'packages/electron-app'
+$frontend = Join-Path $repoRoot 'apps/praxis-desktop/renderer'
+$electronApp = Join-Path $repoRoot 'apps/praxis-desktop/main'
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg) { Write-Host "  + $msg" -ForegroundColor Green }
@@ -97,18 +97,18 @@ if ($SkipBuild) {
   Write-Ok 'core -> out/'
 
   if (-not $Dev) {
-    Write-Step 'Building packages/frontend'
+    Write-Step 'Building apps/praxis-desktop/renderer'
     Invoke-Npm $frontend 'build'
     Write-Ok 'frontend -> dist/'
   }
 
-  Write-Step 'Compiling packages/electron-app'
+  Write-Step 'Compiling apps/praxis-desktop/main'
   Invoke-Npm $electronApp 'compile'
   Write-Ok 'electron-app -> out/'
 
   if (-not $Dev) {
-    # win.loadFile('../../renderer/index.html') reads from packages/electron-app/renderer,
-    # not packages/frontend/dist directly — copy it across or the window opens blank.
+    # win.loadFile('../../renderer/index.html') reads from apps/praxis-desktop/main/renderer,
+    # not apps/praxis-desktop/renderer/dist directly — copy it across or the window opens blank.
     Write-Step 'Copying frontend/dist into electron-app/renderer'
     Invoke-Npm $electronApp 'copy-renderer'
     Write-Ok 'renderer ready'

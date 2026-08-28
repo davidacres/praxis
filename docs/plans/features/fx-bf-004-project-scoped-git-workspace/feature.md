@@ -7,7 +7,7 @@ owner: Electron desktop app
 updated: 2026-08-27
 issues: [docs/issues/features/fx-bf-004-project-scoped-git-workspace/feature-issues.md]
 stories: [FX-BE-005]
-validation: ["npm run frontend:build", "npm run electron:check-types", "npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts"]
+validation: ["npm run frontend:build", "npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
 ## Project-scoped Git workspace and repository onboarding

@@ -26,7 +26,7 @@ jobs:
         run: npm run compile --workspace=ticket-manager
 
       - name: Package VSIX
-        working-directory: packages/vscode-extension
+        working-directory: apps/vscode-extension
         run: npx @vscode/vsce package --no-dependencies
         if: github.ref == 'refs/heads/main'
 
@@ -35,4 +35,4 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           name: ticket-manager-vsix
-          path: "packages/vscode-extension/*.vsix"
+          path: "apps/vscode-extension/*.vsix"

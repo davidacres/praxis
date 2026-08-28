@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-046, TASK-047]
-validation: ["npm run frontend:build", "npm run electron:check-types", "npm run electron:copy-renderer", "npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts"]
+validation: ["npm run frontend:build", "npm run electron:check-types", "npm run electron:copy-renderer", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
 ## Add packaged Electron, accessibility, and responsive verification

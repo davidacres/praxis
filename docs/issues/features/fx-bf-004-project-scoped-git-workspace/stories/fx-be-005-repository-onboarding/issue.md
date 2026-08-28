@@ -34,7 +34,7 @@ Praxis users should reach Git history and diffs through a meaningful project wor
 - `npm run frontend:build`
 - `npm run electron:check-types`
 - `npm run electron:copy-renderer`
-- `npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts`
+- `npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts`
 
 ## Close when
 
