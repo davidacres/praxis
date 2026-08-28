@@ -3,7 +3,7 @@ import {
   describeAiConfigurationResult,
   promptToConfigureDefaultAiProvider
 } from '../ai/aiProviderSetup';
-import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
+import { identifyPlanFolder } from '@praxis/core';
 import { toStoredFolderPath } from '@praxis/core';
 
 function escapeHtml(value: string): string {
@@ -665,8 +665,8 @@ ${connFields}`;
       throw new Error('Plans folder path is required for Live Folder mode.');
     }
 
-    const identified = await identifyPlanFolder(folderPath);
-    const resolvedPath = toStoredFolderPath(identified.plansRootUri.fsPath);
+    const identified = await identifyPlanFolder(originalPath);
+    const resolvedPath = toStoredFolderPath(identified.plansRootPath);
     return {
       resolvedPath,
       changed: resolvedPath !== toStoredFolderPath(originalPath)

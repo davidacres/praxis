@@ -4,8 +4,10 @@ import {
   discoverPlanFolders,
   discoverRepositoryFolders,
   identifyPlanFolder,
-  parsePlanFolder
-} from '../livefolder/markdownPlanParser';
+  parsePlanFolder,
+  setLiveFolderFs
+} from '@praxis/core';
+import { vsCodeLiveFolderFs } from '../adapters/vsCodeLiveFolderFs';
 
 interface LiveFolderFixture {
   rootUri: vscode.Uri;
@@ -63,6 +65,9 @@ Build the first login story.
 suite('markdownPlanParser', () => {
   const fixtureRoots: vscode.Uri[] = [];
 
+  suiteSetup(() => setLiveFolderFs(vsCodeLiveFolderFs));
+  suiteTeardown(() => setLiveFolderFs(undefined));
+
   teardown(async () => {
     while (fixtureRoots.length > 0) {
       const fixtureRoot = fixtureRoots.pop();
@@ -82,10 +87,10 @@ suite('markdownPlanParser', () => {
     fixtureRoots.push(fixture.rootUri);
 
     const selectedUri = vscode.Uri.joinPath(fixture.rootUri, 'product');
-    const identified = await identifyPlanFolder(selectedUri);
+    const identified = await identifyPlanFolder(selectedUri.fsPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, fixture.plansRootUri.fsPath);
-    assert.strictEqual(identified.featuresRootUri.fsPath, fixture.featuresRootUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, fixture.plansRootUri.fsPath);
+    assert.strictEqual(identified.featuresRootPath, fixture.featuresRootUri.fsPath);
   });
 
   test('discoverPlanFolders finds every repository plans root under a matching parent', async () => {
@@ -102,10 +107,10 @@ suite('markdownPlanParser', () => {
       Buffer.from('**Type:** Story\n', 'utf8')
     );
 
-    const matches = await discoverPlanFolders(parentUri);
+    const matches = await discoverPlanFolders(parentUri.fsPath);
 
     assert.deepStrictEqual(
-      matches.map(match => match.plansRootUri.fsPath).sort(),
+      matches.map(match => match.plansRootPath).sort(),
       [
         vscode.Uri.joinPath(parentUri, 'repo-one', 'product', 'docs', 'plans').fsPath,
         vscode.Uri.joinPath(parentUri, 'repo-two', 'product', 'docs', 'plans').fsPath
@@ -131,10 +136,10 @@ suite('markdownPlanParser', () => {
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(repoOneUri, '.git'));
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(repoTwoUri, '.git'));
 
-    const matches = await discoverRepositoryFolders(parentUri);
+    const matches = await discoverRepositoryFolders(parentUri.fsPath);
 
     assert.deepStrictEqual(
-      matches.map(match => match.fsPath).sort(),
+      matches.map(match => match).sort(),
       [parentUri.fsPath, repoOneUri.fsPath, repoTwoUri.fsPath].sort()
     );
   });
@@ -152,9 +157,9 @@ suite('markdownPlanParser', () => {
     fixtureRoots.push(emptyUri);
     await vscode.workspace.fs.createDirectory(emptyUri);
 
-    const identified = await identifyPlanFolder(emptyUri);
+    const identified = await identifyPlanFolder(emptyUri.fsPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, emptyUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, emptyUri.fsPath);
     // No features/ directory is required, and none is created just to validate.
     const entries = await vscode.workspace.fs.readDirectory(emptyUri);
     assert.deepStrictEqual(entries, []);
@@ -176,10 +181,10 @@ suite('markdownPlanParser', () => {
       '# Login fails\n\n**Status:** To Do\n**Type:** Bug\n'
     );
 
-    const identified = await identifyPlanFolder(plansUri);
-    const parsed = await parsePlanFolder(plansUri);
+    const identified = await identifyPlanFolder(plansUri.fsPath);
+    const parsed = await parsePlanFolder(plansUri.fsPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, plansUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, plansUri.fsPath);
     assert.strictEqual(parsed.childItems.length, 1);
     assert.strictEqual(parsed.childItems[0].issueType, 'Bug');
   });
@@ -205,10 +210,10 @@ suite('markdownPlanParser', () => {
       );
     }
 
-    const matches = await discoverPlanFolders(repoUri);
+    const matches = await discoverPlanFolders(repoUri.fsPath);
 
     assert.deepStrictEqual(
-      matches.map(match => match.plansRootUri.fsPath),
+      matches.map(match => match.plansRootPath),
       [],
       'C# source folders must not be detected as plans roots'
     );
@@ -240,19 +245,19 @@ suite('markdownPlanParser', () => {
       '# Child feature\n\n**Status:** Planned\n'
     );
 
-    const identified = await identifyPlanFolder(parentUri);
+    const identified = await identifyPlanFolder(parentUri.fsPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, parentUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, parentUri.fsPath);
   });
 
   test('identifyPlanFolder normalizes a selected features folder back to the plans root', async () => {
     const fixture = await createLiveFolderFixture('selected-features-root');
     fixtureRoots.push(fixture.rootUri);
 
-    const identified = await identifyPlanFolder(fixture.featuresRootUri);
+    const identified = await identifyPlanFolder(fixture.featuresRootUri.fsPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, fixture.plansRootUri.fsPath);
-    assert.strictEqual(identified.featuresRootUri.fsPath, fixture.featuresRootUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, fixture.plansRootUri.fsPath);
+    assert.strictEqual(identified.featuresRootPath, fixture.featuresRootUri.fsPath);
   });
 
   test('identifyPlanFolder accepts stored string paths with forward slashes', async () => {
@@ -262,18 +267,18 @@ suite('markdownPlanParser', () => {
     const selectedPath = fixture.rootUri.fsPath.replace(/\\/g, '/');
     const identified = await identifyPlanFolder(selectedPath);
 
-    assert.strictEqual(identified.plansRootUri.fsPath, fixture.plansRootUri.fsPath);
-    assert.strictEqual(identified.featuresRootUri.fsPath, fixture.featuresRootUri.fsPath);
+    assert.strictEqual(identified.plansRootPath, fixture.plansRootUri.fsPath);
+    assert.strictEqual(identified.featuresRootPath, fixture.featuresRootUri.fsPath);
   });
 
   test('parsePlanFolder parses features and stories from an ancestor folder selection', async () => {
     const fixture = await createLiveFolderFixture('parse-from-ancestor');
     fixtureRoots.push(fixture.rootUri);
 
-    const parsed = await parsePlanFolder(fixture.rootUri);
+    const parsed = await parsePlanFolder(fixture.rootUri.fsPath);
 
-    assert.strictEqual(parsed.plansRootUri.fsPath, fixture.plansRootUri.fsPath);
-    assert.strictEqual(parsed.featuresRootUri.fsPath, fixture.featuresRootUri.fsPath);
+    assert.strictEqual(parsed.plansRootPath, fixture.plansRootUri.fsPath);
+    assert.strictEqual(parsed.featuresRootPath, fixture.featuresRootUri.fsPath);
     assert.strictEqual(parsed.features.length, 1);
     assert.strictEqual(parsed.stories.length, 1);
     assert.strictEqual(parsed.childItems.length, 1);
@@ -307,7 +312,7 @@ Resolve the timeout when refreshing tokens.
 `
     );
 
-    const parsed = await parsePlanFolder(fixture.rootUri);
+    const parsed = await parsePlanFolder(fixture.rootUri.fsPath);
     const childTypes = parsed.childItems.map(item => item.issueType).sort();
 
     assert.deepStrictEqual(childTypes, ['Bug', 'Story', 'Task']);
@@ -332,7 +337,7 @@ A bug filed at the features root, not inside a feature folder.
 `
     );
 
-    const parsed = await parsePlanFolder(fixture.rootUri);
+    const parsed = await parsePlanFolder(fixture.rootUri.fsPath);
     const rootBug = parsed.childItems.find(
       item => item.issueType === 'Bug' && item.title === 'Root level crash'
     );
@@ -358,7 +363,7 @@ NullReferenceException in ISyncResultBuilder when sync completes.
 `
     );
 
-    const parsed = await parsePlanFolder(fixture.rootUri);
+    const parsed = await parsePlanFolder(fixture.rootUri.fsPath);
     const looseBug = parsed.childItems.find(
       item => item.issueType === 'Bug' && item.title === 'ISyncResultBuilder null ref'
     );
@@ -403,7 +408,7 @@ Sync manager times out after 30s.
 `
     );
 
-    const parsed = await parsePlanFolder(rootUri);
+    const parsed = await parsePlanFolder(rootUri.fsPath);
     assert.strictEqual(parsed.features.length, 0, 'No features expected');
     assert.strictEqual(parsed.childItems.length, 2, 'Both bugs should be discovered');
     const bug1 = parsed.childItems.find(i => i.sequence === 1);
@@ -460,7 +465,7 @@ Sync issue.
 `
     );
 
-    const parsed = await parsePlanFolder(rootUri);
+    const parsed = await parsePlanFolder(rootUri.fsPath);
     assert.strictEqual(parsed.features.length, 1, 'One feature expected');
     assert.strictEqual(
       parsed.childItems.filter(i => i.issueType === 'Bug').length,

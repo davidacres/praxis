@@ -5,7 +5,7 @@ import {
   stableFeatureKey,
   stableStoryKey,
   stableChildKey
-} from '../livefolder/markdownPlanParser';
+} from '@praxis/core';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -58,8 +58,8 @@ export async function resolveSuggestedPlansFolderUri(): Promise<vscode.Uri | und
 
   for (const wf of folders) {
     try {
-      const identified = await identifyPlanFolder(wf.uri);
-      return identified.plansRootUri;
+      const identified = await identifyPlanFolder(wf.uri.fsPath);
+      return vscode.Uri.file(identified.plansRootPath);
     } catch {
       // No plans tree found under this workspace root.
     }
@@ -81,7 +81,7 @@ export async function generateTicketPlanFromMarkdownFeatures(
   const { projectKey, projectName, currentUser, onProgress } = options;
 
   onProgress('Parsing feature and story files…');
-  const parsed = await parsePlanFolder(rootUri, onProgress);
+  const parsed = await parsePlanFolder(rootUri.fsPath, onProgress);
 
   if (parsed.features.length === 0) {
     throw new Error(

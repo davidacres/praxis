@@ -26,17 +26,18 @@ Electron renderer (or the reverse) is a common and costly mistake.
 ## Shared logic belongs in core
 
 The extension used to carry ~50 copies of modules core already owned — shims,
-byte-identical duplicates, and files that had silently drifted apart. Those are
-gone. When both surfaces need the same logic, it goes in `packages/core`, stays
-host-agnostic, and each surface supplies its own bindings via an adapter
-(`apps/vscode-extension/src/adapters/`).
+byte-identical duplicates, and files that had silently drifted apart, including
+a ~2,600-line fork of the whole live-folder parser. Those are all gone. When
+both surfaces need the same logic it lives in `packages/core`, stays
+host-agnostic, and each surface supplies its own bindings through an adapter in
+`apps/vscode-extension/src/adapters/`.
 
-Three exceptions remain, and each carries a header comment saying so:
-`livefolder/markdownPlanParser.ts`, `livefolder/liveFolderService.ts`, and
-`livefolder/markdownStatusWriter.ts` still exist in both places, because the
-extension's versions are typed against `vscode.Uri` where core's take string
-paths. **Until they are collapsed, a behavioural change to plan parsing or live
-folder sync has to be made in both copies.**
+Where core needs a host capability it can't assume — VS Code's `Memento`,
+`workspace.fs`, a file watcher — it exposes a small port with a `node:fs`-style
+default and a `setX()` swap (`setLiveFolderFs`, `setLiveFolderWatch`,
+`setMcpOAuthProviderSource`). The extension calls those in `activate()`; the
+desktop app takes the defaults. Add a host capability the same way rather than
+forking a module.
 
 ---
 

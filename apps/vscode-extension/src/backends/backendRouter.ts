@@ -29,7 +29,7 @@ import { inferGitLabProjectFromRepo } from '@praxis/core';
 import { GitLabBoardService } from '@praxis/core';
 import { JiraService } from '@praxis/core';
 import { JiraMcpConnectionResolver } from '../adapters/vsCodeJiraMcpConnectionResolver';
-import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
+import { LiveFolderService, type ExternalCommentEvent } from '@praxis/core';
 import { UserWorkspaceService } from '@praxis/core';
 import { UserWorkspaceStore } from '@praxis/core';
 import type { IssueTrackerService } from '@praxis/core';

@@ -29,7 +29,7 @@ import {
   generateTicketPlanFromMarkdownFeatures,
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
-import { discoverPlanFolders, identifyPlanFolder } from '../livefolder/markdownPlanParser';
+import { discoverPlanFolders, identifyPlanFolder } from '@praxis/core';
 import { toStoredFolderPath } from '@praxis/core';
 import {
   getParentRule,
@@ -152,8 +152,8 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
 
   let selectedPlansUri: vscode.Uri;
   try {
-    const identified = await identifyPlanFolder(chosen[0]);
-    selectedPlansUri = identified.plansRootUri;
+    const identified = await identifyPlanFolder(chosen[0].fsPath);
+    selectedPlansUri = vscode.Uri.file(identified.plansRootPath);
     if (selectedPlansUri.toString() !== chosen[0].toString()) {
       deps.output.appendLine(`[import] Resolved selected folder to ${selectedPlansUri.fsPath}`);
     }
@@ -723,10 +723,10 @@ async function resolveOrInitializePlansRoot(selectedUri: vscode.Uri): Promise<st
         cancellable: false
       },
       async progress => {
-        return identifyPlanFolder(selectedUri, message => progress.report({ message }));
+        return identifyPlanFolder(selectedUri.fsPath, message => progress.report({ message }));
       }
     );
-    return toStoredFolderPath(identified.plansRootUri.fsPath);
+    return toStoredFolderPath(identified.plansRootPath);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     const choice = await vscode.window.showWarningMessage(
@@ -743,8 +743,8 @@ async function resolveOrInitializePlansRoot(selectedUri: vscode.Uri): Promise<st
     await vscode.workspace.fs.createDirectory(featuresUri);
 
     // Re-identify now that features/ exists.
-    const identified = await identifyPlanFolder(selectedUri);
-    return toStoredFolderPath(identified.plansRootUri.fsPath);
+    const identified = await identifyPlanFolder(selectedUri.fsPath);
+    return toStoredFolderPath(identified.plansRootPath);
   }
 }
 
@@ -773,10 +773,10 @@ async function promptForUserWorkspaceBoardInput(): Promise<Array<{
         title: 'Looking for plans folders…',
         cancellable: false
       },
-      async progress => discoverPlanFolders(uris[0], message => progress.report({ message }))
+      async progress => discoverPlanFolders(uris[0].fsPath, message => progress.report({ message }))
     );
     liveFolderPaths = matches.length > 0
-      ? matches.map(match => toStoredFolderPath(match.plansRootUri.fsPath))
+      ? matches.map(match => toStoredFolderPath(match.plansRootPath))
       : [await resolveOrInitializePlansRoot(uris[0])];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -45,7 +45,8 @@ import {
 } from './ai/aiProviderSetup';
 import { BackendModeContextState, resolveBackendModeContextState } from '@praxis/core';
 import { initializeMcpOAuthManager, getMcpOAuthManager } from './mcp/oauthManager';
-import { setMcpOAuthProviderSource } from '@praxis/core';
+import { setMcpOAuthProviderSource, setLiveFolderFs, setLiveFolderWatch } from '@praxis/core';
+import { vsCodeLiveFolderFs, vsCodeLiveFolderWatch } from './adapters/vsCodeLiveFolderFs';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { ClassicBoardsSidebarViewProvider } from './views/classicBoardsSidebarViewProvider';
@@ -966,6 +967,10 @@ export async function activate(
   initializeMcpOAuthManager(context);
   // Let the core MCP client reach the extension's UriHandler-backed OAuth flow.
   setMcpOAuthProviderSource(() => getMcpOAuthManager());
+  // Route core's live-folder file IO through vscode.workspace.fs so the
+  // feature keeps working when the workspace is remote.
+  setLiveFolderFs(vsCodeLiveFolderFs);
+  setLiveFolderWatch(vsCodeLiveFolderWatch);
 
   const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
   const configStore = new AppConfigStore();

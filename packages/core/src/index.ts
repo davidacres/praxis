@@ -41,6 +41,7 @@ export * from './livefolder/liveFolderFs';
 export * from './livefolder/liveFolderService';
 export * from './livefolder/liveFolderWatch';
 export * from './livefolder/markdownPlanParser';
+export * from './livefolder/markdownStatusWriter';
 export * from './userWorkspace/userWorkspaceStore';
 export * from './userWorkspace/userWorkspaceService';
 export * from './userWorkspace/boardDraftPlanner';
