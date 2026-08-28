@@ -3,8 +3,8 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as util from 'node:util';
 import type { OutputChannel } from 'vscode';
-import type { IssueDetails } from '../types';
-import { buildWorktreeName } from '../ai/agentPrompt';
+import type { IssueDetails } from '@ticket-manager/core';
+import { buildWorktreeName } from '@ticket-manager/core';
 
 const execFile = util.promisify(execFileCallback);
 

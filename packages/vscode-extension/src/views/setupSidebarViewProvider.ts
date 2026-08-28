@@ -4,7 +4,7 @@ import {
   promptToConfigureDefaultAiProvider
 } from '../ai/aiProviderSetup';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { toStoredFolderPath } from '@ticket-manager/core';
 
 function escapeHtml(value: string): string {
   return value

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as http from 'node:http';
-import { resolveProviderAdapter, runAgentLoop } from '../ai/agentRuntime';
-import type { GatewayToolDefinition } from '../ai/gateway';
+import { resolveProviderAdapter, runAgentLoop } from '@ticket-manager/core';
+import type { GatewayToolDefinition } from '@ticket-manager/core';
 
 suite('agentLoop', () => {
   test('runs tool call then completes on second model turn', async () => {

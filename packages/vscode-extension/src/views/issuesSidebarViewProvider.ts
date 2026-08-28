@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import { issueTypePillInlineStyle } from '../board/issueTypeColors';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { AiSessionManager } from '@ticket-manager/core';
+import { issueTypePillInlineStyle } from '@ticket-manager/core';
 import { FilterStore } from '../state/filterStore';
-import type { AiProvider, IssueFilters, IssueSummary } from '../types';
+import type { AiProvider, IssueFilters, IssueSummary } from '@ticket-manager/core';
 import { IssuesTreeProvider } from './issuesTreeProvider';
 import { renderIconButton } from './webviewToolbarIcons';
 

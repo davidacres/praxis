@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { IssueDetails, IssueSummary } from '../types';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { IssueDetails, IssueSummary } from '@ticket-manager/core';
 import type {
   TaskDesignerFlowRecommendation,
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode
-} from '../ai/aiReviewService';
-import { issueTypeHex } from '../board/issueTypeColors';
+} from '@ticket-manager/core';
+import { issueTypeHex } from '@ticket-manager/core';
 import {
   normalizeTaskDesignerPersistedState,
   type TaskDesignerPersistedStateRecoveryResult

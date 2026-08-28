@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { AgentSessionRecord } from '../ai/agentTypes';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { AiAssignment, AiProvider } from '../types';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { AgentSessionRecord } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { AiAssignment, AiProvider } from '@ticket-manager/core';
 
 interface ActiveSessionsSidebarCallbacks {
   onOpenSession: (issueKey: string) => Promise<void>;

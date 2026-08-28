@@ -4,7 +4,7 @@ import {
   buildMergeRequestFeedbackTaskDefinition,
   buildMergeRequestReplyComment,
   parseMergeRequestFeedbackResult
-} from '../ai/mergeRequestWorkflow';
+} from '@ticket-manager/core';
 
 suite('mergeRequestWorkflow', () => {
   test('builds a merge request feedback task definition with a structured result contract', () => {

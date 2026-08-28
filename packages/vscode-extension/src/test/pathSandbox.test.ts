@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as nodePath from 'node:path';
-import { PathSandboxError, resolveSandboxedPath } from '../ai/tools';
+import { PathSandboxError, resolveSandboxedPath } from '@ticket-manager/core';
 
 suite('pathSandbox', () => {
   const root = nodePath.resolve('C:/work/project');

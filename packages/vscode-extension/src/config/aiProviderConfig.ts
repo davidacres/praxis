@@ -1,4 +1,4 @@
-import type { AiProvider } from '../types';
+import type { AiProvider } from '@ticket-manager/core';
 
 export type ActiveAiProvider = AiProvider | 'none';
 

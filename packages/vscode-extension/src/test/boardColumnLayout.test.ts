@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import { applyBoardColumnPreferences, getDefaultStatusColumnOrder } from '../views/boardColumnLayout';
-import type { BoardDetails } from '../types';
+import type { BoardDetails } from '@ticket-manager/core';
 
 function createBoardDetails(): BoardDetails {
   return {

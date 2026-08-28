@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { JiraMcpConnectionResolver as CoreJiraMcpConnectionResolver } from '@ticket-manager/core';
 import type { JiraMcpSettingsSource } from '@ticket-manager/core';
 import type { AppConfigStore } from '../config/jiraConfig';
-import type { ConnectionType } from '../types';
+import type { ConnectionType } from '@ticket-manager/core';
 
 export type { JiraMcpConnectionResolution } from '@ticket-manager/core';
 

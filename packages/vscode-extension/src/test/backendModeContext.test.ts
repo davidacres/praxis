@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { resolveBackendModeContextState } from '../ui/backendModeContext';
+import { resolveBackendModeContextState } from '@ticket-manager/core';
 
 suite('backend mode context', () => {
   test('treats configured Jira MCP connections as configured without a stored workspace mode', () => {

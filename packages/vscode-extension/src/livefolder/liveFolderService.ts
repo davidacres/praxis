@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import {
   buildParentValidationMessage,
   getParentRule,
   isAllowedParentType
-} from '../issues/issueHierarchy';
+} from '@ticket-manager/core';
 import type {
   BackendMode,
   Board,
@@ -26,7 +26,7 @@ import type {
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
-} from '../types';
+} from '@ticket-manager/core';
 import {
   type ParsedChildFile,
   type ParsedFeatureFolder,
@@ -53,8 +53,8 @@ import {
   writeStatusToMarkdownFile,
   writeIdeaTranscriptToMarkdownFile
 } from './markdownStatusWriter';
-import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
-import { composeIdeaContent, splitIdeaContent } from '../issues/ideaTranscript';
+import { generateIssueMarkdown, type IssueType } from '@ticket-manager/core';
+import { composeIdeaContent, splitIdeaContent } from '@ticket-manager/core';
 
 // ── Workflow ────────────────────────────────────────────────────────
 

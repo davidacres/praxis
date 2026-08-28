@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import type { AgentSessionRecord, AgentTaskDefinition, AgentTaskState } from '../ai/agentTypes';
-import { AGENT_DEFAULTS } from '../ai/agentTypes';
-import { AiSessionManager } from '../ai/aiSessionManager';
+import type { AgentSessionRecord, AgentTaskDefinition, AgentTaskState } from '@ticket-manager/core';
+import { AGENT_DEFAULTS } from '@ticket-manager/core';
+import { AiSessionManager } from '@ticket-manager/core';
 
 /**
  * Minimal vscode.Memento stub for unit testing AiSessionManager.

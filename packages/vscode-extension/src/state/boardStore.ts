@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { BoardFilters, PersistedBoardFilterState, TrackedBoardRef } from '../types';
+import type { BoardFilters, PersistedBoardFilterState, TrackedBoardRef } from '@ticket-manager/core';
 
 const BOARD_FILTERS_KEY = 'ticketManager.boards.filters';
 const WORK_MODE_LAYOUT_KEY = 'ticketManager.workMode.layout';

@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import { AGENT_DEFAULTS } from '../ai/agentTypes';
-import type { UpdateIssueInput, AiProvider } from '../types';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { AiSessionManager } from '@ticket-manager/core';
+import { AGENT_DEFAULTS } from '@ticket-manager/core';
+import type { UpdateIssueInput, AiProvider } from '@ticket-manager/core';
 import {
   formatParentReference,
   getParentRule,
   getResolvedParentLabel
-} from '../issues/issueHierarchy';
+} from '@ticket-manager/core';
 import { DetailsViewProvider } from './detailsViewProvider';
-import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
+import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '@ticket-manager/core';
 
 interface IssueDetailsSidebarCallbacks {
   onSaveIssueEdits: (

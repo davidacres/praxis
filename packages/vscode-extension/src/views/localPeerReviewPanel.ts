@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import type { IssueDetails } from '../types';
-import type { LprResult } from '../ai/aiReviewService';
-import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
+import type { IssueDetails } from '@ticket-manager/core';
+import type { LprResult } from '@ticket-manager/core';
+import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '@ticket-manager/core';
 import { renderIconButton } from './webviewToolbarIcons';
 
 function escapeHtml(value: string): string {

@@ -11,7 +11,7 @@
 
 import * as vscode from 'vscode';
 import { readUtf8 } from '../livefolder/markdownPlanParser';
-import { ensureFrontMatter, type IssueType } from '../livefolder/markdownTemplate';
+import { ensureFrontMatter, type IssueType } from '@ticket-manager/core';
 
 // ── Type mapping ─────────────────────────────────────────────────────
 

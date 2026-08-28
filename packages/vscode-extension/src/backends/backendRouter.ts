@@ -19,20 +19,20 @@ import type {
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
-} from '../types';
+} from '@ticket-manager/core';
 import { AppConfigStore } from '../config/jiraConfig';
 import { VsCodeMementoStore } from '../adapters/vsCodeMementoStore';
-import type { ConnectionStore } from '../config/connectionStore';
+import type { ConnectionStore } from '@ticket-manager/core';
 import { createConnectionScopedConfigStore, loadConnectionSecrets } from '../config/connectionScopedConfigStore';
 import { DemoService } from '../demo/demoService';
-import { inferGitLabProjectFromRepo } from '../gitlab/gitLabApiService';
-import { GitLabBoardService } from '../gitlab/gitLabBoardService';
-import { JiraService } from '../jira/jiraService';
+import { inferGitLabProjectFromRepo } from '@ticket-manager/core';
+import { GitLabBoardService } from '@ticket-manager/core';
+import { JiraService } from '@ticket-manager/core';
 import { JiraMcpConnectionResolver } from '../jira/jiraMcpConnectionResolver';
 import { LiveFolderService, type ExternalCommentEvent } from '../livefolder/liveFolderService';
-import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
-import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
-import type { IssueTrackerService } from './issueTrackerService';
+import { UserWorkspaceService } from '@ticket-manager/core';
+import { UserWorkspaceStore } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
 
 function buildUnsupportedBackendMessage(mode: BackendMode): string {
   if (mode === 'github') {

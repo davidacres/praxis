@@ -1,6 +1,6 @@
 import * as assert from 'assert';
-import { buildSystemPrompt, buildWorktreeName } from '../ai/agentPrompt';
-import type { AgentTaskDefinition } from '../ai/agentTypes';
+import { buildSystemPrompt, buildWorktreeName } from '@ticket-manager/core';
+import type { AgentTaskDefinition } from '@ticket-manager/core';
 
 suite('agentPrompt', () => {
   test('buildWorktreeName prefixes the issue key and normalizes the suffix', () => {

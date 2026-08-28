@@ -54,3 +54,20 @@ export * from './jira/jiraMcpConnectionResolver';
 export * from './jira/jiraService';
 export * from './git/gitGraph';
 export * from './git/gitParsing';
+
+// Host-agnostic helpers both UI surfaces use. These existed as byte-identical
+// copies inside the VS Code extension until those copies were deleted; they are
+// exported here so the extension and the desktop app share one definition.
+export * from './board/boardIssueFilters';
+export * from './board/boardTransitionResolver';
+export * from './board/issueTypeColors';
+export * from './board/statusColors';
+export * from './board/swimLanes';
+export * from './file/jiraArtifactArchive';
+export * from './issues/ideaTranscript';
+export * from './issues/issueHierarchy';
+export * from './livefolder/markdownTemplate';
+export * from './livefolder/pathUtils';
+export * from './ui/backendModeContext';
+export * from './ui/hexColor';
+export * from './ui/markdownToHtml';

@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
-import { DEFAULT_MAX_AGE_WEEKS } from '../board/boardIssueFilters';
+import { DEFAULT_MAX_AGE_WEEKS } from '@ticket-manager/core';
 import {
   defaultIssueTypeHex,
   normalizeIssueTypeColorKey,
   sanitizeIssueTypeColors
-} from '../board/issueTypeColors';
-import { defaultStatusDotHex, sanitizeStatusColors } from '../board/statusColors';
-import type { Board, BoardColumnPreferences, BoardDetails } from '../types';
+} from '@ticket-manager/core';
+import { defaultStatusDotHex, sanitizeStatusColors } from '@ticket-manager/core';
+import type { Board, BoardColumnPreferences, BoardDetails } from '@ticket-manager/core';
 import type { BoardColumnStore } from '../state/boardColumnStore';
-import { normalizeOptionalHexColor } from '../ui/hexColor';
+import { normalizeOptionalHexColor } from '@ticket-manager/core';
 import { getDefaultStatusColumnOrder } from './boardColumnLayout';
 
 function escapeHtml(value: string): string {

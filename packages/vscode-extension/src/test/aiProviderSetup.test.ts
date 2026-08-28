@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import type { AiProvider } from '../types';
+import type { AiProvider } from '@ticket-manager/core';
 import {
   AI_PROVIDER_LABELS,
   buildAiProviderSetupOptions,

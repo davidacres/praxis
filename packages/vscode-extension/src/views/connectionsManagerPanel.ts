@@ -5,8 +5,8 @@ import type {
   Connection,
   ConnectionCheck,
   TrackedBoard
-} from '../types';
-import { ConnectionStore } from '../config/connectionStore';
+} from '@ticket-manager/core';
+import { ConnectionStore } from '@ticket-manager/core';
 import type { BackendRouter } from '../backends/backendRouter';
 
 /**

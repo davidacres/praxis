@@ -20,15 +20,15 @@ import type {
   UpdateBoardInput,
   UpdateIssueInput,
   WorkflowTransition
-} from '../types';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+} from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import { AppConfigStore } from '../config/jiraConfig';
 import {
   buildParentValidationMessage,
   getParentRule,
   isAllowedParentType,
   normalizeIssueTypeLabel
-} from '../issues/issueHierarchy';
+} from '@ticket-manager/core';
 
 type DemoAssigneeKind = 'me' | 'other' | 'none';
 

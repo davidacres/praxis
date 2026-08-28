@@ -4,8 +4,8 @@ import {
   promptToConfigureDefaultAiProvider
 } from '../ai/aiProviderSetup';
 import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
-import type { BackendMode } from '../types';
+import { toStoredFolderPath } from '@ticket-manager/core';
+import type { BackendMode } from '@ticket-manager/core';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */

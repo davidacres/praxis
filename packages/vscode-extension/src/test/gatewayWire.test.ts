@@ -7,7 +7,7 @@ import {
   sanitizeToolCallId,
   toWireModelId,
   toolResultMessages
-} from '../ai/gateway';
+} from '@ticket-manager/core';
 
 suite('gateway wire', () => {
   test('normalizeInboundModelId prefixes Vercel/', () => {

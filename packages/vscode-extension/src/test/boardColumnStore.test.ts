@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import { repairLegacyBacklogStatusPreferences } from '../state/boardColumnStore';
-import type { BoardColumnPreferences } from '../types';
+import type { BoardColumnPreferences } from '@ticket-manager/core';
 
 suite('boardColumnStore', () => {
   test('realigns legacy backlog-first workflow preferences to current workflow order', () => {

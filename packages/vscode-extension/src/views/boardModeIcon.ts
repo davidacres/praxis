@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { BackendMode } from '../types';
-import { parseHexRgb } from '../ui/hexColor';
+import type { BackendMode } from '@ticket-manager/core';
+import { parseHexRgb } from '@ticket-manager/core';
 
 const DEFAULT_JIRA_BOARD_ICON = '#3b82f6';
 const DEFAULT_DEMO_BOARD_ICON = '#a855f7';

@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { PermissionInfo } from '../ai/agentPrompt';
-import { AGENT_DEFAULTS, type AgentSessionRecord, type AgentEventSummary } from '../ai/agentTypes';
-import type { AiAssignment, AiProvider } from '../types';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { PermissionInfo } from '@ticket-manager/core';
+import { AGENT_DEFAULTS, type AgentSessionRecord, type AgentEventSummary } from '@ticket-manager/core';
+import type { AiAssignment, AiProvider } from '@ticket-manager/core';
 
 export interface AgentSessionController {
   onDidChangeActiveTask(listener: (issueKey: string) => void): () => void;

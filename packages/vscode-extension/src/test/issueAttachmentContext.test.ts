@@ -1,9 +1,9 @@
 import * as assert from 'node:assert';
 import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
-import { stageIssueAttachments } from '../ai/issueAttachmentContext';
-import type { IssueAttachment } from '../types';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import { stageIssueAttachments } from '@ticket-manager/core';
+import type { IssueAttachment } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
 
 suite('issueAttachmentContext', () => {
   const createdDirectories = new Set<string>();

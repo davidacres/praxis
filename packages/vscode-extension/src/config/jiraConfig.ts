@@ -7,15 +7,15 @@ import type {
   ConnectionType,
   DeliveryWorkflowSettings,
   SecretConnectionValues
-} from '../types';
+} from '@ticket-manager/core';
 import { VsCodeSecretsStore } from '../adapters/vsCodeSecretsStore';
 import {
   clearVercelApiKey,
   migrateVercelCredentialToSecretStorage,
   resolveVercelApiKey,
   storeVercelApiKey
-} from '../ai/gatewaySecrets';
-import { resolveGatewayApiKeyFromEnv, resolveGatewayUrlFromEnv } from '../ai/gateway';
+} from '@ticket-manager/core';
+import { resolveGatewayApiKeyFromEnv, resolveGatewayUrlFromEnv } from '@ticket-manager/core';
 import {
   buildAiProviderSettingsFromLegacy,
   isNestedAiProviderObject,

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { IssueDetails, IssueSummary, WorkflowTransition } from '../types';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { IssueDetails, IssueSummary, WorkflowTransition } from '@ticket-manager/core';
 
 export interface DetailsProviderSnapshot {
   loading: boolean;

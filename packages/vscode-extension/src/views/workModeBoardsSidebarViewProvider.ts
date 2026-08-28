@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { AgentSessionRecord } from '../ai/agentTypes';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { ConnectionStore } from '../config/connectionStore';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { AgentSessionRecord } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { ConnectionStore } from '@ticket-manager/core';
 import { BoardStore } from '../state/boardStore';
-import type { AiAssignment, AiProvider, BackendMode, Board, BoardDetails } from '../types';
-import { parseHexRgb } from '../ui/hexColor';
+import type { AiAssignment, AiProvider, BackendMode, Board, BoardDetails } from '@ticket-manager/core';
+import { parseHexRgb } from '@ticket-manager/core';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
 import { BoardsTreeProvider } from './boardsTreeProvider';
 
