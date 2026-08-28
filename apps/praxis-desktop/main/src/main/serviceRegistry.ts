@@ -9,7 +9,7 @@ import {
   ProjectIssueTrackerService
 } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
-import { getDemoService } from './demoServiceInstance';
+import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
 import { getUserWorkspaceStore } from './userWorkspaceStoreInstance';
 import { getLogBus } from './logBusInstance';
 import { ElectronLiveFolderConfigProvider } from './adapters/electronLiveFolderConfigProvider';
@@ -197,7 +197,8 @@ function createGitLabService(connectionId: string): IssueTrackerService {
 
 /**
  * Resolves the backend for a connectionId. `undefined` (the built-in demo
- * boards) and an unknown id resolve to the demo backend. A connection whose
+ * boards) resolves to the demo backend only when explicit demo mode is active.
+ * An unknown id never silently becomes demo data. A connection whose
  * mode has no desktop backend yet (github/userworkspace until their
  * ports land) — or a jiracloud connection whose MCP server can't be resolved —
  * resolves to a stub that reads empty and throws a clear message on mutation,
@@ -217,13 +218,13 @@ export async function getServiceForConnection(
     return service;
   }
   if (!connectionId) {
-    return getDemoService();
+    return isDemoModeEnabled() ? getDemoService() : getStubService('demo');
   }
 
   const connection = getConnectionStore().getConnection(connectionId);
   if (!connection) {
-    console.warn(`serviceRegistry — unknown connection id "${connectionId}", using demo backend`);
-    return getDemoService();
+    console.warn(`serviceRegistry — unknown connection id "${connectionId}"`);
+    return getStubService('demo');
   }
 
   switch (connection.mode) {

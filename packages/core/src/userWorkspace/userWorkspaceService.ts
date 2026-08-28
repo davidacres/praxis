@@ -236,7 +236,25 @@ export class UserWorkspaceService implements IssueTrackerService {
   }
 
   public async getBoards(filters: BoardFilters): Promise<Board[]> {
-    let boards = this.userWorkspaceStore.getBoards().map(createBoardSummary);
+    let boards = await Promise.all(this.userWorkspaceStore.getBoards().map(async definition => {
+      const board = createBoardSummary(definition);
+      // Check the configured folder directly on every listing. A cached
+      // LiveFolderService may still be loaded from before the folder was
+      // deleted or moved, but the board list must reflect the current path.
+      let availability: Board['availability'] = 'available';
+      let availabilityMessage: string | undefined;
+      try {
+        await identifyPlanFolder(definition.liveFolderPath);
+      } catch (error) {
+        availability = 'missing';
+        availabilityMessage = error instanceof Error ? error.message : String(error);
+      }
+      return {
+        ...board,
+        availability,
+        ...(availabilityMessage ? { availabilityMessage } : {})
+      };
+    }));
     if (filters.projectKeys.length > 0) {
       const projectKeys = new Set(filters.projectKeys);
       boards = boards.filter(board => board.projectKey && projectKeys.has(board.projectKey));

@@ -62,9 +62,9 @@ import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolu
  */
 export interface BoardIpc {
   /**
-   * Without `connectionId`, aggregates demo boards + every supported connection's
-   * boards (one bad connection is skipped, not fatal). With `connectionId`, lists
-   * only that connection's boards — used by the board picker.
+   * Without `connectionId`, aggregates the optional demo boards + every supported
+   * connection's boards (one bad connection is skipped, not fatal). With
+   * `connectionId`, lists only that connection's boards — used by the board picker.
    */
   list(filters: BoardFilters, connectionId?: string): Promise<Board[]>;
   get(board: Board): Promise<BoardDetails>;

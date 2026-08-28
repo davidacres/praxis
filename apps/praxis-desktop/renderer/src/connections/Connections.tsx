@@ -205,9 +205,9 @@ export function Connections({ onChanged }: ConnectionsProps) {
                   uwBoards.map(board => (
                     <div key={board.id} className="list-row" data-testid="uw-board-row">
                       <div>
-                        <div className="list-row-title">{board.name}</div>
+                        <div className="list-row-title">{board.availability === 'missing' && <Icon name="warning" size={14} className="board-availability-warning" />}{board.name}</div>
                         <div className="list-row-meta">
-                          {board.projectKey} — {board.locationName}
+                          {board.availability === 'missing' ? `Missing folder — ${board.locationName}` : `${board.projectKey} — ${board.locationName}`}
                         </div>
                       </div>
                       <button

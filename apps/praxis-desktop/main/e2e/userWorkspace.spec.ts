@@ -25,7 +25,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, dismissSplash, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -157,6 +157,26 @@ test('deleting a workspace board removes it', async () => {
 
   // Sidebar entry is gone too.
   await expect(window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME })).toHaveCount(0);
+});
+
+test('a missing workspace folder is marked and can be deleted from the sidebar', async () => {
+  await createBoardViaWizard(workspaceDir, BOARD_NAME, PROJECT_KEY);
+  fs.rmSync(workspaceDir, { recursive: true, force: true });
+
+  await window.reload();
+  await dismissSplash(window);
+  const boardRow = window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME });
+  await expect(boardRow).toBeVisible();
+  await expect(boardRow.locator('[data-testid="board-missing-icon"]')).toBeVisible();
+  await expect(window.locator('[data-testid="new-session-board-select"] span').first()).toHaveText('No board');
+  await window.locator('[data-testid="new-session-board-select"]').click();
+  await expect(window.locator('[data-testid="new-session-board-option"]', { hasText: BOARD_NAME })).toHaveCount(0);
+  await window.locator('[data-testid="new-session-no-board-option"]').click();
+  await expect(window.locator('[data-testid="new-session-ticket-select"]')).toContainText('No ticket');
+  await expect(window.locator('[data-testid="new-session-ticket-select"]')).not.toContainText('free-form chat');
+
+  await boardRow.locator('[data-testid="board-delete-btn"]').click();
+  await expect(boardRow).toHaveCount(0);
 });
 
 test('discovering under a folder without plans folders shows the empty state', async () => {

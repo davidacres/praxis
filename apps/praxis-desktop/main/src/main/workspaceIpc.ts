@@ -1,7 +1,21 @@
 import * as fs from 'node:fs';
 import { app, dialog, ipcMain } from 'electron';
-import { parseWorkspaceFile, toWorkspaceFile, type CreateWorkspaceInput, type UpdateWorkspaceInput } from '@praxis/core';
+import {
+  PRAXIS_WORKSPACE_FILE_EXTENSION,
+  parseWorkspaceFile,
+  toWorkspaceFile,
+  workspaceFileName,
+  type CreateWorkspaceInput,
+  type UpdateWorkspaceInput
+} from '@praxis/core';
 import { getWorkspaceStore } from './workspaceStoreInstance';
+
+// Both file dialogs offer the same choices: the dedicated `.workspace.praxis`
+// extension first (the default view), with an All Files escape hatch.
+const WORKSPACE_FILE_FILTERS = [
+  { name: 'Praxis Workspace', extensions: [PRAXIS_WORKSPACE_FILE_EXTENSION] },
+  { name: 'All Files', extensions: ['*'] }
+];
 
 export function registerWorkspaceIpc(): void {
   ipcMain.handle('workspaces:list', () => getWorkspaceStore().list());
@@ -13,15 +27,15 @@ export function registerWorkspaceIpc(): void {
     const workspace = getWorkspaceStore().get(id);
     if (!workspace) throw new Error(`Workspace ${id} was not found.`);
     const result = await dialog.showSaveDialog({
-      title: 'Save Praxis Workspace', defaultPath: `${workspace.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.praxis-workspace.json`,
-      filters: [{ name: 'Praxis Workspace', extensions: ['praxis-workspace.json', 'json'] }]
+      title: 'Save Praxis Workspace', defaultPath: workspaceFileName(workspace.name),
+      filters: WORKSPACE_FILE_FILTERS
     });
     if (result.canceled || !result.filePath) return undefined;
     await fs.promises.writeFile(result.filePath, JSON.stringify(toWorkspaceFile(workspace), null, 2), 'utf8');
     return result.filePath;
   });
   ipcMain.handle('workspaces:openFromFile', async () => {
-    const result = await dialog.showOpenDialog({ title: 'Open Praxis Workspace', properties: ['openFile'], filters: [{ name: 'Praxis Workspace', extensions: ['json'] }] });
+    const result = await dialog.showOpenDialog({ title: 'Open Praxis Workspace', properties: ['openFile'], filters: WORKSPACE_FILE_FILTERS });
     if (result.canceled || !result.filePaths[0]) return undefined;
     const workspace = parseWorkspaceFile(await fs.promises.readFile(result.filePaths[0], 'utf8'));
     // Imported files retain their provenance metadata; the current app version records the import save.

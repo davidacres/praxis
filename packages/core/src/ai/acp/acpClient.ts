@@ -79,6 +79,7 @@ export class AcpClientWrapper {
   private initializeResponse?: acp.InitializeResponse;
   private resumedSessionId?: string;
   private resumeAttempted = false;
+  private disposed = false;
 
   constructor(private readonly options: AcpClientOptions) {}
 
@@ -97,6 +98,22 @@ export class AcpClientWrapper {
     child.stderr?.on('data', chunk => {
       this.options.logSink?.appendLine(`[acp:stderr] ${chunk.toString('utf8').trimEnd()}`);
     });
+    const logStreamError = (streamName: string) => (err: Error) => {
+      if (this.disposed) {
+        return;
+      }
+      // A client can close the ACP transport while the agent is still flushing
+      // output. Node reports that race as EPIPE on the child stdio stream; it
+      // must be observed or it becomes an uncaught 'error' event.
+      if (err.message.includes('EPIPE') || (err as NodeJS.ErrnoException).code === 'EPIPE') {
+        this.options.logSink?.appendLine(`[acp] ${streamName} closed while stopping the agent`);
+        return;
+      }
+      this.options.logSink?.appendLine(`[acp] ${streamName} stream error: ${err.message}`);
+    };
+    child.stdin?.on('error', logStreamError('stdin'));
+    child.stdout?.on('error', logStreamError('stdout'));
+    child.stderr?.on('error', logStreamError('stderr'));
     child.on('error', err => {
       this.options.logSink?.appendLine(`[acp] subprocess error: ${err.message}`);
     });
@@ -293,10 +310,17 @@ export class AcpClientWrapper {
 
   /** Closes the connection and kills the subprocess. */
   public dispose(): void {
-    this.session?.dispose();
-    this.connection?.close();
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    // Terminate the child before closing the JSON-RPC streams. Closing the
+    // streams first can make an ACP adapter write to a closed stdout pipe and
+    // crash it with an unhandled EPIPE while it is flushing session/query.
     if (this.child && !this.child.killed) {
       this.child.kill();
     }
+    this.session?.dispose();
+    this.connection?.close();
   }
 }

@@ -37,8 +37,21 @@ test('displays the running Praxis version in the title bar', async () => {
 });
 
 test('boards render on launch', async () => {
+  await expect(window.locator('[data-testid="new-session-view"] h1')).toContainText('No board');
+  await expect(window.locator('[data-testid="new-session-board-select"]')).toContainText('No board');
   await window.locator('[data-testid="nav-overview"]').click();
   await expect(window.locator('.overview-board-card').first()).toBeVisible();
+});
+
+test('normal launch does not include built-in demo data', async () => {
+  await app.electronApp.close();
+  app = await launchTestApp(undefined, undefined, undefined, { demoMode: false });
+  window = app.window;
+
+  await window.locator('[data-testid="nav-overview"]').click();
+  await expect(window.locator('.overview-board-card')).toHaveCount(0);
+  await expect(window.getByText('Boards from your connections will appear here.', { exact: true })).toBeVisible();
+  await expect(window.locator('[data-testid="board-nav-item"]')).toHaveCount(0);
 });
 
 test('selecting a board renders its columns and issue cards', async () => {

@@ -1,7 +1,6 @@
 <#
 .SYNOPSIS
-  Build the Praxis Electron desktop app and package it as a branded Windows
-  NSIS installer via electron-builder.
+  Build the Praxis Electron desktop app without packaging an installer.
 
 .DESCRIPTION
   Orchestrates the full pipeline:
@@ -12,38 +11,24 @@
     4. copy-renderer step     -> apps/praxis-desktop/renderer/dist -> apps/praxis-desktop/main/renderer
                                  (so `loadFile('../../renderer/index.html')` resolves
                                  inside the asar — see apps/praxis-desktop/main/src/main/index.ts)
-    5. electron-builder       -> produces apps/praxis-desktop/main/dist/Praxis-*-setup.exe
-
-  The setup executable lands in apps/praxis-desktop/main/dist/ and can be
-  double-clicked to install Praxis.
+  Installer packaging is handled separately by build-installer.ps1.
 
 .PARAMETER SkipBuild
-  Skip the workspace compile/copy steps and run electron-builder against the
-  already-built artifacts. Fails fast if any required input is missing.
-
-.PARAMETER Target
-  Optional electron-builder target override. Defaults to the NSIS target
-  configured in apps/praxis-desktop/main/package.json (build.win.target). Pass
-  'nsis' or 'portable' to produce alternative formats, or 'dir' to produce
-  an unpacked directory (useful for smoke-testing the launcher without
-  installing).
+  Skip the workspace compile/copy steps and verify the already-built artifacts.
+  Fails fast if any required input is missing.
 
 .EXAMPLE
-  npm run app:dist
+  npm run app:build
 
 .EXAMPLE
   pwsh ./scripts/build-app.ps1
 
 .EXAMPLE
-  pwsh ./scripts/build-app.ps1 -Target portable
-
-.EXAMPLE
-  pwsh ./scripts/build-app.ps1 -SkipBuild -Target dir
+  pwsh ./scripts/build-app.ps1 -SkipBuild
 #>
 [CmdletBinding()]
 param(
-  [switch]$SkipBuild,
-  [string]$Target
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,61 +93,7 @@ if ($SkipBuild) {
   Write-Ok 'renderer ready for asar packaging'
 }
 
-if ($Target) {
-  $ebArgs = @('--win', $Target)
-  Write-Step "Running electron-builder (target: $Target)"
-} else {
-  $ebArgs = @()
-  Write-Step 'Running electron-builder (target from package.json: nsis)'
-}
-
-Push-Location $electronApp
-try {
-  npx electron-builder @ebArgs --publish never
-  if ($LASTEXITCODE -ne 0) {
-    throw "electron-builder failed (exit $LASTEXITCODE)"
-  }
-} finally {
-  Pop-Location
-}
-
-$distDir = Join-Path $electronApp 'dist'
-if (-not (Test-Path $distDir)) {
-  throw "electron-builder reported success but $distDir is missing."
-}
-
-# The -Target dir output goes one level deeper (e.g. dist\win-unpacked\*.exe).
-# Installer artifacts land directly in dist\. Find whichever layout matches.
-$installerRoot = $distDir
-if ($Target -eq 'dir') {
-  # Windows unpacked layout is dist\win-unpacked\ — any platform-specific
-  # *-unpacked subdir works for our purposes.
-  $unpacked = Get-ChildItem $distDir -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -like '*-unpacked' } | Select-Object -First 1
-  if ($unpacked) { $installerRoot = $unpacked.FullName }
-}
-
-$artifacts = Get-ChildItem $installerRoot -File -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -match '\.exe$' } |
-  Sort-Object LastWriteTime -Descending
-
 Write-Host ''
-Write-Host 'Build complete.' -ForegroundColor Cyan
-Write-Host "  Output: $installerRoot" -ForegroundColor Cyan
-if ($artifacts) {
-  foreach ($a in $artifacts) {
-    $size = "{0:N2} MB" -f ($a.Length / 1MB)
-    Write-Host "  $($a.FullName)  ($size)" -ForegroundColor Green
-  }
-}
-Write-Host ''
-if ($Target -eq 'dir') {
-  Write-Host 'To launch the unpacked build:' -ForegroundColor Cyan
-  Write-Host "  & `"$($artifacts[0].FullName)`"" -ForegroundColor Cyan
-} elseif ($artifacts) {
-  $installer = $artifacts | Where-Object { $_.Name -like '*setup.exe' } | Select-Object -First 1
-  if ($installer) {
-    Write-Host 'To install locally, open:' -ForegroundColor Cyan
-    Write-Host "  $($installer.FullName)" -ForegroundColor Cyan
-  }
-}
+Write-Host 'Praxis app build is ready.' -ForegroundColor Cyan
+Write-Host "  Renderer: $(Join-Path $frontend 'dist')" -ForegroundColor Green
+Write-Host "  Desktop:  $(Join-Path $electronApp 'out')" -ForegroundColor Green

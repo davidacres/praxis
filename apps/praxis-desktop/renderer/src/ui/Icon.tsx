@@ -34,6 +34,7 @@ export type IconName =
   | 'check-square'
   | 'shield'
   | 'info'
+  | 'warning'
   | 'dot'
   | 'pencil'
   | 'trash'
@@ -123,6 +124,7 @@ const PATHS: Record<IconName, string | string[]> = {
   'check-square': ['M3.4 2.6h9.2a.8.8 0 0 1 .8.8v9.2a.8.8 0 0 1-.8.8H3.4a.8.8 0 0 1-.8-.8V3.4a.8.8 0 0 1 .8-.8z', 'M5.2 8.1 7.2 10l3.6-3.9'],
   shield: 'M8 1.9 13 3.7v4c0 3-2.1 5.3-5 6.4-2.9-1.1-5-3.4-5-6.4v-4z',
   info: ['M8 1.9a6.1 6.1 0 1 0 0 12.2A6.1 6.1 0 0 0 8 1.9z', 'M8 7.2v4M8 4.9v.1'],
+  warning: ['M8 1.7 14.2 13H1.8z', 'M8 5.3v4.1M8 11.6v.1'],
   dot: 'M8 5.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z',
   pencil: ['M11.1 2.6l2.3 2.3', 'M11.6 2.1a1.4 1.4 0 0 1 2 2L5.2 12.5l-3 1 1-3 8.4-8.4z'],
   folder:

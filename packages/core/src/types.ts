@@ -133,6 +133,9 @@ export interface Board {
   locationName?: string;
   /** Optional id of the connection this board came from (multi-connection mode). */
   connectionId?: string;
+  /** Availability of a locally-backed board; missing boards remain visible so they can be removed. */
+  availability?: 'available' | 'missing';
+  availabilityMessage?: string;
   raw?: unknown;
 }
 

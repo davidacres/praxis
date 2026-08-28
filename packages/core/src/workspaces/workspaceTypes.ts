@@ -1,6 +1,20 @@
 export const PRAXIS_WORKSPACE_FORMAT = 'praxis-workspace';
 export const CURRENT_WORKSPACE_SCHEMA_VERSION = 1;
 
+/**
+ * Saved workspaces are written as `<slug>.workspace.praxis`. The dialog filter
+ * matches on the final segment only (Electron ignores the `.workspace.` part),
+ * so `PRAXIS_WORKSPACE_FILE_EXTENSION` is what the open/save filters use.
+ */
+export const PRAXIS_WORKSPACE_FILE_EXTENSION = 'praxis';
+export const PRAXIS_WORKSPACE_FILE_SUFFIX = '.workspace.praxis';
+
+/** `My Team` → `my-team.workspace.praxis` — the default name for a saved workspace file. */
+export function workspaceFileName(name: string): string {
+  const slug = name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+  return `${slug || 'workspace'}${PRAXIS_WORKSPACE_FILE_SUFFIX}`;
+}
+
 export interface WorkspaceRecord {
   id: string;
   name: string;

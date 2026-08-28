@@ -45,10 +45,17 @@ packages/
 The extension is published as `davidacres.praxis`, so its npm name stays
 `praxis` rather than moving under the `@praxis` scope.
 
-Build the Praxis desktop installer with `npm run app:dist:mac` on macOS or
-`npm run app:dist:win` on Windows. Artifacts are written to
+Build the Praxis desktop app with `npm run app:build:mac` on macOS or
+`npm run app:build:win` on Windows. This only compiles the app and prepares the
+renderer; it does not run electron-builder. Build an installer separately with
+`npm run app:installer:mac` or `npm run app:installer:win`. Installer artifacts are written to
 `apps/praxis-desktop/main/dist/`. The macOS DMG and Windows assisted installer use
 the same warm charcoal, parchment, and terracotta visual language as the app.
+
+The desktop app starts without built-in sample data. For demonstrations or
+manual fixture testing, launch explicitly with `npm run app:demo:mac` on macOS
+or `npm run app:demo` on Windows. The equivalent shell flag is
+`./scripts/run-app.sh --demo`; normal launches must not show the demo boards.
 
 ### Praxis desktop Git workspace
 
