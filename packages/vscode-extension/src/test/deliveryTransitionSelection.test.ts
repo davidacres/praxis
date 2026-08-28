@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import { selectNextDeliveryTransition } from '../extension';
-import type { WorkflowTransition } from '../types';
+import type { WorkflowTransition } from '@ticket-manager/core';
 
 function selectFrom(transitions: WorkflowTransition[]): WorkflowTransition | undefined {
   return selectNextDeliveryTransition({

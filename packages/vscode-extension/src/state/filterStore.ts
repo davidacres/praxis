@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { GroupingMode, IssueFilters, PersistedFilterState } from '../types';
+import type { GroupingMode, IssueFilters, PersistedFilterState } from '@ticket-manager/core';
 
 const FILTERS_KEY = 'ticketManager.filters';
 const GROUPING_KEY = 'ticketManager.grouping';

@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
+import type { AiSessionManager } from '@ticket-manager/core';
 import { AI_PROVIDER_LABELS } from '../ai/aiProviderSetup';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import type { BackendRouter } from '../backends/backendRouter';
-import type { ConnectionStore } from '../config/connectionStore';
+import type { ConnectionStore } from '@ticket-manager/core';
 import { AppConfigStore } from '../config/jiraConfig';
-import type { AiProvider, BackendMode, ConnectionCheck } from '../types';
+import type { AiProvider, BackendMode, ConnectionCheck } from '@ticket-manager/core';
 
 type StatusTone = 'ok' | 'warning' | 'error' | 'loading';
 

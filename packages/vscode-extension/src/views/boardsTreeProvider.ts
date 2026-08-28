@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import type { BackendRouter } from '../backends/backendRouter';
-import type { ConnectionStore } from '../config/connectionStore';
+import type { ConnectionStore } from '@ticket-manager/core';
 import { BoardStore } from '../state/boardStore';
-import type { Board, BoardFilters } from '../types';
+import type { Board, BoardFilters } from '@ticket-manager/core';
 
 export interface BoardsProviderSnapshot {
   boards: Board[];

@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
 import * as vscode from 'vscode';
-import { GitLabBoardService } from '../gitlab/gitLabBoardService';
+import { GitLabBoardService } from '@ticket-manager/core';
 
 type FetchInput = URL | Request | string;
 

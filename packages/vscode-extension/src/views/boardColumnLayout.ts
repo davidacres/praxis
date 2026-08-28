@@ -1,4 +1,4 @@
-import type { BoardColumn, BoardColumnPreferences, BoardDetails, IssueSummary } from '../types';
+import type { BoardColumn, BoardColumnPreferences, BoardDetails, IssueSummary } from '@ticket-manager/core';
 
 const DEFAULT_BOARD_STATUS_PREFIX = ['Backlog'] as const;
 

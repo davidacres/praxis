@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import type { IssueFilters } from '../types';
+import type { IssueFilters } from '@ticket-manager/core';
 import { buildEpicStatusMetadataFilters } from '../views/epicsSidebarViewProvider';
 import { buildIssueStatusMetadataFilters } from '../views/issuesSidebarViewProvider';
 

@@ -3,12 +3,12 @@ import {
   discoverPlanFolders,
   discoverRepositoryFolders
 } from '../livefolder/markdownPlanParser';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { toStoredFolderPath } from '@ticket-manager/core';
 import {
   planBoardDrafts,
   validateBoardDrafts,
   type BoardDraftRow
-} from '../userWorkspace/boardDraftPlanner';
+} from '@ticket-manager/core';
 
 export interface UserWorkspaceBoardDraft {
   name: string;

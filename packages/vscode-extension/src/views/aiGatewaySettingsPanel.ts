@@ -6,7 +6,7 @@ import {
   fetchModels,
   probeApiKeyAuth,
   resolveGatewayUrlFromEnv
-} from '../ai/gateway';
+} from '@ticket-manager/core';
 
 interface PanelSnapshot {
   gatewayUrl: string;

@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { defaultStatusDotHex, statusLabelInlineStyle } from '../board/statusColors';
+import { defaultStatusDotHex, statusLabelInlineStyle } from '@ticket-manager/core';
 
 function labelColor(statusName: string, custom?: Record<string, string>): string {
   const style = statusLabelInlineStyle(statusName, custom);

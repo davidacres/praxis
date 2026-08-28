@@ -10,7 +10,7 @@ import {
   parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
   resolveDeliveryPublishCommand
-} from '../ai/deliveryWorkflow';
+} from '@ticket-manager/core';
 
 suite('deliveryWorkflow', () => {
   test('extracts the most recent explicit base branch from Jira comments', () => {

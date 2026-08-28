@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { AiSessionManager } from '../ai/aiSessionManager';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { AiSessionManager } from '@ticket-manager/core';
 import {
   discoverWorkspaceAgentWorkflows
 } from '../ai/agentWorkflowCatalog';
-import type { AgentWorkflowReference, FeatureSubTaskRecord } from '../ai/agentTypes';
+import type { AgentWorkflowReference, FeatureSubTaskRecord } from '@ticket-manager/core';
 import type {
   AiProvider,
   BackendMode,
@@ -15,15 +15,15 @@ import type {
   Project,
   SubTaskSummary,
   WorkflowTransition
-} from '../types';
+} from '@ticket-manager/core';
 import {
   formatParentReference,
   getParentRule,
   getResolvedParentLabel,
   type ParentRule
-} from '../issues/issueHierarchy';
+} from '@ticket-manager/core';
 import { renderIconButton } from './webviewToolbarIcons';
-import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '../ui/markdownToHtml';
+import { markdownToHtmlSafe, MARKDOWN_BODY_CSS } from '@ticket-manager/core';
 
 /** Editor tab title used while the pane holds an unsaved new issue. */
 const DRAFT_PANEL_TITLE = 'New Issue';

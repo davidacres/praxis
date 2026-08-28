@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import type { DetailsProviderSnapshot, DetailsViewProvider } from '../views/detailsViewProvider';
 import { IssueDetailsSidebarViewProvider } from '../views/issueDetailsSidebarViewProvider';
 

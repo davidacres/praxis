@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { AppConfigStore } from '../config/jiraConfig';
 import { DEFAULT_AI_PROVIDER_SETTINGS } from '../config/aiProviderConfig';
-import type { AiProvider } from '../types';
+import type { AiProvider } from '@ticket-manager/core';
 
 export type ConfigurableAiProvider = AiProvider | 'none';
 

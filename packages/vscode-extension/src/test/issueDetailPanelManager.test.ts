@@ -1,8 +1,8 @@
 import * as assert from 'node:assert';
 import * as vscode from 'vscode';
-import { AiSessionManager } from '../ai/aiSessionManager';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
-import type { Board, CreateIssueInput, IssueDetails, Project } from '../types';
+import { AiSessionManager } from '@ticket-manager/core';
+import type { IssueTrackerService } from '@ticket-manager/core';
+import type { Board, CreateIssueInput, IssueDetails, Project } from '@ticket-manager/core';
 import { IssueDetailPanelManager } from '../views/issueDetailPanelManager';
 
 class MemoryMemento implements vscode.Memento {

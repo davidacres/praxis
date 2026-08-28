@@ -9,7 +9,7 @@ import {
   parseGitLabRemoteUrl,
   shouldCreateMergeRequestForStatusChange,
   wrapTicketManagerManagedMergeRequestNote
-} from '../gitlab/gitLabApiService';
+} from '@ticket-manager/core';
 
 type FetchInput = URL | Request | string;
 

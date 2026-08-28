@@ -3,7 +3,7 @@ import {
   planBoardDrafts,
   validateBoardDrafts,
   type BoardDraftRow
-} from '../userWorkspace/boardDraftPlanner';
+} from '@ticket-manager/core';
 
 const PARENT = 'C:\\dev-int';
 const ENGINE = 'C:\\dev-int\\workspace\\Engine\\Example.Integration.Engine';

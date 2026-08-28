@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { BoardColumnPreferences } from '../types';
+import type { BoardColumnPreferences } from '@ticket-manager/core';
 
 const STORAGE_KEY = 'ticketManager.boardColumnPreferences';
 

@@ -5,7 +5,7 @@ import {
   parseCopilotImplementationReadinessAssessment,
   parseTaskDesignerFlowRecommendation,
   type TaskDesignerRecommendationNode
-} from '../ai/aiReviewService';
+} from '@ticket-manager/core';
 
 suite('aiReviewService clarification comment sanitization', () => {
   test('keeps only numbered clarification questions', () => {

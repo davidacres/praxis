@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { IssueDetails } from '../types';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { IssueDetails } from '@ticket-manager/core';
 
 export interface AnalysisRepositoryEntry {
   /** Absolute local path or remote URL. */

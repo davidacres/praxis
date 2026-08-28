@@ -4,7 +4,7 @@ import {
   looksLikeMalformedWindowsPath,
   normalizeConfiguredFolderPath,
   toStoredFolderPath
-} from '../livefolder/pathUtils';
+} from '@ticket-manager/core';
 
 suite('livefolder path utils', () => {
   test('win32 paths round-trip safely through stored forward-slash form', () => {

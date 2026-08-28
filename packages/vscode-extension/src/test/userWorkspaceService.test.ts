@@ -1,8 +1,8 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { UserWorkspaceService } from '../userWorkspace/userWorkspaceService';
-import { UserWorkspaceStore } from '../userWorkspace/userWorkspaceStore';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { UserWorkspaceService } from '@ticket-manager/core';
+import { UserWorkspaceStore } from '@ticket-manager/core';
+import { toStoredFolderPath } from '@ticket-manager/core';
 
 class MemoryMemento {
   private store = new Map<string, unknown>();

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { readUtf8 } from './markdownPlanParser';
-import { ensureFrontMatter, type IssueType } from './markdownTemplate';
-import { composeIdeaContent } from '../issues/ideaTranscript';
+import { ensureFrontMatter, type IssueType } from '@ticket-manager/core';
+import { composeIdeaContent } from '@ticket-manager/core';
 
 /** Reverse-map plan statuses back to the emoji-prefixed markdown format. */
 export function planStatusToMarkdown(planStatus: string): string {

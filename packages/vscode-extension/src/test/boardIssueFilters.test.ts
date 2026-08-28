@@ -1,6 +1,6 @@
 import * as assert from 'node:assert';
-import { filterBoardIssues } from '../board/boardIssueFilters';
-import type { BoardColumnPreferences, IssueSummary } from '../types';
+import { filterBoardIssues } from '@ticket-manager/core';
+import type { BoardColumnPreferences, IssueSummary } from '@ticket-manager/core';
 
 function prefs(overrides: Partial<BoardColumnPreferences> = {}): BoardColumnPreferences {
   return {

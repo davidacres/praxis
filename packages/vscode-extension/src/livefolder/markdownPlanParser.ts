@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import {
   buildUnreadablePathError,
   normalizeConfiguredFolderPath
-} from './pathUtils';
+} from '@ticket-manager/core';
 
 // ── Shared types ────────────────────────────────────────────────────
 

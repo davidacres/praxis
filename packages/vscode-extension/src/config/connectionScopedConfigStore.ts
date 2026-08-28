@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { Connection } from '../types';
+import type { Connection } from '@ticket-manager/core';
 import type { AppConfigStore } from './jiraConfig';
 
 /**

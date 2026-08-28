@@ -4,18 +4,18 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as util from 'node:util';
 import * as vscode from 'vscode';
-import { AiSessionManager } from './ai/aiSessionManager';
+import { AiSessionManager } from '@ticket-manager/core';
 import { BackendRouter } from './backends/backendRouter';
-import type { IssueTrackerService } from './backends/issueTrackerService';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import { registerImportCommand } from './commands/importMarkdownFiles';
 import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
-import { ConnectionStore } from './config/connectionStore';
+import { ConnectionStore } from '@ticket-manager/core';
 import { VsCodeMementoStore } from './adapters/vsCodeMementoStore';
 import { VsCodeSettingsStore } from './adapters/vsCodeSettingsStore';
 import { VsCodeSecretsStore } from './adapters/vsCodeSecretsStore';
-import { prepareArtifactForJiraUpload } from './file/jiraArtifactArchive';
-import { issueTypeHex } from './board/issueTypeColors';
+import { prepareArtifactForJiraUpload } from '@ticket-manager/core';
+import { issueTypeHex } from '@ticket-manager/core';
 import { BoardColumnStore } from './state/boardColumnStore';
 import { BoardStore } from './state/boardStore';
 import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from './state/filterStore';
@@ -27,7 +27,7 @@ import type {
   IssueSummary,
   UpdateIssueInput,
   WorkflowTransition
-} from './types';
+} from '@ticket-manager/core';
 import {
   assessCopilotImplementationReadiness,
   buildTicketContext,
@@ -35,16 +35,16 @@ import {
   respondToCopilotComment,
   reviewTicketWithCopilot,
   runLocalPeerReview
-} from './ai/aiReviewService';
+} from '@ticket-manager/core';
 import {
   AI_PROVIDER_LABELS,
   describeAiConfigurationResult,
   promptToConfigureDefaultAiProvider,
   sortAiOptionsByDefaultProvider
 } from './ai/aiProviderSetup';
-import { BackendModeContextState, resolveBackendModeContextState } from './ui/backendModeContext';
+import { BackendModeContextState, resolveBackendModeContextState } from '@ticket-manager/core';
 import { initializeMcpOAuthManager, getMcpOAuthManager } from './mcp/oauthManager';
-import { setMcpOAuthProviderSource } from './mcp/clientFactory';
+import { setMcpOAuthProviderSource } from '@ticket-manager/core';
 import { BoardColumnConfigPanel } from './views/boardColumnConfigPanel';
 import { BoardPanelManager } from './views/boardPanelManager';
 import { ClassicBoardsSidebarViewProvider } from './views/classicBoardsSidebarViewProvider';
@@ -66,17 +66,17 @@ import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
 import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
 import { IssueAnalysisPanelManager, type AnalysisRepositoryEntry } from './views/issueAnalysisPanelManager';
-import { VercelAgentService, type VercelAgentLogger } from './ai/vercelAgentService';
+import { VercelAgentService, type VercelAgentLogger } from '@ticket-manager/core';
 import { CopilotSessionPanelManager, type AgentSessionController } from './views/copilotSessionPanel';
 import { ActiveSessionsSidebarViewProvider } from './views/activeSessionsSidebarViewProvider';
-import type { AgentSessionRecord, AgentTaskDefinition, AgentWorkflowReference } from './ai/agentTypes';
+import type { AgentSessionRecord, AgentTaskDefinition, AgentWorkflowReference } from '@ticket-manager/core';
 import {
   fetchModels,
   normalizeInboundModelId,
   resolveGatewayApiKeyFromEnv,
   resolveGatewayUrlFromEnv
-} from './ai/gateway';
-import { getParentRule } from './issues/issueHierarchy';
+} from '@ticket-manager/core';
+import { getParentRule } from '@ticket-manager/core';
 import {
   AI_COMMENT_HEADER,
   COPILOT_AGENT_INPUT_REQUEST_MARKER,
@@ -99,7 +99,7 @@ import {
   parseDeliveryAnalysisResult,
   parseDeliveryTaskResult,
   validateDeliveryWorkflowSettings
-} from './ai/deliveryWorkflow';
+} from '@ticket-manager/core';
 import {
   isFeatureRequestTicket,
   buildFeatureDecompositionTaskDefinition,
@@ -108,22 +108,22 @@ import {
   buildFeatureDecompositionBlockedComment,
   parseFeatureDecompositionResult,
   type FeatureDecompositionResult
-} from './ai/featureDecompositionWorkflow';
-import type { FeatureSubTaskRecord } from './ai/agentTypes';
+} from '@ticket-manager/core';
+import type { FeatureSubTaskRecord } from '@ticket-manager/core';
 import {
   buildMergeRequestCreatedComment,
   buildMergeRequestFailureReplyComment,
   buildMergeRequestFeedbackTaskDefinition,
   buildMergeRequestReplyComment,
   parseMergeRequestFeedbackResult
-} from './ai/mergeRequestWorkflow';
+} from '@ticket-manager/core';
 import { GitWorktreeManager, WorktreeConflictError } from './git/gitWorktreeManager';
 import {
   discoverWorkspaceAgentWorkflows,
   promptForAgentWorkflowSelection,
   resolveWorkflowReference
 } from './ai/agentWorkflowCatalog';
-import { stageIssueAttachments } from './ai/issueAttachmentContext';
+import { stageIssueAttachments } from '@ticket-manager/core';
 import {
   createGitLabHandledNoteState,
   diffGitLabDiscussionNotes,
@@ -135,7 +135,7 @@ import {
   wrapTicketManagerManagedMergeRequestNote,
   type GitLabDiscussionNote,
   type GitLabMergeRequest
-} from './gitlab/gitLabApiService';
+} from '@ticket-manager/core';
 
 const execFile = util.promisify(execFileCallback);
 

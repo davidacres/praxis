@@ -2,7 +2,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { prepareArtifactForJiraUpload } from '../file/jiraArtifactArchive';
+import { prepareArtifactForJiraUpload } from '@ticket-manager/core';
 
 suite('jiraArtifactArchive', () => {
   const tempDirectories: string[] = [];

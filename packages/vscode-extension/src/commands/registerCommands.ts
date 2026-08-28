@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { IssueTrackerService } from '../backends/issueTrackerService';
+import type { IssueTrackerService } from '@ticket-manager/core';
 import { AppConfigStore } from '../config/jiraConfig';
 import { BoardStore } from '../state/boardStore';
 import { FilterStore } from '../state/filterStore';
@@ -13,7 +13,7 @@ import type {
   Project,
   IssueSummary,
   WorkflowTransition
-} from '../types';
+} from '@ticket-manager/core';
 import { BoardColumnConfigPanel } from '../views/boardColumnConfigPanel';
 import { BoardPanelManager } from '../views/boardPanelManager';
 import { BoardNode, BoardsTreeProvider } from '../views/boardsTreeProvider';
@@ -30,17 +30,17 @@ import {
   resolveSuggestedPlansFolderUri
 } from '../import/markdownFeaturePlanImporter';
 import { discoverPlanFolders, identifyPlanFolder } from '../livefolder/markdownPlanParser';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { toStoredFolderPath } from '@ticket-manager/core';
 import {
   getParentRule,
   isAllowedParentType
-} from '../issues/issueHierarchy';
-import type { VercelAgentService } from '../ai/vercelAgentService';
+} from '@ticket-manager/core';
+import type { VercelAgentService } from '@ticket-manager/core';
 import { promptForAgentWorkflowSelection } from '../ai/agentWorkflowCatalog';
-import { stageIssueAttachments } from '../ai/issueAttachmentContext';
+import { stageIssueAttachments } from '@ticket-manager/core';
 import type { CopilotSessionPanelManager } from '../views/copilotSessionPanel';
-import type { AiSessionManager } from '../ai/aiSessionManager';
-import type { ConnectionStore } from '../config/connectionStore';
+import type { AiSessionManager } from '@ticket-manager/core';
+import type { ConnectionStore } from '@ticket-manager/core';
 import type { BackendRouter } from '../backends/backendRouter';
 
 interface CommandDependencies {
