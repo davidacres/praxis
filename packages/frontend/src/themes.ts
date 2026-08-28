@@ -2,6 +2,10 @@ export type ThemeMode = 'light' | 'dark';
 export type ThemeModePreference = ThemeMode | 'system';
 import type { AppearanceSettings } from '@ticket-manager/core';
 import { DEFAULT_SURFACE_PACK_ID, findSurfacePack, type SurfacePackDefinition } from './surfacePacks';
+import {
+  perceptualOpacityScale, resolveSurfacePattern,
+  type SurfacePatternInk, type SurfacePatternSpec
+} from './surfacePatterns';
 
 export interface ThemePreviewColors {
   canvas: string;
@@ -209,9 +213,18 @@ export interface SurfaceOpts {
   texture: boolean;
   /** Gate the translucency / backdrop-blur path (phase 2+). */
   translucency: boolean;
+  /** Opt in to native OS window vibrancy behind a glass pack (phase 3+). */
+  windowVibrancy: boolean;
+  /**
+   * The user's Motif override. The motif is independent of the material: a pack
+   * ships a sensible default, and anything set here wins, so a hexagon can be
+   * worn over any theme *and* any material. Undefined fields fall back to the
+   * pack's own pattern, so a partial override (say, just a colour) still works.
+   */
+  motif?: Partial<SurfacePatternSpec>;
 }
 
-const DEFAULT_SURFACE_OPTS: SurfaceOpts = { intensity: 1, texture: true, translucency: true };
+const DEFAULT_SURFACE_OPTS: SurfaceOpts = { intensity: 1, texture: true, translucency: true, windowVibrancy: false };
 
 export function getInitialSurfaceId(): string {
   const saved = localStorage.getItem('tm-surface-id');
@@ -225,10 +238,127 @@ export function getInitialSurfaceOpts(): SurfaceOpts {
       intensity: typeof raw.intensity === 'number' && raw.intensity >= 0 && raw.intensity <= 1
         ? raw.intensity : DEFAULT_SURFACE_OPTS.intensity,
       texture: typeof raw.texture === 'boolean' ? raw.texture : DEFAULT_SURFACE_OPTS.texture,
-      translucency: typeof raw.translucency === 'boolean' ? raw.translucency : DEFAULT_SURFACE_OPTS.translucency
+      translucency: typeof raw.translucency === 'boolean' ? raw.translucency : DEFAULT_SURFACE_OPTS.translucency,
+      windowVibrancy: typeof raw.windowVibrancy === 'boolean' ? raw.windowVibrancy : DEFAULT_SURFACE_OPTS.windowVibrancy,
+      motif: raw.motif && typeof raw.motif === 'object' ? raw.motif : undefined
     };
   } catch {
     return { ...DEFAULT_SURFACE_OPTS };
+  }
+}
+
+/** `--surface-*` properties written inline for the active custom pack, cleared on the next apply. */
+let appliedCustomTokenKeys: string[] = [];
+
+function prefersReducedTransparency(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
+}
+
+/**
+ * Resolves the live value of the theme token a pattern tints itself from. The
+ * pattern SVG is a data URI, so it cannot contain `var()` — the colour has to
+ * be baked in at apply time, which is why `refreshSurfacePattern` re-runs this
+ * whenever the theme changes.
+ */
+export function resolvePatternInk(ink: SurfacePatternInk | undefined, inkColor?: string): string {
+  if (ink === 'custom' && inkColor && /^#[0-9a-f]{3,8}$/i.test(inkColor.trim())) {
+    return inkColor.trim();
+  }
+  const styles = getComputedStyle(document.documentElement);
+  const token = styles.getPropertyValue(ink === 'text' ? '--text' : '--accent').trim();
+  return token || '#888888';
+}
+
+/**
+ * The motif actually painted: the active pack's pattern with the user's
+ * override laid on top. Either alone is enough — a pack with no pattern still
+ * gets one if the user picks it, and a user who changes only the colour keeps
+ * everything else the pack chose.
+ */
+export function effectiveSurfacePattern(
+  pack: SurfacePackDefinition,
+  motif: Partial<SurfacePatternSpec> | undefined
+): SurfacePatternSpec | undefined {
+  if (!motif || Object.keys(motif).length === 0) {
+    return pack.pattern;
+  }
+  const base = pack.pattern ?? { id: 'none', scale: 96, opacity: 0.08 };
+  const merged = { ...base, ...motif } as SurfacePatternSpec;
+  return merged.id ? merged : undefined;
+}
+
+/** The watermark layer's properties, written on :root by `paintSurfacePattern`. */
+const WATERMARK_KEYS = [
+  '--surface-watermark-image',
+  '--surface-watermark-size',
+  '--surface-watermark-opacity',
+  '--surface-watermark-blend',
+  '--surface-watermark-repeat',
+  '--surface-watermark-attachment',
+  '--surface-watermark-position'
+] as const;
+
+/** Renders the effective motif into the `--surface-watermark-*` properties. */
+function paintSurfacePattern(
+  pack: SurfacePackDefinition,
+  textureOn: boolean,
+  motif: Partial<SurfacePatternSpec> | undefined
+): void {
+  const root = document.documentElement;
+  const spec = effectiveSurfacePattern(pack, motif);
+  // The letterpress edge needs a tone that contrasts with the ground, so it
+  // follows the mode unless the user pinned a colour: a highlight on dark, a
+  // shadow on light. Resolved here because the pattern library is mode-blind.
+  const withOutline = spec && spec.outline
+    ? {
+        ...spec,
+        outlineInk: spec.outlineInk
+          ?? (document.documentElement.getAttribute('data-mode') === 'light'
+            ? 'rgba(0,0,0,0.85)'
+            : 'rgba(255,255,255,0.9)')
+      }
+    : spec;
+  // Normalise the declared strength against how far this theme's ink sits from
+  // its panel, so 30% looks like 30% on every palette rather than ranging from
+  // invisible to shouty. See `perceptualOpacityScale`.
+  const patternInk = resolvePatternInk(spec?.ink, spec?.inkColor);
+  const normalised = withOutline
+    ? {
+        ...withOutline,
+        opacity: withOutline.opacity * perceptualOpacityScale(
+          patternInk,
+          getComputedStyle(document.documentElement).getPropertyValue('--bg-elevated').trim()
+        )
+      }
+    : withOutline;
+  const resolved = textureOn ? resolveSurfacePattern(normalised, patternInk) : undefined;
+  if (!resolved) {
+    for (const key of WATERMARK_KEYS) {
+      root.style.removeProperty(key);
+    }
+    return;
+  }
+  root.style.setProperty('--surface-watermark-image', resolved.image);
+  root.style.setProperty('--surface-watermark-size', resolved.size);
+  root.style.setProperty('--surface-watermark-opacity', resolved.opacity);
+  root.style.setProperty('--surface-watermark-blend', resolved.blend);
+  root.style.setProperty('--surface-watermark-repeat', resolved.repeat);
+  root.style.setProperty('--surface-watermark-attachment', resolved.attachment);
+  root.style.setProperty('--surface-watermark-position', resolved.position);
+}
+
+/** The pack + gates most recently applied, so a theme change can re-tint. */
+let activeSurface: { pack: SurfacePackDefinition; textureOn: boolean; motif?: Partial<SurfacePatternSpec> } | undefined;
+
+/**
+ * Re-bakes the active pattern against the current theme's tokens. Wired to
+ * `tm-theme-changed` in main.tsx so switching palettes re-tints the watermark.
+ */
+export function refreshSurfacePattern(): void {
+  if (activeSurface) {
+    paintSurfacePattern(activeSurface.pack, activeSurface.textureOn, activeSurface.motif);
   }
 }
 
@@ -236,12 +366,74 @@ export function applySurfacePack(packId: string, opts: SurfaceOpts = DEFAULT_SUR
   const pack = findSurfacePack(packId) ?? findSurfacePack('flat')!;
   const root = document.documentElement;
   root.setAttribute('data-surface', pack.id);
+
   const intensity = Math.min(1, Math.max(0, opts.intensity));
+  // The OS "reduce transparency" setting overrides the user's translucency dial.
+  // The gate is an attribute (data-translucency) rather than a --var so the glass
+  // packs can express literal backdrop-filter values — a value routed through
+  // nested custom-property + calc indirection is silently dropped by Chromium.
+  const translucencyOn = opts.translucency && !prefersReducedTransparency();
   root.style.setProperty('--surface-intensity', String(intensity));
   root.style.setProperty('--surface-texture', opts.texture ? '1' : '0');
-  root.style.setProperty('--surface-translucency', opts.translucency ? '1' : '0');
+  root.style.setProperty('--surface-translucency', translucencyOn ? '1' : '0');
+  root.setAttribute('data-translucency', translucencyOn ? 'on' : 'off');
+
+  // A custom pack has no [data-surface] stylesheet block — apply its validated
+  // token map inline, and clear whatever the previous custom pack set. The
+  // translucency dial gates the glass properties the same way it does for the
+  // built-in glass packs; --surface-backdrop is derived here (it is not a
+  // stored token) so a custom blur actually reaches the backdrop-filter rule.
+  for (const key of appliedCustomTokenKeys) {
+    root.style.removeProperty(key);
+  }
+  appliedCustomTokenKeys = [];
+  const glassKeys = ['--surface-panel-opacity', '--surface-panel-blur', '--surface-panel-saturate'];
+  if (pack.source === 'custom' && pack.tokens) {
+    for (const [key, value] of Object.entries(pack.tokens)) {
+      if (!translucencyOn && glassKeys.includes(key)) {
+        continue;
+      }
+      root.style.setProperty(key, value);
+      appliedCustomTokenKeys.push(key);
+    }
+    const blur = pack.tokens['--surface-panel-blur'];
+    if (translucencyOn && blur && parseFloat(blur) > 0) {
+      const saturate = pack.tokens['--surface-panel-saturate'] ?? '1';
+      root.style.setProperty('--surface-backdrop', `blur(${blur}) saturate(${saturate})`);
+      appliedCustomTokenKeys.push('--surface-backdrop');
+    }
+  }
+
+  // Native OS translucency: only a glass pack with the dial on, and only when
+  // the platform can do it. applied=false leaves the CSS faux-depth path as the
+  // sole effect. The attribute drives the transparent-root rules in surfaces.css.
+  const wantsVibrancy = pack.glass && opts.windowVibrancy && translucencyOn;
+  const vibrancyBridge = typeof window !== 'undefined' ? window.ticketManager?.window : undefined;
+  if (vibrancyBridge?.setSurfaceVibrancy) {
+    void vibrancyBridge.setSurfaceVibrancy(wantsVibrancy ? 'glass' : 'off')
+      .then(result => {
+        if (result.applied && wantsVibrancy) {
+          root.setAttribute('data-vibrancy', 'glass');
+        } else {
+          root.removeAttribute('data-vibrancy');
+        }
+      })
+      .catch(() => root.removeAttribute('data-vibrancy'));
+  } else if (!wantsVibrancy) {
+    root.removeAttribute('data-vibrancy');
+  }
+
+  // The pattern is data (see surfacePatterns.ts) — resolve it to the watermark
+  // properties every pane and the splash already read. Adding a material never
+  // needs new CSS, only a new entry in the pattern library or a user's pick.
+  activeSurface = { pack, textureOn: opts.texture, motif: opts.motif };
+  paintSurfacePattern(pack, opts.texture, opts.motif);
+
   localStorage.setItem('tm-surface-id', pack.id);
-  localStorage.setItem('tm-surface-opts', JSON.stringify({ intensity, texture: opts.texture, translucency: opts.translucency }));
+  localStorage.setItem('tm-surface-opts', JSON.stringify({
+    intensity, texture: opts.texture, translucency: opts.translucency,
+    windowVibrancy: opts.windowVibrancy, motif: opts.motif
+  }));
   window.dispatchEvent(new CustomEvent('tm-surface-changed', { detail: pack.id }));
   return pack;
 }

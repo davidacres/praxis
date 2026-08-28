@@ -16,8 +16,8 @@ import { registerAiIpc } from './aiIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerGitIpc } from './gitIpc';
-import { attachWindowStateEvents, registerWindowIpc } from './windowIpc';
-import { initSettingsBackend } from './settingsBackendInstance';
+import { attachWindowStateEvents, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@ticket-manager/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
@@ -133,7 +133,25 @@ app.on('open-url', (event, url) => {
   getDesktopMcpOAuthManager().handleProtocolUrl(url);
 });
 
+/**
+ * Reads the persisted Surface dial that opts into native OS window translucency.
+ * A transparent BrowserWindow is a construction-only option, so this is resolved
+ * here rather than after the renderer boots. Defensive: any settings failure just
+ * means an opaque window (the CSS faux-depth path still runs).
+ */
+function wantsWindowVibrancyAtLaunch(): boolean {
+  if (!platformSupportsVibrancy()) {
+    return false;
+  }
+  try {
+    return getSettingsBackend().read().appearance.surface.windowVibrancy === true;
+  } catch {
+    return false;
+  }
+}
+
 function createMainWindow(): void {
+  const vibrancy = wantsWindowVibrancyAtLaunch();
   const win = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -141,9 +159,14 @@ function createMainWindow(): void {
     minHeight: 480,
     icon: getDevAppIcon(),
     // The renderer draws the whole chrome, so paint the shell colour behind it to avoid a
-    // white flash between window creation and first paint.
-    backgroundColor: '#1c1c1c',
+    // white flash between window creation and first paint. A vibrancy window must instead
+    // start transparent so the desktop shows through the frosted panels.
+    backgroundColor: vibrancy ? '#00000000' : '#1c1c1c',
     show: false,
+    ...(vibrancy && isMac ? { vibrancy: 'under-window' as const, transparent: true } : {}),
+    ...(vibrancy && !isMac && process.platform === 'win32'
+      ? { backgroundMaterial: 'acrylic' as const }
+      : {}),
     // Frameless everywhere. On macOS `titleBarStyle: 'hidden'` keeps the traffic lights,
     // inset to line up with the custom title bar's 40px height.
     ...(isMac
@@ -157,6 +180,9 @@ function createMainWindow(): void {
   });
 
   attachWindowStateEvents(win);
+  if (vibrancy) {
+    setWindowVibrancy(win, 'glass');
+  }
   win.once('ready-to-show', () => win.show());
 
   const devServerUrl = process.env.TICKET_MANAGER_DEV_SERVER_URL;

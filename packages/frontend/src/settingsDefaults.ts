@@ -87,7 +87,7 @@ export const DEFAULT_APP_SETTINGS = {
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
-    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint'] as string[],
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'] as string[],
     customSurfacePacks: [] as Array<{ id: string; name: string; description: string; basePackId?: string; tokens: Record<string, string> }>,
     priorityColors: {
       Critical: '#DC2626',

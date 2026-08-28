@@ -249,7 +249,8 @@ textarea {
   height: var(--titlebar-height);
   flex-shrink: 0;
   padding-left: var(--space-2);
-  background: var(--bg);
+  background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent);
+  backdrop-filter: var(--surface-backdrop);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
   user-select: none;
@@ -546,7 +547,15 @@ textarea {
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
-  background-color: var(--bg-sunken);
+  /* Fill folded through --surface-panel-opacity so a glass pack frosts the
+     theme's own --bg-sunken (inert value 1 → byte-identical to a flat fill).
+     --surface-panel-tint-layer (inert `none`) is a wash painted over the fill
+     but behind the content, so a pack can warm / cool / darken the panel
+     without ever touching text contrast. Blur is the only pane that gets one. */
+  background-color: color-mix(in srgb, var(--bg-sunken) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: var(--surface-accent-glow);
+  backdrop-filter: var(--surface-backdrop);
   /* Header popovers may extend over the editor pane. The scrollable sidebar
      content manages its own overflow, so clipping the pane only hides menus. */
   overflow: visible;
@@ -559,7 +568,13 @@ textarea {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  background-color: var(--bg-elevated);
+  /* Translucency without blur — a glass pack lets the shell canvas show
+     through, but the scrolling pane never pays for a backdrop-filter. Inert
+     --surface-panel-opacity (1) → identical to a flat --bg-elevated fill;
+     --surface-panel-tint-layer (inert `none`) washes the fill behind content. */
+  background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: var(--surface-accent-glow);
   /* The reference rounds the top corners of every editor-level surface, so the
      pane reads as a card docked to the bottom of the window. */
   border: 1px solid var(--surface-panel-border-color);
@@ -575,30 +590,59 @@ textarea {
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
-  background-color: var(--bg);
+  background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: var(--surface-accent-glow);
   border: 1px solid var(--surface-panel-border-color);
   border-bottom: none;
   border-radius: calc(var(--radius-md) + var(--surface-radius-boost)) calc(var(--radius-md) + var(--surface-radius-boost)) 0 0;
   overflow: hidden;
 }
 
-/* Surface-pack texture / grain — one overlay per panel shell. Sits above the
-   fill and content (very low opacity + a blend mode) so it reads as a material
-   rather than a wash, and never interferes with pointer events. Inert unless a
-   pack sets --surface-texture-image and a non-zero opacity. */
+/* Surface-pack texture / grain — one overlay per panel shell. Sits ABOVE the
+   fill but BELOW the content (z-index 0, with the panes' direct children lifted
+   to z-index 1) so grain can be strong without ever eroding text contrast.
+   Never interferes with pointer events. Inert unless a pack sets a texture. */
 .pane-sidebar::after,
 .pane-main::after,
 .pane-aux::after {
   content: '';
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 0;
   pointer-events: none;
   background-image: var(--surface-texture-image);
   background-repeat: repeat;
   background-size: var(--surface-texture-size);
   mix-blend-mode: var(--surface-texture-blend);
   opacity: calc(var(--surface-texture-opacity) * var(--surface-intensity) * var(--surface-texture));
+}
+/* Watermark — a second, coarser figurative layer (Praxis' hexagon lattice on
+   the parchment pack). Behind the content like the grain, blended so one asset
+   works on light and dark grounds. Inert unless a pack sets a watermark. */
+.pane-sidebar::before,
+.pane-main::before,
+.pane-aux::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--surface-watermark-image);
+  background-repeat: var(--surface-watermark-repeat);
+  background-position: var(--surface-watermark-position);
+  background-size: var(--surface-watermark-size);
+  /* `fixed` anchors a corner motif to the viewport, so ONE motif spans every
+     pane continuously instead of restarting at each pane boundary. */
+  background-attachment: var(--surface-watermark-attachment);
+  mix-blend-mode: var(--surface-watermark-blend);
+  opacity: calc(var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture));
+}
+.pane-sidebar > *,
+.pane-main > *,
+.pane-aux > * {
+  position: relative;
+  z-index: 1;
 }
 
 .pane-aux.is-expanded {
@@ -3620,16 +3664,105 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .surface-pack-swatch { position: relative; display: block; height: 58px; border-bottom: 1px solid var(--border); background: var(--bg); }
 .surface-pack-swatch-canvas { position: absolute; inset: 0; }
 .surface-pack-swatch-panel { position: absolute; inset: 14px 14px 0; border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; background-repeat: repeat; background-size: 120px 120px; }
+/* The pack's real pattern, drawn from the same library entry the app uses, so
+   the card can never advertise a material the pack does not apply. */
+.surface-pack-swatch-pattern { position: absolute; inset: 14px 14px 0; border-radius: 6px 6px 0 0; background-repeat: repeat; background-position: center; pointer-events: none; }
 .surface-pack-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 2px; }
 .surface-pack-meta strong { font-size: 12px; }
 .surface-pack-active { flex: none; padding: 1px 6px; border: 1px solid var(--accent-border); border-radius: var(--radius-pill); color: var(--accent); font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
 .surface-pack-description { min-height: 30px; padding: 0 10px 9px; color: var(--text-tertiary); font-size: 10px; line-height: 1.35; }
-.surface-dials { margin: 14px 0 4px; }
+.surface-pack-card-wrap { position: relative; display: flex; }
+.surface-pack-card-wrap .surface-pack-card { flex: 1; width: 100%; }
+.surface-pack-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.surface-pack-card-wrap:hover .surface-pack-edit,
+.surface-pack-edit:focus-visible { opacity: 1; }
+.surface-new-btn {
+  margin: 12px 0 2px;
+  padding: 6px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.surface-new-btn:hover { border-color: var(--accent); color: var(--accent); }
+.surface-dials { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 10px; }
 .surface-dial { display: flex; flex-direction: column; gap: 6px; max-width: 320px; }
 .surface-dial-label { color: var(--text-secondary); font-size: 12px; }
 .surface-dial-label em { color: var(--text-tertiary); font-style: normal; font-variant-numeric: tabular-nums; }
 .surface-dial input[type='range'] { width: 100%; accent-color: var(--accent); }
 .surface-dial input[type='range']:disabled { opacity: .5; }
+.surface-dial select { max-width: 160px; }
+/* Pattern controls sit in their own block so the material's figurative layer
+   reads as a distinct group from the panel-material dials above it. */
+.surface-pattern-dials {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+/* Motif — the figurative layer, promoted alongside the pack gallery because it
+   applies over any pack rather than belonging to one. */
+.surface-motif {
+  margin: 18px 0 4px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+.surface-motif.disabled { opacity: .5; pointer-events: none; }
+.surface-motif-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.surface-motif-head strong { display: block; font-size: 13px; }
+.surface-motif-head span { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 11px; line-height: 1.4; max-width: 52ch; }
+.surface-motif-reset {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.surface-motif-reset:hover { border-color: var(--accent); color: var(--accent); }
+/* Two columns so nine controls stay scannable without a scroll. */
+.surface-motif-dials {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+.surface-motif-dials .surface-dial { max-width: none; }
+/* Match the custom-theme editor's field styling — a bare <select> renders with
+   the platform's own light chrome and is unreadable on a dark theme. */
+.surface-motif-dials select,
+.surface-motif-colour input:not([type='color']) {
+  width: 100%;
+  max-width: none;
+  min-height: 28px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  background: var(--bg-input);
+}
+@media (max-width: 860px) { .surface-motif-dials { grid-template-columns: 1fr; } }
+.surface-motif-colour { display: flex; gap: 8px; align-items: center; }
+.surface-motif-colour input[type='color'] { width: 38px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; }
+.surface-motif-colour input:not([type='color']) { flex: 1; min-width: 0; }
 
 .settings-dialog-footer {
   justify-content: space-between;
@@ -6762,7 +6895,29 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   opacity: 1;
   transition: opacity 420ms ease;
   cursor: pointer;
+  isolation: isolate;
 }
+/* The active surface pack's watermark, so the first thing the app shows already
+   carries its material. Same tokens the panes read — set by applySurfacePack
+   before React mounts, so there is no un-watermarked first frame. */
+.startup-splash::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--surface-watermark-image);
+  background-repeat: var(--surface-watermark-repeat);
+  background-position: var(--surface-watermark-position);
+  background-size: var(--surface-watermark-size);
+  /* `fixed` anchors a corner motif to the viewport, so ONE motif spans every
+     pane continuously instead of restarting at each pane boundary. */
+  background-attachment: var(--surface-watermark-attachment);
+  mix-blend-mode: var(--surface-watermark-blend);
+  opacity: calc(var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture));
+}
+.startup-splash-svg,
+.startup-splash-version { position: relative; z-index: 1; }
 .startup-splash-fade { opacity: 0; }
 .startup-splash-svg { width: min(60vw, 620px); height: auto; overflow: visible; }
 .startup-splash-version { position: absolute; right: 22px; bottom: 18px; color: var(--text-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .06em; }
