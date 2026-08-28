@@ -159,6 +159,26 @@ Notes:
 Plain React in a normal DOM. **None of the webview rules above apply here** — there is
 no `createWebviewPanel`, no injected body padding, and no `--vscode-*` tokens.
 
+`renderer/src` is grouped by feature. Put a new file in the folder that owns its
+screen; only genuinely cross-cutting primitives belong in `ui/`.
+
+```
+renderer/src/
+├── app/            shell: App, Sidebar, TitleBar, BottomPanel, splash
+├── projects/       project home, workspace, wizard, work mode
+├── board/          board view, filter bar, board preferences
+├── issues/         issue detail, new issue, peek, analysis
+├── git/            graph, diff workspace, conflict workspace
+├── ai/             sessions, model manager, review pages, workflow picker
+├── settings/       SettingsPage, themes, surfacePacks, surfacePatterns
+├── taskDesigner/   task designer page, sidebar, state
+├── connections/    connection + board setup
+├── ui/             shared primitives (Icon, Markdown, form controls)
+├── assets/         images and generated texture tiles
+├── main.tsx        vite entry — stays at the root
+└── theme.css, surfaces.css
+```
+
 ## Theming
 
 Four independent attribute axes on `<html>`, all composing:
@@ -210,7 +230,7 @@ a regression loudly.
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and
   merged with `mergeAppSettings`. IPC: `settings.get` / `settings.set` / `settings.onChanged`.
-- **`apps/praxis-desktop/renderer/src/settingsDefaults.ts` is a hand-maintained, browser-safe mirror
+- **`apps/praxis-desktop/renderer/src/settings/settingsDefaults.ts` is a hand-maintained, browser-safe mirror
   of core's `DEFAULT_APP_SETTINGS`.** Core is CommonJS and pulls in `chokidar` and
   `markdown-it`, so it cannot be tree-shaken into the renderer bundle. **Add an appearance
   field to core and you must add it here too**, or the Settings page silently drifts from

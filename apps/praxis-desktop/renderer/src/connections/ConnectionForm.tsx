@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { BackendMode, Connection, ConnectionCheck } from '@praxis/core';
-import { backendModeMeta } from '../boardMeta';
-import { FieldRow, Toggle } from '../formControls';
-import { Icon } from '../Icon';
+import { backendModeMeta } from '../board/boardMeta';
+import { FieldRow, Toggle } from '../ui/formControls';
+import { Icon } from '../ui/Icon';
 import {
   CONNECTION_MODES,
   autoSynthesizesBoard,
