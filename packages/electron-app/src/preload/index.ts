@@ -106,6 +106,8 @@ const ticketManager: TicketManagerIpc = {
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    supportsVibrancy: () => ipcRenderer.invoke('window:supportsVibrancy'),
+    setSurfaceVibrancy: (mode: 'off' | 'glass') => ipcRenderer.invoke('window:setSurfaceVibrancy', mode),
     onMaximizeChange: (listener: (maximized: boolean) => void) => {
       // Wrap so the raw IpcRendererEvent never crosses the context bridge.
       const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) =>

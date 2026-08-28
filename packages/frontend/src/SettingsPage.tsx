@@ -5,6 +5,7 @@ import type {
   AgentRuntimeSnapshot,
   AppSettings,
   AppSettingsPatch,
+  SurfaceMotifSettings,
   BoardsSidebarMode,
   Connection
 } from '@ticket-manager/core';
@@ -17,8 +18,13 @@ import { Icon, type IconName } from './Icon';
 import { ModelManagerPanel } from './ModelManagerPanel';
 import { MODEL_PROVIDERS } from './modelProviders';
 import { useSettings } from './useSettings';
-import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
-import { SURFACE_PACKS, type SurfacePackDefinition } from './surfacePacks';
+import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
+import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
+import {
+  DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, perceptualOpacityScale,
+  resolveSurfacePattern, SURFACE_PATTERNS,
+  type SurfacePatternAnchor, type SurfacePatternInk, type SurfacePatternPlacement, type SurfacePatternSpec
+} from './surfacePatterns';
 
 export type SettingsCategory =
   | 'overview'
@@ -1146,6 +1152,32 @@ function SurfacePackCard({
   active: boolean;
   onSelect: () => void;
 }) {
+  // The swatch is rendered from the pack's *own* pattern data rather than a
+  // hand-written preview string, so the gallery can never drift from what the
+  // pack actually does. The tile is shrunk and its opacity lifted, because a
+  // strength tuned for a full window is invisible in a 58px thumbnail — but the
+  // lift runs through the same perceptual scale the app uses, otherwise a
+  // high-contrast ink (Graphite's, against its panel) previews far harsher in
+  // the gallery than it ever looks in the app.
+  const previewInk = pack.pattern ? resolvePatternInk(pack.pattern.ink, pack.pattern.inkColor) : '';
+  const preview = pack.pattern
+    ? resolveSurfacePattern(
+        {
+          ...pack.pattern,
+          // Always tile the swatch: a corner motif's fade is meaningless at
+          // thumbnail size, and the card is showing what the material *is*.
+          placement: 'tile',
+          scale: Math.max(16, pack.pattern.scale * 0.42),
+          opacity: Math.min(
+            0.7,
+            pack.pattern.opacity
+              * 4
+              * perceptualOpacityScale(previewInk, getComputedStyle(document.documentElement).getPropertyValue('--bg-elevated').trim())
+          )
+        },
+        previewInk
+      )
+    : undefined;
   return (
     <button
       type="button"
@@ -1165,6 +1197,13 @@ function SurfacePackCard({
             mixBlendMode: (pack.swatch.blend as CSSProperties['mixBlendMode']) ?? 'normal'
           }}
         />
+        {preview && (
+          <span
+            className="surface-pack-swatch-pattern"
+            data-testid={`surface-swatch-pattern-${pack.id}`}
+            style={{ backgroundImage: preview.image, backgroundSize: preview.size, opacity: Number(preview.opacity) }}
+          />
+        )}
       </span>
       <span className="surface-pack-meta">
         <strong>{pack.name}</strong>
@@ -1205,6 +1244,315 @@ function CustomThemeEditor({
   </div>;
 }
 
+type CustomSurfacePack = AppSettings['appearance']['customSurfacePacks'][number];
+
+const SURFACE_BLEND_MODES = ['soft-light', 'overlay', 'normal', 'multiply', 'screen'] as const;
+
+/** The editor works in friendly dial units; these map 1:1 to a `--surface-*` token map. */
+interface SurfaceDials {
+  panelOpacity: number; // 40..100  → --surface-panel-opacity
+  blur: number;         // 0..40 px → --surface-panel-blur (+ derived backdrop)
+  glow: number;         // 0..40 px → --surface-accent-glow
+  texture: number;      // 0..30    → --surface-texture-opacity (÷100)
+  radius: number;       // 0..8 px  → --surface-radius-boost
+  blend: string;        //          → --surface-texture-blend
+  grain: boolean;       //          → --surface-texture-image on/off
+}
+
+const DEFAULT_SURFACE_DIALS: SurfaceDials = {
+  panelOpacity: 100, blur: 0, glow: 0, texture: 12, radius: 1, blend: 'soft-light', grain: true
+};
+
+function dialsToTokens(d: SurfaceDials): Record<string, string> {
+  const tokens: Record<string, string> = {
+    '--surface-panel-opacity': (d.panelOpacity / 100).toFixed(2),
+    '--surface-radius-boost': `${Math.round(d.radius)}px`,
+    '--surface-texture-blend': SURFACE_BLEND_MODES.includes(d.blend as never) ? d.blend : 'soft-light'
+  };
+  if (d.blur > 0) {
+    tokens['--surface-panel-blur'] = `${Math.round(d.blur)}px`;
+    tokens['--surface-panel-saturate'] = '1.4';
+  }
+  if (d.grain) {
+    tokens['--surface-texture-image'] = 'var(--surface-swatch-grain)';
+    tokens['--surface-texture-size'] = '160px 160px';
+    tokens['--surface-texture-opacity'] = (Math.max(0, Math.min(30, d.texture)) / 100).toFixed(3);
+  } else {
+    tokens['--surface-texture-opacity'] = '0';
+  }
+  if (d.glow > 0) {
+    tokens['--surface-accent-glow'] =
+      `0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 ${Math.round(d.glow)}px color-mix(in srgb, var(--accent) 24%, transparent)`;
+  }
+  return tokens;
+}
+
+function tokensToDials(tokens: Record<string, string>): SurfaceDials {
+  const num = (value: string | undefined, fallback: number) => {
+    const parsed = parseFloat(value ?? '');
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const grainOn = (tokens['--surface-texture-image'] ?? 'none') !== 'none'
+    && num(tokens['--surface-texture-opacity'], 0) > 0;
+  return {
+    panelOpacity: Math.round(num(tokens['--surface-panel-opacity'], 1) * 100),
+    blur: num(tokens['--surface-panel-blur'], 0),
+    glow: tokens['--surface-accent-glow']
+      ? num((/0 0 (\d+(?:\.\d+)?)px/.exec(tokens['--surface-accent-glow']) ?? [])[1], 16)
+      : 0,
+    texture: Math.round(num(tokens['--surface-texture-opacity'], 0.12) * 100),
+    radius: num(tokens['--surface-radius-boost'], 0),
+    blend: tokens['--surface-texture-blend'] ?? 'soft-light',
+    grain: grainOn
+  };
+}
+
+/** Keep only whitelisted `--surface-*` string keys — mirrors core's validator for imports. */
+function sanitizeSurfaceTokens(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>)
+      .filter(([key, value]) => SURFACE_TOKEN_KEYS.includes(key) && typeof value === 'string')
+  ) as Record<string, string>;
+}
+
+/**
+ * Custom surface editor — the material-layer parallel of `CustomThemeEditor`.
+ * Dials write straight to a validated `--surface-*` token map; Export / Import
+ * round-trips that map as JSON.
+ */
+function CustomSurfaceEditor({
+  pack, onChange, onSave, onDelete, onCancel, onExport
+}: {
+  pack: CustomSurfacePack;
+  onChange: (pack: CustomSurfacePack) => void;
+  onSave: () => void;
+  onDelete?: () => void;
+  onCancel: () => void;
+  onExport: () => void;
+}) {
+  const dials = tokensToDials(pack.tokens);
+  const setDials = (patch: Partial<SurfaceDials>) =>
+    onChange({ ...pack, tokens: dialsToTokens({ ...dials, ...patch }) });
+  const importRef = useRef<HTMLInputElement>(null);
+
+  // The pattern is picked from the shared library, never authored — this is what
+  // lets a user build a new material (honeycomb, drafting grid, weave) without
+  // any code. See surfacePatterns.ts.
+  const pattern: SurfacePatternSpec = pack.pattern ?? { id: 'none', scale: 120, opacity: 0.08, ink: 'accent' };
+  const setPattern = (patch: Partial<SurfacePatternSpec>) =>
+    onChange({ ...pack, pattern: { ...pattern, ...patch } });
+
+  const runImport = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result)) as Partial<CustomSurfacePack>;
+        onChange({
+          ...pack,
+          name: typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim().slice(0, 80) : pack.name,
+          description: typeof parsed.description === 'string' ? parsed.description.slice(0, 240) : pack.description,
+          basePackId: typeof parsed.basePackId === 'string' ? parsed.basePackId : pack.basePackId,
+          pattern: findSurfacePattern((parsed.pattern as SurfacePatternSpec | undefined)?.id)
+            ? (parsed.pattern as SurfacePatternSpec)
+            : pack.pattern,
+          tokens: { ...dialsToTokens(DEFAULT_SURFACE_DIALS), ...sanitizeSurfaceTokens(parsed.tokens) }
+        });
+      } catch {
+        // A malformed file leaves the editor untouched.
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  return <div className="custom-theme-editor" role="region" aria-label="Custom surface editor">
+    <div className="custom-theme-editor-heading"><div><strong>{pack.name || 'Custom surface'}</strong><span>Changes preview live.</span></div><button type="button" className="icon-btn icon-btn-sm" aria-label="Close custom surface editor" onClick={onCancel}>×</button></div>
+    <div className="custom-theme-editor-grid">
+      <label>Name<input value={pack.name} onChange={event => onChange({ ...pack, name: event.target.value })} maxLength={80} data-testid="custom-surface-name" /></label>
+      <label>Base
+        <select value={pack.basePackId ?? ''} onChange={event => onChange({ ...pack, basePackId: event.target.value || undefined })}>
+          <option value="">None</option>
+          {SURFACE_PACKS.filter(base => base.id !== 'flat').map(base => <option key={base.id} value={base.id}>{base.name}</option>)}
+        </select>
+      </label>
+      <label className="wide">Description<input value={pack.description} onChange={event => onChange({ ...pack, description: event.target.value })} maxLength={240} /></label>
+    </div>
+    <div className="surface-dials">
+      <label className="surface-dial"><span className="surface-dial-label">Panel opacity <em>{dials.panelOpacity}%</em></span>
+        <input type="range" min={40} max={100} step={2} value={dials.panelOpacity} data-testid="custom-surface-opacity" onChange={event => setDials({ panelOpacity: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Backdrop blur <em>{Math.round(dials.blur)}px</em></span>
+        <input type="range" min={0} max={40} step={1} value={dials.blur} onChange={event => setDials({ blur: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Accent glow <em>{Math.round(dials.glow)}px</em></span>
+        <input type="range" min={0} max={40} step={1} value={dials.glow} onChange={event => setDials({ glow: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Texture <em>{dials.texture}%</em></span>
+        <input type="range" min={0} max={30} step={1} value={dials.texture} disabled={!dials.grain} onChange={event => setDials({ texture: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Corner boost <em>{Math.round(dials.radius)}px</em></span>
+        <input type="range" min={0} max={8} step={1} value={dials.radius} onChange={event => setDials({ radius: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Blend</span>
+        <select value={dials.blend} onChange={event => setDials({ blend: event.target.value })}>{SURFACE_BLEND_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}</select></label>
+    </div>
+    <div className="surface-dials surface-pattern-dials">
+      <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
+        <select
+          value={pattern.id}
+          data-testid="custom-surface-pattern"
+          onChange={event => setPattern({ id: event.target.value })}
+        >{SURFACE_PATTERNS.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
+      <label className="surface-dial"><span className="surface-dial-label">Pattern scale <em>{Math.round(pattern.scale)}px</em></span>
+        <input type="range" min={16} max={260} step={4} value={Math.round(pattern.scale)} disabled={pattern.id === 'none'}
+          data-testid="custom-surface-pattern-scale"
+          onChange={event => setPattern({ scale: Number(event.target.value) })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Pattern strength <em>{Math.round(pattern.opacity * 100)}%</em></span>
+        <input type="range" min={0} max={40} step={1} value={Math.round(pattern.opacity * 100)} disabled={pattern.id === 'none'}
+          onChange={event => setPattern({ opacity: Number(event.target.value) / 100 })} /></label>
+      <label className="surface-dial"><span className="surface-dial-label">Pattern ink</span>
+        <select value={pattern.ink ?? 'accent'} disabled={pattern.id === 'none'}
+          onChange={event => setPattern({ ink: event.target.value as SurfacePatternInk })}>
+          <option value="accent">Accent</option>
+          <option value="text">Text</option>
+        </select></label>
+    </div>
+    <Toggle label="Grain texture" checked={dials.grain} onChange={next => setDials({ grain: next })} testId="custom-surface-grain" />
+    <input ref={importRef} type="file" accept="application/json" hidden onChange={event => { const file = event.target.files?.[0]; if (file) runImport(file); event.target.value = ''; }} />
+    <div className="custom-theme-editor-actions">
+      <button type="button" onClick={onCancel}>Cancel</button>
+      <button type="button" onClick={() => importRef.current?.click()}>Import</button>
+      <button type="button" onClick={onExport}>Export</button>
+      {onDelete && <button type="button" className="danger" onClick={onDelete}>Delete</button>}
+      <button type="button" className="primary" onClick={onSave} disabled={!pack.name.trim()}>Save surface</button>
+    </div>
+  </div>;
+}
+
+const MOTIF_ANCHORS: Array<[SurfacePatternAnchor, string]> = [
+  ['top-left', 'Top left'], ['top-right', 'Top right'],
+  ['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right']
+];
+
+/**
+ * The Motif panel — the material's figurative layer, promoted out of the custom
+ * editor so it applies over *any* pack and *any* theme. Every control writes a
+ * partial override; unset fields keep whatever the active pack chose, and Reset
+ * clears the override entirely.
+ */
+function MotifPanel({
+  pack, motif, disabled, onChange
+}: {
+  pack?: SurfacePackDefinition;
+  motif?: SurfaceMotifSettings;
+  disabled?: boolean;
+  onChange: (motif: SurfaceMotifSettings | undefined) => void;
+}) {
+  const base = pack?.pattern;
+  const effective: SurfacePatternSpec = {
+    id: 'none', scale: 62, opacity: 0.3, ink: 'accent',
+    placement: 'tile', anchor: 'top-right', spread: DEFAULT_MOTIF_SPREAD, fade: DEFAULT_MOTIF_FADE,
+    fill: 0, outline: 0,
+    ...(base ?? {}),
+    ...(motif ?? {})
+  };
+  const set = (patch: Partial<SurfacePatternSpec>) =>
+    onChange({ ...effective, ...patch } as SurfaceMotifSettings);
+  const isCorner = effective.placement === 'corner';
+  const overridden = motif !== undefined;
+
+  return (
+    <section className={`surface-motif${disabled ? ' disabled' : ''}`} data-testid="motif-panel">
+      <div className="surface-motif-head">
+        <div>
+          <strong>Motif</strong>
+          <span>The mark laid on the material. Independent of the pack, so it rides over any theme.</span>
+        </div>
+        {overridden && (
+          <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => onChange(undefined)}>
+            Reset to pack
+          </button>
+        )}
+      </div>
+      <div className="surface-dials surface-motif-dials">
+        <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
+          <select value={effective.id} disabled={disabled} data-testid="motif-pattern"
+            onChange={e => set({ id: e.target.value })}>
+            {SURFACE_PATTERNS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></label>
+
+        <label className="surface-dial"><span className="surface-dial-label">Placement</span>
+          <select value={effective.placement} disabled={disabled || effective.id === 'none'} data-testid="motif-placement"
+            onChange={e => set({ placement: e.target.value as SurfacePatternPlacement })}>
+            <option value="tile">Tile — repeats everywhere</option>
+            <option value="corner">Corner — one fading mark</option>
+          </select></label>
+
+        {isCorner && (
+          <label className="surface-dial"><span className="surface-dial-label">Anchor</span>
+            <select value={effective.anchor} disabled={disabled} data-testid="motif-anchor"
+              onChange={e => set({ anchor: e.target.value as SurfacePatternAnchor })}>
+              {MOTIF_ANCHORS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select></label>
+        )}
+
+        <label className="surface-dial"><span className="surface-dial-label">Cell size <em>{Math.round(effective.scale)}px</em></span>
+          <input type="range" min={16} max={220} step={2} value={Math.round(effective.scale)}
+            disabled={disabled || effective.id === 'none'} data-testid="motif-scale"
+            onChange={e => set({ scale: Number(e.target.value) })} /></label>
+
+        {isCorner && (
+          <>
+            <label className="surface-dial"><span className="surface-dial-label">Spread <em>{Math.round(effective.spread ?? 0)}px</em></span>
+              <input type="range" min={200} max={1600} step={20} value={Math.round(effective.spread ?? DEFAULT_MOTIF_SPREAD)}
+                disabled={disabled} data-testid="motif-spread"
+                onChange={e => set({ spread: Number(e.target.value) })} /></label>
+            <label className="surface-dial"><span className="surface-dial-label">Fade <em>{Math.round((effective.fade ?? 0) * 100)}%</em></span>
+              <input type="range" min={10} max={100} step={2} value={Math.round((effective.fade ?? DEFAULT_MOTIF_FADE) * 100)}
+                disabled={disabled} data-testid="motif-fade"
+                onChange={e => set({ fade: Number(e.target.value) / 100 })} /></label>
+          </>
+        )}
+
+        <label className="surface-dial"><span className="surface-dial-label">Solid cells <em>{Math.round((effective.fill ?? 0) * 100)}%</em></span>
+          <input type="range" min={0} max={100} step={17} value={Math.round((effective.fill ?? 0) * 100)}
+            disabled={disabled || effective.id !== 'hexagon'} data-testid="motif-fill"
+            onChange={e => set({ fill: Number(e.target.value) / 100 })} /></label>
+
+        <label className="surface-dial">
+          <span className="surface-dial-label">Outline <em>{effective.outline ? `${Math.round(effective.outline * 100)}%` : 'off'}</em></span>
+          <input type="range" min={0} max={100} step={5} value={Math.round((effective.outline ?? 0) * 100)}
+            disabled={disabled || effective.id === 'none'} data-testid="motif-outline"
+            onChange={e => set({ outline: Number(e.target.value) / 100 })} /></label>
+
+        <label className="surface-dial"><span className="surface-dial-label">Strength <em>{Math.round(effective.opacity * 100)}%</em></span>
+          <input type="range" min={0} max={60} step={1} value={Math.round(effective.opacity * 100)}
+            disabled={disabled || effective.id === 'none'} data-testid="motif-strength"
+            onChange={e => set({ opacity: Number(e.target.value) / 100 })} /></label>
+
+        <label className="surface-dial"><span className="surface-dial-label">Line weight <em>{(effective.weight ?? 0.055).toFixed(3)}</em></span>
+          <input type="range" min={5} max={200} step={5} value={Math.round((effective.weight ?? 0.055) * 1000)}
+            disabled={disabled || effective.id === 'none'} data-testid="motif-weight"
+            onChange={e => set({ weight: Number(e.target.value) / 1000 })} /></label>
+
+        <label className="surface-dial"><span className="surface-dial-label">Colour</span>
+          <select value={effective.ink ?? 'accent'} disabled={disabled || effective.id === 'none'} data-testid="motif-ink"
+            onChange={e => set({ ink: e.target.value as SurfacePatternInk })}>
+            <option value="accent">Theme accent</option>
+            <option value="text">Theme text</option>
+            <option value="custom">Custom…</option>
+          </select></label>
+
+        {effective.ink === 'custom' && (
+          <label className="surface-dial"><span className="surface-dial-label">Custom colour</span>
+            <span className="surface-motif-colour">
+              <input type="color" value={/^#[0-9a-f]{6}$/i.test(effective.inkColor ?? '') ? effective.inkColor! : '#c6431f'}
+                disabled={disabled} data-testid="motif-ink-color"
+                onChange={e => set({ inkColor: e.target.value })} />
+              <input value={effective.inkColor ?? ''} placeholder="#c6431f" disabled={disabled} maxLength={9}
+                onChange={e => set({ inkColor: e.target.value })} />
+            </span></label>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ThemesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
   const category = CATEGORIES.find(c => c.id === 'themes')!;
   const [selectedTheme, setSelectedTheme] = useState(() => settings.appearance.themeId || getInitialThemeId());
@@ -1216,8 +1564,48 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
 
   const surfaceId = settings.appearance.surfacePackId;
   const surfaceOpts = settings.appearance.surface;
+  const customSurfacePacks = settings.appearance.customSurfacePacks ?? [];
   const applySurface = (id: string, opts: typeof surfaceOpts) =>
-    applySurfacePack(id, { intensity: opts.intensity, texture: opts.texture, translucency: opts.translucency });
+    applySurfacePack(id, {
+      intensity: opts.intensity,
+      texture: opts.texture,
+      translucency: opts.translucency,
+      windowVibrancy: opts.windowVibrancy,
+      motif: opts.motif
+    });
+  const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
+  const visibleSurfacePacks = allSurfacePacks().filter(pack => pack.supports.includes(currentMode));
+  const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
+  const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
+  const [vibrancySupported, setVibrancySupported] = useState(false);
+  useEffect(() => {
+    void window.ticketManager.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
+  }, []);
+
+  const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
+    registerCustomSurfacePacks(packs);
+    if (nextActiveId) {
+      applySurface(nextActiveId, surfaceOpts);
+    }
+    return update({ appearance: { customSurfacePacks: packs, ...(nextActiveId ? { surfacePackId: nextActiveId } : {}) } });
+  };
+  const newCustomSurface = (): CustomSurfacePack => ({
+    id: `custom-${Date.now().toString(36)}`,
+    name: 'My surface',
+    description: '',
+    basePackId: 'parchment',
+    pattern: { id: 'hexagon', scale: 124, opacity: 0.08, ink: 'accent', weight: 0.8 },
+    tokens: dialsToTokens(DEFAULT_SURFACE_DIALS)
+  });
+  const exportSurface = (pack: CustomSurfacePack) => {
+    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'surface'}.surface.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     registerCustomThemes(custom);
@@ -1351,21 +1739,68 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
 
       <section className="theme-gallery-section surface-section" data-testid="surface-section">
         <div className="theme-marketplace-heading">
-          <div><h4>Surface</h4><p>A material layer — texture, grain, depth — on top of the theme above. Composes with any theme.</p></div>
+          <div><h4>Surface</h4><p>A material layer — texture, grain, depth, translucency — on top of the theme above. Composes with any theme.</p></div>
         </div>
         <div className="theme-gallery-grid surface-pack-grid">
-          {SURFACE_PACKS.map(pack => (
-            <SurfacePackCard
-              key={pack.id}
-              pack={pack}
-              active={surfaceId === pack.id}
-              onSelect={() => {
-                applySurface(pack.id, surfaceOpts);
-                void update({ appearance: { surfacePackId: pack.id } });
-              }}
-            />
+          {visibleSurfacePacks.map(pack => (
+            <div className="surface-pack-card-wrap" key={pack.id}>
+              <SurfacePackCard
+                pack={pack}
+                active={surfaceId === pack.id}
+                onSelect={() => {
+                  applySurface(pack.id, surfaceOpts);
+                  void update({ appearance: { surfacePackId: pack.id } });
+                }}
+              />
+              {pack.source === 'custom' && (
+                <button
+                  type="button"
+                  className="surface-pack-edit"
+                  aria-label={`Edit ${pack.name}`}
+                  data-testid={`surface-edit-${pack.id}`}
+                  onClick={() => setEditingSurface(customSurfacePacks.find(record => record.id === pack.id))}
+                >Edit</button>
+              )}
+            </div>
           ))}
         </div>
+        <button
+          type="button"
+          className="surface-new-btn"
+          data-testid="surface-new"
+          onClick={() => setEditingSurface(newCustomSurface())}
+        >+ New custom surface</button>
+        {editingSurface && (
+          <CustomSurfaceEditor
+            pack={editingSurface}
+            onChange={setEditingSurface}
+            onCancel={() => setEditingSurface(undefined)}
+            onExport={() => exportSurface(editingSurface)}
+            onDelete={customSurfacePacks.some(record => record.id === editingSurface.id)
+              ? () => {
+                  const remaining = customSurfacePacks.filter(record => record.id !== editingSurface.id);
+                  setEditingSurface(undefined);
+                  void persistSurfacePacks(remaining, surfaceId === editingSurface.id ? 'parchment' : undefined);
+                }
+              : undefined}
+            onSave={() => {
+              const others = customSurfacePacks.filter(record => record.id !== editingSurface.id);
+              const nextPacks = [...others, editingSurface];
+              setEditingSurface(undefined);
+              void persistSurfacePacks(nextPacks, editingSurface.id);
+            }}
+          />
+        )}
+        <MotifPanel
+          pack={activeSurfacePack}
+          motif={surfaceOpts.motif}
+          disabled={surfaceId === 'flat'}
+          onChange={next => {
+            const updated = { ...surfaceOpts, motif: next };
+            applySurface(surfaceId, updated);
+            void update({ appearance: { surface: { motif: next } } });
+          }}
+        />
         <div className="surface-dials">
           <label className="surface-dial">
             <span className="surface-dial-label">Intensity <em>{Math.round(surfaceOpts.intensity * 100)}%</em></span>
@@ -1398,6 +1833,32 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
             void update({ appearance: { surface: { texture: next } } });
           }}
         />
+        <Toggle
+          label="Translucency"
+          description="Frosted, see-through panels for glass packs like Aurora Glass. Ignored by opaque packs; forced off when the OS asks for reduced transparency."
+          checked={surfaceOpts.translucency}
+          disabled={!activeSurfacePack?.glass}
+          testId="surface-translucency-toggle"
+          onChange={next => {
+            const updated = { ...surfaceOpts, translucency: next };
+            applySurface(surfaceId, updated);
+            void update({ appearance: { surface: { translucency: next } } });
+          }}
+        />
+        {vibrancySupported && (
+          <Toggle
+            label="Window blur"
+            description="Let the desktop behind the app show through frosted panels, using the OS's native vibrancy. Takes full effect after the next relaunch."
+            checked={surfaceOpts.windowVibrancy}
+            disabled={!activeSurfacePack?.glass || !surfaceOpts.translucency}
+            testId="surface-vibrancy-toggle"
+            onChange={next => {
+              const updated = { ...surfaceOpts, windowVibrancy: next };
+              applySurface(surfaceId, updated);
+              void update({ appearance: { surface: { windowVibrancy: next } } });
+            }}
+          />
+        )}
       </section>
     </>
   );

@@ -101,3 +101,104 @@ test('merge swaps the active surface pack id', () => {
   // untouched theme fields survive
   assert.equal(merged.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId);
 });
+
+test('the phase-2 glass packs are in the default installed list', () => {
+  const ids = DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds;
+  assert.ok(ids.includes('aurora-glass'));
+  assert.ok(ids.includes('noir'));
+});
+
+test('a custom surface pack keeps its basePackId and merges into the profile', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      customSurfacePacks: [
+        { id: 'custom-vellum', name: 'Vellum', description: '', basePackId: 'parchment', tokens: { '--surface-panel-blur': '12px' } }
+      ]
+    }
+  });
+  assert.equal(settings.appearance.customSurfacePacks[0]!.basePackId, 'parchment');
+
+  const merged = mergeAppSettings(settings, { appearance: { surfacePackId: 'custom-vellum' } });
+  assert.equal(merged.appearance.surfacePackId, 'custom-vellum');
+  assert.equal(merged.appearance.customSurfacePacks[0]!.tokens['--surface-panel-blur'], '12px');
+});
+
+test('a custom pack keeps a valid watermark pattern and clamps its numbers', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      customSurfacePacks: [
+        {
+          id: 'custom-hex',
+          name: 'Hex',
+          description: '',
+          tokens: {},
+          pattern: { id: 'hexagon', scale: 9999, opacity: 5, ink: 'text', weight: 0, blend: 'overlay' }
+        }
+      ]
+    }
+  });
+  const pattern = settings.appearance.customSurfacePacks[0]!.pattern!;
+  assert.equal(pattern.id, 'hexagon');
+  assert.equal(pattern.scale, 400);   // clamped down from 9999
+  assert.equal(pattern.opacity, 1);   // clamped down from 5
+  assert.equal(pattern.weight, 0.005); // clamped up from 0
+  assert.equal(pattern.ink, 'text');
+  assert.equal(pattern.blend, 'overlay');
+});
+
+test('a motif override is validated and clamped like a pack pattern', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: {
+        motif: {
+          id: 'hexagon', scale: 62, opacity: 0.3, ink: 'custom', inkColor: '#4ec9b0',
+          placement: 'corner', anchor: 'top-left', spread: 99999, fade: 2, fill: 0.5
+        }
+      }
+    }
+  });
+  const motif = settings.appearance.surface.motif!;
+  assert.equal(motif.ink, 'custom');
+  assert.equal(motif.inkColor, '#4ec9b0');
+  assert.equal(motif.placement, 'corner');
+  assert.equal(motif.anchor, 'top-left');
+  assert.equal(motif.spread, 2400); // clamped
+  assert.equal(motif.fade, 1);      // clamped
+  assert.equal(motif.fill, 0.5);
+});
+
+test('a motif ink colour that is not a literal hex is refused', () => {
+  // The colour is baked straight into an SVG `stroke`, so anything that is not
+  // a plain hex must never survive validation.
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: { motif: { id: 'hexagon', scale: 62, opacity: 0.3, ink: 'custom', inkColor: 'url(#x)' } }
+    }
+  });
+  assert.equal(settings.appearance.surface.motif!.inkColor, undefined);
+});
+
+test('an unknown motif anchor falls back rather than reaching CSS', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: { motif: { id: 'grid', scale: 40, opacity: 0.2, anchor: 'middle-of-nowhere' } }
+    }
+  });
+  assert.equal(settings.appearance.surface.motif!.anchor, undefined);
+});
+
+test('a custom pack drops an unsafe pattern id or blend rather than passing it to CSS', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      customSurfacePacks: [
+        { id: 'custom-a', name: 'A', description: '', tokens: {}, pattern: { id: 'url(javascript:1)', scale: 40, opacity: 0.1 } },
+        { id: 'custom-b', name: 'B', description: '', tokens: {}, pattern: { id: 'grid', scale: 40, opacity: 0.1, blend: 'expression(evil)' } }
+      ]
+    }
+  });
+  // An id that is not a plain slug is refused outright…
+  assert.equal(settings.appearance.customSurfacePacks[0]!.pattern, undefined);
+  // …and a blend outside the CSS keyword set is dropped, keeping the rest.
+  assert.equal(settings.appearance.customSurfacePacks[1]!.pattern!.id, 'grid');
+  assert.equal(settings.appearance.customSurfacePacks[1]!.pattern!.blend, undefined);
+});

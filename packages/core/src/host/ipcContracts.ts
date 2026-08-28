@@ -173,6 +173,18 @@ export interface WindowIpc {
   isMaximized(): Promise<boolean>;
   /** Subscribes to maximize/unmaximize; returns an unsubscribe function. */
   onMaximizeChange(listener: (maximized: boolean) => void): () => void;
+  /**
+   * True when the OS can render a translucent ("vibrancy" / "acrylic") window
+   * behind the app — macOS always, Windows 11 22H2+, never Linux. The Surface
+   * settings panel shows the Window-blur toggle only when this resolves true.
+   */
+  supportsVibrancy(): Promise<boolean>;
+  /**
+   * Turns native window translucency on (`'glass'`) or off (`'off'`). A no-op
+   * that resolves `{ applied: false }` on platforms without support. Called by
+   * `applySurfacePack` whenever a glass pack + the Window-blur dial change.
+   */
+  setSurfaceVibrancy(mode: 'off' | 'glass'): Promise<{ applied: boolean }>;
 }
 
 /**

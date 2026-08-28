@@ -2,7 +2,11 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <!-- `img-src` adds `data:` so the surface-pack pattern and grain layers can
+         paint: they are inline SVG tiles generated in surfacePatterns.ts, not
+         remote assets. Data images are inert (a CSS background or <img> never
+         runs script) and no remote origin is permitted by any directive. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
     <title>Praxis</title>
   </head>
   <body>

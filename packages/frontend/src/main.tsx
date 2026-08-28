@@ -7,6 +7,7 @@ import {
   getInitialSurfaceId,
   getInitialSurfaceOpts,
   getInitialThemeId,
+  refreshSurfacePattern,
   registerCustomThemes
 } from './themes';
 import { registerCustomSurfacePacks } from './surfacePacks';
@@ -16,6 +17,20 @@ import './surfaces.css';
 document.documentElement.setAttribute('data-accent', localStorage.getItem('tm-theme-accent') ?? 'violet');
 applyThemePreference(getInitialThemeId(), localStorage.getItem('tm-theme-mode') === 'light' ? 'light' : 'dark');
 applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
+
+// A pattern's colour is baked into its SVG data URI, so it cannot follow a
+// `var()`. Re-bake it whenever the palette changes to keep the watermark tinted
+// from the live theme.
+window.addEventListener('tm-theme-changed', () => refreshSurfacePattern());
+
+// The Aurora Glass ambient layer pauses its animation while the window is not
+// focused (see surfaces.css). Renderer-only — no IPC needed for window blur.
+const setWindowActive = (active: boolean) =>
+  document.documentElement.setAttribute('data-window-active', String(active));
+setWindowActive(document.hasFocus());
+window.addEventListener('focus', () => setWindowActive(true));
+window.addEventListener('blur', () => setWindowActive(false));
+
 void window.ticketManager.settings.get().then(settings => {
   registerCustomThemes(settings.appearance.customThemes);
   applyThemePreference(settings.appearance.themeId, settings.appearance.themeMode);
@@ -23,7 +38,9 @@ void window.ticketManager.settings.get().then(settings => {
   applySurfacePack(settings.appearance.surfacePackId, {
     intensity: settings.appearance.surface.intensity,
     texture: settings.appearance.surface.texture,
-    translucency: settings.appearance.surface.translucency
+    translucency: settings.appearance.surface.translucency,
+    windowVibrancy: settings.appearance.surface.windowVibrancy,
+    motif: settings.appearance.surface.motif
   });
 }).catch(() => {
   // Local storage remains a usable first-launch fallback when settings are unavailable.

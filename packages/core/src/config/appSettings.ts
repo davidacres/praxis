@@ -177,6 +177,13 @@ export interface AppearanceSettings {
     texture: boolean;
     /** Opt in to native OS window vibrancy (phase 3+). */
     windowVibrancy: boolean;
+    /**
+     * The user's Motif override. The motif (hexagon, grid, weave …) is
+     * independent of the material, so it can be worn over any theme *and* any
+     * pack. Fields left out fall back to the active pack's own pattern, so a
+     * partial override — just a colour, say — still works.
+     */
+    motif?: SurfaceMotifSettings;
   };
   /** Surface packs available in this profile (built-ins are always present). */
   installedSurfacePackIds: string[];
@@ -189,7 +196,48 @@ export interface AppearanceSettings {
     basePackId?: string;
     /** `--surface-*` custom-property overrides; validated against a whitelist. */
     tokens: Record<string, string>;
+    /**
+     * Watermark pattern chosen from the renderer's shared pattern library
+     * (`surfacePatterns.ts`) by id. Held as data so adding a material never
+     * needs new CSS; the renderer ignores ids it does not know.
+     */
+    pattern?: SurfaceMotifSettings;
   }>;
+}
+
+/**
+ * A watermark motif: which pattern from the renderer's library, how it is
+ * placed, and the material properties the user can tune. Shared by a custom
+ * pack's own pattern and by the profile-wide `surface.motif` override.
+ */
+export interface SurfaceMotifSettings {
+  /** Pattern id from the renderer's library; unknown ids are ignored there. */
+  id: string;
+  /** Size of one cell in CSS pixels. */
+  scale: number;
+  /** 0..1 strength, before the user's Intensity dial. */
+  opacity: number;
+  /** Which live theme token tints it, or `custom` to use `inkColor`. */
+  ink?: 'accent' | 'text' | 'custom';
+  /** Explicit colour when `ink` is `custom`. */
+  inkColor?: string;
+  /** Stroke weight, relative to one cell. */
+  weight?: number;
+  blend?: string;
+  /** `tile` repeats everywhere; `corner` is one anchored, fading motif. */
+  placement?: 'tile' | 'corner';
+  /** Which window corner a `corner` motif grows from. */
+  anchor?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  /** How far a `corner` motif spreads, in CSS pixels. */
+  spread?: number;
+  /** 0..1 — how far across the spread it fades to nothing. */
+  fade?: number;
+  /** 0..1 density of solid cells scattered through the lattice. */
+  fill?: number;
+  /** 0..1 strength of a second offset line behind the main one (letterpress edge). */
+  outline?: number;
+  /** Colour of that offset line; defaults to a mode-appropriate tone. */
+  outlineInk?: string;
 }
 
 export type TerminalCursorStyle = 'block' | 'underline' | 'bar';
@@ -285,7 +333,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     customThemes: [],
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
-    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint'],
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'],
     customSurfacePacks: [],
     priorityColors: {
       Critical: '#DC2626',
@@ -434,11 +482,64 @@ const SURFACE_TOKEN_KEYS: ReadonlySet<string> = new Set([
 
 function readSurface(value: unknown, fallback: AppearanceSettings['surface']): AppearanceSettings['surface'] {
   if (!isRecord(value)) return { ...fallback };
+  const motif = readSurfacePatternSpec(value.motif);
   return {
     intensity: clampNumber(value.intensity, 0, 1, fallback.intensity),
     translucency: readBoolean(value.translucency, fallback.translucency),
     texture: readBoolean(value.texture, fallback.texture),
-    windowVibrancy: readBoolean(value.windowVibrancy, fallback.windowVibrancy)
+    windowVibrancy: readBoolean(value.windowVibrancy, fallback.windowVibrancy),
+    ...(motif ? { motif } : {})
+  };
+}
+
+/**
+ * Validates a stored watermark-pattern spec. The pattern *library* lives in the
+ * renderer, so this deliberately does not police the id against a list — it only
+ * enforces a safe shape and clamps the numbers; the renderer drops ids it does
+ * not recognise. Nothing here reaches CSS as raw text except `blend`, which is
+ * restricted to the CSS blend keywords.
+ */
+const SURFACE_BLEND_KEYWORDS: ReadonlySet<string> = new Set([
+  'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'soft-light', 'hard-light'
+]);
+
+const SURFACE_ANCHORS: ReadonlySet<string> = new Set(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+
+function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefined {
+  if (!isRecord(value) || typeof value.id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.id)) {
+    return undefined;
+  }
+  const blend = typeof value.blend === 'string' && SURFACE_BLEND_KEYWORDS.has(value.blend)
+    ? { blend: value.blend }
+    : {};
+  // The ink colour is baked straight into an SVG `stroke`, so only a literal
+  // hex is accepted — never an arbitrary CSS colour expression.
+  const inkColor = typeof value.inkColor === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value.inkColor.trim())
+    ? { inkColor: value.inkColor.trim() }
+    : {};
+  // Same rule for the outline tone — it is baked into an SVG `stroke` too, so a
+  // literal hex or nothing. The mode-appropriate default is applied downstream.
+  const outlineInk = typeof value.outlineInk === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(value.outlineInk.trim())
+    ? { outlineInk: value.outlineInk.trim() }
+    : {};
+  const anchor = typeof value.anchor === 'string' && SURFACE_ANCHORS.has(value.anchor)
+    ? { anchor: value.anchor as SurfaceMotifSettings['anchor'] }
+    : {};
+  return {
+    id: value.id,
+    scale: clampNumber(value.scale, 8, 400, 120),
+    opacity: clampNumber(value.opacity, 0, 1, 0.08),
+    ink: value.ink === 'text' ? 'text' : value.ink === 'custom' ? 'custom' : 'accent',
+    weight: clampNumber(value.weight, 0.005, 1, 0.055),
+    placement: value.placement === 'corner' ? 'corner' : 'tile',
+    spread: clampNumber(value.spread, 120, 2400, 720),
+    fade: clampNumber(value.fade, 0.05, 1, 0.62),
+    fill: clampNumber(value.fill, 0, 1, 0),
+    outline: clampNumber(value.outline, 0, 1, 0),
+    ...anchor,
+    ...inkColor,
+    ...outlineInk,
+    ...blend
   };
 }
 
@@ -453,11 +554,13 @@ function readCustomSurfacePacks(value: unknown): AppearanceSettings['customSurfa
     const base = typeof item.basePackId === 'string' && /^[a-z0-9-]+$/.test(item.basePackId)
       ? { basePackId: item.basePackId }
       : {};
+    const pattern = readSurfacePatternSpec(item.pattern);
     return {
       id: item.id as string,
       name: (item.name as string).trim().slice(0, 80),
       description: (item.description as string).slice(0, 240),
       ...base,
+      ...(pattern ? { pattern } : {}),
       tokens: Object.fromEntries(
         Object.entries(item.tokens as Record<string, unknown>)
           .filter(([key, val]) => SURFACE_TOKEN_KEYS.has(key) && typeof val === 'string')
