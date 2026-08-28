@@ -53,9 +53,9 @@ function Write-Warn2($msg) { Write-Host "  ! $msg" -ForegroundColor Yellow }
 
 # --- Detect editors ----------------------------------------------------------
 $editors = @(
-  [pscustomobject]@{ Name = 'VS Code';          Ext = "$env:USERPROFILE\.vscode\extensions";          Cli = 'code' }
-  [pscustomobject]@{ Name = 'VS Code Insiders';  Ext = "$env:USERPROFILE\.vscode-insiders\extensions";  Cli = 'code-insiders' }
-  [pscustomobject]@{ Name = 'Cursor';            Ext = "$env:USERPROFILE\.cursor\extensions";           Cli = 'cursor' }
+  [pscustomobject]@{ Name = 'VS Code';          Ext = (Join-Path $HOME ".vscode/extensions");          Cli = 'code' }
+  [pscustomobject]@{ Name = 'VS Code Insiders';  Ext = (Join-Path $HOME ".vscode-insiders/extensions");  Cli = 'code-insiders' }
+  [pscustomobject]@{ Name = 'Cursor';            Ext = (Join-Path $HOME ".cursor/extensions");           Cli = 'cursor' }
 )
 
 $detected = $editors | Where-Object { Test-Path $_.Ext }

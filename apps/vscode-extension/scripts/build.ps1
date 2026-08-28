@@ -270,12 +270,15 @@ function Build-StoreSidecarFromPackage {
 Push-Location $extensionRoot
 try {
   # --- 1. Ensure dev dependencies ---------------------------------------------
-  $tsc = Join-Path $extensionRoot 'node_modules\typescript\bin\tsc'
+  # In this monorepo the dev deps (typescript, esbuild, @types/*) are hoisted to
+  # the repo-root node_modules, so don't look for them under the extension's own
+  # node_modules — resolve the tools through `npx` / node's own resolution.
   $esbuildScript = Join-Path $extensionRoot 'esbuild.mjs'
-  $haveTypes = (Test-Path (Join-Path $extensionRoot 'node_modules\@types\node')) -and
-               (Test-Path (Join-Path $extensionRoot 'node_modules\@types\vscode'))
+  if (-not (Test-Path $esbuildScript)) { throw "esbuild.mjs not found at $esbuildScript." }
 
-  if (-not (Test-Path $tsc) -or -not $haveTypes -or -not (Test-Path $esbuildScript)) {
+  & npx --no-install tsc --version *> $null
+  $haveTsc = ($LASTEXITCODE -eq 0)
+  if (-not $haveTsc) {
     Write-Step 'Installing build dependencies'
     & npm install
     if ($LASTEXITCODE -ne 0) {
@@ -288,12 +291,9 @@ try {
     Write-Ok 'Dependencies already present'
   }
 
-  if (-not (Test-Path $tsc)) { throw "TypeScript compiler not found at $tsc." }
-  if (-not (Test-Path $esbuildScript)) { throw "esbuild.mjs not found at $esbuildScript." }
-
   # --- 2. Type-check ---------------------------------------------------------
   Write-Step 'Type-checking (tsc --noEmit)'
-  & node $tsc --noEmit -p $extensionRoot
+  & npx --no-install tsc --noEmit -p $extensionRoot
   if ($LASTEXITCODE -ne 0) { throw 'Type-check failed.' }
   Write-Ok 'Type-check clean'
 
@@ -302,7 +302,7 @@ try {
   & node $esbuildScript --production
   if ($LASTEXITCODE -ne 0) { throw 'esbuild bundling failed.' }
 
-  $entry = Join-Path $extensionRoot 'out\extension.js'
+  $entry = Join-Path $extensionRoot 'out/extension.js'
   if (-not (Test-Path $entry)) { throw "esbuild produced no output at $entry" }
   Write-Ok "Bundled $entry"
 
@@ -345,7 +345,9 @@ try {
   if ($baseContentUrl) { $vsceArgs += @('--baseContentUrl', $baseContentUrl) }
   if ($baseImagesUrl)  { $vsceArgs += @('--baseImagesUrl',  $baseImagesUrl)  }
 
-  & npx --yes --registry $PublicRegistry @vscode/vsce @vsceArgs
+  # Pin @latest so npx fetches a current vsce rather than reusing a stale
+  # globally-installed one (older vsce crashes on Node >= 22 via its jwa dep).
+  & npx --yes --registry $PublicRegistry '@vscode/vsce@latest' @vsceArgs
   if ($LASTEXITCODE -ne 0) { throw 'vsce package failed.' }
   if (-not (Test-Path $vsixPath)) { throw "vsce reported success but $vsixPath is missing." }
   Write-Ok "Packaged -> $vsixPath"
@@ -363,12 +365,12 @@ try {
   # So the artifacts/ folder is self-contained and can be distributed as-is:
   # the .vsix + a self-contained install script + a short README.
   Write-Step 'Bundling standalone installer'
-  $installDistSrc = Join-Path $extensionRoot 'scripts\install-dist.ps1'
+  $installDistSrc = Join-Path $extensionRoot 'scripts/install-dist.ps1'
   if (Test-Path $installDistSrc) {
     Copy-Item -Force $installDistSrc (Join-Path $artifactsRoot 'install.ps1')
     Write-Ok "Installer -> $(Join-Path $artifactsRoot 'install.ps1')"
   } else {
-    Write-Warn2 "scripts\install-dist.ps1 not found; skipping installer bundle."
+    Write-Warn2 "scripts/install-dist.ps1 not found; skipping installer bundle."
   }
 
   $readmeText = @"
