@@ -7,7 +7,7 @@ import {
 } from '@ticket-manager/core';
 import { defaultStatusDotHex, sanitizeStatusColors } from '@ticket-manager/core';
 import type { Board, BoardColumnPreferences, BoardDetails } from '@ticket-manager/core';
-import type { BoardColumnStore } from '../state/boardColumnStore';
+import type { BoardColumnStore } from '@ticket-manager/core';
 import { normalizeOptionalHexColor } from '@ticket-manager/core';
 import { getDefaultStatusColumnOrder } from './boardColumnLayout';
 

@@ -1,13 +1,12 @@
-// Shim: the catalog logic moved to packages/core/src/ai (Phase F — shared with the
-// Electron desktop app). This module keeps only the vscode-coupled picker.
+// The workflow catalog itself lives in @ticket-manager/core so the desktop app
+// shares it. What stays here is the one piece that cannot: the VS Code quick-pick
+// UI for choosing a workflow pack.
 import * as vscode from 'vscode';
 import {
   discoverWorkspaceAgentWorkflows,
   matchesWorkflow,
   type AgentWorkflowReference
 } from '@ticket-manager/core';
-
-export * from '@ticket-manager/core';
 
 interface WorkflowQuickPickItem extends vscode.QuickPickItem {
   pickType: 'none' | 'workflow';

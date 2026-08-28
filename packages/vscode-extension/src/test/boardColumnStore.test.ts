@@ -1,5 +1,5 @@
 import * as assert from 'node:assert';
-import { repairLegacyBacklogStatusPreferences } from '../state/boardColumnStore';
+import { repairLegacyBacklogStatusPreferences } from '@ticket-manager/core';
 import type { BoardColumnPreferences } from '@ticket-manager/core';
 
 suite('boardColumnStore', () => {

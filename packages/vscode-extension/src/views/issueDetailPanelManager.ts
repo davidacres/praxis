@@ -1,9 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '@ticket-manager/core';
 import type { AiSessionManager } from '@ticket-manager/core';
-import {
-  discoverWorkspaceAgentWorkflows
-} from '../ai/agentWorkflowCatalog';
+import { discoverWorkspaceAgentWorkflows } from '@ticket-manager/core';
 import type { AgentWorkflowReference, FeatureSubTaskRecord } from '@ticket-manager/core';
 import type {
   AiProvider,

@@ -12,13 +12,14 @@ import { registerCommands } from './commands/registerCommands';
 import { AppConfigStore } from './config/jiraConfig';
 import { ConnectionStore } from '@ticket-manager/core';
 import { VsCodeMementoStore } from './adapters/vsCodeMementoStore';
+import { vsCodeHostStorage } from './adapters/vsCodeHostStorage';
 import { VsCodeSettingsStore } from './adapters/vsCodeSettingsStore';
 import { VsCodeSecretsStore } from './adapters/vsCodeSecretsStore';
 import { prepareArtifactForJiraUpload } from '@ticket-manager/core';
 import { issueTypeHex } from '@ticket-manager/core';
-import { BoardColumnStore } from './state/boardColumnStore';
-import { BoardStore } from './state/boardStore';
-import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from './state/filterStore';
+import { BoardColumnStore } from '@ticket-manager/core';
+import { BoardStore } from '@ticket-manager/core';
+import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from '@ticket-manager/core';
 import type {
   AiProvider,
   BackendMode,
@@ -118,11 +119,8 @@ import {
   parseMergeRequestFeedbackResult
 } from '@ticket-manager/core';
 import { GitWorktreeManager, WorktreeConflictError } from './git/gitWorktreeManager';
-import {
-  discoverWorkspaceAgentWorkflows,
-  promptForAgentWorkflowSelection,
-  resolveWorkflowReference
-} from './ai/agentWorkflowCatalog';
+import { promptForAgentWorkflowSelection } from './ai/agentWorkflowPicker';
+import { discoverWorkspaceAgentWorkflows, resolveWorkflowReference } from '@ticket-manager/core';
 import { stageIssueAttachments } from '@ticket-manager/core';
 import {
   createGitLabHandledNoteState,
@@ -1028,9 +1026,10 @@ export async function activate(
       await startNewCopilotSession(issueKey);
     }
   );
-  const filterStore = new FilterStore(context);
-  const boardStore = new BoardStore(context);
-  const boardColumnStore = new BoardColumnStore(context);
+  const hostStorage = vsCodeHostStorage(context);
+  const filterStore = new FilterStore(hostStorage);
+  const boardStore = new BoardStore(hostStorage);
+  const boardColumnStore = new BoardColumnStore(hostStorage);
   const boardColumnConfigPanel = new BoardColumnConfigPanel(boardColumnStore);
   const newProjectWizardPanel = new NewProjectWizardPanel();
   const setupWizardPanel = new SetupWizardPanel();

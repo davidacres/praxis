@@ -7,7 +7,7 @@ import {
   resolveWorkflowReference,
   resolveRelevantAgentWorkflow,
   resolveConfiguredAgentWorkflow
-} from '../ai/agentWorkflowCatalog';
+} from '@ticket-manager/core';
 
 async function createSkill(tempRoot: string, skillName: string, content: string): Promise<string> {
   const skillDir = path.join(tempRoot, '.github', 'skills', skillName);

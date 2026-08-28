@@ -29,6 +29,7 @@ export * from './ai/vercelAgentService';
 export * from './config/connectionStore';
 export * from './config/appSettings';
 export * from './state/boardColumnStore';
+export * from './state/boardStore';
 export * from './state/filterStore';
 export * from './taskDesigner/taskDesignerState';
 export * from './taskDesigner/masterPlan';

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '@ticket-manager/core';
 import type { AiSessionManager } from '@ticket-manager/core';
-import { FilterStore } from '../state/filterStore';
+import { FilterStore } from '@ticket-manager/core';
 import type { Board, IssueFilters, IssueSummary } from '@ticket-manager/core';
 
 export interface IssuesProviderSnapshot {

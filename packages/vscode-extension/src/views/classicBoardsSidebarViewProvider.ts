@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import type { ConnectionStore } from '@ticket-manager/core';
 import type { IssueTrackerService } from '@ticket-manager/core';
-import type { BoardColumnStore } from '../state/boardColumnStore';
-import { BoardStore } from '../state/boardStore';
+import type { BoardColumnStore } from '@ticket-manager/core';
+import { BoardStore } from '@ticket-manager/core';
 import type { BackendMode } from '@ticket-manager/core';
 import { buildMetaPillInlineStyle } from '@ticket-manager/core';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';
