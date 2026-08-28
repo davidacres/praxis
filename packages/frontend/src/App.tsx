@@ -733,6 +733,7 @@ export function App() {
                   boards={boards}
                   projects={projects}
                   connections={connections}
+                  connectionChecks={connectionChecks}
                   selectedBoardId={route.boardId}
                   detailsByBoardId={detailsByBoardId}
                   onSelectBoard={board => navigate({ boardId: board.id })}

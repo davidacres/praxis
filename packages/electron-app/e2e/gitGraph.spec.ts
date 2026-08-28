@@ -33,18 +33,73 @@ async function expectHistoryColumnsAligned(window: TestApp['window']) {
   expect(dateFits).toBe(true);
 }
 
+/** Repositories created by a test, removed in afterEach. */
+let repositories: string[] = [];
+
+/**
+ * A small but structurally complete repository: two branches joined by a real
+ * merge commit (so the graph has edges and the "Merges only" filter has
+ * something to find) plus an uncommitted edit for the diff and staging flows.
+ */
+function createFixtureRepository(): string {
+  const repository = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-gitgraph-e2e-'));
+  repositories.push(repository);
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repository, stdio: 'pipe' });
+  git('init', '-b', 'main');
+  git('config', 'user.name', 'Praxis Test');
+  git('config', 'user.email', 'praxis@example.test');
+  fs.writeFileSync(path.join(repository, 'README.md'), 'line one\nline two\nline three\n');
+  git('add', '.');
+  git('commit', '-m', 'initial commit');
+  git('switch', '-c', 'feature');
+  fs.writeFileSync(path.join(repository, 'feature.txt'), 'feature work\n');
+  git('add', '.');
+  git('commit', '-m', 'feature work');
+  git('switch', 'main');
+  fs.writeFileSync(path.join(repository, 'main.txt'), 'main work\n');
+  git('add', '.');
+  git('commit', '-m', 'main work');
+  git('merge', '--no-ff', 'feature', '-m', 'merge feature into main');
+  // Left dirty on purpose — "Review unstaged" and the hunk staging controls
+  // need a real working-tree change to act on.
+  fs.writeFileSync(path.join(repository, 'README.md'), 'line one\nline two edited\nline three\nline four\n');
+  return repository;
+}
+
+/**
+ * Git is per-project now, so the graph is reached by attaching the repository
+ * to a project and navigating through that project's Git entry.
+ */
+async function openProjectGit(repository: string): Promise<void> {
+  const project = await app.window.evaluate(async folder => window.ticketManager.projects.create({
+    name: 'Git Fixture', key: 'GITFIX', type: 'software', purpose: 'Git graph fixture', brief: {},
+    startingPoint: 'existing-folder', folderPath: folder,
+    workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+    starterTickets: [{ summary: 'Repository work', description: 'Fixture', issueType: 'Task', status: 'todo' }],
+    defaultAiToolMode: 'read-only'
+  }), repository);
+  await app.window.reload();
+  await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
+  await app.window.getByTestId('project-git-nav-item').click();
+}
+
 test.beforeEach(async () => {
+  repositories = [];
   app = await launchTestApp();
 });
 
 test.afterEach(async () => {
   await closeTestApp(app);
+  for (const repository of repositories) {
+    fs.rmSync(repository, { recursive: true, force: true });
+  }
+  repositories = [];
 });
 
 test('renders the visual Git graph and commit inspector', async () => {
   const window = app.window;
   await window.setViewportSize({ width: 1280, height: 720 });
-  await window.getByTestId('nav-git').click();
+  await openProjectGit(createFixtureRepository());
   await expect(window.getByTestId('git-graph-page')).toBeVisible();
   await expect(window.getByText('History', { exact: true })).toBeVisible();
   await expect(window.getByRole('complementary', { name: 'Branches' })).toContainText('Branches');
@@ -108,7 +163,7 @@ test('keeps the graph usable in a narrow reduced-motion window', async () => {
   const window = app.window;
   await window.setViewportSize({ width: 900, height: 650 });
   await window.emulateMedia({ reducedMotion: 'reduce' });
-  await window.getByTestId('nav-git').click();
+  await openProjectGit(createFixtureRepository());
   await expect(window.getByTestId('git-graph-page')).toBeVisible();
   await expect(window.getByRole('list', { name: 'Commit history' })).toBeVisible();
   await expect(window.getByText('History', { exact: true })).toBeVisible();
@@ -120,7 +175,6 @@ test('keeps the graph usable in a narrow reduced-motion window', async () => {
 });
 
 test('presents a clear three-way conflict editor and saves a resolution', async () => {
-  await closeTestApp(app);
   const repository = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-conflict-e2e-'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: repository, stdio: 'pipe' });
   try {
@@ -138,10 +192,10 @@ test('presents a clear three-way conflict editor and saves a resolution', async 
     git('commit', '-am', 'current story');
     try { git('merge', 'incoming'); } catch { /* expected conflict */ }
 
-    app = await launchTestApp(undefined, undefined, { TICKET_MANAGER_DEFAULT_REPOSITORY: repository });
     const window = app.window;
     await window.setViewportSize({ width: 1280, height: 720 });
-    await window.getByTestId('nav-git').click();
+    // Attach the conflicted repository to a project — the graph is per-project.
+    await openProjectGit(repository);
     await expect(window.getByTestId('git-conflict-workspace')).toBeVisible();
     await expect(window.getByRole('region', { name: 'Merge conflict editor' })).toContainText('Current branch');
     await expect(window.getByRole('region', { name: 'Merge conflict editor' })).toContainText('Incoming branch');

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="57" viewBox="0 0 150 57">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2c2620"/>
+      <stop offset="1" stop-color="#191919"/>
+    </linearGradient>
+    <radialGradient id="dot" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ef6a3f"/>
+      <stop offset="0.6" stop-color="#c6431f"/>
+      <stop offset="1" stop-color="#9c3417"/>
+    </radialGradient>
+  </defs>
+  <rect width="150" height="57" fill="url(#bg)"/>
+  <circle cx="20" cy="28" r="7" fill="url(#dot)"/>
+  <text x="34" y="34" fill="#fffdf8" font-family="Segoe UI, sans-serif" font-size="20" font-weight="650">Praxis</text>
+</svg>

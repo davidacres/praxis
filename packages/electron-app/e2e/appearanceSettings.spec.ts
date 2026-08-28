@@ -70,7 +70,8 @@ test('persists the selected theme and mode through app settings', async () => {
 });
 
 test('startup splash inherits the saved app theme', async () => {
-  await window.locator('[data-testid="startup-splash"]').click();
+  // launchTestApp already dismissed the first splash; the reload below brings a
+  // fresh one back, which is the one these colour assertions read.
   await window.locator('[data-testid="titlebar-themes"]').click();
   await window.locator('[data-testid="theme-card-humanist-light"]').click();
   await window.reload();

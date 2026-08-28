@@ -28,10 +28,19 @@ export interface TestApp {
  * restart; callers then close the intermediate app with `electronApp.close()`
  * only, letting `closeTestApp` clean the profile up after the final launch.
  */
+export interface LaunchOptions {
+  /**
+   * Leave the startup splash on screen. Only for the handful of tests that
+   * assert on the splash itself — every other test wants it out of the way.
+   */
+  keepSplash?: boolean;
+}
+
 export async function launchTestApp(
   seedSettings?: Record<string, unknown>,
   reuse?: { userDataDir: string; settingsPath: string },
-  extraEnv?: Record<string, string | undefined>
+  extraEnv?: Record<string, string | undefined>,
+  options?: LaunchOptions
 ): Promise<TestApp> {
   const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-e2e-'));
   const settingsPath = reuse?.settingsPath ?? path.join(userDataDir, 'test-settings.json');
@@ -60,7 +69,30 @@ export async function launchTestApp(
   });
   const window = await electronApp.firstWindow();
   await window.waitForLoadState('domcontentloaded');
+  if (!options?.keepSplash) {
+    await dismissSplash(window);
+  }
   return { electronApp, window, userDataDir, settingsPath };
+}
+
+/**
+ * The splash animates for ~7.8s before it retires itself, which every test
+ * would otherwise pay on launch. Clicking it skips straight to the 420ms fade,
+ * which is the same escape hatch a real user has.
+ *
+ * Deliberately forgiving: the splash is skipped entirely under reduced motion,
+ * and may have finished on its own if the machine was slow to hand us the
+ * window — either way the goal is simply "no splash", so a miss is not a
+ * failure.
+ */
+export async function dismissSplash(window: Page): Promise<void> {
+  const splash = window.locator('[data-testid="startup-splash"]');
+  try {
+    await splash.click({ timeout: 4000 });
+  } catch {
+    // Already gone, or never rendered.
+  }
+  await splash.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
 }
 
 export async function closeTestApp(app: TestApp): Promise<void> {

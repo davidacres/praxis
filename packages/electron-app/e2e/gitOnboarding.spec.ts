@@ -11,11 +11,24 @@ test.beforeEach(async () => { app = await launchTestApp(); });
 test.afterEach(async () => { await closeTestApp(app); });
 
 test('Git Graph explains that a project workspace is required', async () => {
-  await app.window.getByTestId('nav-git').click();
+  // Git is per-project now, so the explainer is reached through a project that
+  // has no workspace folder yet. The entry point stays enabled on purpose: the
+  // setup screen is what tells the user what is missing and offers a way out.
+  const project = await app.window.evaluate(() => window.ticketManager.projects.create({
+    name: 'Folderless', key: 'NOFOLDER', type: 'product', purpose: 'Workspace explainer', brief: {},
+    startingPoint: 'app-storage', workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+    starterTickets: [{ summary: 'First task', description: 'Placeholder', issueType: 'Task', status: 'todo' }],
+    defaultAiToolMode: 'read-only'
+  }));
+  await app.window.reload();
+  await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
+  await app.window.getByTestId('project-git-nav-item').click();
+
   await expect(app.window.getByTestId('git-onboarding')).toBeVisible();
   await expect(app.window.getByRole('heading', { name: 'Attach a workspace to use Git Graph' })).toBeVisible();
   await expect(app.window.getByText(/Git history, branches, and diffs belong to a project folder/)).toBeVisible();
   await expect(app.window.getByText(/rev-parse|not a git repository/i)).toHaveCount(0);
+  // The screen must offer a way forward, not just describe the problem.
   await expect(app.window.getByTestId('git-choose-workspace')).toBeVisible();
 });
 
