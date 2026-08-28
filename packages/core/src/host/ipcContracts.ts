@@ -52,6 +52,7 @@ import type {
   ProjectRecord,
   UpdateProjectInput
 } from '../projects/projectTypes';
+import type { CreateWorkspaceInput, UpdateWorkspaceInput, WorkspaceRecord } from '../workspaces/workspaceTypes';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -266,6 +267,17 @@ export interface ProjectsIpc {
   attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;
   linkBoard(projectId: string, board: ProjectBoardReference): Promise<ProjectRecord>;
   unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord>;
+}
+
+/** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
+export interface WorkspacesIpc {
+  list(): Promise<WorkspaceRecord[]>;
+  get(workspaceId: string): Promise<WorkspaceRecord | undefined>;
+  create(input: CreateWorkspaceInput): Promise<WorkspaceRecord>;
+  update(workspaceId: string, patch: UpdateWorkspaceInput): Promise<WorkspaceRecord>;
+  remove(workspaceId: string): Promise<void>;
+  saveToFile(workspaceId: string): Promise<string | undefined>;
+  openFromFile(): Promise<WorkspaceRecord | undefined>;
 }
 
 /** Progress payload streamed on the `ai:reviewProgress` push channel while a review runs. */
@@ -508,6 +520,7 @@ export interface PraxisIpc {
   agentRuntime: AgentRuntimeIpc;
   taskDesigner: TaskDesignerIpc;
   projects: ProjectsIpc;
+  workspaces: WorkspacesIpc;
   terminal: TerminalIpc;
   git: GitIpc;
 }

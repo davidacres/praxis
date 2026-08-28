@@ -43,6 +43,8 @@ surface and host integrations. Last audited: 2026-08-23.
 | Per-column manual issue ordering | ✓ | ✗ | |
 | Max-age filter (hide stale issues) | ✓ | ✗ | |
 | New project wizard | ✓ | ✗ | |
+| Saved Praxis workspace contexts | ✗ | ✓ | Desktop stores project/connection references and objectives in versioned workspace files |
+| Project-first sidebar hierarchy | ✗ | ✓ | Projects own boards and Repository tools; unlinked boards remain separately discoverable |
 
 ## Issues
 

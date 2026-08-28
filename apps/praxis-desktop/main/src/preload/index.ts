@@ -29,6 +29,7 @@ import type {
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, UpdateProjectInput } from '@praxis/core';
+import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -257,6 +258,15 @@ const praxis: PraxisIpc = {
     attachFolder: (projectId: string, input: AttachProjectFolderInput) => ipcRenderer.invoke('projects:attachFolder', projectId, input),
     linkBoard: (projectId: string, board: ProjectBoardReference) => ipcRenderer.invoke('projects:linkBoard', projectId, board),
     unlinkBoard: (projectId: string, connectionId: string, boardId: string) => ipcRenderer.invoke('projects:unlinkBoard', projectId, connectionId, boardId)
+  },
+  workspaces: {
+    list: () => ipcRenderer.invoke('workspaces:list'),
+    get: (workspaceId: string) => ipcRenderer.invoke('workspaces:get', workspaceId),
+    create: (input: CreateWorkspaceInput) => ipcRenderer.invoke('workspaces:create', input),
+    update: (workspaceId: string, patch: UpdateWorkspaceInput) => ipcRenderer.invoke('workspaces:update', workspaceId, patch),
+    remove: (workspaceId: string) => ipcRenderer.invoke('workspaces:remove', workspaceId),
+    saveToFile: (workspaceId: string) => ipcRenderer.invoke('workspaces:saveToFile', workspaceId),
+    openFromFile: () => ipcRenderer.invoke('workspaces:openFromFile')
   },
   terminal: {
     listProfiles: () => ipcRenderer.invoke('terminal:listProfiles'),
