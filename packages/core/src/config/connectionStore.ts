@@ -192,11 +192,15 @@ export class ConnectionStore implements Disposable {
   public async removeConnection(connectionId: string): Promise<void> {
     const remainingConnections = this.getConnections().filter(c => c.id !== connectionId);
     const remainingBoards = this.getTrackedBoards().filter(b => b.connectionId !== connectionId);
-    await Promise.all([
-      this.writeConnections(remainingConnections),
-      this.writeTrackedBoards(remainingBoards),
-      this.purgeSecretsForConnection(connectionId)
-    ]);
+    // Both writes target the SAME settings document, so they must not run
+    // concurrently: each is read-modify-write, and in parallel the second
+    // restores the key the first just changed — which let a removed connection
+    // reappear. Secrets live in their own store, so that part is safe to run
+    // alongside.
+    const purgeSecrets = this.purgeSecretsForConnection(connectionId);
+    await this.writeConnections(remainingConnections);
+    await this.writeTrackedBoards(remainingBoards);
+    await purgeSecrets;
   }
 
   public async addTrackedBoard(board: TrackedBoard): Promise<void> {

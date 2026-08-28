@@ -86,7 +86,30 @@ export class SharedSettingsBackend implements SettingsBackend {
     }
   }
 
-  private async persist(settings: AppSettings): Promise<void> {
+  /**
+   * Serialises writes. `persistNow` is read-modify-write against a shared
+   * document *and* stages through a single temp path, so two concurrent calls
+   * both read the same base and the later rename silently discards the
+   * earlier one's change. That surfaced as removing a connection appearing to
+   * succeed and then the connection coming back: `removeConnection` writes the
+   * connection list and the tracked-board list, and whichever landed second
+   * restored what the first had deleted.
+   *
+   * Chaining makes each write observe the previous one's result. A failed
+   * write must not poison the queue, so the chain continues either way.
+   */
+  private writeQueue: Promise<void> = Promise.resolve();
+
+  private persist(settings: AppSettings): Promise<void> {
+    const run = this.writeQueue.then(
+      () => this.persistNow(settings),
+      () => this.persistNow(settings)
+    );
+    this.writeQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  private async persistNow(settings: AppSettings): Promise<void> {
     await fsp.mkdir(path.dirname(this.filePath), { recursive: true });
     // The connection/board store shares this JSON document but owns a few
     // extension keys that are intentionally outside AppSettings.  Merge the
