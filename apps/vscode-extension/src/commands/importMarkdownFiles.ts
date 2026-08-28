@@ -10,7 +10,7 @@
  */
 
 import * as vscode from 'vscode';
-import { readUtf8 } from '../livefolder/markdownPlanParser';
+import { readUtf8 } from '@praxis/core';
 import { ensureFrontMatter, type IssueType } from '@praxis/core';
 
 // ── Type mapping ─────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ export async function importMarkdownFiles(
     onProgress?.(`Processing: ${name}`);
 
     try {
-      const raw = await readUtf8(fileUri);
+      const raw = await readUtf8(fileUri.fsPath);
 
       // Skip files without a title heading (not issue files)
       if (!raw.match(/^#\s+.+$/m)) {

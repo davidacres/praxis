@@ -5,15 +5,15 @@ import {
   writeDescriptionToMarkdownFile,
   writePriorityToMarkdownFile,
   upgradeMarkdownFile,
-  planStatusToMarkdown
-} from '../livefolder/markdownStatusWriter';
-import {
+  planStatusToMarkdown,
   extractStatusRaw,
   mapMarkdownStatusToPlanStatus,
   extractPriorityRaw,
   extractSeverityRaw,
-  extractReportedByRaw
-} from '../livefolder/markdownPlanParser';
+  extractReportedByRaw,
+  setLiveFolderFs
+} from '@praxis/core';
+import { vsCodeLiveFolderFs } from '../adapters/vsCodeLiveFolderFs';
 
 async function writeTextFile(uri: vscode.Uri, contents: string): Promise<void> {
   const parentUri = vscode.Uri.joinPath(uri, '..');
@@ -21,8 +21,8 @@ async function writeTextFile(uri: vscode.Uri, contents: string): Promise<void> {
   await vscode.workspace.fs.writeFile(uri, Buffer.from(contents, 'utf8'));
 }
 
-async function readTextFile(uri: vscode.Uri): Promise<string> {
-  const bytes = await vscode.workspace.fs.readFile(uri);
+async function readTextFile(filePath: string): Promise<string> {
+  const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
   return new TextDecoder('utf-8').decode(bytes);
 }
 
@@ -43,11 +43,14 @@ function tmpUri(name: string): vscode.Uri {
 suite('markdownStatusWriter', () => {
   const createdFiles: vscode.Uri[] = [];
 
-  async function createFile(name: string, content: string): Promise<vscode.Uri> {
+  suiteSetup(() => setLiveFolderFs(vsCodeLiveFolderFs));
+  suiteTeardown(() => setLiveFolderFs(undefined));
+
+  async function createFile(name: string, content: string): Promise<string> {
     const uri = tmpUri(name);
     await writeTextFile(uri, content);
     createdFiles.push(uri);
-    return uri;
+    return uri.fsPath;
   }
 
   teardown(async () => {

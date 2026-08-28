@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import {
   discoverPlanFolders,
   discoverRepositoryFolders
-} from '../livefolder/markdownPlanParser';
+} from '@praxis/core';
 import { toStoredFolderPath } from '@praxis/core';
 import {
   planBoardDrafts,
@@ -145,9 +145,9 @@ export class UserWorkspaceBoardWizardPanel {
         )
       ]);
       const rows = planBoardDrafts({
-        repositories: gitRepositories.map(repository => ({ rootPath: repository.fsPath })),
+        repositories: gitRepositories.map(rootPath => ({ rootPath })),
         planRoots: matches.map(match => ({
-          plansPath: match.plansRootUri.fsPath,
+          plansPath: match.plansRootPath,
           featureEntryCount: match.featureEntries.length
         })),
         existingPaths: [...this.existingPaths],

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import { LiveFolderService } from '../livefolder/liveFolderService';
+import { LiveFolderService, setLiveFolderFs, setLiveFolderWatch } from '@praxis/core';
+import { vsCodeLiveFolderFs, vsCodeLiveFolderWatch } from '../adapters/vsCodeLiveFolderFs';
 
 const WORKSPACE_ROOT_URI = vscode.workspace.workspaceFolders?.[0]?.uri;
 
@@ -61,6 +62,16 @@ function createService(plansRootFsPath: string): LiveFolderService {
 suite('LiveFolderService createIssue', () => {
   let suiteRoot: vscode.Uri;
   let service: LiveFolderService | undefined;
+
+  // Exercise core's LiveFolderService through the extension's real file IO.
+  suiteSetup(() => {
+    setLiveFolderFs(vsCodeLiveFolderFs);
+    setLiveFolderWatch(vsCodeLiveFolderWatch);
+  });
+  suiteTeardown(() => {
+    setLiveFolderFs(undefined);
+    setLiveFolderWatch(undefined);
+  });
 
   setup(async () => {
     if (!WORKSPACE_ROOT_URI) {
