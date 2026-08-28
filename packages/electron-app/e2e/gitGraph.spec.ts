@@ -159,6 +159,29 @@ test('renders the visual Git graph and commit inspector', async () => {
   await window.screenshot({ path: 'output/playwright/praxis-diff-workspace-narrow.png', fullPage: true });
 });
 
+test('Refresh reloads the project repository, not the app working directory', async () => {
+  // Regression guard: the service used to fall back to a
+  // TICKET_MANAGER_DEFAULT_REPOSITORY env var and then to `process.cwd()`, and
+  // Refresh called it with no path — so it silently swapped the view to
+  // whatever repository the app itself was launched from.
+  const window = app.window;
+  const repository = createFixtureRepository();
+  await openProjectGit(repository);
+  await expect(window.getByTestId('git-graph-page')).toBeVisible();
+
+  const repositoryName = path.basename(repository);
+  await expect(window.locator('.git-repo-name')).toHaveText(repositoryName);
+
+  await window.getByRole('button', { name: '↻ Refresh' }).click();
+
+  // Still the fixture, and still its history — not this checkout's — and no
+  // error, which is how the same mistake surfaces now that the service refuses
+  // to guess a repository instead of silently picking the wrong one.
+  await expect(window.locator('.git-error')).toHaveCount(0);
+  await expect(window.locator('.git-repo-name')).toHaveText(repositoryName);
+  await expect(window.getByRole('list', { name: 'Commit history' })).toContainText('merge feature into main');
+});
+
 test('keeps the graph usable in a narrow reduced-motion window', async () => {
   const window = app.window;
   await window.setViewportSize({ width: 900, height: 650 });

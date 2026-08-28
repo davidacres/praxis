@@ -611,7 +611,7 @@ export interface GitIpc {
   preflight(repositoryPath?: string): Promise<GitRepositoryPreflight>;
   initialize(repositoryPath: string): Promise<GitRepositoryPreflight>;
   clone(repositoryUrl: string, targetParent: string, targetName?: string): Promise<GitRepositoryPreflight>;
-  open(repositoryPath?: string): Promise<GitRepositorySnapshot>;
+  open(repositoryPath: string): Promise<GitRepositorySnapshot>;
   refresh(repositoryPath: string): Promise<GitRepositorySnapshot>;
   status(repositoryPath: string): Promise<GitStatusSnapshot>;
   getCommit(repositoryPath: string, hash: string): Promise<GitCommitDetails>;
