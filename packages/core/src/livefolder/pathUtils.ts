@@ -25,7 +25,11 @@ export function toStoredFolderPath(
   if (isWindowsPlatform(platform)) {
     return path.win32.normalize(trimmed).replace(/\\/g, '/');
   }
-  return path.posix.normalize(trimmed);
+  // A Windows-style path can reach a non-Windows host — pasted into settings, or
+  // sent from a Windows client — and must still normalise to the canonical
+  // forward-slash form rather than keeping its backslashes verbatim. Matches the
+  // posix branch of `normalizeConfiguredFolderPath`.
+  return path.posix.normalize(trimmed.replace(/\\/g, '/'));
 }
 
 export function looksLikeMalformedWindowsPath(filePath: string): boolean {
