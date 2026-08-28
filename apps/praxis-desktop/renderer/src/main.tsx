@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { App } from './App';
+import { App } from './app/App';
 import {
   applySurfacePack,
   applyThemePreference,
@@ -9,8 +9,8 @@ import {
   getInitialThemeId,
   refreshSurfacePattern,
   registerCustomThemes
-} from './themes';
-import { registerCustomSurfacePacks } from './surfacePacks';
+} from './settings/themes';
+import { registerCustomSurfacePacks } from './settings/surfacePacks';
 import './theme.css';
 import './surfaces.css';
 
