@@ -1,5 +1,5 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { liveFolderFs } from './liveFolderFs';
 import {
   buildUnreadablePathError,
   normalizeConfiguredFolderPath
@@ -75,7 +75,7 @@ export interface ParsedPlanFolder {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 export async function readUtf8(filePath: string): Promise<string> {
-  return fs.readFile(filePath, 'utf-8');
+  return liveFolderFs().readFile(filePath);
 }
 
 export function extractMainHeading(content: string): string {
@@ -428,8 +428,7 @@ export function stableChildKey(
  */
 async function readDirectorySafe(dirPath: string): Promise<[string, FileKind][] | undefined> {
   try {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    return entries.map(e => [e.name, e.isDirectory() ? 'directory' : 'file']);
+    return await liveFolderFs().readDirectory(dirPath);
   } catch {
     return undefined;
   }
@@ -824,10 +823,9 @@ export async function parsePlanFolder(
   // Scan inside each feature directory
   for (const folder of features) {
     const folderPath = path.join(featuresRootPath, folder.dirName);
-    const files = await fs.readdir(folderPath, { withFileTypes: true });
-    for (const dirent of files) {
-      const fname = dirent.name;
-      if (!dirent.isFile() || !fname.toLowerCase().endsWith('.md')) {
+    const files = await liveFolderFs().readDirectory(folderPath);
+    for (const [fname, kind] of files) {
+      if (kind !== 'file' || !fname.toLowerCase().endsWith('.md')) {
         continue;
       }
       if (fname.toLowerCase() === 'feature.md') {

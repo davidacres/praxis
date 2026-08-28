@@ -1,6 +1,6 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import chokidar, { type FSWatcher } from 'chokidar';
+import { liveFolderFs } from './liveFolderFs';
+import { liveFolderWatch, type LiveFolderWatcher } from './liveFolderWatch';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { Emitter, type Event } from '../host/emitter';
 import {
@@ -241,7 +241,7 @@ export class LiveFolderService implements IssueTrackerService {
   /** In-flight first load — concurrent callers share it instead of racing a
    *  second `loadFromDisk` (whose template-upgrade pass rewrites files). */
   private loadingPromise?: Promise<void>;
-  private watchers: FSWatcher[] = [];
+  private watchers: LiveFolderWatcher[] = [];
   private debounceTimer?: ReturnType<typeof setTimeout>;
   /** Track paths we just wrote to, so we can skip the watcher callback. */
   private recentWrites = new Set<string>();
@@ -516,7 +516,7 @@ export class LiveFolderService implements IssueTrackerService {
       );
       const featureFilePath = path.join(featureDirPath, 'feature.md');
 
-      await fs.mkdir(featureDirPath, { recursive: true });
+      await liveFolderFs().mkdir(featureDirPath);
       await this.writeManagedFile(
         featureFilePath,
         buildIssueMarkdown(
@@ -544,7 +544,7 @@ export class LiveFolderService implements IssueTrackerService {
         this.featuresRootPath,
         buildFeatureDirectoryName(newFeatureId, input.newParentSummary.trim())
       );
-      await fs.mkdir(newFeatureDirPath, { recursive: true });
+      await liveFolderFs().mkdir(newFeatureDirPath);
       await this.writeManagedFile(
         path.join(newFeatureDirPath, 'feature.md'),
         buildIssueMarkdown(
@@ -1198,7 +1198,7 @@ export class LiveFolderService implements IssueTrackerService {
   private async writeManagedFile(filePath: string, contents: string): Promise<void> {
     this.recentWrites.add(filePath);
     try {
-      await fs.writeFile(filePath, contents, 'utf-8');
+      await liveFolderFs().writeFile(filePath, contents);
     } finally {
       setTimeout(() => this.recentWrites.delete(filePath), 2000);
     }
@@ -1230,8 +1230,7 @@ export class LiveFolderService implements IssueTrackerService {
       return;
     }
 
-    const handleChangeFor = (rootPath: string) => (relativePath: string) => {
-      const absolutePath = path.join(rootPath, relativePath);
+    const handleChangeFor = (_rootPath: string) => (absolutePath: string) => {
       // Skip if we just wrote this file
       if (this.recentWrites.has(absolutePath)) {
         return;
@@ -1247,17 +1246,9 @@ export class LiveFolderService implements IssueTrackerService {
 
     // One watcher per plans root. Roots discovered later (by a reload) are not
     // watched until the next full load — a documented v1 limitation.
+    const watch = liveFolderWatch();
     for (const root of this.boardRoots) {
-      const watcher = chokidar.watch('**/*.md', {
-        cwd: root.rootPath,
-        ignoreInitial: true,
-        awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
-      });
-      const handleChange = handleChangeFor(root.rootPath);
-      watcher.on('change', handleChange);
-      watcher.on('add', handleChange);
-      watcher.on('unlink', handleChange);
-      this.watchers.push(watcher);
+      this.watchers.push(watch(root.rootPath, handleChangeFor(root.rootPath)));
     }
   }
 
