@@ -97,7 +97,7 @@ function getModeOptions(): ModeOption[] {
       mode: 'userworkspace',
       icon: '🧰',
       title: 'Create User Workspace',
-      description: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later'
+      description: 'Store Praxis boards outside VS Code workspaces and add plan-folder boards later'
     },
     ...MODE_OPTIONS.slice(1)
   ];
@@ -132,7 +132,7 @@ export class SetupWizardPanel {
       }
 
       this.panel = vscode.window.createWebviewPanel(
-        'ticketManager.setupWizard',
+        'praxis.setupWizard',
         'Configure Project',
         vscode.ViewColumn.Active,
         { enableScripts: true, retainContextWhenHidden: true }
@@ -175,7 +175,7 @@ export class SetupWizardPanel {
         if (mode) {
           this.state.selectedMode = mode;
           if (mode === 'jiracloud') {
-            const config = vscode.workspace.getConfiguration('ticketManager');
+            const config = vscode.workspace.getConfiguration('praxis');
             this.state.jiraMcpSiteUrl = config.get<string>('jiraMcpSiteUrl', '');
             this.state.jiraMcpEpicKey = config.get<string>('jiraMcpEpicKey', '');
             this.state.jiraMcpBoardJql = config.get<string>('jiraMcpBoardJql', '');
@@ -251,7 +251,7 @@ export class SetupWizardPanel {
 
     const savedMode = this.state.selectedMode;
 
-    const config = vscode.workspace.getConfiguration('ticketManager');
+    const config = vscode.workspace.getConfiguration('praxis');
     const target = this.state.selectedMode === 'userworkspace'
       ? vscode.ConfigurationTarget.Global
       : vscode.workspace.workspaceFolders?.length
@@ -413,7 +413,7 @@ export class SetupWizardPanel {
 
   private renderLiveFolderForm(): string {
     return `
-      <p class="form-help">Select a plans folder or a parent folder. Ticket Manager will search for features/feature-NN-*/feature.md and story-*.md files.</p>
+      <p class="form-help">Select a plans folder or a parent folder. Praxis will search for features/feature-NN-*/feature.md and story-*.md files.</p>
       <div class="field-group">
         <label class="field-label">Plans Folder Path</label>
         <div class="input-row">
@@ -442,7 +442,7 @@ export class SetupWizardPanel {
 
   private renderUserWorkspaceForm(): string {
     return `
-      <p class="form-help">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
+      <p class="form-help">Create a user-scoped Praxis workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
   }
 
   /* -- Jira form --------------------------------------------------- */

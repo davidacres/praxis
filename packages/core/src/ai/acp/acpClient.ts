@@ -109,7 +109,7 @@ export class AcpClientWrapper {
       Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
     );
 
-    const app = acpModule.client({ name: 'ticket-manager' });
+    const app = acpModule.client({ name: 'praxis' });
 
     app.onRequest(acpModule.CLIENT_METHODS.session_request_permission, async ctx => {
       const { toolCall, options } = ctx.params;
@@ -166,7 +166,7 @@ export class AcpClientWrapper {
           writeTextFile: this.options.toolMode === 'full'
         }
       },
-      clientInfo: { name: 'ticket-manager', version: '0.0.0' }
+      clientInfo: { name: 'praxis', version: '0.0.0' }
     });
   }
 

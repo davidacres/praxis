@@ -27,8 +27,8 @@ export function BoardPicker({ connection, onDone }: BoardPickerProps) {
     setLoading(true);
     setError(undefined);
     Promise.all([
-      window.ticketManager.board.list(EMPTY_BOARD_FILTERS, connection.id),
-      window.ticketManager.connection.getTrackedBoards(connection.id)
+      window.praxis.board.list(EMPTY_BOARD_FILTERS, connection.id),
+      window.praxis.connection.getTrackedBoards(connection.id)
     ])
       .then(([available, tracked]) => {
         setBoards(available);
@@ -60,7 +60,7 @@ export function BoardPicker({ connection, onDone }: BoardPickerProps) {
     setSaving(true);
     setError(undefined);
     try {
-      const tracked = await window.ticketManager.connection.getTrackedBoards(connection.id);
+      const tracked = await window.praxis.connection.getTrackedBoards(connection.id);
       const trackedById = new Map(tracked.map(board => [board.boardId, board]));
 
       const toAdd: TrackedBoard[] = [];
@@ -71,11 +71,11 @@ export function BoardPicker({ connection, onDone }: BoardPickerProps) {
         }
       }
       if (toAdd.length > 0) {
-        await window.ticketManager.connection.addTrackedBoards(toAdd);
+        await window.praxis.connection.addTrackedBoards(toAdd);
       }
       for (const board of tracked) {
         if (!selected.has(board.boardId)) {
-          await window.ticketManager.connection.removeTrackedBoard(connection.id, board.boardId);
+          await window.praxis.connection.removeTrackedBoard(connection.id, board.boardId);
         }
       }
       onDone();

@@ -34,7 +34,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
 
   useEffect(() => {
     setIssue(undefined);
-    void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
+    void window.praxis.issue.get(issueKey, connectionId).then(setIssue);
   }, [issueKey, connectionId]);
 
   const runReview = useCallback(async () => {
@@ -43,7 +43,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
     setFollowUp('');
     setFollowUpError(undefined);
     try {
-      const result = await window.ticketManager.ai.localPeerReview(issueKey, connectionId, provider, model);
+      const result = await window.praxis.ai.localPeerReview(issueKey, connectionId, provider, model);
       setState({ phase: 'done', result });
     } catch (error) {
       setState({
@@ -61,7 +61,7 @@ export function LocalPeerReviewPage({ issueKey, connectionId, provider, model, o
     setFollowUps(current => [...current, { role: 'user', text: message }]);
     setFollowUp('');
     try {
-      const response = await window.ticketManager.ai.localPeerReviewFollowUp(issueKey, message, connectionId, provider, model);
+      const response = await window.praxis.ai.localPeerReviewFollowUp(issueKey, message, connectionId, provider, model);
       setFollowUps(current => [...current, { role: 'assistant', text: response }]);
     } catch (error) {
       setFollowUpError(error instanceof Error ? error.message : String(error));

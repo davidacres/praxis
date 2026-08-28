@@ -7,7 +7,7 @@ import type { ConnectionType } from '@praxis/core';
 export type { JiraMcpConnectionResolution } from '@praxis/core';
 
 /**
- * Scans `ticketManager.connections` entries for `env` custom env vars and
+ * Scans `praxis.connections` entries for `env` custom env vars and
  * merges them into a flat record. Returns an empty object when no entries
  * contribute any variables.
  */
@@ -40,7 +40,7 @@ function loadCustomEnvFromConnections(
 }
 
 /**
- * Scans `ticketManager.connections` entries for `httpHeaders` or `headers`
+ * Scans `praxis.connections` entries for `httpHeaders` or `headers`
  * custom request headers and merges them. Returns an empty object when
  * no entries contribute any headers.
  */
@@ -77,7 +77,7 @@ function loadHttpHeadersFromConnections(
 /** Reads the resolver's raw settings from the VS Code configuration tree. */
 class VsCodeJiraMcpSettingsSource implements JiraMcpSettingsSource {
   private config(): ReturnType<typeof vscode.workspace.getConfiguration> {
-    return vscode.workspace.getConfiguration('ticketManager');
+    return vscode.workspace.getConfiguration('praxis');
   }
 
   public getConnectionType(): ConnectionType {

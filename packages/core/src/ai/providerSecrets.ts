@@ -15,7 +15,7 @@ import {
  * previously-stored keys keep resolving without a migration step.
  */
 export function secretKeyForProvider(provider: AiProvider): string {
-  return provider === 'vercel-gateway' ? SECRET_VERCEL_API_KEY : `ticketManager.${provider}ApiKey`;
+  return provider === 'vercel-gateway' ? SECRET_VERCEL_API_KEY : `praxis.${provider}ApiKey`;
 }
 
 /** Providers whose credentials are stored in the AI provider secrets namespace. */

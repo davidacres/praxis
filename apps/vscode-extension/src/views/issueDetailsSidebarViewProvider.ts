@@ -288,27 +288,27 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       if (!issueKey) {
         return;
       }
-      await vscode.commands.executeCommand('ticketManager.unassignAi', issueKey);
+      await vscode.commands.executeCommand('praxis.unassignAi', issueKey);
     }
 
     if (type === 'viewAgentSession') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.viewAgentSession', issueKey);
+        await vscode.commands.executeCommand('praxis.viewAgentSession', issueKey);
       }
     }
 
     if (type === 'abortAgentSession') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.abortAgentSession', issueKey);
+        await vscode.commands.executeCommand('praxis.abortAgentSession', issueKey);
       }
     }
 
     if (type === 'delegateToCopilot') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.delegateToAiAgent', issueKey);
+        await vscode.commands.executeCommand('praxis.delegateToAiAgent', issueKey);
       }
     }
 
@@ -316,14 +316,14 @@ export class IssueDetailsSidebarViewProvider implements vscode.WebviewViewProvid
       const issueKey = asString(message.issueKey);
       const provider = asString(message.provider);
       if (issueKey && provider) {
-        await vscode.commands.executeCommand('ticketManager.assignToAi', issueKey, provider);
+        await vscode.commands.executeCommand('praxis.assignToAi', issueKey, provider);
       }
     }
 
     if (type === 'assignWorkflowPack') {
       const issueKey = asString(message.issueKey);
       if (issueKey) {
-        await vscode.commands.executeCommand('ticketManager.assignWorkflowPack', issueKey);
+        await vscode.commands.executeCommand('praxis.assignWorkflowPack', issueKey);
       }
     }
 

@@ -1,19 +1,19 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { TicketManagerExtensionApi } from '../extension';
+import type { PraxisExtensionApi } from '../extension';
 
-const EXTENSION_ID_CANDIDATES = ['davidacres.ticket-manager', 'local-dev.ticket-manager'];
+const EXTENSION_ID_CANDIDATES = ['praxis.praxis', 'local-dev.praxis'];
 const WORKSPACE_MCP_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.vscode', 'mcp.json')
   : undefined;
 const USER_MCP_OVERRIDE_URI = vscode.workspace.workspaceFolders?.[0]
-  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.ticket-manager-test', 'user-mcp.json')
+  ? vscode.Uri.joinPath(vscode.workspace.workspaceFolders[0].uri, '.praxis-test', 'user-mcp.json')
   : undefined;
 const LIVE_FOLDER_TEST_ROOT_URI = vscode.workspace.workspaceFolders?.[0]
   ? vscode.Uri.joinPath(
       vscode.workspace.workspaceFolders[0].uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       'live-folder-mode'
     )
   : undefined;
@@ -44,10 +44,10 @@ async function waitFor(
   throw new Error('Timed out waiting for condition.');
 }
 
-async function getApi(): Promise<TicketManagerExtensionApi> {
+async function getApi(): Promise<PraxisExtensionApi> {
   const extension = EXTENSION_ID_CANDIDATES
-    .map(id => vscode.extensions.getExtension<TicketManagerExtensionApi>(id))
-    .find((candidate): candidate is vscode.Extension<TicketManagerExtensionApi> => Boolean(candidate));
+    .map(id => vscode.extensions.getExtension<PraxisExtensionApi>(id))
+    .find((candidate): candidate is vscode.Extension<PraxisExtensionApi> => Boolean(candidate));
   assert.ok(extension, 'Extension should be available');
   const api = await extension.activate();
   return api;
@@ -187,8 +187,8 @@ async function writeUserMcpOverride(contents: string): Promise<void> {
   process.env.JIRA_MINI_USER_MCP_PATHS = USER_MCP_OVERRIDE_URI.fsPath;
 }
 
-async function resetConnectionState(api: TicketManagerExtensionApi): Promise<void> {
-  const config = vscode.workspace.getConfiguration('ticketManager');
+async function resetConnectionState(api: PraxisExtensionApi): Promise<void> {
+  const config = vscode.workspace.getConfiguration('praxis');
   await Promise.all([
     config.update('backendMode', 'jiracloud', vscode.ConfigurationTarget.Workspace),
     config.update('liveFolderPath', '', vscode.ConfigurationTarget.Workspace),
@@ -217,13 +217,13 @@ async function resetConnectionState(api: TicketManagerExtensionApi): Promise<voi
 }
 
 async function configureScenario(
-  api: TicketManagerExtensionApi,
+  api: PraxisExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await clearWorkspaceMcpFile();
   await clearUserMcpOverride();
   const serverPath = getServerPath();
-  const config = vscode.workspace.getConfiguration('ticketManager');
+  const config = vscode.workspace.getConfiguration('praxis');
 
   await Promise.all([
     config.update('backendMode', 'jiracloud', vscode.ConfigurationTarget.Workspace),
@@ -246,13 +246,13 @@ async function configureScenario(
 }
 
 async function configureWorkspaceMcpScenario(
-  api: TicketManagerExtensionApi,
+  api: PraxisExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await resetConnectionState(api);
 
   await writeWorkspaceMcpFile(`{
-  // Ticket Manager should automatically use this workspace MCP server.
+  // Praxis should automatically use this workspace MCP server.
   "servers": {
     "jira": {
       "command": "node",
@@ -270,7 +270,7 @@ async function configureWorkspaceMcpScenario(
 }
 
 async function configureUserMcpScenario(
-  api: TicketManagerExtensionApi,
+  api: PraxisExtensionApi,
   scenario: 'default' | 'no-projects' | 'missing-capabilities' | 'parent-unsupported' | 'atlassian'
 ): Promise<void> {
   await resetConnectionState(api);
@@ -288,21 +288,21 @@ async function configureUserMcpScenario(
   await api.refresh();
 }
 
-async function configureDemoScenario(api: TicketManagerExtensionApi): Promise<void> {
+async function configureDemoScenario(api: PraxisExtensionApi): Promise<void> {
   await resetConnectionState(api);
-  const config = vscode.workspace.getConfiguration('ticketManager');
+  const config = vscode.workspace.getConfiguration('praxis');
   await config.update('backendMode', 'demo', vscode.ConfigurationTarget.Workspace);
   await api.backendService.reset();
   await api.refresh();
 }
 
 async function configureLiveFolderScenario(
-  api: TicketManagerExtensionApi,
+  api: PraxisExtensionApi,
   options?: { allowIssueCreation?: boolean }
 ): Promise<LiveFolderFixture> {
   await resetConnectionState(api);
   const fixture = await createLiveFolderFixture('default');
-  const config = vscode.workspace.getConfiguration('ticketManager');
+  const config = vscode.workspace.getConfiguration('praxis');
   await Promise.all([
     config.update('backendMode', 'livefolder', vscode.ConfigurationTarget.Workspace),
     config.update(
@@ -323,7 +323,7 @@ async function configureLiveFolderScenario(
   return fixture;
 }
 
-suite('Ticket Manager Extension', () => {
+suite('Praxis Extension', () => {
   suiteTeardown(async () => {
     const api = await getApi();
     await clearWorkspaceMcpFile();
@@ -338,22 +338,22 @@ suite('Ticket Manager Extension', () => {
 
     assert.ok(api.issuesProvider, 'Issues provider should be created');
     assert.ok(api.detailsProvider, 'Details provider should be created');
-    assert.ok(commands.includes('ticketManager.refresh'));
-    assert.ok(commands.includes('ticketManager.checkConnection'));
-    assert.ok(commands.includes('ticketManager.changeStatus'));
-    assert.ok(commands.includes('ticketManager.setBackendMode'));
-    assert.ok(commands.includes('ticketManager.openSettings'));
-    assert.ok(commands.includes('ticketManager.toggleWorkMode'));
-    assert.ok(commands.includes('ticketManager.configureAi'));
-    assert.ok(commands.includes('ticketManager.openAiGatewaySettings'));
-    assert.ok(commands.includes('ticketManager.openBoard'));
-    assert.ok(commands.includes('ticketManager.setBoardProjects'));
-    assert.ok(commands.includes('ticketManager.setBoardTypes'));
-    assert.ok(commands.includes('ticketManager.setBoardSearchText'));
-    assert.ok(commands.includes('ticketManager.openIssueFullDetails'));
-    assert.ok(commands.includes('ticketManager.configureBoardColumns'));
-    assert.ok(commands.includes('ticketManager.createIssue'));
-    assert.ok(commands.includes('ticketManager.createBoard'));
+    assert.ok(commands.includes('praxis.refresh'));
+    assert.ok(commands.includes('praxis.checkConnection'));
+    assert.ok(commands.includes('praxis.changeStatus'));
+    assert.ok(commands.includes('praxis.setBackendMode'));
+    assert.ok(commands.includes('praxis.openSettings'));
+    assert.ok(commands.includes('praxis.toggleWorkMode'));
+    assert.ok(commands.includes('praxis.configureAi'));
+    assert.ok(commands.includes('praxis.openAiGatewaySettings'));
+    assert.ok(commands.includes('praxis.openBoard'));
+    assert.ok(commands.includes('praxis.setBoardProjects'));
+    assert.ok(commands.includes('praxis.setBoardTypes'));
+    assert.ok(commands.includes('praxis.setBoardSearchText'));
+    assert.ok(commands.includes('praxis.openIssueFullDetails'));
+    assert.ok(commands.includes('praxis.configureBoardColumns'));
+    assert.ok(commands.includes('praxis.createIssue'));
+    assert.ok(commands.includes('praxis.createBoard'));
   });
 
   test('can disable live-folder issue creation with a workspace setting', async () => {

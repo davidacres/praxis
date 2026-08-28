@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Standalone installer for the Ticket Manager VS Code extension. Distribute
+  Standalone installer for the Praxis VS Code extension. Distribute
   this file alongside the .vsix; it has no other dependencies.
 
 .DESCRIPTION
-  Installs the Ticket Manager .vsix that sits next to this script into every
+  Installs the Praxis .vsix that sits next to this script into every
   detected VS Code-family editor (VS Code, VS Code Insiders, Cursor) using
   that editor's CLI (`code` / `code-insiders` / `cursor --install-extension`).
 
@@ -12,23 +12,23 @@
   script needs no source checkout and no package.json — just the .vsix
   beside it.
 
-  Unlike the Frosty installer, Ticket Manager does NOT register a proposed
+  Unlike the Frosty installer, Praxis does NOT register a proposed
   API: the activationEvents set is `onStartupFinished`, which works without
   any `enable-proposed-api` flag in argv.json.
 
 .PARAMETER VsixPath
-  Path to the .vsix to install. Defaults to the newest ticket-manager-*.vsix
+  Path to the .vsix to install. Defaults to the newest praxis-*.vsix
   found in the same folder as this script.
 
 .PARAMETER Uninstall
-  Remove the Ticket Manager extension from all detected editors.
+  Remove the Praxis extension from all detected editors.
 
 .EXAMPLE
   # From the folder containing install-dist.ps1 and the .vsix:
   pwsh ./install-dist.ps1
 
 .EXAMPLE
-  pwsh ./install-dist.ps1 -VsixPath .\ticket-manager-0.1.0.vsix
+  pwsh ./install-dist.ps1 -VsixPath .\praxis-0.1.0.vsix
 
 .EXAMPLE
   pwsh ./install-dist.ps1 -Uninstall
@@ -50,7 +50,7 @@ if (-not $scriptDir) { $scriptDir = (Get-Location).Path }
 
 # --- Locate the .vsix ------------------------------------------------------
 if (-not $VsixPath) {
-  $VsixPath = Get-ChildItem $scriptDir -Filter 'ticket-manager-*.vsix' -File -ErrorAction SilentlyContinue |
+  $VsixPath = Get-ChildItem $scriptDir -Filter 'praxis-*.vsix' -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 if (-not $VsixPath) {
@@ -58,7 +58,7 @@ if (-not $VsixPath) {
     Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
 if (-not $VsixPath -or -not (Test-Path $VsixPath)) {
-  throw "No .vsix found. Place this script next to the Ticket Manager .vsix, or pass -VsixPath <file>."
+  throw "No .vsix found. Place this script next to the Praxis .vsix, or pass -VsixPath <file>."
 }
 $VsixPath = (Resolve-Path $VsixPath).Path
 
@@ -171,5 +171,5 @@ if ($anyFailed) { Write-Warn2 'Completed with warnings (see above).' }
 Write-Host 'Done.' -ForegroundColor Cyan
 Write-Host 'Next steps:' -ForegroundColor Cyan
 Write-Host '  1. Fully restart each editor (close all windows).'
-Write-Host '  2. Click the Ticket Manager activity-bar entry and pick a backend.'
+Write-Host '  2. Click the Praxis activity-bar entry and pick a backend.'
 Write-Host '  3. Configure Connections & Boards.'

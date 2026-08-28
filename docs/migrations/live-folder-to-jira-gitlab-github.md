@@ -11,16 +11,16 @@ Implement a reliable migration path from Live Folder markdown plans to hosted is
 ## Current State
 
 - Live Folder mode can read and optionally write markdown features, stories, tasks, and bugs.
-- `Ticket Manager: Migrate Live Folder to Jira Cloud` exists as the current migration surface.
-- `Ticket Manager: Link Jira Cloud Epic` links a workspace to a Jira Cloud epic.
+- `Praxis: Migrate Live Folder to Jira Cloud` exists as the current migration surface.
+- `Praxis: Link Jira Cloud Epic` links a workspace to a Jira Cloud epic.
 - Jira Cloud supports direct issue, transition, comment, attachment, and sub-task operations through Atlassian Cloud APIs.
 - GitLab support exists for API/MR delivery workflows, but it is not a full issue/board backend equivalent to Jira/File mode.
 - GitHub settings/setup exist, but no GitHub issue/board backend service is currently present in `src`.
 
 ## Phase 1 — Command and UI Surfaces
 
-1. Keep `Ticket Manager: Migrate Live Folder to Jira Cloud` as the Jira-specific entry point.
-2. Add a generalized migration command only after at least two targets share the same migration flow, for example `Ticket Manager: Migrate Live Folder`.
+1. Keep `Praxis: Migrate Live Folder to Jira Cloud` as the Jira-specific entry point.
+2. Add a generalized migration command only after at least two targets share the same migration flow, for example `Praxis: Migrate Live Folder`.
 3. Add setup-view affordances:
    - show the current Live Folder source path
    - show the selected target backend
@@ -150,4 +150,4 @@ Target-specific rules:
 - Whether comments should preserve exact timestamps or use migration-time comments with original timestamp text.
 - How to handle target workflow statuses that require unavailable transitions.
 - How to migrate local attachments referenced by markdown.
-- How to prevent accidental writes when `ticketManager.liveFolderAllowIssueCreation` is false but target migration is requested.
+- How to prevent accidental writes when `praxis.liveFolderAllowIssueCreation` is false but target migration is requested.

@@ -2,7 +2,7 @@ import { Emitter, type Disposable } from '../host/emitter';
 import type { HostStorage } from '../host/stateStore';
 import type { BoardColumnPreferences } from '../types';
 
-const STORAGE_KEY = 'ticketManager.boardColumnPreferences';
+const STORAGE_KEY = 'praxis.boardColumnPreferences';
 
 type PersistedMap = Record<string, BoardColumnPreferences>;
 

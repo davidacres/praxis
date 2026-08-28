@@ -12,10 +12,10 @@ import type {
   WorkflowAssignmentSource
 } from './agentTypes';
 
-const STORAGE_KEY = 'ticketManager.aiSessions';
-const AGENT_STORAGE_KEY = 'ticketManager.agentSessions';
-const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'ticketManager.issueWorkflowAssignments';
-const MODEL_OVERRIDE_STORAGE_KEY = 'ticketManager.issueModelOverrides';
+const STORAGE_KEY = 'praxis.aiSessions';
+const AGENT_STORAGE_KEY = 'praxis.agentSessions';
+const WORKFLOW_ASSIGNMENT_STORAGE_KEY = 'praxis.issueWorkflowAssignments';
+const MODEL_OVERRIDE_STORAGE_KEY = 'praxis.issueModelOverrides';
 
 type AgentRuntimeProvider = AiProvider;
 

@@ -190,7 +190,7 @@ function AgentRuntimeSection() {
   const refresh = async () => {
     setBusy(true);
     try {
-      setSnapshot(await window.ticketManager.agentRuntime.refresh());
+      setSnapshot(await window.praxis.agentRuntime.refresh());
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -200,7 +200,7 @@ function AgentRuntimeSection() {
   };
 
   useEffect(() => {
-    void window.ticketManager.agentRuntime.list().then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+    void window.praxis.agentRuntime.list().then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
 
   return (
@@ -230,7 +230,7 @@ function AgentRuntimeSection() {
                   <div className="settings-field-help">{agent.manifest.type} · {agent.trusted ? 'trusted' : 'approval required'}{agent.errors.length ? ` · ${agent.errors.map(item => item.message).join('; ')}` : ''}</div>
                 </div>
                 <div className="settings-field-control">
-                  <button className="btn" type="button" disabled={!agent.trusted || agent.errors.length > 0 || busy} onClick={() => void window.ticketManager.agentRuntime.start(agent.manifest.id).then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))}>
+                  <button className="btn" type="button" disabled={!agent.trusted || agent.errors.length > 0 || busy} onClick={() => void window.praxis.agentRuntime.start(agent.manifest.id).then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))}>
                     Start
                   </button>
                 </div>
@@ -246,7 +246,7 @@ function AgentRuntimeSection() {
                       {snapshot.agents.find(agent => agent.trusted && agent.errors.length === 0) && <button className="btn" type="button" disabled={!skill.trusted || busy} onClick={() => {
                         const agent = snapshot.agents.find(candidate => candidate.trusted && candidate.errors.length === 0);
                         if (!agent) return;
-                        void window.ticketManager.agentRuntime.activateSkill(agent.manifest.id, skill.metadata.name).then(() => setActivated(skill.metadata.name)).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+                        void window.praxis.agentRuntime.activateSkill(agent.manifest.id, skill.metadata.name).then(() => setActivated(skill.metadata.name)).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
                       }}>Activate</button>}
                     </>
                   )}
@@ -583,7 +583,7 @@ function AiSection({
   const [managingModels, setManagingModels] = useState(false);
 
   const reloadStatuses = () => {
-    window.ticketManager.ai
+    window.praxis.ai
       .listProviderStatuses()
       .then(setStatuses)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
@@ -605,7 +605,7 @@ function AiSection({
     setBusy(true);
     setError(undefined);
     try {
-      await window.ticketManager.ai.setProviderApiKey(selectedProviderId, value);
+      await window.praxis.ai.setProviderApiKey(selectedProviderId, value);
       reloadStatuses();
       setKeyDraft('');
     } catch (err) {
@@ -620,7 +620,7 @@ function AiSection({
     setResettingKeys(true);
     setError(undefined);
     try {
-      await window.ticketManager.ai.resetProviderApiKeys();
+      await window.praxis.ai.resetProviderApiKeys();
       setStatuses([]);
       reloadStatuses();
     } catch (err) {
@@ -1579,7 +1579,7 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
   const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
   const [vibrancySupported, setVibrancySupported] = useState(false);
   useEffect(() => {
-    void window.ticketManager.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
+    void window.praxis.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
   }, []);
 
   const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
@@ -1911,7 +1911,7 @@ function TerminalSection({
 
   useEffect(() => {
     let active = true;
-    void window.ticketManager.terminal.listProfiles().then(next => {
+    void window.praxis.terminal.listProfiles().then(next => {
       if (active) setProfiles(next);
     });
     return () => { active = false; };

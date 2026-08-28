@@ -3,7 +3,7 @@ import * as util from 'node:util';
 
 const execFile = util.promisify(execFileCallback);
 
-export const TICKET_MANAGER_MR_REPLY_MARKER = '<!-- ticket-manager-mr-reply -->';
+export const PRAXIS_MR_REPLY_MARKER = '<!-- praxis-mr-reply -->';
 
 export interface GitLabProjectRemote {
   baseUrl: string;
@@ -344,12 +344,12 @@ export function diffGitLabDiscussionNotes(
   };
 }
 
-export function isTicketManagerManagedMergeRequestNote(body: string): boolean {
-  return body.trimStart().startsWith(TICKET_MANAGER_MR_REPLY_MARKER);
+export function isPraxisManagedMergeRequestNote(body: string): boolean {
+  return body.trimStart().startsWith(PRAXIS_MR_REPLY_MARKER);
 }
 
-export function wrapTicketManagerManagedMergeRequestNote(body: string): string {
-  return `${TICKET_MANAGER_MR_REPLY_MARKER}\n${body.trim()}`;
+export function wrapPraxisManagedMergeRequestNote(body: string): string {
+  return `${PRAXIS_MR_REPLY_MARKER}\n${body.trim()}`;
 }
 
 export function isDoneLikeStatus(status: string | undefined, statusCategory?: string): boolean {

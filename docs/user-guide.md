@@ -1,8 +1,8 @@
-# Ticket Manager User Guide
+# Praxis User Guide
 
 ## Overview
 
-Ticket Manager is a VS Code extension for managing issues, boards, AI sessions, and delivery workflows without leaving the editor.
+Praxis is a VS Code extension for managing issues, boards, AI sessions, and delivery workflows without leaving the editor.
 
 The extension combines:
 
@@ -18,7 +18,7 @@ The extension combines:
 
 The extension is organized around named backend connections and explicitly tracked boards.
 
-- Connections define how Ticket Manager talks to a backend.
+- Connections define how Praxis talks to a backend.
 - Tracked boards are the board records you choose to show in the extension.
 - Selecting a tracked board also selects the connection used for routed board and issue operations.
 
@@ -26,7 +26,7 @@ The canonical setup surface is the **Connections & Boards** panel.
 
 ### Sidebar modes
 
-Ticket Manager has two sidebar layouts.
+Praxis has two sidebar layouts.
 
 #### Classic mode
 
@@ -44,11 +44,11 @@ Work Mode is the board-centric layout.
 
 - Boards render as richer cards.
 - Active AI sessions are shown under their owning board.
-- The mode can be toggled with `Ticket Manager: Toggle Work Mode` or by setting `ticketManager.boardsSidebarPreviewMode` to `work`.
+- The mode can be toggled with `Praxis: Toggle Work Mode` or by setting `praxis.boardsSidebarPreviewMode` to `work`.
 
 ### Panels and detail surfaces
 
-Beyond the sidebar views, Ticket Manager includes:
+Beyond the sidebar views, Praxis includes:
 
 - Connections & Boards panel
 - Full Issue Details panel
@@ -96,8 +96,8 @@ Supported capabilities include:
 - board browsing and tracking,
 - comments,
 - status transitions,
-- linked epic / linked board query setup (`ticketManager.jiraMcpEpicKey`,
-  `ticketManager.jiraMcpBoardJql`),
+- linked epic / linked board query setup (`praxis.jiraMcpEpicKey`,
+  `praxis.jiraMcpBoardJql`),
 - AI-driven delivery workflow that runs against the MCP connection.
 
 ### Demo (`demo`)
@@ -133,11 +133,11 @@ Uses local workspace-backed issue storage for lighter local workflows.
 
 Use these entry points:
 
-- `Ticket Manager: Open Connections & Boards`
-- `Ticket Manager: Add Connection`
-- `Ticket Manager: Add Tracked Board`
-- `Ticket Manager: Configure Project`
-- `Ticket Manager: Set Backend Mode`
+- `Praxis: Open Connections & Boards`
+- `Praxis: Add Connection`
+- `Praxis: Add Tracked Board`
+- `Praxis: Configure Project`
+- `Praxis: Set Backend Mode`
 
 ### Board workflows
 
@@ -248,76 +248,76 @@ This section is a grouped summary. The dedicated reference lives in [docs/comman
 
 ### Setup and navigation
 
-- `Ticket Manager: Refresh`
-- `Ticket Manager: Configure Jira MCP Connection`
-- `Ticket Manager: Check Connection`
-- `Ticket Manager: Set Backend Mode`
-- `Ticket Manager: Configure Project`
-- `Ticket Manager: Open Settings`
-- `Ticket Manager: Toggle Work Mode`
-- `Ticket Manager: Open Connections & Boards`
-- `Ticket Manager: Add Connection`
-- `Ticket Manager: Add Tracked Board`
+- `Praxis: Refresh`
+- `Praxis: Configure Jira MCP Connection`
+- `Praxis: Check Connection`
+- `Praxis: Set Backend Mode`
+- `Praxis: Configure Project`
+- `Praxis: Open Settings`
+- `Praxis: Toggle Work Mode`
+- `Praxis: Open Connections & Boards`
+- `Praxis: Add Connection`
+- `Praxis: Add Tracked Board`
 
 ### Board and issue creation
 
-- `Ticket Manager: Open Board`
-- `Ticket Manager: Create Board`
-- `Ticket Manager: Create Issue`
-- `Ticket Manager: Create Idea`
-- `Ticket Manager: Create EPIC`
-- `Ticket Manager: New Project`
+- `Praxis: Open Board`
+- `Praxis: Create Board`
+- `Praxis: Create Issue`
+- `Praxis: Create Idea`
+- `Praxis: Create EPIC`
+- `Praxis: New Project`
 
 ### Search and filtering
 
-- `Ticket Manager: Search Boards`
-- `Ticket Manager: Search Issues`
-- `Ticket Manager: Search EPICs`
-- `Ticket Manager: Set Board Projects`
-- `Ticket Manager: Set Board Types`
-- `Ticket Manager: Set Board Search Text`
-- `Ticket Manager: Clear Board Filters`
-- `Ticket Manager: Set Projects`
-- `Ticket Manager: Set Status Filter`
-- `Ticket Manager: Set Issue Type Filter`
-- `Ticket Manager: Set Search Text`
-- `Ticket Manager: Toggle Assignee Scope`
-- `Ticket Manager: Set Parent Item Scope`
-- `Ticket Manager: Clear Parent Item Scope`
-- `Ticket Manager: Clear Filters`
+- `Praxis: Search Boards`
+- `Praxis: Search Issues`
+- `Praxis: Search EPICs`
+- `Praxis: Set Board Projects`
+- `Praxis: Set Board Types`
+- `Praxis: Set Board Search Text`
+- `Praxis: Clear Board Filters`
+- `Praxis: Set Projects`
+- `Praxis: Set Status Filter`
+- `Praxis: Set Issue Type Filter`
+- `Praxis: Set Search Text`
+- `Praxis: Toggle Assignee Scope`
+- `Praxis: Set Parent Item Scope`
+- `Praxis: Clear Parent Item Scope`
+- `Praxis: Clear Filters`
 
 ### Board and issue actions
 
-- `Ticket Manager: Configure Board Settings`
-- `Ticket Manager: Change Status`
-- `Ticket Manager: Open Full Issue Details`
-- `Ticket Manager: Open External Link`
-- `Ticket Manager: Copy Issue Key`
-- `Ticket Manager: Load More`
-- `Ticket Manager: Assign to Me`
-- `Ticket Manager: Assign to AI Agent`
-- `Ticket Manager: Abandon AI Session`
+- `Praxis: Configure Board Settings`
+- `Praxis: Change Status`
+- `Praxis: Open Full Issue Details`
+- `Praxis: Open External Link`
+- `Praxis: Copy Issue Key`
+- `Praxis: Load More`
+- `Praxis: Assign to Me`
+- `Praxis: Assign to AI Agent`
+- `Praxis: Abandon AI Session`
 
 ### AI and session workflows
 
-- `Ticket Manager: Configure AI`
-- `Ticket Manager: Delegate to Copilot Agent`
-- `Ticket Manager: Start Claude Code Session`
-- `Ticket Manager: Assign Workflow Pack`
-- `Ticket Manager: View AI Session`
-- `Ticket Manager: Abort Agent Session`
-- `Ticket Manager: Review Ticket with AI`
-- `Ticket Manager: Local Peer Review (LPR)`
-- `Ticket Manager: Start Sub-Task Delivery`
+- `Praxis: Configure AI`
+- `Praxis: Delegate to Copilot Agent`
+- `Praxis: Start Claude Code Session`
+- `Praxis: Assign Workflow Pack`
+- `Praxis: View AI Session`
+- `Praxis: Abort Agent Session`
+- `Praxis: Review Ticket with AI`
+- `Praxis: Local Peer Review (LPR)`
+- `Praxis: Start Sub-Task Delivery`
 
 ### Planning and migration
 
-- `Ticket Manager: Open Task Designer`
-- `Ticket Manager: Import Plan from Markdown Features`
-- `Ticket Manager: Import Markdown Files to Template Format`
-- `Ticket Manager: Migrate Live Folder to Jira`
-- `Ticket Manager: Link Jira MCP Epic`
-- `Ticket Manager: Link Jira MCP Board Query`
+- `Praxis: Open Task Designer`
+- `Praxis: Import Plan from Markdown Features`
+- `Praxis: Import Markdown Files to Template Format`
+- `Praxis: Migrate Live Folder to Jira`
+- `Praxis: Link Jira MCP Epic`
+- `Praxis: Link Jira MCP Board Query`
 
 ## Live Folder mode
 

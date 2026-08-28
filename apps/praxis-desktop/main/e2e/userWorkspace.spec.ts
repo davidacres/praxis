@@ -16,7 +16,7 @@
 //                       test 3 to assert the empty-state branch.
 //
 // Per-test isolation: `launchTestApp` points both `--user-data-dir` and
-// `TICKET_MANAGER_SETTINGS_PATH` at throwaway paths inside a fresh tmp dir,
+// `PRAXIS_SETTINGS_PATH` at throwaway paths inside a fresh tmp dir,
 // so the connection list and the `userWorkspace.json` board store cannot
 // leak between tests.
 
@@ -66,9 +66,9 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 test.beforeEach(async () => {
-  workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-uw-'));
+  workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-uw-'));
   writeFixtureLiveFolder(workspaceDir);
-  emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-uw-empty-'));
+  emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-uw-empty-'));
 
   app = await launchTestApp({
     connections: [
@@ -184,7 +184,7 @@ test('a Git repository with no plans content yet is still discoverable', async (
   // folders, so a brand-new repository with no features/ tree yet was
   // invisible here even though the VS Code extension's "Find repositories"
   // already found it via a separate .git scan.
-  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-uw-repo-'));
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-uw-repo-'));
   fs.mkdirSync(path.join(repoDir, '.git'), { recursive: true });
 
   try {

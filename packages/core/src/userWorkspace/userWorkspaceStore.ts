@@ -1,7 +1,7 @@
 import type { KeyValueStore } from '../host/stateStore';
 import { toStoredFolderPath } from '../livefolder/pathUtils';
 
-const USER_WORKSPACE_BOARDS_KEY = 'ticketManager.userWorkspaceBoards';
+const USER_WORKSPACE_BOARDS_KEY = 'praxis.userWorkspaceBoards';
 
 export interface UserWorkspaceBoardDefinition {
   id: string;

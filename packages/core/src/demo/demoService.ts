@@ -204,7 +204,7 @@ function createSeedIssues(): DemoIssue[] {
           summary: 'Triage production incident',
           status: 'To Do',
           relationship: 'relates to',
-          browseUrl: 'https://example.com/ticket-manager-demo/OPS-200'
+          browseUrl: 'https://example.com/praxis-demo/OPS-200'
         }
       ],
       attachments: [
@@ -213,7 +213,7 @@ function createSeedIssues(): DemoIssue[] {
           fileName: 'platform-design-notes.pdf',
           mimeType: 'application/pdf',
           sizeBytes: 248_400,
-          contentUrl: 'https://example.com/ticket-manager-demo/attachments/platform-design-notes.pdf',
+          contentUrl: 'https://example.com/praxis-demo/attachments/platform-design-notes.pdf',
           created: '2026-03-27T19:45:00.000Z',
           author: 'Alex Agent'
         },
@@ -222,8 +222,8 @@ function createSeedIssues(): DemoIssue[] {
           fileName: 'current-state-screenshot.png',
           mimeType: 'image/png',
           sizeBytes: 86_100,
-          contentUrl: 'https://example.com/ticket-manager-demo/attachments/current-state-screenshot.png',
-          thumbnailUrl: 'https://example.com/ticket-manager-demo/attachments/current-state-screenshot.png',
+          contentUrl: 'https://example.com/praxis-demo/attachments/current-state-screenshot.png',
+          thumbnailUrl: 'https://example.com/praxis-demo/attachments/current-state-screenshot.png',
           created: '2026-03-27T20:10:00.000Z',
           author: 'Jordan Builder'
         }
@@ -251,7 +251,7 @@ function createSeedIssues(): DemoIssue[] {
           summary: 'Simulate workflow validation edge case',
           status: 'Blocked',
           relationship: 'is blocked by',
-          browseUrl: 'https://example.com/ticket-manager-demo/APP-103'
+          browseUrl: 'https://example.com/praxis-demo/APP-103'
         }
       ]
     },
@@ -363,7 +363,7 @@ function toIssueSummary(issue: DemoIssue, issuesByKey?: Map<string, DemoIssue>):
     priority: issue.priority,
     created: issue.created,
     updated: issue.updated,
-    browseUrl: `https://example.com/ticket-manager-demo/${issue.key}`,
+    browseUrl: `https://example.com/praxis-demo/${issue.key}`,
     description: issue.description,
     subTasks: issue.subTasks?.length ? issue.subTasks : undefined,
     raw: issue

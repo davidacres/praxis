@@ -14,17 +14,17 @@ Add configuration and visibility gates for the analysis capability. Analysis sho
 
 ## Implementation Activities
 1. Add settings keys in package.json:
-   - ticketManager.ai.analysisDefaultPrompt (required, empty default)
-   - ticketManager.ai.analysisDefaultModel (optional, empty default)
+   - praxis.ai.analysisDefaultPrompt (required, empty default)
+   - praxis.ai.analysisDefaultModel (optional, empty default)
 2. Add AppConfigStore accessors in src/config/jiraConfig.ts:
    - getAiAnalysisDefaultPrompt()
    - getAiAnalysisDefaultModel()
    - isAiAnalysisEnabled()
-3. Add and refresh context key ticketManager.analysisEnabled in src/extension.ts during activation and configuration changes.
-4. Update menu when clauses to include ticketManager.analysisEnabled.
-5. Extend src/views/ticketManagerStatusBar.ts with analysisEnabled state and explicit copy:
+3. Add and refresh context key praxis.analysisEnabled in src/extension.ts during activation and configuration changes.
+4. Update menu when clauses to include praxis.analysisEnabled.
+5. Extend src/views/praxisStatusBar.ts with analysisEnabled state and explicit copy:
    - Text suffix: Analysis enabled / Analysis disabled
-   - Tooltip: Enabled (default prompt configured) or Disabled (set ticketManager.ai.analysisDefaultPrompt)
+   - Tooltip: Enabled (default prompt configured) or Disabled (set praxis.ai.analysisDefaultPrompt)
 
 ## Acceptance Criteria
 1. Analysis commands and menu actions are hidden when analysisDefaultPrompt is empty.
@@ -34,8 +34,8 @@ Add configuration and visibility gates for the analysis capability. Analysis sho
 5. Status bar updates without requiring VS Code restart.
 
 ## Verification
-1. Clear ticketManager.ai.analysisDefaultPrompt and confirm action visibility is off.
-2. Set ticketManager.ai.analysisDefaultPrompt and confirm action visibility is on.
+1. Clear praxis.ai.analysisDefaultPrompt and confirm action visibility is off.
+2. Set praxis.ai.analysisDefaultPrompt and confirm action visibility is on.
 3. Confirm status bar text/tooltip updates after each settings change.
 4. Run npm run compile.
 

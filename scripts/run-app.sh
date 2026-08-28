@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Build and launch the Ticket Manager desktop (Electron) app.
+# Build and launch the Praxis desktop (Electron) app.
 #
 # Compiles the three workspaces in dependency order and starts Electron:
 #
@@ -15,7 +15,7 @@
 #
 # In --dev mode step 2/4 are replaced by the Vite dev server: the script starts it,
 # waits for the port to answer, and points the main process at it through
-# TICKET_MANAGER_DEV_SERVER_URL so the renderer hot-reloads on save. The server
+# PRAXIS_DEV_SERVER_URL so the renderer hot-reloads on save. The server
 # is shut down again when the app window closes.
 #
 # NODE_OPTIONS is cleared for the child processes. Electron rejects flags such
@@ -149,9 +149,9 @@ if [[ "$DEV" -eq 1 ]]; then
   fi
 
   ok 'Dev server ready'
-  export TICKET_MANAGER_DEV_SERVER_URL="$DEV_URL"
+  export PRAXIS_DEV_SERVER_URL="$DEV_URL"
 else
-  unset TICKET_MANAGER_DEV_SERVER_URL || true
+  unset PRAXIS_DEV_SERVER_URL || true
 fi
 
 step 'Launching Electron'

@@ -78,7 +78,7 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.issue
+    void window.praxis.issue
       .getProjects(connectionId)
       .then(projects => {
         if (cancelled) {
@@ -102,7 +102,7 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
       return;
     }
     let cancelled = false;
-    void window.ticketManager.issue
+    void window.praxis.issue
       .getParentItems(
         {
           projectKeys: [projectKey],
@@ -179,7 +179,7 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
     setBusy(true);
     setError(undefined);
     try {
-      const created = await window.ticketManager.issue.create(
+      const created = await window.praxis.issue.create(
         {
           projectKey,
           issueType,
@@ -207,7 +207,7 @@ export function NewIssuePage({ board, connection, initialIssueType, onCancel, on
       };
       if (Object.keys(followUp).length > 0) {
         try {
-          await window.ticketManager.issue.update(created.key, followUp, connectionId);
+          await window.praxis.issue.update(created.key, followUp, connectionId);
         } catch (followUpError) {
           setFollowUpIssue({
             key: created.key,

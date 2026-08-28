@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build and launch the Ticket Manager desktop (Electron) app.
+  Build and launch the Praxis desktop (Electron) app.
 
 .DESCRIPTION
   Compiles the three workspaces in dependency order and starts Electron:
@@ -12,7 +12,7 @@
 
   In -Dev mode step 2 is replaced by the Vite dev server: the script starts it,
   waits for the port to answer, and points the main process at it through
-  TICKET_MANAGER_DEV_SERVER_URL so the renderer hot-reloads on save. The server
+  PRAXIS_DEV_SERVER_URL so the renderer hot-reloads on save. The server
   is shut down again when the app window closes.
 
   NODE_OPTIONS is cleared for the child processes. Electron rejects flags such
@@ -141,9 +141,9 @@ try {
     if (-not $ready) { throw "Vite dev server did not answer on $devUrl within 30s." }
 
     Write-Ok 'Dev server ready'
-    $env:TICKET_MANAGER_DEV_SERVER_URL = $devUrl
+    $env:PRAXIS_DEV_SERVER_URL = $devUrl
   } else {
-    Remove-Item Env:TICKET_MANAGER_DEV_SERVER_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:PRAXIS_DEV_SERVER_URL -ErrorAction SilentlyContinue
   }
 
   Write-Step 'Launching Electron'

@@ -16,7 +16,7 @@ surface and host integrations. Last audited: 2026-08-23.
 | User workspace | ✓ | ✓ | |
 | GitLab boards | ✓ | ✓ | |
 | Jira via custom MCP server (stdio/HTTP, "Advanced") | ✓ | ✓ | |
-| Jira Cloud OAuth sign-in (browser) | ✓ | ✓ | Extension: `vscode://` redirect. Desktop: `ticketmanager://` scheme + loopback fallback |
+| Jira Cloud OAuth sign-in (browser) | ✓ | ✓ | Extension: `vscode://` redirect. Desktop: `praxis://` scheme + loopback fallback |
 | Jira Cloud API-token sign-in (guided) | ? | ✓ | Extension: only via manual Advanced HTTP header config |
 | Bring-your-own 3LO OAuth client (org-restricted tenants) | ✗ | ✓ | Desktop-only: pre-registered client id/secret, direct `auth.atlassian.com` flow |
 | Connections manager UI | ✓ | ✓ | |

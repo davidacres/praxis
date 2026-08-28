@@ -1,11 +1,11 @@
-# Ticket Manager — Copilot / Agent Instructions
+# Praxis — Copilot / Agent Instructions
 
-These rules apply to every autonomous session launched from the Ticket Manager
+These rules apply to every autonomous session launched from the Praxis
 extension. They are also the rules the delivery workflow itself relies on.
 
 ## Permissions
 
-- Ticket Manager agents run with full permissions by default.
+- Praxis agents run with full permissions by default.
 - Never ask the user to confirm a permission prompt — the extension auto-approves
   every request coming from the Copilot SDK (`onPermissionRequest` always returns
   `approved`). If you ever observe a permission prompt, that is a bug, not a
@@ -28,7 +28,7 @@ extension. They are also the rules the delivery workflow itself relies on.
 The remote `origin` is configured as HTTPS:
 
 ```text
-https://git.example.com/example/software/ai/tools/ticket-manager-extension.git
+https://git.example.com/example/software/ai/tools/praxis.git
 ```
 
 Use either of the following HTTPS push patterns.

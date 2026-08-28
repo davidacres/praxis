@@ -1,20 +1,20 @@
 {
-    "ticketManager.workspaceMcpServerName": "",
-    "ticketManager.connectionType": "http",
-    "ticketManager.jiraPolling.requiredLabel": "syscfg",
-    "ticketManager.jiraPolling.enabled": true,
-    "ticketManager.planFilePath": "",
-    "ticketManager.gitlabUrl": "https://git.example.com/",
-    "ticketManager.jiraCloudEpicKey": "",
-    "ticketManager.jiraCloudBoardJql": "",
-    "ticketManager.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
-    "ticketManager.jiraCloudId": "44cc86db-d3f2-402a-bf99-b800427b690e",
-    "ticketManager.jiraCloudSiteName": "example-test",
-    "ticketManager.jiraCloudSiteUrl": "https://example-test.atlassian.net",
-    "ticketManager.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
-    "ticketManager.jiraCloudBoardName": "",
-    "ticketManager.gitlabListAllAccessibleBoards": true,
-    "ticketManager.connections": [
+    "praxis.workspaceMcpServerName": "",
+    "praxis.connectionType": "http",
+    "praxis.jiraPolling.requiredLabel": "syscfg",
+    "praxis.jiraPolling.enabled": true,
+    "praxis.planFilePath": "",
+    "praxis.gitlabUrl": "https://git.example.com/",
+    "praxis.jiraCloudEpicKey": "",
+    "praxis.jiraCloudBoardJql": "",
+    "praxis.jiraOAuthClientId": "kUpGcyZbAtBbNPiQ9ZaymL8MJmspFOTr",
+    "praxis.jiraCloudId": "44cc86db-d3f2-402a-bf99-b800427b690e",
+    "praxis.jiraCloudSiteName": "example-test",
+    "praxis.jiraCloudSiteUrl": "https://example-test.atlassian.net",
+    "praxis.jiraMcpCloudId": "70354e3b-5bfa-4554-b2fc-67e4e57908c8",
+    "praxis.jiraCloudBoardName": "",
+    "praxis.gitlabListAllAccessibleBoards": true,
+    "praxis.connections": [
         {
             "id": "gitlab",
             "name": "GitLab",
@@ -46,7 +46,7 @@
             }
         }
     ],
-    "ticketManager.boards": [
+    "praxis.boards": [
         {
             "connectionId": "gitlab",
             "boardId": "gitlab:3668:279",
@@ -73,11 +73,11 @@
             "displayName": "My Board"
         }
     ],
-    "ticketManager.boardsSidebarPreviewMode": "classic",
-    "ticketManager.workModeEnabled": false,
-    "ticketManager.backendMode": "jiracloud",
-    "ticketManager.liveFolderPath": "",
-    "ticketManager.liveFolderAllowIssueCreation": true,
-    "ticketManager.liveFolderProjectKey": "",
-    "ticketManager.liveFolderProjectName": ""
+    "praxis.boardsSidebarPreviewMode": "classic",
+    "praxis.workModeEnabled": false,
+    "praxis.backendMode": "jiracloud",
+    "praxis.liveFolderPath": "",
+    "praxis.liveFolderAllowIssueCreation": true,
+    "praxis.liveFolderProjectKey": "",
+    "praxis.liveFolderProjectName": ""
 }

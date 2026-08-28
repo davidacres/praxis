@@ -86,7 +86,7 @@ export function App() {
   const [appVersion, setAppVersion] = useState<string>();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
   useEffect(() => {
-    void window.ticketManager.app.getVersion().then(setAppVersion).catch(() => setAppVersion(undefined));
+    void window.praxis.app.getVersion().then(setAppVersion).catch(() => setAppVersion(undefined));
   }, []);
   const [nav, setNav] = useState<{ entries: Route[]; index: number }>({
     entries: [{}],
@@ -206,21 +206,21 @@ export function App() {
   // an IPC rejection used to silently leave the app on its previous (often
   // empty) list with nothing in the console to explain it.
   const refreshBoards = useCallback(() => {
-    void window.ticketManager.board
+    void window.praxis.board
       .list(EMPTY_FILTERS)
       .then(setBoards)
       .catch(error => console.error('Failed to load boards:', error));
   }, []);
 
   const refreshConnections = useCallback(() => {
-    void window.ticketManager.connection
+    void window.praxis.connection
       .list()
       .then(setConnections)
       .catch(error => console.error('Failed to load connections:', error));
   }, []);
 
   const refreshProjects = useCallback(() => {
-    void window.ticketManager.projects.list().then(setProjects).catch(error => console.error('Failed to load projects:', error));
+    void window.praxis.projects.list().then(setProjects).catch(error => console.error('Failed to load projects:', error));
   }, []);
 
   useEffect(() => {
@@ -248,7 +248,7 @@ export function App() {
       if (connection.mode === 'demo') {
         continue;
       }
-      void window.ticketManager.connection
+      void window.praxis.connection
         .check(connection.id)
         .then(result => {
           if (!cancelled) {
@@ -277,7 +277,7 @@ export function App() {
   // issueKey, kept most-recent-first to match `ai:listSessions` ordering).
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.ai
+    void window.praxis.ai
       .listSessions()
       .then(sessions => {
         if (!cancelled) {
@@ -285,13 +285,13 @@ export function App() {
         }
       })
       .catch(error => console.error('Failed to load AI sessions:', error));
-    const unsubscribeChanged = window.ticketManager.ai.onSessionChanged(record => {
+    const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
         return [record, ...rest].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
       });
     });
-    const unsubscribeDeleted = window.ticketManager.ai.onSessionDeleted(issueKey => {
+    const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
       setAgentSessions(current => current.filter(session => session.issueKey !== issueKey));
     });
     return () => {
@@ -335,7 +335,7 @@ export function App() {
 
   const refreshBoardDetails = useCallback(() => {
     if (selectedBoard) {
-      void window.ticketManager.board.get(selectedBoard).then(setBoardDetails);
+      void window.praxis.board.get(selectedBoard).then(setBoardDetails);
     }
   }, [selectedBoard]);
 
@@ -347,7 +347,7 @@ export function App() {
    */
   const getMoveTransition = useCallback(
     async (issueKey: string, moveConnectionId: string | undefined, targetStatus: string) => {
-      const issue = await window.ticketManager.issue.get(issueKey, moveConnectionId);
+      const issue = await window.praxis.issue.get(issueKey, moveConnectionId);
       const transitions = issue?.transitions ?? [];
       return findTransitionToTargetStatus(transitions, targetStatus);
     },
@@ -368,7 +368,7 @@ export function App() {
             );
             return;
           }
-          return window.ticketManager.issue
+          return window.praxis.issue
             .transition(issueKey, transition.id, moveConnectionId)
             .then(() => refreshBoardDetails());
         })
@@ -384,7 +384,7 @@ export function App() {
       setBoardDetails(undefined);
       return;
     }
-    void window.ticketManager.board.get(selectedBoard).then(setBoardDetails);
+    void window.praxis.board.get(selectedBoard).then(setBoardDetails);
   }, [selectedBoard]);
 
   /** Work mode needs every board's issues at once, not just the selected one. */
@@ -394,7 +394,7 @@ export function App() {
     }
     let cancelled = false;
     void Promise.all(
-      boards.map(async board => [board.id, await window.ticketManager.board.get(board)] as const)
+      boards.map(async board => [board.id, await window.praxis.board.get(board)] as const)
     ).then(pairs => {
       if (!cancelled) {
         setDetailsByBoardId(Object.fromEntries(pairs));
@@ -581,7 +581,7 @@ export function App() {
             const project = board?.connectionId?.startsWith('project:')
               ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))
               : undefined;
-            const record = await window.ticketManager.ai.delegate({
+            const record = await window.praxis.ai.delegate({
               ...(issueKey ? { issueKey } : {}),
               mode,
               ...(board?.connectionId ? { connectionId: board.connectionId } : {}),
@@ -591,7 +591,7 @@ export function App() {
               toolMode: project?.defaultAiToolMode ?? toolMode,
               workingDirectory: project?.workspaceFolder
             });
-            await window.ticketManager.ai.renameSession(record.issueKey, title);
+            await window.praxis.ai.renameSession(record.issueKey, title);
             navigate({ feature: 'sessions', sessionKey: record.issueKey });
           }}
           connectionCount={connections.length}
@@ -856,8 +856,8 @@ export function App() {
                   workingDirectory={terminalWorkingDirectory}
                   terminalDisabledReason={terminalDisabledReason}
                   onTerminalAi={async (prompt, sessionId) => {
-                    const context = await window.ticketManager.terminal.getContext(sessionId);
-                    const commands = await window.ticketManager.terminal.listCommands(sessionId);
+                    const context = await window.praxis.terminal.getContext(sessionId);
+                    const commands = await window.praxis.terminal.listCommands(sessionId);
                     const lastCommand = commands[commands.length - 1];
                     const goal = [
                       prompt,
@@ -869,7 +869,7 @@ export function App() {
                         : 'Last command: unavailable',
                       context.output || '(no recent output captured)'
                     ].join('\n');
-                    return window.ticketManager.ai.delegate({
+                    return window.praxis.ai.delegate({
                       goal,
                       workingDirectory: context.cwd,
                       toolMode: 'read-only'

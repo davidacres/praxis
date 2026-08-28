@@ -2,9 +2,9 @@ import { Emitter, type Disposable } from '../host/emitter';
 import type { HostStorage } from '../host/stateStore';
 import type { GroupingMode, IssueFilters, PersistedFilterState } from '../types';
 
-const FILTERS_KEY = 'ticketManager.filters';
-const GROUPING_KEY = 'ticketManager.grouping';
-const EPIC_STATUSES_KEY = 'ticketManager.epicStatuses';
+const FILTERS_KEY = 'praxis.filters';
+const GROUPING_KEY = 'praxis.grouping';
+const EPIC_STATUSES_KEY = 'praxis.epicStatuses';
 
 const DEFAULT_FILTERS: IssueFilters = {
   projectKeys: [],

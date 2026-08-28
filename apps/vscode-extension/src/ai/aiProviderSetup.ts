@@ -95,7 +95,7 @@ export async function promptToConfigureDefaultAiProvider(options?: {
       option
     })),
     {
-      title: 'Ticket Manager: AI',
+      title: 'Praxis: AI',
       placeHolder: 'Configure Vercel AI Gateway or disable AI.'
     }
   );
@@ -118,7 +118,7 @@ export async function promptToConfigureDefaultAiProvider(options?: {
   if (options?.openVercelGatewaySettings) {
     await options.openVercelGatewaySettings();
   } else {
-    await vscode.commands.executeCommand('ticketManager.openAiGatewaySettings');
+    await vscode.commands.executeCommand('praxis.openAiGatewaySettings');
   }
   return { status: 'configured', provider: 'vercel-gateway' };
 }

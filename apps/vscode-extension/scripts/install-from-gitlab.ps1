@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-  Download Ticket Manager from the GitLab Package Registry and install it.
+  Download Praxis from the GitLab Package Registry and install it.
 
 .DESCRIPTION
-  Fetches ticket-manager-<version>.vsix (and the bundled install.ps1) from
+  Fetches praxis-<version>.vsix (and the bundled install.ps1) from
   this project's Generic Package Registry, then installs into detected
   editors (VS Code / Insiders / Cursor).
 
@@ -16,7 +16,7 @@
   Package version to install (e.g. 0.1.0). Default: newest semver in the registry.
 
 .PARAMETER Uninstall
-  Passed through to the installer (remove Ticket Manager from editors).
+  Passed through to the installer (remove Praxis from editors).
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\install-from-gitlab.ps1
@@ -30,9 +30,9 @@ param(
   [string]$ProjectId,
   [string]$ApiUrl,
   [string]$Token,
-  [string]$PackageName = 'ticket-manager',
+  [string]$PackageName = 'praxis',
   [string]$GitLabHost = 'git.example.com',
-  [string]$ProjectPath = 'example/software/ai/tools/ticket-manager-extension',
+  [string]$ProjectPath = 'example/software/ai/tools/praxis',
   [switch]$Uninstall
 )
 
@@ -134,7 +134,7 @@ if (-not $Version) {
 
 $base = "$ApiUrl/projects/$ProjectId/packages/generic/$PackageName/$Version"
 $vsixName = "$PackageName-$Version.vsix"
-$workDir = Join-Path $env:TEMP ("ticket-manager-install-" + [guid]::NewGuid().ToString('n'))
+$workDir = Join-Path $env:TEMP ("praxis-install-" + [guid]::NewGuid().ToString('n'))
 New-Item -ItemType Directory -Force $workDir | Out-Null
 
 try {

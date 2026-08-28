@@ -15,11 +15,11 @@ export interface TestApp {
  * Launches the app fully isolated from the developer's machine:
  *
  * - `--user-data-dir` gives Electron a throwaway profile, and
- * - `TICKET_MANAGER_SETTINGS_PATH` points the settings backend (which the
+ * - `PRAXIS_SETTINGS_PATH` points the settings backend (which the
  *   connection store shares) at a throwaway file inside that profile.
  *
  * Without the second piece the suite reads and writes the real shared
- * settings file (`%APPDATA%\ticket-manager\settings.json`) — tests used to
+ * settings file (`%APPDATA%\praxis\settings.json`) — tests used to
  * leak `e2e-*` connections into it and fail depending on what the developer
  * had configured. `seedSettings` pre-populates the per-test file.
  *
@@ -42,7 +42,7 @@ export async function launchTestApp(
   extraEnv?: Record<string, string | undefined>,
   options?: LaunchOptions
 ): Promise<TestApp> {
-  const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-e2e-'));
+  const userDataDir = reuse?.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-e2e-'));
   const settingsPath = reuse?.settingsPath ?? path.join(userDataDir, 'test-settings.json');
   if (seedSettings) {
     fs.writeFileSync(settingsPath, JSON.stringify(seedSettings, null, 2));
@@ -50,7 +50,7 @@ export async function launchTestApp(
 
   const env: Record<string, string> = {
     ...process.env,
-    TICKET_MANAGER_SETTINGS_PATH: settingsPath
+    PRAXIS_SETTINGS_PATH: settingsPath
   } as Record<string, string>;
   // Per-test env overrides; `undefined` deletes a variable so a developer's
   // real credentials (e.g. AI_GATEWAY_API_KEY) can't leak into a test.

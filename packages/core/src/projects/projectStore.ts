@@ -5,7 +5,7 @@ import type {
   UpdateProjectInput
 } from './projectTypes';
 
-const PROJECTS_KEY = 'ticketManager.projects.v1';
+const PROJECTS_KEY = 'praxis.projects.v1';
 
 export class ProjectStore {
   public constructor(private readonly state: KeyValueStore) {}

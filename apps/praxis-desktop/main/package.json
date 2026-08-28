@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "description": "Praxis desktop workspace for planning, tickets, and delivery.",
   "author": "Praxis",
-  "repository": "https://github.com/davidacres/ticket-manager-extension.git",
+  "repository": "https://github.com/davidacres/praxis.git",
   "private": true,
   "type": "commonjs",
   "main": "./out/main/index.js",

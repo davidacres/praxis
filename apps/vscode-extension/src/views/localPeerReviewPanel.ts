@@ -68,7 +68,7 @@ export class LocalPeerReviewPanel implements vscode.Disposable {
     const issueKey = this.issue?.key ?? 'LPR';
     const nonce = createNonce();
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.localPeerReview',
+      'praxis.localPeerReview',
       `LPR: ${issueKey}`,
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }

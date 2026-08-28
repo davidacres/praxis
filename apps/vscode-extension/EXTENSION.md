@@ -1,8 +1,8 @@
-# Ticket Manager
+# Praxis
 
 **A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.**
 
-Ticket Manager is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface. It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira MCP, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
+Praxis is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface. It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira MCP, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
 ## Features
 
@@ -14,7 +14,7 @@ Ticket Manager is a VS Code extension for working with tracked boards, issues, A
 - **Local Peer Review (LPR)** for issue-focused review output.
 - **Task Designer** for planning execution with ticket nodes, note nodes, website preview nodes, curved connectors, zoom, AI recommendations, and master-plan generation.
 - **Jira MCP-backed delivery workflow orchestration**, including worktree-backed delivery flows and sub-task delivery support.
-- **Live Folder markdown import/migration helpers** for moving existing planning artefacts into Ticket Manager.
+- **Live Folder markdown import/migration helpers** for moving existing planning artefacts into Praxis.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ Ticket Manager is a VS Code extension for working with tracked boards, issues, A
 
 ## Configuration
 
-Open the **Connections & Boards** view (Ticket Manager activity-bar entry → Connections & Boards) and pick the backend type:
+Open the **Connections & Boards** view (Praxis activity-bar entry → Connections & Boards) and pick the backend type:
 
 - **Jira MCP** — pick the MCP server you configured and add the URL it should connect to; configure tracked boards and optional status overrides.
 - **Demo** — file-backed demo data so you can explore the extension without any external service.

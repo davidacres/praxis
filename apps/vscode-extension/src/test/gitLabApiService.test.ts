@@ -4,11 +4,11 @@ import {
   createGitLabHandledNoteState,
   diffGitLabDiscussionNotes,
   flattenGitLabDiscussionNotes,
-  isTicketManagerManagedMergeRequestNote,
+  isPraxisManagedMergeRequestNote,
   mergeRequestMatchesIssueKey,
   parseGitLabRemoteUrl,
   shouldCreateMergeRequestForStatusChange,
-  wrapTicketManagerManagedMergeRequestNote
+  wrapPraxisManagedMergeRequestNote
 } from '@praxis/core';
 
 type FetchInput = URL | Request | string;
@@ -87,10 +87,10 @@ suite('gitLabApiService', () => {
     assert.strictEqual(diff.newNotes[0].id, '2');
   });
 
-  test('detects Ticket Manager managed merge request notes', () => {
-    const wrapped = wrapTicketManagerManagedMergeRequestNote('Reply body');
-    assert.strictEqual(isTicketManagerManagedMergeRequestNote(wrapped), true);
-    assert.strictEqual(isTicketManagerManagedMergeRequestNote('Human comment'), false);
+  test('detects Praxis managed merge request notes', () => {
+    const wrapped = wrapPraxisManagedMergeRequestNote('Reply body');
+    assert.strictEqual(isPraxisManagedMergeRequestNote(wrapped), true);
+    assert.strictEqual(isPraxisManagedMergeRequestNote('Human comment'), false);
   });
 
   test('creates merge requests only for in-review to done transitions', () => {

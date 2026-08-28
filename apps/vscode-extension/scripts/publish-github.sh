@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Publish the Ticket Manager .vsix to GitHub Packages' npm registry
+# Publish the Praxis .vsix to GitHub Packages' npm registry
 # (npm.pkg.github.com), for use by the Frosty GitHub-provider Store/update
 # check.
 #
@@ -21,7 +21,7 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/publish-github.sh
-#   ./scripts/publish-github.sh --vsix-path artifacts/ticket-manager-0.2.1.vsix
+#   ./scripts/publish-github.sh --vsix-path artifacts/praxis-0.2.1.vsix
 
 # Colors
 CYAN='\033[1;36m'
@@ -36,9 +36,9 @@ warn() { echo -e "${YELLOW}  ! $*${NC}"; }
 VSIX_PATH=""
 TOKEN=""
 OWNER="davidacres"
-PACKAGE_NAME="ticket-manager"
-REPO_NAME="ticket-manager-extension"
-HOMEPAGE="https://github.com/davidacres/ticket-manager-extension"
+PACKAGE_NAME="praxis"
+REPO_NAME="praxis"
+HOMEPAGE="https://github.com/davidacres/praxis"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -122,7 +122,7 @@ fi
 VSIX_PATH=$(cd "$(dirname "$VSIX_PATH")" && pwd)/$(basename "$VSIX_PATH")
 
 FILE_NAME=$(basename "$VSIX_PATH")
-# Extract version: ticket-manager[-preview]-<version>.vsix
+# Extract version: praxis[-preview]-<version>.vsix
 if [[ ! "$FILE_NAME" =~ ^$PACKAGE_NAME(-preview)?-(.+)\.vsix$ ]]; then
   echo "Unexpected VSIX name '$FILE_NAME' (expected $PACKAGE_NAME[-preview]-<version>.vsix)." >&2
   exit 1
@@ -153,7 +153,7 @@ HOMEPAGE="https://github.com/${OWNER}/${REPO_NAME}"
 
 step "Publishing @${OWNER}/${PACKAGE_NAME}@${VERSION} → GitHub Packages"
 
-STAGE_DIR=$(mktemp -d -t "ticket-manager-publish-github-XXXXXX")
+STAGE_DIR=$(mktemp -d -t "praxis-publish-github-XXXXXX")
 cleanup() {
   rm -rf "$STAGE_DIR"
 }
@@ -173,7 +173,7 @@ const homepage = process.argv[6];
 const pkg = {
   name: '@' + owner + '/' + name,
   version,
-  description: 'Ticket Manager VS Code extension .vsix, published for the Frosty GitHub Packages store/update provider.',
+  description: 'Praxis VS Code extension .vsix, published for the Frosty GitHub Packages store/update provider.',
   author: owner,
   homepage,
   publishConfig: { registry: 'https://npm.pkg.github.com' },

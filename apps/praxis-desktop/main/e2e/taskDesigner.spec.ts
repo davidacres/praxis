@@ -291,7 +291,7 @@ test('AI recommend flow previews an ordering and applying stacks the tickets ver
 });
 
 test('generate master plan writes plans/master-plan.md under the working directory', async () => {
-  const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-plan-'));
+  const workingDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-plan-'));
   tempDirs.push(workingDirectory);
   app = await launchTestApp({ ai: { workingDirectory } }, undefined, { ...NO_GATEWAY_ENV });
   const win = app.window;

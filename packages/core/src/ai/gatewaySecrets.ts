@@ -2,7 +2,7 @@ import type { SecretsStore } from '../host/secrets';
 import { resolveGatewayApiKeyFromEnv } from './gateway';
 
 /** Secret key for the Vercel AI Gateway API key (Frosty-style). */
-export const SECRET_VERCEL_API_KEY = 'ticketManager.vercelApiKey';
+export const SECRET_VERCEL_API_KEY = 'praxis.vercelApiKey';
 
 export async function getStoredVercelApiKey(
   secrets: SecretsStore

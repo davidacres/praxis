@@ -288,7 +288,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
       case 'openIssueDraft': {
         const issueType = typeof payload.issueType === 'string' ? payload.issueType.trim() : '';
         await vscode.commands.executeCommand(
-          'ticketManager.createIssue',
+          'praxis.createIssue',
           issueType ? { issueType } : undefined
         );
         return;
@@ -831,7 +831,7 @@ export class IssuesSidebarViewProvider implements vscode.WebviewViewProvider, vs
             return;
           }
           event.dataTransfer.effectAllowed = 'copy';
-          event.dataTransfer.setData('application/x-ticket-manager-issue', issueKey);
+          event.dataTransfer.setData('application/x-praxis-issue', issueKey);
           event.dataTransfer.setData('text/plain', issueKey);
         });
       }

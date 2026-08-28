@@ -525,7 +525,7 @@ export function IssueDetail({
   const [mrError, setMrError] = useState<string | undefined>();
 
   const refreshIssue = useCallback(() => {
-    void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
+    void window.praxis.issue.get(issueKey, connectionId).then(setIssue);
   }, [issueKey, connectionId]);
 
   const syncDraftFromIssue = useCallback((loaded: IssueDetails) => {
@@ -541,7 +541,7 @@ export function IssueDetail({
     setDraft(emptyDraft());
     setStatusTransitionId('');
     setDescriptionEditing(false);
-    void window.ticketManager.issue
+    void window.praxis.issue
       .get(issueKey, connectionId)
       .then(loaded => {
         setIssue(loaded);
@@ -552,7 +552,7 @@ export function IssueDetail({
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.connection
+    void window.praxis.connection
       .list()
       .then(connections => {
         if (cancelled) {
@@ -576,8 +576,8 @@ export function IssueDetail({
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      window.ticketManager.ai.listProviderStatuses(),
-      window.ticketManager.settings.get()
+      window.praxis.ai.listProviderStatuses(),
+      window.praxis.settings.get()
     ])
       .then(([statuses, settings]) => {
         if (cancelled) {
@@ -620,7 +620,7 @@ export function IssueDetail({
   useEffect(() => {
     let cancelled = false;
     setAnalysisConfirmed(false);
-    void window.ticketManager.ai
+    void window.praxis.ai
       .getAnalysis(issueKey)
       .then(state => {
         if (!cancelled) {
@@ -628,7 +628,7 @@ export function IssueDetail({
         }
       })
       .catch(() => undefined);
-    const unsubscribe = window.ticketManager.ai.onAnalysisChanged(state => {
+    const unsubscribe = window.praxis.ai.onAnalysisChanged(state => {
       if (state.issueKey === issueKey) {
         setAnalysisConfirmed(state.confirmed);
       }
@@ -649,7 +649,7 @@ export function IssueDetail({
     setModelsLoading(true);
     Promise.all([
       fetchModelOptions(selectedProvider, false),
-      window.ticketManager.settings.get()
+      window.praxis.settings.get()
     ])
       .then(([options, settings]) => {
         if (cancelled || !options) {
@@ -711,7 +711,7 @@ export function IssueDetail({
       return;
     }
     let cancelled = false;
-    void window.ticketManager.issue
+    void window.praxis.issue
       .getParentItems(
         {
           projectKeys: [issue.projectKey],
@@ -745,7 +745,7 @@ export function IssueDetail({
   useEffect(() => {
     let cancelled = false;
     setAgentSession(undefined);
-    void window.ticketManager.ai
+    void window.praxis.ai
       .listSessions()
       .then(sessions => {
         if (!cancelled) {
@@ -753,7 +753,7 @@ export function IssueDetail({
         }
       })
       .catch(() => undefined);
-    const unsubscribe = window.ticketManager.ai.onSessionChanged(record => {
+    const unsubscribe = window.praxis.ai.onSessionChanged(record => {
       if (record.issueKey === issueKey) {
         setAgentSession(record);
       }
@@ -768,9 +768,9 @@ export function IssueDetail({
     let cancelled = false;
     const subTaskKeys = issue?.subTasks?.map(subTask => subTask.key) ?? [];
     Promise.all([
-      window.ticketManager.ai.listWorkflowPacks(),
+      window.praxis.ai.listWorkflowPacks(),
       Promise.all(
-        subTaskKeys.map(async key => [key, await window.ticketManager.ai.getWorkflowAssignment(key)] as const)
+        subTaskKeys.map(async key => [key, await window.praxis.ai.getWorkflowAssignment(key)] as const)
       )
     ])
       .then(([workflows, assignments]) => {
@@ -796,7 +796,7 @@ export function IssueDetail({
     setWorkflowAssignment(undefined);
     setMergeRequests(undefined);
     setMrError(undefined);
-    void window.ticketManager.ai
+    void window.praxis.ai
       .getWorkflowAssignment(issueKey)
       .then(assignment => {
         if (!cancelled) {
@@ -811,7 +811,7 @@ export function IssueDetail({
 
   const openInBrowser = (url: string | undefined) => {
     if (url) {
-      void window.ticketManager.shell.openExternal(url);
+      void window.praxis.shell.openExternal(url);
     }
   };
 
@@ -829,7 +829,7 @@ export function IssueDetail({
     setBusy(true);
     setError(undefined);
     try {
-      const loaded = await window.ticketManager.issue.get(issueKey, connectionId);
+      const loaded = await window.praxis.issue.get(issueKey, connectionId);
       setIssue(loaded);
       syncDraftFromIssue(loaded);
     } catch (err) {
@@ -855,12 +855,12 @@ export function IssueDetail({
     setBusy(true);
     setError(undefined);
     try {
-      const label = await window.ticketManager.issue.getSelfAssigneeLabel(connectionId);
+      const label = await window.praxis.issue.getSelfAssigneeLabel(connectionId);
       if (!label) {
         throw new Error('The current tracker user could not be resolved. Enter an assignee manually.');
       }
-      await window.ticketManager.issue.update(issueKey, { assignee: label }, connectionId);
-      const loaded = await window.ticketManager.issue.get(issueKey, connectionId);
+      await window.praxis.issue.update(issueKey, { assignee: label }, connectionId);
+      const loaded = await window.praxis.issue.get(issueKey, connectionId);
       setIssue(loaded);
       syncDraftFromIssue(loaded);
       onChanged();
@@ -895,7 +895,7 @@ export function IssueDetail({
   };
 
   const startAiSession = async (task: AgentTaskDefinition) => {
-    const record = await window.ticketManager.ai.delegate({
+    const record = await window.praxis.ai.delegate({
       issueKey,
       connectionId,
       task,
@@ -924,7 +924,7 @@ export function IssueDetail({
       }
       setBusy(true);
       setError(undefined);
-      void window.ticketManager.ai
+      void window.praxis.ai
         .delegate({
           issueKey,
           connectionId,
@@ -964,11 +964,11 @@ export function IssueDetail({
       setBusy(true);
       setError(undefined);
       try {
-        await window.ticketManager.issue.update(issueKey, payload, connectionId);
+        await window.praxis.issue.update(issueKey, payload, connectionId);
         if (statusTransitionId) {
-          await window.ticketManager.issue.transition(issueKey, statusTransitionId, connectionId);
+          await window.praxis.issue.transition(issueKey, statusTransitionId, connectionId);
         }
-        const loaded = await window.ticketManager.issue.get(issueKey, connectionId);
+        const loaded = await window.praxis.issue.get(issueKey, connectionId);
         setIssue(loaded);
         syncDraftFromIssue(loaded);
         onChanged();
@@ -1348,9 +1348,9 @@ export function IssueDetail({
                               availableWorkflows.find(
                                 candidate => candidate.instructionsPath === event.target.value
                               ) ?? null;
-                            void window.ticketManager.ai
+                            void window.praxis.ai
                               .setWorkflowAssignment(subTask.key, workflow)
-                              .then(() => window.ticketManager.ai.getWorkflowAssignment(subTask.key))
+                              .then(() => window.praxis.ai.getWorkflowAssignment(subTask.key))
                               .then(assignment =>
                                 setSubTaskAssignments(current => ({
                                   ...current,
@@ -1582,7 +1582,7 @@ export function IssueDetail({
                         }
                         onClick={() =>
                           void runAction(() =>
-                            window.ticketManager.ai.startDelivery(issueKey, connectionId).then(() => undefined)
+                            window.praxis.ai.startDelivery(issueKey, connectionId).then(() => undefined)
                           )
                         }
                       >
@@ -1603,7 +1603,7 @@ export function IssueDetail({
                         }
                         onClick={() =>
                           void runAction(() =>
-                            window.ticketManager.ai.decomposeFeature(issueKey, connectionId).then(() => undefined)
+                            window.praxis.ai.decomposeFeature(issueKey, connectionId).then(() => undefined)
                           )
                         }
                       >
@@ -1661,7 +1661,7 @@ export function IssueDetail({
                           className="chip"
                           data-testid="issue-ai-abort-btn"
                           disabled={busy}
-                          onClick={() => void runAction(() => window.ticketManager.ai.abort(issueKey))}
+                          onClick={() => void runAction(() => window.praxis.ai.abort(issueKey))}
                         >
                           Abort
                         </button>
@@ -1704,7 +1704,7 @@ export function IssueDetail({
                               disabled={busy}
                               onClick={() =>
                                 void runAction(() =>
-                                  window.ticketManager.ai
+                                  window.praxis.ai
                                     .startSubTaskDelivery(issueKey, subTask.issueKey, connectionId)
                                     .then(() => undefined)
                                 )
@@ -1727,7 +1727,7 @@ export function IssueDetail({
                         disabled={busy}
                         onClick={() => {
                           setMrError(undefined);
-                          void window.ticketManager.ai
+                          void window.praxis.ai
                             .listMergeRequests(issueKey, connectionId)
                             .then(setMergeRequests)
                             .catch(err =>
@@ -1743,7 +1743,7 @@ export function IssueDetail({
                         disabled={busy}
                         onClick={() =>
                           void runAction(() =>
-                            window.ticketManager.ai
+                            window.praxis.ai
                               .createMergeRequest(issueKey, connectionId)
                               .then(created => setMergeRequests(current => [...(current ?? []), created]))
                           )
@@ -1757,7 +1757,7 @@ export function IssueDetail({
                         disabled={busy}
                         onClick={() =>
                           void runAction(() =>
-                            window.ticketManager.ai
+                            window.praxis.ai
                               .checkMergeRequestFeedback(issueKey, connectionId)
                               .then(() => undefined)
                           )
@@ -1793,9 +1793,9 @@ export function IssueDetail({
                 onClose={() => setShowWorkflowPicker(false)}
                 onSelect={workflow => {
                   setShowWorkflowPicker(false);
-                  void window.ticketManager.ai
+                  void window.praxis.ai
                     .setWorkflowAssignment(issueKey, workflow)
-                    .then(() => window.ticketManager.ai.getWorkflowAssignment(issueKey))
+                    .then(() => window.praxis.ai.getWorkflowAssignment(issueKey))
                     .then(setWorkflowAssignment)
                     .catch(err => setError(err instanceof Error ? err.message : String(err)));
                 }}
@@ -1860,7 +1860,7 @@ export function IssueDetail({
                 disabled={busy || !commentBody.trim()}
                 onClick={() =>
                   void runAction(async () => {
-                    await window.ticketManager.issue.addComment(issueKey, commentBody, connectionId);
+                    await window.praxis.issue.addComment(issueKey, commentBody, connectionId);
                     setCommentBody('');
                   })
                 }

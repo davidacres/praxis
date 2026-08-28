@@ -142,7 +142,7 @@ export class McpClientWrapper {
     await this.disconnect();
 
     const client = new Client(
-      { name: 'ticket-manager', version: '0.0.1' },
+      { name: 'praxis', version: '0.0.1' },
       {
         capabilities: {}
       }

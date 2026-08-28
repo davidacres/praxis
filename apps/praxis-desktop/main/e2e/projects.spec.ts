@@ -50,7 +50,7 @@ test('creates a folderless Product project through the six-step wizard and opens
   expect(themedColors.accent).toBe('#c6431f');
   expect(themedColors.boardIcon).toBe('rgb(205, 191, 174)');
   await expect(page).toHaveScreenshot('project-home.png');
-  const stored = await page.evaluate(() => window.ticketManager.projects.list());
+  const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.key === 'CUSTOMER');
   expect(created?.defaultAiToolMode).toBe('project-only');
   expect(created?.workItems).toHaveLength(5);
@@ -97,20 +97,20 @@ test('retains an existing PROJECT.md and supports local board transitions and ed
   try {
     const result = await app.window.evaluate(async folderPath => {
       const stages = [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }];
-      const project = await window.ticketManager.projects.create({
+      const project = await window.praxis.projects.create({
         name: 'Existing Workspace', key: 'EXIST', type: 'software', purpose: 'Test', brief: {},
         startingPoint: 'existing-folder', folderPath, workflowStages: stages,
         starterTickets: [{ summary: 'First slice', description: '', issueType: 'Task', status: 'To do' }],
         defaultAiToolMode: 'full'
       });
-      const boards = await window.ticketManager.board.list({ projectKeys: ['EXIST'], types: [], searchText: '' });
+      const boards = await window.praxis.board.list({ projectKeys: ['EXIST'], types: [], searchText: '' });
       const board = boards.find(item => item.connectionId === `project:${project.id}`)!;
-      const before = await window.ticketManager.board.get(board);
-      await window.ticketManager.issue.update(before.issues[0].key, { summary: 'Edited slice' }, board.connectionId);
-      const issue = await window.ticketManager.issue.get(before.issues[0].key, board.connectionId);
+      const before = await window.praxis.board.get(board);
+      await window.praxis.issue.update(before.issues[0].key, { summary: 'Edited slice' }, board.connectionId);
+      const issue = await window.praxis.issue.get(before.issues[0].key, board.connectionId);
       const transition = issue?.transitions?.find(item => item.toStatus === 'Done')!;
-      await window.ticketManager.issue.transition(issue!.key, transition.id, board.connectionId);
-      return { project, issue: await window.ticketManager.issue.get(issue!.key, board.connectionId) };
+      await window.praxis.issue.transition(issue!.key, transition.id, board.connectionId);
+      return { project, issue: await window.praxis.issue.get(issue!.key, board.connectionId) };
     }, folder);
     expect(result.project.projectFileStatus).toBe('retained');
     expect(result.issue?.summary).toBe('Edited slice');
@@ -132,8 +132,8 @@ test('rejects prohibited folderless types and new-folder collisions without chan
         starterTickets: [{ summary: 'Ticket', description: '', issueType: 'Task', status: 'Backlog' }],
         defaultAiToolMode: 'full' as const
       };
-      const capture = async (input: Parameters<typeof window.ticketManager.projects.create>[0]) => {
-        try { await window.ticketManager.projects.create(input); return ''; }
+      const capture = async (input: Parameters<typeof window.praxis.projects.create>[0]) => {
+        try { await window.praxis.projects.create(input); return ''; }
         catch (error) { return error instanceof Error ? error.message : String(error); }
       };
       return {
@@ -179,7 +179,7 @@ test('attaches a folder later and enforces one-project ownership for linked boar
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-attach-'));
   try {
     const result = await app.window.evaluate(async folderPath => {
-      const create = (name: string, key: string) => window.ticketManager.projects.create({
+      const create = (name: string, key: string) => window.praxis.projects.create({
         name, key, type: 'research', purpose: '', brief: {}, startingPoint: 'app-storage',
         workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
         starterTickets: [{ summary: 'Research', description: '', issueType: 'Task', status: 'To do' }],
@@ -187,15 +187,15 @@ test('attaches a folder later and enforces one-project ownership for linked boar
       });
       const first = await create('First Research', 'FIRST');
       const second = await create('Second Research', 'SECOND');
-      const attached = await window.ticketManager.projects.attachFolder(first.id, {
+      const attached = await window.praxis.projects.attachFolder(first.id, {
         startingPoint: 'existing-folder', folderPath, createProjectFile: true
       });
       const board = { connectionId: 'jira-main', boardId: '42', displayName: 'Delivery' };
-      await window.ticketManager.projects.linkBoard(first.id, board);
+      await window.praxis.projects.linkBoard(first.id, board);
       let duplicateError = '';
-      try { await window.ticketManager.projects.linkBoard(second.id, board); }
+      try { await window.praxis.projects.linkBoard(second.id, board); }
       catch (error) { duplicateError = error instanceof Error ? error.message : String(error); }
-      const unlinked = await window.ticketManager.projects.unlinkBoard(first.id, board.connectionId, board.boardId);
+      const unlinked = await window.praxis.projects.unlinkBoard(first.id, board.connectionId, board.boardId);
       return { attached, duplicateError, linkedCountAfterUnlink: unlinked.linkedBoards.length };
     }, folder);
     expect(result.attached.project.workspaceFolder).toBe(folder);
@@ -259,15 +259,15 @@ test('shows a connected board only beneath its owning Praxis project', async () 
 
   try {
     await app.window.evaluate(async projectFolder => {
-      const project = await window.ticketManager.projects.create({
+      const project = await window.praxis.projects.create({
         name: 'Delivery Workspace', key: 'DELIVERY', type: 'software', purpose: 'Ship linked work', brief: {},
         startingPoint: 'existing-folder', folderPath: projectFolder, workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
         starterTickets: [{ summary: 'Starter', description: '', issueType: 'Task', status: 'To do' }], defaultAiToolMode: 'read-only'
       });
-      const boards = await window.ticketManager.board.list({ projectKeys: [], types: [], searchText: '' });
+      const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
       const connected = boards.find(board => board.connectionId === 'linked-live-folder');
       if (!connected?.connectionId) throw new Error('Expected connected live-folder board.');
-      await window.ticketManager.projects.linkBoard(project.id, {
+      await window.praxis.projects.linkBoard(project.id, {
         connectionId: connected.connectionId, boardId: connected.id, displayName: connected.name
       });
     }, folder);

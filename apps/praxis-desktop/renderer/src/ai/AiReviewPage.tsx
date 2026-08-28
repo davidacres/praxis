@@ -29,12 +29,12 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     setContent('');
     setError(undefined);
     setPosted(false);
-    void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
+    void window.praxis.issue.get(issueKey, connectionId).then(setIssue);
   }, [issueKey, connectionId]);
 
   // Live markdown stream for this issue's review.
   useEffect(() => {
-    const unsubscribe = window.ticketManager.ai.onReviewProgress(progress => {
+    const unsubscribe = window.praxis.ai.onReviewProgress(progress => {
       if (progress.issueKey !== issueKey) {
         return;
       }
@@ -65,7 +65,7 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     setPosted(false);
     setContent('');
     try {
-      const markdown = await window.ticketManager.ai.reviewIssue(issueKey, connectionId, provider, model);
+      const markdown = await window.praxis.ai.reviewIssue(issueKey, connectionId, provider, model);
       setContent(markdown);
     } catch (err) {
       // The progress push also carries the error; this covers pre-stream failures.
@@ -81,7 +81,7 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
     }
     setError(undefined);
     try {
-      await window.ticketManager.issue.addComment(issueKey, content, connectionId);
+      await window.praxis.issue.addComment(issueKey, content, connectionId);
       setPosted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -116,7 +116,7 @@ export function AiReviewPage({ issueKey, connectionId, provider, model, onClose 
           <button
             className="btn"
             data-testid="ai-review-cancel"
-            onClick={() => void window.ticketManager.ai.cancelReview(issueKey)}
+            onClick={() => void window.praxis.ai.cancelReview(issueKey)}
           >
             Cancel
           </button>

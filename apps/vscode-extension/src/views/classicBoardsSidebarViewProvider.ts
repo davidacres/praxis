@@ -73,7 +73,7 @@ export class ClassicBoardsSidebarViewProvider implements vscode.WebviewViewProvi
         this.render();
       }),
       vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('ticketManager')) {
+        if (e.affectsConfiguration('praxis')) {
           this.render();
         }
       })

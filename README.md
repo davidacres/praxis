@@ -1,6 +1,6 @@
-# Ticket Manager
+# Praxis
 
-Ticket Manager is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface.
+Praxis is a VS Code extension for working with tracked boards, issues, AI sessions, and delivery workflows from a single extension surface.
 
 It supports classic multi-view navigation, a board-centric Work Mode, task design and execution planning, AI-assisted review and implementation workflows, and multiple backend types including Jira MCP, Demo, Live Folder, GitLab-oriented delivery flows, and local workspace-backed storage.
 
@@ -42,8 +42,8 @@ packages/
    └───────────────────────┘                    └────────────────────┘
 ```
 
-The extension is published as `davidacres.ticket-manager`, so its npm name stays
-`ticket-manager` rather than moving under the `@praxis` scope.
+The extension is published as `davidacres.praxis`, so its npm name stays
+`praxis` rather than moving under the `@praxis` scope.
 
 Build the Praxis desktop installer with `npm run app:dist:mac` on macOS or
 `npm run app:dist:win` on Windows. Artifacts are written to
@@ -110,7 +110,7 @@ Focused evidence is captured under `apps/praxis-desktop/main/output/playwright/`
 
 ## Backend modes
 
-Configured through `ticketManager.backendMode` and, for tracked boards, through the per-connection mode stored in `ticketManager.connections`.
+Configured through `praxis.backendMode` and, for tracked boards, through the per-connection mode stored in `praxis.connections`.
 
 | Mode | Value | Current support |
 | --- | --- | --- |
@@ -145,7 +145,7 @@ Notes:
 
 ## AI and delivery workflows
 
-Ticket Manager includes several AI-related surfaces:
+Praxis includes several AI-related surfaces:
 
 - Assigning issues to configured AI providers.
 - Viewing and managing AI sessions from the Sessions view.
@@ -167,26 +167,26 @@ The extension contributes a large command and settings surface. Use these docs a
 
 Important settings include:
 
-- `ticketManager.backendMode`
-- `ticketManager.boardsSidebarPreviewMode`
-- `ticketManager.jiraPolling.enabled`
-- `ticketManager.ai.provider`
-- `ticketManager.ai.agentName`
-- `ticketManager.ai.deliveryWorkflowEnabled`
+- `praxis.backendMode`
+- `praxis.boardsSidebarPreviewMode`
+- `praxis.jiraPolling.enabled`
+- `praxis.ai.provider`
+- `praxis.ai.agentName`
+- `praxis.ai.deliveryWorkflowEnabled`
 
 ## Getting started
 
-1. Open `Ticket Manager: Open Connections & Boards`.
+1. Open `Praxis: Open Connections & Boards`.
 2. Add a connection that matches the backend you want to use.
 3. Add one or more tracked boards.
 4. Open a tracked board from the Boards or Work Mode view.
 5. Use the issue views, Issue Details, Task Designer, and AI/session tools from there.
 
-If you prefer the board-centric layout, set `ticketManager.boardsSidebarPreviewMode` to `work` or run `Ticket Manager: Toggle Work Mode`.
+If you prefer the board-centric layout, set `praxis.boardsSidebarPreviewMode` to `work` or run `Praxis: Toggle Work Mode`.
 
 ## Board settings
 
-Tracked boards can be customized from `Ticket Manager: Configure Board Settings`.
+Tracked boards can be customized from `Praxis: Configure Board Settings`.
 
 - `Statuses` is the main editor for status order, naming, visibility on the board, and per-status colors.
 - Board filters can narrow tickets by assignee, epic, age, and included statuses.
@@ -262,7 +262,7 @@ npm run package:vscode
 - `npm run jira-mr-polling:once`
 - `npm run jira-mr-polling:test`
 
-Installer/package helper scripts write extension packages to `artifacts/` (for example `artifacts/ticket-manager-<version>.vsix`).
+Installer/package helper scripts write extension packages to `artifacts/` (for example `artifacts/praxis-<version>.vsix`).
 
 ## Migration docs
 

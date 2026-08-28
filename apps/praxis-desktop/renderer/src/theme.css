@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Ticket Manager desktop shell — design tokens + component styles.
+   Praxis desktop shell — design tokens + component styles.
 
    Theming runs on two independent attribute axes set on <html>:
      data-mode="light|dark"      surface + text ramp
@@ -1244,7 +1244,7 @@ textarea {
 }
 .sidebar-section-add:hover { background: var(--bg-hover); color: var(--text); }
 
-/* The "Ticket Manager" footer header doubles as a collapse toggle. It needs to
+/* The "Praxis" footer header doubles as a collapse toggle. It needs to
    host a chevron alongside its label, so it stacks them with a flex layout
    rather than relying on .sidebar-section-button's block display. The label
    sits flush against the left edge (matching the active feature rows below it)

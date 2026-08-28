@@ -237,13 +237,13 @@ export function extractModelDirective(
 export function validateDeliveryWorkflowSettings(settings: DeliveryWorkflowSettings): string[] {
   const errors: string[] = [];
   if (!settings.enabled) {
-    errors.push('Delivery workflow is disabled in Ticket Manager settings.');
+    errors.push('Delivery workflow is disabled in Praxis settings.');
   }
   if (!settings.publishCommand) {
-    errors.push('Set ticketManager.ai.deliveryPublishCommand to the repo-specific MSI publish command.');
+    errors.push('Set praxis.ai.deliveryPublishCommand to the repo-specific MSI publish command.');
   }
   if (!settings.artifactPattern) {
-    errors.push('Set ticketManager.ai.deliveryArtifactPattern to the MSI artifact path or glob.');
+    errors.push('Set praxis.ai.deliveryArtifactPattern to the MSI artifact path or glob.');
   }
   return errors;
 }
@@ -281,7 +281,7 @@ export function buildMissingWorkflowComment(recommendations: string[]): string {
   const suggestionLines = recommendations.length > 0
     ? recommendations.map((recommendation, index) => `${index + 1}. ${recommendation}`)
     : [
-        '1. No workflow packs are currently available in this workspace. Add one under .github/skills, then assign it in Ticket Manager or specify it in Jira.'
+        '1. No workflow packs are currently available in this workspace. Add one under .github/skills, then assign it in Praxis or specify it in Jira.'
       ];
 
   return [
@@ -290,7 +290,7 @@ export function buildMissingWorkflowComment(recommendations: string[]): string {
     '',
     'Workflow assignment required.',
     'Implementation is blocked because no workflow pack is assigned to this issue.',
-    'Specify a workflow pack either in the Ticket Manager UI or in a Jira description/comment line such as Workflow pack: add-edit-dotnet-web-api.',
+    'Specify a workflow pack either in the Praxis UI or in a Jira description/comment line such as Workflow pack: add-edit-dotnet-web-api.',
     '',
     'Available workflow packs:',
     ...suggestionLines,
@@ -785,7 +785,7 @@ export function buildPollingAnalysisReadyComment(): string {
     '',
     'Analysis result: READY',
     'The ticket is specific enough to implement without making risky assumptions.',
-    'Ticket Manager is now preparing the delivery workflow.'
+    'Praxis is now preparing the delivery workflow.'
   ].join('\n');
 }
 

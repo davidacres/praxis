@@ -293,7 +293,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
         this.render();
       }),
       vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('ticketManager')) {
+        if (e.affectsConfiguration('praxis')) {
           this.render();
         }
       })
@@ -939,7 +939,7 @@ export class WorkModeBoardsSidebarViewProvider implements vscode.WebviewViewProv
 
   private renderBoards(boards: Board[]): string {
     const fallbackMode = this.getBackendMode();
-    const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
+    const priorityColors = vscode.workspace.getConfiguration('praxis').get<Record<string, string>>('priorityColors', {});
     const resolveBoardMode = (connectionId: string | undefined): BackendMode => this.resolveBoardMode(connectionId);
     const fallbackModeIconMarkup = boardListModeIconSvg(fallbackMode);
     const fallbackModeIconColor = resolveBackendModeBoardIconColor(fallbackMode);

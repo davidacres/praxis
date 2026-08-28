@@ -110,7 +110,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     setTerminalError(undefined);
     try {
       const selectedProfile = profileId || terminalSettings?.defaultProfileId || undefined;
-      const created = await window.ticketManager.terminal.create({ cwd: workingDirectory, cols: 100, rows: 24, profileId: selectedProfile, reuseExisting });
+      const created = await window.praxis.terminal.create({ cwd: workingDirectory, cols: 100, rows: 24, profileId: selectedProfile, reuseExisting });
       setSessions(current => [...current.filter(item => item.id !== created.id), created]);
       selectTerminal(created.id);
     } catch (error) {
@@ -123,7 +123,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
   useEffect(() => {
     let cancelled = false;
     if (terminalDisabledReason) return undefined;
-    void window.ticketManager.terminal.list().then(existing => {
+    void window.praxis.terminal.list().then(existing => {
       if (cancelled) return;
       setSessions(existing);
       const remembered = getActiveTerminalId();
@@ -137,16 +137,16 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
 
   useEffect(() => {
     if (terminalDisabledReason) return;
-    void window.ticketManager.terminal.listProfiles().then(setProfiles)
+    void window.praxis.terminal.listProfiles().then(setProfiles)
       .catch(error => setTerminalError(error instanceof Error ? error.message : String(error)));
   }, [terminalDisabledReason]);
 
   useEffect(() => {
     if (!activeId || terminalDisabledReason) return undefined;
-    void window.ticketManager.terminal.listCommands(activeId).then(commands => {
+    void window.praxis.terminal.listCommands(activeId).then(commands => {
       setLastCommand(commands[commands.length - 1]);
     }).catch(() => undefined);
-    const unsubscribe = window.ticketManager.terminal.onCommand(event => {
+    const unsubscribe = window.praxis.terminal.onCommand(event => {
       if (event.sessionId === activeId) setLastCommand(event.command);
     });
     return unsubscribe;
@@ -154,7 +154,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
 
   useEffect(() => {
     if (!terminalAiSession?.issueKey) return undefined;
-    const unsubscribe = window.ticketManager.ai.onSessionChanged(record => {
+    const unsubscribe = window.praxis.ai.onSessionChanged(record => {
       if (record.issueKey === terminalAiSession.issueKey) setTerminalAiSession(record);
     });
     return unsubscribe;
@@ -162,9 +162,9 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.log.getRecent().then(recent => { if (!cancelled) setLogLines(recent); })
+    void window.praxis.log.getRecent().then(recent => { if (!cancelled) setLogLines(recent); })
       .catch(error => console.error('Failed to load log output:', error));
-    const unsubscribe = window.ticketManager.log.onAppended(line => {
+    const unsubscribe = window.praxis.log.onAppended(line => {
       setLogLines(current => [...current.slice(-(MAX_RENDERED_LINES - 1)), line]);
     });
     return () => { cancelled = true; unsubscribe(); };
@@ -214,7 +214,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
     const observer = new ResizeObserver(fitTerminal);
     observer.observe(host);
     const input = terminal.onData(data => {
-      void window.ticketManager.terminal.write(activeId, data)
+      void window.praxis.terminal.write(activeId, data)
         .catch(error => terminal.writeln(`\r\n[terminal] ${String(error)}`));
     });
     const selection = terminal.onSelectionChange(() => {
@@ -223,13 +223,13 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
       if (selected) void navigator.clipboard?.writeText(selected).catch(() => undefined);
     });
     const resize = terminal.onResize(({ cols, rows }) => {
-      void window.ticketManager.terminal.resize(activeId, cols, rows).catch(() => undefined);
+      void window.praxis.terminal.resize(activeId, cols, rows).catch(() => undefined);
     });
-    const unsubscribeOutput = window.ticketManager.terminal.onOutput(event => {
+    const unsubscribeOutput = window.praxis.terminal.onOutput(event => {
       if (event.sessionId === activeId) terminal.write(event.data);
       setSessions(current => current.map(item => item.id === event.sessionId ? { ...item, hasContext: true } : item));
     });
-    const unsubscribeExit = window.ticketManager.terminal.onExit(event => {
+    const unsubscribeExit = window.praxis.terminal.onExit(event => {
       setSessions(current => current.map(item => item.id === event.sessionId ? { ...item, exited: true } : item));
       if (event.sessionId === activeId) terminal.writeln(`\r\n\x1b[90mProcess exited with code ${event.exitCode}.\x1b[0m`);
     });
@@ -239,7 +239,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
       fitTerminal();
     };
     window.addEventListener('tm-theme-changed', updateTheme);
-    void window.ticketManager.terminal.getBuffer(activeId).then(buffer => { if (buffer) terminal.write(buffer); })
+    void window.praxis.terminal.getBuffer(activeId).then(buffer => { if (buffer) terminal.write(buffer); })
       .catch(error => terminal.writeln(`[terminal] ${String(error)}`));
     return () => {
       observer.disconnect(); input.dispose(); selection.dispose(); resize.dispose(); unsubscribeOutput(); unsubscribeExit();
@@ -250,7 +250,7 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
 
   const killActive = async () => {
     if (!activeId) return;
-    await window.ticketManager.terminal.kill(activeId).catch(error => setTerminalError(String(error)));
+    await window.praxis.terminal.kill(activeId).catch(error => setTerminalError(String(error)));
     const remaining = sessions.filter(item => item.id !== activeId);
     setSessions(remaining);
     const next = [...remaining].reverse().find(item => !item.exited);
@@ -395,8 +395,8 @@ export function BottomPanel({ onClose, workingDirectory, terminalDisabledReason,
                   {suggestedCommand && <>
                     <pre>{suggestedCommand}</pre>
                     <div className="terminal-ai-result-actions">
-                      <button type="button" onClick={() => activeId && void window.ticketManager.terminal.write(activeId, suggestedCommand)}>Insert</button>
-                      <button type="button" className="primary" onClick={() => activeId && void window.ticketManager.terminal.write(activeId, `${suggestedCommand}\r`)}>Run</button>
+                      <button type="button" onClick={() => activeId && void window.praxis.terminal.write(activeId, suggestedCommand)}>Insert</button>
+                      <button type="button" className="primary" onClick={() => activeId && void window.praxis.terminal.write(activeId, `${suggestedCommand}\r`)}>Run</button>
                     </div>
                   </>}
                   {!suggestedCommand && terminalAiSession.responseText && <p>{terminalAiSession.responseText}</p>}

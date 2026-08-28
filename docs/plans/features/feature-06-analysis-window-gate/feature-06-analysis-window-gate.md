@@ -13,8 +13,8 @@
 Add a dedicated per-issue Analysis Window that behaves like a local chat for analysis and clarification. Analysis is gated by a required default prompt setting, supports model selection, and requires explicit user confirmation before Assign to AI can proceed using the existing AI session and ticket update pipeline.
 
 ## Acceptance Criteria
-1. Analysis actions are hidden when ticketManager.ai.analysisDefaultPrompt is empty.
-2. Analysis actions become visible when ticketManager.ai.analysisDefaultPrompt is configured.
+1. Analysis actions are hidden when praxis.ai.analysisDefaultPrompt is empty.
+2. Analysis actions become visible when praxis.ai.analysisDefaultPrompt is configured.
 3. Analysis Window provides chat-like multi-turn interaction and a selectable model.
 4. Status bar shows Analysis enabled or Analysis disabled state and updates when settings change.
 5. Assign to AI is blocked until the user confirms analysis completion.
@@ -78,7 +78,7 @@ Use both explicit steps and a system prompt. The system prompt guides model beha
 
 ### Code-Enforced Steps
 
-1. Require ticketManager.ai.analysisDefaultPrompt to be non-empty before showing analysis actions.
+1. Require praxis.ai.analysisDefaultPrompt to be non-empty before showing analysis actions.
 2. Open per-issue Analysis Window and load persisted chat/model state.
 3. Use selected model for each turn (default from setting, then user override).
 4. Keep all clarification interaction local to the Analysis Window.
@@ -94,13 +94,13 @@ Use both explicit steps and a system prompt. The system prompt guides model beha
 
 ## Suggested Default Prompt Template
 
-Use this as the baseline value for ticketManager.ai.analysisDefaultPrompt:
+Use this as the baseline value for praxis.ai.analysisDefaultPrompt:
 
 "You are performing pre-implementation analysis for a ticket. Review ticket details and relevant repository context. Ask focused clarification questions when information is missing. Maintain a concise running summary with assumptions, risks, and unknowns. Do not implement code or mutate ticket state. End each response with a readiness status: Ready or Needs Clarification."
 
 ## Verification
-1. Verify analysis actions are hidden when ticketManager.ai.analysisDefaultPrompt is empty.
-2. Verify analysis actions appear when ticketManager.ai.analysisDefaultPrompt is configured.
+1. Verify analysis actions are hidden when praxis.ai.analysisDefaultPrompt is empty.
+2. Verify analysis actions appear when praxis.ai.analysisDefaultPrompt is configured.
 3. Verify Assign to AI remains blocked until analysis is explicitly confirmed.
 4. Verify Assign to AI still uses existing AI sessions and ticket update behavior after confirmation.
 5. Run npm run compile.

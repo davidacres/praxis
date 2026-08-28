@@ -51,7 +51,7 @@ if (-not $SkipPackage) {
     }
     Push-Location $projectRoot
     try {
-        $repoUrl = "https://git.example.com/example/software/ai/tools/ticket-manager-extension"
+        $repoUrl = "https://git.example.com/example/software/ai/tools/praxis"
         $rawContentUrl = "$repoUrl/-/raw/main/"
         & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl --out $vsixPath
     }

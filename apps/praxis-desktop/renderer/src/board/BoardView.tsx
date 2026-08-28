@@ -166,7 +166,7 @@ export function BoardView({
   // id, so a board switch remounts and re-reads).
   useEffect(() => {
     let cancelled = false;
-    window.ticketManager.boardPrefs
+    window.praxis.boardPrefs
       .get(boardId)
       .then(loaded => {
         if (!cancelled) {
@@ -183,7 +183,7 @@ export function BoardView({
   const updatePrefs = useCallback(
     (next: BoardColumnPreferences) => {
       setPrefs(next);
-      window.ticketManager.boardPrefs
+      window.praxis.boardPrefs
         .set(boardId, next)
         .catch((error: unknown) => console.error('Failed to save board preferences:', error));
     },
@@ -212,7 +212,7 @@ export function BoardView({
     setLoadingMore(false);
     setListError(undefined);
     let cancelled = false;
-    window.ticketManager.issue
+    window.praxis.issue
       .list(scopedFilters, 0, PAGE_SIZE, connectionId)
       .then(page => {
         if (cancelled || generation !== generationRef.current) {
@@ -243,7 +243,7 @@ export function BoardView({
   // dropdowns don't collapse while a filter is applied.
   useEffect(() => {
     let cancelled = false;
-    window.ticketManager.issue
+    window.praxis.issue
       .getFilterMetadata(scopedFilters, connectionId)
       .then(meta => {
         if (!cancelled) {
@@ -251,7 +251,7 @@ export function BoardView({
         }
       })
       .catch(() => undefined);
-    window.ticketManager.issue
+    window.praxis.issue
       .getParentItems(scopedFilters, undefined, undefined, connectionId)
       .then(items => {
         if (!cancelled) {
@@ -277,7 +277,7 @@ export function BoardView({
   const loadMore = useCallback(() => {
     const generation = generationRef.current;
     setLoadingMore(true);
-    window.ticketManager.issue
+    window.praxis.issue
       .list(scopedFilters, issues.length, PAGE_SIZE, connectionId)
       .then(page => {
         if (generation !== generationRef.current) {

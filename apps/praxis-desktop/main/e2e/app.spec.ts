@@ -31,7 +31,7 @@ test('groups all layout toggles on the right side of the title bar', async () =>
 });
 
 test('displays the running Praxis version in the title bar', async () => {
-  const version = await window.evaluate(() => window.ticketManager.app.getVersion());
+  const version = await window.evaluate(() => window.praxis.app.getVersion());
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);
   await expect(window.locator('.titlebar-version')).toHaveText(`v${version}`);
 });

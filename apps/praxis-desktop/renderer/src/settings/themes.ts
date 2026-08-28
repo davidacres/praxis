@@ -408,7 +408,7 @@ export function applySurfacePack(packId: string, opts: SurfaceOpts = DEFAULT_SUR
   // the platform can do it. applied=false leaves the CSS faux-depth path as the
   // sole effect. The attribute drives the transparent-root rules in surfaces.css.
   const wantsVibrancy = pack.glass && opts.windowVibrancy && translucencyOn;
-  const vibrancyBridge = typeof window !== 'undefined' ? window.ticketManager?.window : undefined;
+  const vibrancyBridge = typeof window !== 'undefined' ? window.praxis?.window : undefined;
   if (vibrancyBridge?.setSurfaceVibrancy) {
     void vibrancyBridge.setSurfaceVibrancy(wantsVibrancy ? 'glass' : 'off')
       .then(result => {

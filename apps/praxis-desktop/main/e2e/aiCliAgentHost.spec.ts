@@ -33,11 +33,11 @@ async function configureCliProvider(win: TestApp['window'], provider: string, cl
   await win.evaluate(
     async ({ provider, cliPath }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
         };
       };
-      await w.ticketManager.settings.set({ ai: { providers: { [provider]: { cliPath } } } });
+      await w.praxis.settings.set({ ai: { providers: { [provider]: { cliPath } } } });
     },
     { provider, cliPath }
   );
@@ -53,7 +53,7 @@ async function delegate(
   await win.evaluate(
     async ({ issueKey, provider, goal, model }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           ai: {
             delegate: (input: {
               issueKey: string;
@@ -64,7 +64,7 @@ async function delegate(
           };
         };
       };
-      await w.ticketManager.ai.delegate({
+      await w.praxis.ai.delegate({
         issueKey,
         provider,
         model,
@@ -81,7 +81,7 @@ async function listCliModelOptions(
 ): Promise<{ currentValue: string; options: Array<{ value: string; name: string }> } | undefined> {
   return win.evaluate(async provider => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           listCliModelOptions: (
             provider: string
@@ -89,7 +89,7 @@ async function listCliModelOptions(
         };
       };
     };
-    return w.ticketManager.ai.listCliModelOptions(provider);
+    return w.praxis.ai.listCliModelOptions(provider);
   }, provider);
 }
 
@@ -105,7 +105,7 @@ async function readSession(
 } | undefined> {
   return win.evaluate(async issueKey => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: { listSessions: () => Promise<Array<{
           issueKey: string;
           state: string;
@@ -116,7 +116,7 @@ async function readSession(
         }>> };
       };
     };
-    const sessions = await w.ticketManager.ai.listSessions();
+    const sessions = await w.praxis.ai.listSessions();
     return sessions.find(s => s.issueKey === issueKey);
   }, issueKey);
 }
@@ -158,7 +158,7 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
   const win = app.window;
   await win.evaluate(
     async ({ cliPath }) => {
-      await window.ticketManager.settings.set({
+      await window.praxis.settings.set({
         ai: {
           activeProvider: 'vercel-gateway',
           analysisPrompt: 'Assess this ticket carefully.',
@@ -213,8 +213,8 @@ test('abort kills the ACP agent subprocess cleanly', async () => {
   expect(psBefore).toContain('fakeAcpAgent.mjs');
 
   await win.evaluate(async issueKey => {
-    const w = window as unknown as { ticketManager: { ai: { abort: (issueKey: string) => Promise<void> } } };
-    await w.ticketManager.ai.abort(issueKey);
+    const w = window as unknown as { praxis: { ai: { abort: (issueKey: string) => Promise<void> } } };
+    await w.praxis.ai.abort(issueKey);
   }, 'APP-201');
 
   await expect.poll(async () => (await readSession(win, 'APP-201'))?.state, { timeout: 10000 }).toBe('aborted');

@@ -142,7 +142,7 @@ export class DetailsViewProvider implements vscode.TreeDataProvider<Node>, vscod
       item.tooltip = `${element.issueKey}: open full issue details in an editor tab`;
       item.iconPath = new vscode.ThemeIcon('link');
       item.command = {
-        command: 'ticketManager.openIssueFullDetails',
+        command: 'praxis.openIssueFullDetails',
         title: 'Open full issue details',
         arguments: [element.issueKey]
       };

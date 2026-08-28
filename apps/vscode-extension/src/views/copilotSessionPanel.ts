@@ -328,7 +328,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
   private createPanel(issueKey: string): void {
     const nonce = createNonce();
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.aiSession',
+      'praxis.aiSession',
       `🤖 AI Session: ${issueKey}`,
       vscode.ViewColumn.Active,
       {
@@ -423,7 +423,7 @@ export class CopilotSessionPanelManager implements vscode.Disposable {
     const queuedPermissionLabel = getQueuedPermissionLabel(pendingPermissionDescriptions.length);
     const currentPermission = pendingPermissions[0];
 
-    const verboseFeed = vscode.workspace.getConfiguration('ticketManager.ai').get<boolean>('verboseActivityFeed', false);
+    const verboseFeed = vscode.workspace.getConfiguration('praxis.ai').get<boolean>('verboseActivityFeed', false);
     const stepCount = record?.stepCount ?? 0;
     const progressPct = maxSteps > 0 ? Math.min(100, Math.round((stepCount / maxSteps) * 100)) : 0;
     const latestEvent = record?.events.length ? record.events[record.events.length - 1] : undefined;

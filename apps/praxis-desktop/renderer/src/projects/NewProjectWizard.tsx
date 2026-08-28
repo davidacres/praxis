@@ -84,10 +84,10 @@ export function NewProjectWizard({ mode = 'create', onCancel, onCreated }: { mod
   }), [name, key, type, purpose, brief, startingPoint, folderPath, folderName, stages, tickets, toolMode]);
 
   const chooseFolder = async () => {
-    const chosen = await window.ticketManager.dialog.pickFolder(startingPoint === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder');
+    const chosen = await window.praxis.dialog.pickFolder(startingPoint === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder');
     if (!chosen) return;
     setFolderPath(chosen); setError(undefined);
-    if (startingPoint === 'existing-folder') setInspection(await window.ticketManager.projects.inspectFolder(chosen));
+    if (startingPoint === 'existing-folder') setInspection(await window.praxis.projects.inspectFolder(chosen));
     else setInspection(undefined);
   };
   const continueStep = async () => {
@@ -95,7 +95,7 @@ export function NewProjectWizard({ mode = 'create', onCancel, onCreated }: { mod
     try {
       if (step === 0 && mode === 'existing') {
         if (!folderPath) throw new Error('Choose the existing project folder.');
-        const result = inspection ?? await window.ticketManager.projects.inspectFolder(folderPath);
+        const result = inspection ?? await window.praxis.projects.inspectFolder(folderPath);
         if (!result.exists || !result.isDirectory) throw new Error('Choose an existing folder.');
         setInspection(result);
       }
@@ -105,7 +105,7 @@ export function NewProjectWizard({ mode = 'create', onCancel, onCreated }: { mod
         if (startingPoint !== 'app-storage' && !folderPath) throw new Error(mode === 'existing' ? 'Choose the existing folder.' : 'Choose a parent folder.');
         if (startingPoint === 'new-folder') {
           if (!folderName.trim()) throw new Error('Enter a project folder name.');
-          const result = await window.ticketManager.projects.inspectFolder(previewPath);
+          const result = await window.praxis.projects.inspectFolder(previewPath);
           if (result.exists) throw new Error('That folder already exists. Select Existing Folder instead.');
         }
       }
@@ -115,7 +115,7 @@ export function NewProjectWizard({ mode = 'create', onCancel, onCreated }: { mod
   };
   const create = async () => {
     setCreating(true); setError(undefined);
-    try { onCreated(await window.ticketManager.projects.create(input)); }
+    try { onCreated(await window.praxis.projects.create(input)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); }
   };
 

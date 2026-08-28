@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Compile the Ticket Manager VS Code extension and package it as a .vsix.
+  Compile the Praxis VS Code extension and package it as a .vsix.
 
 .DESCRIPTION
   1. Ensures build-time dev dependencies (typescript + esbuild + vsce) are
@@ -13,7 +13,7 @@
      Authors don't handcraft any sidecar files.
 
   The .vsix is written to artifacts/ and can be installed with:
-    code --install-extension artifacts/ticket-manager-<version>.vsix
+    code --install-extension artifacts/praxis-<version>.vsix
 
 .PARAMETER PublicRegistry
   Registry URL used when the default registry can't resolve the dev dependencies.
@@ -372,10 +372,10 @@ try {
   }
 
   $readmeText = @"
-Ticket Manager $($pkg.version)
+Praxis $($pkg.version)
 ======================
 
-This folder contains everything needed to install Ticket Manager:
+This folder contains everything needed to install Praxis:
 
   - $vsixName   (the extension)
   - install.ps1                     (installer)
@@ -388,7 +388,7 @@ That installs the extension into every detected VS Code-family editor
 (VS Code, VS Code Insiders, Cursor). Then fully restart your editor(s).
 
 After installing:
-  1. Open the Ticket Manager activity-bar entry and pick a backend (Jira,
+  1. Open the Praxis activity-bar entry and pick a backend (Jira,
      Demo, Live Folder, File, or GitLab).
   2. Configure Connections & Boards.
 

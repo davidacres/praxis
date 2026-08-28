@@ -148,18 +148,18 @@ async function syncSynthesizedTrackedBoard(connection: Connection): Promise<void
   if (!canonical) {
     return;
   }
-  const tracked = await window.ticketManager.connection.getTrackedBoards(connection.id);
+  const tracked = await window.praxis.connection.getTrackedBoards(connection.id);
   const existingCanonical = tracked.find(board => board.boardId === canonical.boardId);
   if (existingCanonical) {
     if (existingCanonical.displayName !== canonical.displayName) {
-      await window.ticketManager.connection.updateTrackedBoard(canonical);
+      await window.praxis.connection.updateTrackedBoard(canonical);
     }
   } else {
-    await window.ticketManager.connection.addTrackedBoards([canonical]);
+    await window.praxis.connection.addTrackedBoards([canonical]);
   }
   for (const board of tracked) {
     if (board.boardId !== canonical.boardId) {
-      await window.ticketManager.connection.removeTrackedBoard(connection.id, board.boardId);
+      await window.praxis.connection.removeTrackedBoard(connection.id, board.boardId);
     }
   }
 }
@@ -222,7 +222,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     let cancelled = false;
     void Promise.all(
       secretNamesForMode(existing.mode).map(async secretName => {
-        const has = await window.ticketManager.connection.hasSecret(existing.id, secretName);
+        const has = await window.praxis.connection.hasSecret(existing.id, secretName);
         return has ? secretName : undefined;
       })
     ).then(results => {
@@ -256,11 +256,11 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
       // Mode is immutable after creation, so `mode` here is always the
       // connection's own — the select is disabled in edit mode.
       connection = { id: persistedId, name: trimmedName, mode, settings };
-      await window.ticketManager.connection.update(connection);
+      await window.praxis.connection.update(connection);
     } else {
-      const id = await window.ticketManager.connection.generateId(trimmedName);
+      const id = await window.praxis.connection.generateId(trimmedName);
       connection = { id, name: trimmedName, mode, settings };
-      await window.ticketManager.connection.add(connection);
+      await window.praxis.connection.add(connection);
       setPersistedId(id);
     }
 
@@ -268,7 +268,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     for (const [secretName, value] of Object.entries(secrets)) {
       const trimmed = value.trim();
       if (trimmed.length > 0) {
-        await window.ticketManager.connection.setSecret(connection.id, secretName, trimmed);
+        await window.praxis.connection.setSecret(connection.id, secretName, trimmed);
       }
     }
 
@@ -279,7 +279,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     // for removing a secret.
     if (mode === 'jiracloud' && jiraSetupMode === 'cloud' && jiraAuthMethod === 'oauth') {
       if (savedSecretNames.includes('jiraApiToken')) {
-        await window.ticketManager.connection.setSecret(connection.id, 'jiraApiToken', undefined);
+        await window.praxis.connection.setSecret(connection.id, 'jiraApiToken', undefined);
         setSavedSecretNames(prev => prev.filter(name => name !== 'jiraApiToken'));
       }
     }
@@ -288,7 +288,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     // token path cannot use.
     if (mode === 'jiracloud' && jiraSetupMode === 'cloud' && jiraAuthMethod === 'api-token') {
       if (savedSecretNames.includes('jiraOAuthClientSecret')) {
-        await window.ticketManager.connection.setSecret(
+        await window.praxis.connection.setSecret(
           connection.id,
           'jiraOAuthClientSecret',
           undefined
@@ -322,7 +322,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     try {
       const connection = await persist();
       onPersisted?.();
-      setTestResult(await window.ticketManager.connection.check(connection.id));
+      setTestResult(await window.praxis.connection.check(connection.id));
     } catch (error) {
       setTestResult({
         status: 'error',
@@ -350,7 +350,7 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     setSaving(true);
     setSaveError(undefined);
     try {
-      await window.ticketManager.connection.remove(targetId);
+      await window.praxis.connection.remove(targetId);
       onRemoved(targetId);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -598,7 +598,7 @@ function ModeFields({
                 className="btn"
                 data-testid="conn-browse-path"
                 onClick={() => {
-                  void window.ticketManager.dialog
+                  void window.praxis.dialog
                     .pickFolder('Select plans folder')
                     .then(picked => {
                       if (picked) {
@@ -710,7 +710,7 @@ function ModeFields({
                     <div className="conn-byo-oauth-body">
                       <p className="placeholder-text" data-testid="jira-byo-oauth-help">
                         Register an OAuth 2.0 (3LO) app at developer.atlassian.com, add
-                        ticketmanager://oauth-callback to its callback URLs, and grant it the
+                        praxis://oauth-callback to its callback URLs, and grant it the
                         Jira API scopes (Permissions → Jira API). The scope string below must
                         match the scopes granted to the app. Useful when your organization
                         blocks dynamically-registered apps.
@@ -730,13 +730,13 @@ function ModeFields({
                       {secretField('jiraOAuthClientSecret', 'Client secret', 'jira-oauth-client-secret')}
                       <FieldRow
                         label="Redirect URL (optional override)"
-                        description="Callback URL registered with your OAuth app. Leave blank to use the default ticketmanager:// callback."
+                        description="Callback URL registered with your OAuth app. Leave blank to use the default praxis:// callback."
                       >
                         <input
                           className="input"
                           data-testid="jira-oauth-redirect-url"
                           value={textValue('jiraOAuthRedirectUrl')}
-                          placeholder="ticketmanager://oauth-callback"
+                          placeholder="praxis://oauth-callback"
                           onChange={event => setValue('jiraOAuthRedirectUrl', event.target.value)}
                         />
                       </FieldRow>
@@ -827,7 +827,7 @@ function ModeFields({
                     className="btn"
                     data-testid="conn-browse-workspaceFolder"
                     onClick={() => {
-                      void window.ticketManager.dialog
+                      void window.praxis.dialog
                         .pickFolder('Select workspace folder')
                         .then(picked => {
                           if (picked) {

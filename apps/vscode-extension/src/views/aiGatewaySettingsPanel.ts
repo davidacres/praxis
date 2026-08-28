@@ -45,7 +45,7 @@ export class AiGatewaySettingsPanel implements vscode.Disposable {
     // Fetch/complete async work BEFORE createWebviewPanel, then set html
     // synchronously (VS Code Insiders webview rule — see CLAUDE.md).
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.aiGatewaySettings',
+      'praxis.aiGatewaySettings',
       'AI Gateway Settings',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
@@ -111,7 +111,7 @@ export class AiGatewaySettingsPanel implements vscode.Disposable {
     if (type === 'openVsCodeSettings') {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
-        'ticketManager.ai'
+        'praxis.ai'
       );
     }
   }

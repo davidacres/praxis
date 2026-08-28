@@ -13,7 +13,7 @@ test('runs a real PTY and preserves it when the panel is closed', async () => {
   await win.getByLabel('Toggle panel').click();
   const terminal = win.getByTestId('integrated-terminal');
   await expect(terminal).toBeVisible();
-  const liveSession = await win.evaluate(async () => (await window.ticketManager.terminal.list()).find(session => !session.exited)?.id);
+  const liveSession = await win.evaluate(async () => (await window.praxis.terminal.list()).find(session => !session.exited)?.id);
   if (liveSession) await win.getByLabel('Active terminal').selectOption(liveSession);
 
   await win.waitForTimeout(400);
@@ -21,13 +21,13 @@ test('runs a real PTY and preserves it when the panel is closed', async () => {
   await win.keyboard.type("printf 'TM_PTY_OK\\n'");
   await win.keyboard.press('Enter');
   const currentContext = async () => win.evaluate(async sessionId =>
-    (await window.ticketManager.terminal.getContext(sessionId)).output, liveSession);
+    (await window.praxis.terminal.getContext(sessionId)).output, liveSession);
   await expect.poll(currentContext).toContain('TM_PTY_OK');
   await win.keyboard.type('printf "\\033[31mRED\\033[0m \\033[38;2;255;100;0mTRUECOLOR\\033[0m [$TERM/$COLORTERM]\\n"');
   await win.keyboard.press('Enter');
   await expect.poll(currentContext).toContain('RED TRUECOLOR [xterm-256color/truecolor]');
 
-  const context = await win.evaluate(async sessionId => window.ticketManager.terminal.getContext(sessionId), liveSession);
+  const context = await win.evaluate(async sessionId => window.praxis.terminal.getContext(sessionId), liveSession);
   expect(context.output).toContain('TM_PTY_OK');
 
   await win.getByLabel('Close panel').click();
@@ -40,7 +40,7 @@ test('captures shell-integrated command records and exposes failed-command actio
   app = await launchTestApp();
   const win = app.window;
   await win.getByLabel('Toggle panel').click();
-  const liveSession = await win.evaluate(async () => (await window.ticketManager.terminal.list()).find(session => !session.exited)?.id);
+  const liveSession = await win.evaluate(async () => (await window.praxis.terminal.list()).find(session => !session.exited)?.id);
   if (liveSession) await win.getByLabel('Active terminal').selectOption(liveSession);
   const terminal = win.getByTestId('integrated-terminal');
   await win.waitForTimeout(400);
@@ -48,7 +48,7 @@ test('captures shell-integrated command records and exposes failed-command actio
   await win.keyboard.type("printf 'TM_COMMAND_RECORD\\n'; false");
   await win.keyboard.press('Enter');
   const command = async () => win.evaluate(async sessionId => {
-    const commands = await window.ticketManager.terminal.listCommands(sessionId);
+    const commands = await window.praxis.terminal.listCommands(sessionId);
     return commands.at(-1);
   }, liveSession);
   await expect.poll(command, { timeout: 8_000 }).toMatchObject({ status: 'failed', exitCode: 1 });
@@ -86,7 +86,7 @@ test('opens per-terminal settings and applies an active-session override', async
 test('detects installed shell profiles and launches a selected profile', async () => {
   app = await launchTestApp();
   const win = app.window;
-  const profiles = await win.evaluate(() => window.ticketManager.terminal.listProfiles());
+  const profiles = await win.evaluate(() => window.praxis.terminal.listProfiles());
   expect(profiles.some(profile => profile.name === 'zsh')).toBe(process.platform === 'darwin');
   if (process.platform === 'win32') {
     expect(profiles.some(profile => ['PowerShell', 'Command Prompt'].includes(profile.name))).toBe(true);

@@ -40,7 +40,7 @@ function Get-StableVsCodeCliPath {
 }
 
 $codeCliPath = Get-StableVsCodeCliPath
-$workspaceFilePath = Join-Path $env:TEMP 'ticket-manager-shell.code-workspace'
+$workspaceFilePath = Join-Path $env:TEMP 'praxis-shell.code-workspace'
 $shellSettings = @{
     'chat.commandCenter.enabled' = $false
     'chat.experimental.detectParticipant.enabled' = $false
@@ -105,7 +105,7 @@ Start-Process "vscode://command/workbench.action.closePanel" | Out-Null
 Start-Sleep -Milliseconds 300
 Start-Process "vscode://command/workbench.action.closeAuxiliaryBar" | Out-Null
 Start-Sleep -Milliseconds 300
-Start-Process "vscode://command/workbench.view.extension.ticketManager" | Out-Null
+Start-Process "vscode://command/workbench.view.extension.praxis" | Out-Null
 Start-Sleep -Milliseconds 400
 Start-Process "vscode://command/workbench.action.closePanel" | Out-Null
 Start-Sleep -Milliseconds 300

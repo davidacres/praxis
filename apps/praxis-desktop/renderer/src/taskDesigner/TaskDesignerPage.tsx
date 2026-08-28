@@ -207,7 +207,7 @@ export function TaskDesignerPage({
 
   const persistNow = useCallback(async () => {
     try {
-      const result = await window.ticketManager.taskDesigner.setState(
+      const result = await window.praxis.taskDesigner.setState(
         board.id,
         board.connectionId,
         canvasRef.current
@@ -233,7 +233,7 @@ export function TaskDesignerPage({
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.taskDesigner
+    void window.praxis.taskDesigner
       .getState(board.id, board.connectionId)
       .then(loadedState => {
         if (cancelled) {
@@ -255,7 +255,7 @@ export function TaskDesignerPage({
             height: 190
           };
           initial = { ...loadedState, nodes: [note] };
-          void window.ticketManager.taskDesigner.setState(board.id, board.connectionId, initial);
+          void window.praxis.taskDesigner.setState(board.id, board.connectionId, initial);
         }
         canvasRef.current = initial;
         setCanvas(initial);
@@ -273,7 +273,7 @@ export function TaskDesignerPage({
     return () => {
       window.clearTimeout(persistTimerRef.current);
       window.clearTimeout(feedbackTimerRef.current);
-      void window.ticketManager.taskDesigner.setState(board.id, board.connectionId, canvasRef.current);
+      void window.praxis.taskDesigner.setState(board.id, board.connectionId, canvasRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board.id, board.connectionId]);
@@ -390,7 +390,7 @@ export function TaskDesignerPage({
 
   const addTicketNode = useCallback(
     async (issueKey: string, point: { x: number; y: number }) => {
-      const resolved = await window.ticketManager.taskDesigner.resolveIssue(issueKey, board.connectionId);
+      const resolved = await window.praxis.taskDesigner.resolveIssue(issueKey, board.connectionId);
       const index = computeNextNodeIndex(canvasRef.current.nodes);
       const node: TaskDesignerTicketNode = {
         type: 'ticket',
@@ -705,7 +705,7 @@ export function TaskDesignerPage({
 
   const onCanvasDragOver = useCallback((event: ReactDragEvent) => {
     const types = event.dataTransfer?.types ?? [];
-    if (types.includes('application/x-ticket-manager-issue') || types.includes('text/plain')) {
+    if (types.includes('application/x-praxis-issue') || types.includes('text/plain')) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
     }
@@ -714,7 +714,7 @@ export function TaskDesignerPage({
   const onCanvasDrop = useCallback(
     (event: ReactDragEvent) => {
       const issueKey = (
-        event.dataTransfer?.getData('application/x-ticket-manager-issue') ||
+        event.dataTransfer?.getData('application/x-praxis-issue') ||
         event.dataTransfer?.getData('text/plain') ||
         ''
       ).trim();
@@ -723,7 +723,7 @@ export function TaskDesignerPage({
       }
       event.preventDefault();
       const point = clientToCanvas(event.clientX, event.clientY);
-      void window.ticketManager.taskDesigner
+      void window.praxis.taskDesigner
         .resolveIssue(issueKey, board.connectionId)
         .then(payload => applyDroppedIssue(payload, point))
         .catch(error => setFeedback(error instanceof Error ? error.message : String(error), true));
@@ -743,7 +743,7 @@ export function TaskDesignerPage({
     }
     setBusy('recommend');
     try {
-      const result = await window.ticketManager.taskDesigner.recommendFlow(
+      const result = await window.praxis.taskDesigner.recommendFlow(
         ticketNodes.map(node => ({
           id: node.id,
           issueKey: node.issueKey,
@@ -774,7 +774,7 @@ export function TaskDesignerPage({
   const requestRecommendBoardFlow = useCallback(async () => {
     setBusy('recommendBoard');
     try {
-      const result = await window.ticketManager.taskDesigner.recommendBoardFlow(board);
+      const result = await window.praxis.taskDesigner.recommendBoardFlow(board);
       const previewNodes: TaskDesignerTicketNode[] = result.nodes.map((node, index) => ({
         type: 'ticket',
         id: node.id,
@@ -831,7 +831,7 @@ export function TaskDesignerPage({
       setRecommendation(undefined);
       setSelectedNodeId(undefined);
       setSelectedConnectorId(undefined);
-      const result = await window.ticketManager.taskDesigner.setState(board.id, board.connectionId, nextState);
+      const result = await window.praxis.taskDesigner.setState(board.id, board.connectionId, nextState);
       if (!result.ok) {
         applyCanvas(result.state);
         setFeedback(result.warning ?? 'Unable to apply AI recommendation.', true);
@@ -857,7 +857,7 @@ export function TaskDesignerPage({
   const requestGenerateMasterPlan = useCallback(async () => {
     setBusy('masterPlan');
     try {
-      const result = await window.ticketManager.taskDesigner.generateMasterPlan(
+      const result = await window.praxis.taskDesigner.generateMasterPlan(
         board.id,
         board.connectionId,
         canvasRef.current

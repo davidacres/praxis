@@ -45,7 +45,7 @@ export async function loadConnectionSecrets(
   connection: Connection
 ): Promise<ConnectionSecretsSnapshot> {
   const secretKey = (name: string): string =>
-    `ticketManager.connection.${connection.id}.${name}`;
+    `praxis.connection.${connection.id}.${name}`;
   const [gitlabApiKey, githubPat] = await Promise.all([
     context.secrets.get(secretKey('gitlabApiKey')).then(value => value ?? context.secrets.get(secretKey('apiKey'))),
     context.secrets.get(secretKey('githubPat')).then(value => value ?? context.secrets.get(secretKey('pat')))

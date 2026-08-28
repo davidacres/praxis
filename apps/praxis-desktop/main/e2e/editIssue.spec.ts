@@ -51,7 +51,7 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 async function launchWithEditFixture(): Promise<void> {
-  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-edit-'));
+  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-edit-'));
   writeFixtureLiveFolder(liveFolderDir);
 
   app = await launchTestApp({

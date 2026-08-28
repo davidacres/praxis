@@ -49,7 +49,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'ticketManager.connectionsManager',
+      'praxis.connectionsManager',
       'Connections & Boards',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
@@ -159,7 +159,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     }
     // Leave the manager so Create Board input boxes keep focus.
     this.panel?.dispose();
-    await vscode.commands.executeCommand('ticketManager.createBoard');
+    await vscode.commands.executeCommand('praxis.createBoard');
   }
 
   private async handleEditConnection(message: Record<string, unknown>): Promise<void> {
@@ -464,13 +464,13 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
         this.state.view = 'list';
         this.state.connectionForm = undefined;
         void vscode.window.showInformationMessage(
-          `Connection "${connection.name}" saved. Boards are available in the Ticket Manager sidebar.`
+          `Connection "${connection.name}" saved. Boards are available in the Praxis sidebar.`
         );
       } else if (connection.mode === 'userworkspace') {
         this.state.view = 'list';
         this.state.connectionForm = undefined;
         void vscode.window.showInformationMessage(
-          `Connection "${connection.name}" saved. Use Ticket Manager: Create Board to add a plans folder.`
+          `Connection "${connection.name}" saved. Use Praxis: Create Board to add a plans folder.`
         );
       } else {
         // Chain into the board picker for backends with discoverable boards.
@@ -482,12 +482,12 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       // setting. Only set it for the first connection (or when unset) so a
       // second connection of a different mode does not thrash the setting.
       const currentMode = vscode.workspace
-        .getConfiguration('ticketManager')
+        .getConfiguration('praxis')
         .get<string>('backendMode');
       const connectionCount = this.connectionStore.getConnections().length;
       if (!currentMode || connectionCount === 1) {
         await vscode.workspace
-          .getConfiguration('ticketManager')
+          .getConfiguration('praxis')
           .update('backendMode', connection.mode, this.configTarget());
       }
     } catch (error) {
@@ -704,7 +704,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
     if (connections.length === 0) {
       return `${headerHtml}
         <section class="empty-state">
-          <h2>Welcome to Ticket Manager</h2>
+          <h2>Welcome to Praxis</h2>
           <p>You have no backend connections yet. Add one to start tracking boards.</p>
           <button class="primary large" data-action="addConnection">+ Add your first connection</button>
         </section>
@@ -793,7 +793,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <header class="manager-header">
         <div>
           <h1>${esc(title)}</h1>
-          <p class="subtle">${form.isEditing ? 'Update the settings for this connection.' : 'Configure a backend Ticket Manager can connect to.'}</p>
+          <p class="subtle">${form.isEditing ? 'Update the settings for this connection.' : 'Configure a backend Praxis can connect to.'}</p>
         </div>
         <button data-action="navigateList">Back to list</button>
       </header>
@@ -926,7 +926,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       <header class="manager-header">
         <div>
           <h1>${esc(title)}</h1>
-          <p class="subtle">Pick the boards you want Ticket Manager to track from this connection.</p>
+          <p class="subtle">Pick the boards you want Praxis to track from this connection.</p>
         </div>
         <button data-action="navigateList">Back to list</button>
       </header>
@@ -948,7 +948,7 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       return;
     }
 
-    const config = vscode.workspace.getConfiguration('ticketManager');
+    const config = vscode.workspace.getConfiguration('praxis');
     const siteUrl = config.get<string>('jiraMcpSiteUrl', '').trim();
     const epicKey = config.get<string>('jiraMcpEpicKey', '').trim();
     const boardJql = config.get<string>('jiraMcpBoardJql', '').trim();

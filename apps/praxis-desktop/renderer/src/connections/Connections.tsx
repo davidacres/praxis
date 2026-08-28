@@ -35,7 +35,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
 
   const reload = useCallback(() => {
     const sequence = ++reloadSequence.current;
-    window.ticketManager.connection
+    window.praxis.connection
       .list()
       .then(list => {
         if (sequence !== reloadSequence.current) return;
@@ -70,7 +70,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
       setTrackedBoards([]);
       return;
     }
-    window.ticketManager.connection
+    window.praxis.connection
       .getTrackedBoards(selected.id)
       .then(setTrackedBoards)
       .catch(() => setTrackedBoards([]));
@@ -83,7 +83,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
       setUwBoards([]);
       return;
     }
-    window.ticketManager.board
+    window.praxis.board
       .list(EMPTY_UW_BOARD_FILTERS, selected.id)
       .then(setUwBoards)
       .catch(() => setUwBoards([]));
@@ -92,7 +92,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
   useEffect(reloadUwBoards, [reloadUwBoards]);
 
   const removeTracked = (board: TrackedBoard) => {
-    void window.ticketManager.connection
+    void window.praxis.connection
       .removeTrackedBoard(board.connectionId, board.boardId)
       .then(() => {
         reloadTracked();
@@ -104,7 +104,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
     if (!selected) {
       return;
     }
-    void window.ticketManager.userWorkspace
+    void window.praxis.userWorkspace
       .deleteBoard(selected.id, board.id)
       .then(() => {
         reloadUwBoards();

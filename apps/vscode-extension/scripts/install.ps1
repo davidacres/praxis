@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Install the (already-built) Ticket Manager VS Code extension into all
+  Install the (already-built) Praxis VS Code extension into all
   detected VS Code-family editors: VS Code, VS Code Insiders, and Cursor.
 
 .DESCRIPTION
@@ -9,14 +9,14 @@
   isn't on PATH, falls back to copying the compiled payload (package.json,
   out/, media/) straight into the editor's extensions folder.
 
-  Unlike Frosty, Ticket Manager does NOT need proposed APIs in argv.json
+  Unlike Frosty, Praxis does NOT need proposed APIs in argv.json
   (activation is `onStartupFinished`).
 
   This script does NOT build. Run build.ps1 first (or use `npm run build:install`).
   If no .vsix and no out/ are found, it errors out.
 
 .PARAMETER Uninstall
-  Remove the Ticket Manager extension from all detected editors.
+  Remove the Praxis extension from all detected editors.
 
 .EXAMPLE
   pwsh ./scripts/build.ps1
@@ -182,5 +182,5 @@ Write-Host ''
 Write-Host 'Done.' -ForegroundColor Cyan
 Write-Host 'Next steps:' -ForegroundColor Cyan
 Write-Host '  1. Fully restart each editor (close all windows).'
-Write-Host '  2. Open the Ticket Manager activity-bar entry and pick a backend.'
+Write-Host '  2. Open the Praxis activity-bar entry and pick a backend.'
 Write-Host '  3. Configure Connections & Boards (and AI Gateway Settings if using AI).'

@@ -64,7 +64,7 @@ export function TaskDesignerSidebar({
             onClick={() => onSelectIssue(issue)}
             onDragStart={event => {
               event.dataTransfer.effectAllowed = 'copy';
-              event.dataTransfer.setData('application/x-ticket-manager-issue', issue.key);
+              event.dataTransfer.setData('application/x-praxis-issue', issue.key);
               event.dataTransfer.setData('text/plain', issue.key);
               event.currentTarget.classList.add('is-dragging');
             }}

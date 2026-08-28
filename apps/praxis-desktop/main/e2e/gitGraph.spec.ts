@@ -71,7 +71,7 @@ function createFixtureRepository(): string {
  * to a project and navigating through that project's Git entry.
  */
 async function openProjectGit(repository: string): Promise<void> {
-  const project = await app.window.evaluate(async folder => window.ticketManager.projects.create({
+  const project = await app.window.evaluate(async folder => window.praxis.projects.create({
     name: 'Git Fixture', key: 'GITFIX', type: 'software', purpose: 'Git graph fixture', brief: {},
     startingPoint: 'existing-folder', folderPath: folder,
     workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
@@ -161,7 +161,7 @@ test('renders the visual Git graph and commit inspector', async () => {
 
 test('Refresh reloads the project repository, not the app working directory', async () => {
   // Regression guard: the service used to fall back to a
-  // TICKET_MANAGER_DEFAULT_REPOSITORY env var and then to `process.cwd()`, and
+  // PRAXIS_DEFAULT_REPOSITORY env var and then to `process.cwd()`, and
   // Refresh called it with no path — so it silently swapped the view to
   // whatever repository the app itself was launched from.
   const window = app.window;

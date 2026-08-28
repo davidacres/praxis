@@ -39,7 +39,7 @@ interface AnalysisPanelContext {
   workspaceFolders: Array<{ uri: string; name: string }>;
 }
 
-const STORAGE_KEY = 'ticketManager.issueAnalysisStates';
+const STORAGE_KEY = 'praxis.issueAnalysisStates';
 const DEFAULT_ANALYSIS_REQUEST =
   'Analyze this ticket using its title, description, comments, and available metadata. Identify missing information, assumptions, risks, and whether it is ready for AI assignment.';
 
@@ -152,7 +152,7 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
     }
 
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.issueAnalysis',
+      'praxis.issueAnalysis',
       `Analysis ${issueKey}`,
       vscode.ViewColumn.Beside,
       {
@@ -287,9 +287,9 @@ export class IssueAnalysisPanelManager implements vscode.Disposable {
       const defaultPrompt = this.getDefaultPrompt().trim();
       if (!defaultPrompt) {
         this.log(`[IssueAnalysis] Analysis blocked for ${issueKey}: default prompt is missing.`);
-        assistantMessage.text = 'Analysis failed: Set Ticket Manager AI Analysis Default Prompt before running analysis.';
+        assistantMessage.text = 'Analysis failed: Set Praxis AI Analysis Default Prompt before running analysis.';
         void vscode.window.showWarningMessage(
-          'Set Ticket Manager AI Analysis Default Prompt before running analysis.'
+          'Set Praxis AI Analysis Default Prompt before running analysis.'
         );
         return;
       }

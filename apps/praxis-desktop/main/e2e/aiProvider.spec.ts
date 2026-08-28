@@ -112,7 +112,7 @@ test('delegate streams session events over the push channel and completes agains
   // Collect push-channel updates before delegating.
   await win.evaluate(() => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           onSessionChanged: (listener: (record: { state: string }) => void) => () => void;
         };
@@ -120,14 +120,14 @@ test('delegate streams session events over the push channel and completes agains
       __aiUpdates: string[];
     };
     w.__aiUpdates = [];
-    w.ticketManager.ai.onSessionChanged(record => {
+    w.praxis.ai.onSessionChanged(record => {
       w.__aiUpdates.push(record.state);
     });
   });
 
   const sessionId = await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           delegate: (input: {
             issueKey: string;
@@ -136,7 +136,7 @@ test('delegate streams session events over the push channel and completes agains
         };
       };
     };
-    const record = await w.ticketManager.ai.delegate({
+    const record = await w.praxis.ai.delegate({
       issueKey: 'APP-100',
       task: { goal: 'Smoke-test the desktop agent pipeline', maxSteps: 3, timeoutMs: 30000 }
     });
@@ -149,11 +149,11 @@ test('delegate streams session events over the push channel and completes agains
     .poll(async () =>
       win.evaluate(async () => {
         const w = window as unknown as {
-          ticketManager: {
+          praxis: {
             ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
           };
         };
-        const sessions = await w.ticketManager.ai.listSessions();
+        const sessions = await w.praxis.ai.listSessions();
         return sessions.find(s => s.issueKey === 'APP-100')?.state;
       })
     )
@@ -184,17 +184,17 @@ test('abort stops an in-flight session', async () => {
   const readState = () =>
     win.evaluate(async () => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
         };
       };
-      const sessions = await w.ticketManager.ai.listSessions();
+      const sessions = await w.praxis.ai.listSessions();
       return sessions.find(s => s.issueKey === 'APP-101')?.state;
     });
 
   await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           delegate: (input: {
             issueKey: string;
@@ -203,7 +203,7 @@ test('abort stops an in-flight session', async () => {
         };
       };
     };
-    await w.ticketManager.ai.delegate({
+    await w.praxis.ai.delegate({
       issueKey: 'APP-101',
       task: { goal: 'Hang until aborted', timeoutMs: 60000 }
     });
@@ -214,9 +214,9 @@ test('abort stops an in-flight session', async () => {
 
   await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: { ai: { abort: (issueKey: string) => Promise<void> } };
+      praxis: { ai: { abort: (issueKey: string) => Promise<void> } };
     };
-    await w.ticketManager.ai.abort('APP-101');
+    await w.praxis.ai.abort('APP-101');
   });
 
   await expect.poll(readState).toBe('aborted');
@@ -232,7 +232,7 @@ async function configureProvider(
   await win.evaluate(
     async ({ provider, baseUrl, apiKey }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           settings: {
             set: (patch: {
               ai: { providers: Record<string, { baseUrl: string }> };
@@ -241,8 +241,8 @@ async function configureProvider(
           ai: { setProviderApiKey: (provider: string, value: string) => Promise<unknown> };
         };
       };
-      await w.ticketManager.settings.set({ ai: { providers: { [provider]: { baseUrl } } } });
-      await w.ticketManager.ai.setProviderApiKey(provider, apiKey);
+      await w.praxis.settings.set({ ai: { providers: { [provider]: { baseUrl } } } });
+      await w.praxis.ai.setProviderApiKey(provider, apiKey);
     },
     { provider, baseUrl, apiKey }
   );
@@ -256,7 +256,7 @@ test('delegate completes against an OpenAI-provider mock (same wire format as Ve
 
   await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           delegate: (input: {
             issueKey: string;
@@ -266,7 +266,7 @@ test('delegate completes against an OpenAI-provider mock (same wire format as Ve
         };
       };
     };
-    await w.ticketManager.ai.delegate({
+    await w.praxis.ai.delegate({
       issueKey: 'APP-102',
       provider: 'openai',
       task: { goal: 'Smoke-test the OpenAI provider', maxSteps: 3, timeoutMs: 30000 }
@@ -277,11 +277,11 @@ test('delegate completes against an OpenAI-provider mock (same wire format as Ve
     .poll(async () =>
       win.evaluate(async () => {
         const w = window as unknown as {
-          ticketManager: {
+          praxis: {
             ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
           };
         };
-        const sessions = await w.ticketManager.ai.listSessions();
+        const sessions = await w.praxis.ai.listSessions();
         return sessions.find(s => s.issueKey === 'APP-102')?.state;
       })
     )
@@ -299,7 +299,7 @@ test('delegate completes against an Anthropic-provider mock (Messages API wire f
 
   await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           delegate: (input: {
             issueKey: string;
@@ -309,7 +309,7 @@ test('delegate completes against an Anthropic-provider mock (Messages API wire f
         };
       };
     };
-    await w.ticketManager.ai.delegate({
+    await w.praxis.ai.delegate({
       issueKey: 'APP-103',
       provider: 'anthropic',
       task: { goal: 'Smoke-test the Anthropic provider', maxSteps: 3, timeoutMs: 30000 }
@@ -320,11 +320,11 @@ test('delegate completes against an Anthropic-provider mock (Messages API wire f
     .poll(async () =>
       win.evaluate(async () => {
         const w = window as unknown as {
-          ticketManager: {
+          praxis: {
             ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> };
           };
         };
-        const sessions = await w.ticketManager.ai.listSessions();
+        const sessions = await w.praxis.ai.listSessions();
         return sessions.find(s => s.issueKey === 'APP-103')?.state;
       })
     )
@@ -344,7 +344,7 @@ async function listApiModelOptions(
 ): Promise<{ currentValue?: string; options: Array<{ value: string; name: string }> } | undefined> {
   return win.evaluate(async provider => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           listApiModelOptions: (
             provider: string
@@ -352,7 +352,7 @@ async function listApiModelOptions(
         };
       };
     };
-    return w.ticketManager.ai.listApiModelOptions(provider);
+    return w.praxis.ai.listApiModelOptions(provider);
   }, provider);
 }
 
@@ -404,7 +404,7 @@ test('delegating with a model override sends that model in the gateway request',
   // sidesteps needing a valid seeded demo issue key.
   const issueKey = await win.evaluate(async () => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: {
           delegate: (input: {
             goal: string;
@@ -414,7 +414,7 @@ test('delegating with a model override sends that model in the gateway request',
         };
       };
     };
-    const record = await w.ticketManager.ai.delegate({
+    const record = await w.praxis.ai.delegate({
       goal: 'Smoke-test the model override',
       model: 'mock/model-override',
       task: { maxSteps: 3, timeoutMs: 30000 }
@@ -426,9 +426,9 @@ test('delegating with a model override sends that model in the gateway request',
     .poll(async () =>
       win.evaluate(async issueKey => {
         const w = window as unknown as {
-          ticketManager: { ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> } };
+          praxis: { ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string }>> } };
         };
-        const sessions = await w.ticketManager.ai.listSessions();
+        const sessions = await w.praxis.ai.listSessions();
         return sessions.find(s => s.issueKey === issueKey)?.state;
       }, issueKey)
     )
@@ -459,13 +459,13 @@ test('the New Session composer lists configured providers and can start a sessio
     .poll(async () =>
       win.evaluate(async () => {
         const w = window as unknown as {
-          ticketManager: {
+          praxis: {
             ai: {
               listSessions: () => Promise<Array<{ state: string; issueKey: string }>>;
             };
           };
         };
-        const sessions = await w.ticketManager.ai.listSessions();
+        const sessions = await w.praxis.ai.listSessions();
         return sessions[0]?.state;
       })
     )
@@ -508,8 +508,8 @@ test('the model manager panel curates which models the composer offers', async (
 
   // Persists in the settings backend, independent of this window's state.
   const persisted = await win.evaluate(async () => {
-    const w = window as unknown as { ticketManager: { settings: { get: () => Promise<{ ai: { providers: Record<string, { enabledModelIds?: string[] }> } }> } } };
-    const settings = await w.ticketManager.settings.get();
+    const w = window as unknown as { praxis: { settings: { get: () => Promise<{ ai: { providers: Record<string, { enabledModelIds?: string[] }> } }> } } };
+    const settings = await w.praxis.settings.get();
     return settings.ai.providers['vercel-gateway']?.enabledModelIds;
   });
   expect(persisted?.sort()).toEqual(['anthropic/claude-opus-5', 'anthropic/claude-sonnet-5']);

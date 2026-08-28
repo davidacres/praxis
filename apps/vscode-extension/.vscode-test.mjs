@@ -14,7 +14,7 @@ import { defineConfig } from '@vscode/test-cli';
  * only injects its own --user-data-dir when one is not already supplied, so
  * this overrides rather than duplicates it.
  */
-const userDataDir = path.join(os.homedir(), '.vscode-test-ticket-manager');
+const userDataDir = path.join(os.homedir(), '.vscode-test-praxis');
 
 export default defineConfig([
   {

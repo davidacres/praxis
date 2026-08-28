@@ -29,7 +29,7 @@ export function OverviewPage({ projects, boards, connections, sessions, connecti
   const recentProjects = [...projects].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
   const recentSessions = sessions.slice(0, 4);
   const [runtime, setRuntime] = useState<{ agents: number; skills: number }>();
-  useEffect(() => { void window.ticketManager.agentRuntime.list().then(snapshot => setRuntime({ agents: snapshot.agents.length, skills: snapshot.skills.length })).catch(() => setRuntime({ agents: 0, skills: 0 })); }, []);
+  useEffect(() => { void window.praxis.agentRuntime.list().then(snapshot => setRuntime({ agents: snapshot.agents.length, skills: snapshot.skills.length })).catch(() => setRuntime({ agents: 0, skills: 0 })); }, []);
 
   return (
     <div className="overview-page" data-testid="overview-page">

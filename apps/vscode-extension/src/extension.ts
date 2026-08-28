@@ -65,7 +65,7 @@ import { IssueDetailsSidebarViewProvider } from './views/issueDetailsSidebarView
 import { IssuesSidebarViewProvider } from './views/issuesSidebarViewProvider';
 import { IssuesTreeProvider } from './views/issuesTreeProvider';
 import { SetupSidebarViewProvider } from './views/setupSidebarViewProvider';
-import { TicketManagerStatusBar } from './views/ticketManagerStatusBar';
+import { PraxisStatusBar } from './views/praxisStatusBar';
 import { TaskDesignerPanelManager } from './views/taskDesignerPanelManager';
 import { IssueAnalysisPanelManager, type AnalysisRepositoryEntry } from './views/issueAnalysisPanelManager';
 import { VercelAgentService, type VercelAgentLogger } from '@praxis/core';
@@ -128,17 +128,17 @@ import {
   diffGitLabDiscussionNotes,
   GitLabApiService,
   inferGitLabProjectFromRepo,
-  isTicketManagerManagedMergeRequestNote,
+  isPraxisManagedMergeRequestNote,
   mergeRequestMatchesIssueKey,
   shouldCreateMergeRequestForStatusChange,
-  wrapTicketManagerManagedMergeRequestNote,
+  wrapPraxisManagedMergeRequestNote,
   type GitLabDiscussionNote,
   type GitLabMergeRequest
 } from '@praxis/core';
 
 const execFile = util.promisify(execFileCallback);
 
-export interface TicketManagerExtensionApi {
+export interface PraxisExtensionApi {
   refresh(): Promise<void>;
   backendService: IssueTrackerService;
   filterStore: FilterStore;
@@ -155,8 +155,8 @@ export interface TicketManagerExtensionApi {
 }
 
 const STARTUP_BACKEND_LOAD_TIMEOUT_MS = 30000;
-const STARTUP_BACKEND_LOAD_CANCELLED = 'ticket-manager-startup-load-cancelled';
-const STARTUP_BACKEND_LOAD_TIMED_OUT = 'ticket-manager-startup-load-timed-out';
+const STARTUP_BACKEND_LOAD_CANCELLED = 'praxis-startup-load-cancelled';
+const STARTUP_BACKEND_LOAD_TIMED_OUT = 'praxis-startup-load-timed-out';
 
 function rejectStartupLoadCancelled(reject: (reason?: unknown) => void): void {
   reject(new Error(STARTUP_BACKEND_LOAD_CANCELLED));
@@ -523,7 +523,7 @@ function buildMissingRepositoryPrompt(reason?: string): string {
 
 function getAnalysisRepoRoot(workingDirectory: string | undefined, globalStoragePath: string): string {
   return workingDirectory
-    ? path.join(workingDirectory, '.ticket-manager-analysis', 'repos')
+    ? path.join(workingDirectory, '.praxis-analysis', 'repos')
     : path.join(globalStoragePath, 'analysis-repos');
 }
 
@@ -622,7 +622,7 @@ async function buildRepositorySummary(repoPath: string, sourceLabel: string): Pr
     () => [] as Array<{ name: string; isDirectory(): boolean }>
   );
   const visibleEntries = rootEntries
-    .filter(entry => !['.git', 'node_modules', '.worktrees', '.ticket-manager-analysis'].includes(entry.name))
+    .filter(entry => !['.git', 'node_modules', '.worktrees', '.praxis-analysis'].includes(entry.name))
     .slice(0, 12)
     .map(entry => `${entry.isDirectory() ? 'dir' : 'file'}:${entry.name}`);
   const readmeText = await readOptionalTextFile(path.join(repoPath, 'README.md'))
@@ -909,7 +909,7 @@ function filterGitLabNotesForAutomation(notes: GitLabDiscussionNote[]): GitLabDi
   return notes.filter(note =>
     !note.system &&
     note.body.trim().length > 0 &&
-    !isTicketManagerManagedMergeRequestNote(note.body)
+    !isPraxisManagedMergeRequestNote(note.body)
   );
 }
 
@@ -963,7 +963,7 @@ export function selectNextDeliveryTransition(
 
 export async function activate(
   context: vscode.ExtensionContext
-): Promise<TicketManagerExtensionApi> {
+): Promise<PraxisExtensionApi> {
   initializeMcpOAuthManager(context);
   // Let the core MCP client reach the extension's UriHandler-backed OAuth flow.
   setMcpOAuthProviderSource(() => getMcpOAuthManager());
@@ -972,21 +972,21 @@ export async function activate(
   setLiveFolderFs(vsCodeLiveFolderFs);
   setLiveFolderWatch(vsCodeLiveFolderWatch);
 
-  const outputChannel = vscode.window.createOutputChannel('Ticket Manager');
+  const outputChannel = vscode.window.createOutputChannel('Praxis');
   const configStore = new AppConfigStore();
   configStore.bindExtensionSecrets(context.secrets);
   await configStore.refreshVercelApiKeyCache();
   await configStore.migrateAiProviderSettings();
   const aiSessionManager = new AiSessionManager(new VsCodeMementoStore(context.workspaceState));
   const connectionStore = new ConnectionStore(
-    new VsCodeSettingsStore('ticketManager'),
+    new VsCodeSettingsStore('praxis'),
     new VsCodeSecretsStore(context.secrets)
   );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(event => {
       if (
-        event.affectsConfiguration('ticketManager.connections') ||
-        event.affectsConfiguration('ticketManager.boards')
+        event.affectsConfiguration('praxis.connections') ||
+        event.affectsConfiguration('praxis.boards')
       ) {
         connectionStore.notifyChanged();
       }
@@ -1057,16 +1057,16 @@ export async function activate(
   });
   context.subscriptions.push(connectionsManagerPanel, aiGatewaySettingsPanel);
   context.subscriptions.push(
-    vscode.commands.registerCommand('ticketManager.openConnectionsManager', () => {
+    vscode.commands.registerCommand('praxis.openConnectionsManager', () => {
       connectionsManagerPanel.open();
     }),
-    vscode.commands.registerCommand('ticketManager.openAiGatewaySettings', () => {
+    vscode.commands.registerCommand('praxis.openAiGatewaySettings', () => {
       void aiGatewaySettingsPanel.open();
     }),
-    vscode.commands.registerCommand('ticketManager.addConnection', () => {
+    vscode.commands.registerCommand('praxis.addConnection', () => {
       connectionsManagerPanel.open({ kind: 'addConnection' });
     }),
-    vscode.commands.registerCommand('ticketManager.addBoard', async (connectionId?: string) => {
+    vscode.commands.registerCommand('praxis.addBoard', async (connectionId?: string) => {
       let targetId = connectionId;
       if (!targetId) {
         const connections = connectionStore.getConnections();
@@ -1127,7 +1127,7 @@ export async function activate(
       backendService.setActiveConnection(initialTrackedRef.connectionId);
     }
   }
-  const ticketManagerStatusBar = new TicketManagerStatusBar(
+  const praxisStatusBar = new PraxisStatusBar(
     configStore,
     backendService,
     aiSessionManager,
@@ -1148,7 +1148,7 @@ export async function activate(
 
   function reportError(error: unknown, scope?: string): void {
     logError(outputChannel, error, scope);
-    ticketManagerStatusBar.recordError(error);
+    praxisStatusBar.recordError(error);
   }
 
   function isVercelGatewayConfigured(): boolean {
@@ -1668,7 +1668,7 @@ export async function activate(
             throw new Error('GitLab MR automation is not configured, so the feedback reply could not be posted.');
           }
 
-          const replyBody = wrapTicketManagerManagedMergeRequestNote(buildMergeRequestReplyComment(feedbackResult));
+          const replyBody = wrapPraxisManagedMergeRequestNote(buildMergeRequestReplyComment(feedbackResult));
           const triggeringDiscussionIds = [
             ...new Set(
               (mergeRequest.pendingFeedback?.notes ?? [])
@@ -1969,7 +1969,7 @@ export async function activate(
         if (gitLabAutomation) {
           await gitLabAutomation.client.addMergeRequestNote(
             delivery.mergeRequest.iid,
-            wrapTicketManagerManagedMergeRequestNote(buildMergeRequestFailureReplyComment(failureReason))
+            wrapPraxisManagedMergeRequestNote(buildMergeRequestFailureReplyComment(failureReason))
           );
         }
       }
@@ -2005,7 +2005,7 @@ export async function activate(
           if (gitLabAutomation) {
             await gitLabAutomation.client.addMergeRequestNote(
               delivery.mergeRequest.iid,
-              wrapTicketManagerManagedMergeRequestNote(buildMergeRequestFailureReplyComment(message))
+              wrapPraxisManagedMergeRequestNote(buildMergeRequestFailureReplyComment(message))
             );
           }
         } catch (mergeRequestCommentError) {
@@ -2689,8 +2689,8 @@ export async function activate(
 
   async function revealActiveSessionsView(): Promise<void> {
     try {
-      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
-      await vscode.commands.executeCommand('ticketManager.activeSessions.focus');
+      await vscode.commands.executeCommand('workbench.view.extension.praxis');
+      await vscode.commands.executeCommand('praxis.activeSessions.focus');
     } catch {
       // View focus can fail while the workbench is closing or not ready yet.
     }
@@ -2749,7 +2749,7 @@ export async function activate(
   }
 
   async function promptForPendingPermission(issueKey: string): Promise<void> {
-    // Autopilot mode: Ticket Manager agents auto-approve every Copilot SDK
+    // Autopilot mode: Praxis agents auto-approve every Copilot SDK
     // permission request, so a user-facing permission modal must never fire.
     // Kept as a no-op so legacy call sites compile without reintroducing the
     // prompt.
@@ -2761,7 +2761,7 @@ export async function activate(
     const apiKey = getVercelGatewayOptions().apiKey;
     if (!apiKey && options?.showWarning) {
       void vscode.window.showWarningMessage(
-        'Vercel AI Gateway API key is not configured. Run Ticket Manager: Configure AI.'
+        'Vercel AI Gateway API key is not configured. Run Praxis: Configure AI.'
       );
     }
     return apiKey;
@@ -2857,7 +2857,7 @@ export async function activate(
   ): Promise<AgentRuntimeProvider> {
     const provider = options?.provider ?? resolvePreferredAgentProvider(issue.key, undefined, issue);
     if (!provider) {
-      throw new Error('No AI agent is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.');
+      throw new Error('No AI agent is configured. Run Praxis: Configure AI to set up Vercel AI Gateway.');
     }
 
     const model = resolveModelOverride(issue.key, issue);
@@ -2881,7 +2881,7 @@ export async function activate(
   ): Promise<AgentRuntimeProvider> {
     const provider = resolvePreferredAgentProvider(issueKey, record);
     if (!provider) {
-      throw new Error('No AI agent is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.');
+      throw new Error('No AI agent is configured. Run Praxis: Configure AI to set up Vercel AI Gateway.');
     }
 
     const model = resolveModelOverride(issueKey);
@@ -3203,7 +3203,7 @@ export async function activate(
 
   // Set mode context early so when-clauses on views evaluate correctly
   // before VS Code tries to resolve them.
-  // !ticketManager.configured is true when the key is false OR doesn't exist,
+  // !praxis.configured is true when the key is false OR doesn't exist,
   // which means the setup view shows by default before activate() even runs.
   const getModeContextState = async (): Promise<BackendModeContextState> => {
     // Connections & Boards is the canonical setup path. Any saved connection
@@ -3229,19 +3229,19 @@ export async function activate(
     }
     return resolved;
   };
-  const JIRA_MCP_SCOPE_MIGRATION_KEY = 'ticketManager.jiraMcpEpicIssueScopeMigrated';
+  const JIRA_MCP_SCOPE_MIGRATION_KEY = 'praxis.jiraMcpEpicIssueScopeMigrated';
   const initialModeContext = await getModeContextState();
   await vscode.commands.executeCommand(
-    'setContext', 'ticketManager.mode',
+    'setContext', 'praxis.mode',
     initialModeContext.mode ?? 'unconfigured'
   );
   await vscode.commands.executeCommand(
-    'setContext', 'ticketManager.configured',
+    'setContext', 'praxis.configured',
     initialModeContext.configured
   );
   type BoardsSidebarMode = 'classic' | 'work';
   const getBoardsSidebarMode = (): BoardsSidebarMode => {
-    const configuration = vscode.workspace.getConfiguration('ticketManager');
+    const configuration = vscode.workspace.getConfiguration('praxis');
     return configuration.get<string>('boardsSidebarPreviewMode') === 'work'
       ? 'work'
       : 'classic';
@@ -3253,24 +3253,24 @@ export async function activate(
       : vscode.ConfigurationTarget.Global;
 
   const setBoardsSidebarMode = async (mode: BoardsSidebarMode): Promise<void> => {
-    const configuration = vscode.workspace.getConfiguration('ticketManager');
+    const configuration = vscode.workspace.getConfiguration('praxis');
     const target = getBoardsSidebarSettingsTarget();
     await configuration.update('boardsSidebarPreviewMode', mode, target);
   };
 
   const getBoardsContainerCommand = (): string =>
     getBoardsSidebarMode() === 'work'
-      ? 'workbench.view.extension.ticketManagerWorkMode'
-      : 'workbench.view.extension.ticketManager';
+      ? 'workbench.view.extension.praxisWorkMode'
+      : 'workbench.view.extension.praxis';
 
   const getSetupViewId = (): string =>
-    getBoardsSidebarMode() === 'work' ? 'ticketManager.workModeSetup' : 'ticketManager.setup';
-  await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
+    getBoardsSidebarMode() === 'work' ? 'praxis.workModeSetup' : 'praxis.setup';
+  await vscode.commands.executeCommand('setContext', 'praxis.boardsSidebarMode', getBoardsSidebarMode());
 
   const updateAnalysisContext = async (): Promise<void> => {
     await vscode.commands.executeCommand(
       'setContext',
-      'ticketManager.analysisGateEnabled',
+      'praxis.analysisGateEnabled',
       configStore.isAiAnalysisGateEnabled()
     );
   };
@@ -3403,7 +3403,7 @@ export async function activate(
   const localPeerReviewPanel = new LocalPeerReviewPanel(async (issue) => {
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
-      throw new Error('No AI providers configured. Run Ticket Manager: Configure AI.');
+      throw new Error('No AI providers configured. Run Praxis: Configure AI.');
     }
     let chosen = options[0];
     if (options.length > 1) {
@@ -3441,7 +3441,7 @@ export async function activate(
     async input => {
       const options = getConfiguredAiOptions();
       if (options.length === 0) {
-        throw new Error('No AI providers are configured. Run Ticket Manager: Configure AI.');
+        throw new Error('No AI providers are configured. Run Praxis: Configure AI.');
       }
 
       const chosen = options[0];
@@ -3617,9 +3617,9 @@ export async function activate(
     }
 
     try {
-      await vscode.commands.executeCommand('workbench.view.extension.ticketManager');
+      await vscode.commands.executeCommand('workbench.view.extension.praxis');
       if (options.focus) {
-        await vscode.commands.executeCommand('ticketManager.issueDetails.focus');
+        await vscode.commands.executeCommand('praxis.issueDetails.focus');
       }
     } catch {
       // focusing can fail if the view is not ready
@@ -3628,9 +3628,9 @@ export async function activate(
 
   async function setModeContext(): Promise<void> {
     const modeContext = await getModeContextState();
-    await vscode.commands.executeCommand('setContext', 'ticketManager.mode', modeContext.mode ?? 'unconfigured');
-    await vscode.commands.executeCommand('setContext', 'ticketManager.configured', modeContext.configured);
-    await vscode.commands.executeCommand('setContext', 'ticketManager.boardsSidebarMode', getBoardsSidebarMode());
+    await vscode.commands.executeCommand('setContext', 'praxis.mode', modeContext.mode ?? 'unconfigured');
+    await vscode.commands.executeCommand('setContext', 'praxis.configured', modeContext.configured);
+    await vscode.commands.executeCommand('setContext', 'praxis.boardsSidebarMode', getBoardsSidebarMode());
     await updateAnalysisContext();
   }
 
@@ -3658,7 +3658,7 @@ export async function activate(
   }
 
   function refreshStatusBarInBackground(): void {
-    void ticketManagerStatusBar.refresh().catch(error => reportError(error, 'status-bar-refresh'));
+    void praxisStatusBar.refresh().catch(error => reportError(error, 'status-bar-refresh'));
   }
 
   function refreshBoardsInBackgroundAfterStartup(): void {
@@ -3697,7 +3697,7 @@ export async function activate(
     }
 
     await vscode.workspace
-      .getConfiguration('ticketManager')
+      .getConfiguration('praxis')
       .update(
         'backendMode',
         undefined,
@@ -3712,8 +3712,8 @@ export async function activate(
 
     void vscode.window.showWarningMessage(
       reason === 'cancelled'
-        ? 'Ticket Manager startup was cancelled. Configure Project to choose or fix the backend connection.'
-        : 'Ticket Manager startup timed out waiting for the backend. Configure Project to choose or fix the backend connection.'
+        ? 'Praxis startup was cancelled. Configure Project to choose or fix the backend connection.'
+        : 'Praxis startup timed out waiting for the backend. Configure Project to choose or fix the backend connection.'
     );
   }
 
@@ -3721,7 +3721,7 @@ export async function activate(
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: 'Ticket Manager is connecting to the configured backend…',
+        title: 'Praxis is connecting to the configured backend…',
         cancellable: true
       },
       async (_progress, token) => {
@@ -3768,17 +3768,17 @@ export async function activate(
     await Promise.all([
       vscode.commands.executeCommand(
         'setContext',
-        'ticketManager.issuesSearchActive',
+        'praxis.issuesSearchActive',
         filterStore.getFilters().searchText.trim().length > 0
       ),
       vscode.commands.executeCommand(
         'setContext',
-        'ticketManager.epicsSearchActive',
+        'praxis.epicsSearchActive',
         epicsSidebarViewProvider?.getSearchText().trim().length > 0
       ),
       vscode.commands.executeCommand(
         'setContext',
-        'ticketManager.boardsSearchActive',
+        'praxis.boardsSearchActive',
         boardStore.getFilters().searchText.trim().length > 0
       )
     ]);
@@ -3818,7 +3818,7 @@ export async function activate(
     ]);
     await selectBoard(await resolveBoardById(`epic:${issueKey}`));
     await boardPanelManager.refresh();
-    await ticketManagerStatusBar.refresh();
+    await praxisStatusBar.refresh();
     void vscode.window.showInformationMessage(`${issueKey} is now the default EPIC for this repo.`);
   }
 
@@ -4333,7 +4333,7 @@ export async function activate(
     if (board.id.startsWith('epic:')) {
       const epicKey = board.id.slice('epic:'.length).trim();
       if (!epicKey || configStore.getJiraMcpEpicKey() !== epicKey) {
-        throw new Error('This Jira MCP epic board is not linked through Ticket Manager settings.');
+        throw new Error('This Jira MCP epic board is not linked through Praxis settings.');
       }
 
       await configStore.setJiraMcpEpicKey(undefined);
@@ -4350,7 +4350,7 @@ export async function activate(
     throw new Error('This Jira MCP board cannot be closed individually.');
   }
 
-  async function removeBoardFromTicketManager(board: Board): Promise<void> {
+  async function removeBoardFromPraxis(board: Board): Promise<void> {
     // In connections mode a board is tracked against a specific connection.
     // Removing it just untracks it from that connection; the underlying backend
     // config is owned by the connection, not the global config store.
@@ -4388,7 +4388,7 @@ export async function activate(
         return;
       }
 
-      await removeBoardFromTicketManager(board);
+      await removeBoardFromPraxis(board);
       if (
         boardStore.getLastSelectedBoardId() === boardId ||
         boardPanelManager.getActiveBoard()?.id === boardId
@@ -4457,7 +4457,7 @@ export async function activate(
       return;
     }
     try {
-      const config = vscode.workspace.getConfiguration('ticketManager');
+      const config = vscode.workspace.getConfiguration('praxis');
       const target = vscode.workspace.workspaceFolders?.length
         ? vscode.ConfigurationTarget.Workspace
         : vscode.ConfigurationTarget.Global;
@@ -4520,7 +4520,7 @@ export async function activate(
     if (copilotRequest) {
       if (!isCopilotSdkConfigured()) {
         void vscode.window.showWarningMessage(
-          'Comment added, but Vercel AI Gateway is not configured for @agent replies. Run Ticket Manager: Configure AI.'
+          'Comment added, but Vercel AI Gateway is not configured for @agent replies. Run Praxis: Configure AI.'
         );
       } else {
         try {
@@ -4633,7 +4633,7 @@ export async function activate(
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
       await vscode.window.showWarningMessage(
-        'No AI provider is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.'
+        'No AI provider is configured. Run Praxis: Configure AI to set up Vercel AI Gateway.'
       );
       return undefined;
     }
@@ -4883,7 +4883,7 @@ export async function activate(
   async function startNewCopilotSession(issueKey: string): Promise<void> {
     if (!isCopilotSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
+        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Praxis: Configure AI.'
       );
       return;
     }
@@ -4947,7 +4947,7 @@ export async function activate(
   async function resumeCopilotSession(issueKey: string): Promise<void> {
     if (!isCopilotSdkConfigured()) {
       void vscode.window.showErrorMessage(
-        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Ticket Manager: Configure AI.'
+        'Neither Vercel AI Gateway nor Claude Code CLI is configured. Run Praxis: Configure AI.'
       );
       return;
     }
@@ -4984,7 +4984,7 @@ export async function activate(
     const options = getConfiguredAiOptions();
     if (options.length === 0) {
       throw new Error(
-        'No AI provider is configured. Run Ticket Manager: Configure AI to set up Vercel AI Gateway.'
+        'No AI provider is configured. Run Praxis: Configure AI to set up Vercel AI Gateway.'
       );
     }
 
@@ -5266,7 +5266,7 @@ export async function activate(
       },
       onAddBoard: async () => {
         // Same entry point as the classic Boards "+" toolbar action.
-        await vscode.commands.executeCommand('ticketManager.createBoard');
+        await vscode.commands.executeCommand('praxis.createBoard');
       },
       onOpenSession: async (issueKey, boardId) => {
         const sessionBoardId =
@@ -5373,56 +5373,56 @@ export async function activate(
   await refreshSearchActionContexts();
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('ticketManager.createEpic', async () => {
+    vscode.commands.registerCommand('praxis.createEpic', async () => {
       try {
         await createEpic();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchIssues', async () => {
+    vscode.commands.registerCommand('praxis.searchIssues', async () => {
       try {
         await searchIssues();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchIssuesActive', async () => {
+    vscode.commands.registerCommand('praxis.searchIssuesActive', async () => {
       try {
         await searchIssues();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchEpics', async () => {
+    vscode.commands.registerCommand('praxis.searchEpics', async () => {
       try {
         await searchEpics();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchEpicsActive', async () => {
+    vscode.commands.registerCommand('praxis.searchEpicsActive', async () => {
       try {
         await searchEpics();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchBoards', async () => {
+    vscode.commands.registerCommand('praxis.searchBoards', async () => {
       try {
         await searchBoards();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.searchBoardsActive', async () => {
+    vscode.commands.registerCommand('praxis.searchBoardsActive', async () => {
       try {
         await searchBoards();
       } catch (error) {
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.assignToMe', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.assignToMe', async (arg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
@@ -5434,7 +5434,7 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.assignToAi', async (arg?: unknown, providerArg?: unknown) => {
+    vscode.commands.registerCommand('praxis.assignToAi', async (arg?: unknown, providerArg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
@@ -5457,11 +5457,11 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.openAnalysisWindow', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.openAnalysisWindow', async (arg?: unknown) => {
       try {
         if (!configStore.isAiAnalysisGateEnabled()) {
           await vscode.window.showInformationMessage(
-            'Analysis gate is disabled. Enable Ticket Manager AI Analysis and set a default analysis prompt in Settings.'
+            'Analysis gate is disabled. Enable Praxis AI Analysis and set a default analysis prompt in Settings.'
           );
           return;
         }
@@ -5477,7 +5477,7 @@ export async function activate(
         reportError(error, 'open-analysis-window');
       }
     }),
-    vscode.commands.registerCommand('ticketManager.confirmAnalysisComplete', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.confirmAnalysisComplete', async (arg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
@@ -5489,7 +5489,7 @@ export async function activate(
         reportError(error, 'confirm-analysis-complete');
       }
     }),
-    vscode.commands.registerCommand('ticketManager.unassignAi', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.unassignAi', async (arg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
@@ -5501,7 +5501,7 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.reviewWithAi', async () => {
+    vscode.commands.registerCommand('praxis.reviewWithAi', async () => {
       try {
         const issue = detailsProvider.getActiveIssue();
         if (!issue) {
@@ -5527,7 +5527,7 @@ export async function activate(
         reportError(error);
       }
     }),
-    vscode.commands.registerCommand('ticketManager.localPeerReview', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.localPeerReview', async (arg?: unknown) => {
       try {
         const issueKey = resolveIssueKeyFromArgOrActive(arg);
         if (!issueKey) {
@@ -5543,7 +5543,7 @@ export async function activate(
         reportError(error, 'localPeerReview');
       }
     }),
-    vscode.commands.registerCommand('ticketManager.startSubTaskDelivery', async (parentIssueKey?: string, subTaskKey?: string) => {
+    vscode.commands.registerCommand('praxis.startSubTaskDelivery', async (parentIssueKey?: string, subTaskKey?: string) => {
       if (!parentIssueKey || !subTaskKey) {
         void vscode.window.showErrorMessage('Parent issue key and sub-task key are required.');
         return;
@@ -5558,13 +5558,13 @@ export async function activate(
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.openSettings', async () => {
+    vscode.commands.registerCommand('praxis.openSettings', async () => {
       await vscode.commands.executeCommand(
         'workbench.action.openSettings',
-        `@ext:${context.extension.id} ticketManager`
+        `@ext:${context.extension.id} praxis`
       );
     }),
-    vscode.commands.registerCommand('ticketManager.toggleWorkMode', async () => {
+    vscode.commands.registerCommand('praxis.toggleWorkMode', async () => {
       try {
         const nextMode: BoardsSidebarMode = getBoardsSidebarMode() === 'work' ? 'classic' : 'work';
         // Only persist the mode change. The onDidChangeConfiguration handler
@@ -5573,13 +5573,13 @@ export async function activate(
         // that left the board editor panel unable to open.
         await setBoardsSidebarMode(nextMode);
         void vscode.window.showInformationMessage(
-          nextMode === 'work' ? 'Ticket Manager switched to Work Mode.' : 'Ticket Manager switched to Classic mode.'
+          nextMode === 'work' ? 'Praxis switched to Work Mode.' : 'Praxis switched to Classic mode.'
         );
       } catch (error) {
         reportError(error, 'toggle-work-mode');
       }
     }),
-    vscode.commands.registerCommand('ticketManager.configureAi', async () => {
+    vscode.commands.registerCommand('praxis.configureAi', async () => {
       try {
         const result = await promptToConfigureDefaultAiProvider({
           openVercelGatewaySettings: () => aiGatewaySettingsPanel.open(),
@@ -5628,21 +5628,21 @@ export async function activate(
       },
       output: outputChannel,
       onConnectionCheck: result => {
-        ticketManagerStatusBar.recordConnectionResult(result);
+        praxisStatusBar.recordConnectionResult(result);
       },
       reportError,
       vercelAgentService,
       copilotSessionPanelManager,
       aiSessionManager
     }),
-    vscode.window.registerWebviewViewProvider('ticketManager.myIssues', issuesSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.epics', epicsSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.boards', boardsSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.workModeBoards', workModeBoardsSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.activeSessions', activeSessionsSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.issueDetails', issueDetailsSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.setup', setupSidebarViewProvider),
-    vscode.window.registerWebviewViewProvider('ticketManager.workModeSetup', workModeSetupSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.myIssues', issuesSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.epics', epicsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.boards', boardsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.workModeBoards', workModeBoardsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.activeSessions', activeSessionsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.issueDetails', issueDetailsSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.setup', setupSidebarViewProvider),
+    vscode.window.registerWebviewViewProvider('praxis.workModeSetup', workModeSetupSidebarViewProvider),
     setupSidebarViewProvider,
     workModeSetupSidebarViewProvider,
     issuesSidebarViewProvider,
@@ -5651,7 +5651,7 @@ export async function activate(
     workModeBoardsSidebarViewProvider,
     activeSessionsSidebarViewProvider,
     issueDetailsSidebarViewProvider,
-    ticketManagerStatusBar,
+    praxisStatusBar,
     vercelAgentService,
     copilotSessionPanelManager,
     aiSessionManager,
@@ -5683,7 +5683,7 @@ export async function activate(
       // calls automatically route to the right connection.
       const trackedRef = boardStore.getLastSelectedTrackedBoard();
       backendService.setActiveConnection(trackedRef?.connectionId);
-      ticketManagerStatusBar.resync();
+      praxisStatusBar.resync();
       void boardsProvider.refresh().catch(error => reportError(error));
     }),
     connectionStore.onDidChange(() => {
@@ -5699,7 +5699,7 @@ export async function activate(
               backendService.setActiveConnection(connectionId);
             }
           }
-          ticketManagerStatusBar.resync();
+          praxisStatusBar.resync();
           await boardsProvider.refresh();
         } catch (error) {
           reportError(error, 'connection-store-change');
@@ -5709,26 +5709,26 @@ export async function activate(
     ...(context.extensionMode !== vscode.ExtensionMode.Test
       ? [
           vscode.workspace.onDidChangeConfiguration(event => {
-            if (!event.affectsConfiguration('ticketManager')) {
+            if (!event.affectsConfiguration('praxis')) {
               return;
             }
 
             if (
-              event.affectsConfiguration('ticketManager.ai') &&
-              !event.affectsConfiguration('ticketManager.backendMode') &&
-              !event.affectsConfiguration('ticketManager.connectionType') &&
-              !event.affectsConfiguration('ticketManager.httpUrl') &&
-              !event.affectsConfiguration('ticketManager.stdioCommand') &&
-              !event.affectsConfiguration('ticketManager.stdioArgs') &&
-              !event.affectsConfiguration('ticketManager.stdioCwd') &&
-              !event.affectsConfiguration('ticketManager.liveFolderPath') &&
-              !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
-              !event.affectsConfiguration('ticketManager.liveFolderProjectName')
+              event.affectsConfiguration('praxis.ai') &&
+              !event.affectsConfiguration('praxis.backendMode') &&
+              !event.affectsConfiguration('praxis.connectionType') &&
+              !event.affectsConfiguration('praxis.httpUrl') &&
+              !event.affectsConfiguration('praxis.stdioCommand') &&
+              !event.affectsConfiguration('praxis.stdioArgs') &&
+              !event.affectsConfiguration('praxis.stdioCwd') &&
+              !event.affectsConfiguration('praxis.liveFolderPath') &&
+              !event.affectsConfiguration('praxis.liveFolderProjectKey') &&
+              !event.affectsConfiguration('praxis.liveFolderProjectName')
             ) {
               refreshAiAssignmentMenus();
               updateCommentPlaceholders();
               void updateAnalysisContext().catch(error => reportError(error));
-              void ticketManagerStatusBar.refresh().catch(error => reportError(error));
+              void praxisStatusBar.refresh().catch(error => reportError(error));
               return;
             }
 
@@ -5737,9 +5737,9 @@ export async function activate(
                 refreshAiAssignmentMenus();
                 updateCommentPlaceholders();
                 await updateAnalysisContext();
-                const boardsModeChanged = event.affectsConfiguration('ticketManager.boardsSidebarPreviewMode');
+                const boardsModeChanged = event.affectsConfiguration('praxis.boardsSidebarPreviewMode');
                 if (boardsModeChanged) {
-                  const configuration = vscode.workspace.getConfiguration('ticketManager');
+                  const configuration = vscode.workspace.getConfiguration('praxis');
                   const desiredMode = getBoardsSidebarMode();
                   const currentPreviewMode = configuration.get<string>('boardsSidebarPreviewMode') === 'work'
                     ? 'work'
@@ -5757,15 +5757,15 @@ export async function activate(
                 // therefore the status bar connection check) is not lost.
                 const onlyBoardsModeChanged =
                   boardsModeChanged &&
-                  !event.affectsConfiguration('ticketManager.backendMode') &&
-                  !event.affectsConfiguration('ticketManager.connectionType') &&
-                  !event.affectsConfiguration('ticketManager.httpUrl') &&
-                  !event.affectsConfiguration('ticketManager.stdioCommand') &&
-                  !event.affectsConfiguration('ticketManager.stdioArgs') &&
-                  !event.affectsConfiguration('ticketManager.stdioCwd') &&
-                  !event.affectsConfiguration('ticketManager.liveFolderPath') &&
-                  !event.affectsConfiguration('ticketManager.liveFolderProjectKey') &&
-                  !event.affectsConfiguration('ticketManager.liveFolderProjectName');
+                  !event.affectsConfiguration('praxis.backendMode') &&
+                  !event.affectsConfiguration('praxis.connectionType') &&
+                  !event.affectsConfiguration('praxis.httpUrl') &&
+                  !event.affectsConfiguration('praxis.stdioCommand') &&
+                  !event.affectsConfiguration('praxis.stdioArgs') &&
+                  !event.affectsConfiguration('praxis.stdioCwd') &&
+                  !event.affectsConfiguration('praxis.liveFolderPath') &&
+                  !event.affectsConfiguration('praxis.liveFolderProjectKey') &&
+                  !event.affectsConfiguration('praxis.liveFolderProjectName');
 
                 if (onlyBoardsModeChanged) {
                   // A pure classic <-> work preview switch keeps the same backend,

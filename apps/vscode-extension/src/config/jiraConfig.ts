@@ -28,9 +28,9 @@ import {
   type LegacyAiSettingsSnapshot
 } from './aiProviderConfig';
 
-const CONFIG_ROOT = 'ticketManager';
-const SECRET_ENV_KEY = 'ticketManager.secretEnv';
-const SECRET_HEADERS_KEY = 'ticketManager.secretHeaders';
+const CONFIG_ROOT = 'praxis';
+const SECRET_ENV_KEY = 'praxis.secretEnv';
+const SECRET_HEADERS_KEY = 'praxis.secretHeaders';
 
 const DEFAULT_JIRA_BASE_URL = 'https://jira.example.com';
 
@@ -385,7 +385,7 @@ export class AppConfigStore {
   }
 
   public async getGitLabApiKeyFromSecrets(context: vscode.ExtensionContext): Promise<string> {
-    return (await context.secrets.get('ticketManager.gitlabApiKey') ?? '').trim();
+    return (await context.secrets.get('praxis.gitlabApiKey') ?? '').trim();
   }
 
   public getGitLabApiKey(): string {
@@ -393,11 +393,11 @@ export class AppConfigStore {
   }
 
   public async storeGitLabApiKey(context: vscode.ExtensionContext, value: string): Promise<void> {
-    await context.secrets.store('ticketManager.gitlabApiKey', value);
+    await context.secrets.store('praxis.gitlabApiKey', value);
   }
 
   public async deleteGitLabApiKeySecret(context: vscode.ExtensionContext): Promise<void> {
-    await context.secrets.delete('ticketManager.gitlabApiKey');
+    await context.secrets.delete('praxis.gitlabApiKey');
   }
 
   public getGitLabProjectPath(): string {
@@ -512,7 +512,7 @@ export class AppConfigStore {
     );
   }
 
-  /** Migrate legacy AI settings into flat ticketManager.ai.* fields. */
+  /** Migrate legacy AI settings into flat praxis.ai.* fields. */
   public async migrateAiProviderSettings(): Promise<void> {
     const config = vscode.workspace.getConfiguration(CONFIG_ROOT);
     const target = vscode.ConfigurationTarget.Global;
@@ -598,7 +598,7 @@ export class AppConfigStore {
     return this.getActiveAiProvider();
   }
 
-  /** The single AI provider Ticket Manager uses for assignment, analysis, and agent tasks. */
+  /** The single AI provider Praxis uses for assignment, analysis, and agent tasks. */
   public getActiveAiProvider(): AiProvider | 'none' {
     return this.getAiProviderSettings().provider;
   }

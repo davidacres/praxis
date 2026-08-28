@@ -263,7 +263,7 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'ticketManager.boardPanel',
+      'praxis.boardPanel',
       this.activeBoard ? `Board: ${this.activeBoard.name}` : 'Board',
       // Use a concrete editor column so the panel always lands in the editor
       // group, even when the sidebar/activity-bar is focused (e.g. right after a
@@ -306,12 +306,12 @@ export class BoardPanelManager implements vscode.Disposable {
     }
 
     if (type === 'createIssue') {
-      await vscode.commands.executeCommand('ticketManager.createIssue', this.activeBoard);
+      await vscode.commands.executeCommand('praxis.createIssue', this.activeBoard);
       return;
     }
 
 if (type === 'openColumnConfig') {
-      await vscode.commands.executeCommand('ticketManager.configureBoardColumns');
+      await vscode.commands.executeCommand('praxis.configureBoardColumns');
       return;
     }
 
@@ -321,7 +321,7 @@ if (type === 'openColumnConfig') {
         return;
       }
 
-      await vscode.commands.executeCommand('ticketManager.openIssueFullDetails', issueKey);
+      await vscode.commands.executeCommand('praxis.openIssueFullDetails', issueKey);
       return;
     }
 
@@ -353,7 +353,7 @@ if (type === 'openColumnConfig') {
       }
       const provider = asString(message.provider) as AiProvider | undefined;
       if (action === 'viewDetails') {
-        await vscode.commands.executeCommand('ticketManager.openIssueFullDetails', issueKey);
+        await vscode.commands.executeCommand('praxis.openIssueFullDetails', issueKey);
         return;
       }
       const actions = this.cardActions;
@@ -712,7 +712,7 @@ if (type === 'openColumnConfig') {
       } else if (display) {
         const columnPrefs = this.boardColumnStore.getPreferences(board.id);
         const swim = columnPrefs.swimLaneGroupBy;
-        const priorityColors = vscode.workspace.getConfiguration('ticketManager').get<Record<string, string>>('priorityColors', {});
+        const priorityColors = vscode.workspace.getConfiguration('praxis').get<Record<string, string>>('priorityColors', {});
         const renderPrefs: BoardRenderPrefs = {
           statusColors: columnPrefs.statusColors,
           issueTypeColors: columnPrefs.issueTypeColors,

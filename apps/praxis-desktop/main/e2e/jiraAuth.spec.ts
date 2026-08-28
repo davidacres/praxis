@@ -18,7 +18,7 @@
 //      — discovery, dynamic client registration (`POST /register`), browser-
 //      style authorize (`GET /authorize`), and authorization_code token grant
 //      (`POST /token`). The desktop app's loopback listener is wired to the
-//      mock via `TICKET_MANAGER_E2E_NO_BROWSER=1`, which replaces the real
+//      mock via `PRAXIS_E2E_NO_BROWSER=1`, which replaces the real
 //      browser with an in-process `http.get` that follows the 302 chain so the
 //      callback is hit synchronously. The mock's event log then reads
 //      `register → authorize → token → initialize → tools/list` and the
@@ -73,12 +73,12 @@ import {
 } from './mockJiraMcpHttpServer';
 
 // `page.evaluate` runs the supplied pageFunction in the renderer, where the
-// preload bridge exposes `window.ticketManager.{connection.check, setSecret,
+// preload bridge exposes `window.praxis.{connection.check, setSecret,
 // hasSecret, ...}`. Augment the global Window interface so we can write those
 // accesses from TypeScript without per-call casts.
 declare global {
   interface Window {
-    ticketManager?: {
+    praxis?: {
       connection: {
         check: (id: string) => Promise<unknown>;
         setSecret: (id: string, name: string, value: string) => Promise<void>;
@@ -107,13 +107,13 @@ test.afterEach(async () => {
     mock = undefined;
   }
   // Defensive: cleared even though the OAuth test sets it before launchTestApp.
-  delete process.env.TICKET_MANAGER_E2E_NO_BROWSER;
+  delete process.env.PRAXIS_E2E_NO_BROWSER;
 });
 
 /**
  * Drive the equivalent of the connections UI's "Test connection" — open the
  * connections panel, select the seeded connection row, then invoke
- * `window.ticketManager.connection.check(id)` from the renderer so the seeded
+ * `window.praxis.connection.check(id)` from the renderer so the seeded
  * settings (especially `httpUrl = mock.baseUrl && jiraAuthMethod && email`)
  * reach `serviceRegistry.createJiraService` unmodified.
  *
@@ -137,7 +137,7 @@ async function runTestConnection(
   // minus the form's persist step — see the file-level comment for why we
   // skip the button.
   const result = (await page.evaluate(
-    ([id]) => window.ticketManager!.connection.check(id),
+    ([id]) => window.praxis!.connection.check(id),
     [connectionId] as [string]
   )) as { status?: string; message?: string };
   console.log(`[jiraAuth] check(${connectionId}) →`, JSON.stringify(result));
@@ -174,12 +174,12 @@ test('jiracloud api-token connection injects Authorization: Basic on every MCP r
   // machine uses DPAPI, which works for the throwaway profile).
   await page.evaluate(
     ([id, name, value]) =>
-      window.ticketManager!.connection.setSecret(id, name, value),
+      window.praxis!.connection.setSecret(id, name, value),
     ['jira-token', 'jiraApiToken', token] as [string, string, string]
   );
 
   const hasSaved = await page.evaluate(
-    ([id, name]) => window.ticketManager!.connection.hasSecret(id, name),
+    ([id, name]) => window.praxis!.connection.hasSecret(id, name),
     ['jira-token', 'jiraApiToken'] as [string, string]
   );
   expect(hasSaved).toBe(true);
@@ -216,7 +216,7 @@ test('jiracloud oauth connection runs the full SDK OAuth loop without a browser'
   // branches to the in-process follow-redirects shim instead of
   // shell.openExternal. Set it BEFORE launchTestApp so the env merge
   // (process.env spread into the Electron process) carries it over.
-  process.env.TICKET_MANAGER_E2E_NO_BROWSER = '1';
+  process.env.PRAXIS_E2E_NO_BROWSER = '1';
 
   mock = await startMockJiraMcpHttpServer({ mode: 'oauth' });
   app = await launchTestApp({
@@ -295,7 +295,7 @@ test('jiracloud oauth connection can use a pre-registered client (BYO)', async (
 
   // Same in-process browser shim as the dynamic-client test above — set BEFORE
   // launchTestApp so the env merge carries the flag into the Electron child.
-  process.env.TICKET_MANAGER_E2E_NO_BROWSER = '1';
+  process.env.PRAXIS_E2E_NO_BROWSER = '1';
 
   const clientId = 'my-3lo-client-id';
   const clientSecret = 'my-3lo-secret';
@@ -351,18 +351,18 @@ test('jiracloud oauth connection can use a pre-registered client (BYO)', async (
   // state — covers the rare race where `safeStorage.isEncryptionAvailable()`
   // is the slow path on cold boot.
   await page.waitForFunction(() =>
-    Boolean(window.ticketManager?.connection?.setSecret)
+    Boolean(window.praxis?.connection?.setSecret)
   );
   await page.evaluate(
     ([id, name, value]) =>
-      window.ticketManager!.connection.setSecret(id, name, value),
+      window.praxis!.connection.setSecret(id, name, value),
     ['jira-byo', 'jiraOAuthClientSecret', clientSecret] as [string, string, string]
   );
   let hasSecret = false;
   let hasSecretDiagnostics = '';
   for (let attempt = 0; attempt < 20 && !hasSecret; attempt++) {
     hasSecret = await page.evaluate(
-      ([id, name]) => window.ticketManager!.connection.hasSecret(id, name),
+      ([id, name]) => window.praxis!.connection.hasSecret(id, name),
       ['jira-byo', 'jiraOAuthClientSecret'] as [string, string]
     );
     if (!hasSecret) {
@@ -420,7 +420,7 @@ test('jiracloud oauth connection can use a pre-registered client (BYO)', async (
   expect(mock.eventLog).toContain('token');
   expect(mock.lastTokenEndpointAuth).toBe(expectedTokenBasic);
   expect(
-    mock.lastAuthorizeQuery?.redirect_uri === 'ticketmanager://oauth-callback' ||
+    mock.lastAuthorizeQuery?.redirect_uri === 'praxis://oauth-callback' ||
       /^http:\/\/127\.0\.0\.1:\d+\/callback$/.test(
         mock.lastAuthorizeQuery?.redirect_uri ?? ''
       )
@@ -480,13 +480,13 @@ test('jiracloud oauth connection can use a pre-registered client (BYO)', async (
   expect(mock.lastAuthorizeQuery?.audience).toBe('api.atlassian.com');
   expect(mock.lastAuthorizeQuery?.prompt).toBe('consent');
   // Redirect URI must point at one of the manager's registered callback
-  // URLs — either the `ticketmanager://` scheme callback (when
+  // URLs — either the `praxis://` scheme callback (when
   // `app.setAsDefaultProtocolClient` succeeded for this run) or the
   // loopback listener URL (when scheme registration failed). The provider
   // picks whichever the manager resolved to; the assertion here mirrors
   // that without prescribing the winner.
   expect(
-    mock.lastAuthorizeQuery?.redirect_uri === 'ticketmanager://oauth-callback' ||
+    mock.lastAuthorizeQuery?.redirect_uri === 'praxis://oauth-callback' ||
       /^http:\/\/127\.0\.0\.1:\d+\/callback$/.test(
         mock.lastAuthorizeQuery?.redirect_uri ?? ''
       )

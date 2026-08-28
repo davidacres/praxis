@@ -182,7 +182,7 @@ export class BoardColumnConfigPanel implements vscode.Disposable {
     }
 
     this.panel = vscode.window.createWebviewPanel(
-      'ticketManager.boardColumnConfig',
+      'praxis.boardColumnConfig',
       'Board settings',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }

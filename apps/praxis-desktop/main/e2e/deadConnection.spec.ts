@@ -16,7 +16,7 @@ test.beforeEach(async () => {
         id: 'dead-livefolder',
         name: 'dead-livefolder',
         mode: 'livefolder',
-        settings: { path: path.join(os.tmpdir(), 'ticket-manager-does-not-exist-9f3a') }
+        settings: { path: path.join(os.tmpdir(), 'praxis-does-not-exist-9f3a') }
       }
     ]
   });

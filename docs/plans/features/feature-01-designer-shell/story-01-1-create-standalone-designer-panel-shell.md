@@ -14,7 +14,7 @@ Add a new standalone task designer panel, command entry point, synchronous webvi
 
 ## Implementation Activities
 1. Add a new panel manager under `src/views/` using the existing standalone panel pattern.
-2. Register a `ticketManager.openTaskDesigner` command in activation/command wiring.
+2. Register a `praxis.openTaskDesigner` command in activation/command wiring.
 3. Render a dotted empty surface with toolbar actions for Add Ticket and AI Recommend.
 4. Add an empty-state message and a lightweight persisted state model with no nodes yet.
 

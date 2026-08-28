@@ -5,7 +5,7 @@ import type { SecretsStore } from '../host/secrets';
 
 const CONNECTIONS_KEY = 'connections';
 const BOARDS_KEY = 'boards';
-const SECRET_PREFIX = 'ticketManager.connection';
+const SECRET_PREFIX = 'praxis.connection';
 
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'jiracloud',
@@ -73,7 +73,7 @@ function secretKey(connectionId: string, name: string): string {
  * single global `backendMode` model. Connections and tracked boards live in
  * the `connections` / `boards` settings keys; per-connection secrets live in
  * SecretsStore keyed by connection id. Host-agnostic: the VS Code adapter
- * backs `settings` with `vscode.workspace.getConfiguration('ticketManager')`
+ * backs `settings` with `vscode.workspace.getConfiguration('praxis')`
  * and forwards `vscode.workspace.onDidChangeConfiguration` into
  * `notifyChanged()`; the Electron adapter backs it with a JSON settings file
  * and has no external change source to forward.
