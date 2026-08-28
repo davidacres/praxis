@@ -63,11 +63,15 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
   const visualSettings = settings?.gitVisual ?? { branchColorsEnabled: true, mergeMarkersEnabled: true, orientation: 'vertical' as const, performanceMode: false };
   const gitSettings = settings?.git ?? { executablePath: '', defaultBranch: '', fetchIntervalMinutes: 0 };
 
-  const load = async (repositoryPath?: string) => {
+  // Always takes an explicit repository: Git is per-project, and the service
+  // no longer guesses one from the process working directory.
+  const load = async (target: string, options?: { force?: boolean }) => {
     setLoading(true);
     setError(undefined);
     try {
-      const next = await window.ticketManager.git.open(repositoryPath);
+      const next = options?.force
+        ? await window.ticketManager.git.refresh(target)
+        : await window.ticketManager.git.open(target);
       setSnapshot(next);
       setCompareLeft(current => current || next.currentBranch || next.branches.find(branch => !branch.isRemote)?.name || 'HEAD');
       setCompareRight(current => current || next.branches.find(branch => !branch.isRemote && branch.name !== next.currentBranch)?.name || next.currentBranch || 'HEAD');
@@ -88,7 +92,9 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     try {
       const result = await window.ticketManager.git.preflight(candidate);
       setPreflight(result);
-      if (result.status === 'repository' || result.status === 'worktree') {
+      // Both statuses carry a resolved repositoryPath; checking keeps that
+      // guarantee honest rather than asserting it away.
+      if ((result.status === 'repository' || result.status === 'worktree') && result.repositoryPath) {
         await load(result.repositoryPath);
       } else {
         setLoading(false);
@@ -269,7 +275,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
         </div>
         <div className="git-header-actions">
           <label className="git-search"><span>⌕</span><input aria-label="Search commits" placeholder="Search commits" value={query} onChange={event => setQuery(event.target.value)} /></label>
-          <button className="git-button" onClick={() => void load()} disabled={loading}>{loading ? 'Loading…' : '↻ Refresh'}</button>
+          <button className="git-button" onClick={() => { if (snapshot) void load(snapshot.repositoryPath, { force: true }); }} disabled={loading || !snapshot}>{loading ? 'Loading…' : '↻ Refresh'}</button>
           <button className="git-button git-open-button" data-testid="git-open-repository" onClick={() => void window.ticketManager.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })} disabled={loading}>Open repository</button>
           <button className={`git-button git-settings-button${settingsOpen ? ' active' : ''}`} aria-label="Git settings" onClick={() => setSettingsOpen(value => !value)}>⚙</button>
           {snapshot && <button className={`git-button git-changes-button${changesOpen ? ' active' : ''}`} data-testid="git-changes" onClick={() => { setChangesOpen(value => !value); void refreshStatus(); }}>Changes{status?.files.length ? ` ${status.files.length}` : ''}</button>}
@@ -325,7 +331,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
         <button disabled={!compareLeft || !compareRight || compareLeft === compareRight} onClick={() => openDiff({ kind: 'compare', left: compareLeft, right: compareRight })}>Open comparison</button>
       </section>}
 
-      {error && <div className="git-error" role="alert"><strong>Git is unavailable</strong><span>{error}</span><button onClick={() => void load()}>Try again</button></div>}
+      {error && <div className="git-error" role="alert"><strong>Git is unavailable</strong><span>{error}</span><button onClick={() => void inspectAndLoad(repositoryPath)}>Try again</button></div>}
       {busyAction && <div className="git-progress" role="status"><span className="git-progress-dot" />{busyAction}…</div>}
       {loading && !snapshot && <div className="git-empty"><div className="git-spinner" /><h2>Reading repository history</h2><p>Building the branch map from your installed Git.</p></div>}
       {!loading && !snapshot && !error && <div className="git-empty"><div className="git-empty-icon">⌘</div><h2>No repository selected</h2><p>Open a folder containing a Git repository to explore its history.</p></div>}

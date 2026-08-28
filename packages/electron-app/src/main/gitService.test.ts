@@ -118,3 +118,30 @@ test('handles missing Git, non-repositories, worktrees, shallow history, and det
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
+
+test('git operations refuse an empty repository path instead of guessing one', async () => {
+  // Git is per-project. This used to fall back to a
+  // TICKET_MANAGER_DEFAULT_REPOSITORY env var and then to `process.cwd()`,
+  // which silently resolved against whatever directory the app was launched
+  // from — so a Refresh with no path quietly swapped to an unrelated
+  // repository. Refusing is the honest answer.
+  const originalDefault = process.env.TICKET_MANAGER_DEFAULT_REPOSITORY;
+  process.env.TICKET_MANAGER_DEFAULT_REPOSITORY = process.cwd();
+  try {
+    for (const empty of ['', '   ']) {
+      await assert.rejects(
+        () => loadGitRepository(empty),
+        /No repository path was supplied/,
+        `expected "${empty}" to be refused`
+      );
+    }
+    // Even with the old env var set, it must not be consulted.
+    await assert.rejects(
+      () => loadGitRepository(undefined as unknown as string),
+      /No repository path was supplied/
+    );
+  } finally {
+    if (originalDefault === undefined) delete process.env.TICKET_MANAGER_DEFAULT_REPOSITORY;
+    else process.env.TICKET_MANAGER_DEFAULT_REPOSITORY = originalDefault;
+  }
+});

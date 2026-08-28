@@ -5,7 +5,7 @@ export function registerGitIpc(): void {
   ipcMain.handle('git:preflight', async (_event, repositoryPath?: string) => preflightGitRepository(repositoryPath));
   ipcMain.handle('git:initialize', async (_event, repositoryPath: string) => initializeGitRepository(repositoryPath));
   ipcMain.handle('git:clone', async (_event, repositoryUrl: string, targetParent: string, targetName?: string) => cloneGitRepository(repositoryUrl, targetParent, targetName));
-  ipcMain.handle('git:open', async (_event, repositoryPath?: string) => loadGitRepository(repositoryPath));
+  ipcMain.handle('git:open', async (_event, repositoryPath: string) => loadGitRepository(repositoryPath));
   ipcMain.handle('git:refresh', async (_event, repositoryPath: string) => loadGitRepository(repositoryPath, { force: true }));
   ipcMain.handle('git:status', async (_event, repositoryPath: string) => getGitStatus(repositoryPath));
   ipcMain.handle('git:getCommit', async (_event, repositoryPath: string, hash: string) => getGitCommit(repositoryPath, hash));

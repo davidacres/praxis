@@ -70,8 +70,18 @@ async function gitWithInput(args: string[], cwd: string, input: string): Promise
   });
 }
 
-async function resolveRepository(input?: string): Promise<string> {
-  const candidate = input?.trim() || process.env.TICKET_MANAGER_DEFAULT_REPOSITORY?.trim() || process.cwd();
+/**
+ * Git is per-project, so the caller must always say which repository it means.
+ * This used to fall back to a `TICKET_MANAGER_DEFAULT_REPOSITORY` env var and
+ * then to `process.cwd()`, which silently resolved against whatever directory
+ * the app process was launched from — a repository the user never asked for.
+ * Refusing is the honest answer; every caller has the path.
+ */
+async function resolveRepository(input: string): Promise<string> {
+  const candidate = input?.trim();
+  if (!candidate) {
+    throw new Error('No repository path was supplied. Open Git from a project with a workspace folder.');
+  }
   return (await git(['rev-parse', '--show-toplevel'], candidate)).trim();
 }
 
@@ -118,7 +128,7 @@ export async function cloneGitRepository(repositoryUrl: string, targetParent: st
   return preflightGitRepository(destination);
 }
 
-export async function loadGitRepository(input?: string, options?: { force?: boolean }): Promise<GitRepositorySnapshot> {
+export async function loadGitRepository(input: string, options?: { force?: boolean }): Promise<GitRepositorySnapshot> {
   const repositoryPath = await resolveRepository(input);
   const cached = repositoryCache.get(repositoryPath);
   if (cached && !options?.force && Date.now() - Date.parse(cached.loadedAt) < CACHE_TTL_MS) return cached;
