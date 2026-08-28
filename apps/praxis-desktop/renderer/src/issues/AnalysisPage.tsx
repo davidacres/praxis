@@ -29,9 +29,9 @@ export function AnalysisPage({ issueKey, connectionId, provider, model, onClose 
     setState(undefined);
     setError(undefined);
     autoStartedIssueRef.current = undefined;
-    void window.ticketManager.issue.get(issueKey, connectionId).then(setIssue);
-    void window.ticketManager.ai.getAnalysis(issueKey).then(setState);
-    const unsubscribe = window.ticketManager.ai.onAnalysisChanged(next => {
+    void window.praxis.issue.get(issueKey, connectionId).then(setIssue);
+    void window.praxis.ai.getAnalysis(issueKey).then(setState);
+    const unsubscribe = window.praxis.ai.onAnalysisChanged(next => {
       if (next.issueKey === issueKey) {
         setState(next);
       }
@@ -50,7 +50,7 @@ export function AnalysisPage({ issueKey, connectionId, provider, model, onClose 
     setError(undefined);
     setQuestion('');
     try {
-      await window.ticketManager.ai.submitAnalysis(issueKey, text, connectionId, provider, model);
+      await window.praxis.ai.submitAnalysis(issueKey, text, connectionId, provider, model);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -98,7 +98,7 @@ export function AnalysisPage({ issueKey, connectionId, provider, model, onClose 
             data-testid="analysis-confirm-btn"
             disabled={busy}
             onClick={() =>
-              void window.ticketManager.ai
+              void window.praxis.ai
                 .setAnalysisConfirmed(issueKey, !state.confirmed)
                 .catch(err => setError(err instanceof Error ? err.message : String(err)))
             }
@@ -113,7 +113,7 @@ export function AnalysisPage({ issueKey, connectionId, provider, model, onClose 
             data-testid="analysis-clear-btn"
             disabled={busy}
             onClick={() =>
-              void window.ticketManager.ai
+              void window.praxis.ai
                 .clearAnalysis(issueKey)
                 .catch(err => setError(err instanceof Error ? err.message : String(err)))
             }
@@ -188,7 +188,7 @@ export function AnalysisPage({ issueKey, connectionId, provider, model, onClose 
           <button
             className="btn"
             data-testid="analysis-cancel-btn"
-            onClick={() => void window.ticketManager.ai.cancelAnalysis(issueKey)}
+            onClick={() => void window.praxis.ai.cancelAnalysis(issueKey)}
           >
             Cancel
           </button>

@@ -93,7 +93,7 @@ export async function stageIssueAttachments(options: {
 
   const directoryPath = path.join(
     os.tmpdir(),
-    'ticket-manager',
+    'praxis',
     'issue-attachments',
     sanitizePathSegment(options.issue.key)
   );

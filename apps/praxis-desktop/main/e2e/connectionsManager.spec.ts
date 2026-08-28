@@ -92,7 +92,7 @@ test('the new-connection form renders the per-mode field sets', async () => {
 });
 
 test('saving a live folder connection auto-tracks its board', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-conn-live-'));
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-conn-live-'));
   try {
     writeFixtureLiveFolder(liveFolderDir);
     await openNewConnectionForm();

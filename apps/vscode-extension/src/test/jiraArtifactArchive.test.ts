@@ -13,7 +13,7 @@ suite('jiraArtifactArchive', () => {
   });
 
   test('zips MSI artifacts before upload with ticket and build suffixes', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ticket-manager-archive-'));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-archive-'));
     tempDirectories.push(tempDir);
 
     const artifactPath = path.join(tempDir, 'SystemConfigurator.msi');
@@ -38,7 +38,7 @@ suite('jiraArtifactArchive', () => {
   });
 
   test('defaults the MSI build suffix to a zero-padded artifact index', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ticket-manager-archive-'));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-archive-'));
     tempDirectories.push(tempDir);
 
     const artifactPath = path.join(tempDir, 'SystemConfigurator.msi');
@@ -53,15 +53,15 @@ suite('jiraArtifactArchive', () => {
   });
 
   test('keeps non-MSI artifacts unchanged', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ticket-manager-archive-'));
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-archive-'));
     tempDirectories.push(tempDir);
 
-    const artifactPath = path.join(tempDir, 'TicketManager.txt');
+    const artifactPath = path.join(tempDir, 'Praxis.txt');
     await fs.writeFile(artifactPath, 'plain-text');
 
     const prepared = await prepareArtifactForJiraUpload(artifactPath);
 
-    assert.strictEqual(prepared.attachmentName, 'TicketManager.txt');
+    assert.strictEqual(prepared.attachmentName, 'Praxis.txt');
     assert.strictEqual(prepared.uploadPath, artifactPath);
     assert.strictEqual(prepared.cleanup, undefined);
   });

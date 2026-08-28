@@ -24,7 +24,7 @@ suite('agentWorkflowCatalog', () => {
   });
 
   test('discovers workspace workflow packs from .github/skills', async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-workflow-'));
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'praxis-workflow-'));
     tempDirs.push(tempRoot);
 
     await createSkill(
@@ -55,10 +55,10 @@ suite('agentWorkflowCatalog', () => {
   });
 
   test('discovers workflow packs from symlinked skill directories', async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-workflow-'));
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'praxis-workflow-'));
     tempDirs.push(tempRoot);
 
-    const sharedSkillRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-shared-skill-'));
+    const sharedSkillRoot = await mkdtemp(path.join(os.tmpdir(), 'praxis-shared-skill-'));
     tempDirs.push(sharedSkillRoot);
 
     const sharedSkillDir = path.join(sharedSkillRoot, 'add-edit-dotnet-web-api');
@@ -93,7 +93,7 @@ suite('agentWorkflowCatalog', () => {
   });
 
   test('resolves a configured workflow directory to the repo-relative skill file', async () => {
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'ticket-manager-workflow-'));
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'praxis-workflow-'));
     tempDirs.push(tempRoot);
 
     const skillDir = await createSkill(

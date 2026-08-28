@@ -148,7 +148,7 @@ export class IssuesTreeProvider implements vscode.TreeDataProvider<TreeNode>, vs
       item.contextValue = element.contextValue;
       item.iconPath = new vscode.ThemeIcon('chevron-down');
       item.command = {
-        command: 'ticketManager.loadMore',
+        command: 'praxis.loadMore',
         title: 'Load More',
         arguments: [element]
       };

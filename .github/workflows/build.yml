@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Compile extension
-        run: npm run compile --workspace=ticket-manager
+        run: npm run compile --workspace=praxis
 
       - name: Package VSIX
         working-directory: apps/vscode-extension
@@ -34,5 +34,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main'
         with:
-          name: ticket-manager-vsix
+          name: praxis-vsix
           path: "apps/vscode-extension/*.vsix"

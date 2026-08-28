@@ -21,7 +21,7 @@ import { getSecretsStore } from './connectionStoreInstance';
  * - `vscode://` UriHandler → a loopback `node:http` listener on a fixed
  *   preferred port (fallback: OS-assigned), callback path `/callback`.
  * - `vscode.env.openExternal` → `shell.openExternal`, with an e2e seam:
- *   `TICKET_MANAGER_E2E_NO_BROWSER=1` performs the authorization GET in-process
+ *   `PRAXIS_E2E_NO_BROWSER=1` performs the authorization GET in-process
  *   (following redirects) so the loopback callback fires without a real browser.
  */
 const OAUTH_CALLBACK_PATH = '/callback';
@@ -35,7 +35,7 @@ const MAX_REDIRECTS = 5;
  * org admins allowlist — a localhost port reads as an untrusted app to
  * Atlassian orgs with redirect-URL restrictions.
  */
-export const OAUTH_SCHEME = 'ticketmanager';
+export const OAUTH_SCHEME = 'praxis';
 const OAUTH_SCHEME_CALLBACK_URL = `${OAUTH_SCHEME}://oauth-callback`;
 
 type PendingAuthorization = {
@@ -226,7 +226,7 @@ class DesktopMcpOAuthProvider implements OAuthClientProvider {
     // Include the client id so a BYO-client connection and a DCR connection
     // to the same server never share cached tokens/verifiers.
     const identity = this.serverUrl + (this.oauthClient ? `#${this.oauthClient.clientId}` : '');
-    return `ticketManager.mcp.oauth.${kind}.${buildServerKey(identity)}`;
+    return `praxis.mcp.oauth.${kind}.${buildServerKey(identity)}`;
   }
 }
 
@@ -257,7 +257,7 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
   }
 
   /**
-   * Entry point for `ticketmanager://` URLs delivered by the OS (second-instance
+   * Entry point for `praxis://` URLs delivered by the OS (second-instance
    * argv on Windows/Linux, `open-url` on macOS — wired in index.ts).
    */
   public handleProtocolUrl(urlString: string): void {
@@ -321,7 +321,7 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
     // not the verifier).
     console.log(`[oauth] Opening authorization URL: ${authorizationUrl.toString()}`);
 
-    if (process.env.TICKET_MANAGER_E2E_NO_BROWSER === '1') {
+    if (process.env.PRAXIS_E2E_NO_BROWSER === '1') {
       // e2e seam: follow the authorization redirect chain in-process so the
       // loopback callback fires without launching a real browser.
       void this.followRedirectsInProcess(authorizationUrl.toString(), MAX_REDIRECTS).catch(
@@ -352,7 +352,7 @@ export class DesktopMcpOAuthManager implements McpOAuthProviderSource {
 
   /**
    * Shared callback settlement for both delivery channels (loopback HTTP and
-   * the `ticketmanager://` protocol URL). Resolves or rejects the pending
+   * the `praxis://` protocol URL). Resolves or rejects the pending
    * authorization from the callback's query params.
    */
   private settlePending(url: URL): 'resolved' | 'rejected' | 'none' {

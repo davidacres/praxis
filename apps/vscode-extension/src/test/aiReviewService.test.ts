@@ -68,7 +68,7 @@ Questions:
       '{',
       '  "status": "needs_clarification",',
       '  "workflowReference": "",',
-      '  "comment": "Please specify the workflow pack for this ticket in Ticket Manager or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api."',
+      '  "comment": "Please specify the workflow pack for this ticket in Praxis or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api."',
       '}',
       '```'
     ].join('\n'));
@@ -76,7 +76,7 @@ Questions:
     assert.deepStrictEqual(assessment, {
       status: 'needs_clarification',
       workflowReference: undefined,
-      clarificationComment: 'Please specify the workflow pack for this ticket in Ticket Manager or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api.'
+      clarificationComment: 'Please specify the workflow pack for this ticket in Praxis or add a Jira comment such as Workflow pack: add-edit-dotnet-web-api.'
     });
   });
 });

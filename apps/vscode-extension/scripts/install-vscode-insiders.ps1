@@ -60,7 +60,7 @@ if (-not $SkipPackage) {
     }
     Push-Location $projectRoot
     try {
-        $repoUrl = "https://git.tools.dev.assaabloyglobalsolutions.net/traka/software/ai/tools/ticket-manager-extension"
+        $repoUrl = "https://git.tools.dev.assaabloyglobalsolutions.net/traka/software/ai/tools/praxis"
         $rawContentUrl = "$repoUrl/-/raw/main/"
         & npx @vscode/vsce package --baseContentUrl $rawContentUrl --baseImagesUrl $rawContentUrl --out $vsixPath
         if ($LASTEXITCODE -ne 0) {

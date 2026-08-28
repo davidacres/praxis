@@ -30,7 +30,7 @@ async function createLiveFolderFixture(name: string): Promise<LiveFolderFixture>
   const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const rootUri = vscode.Uri.joinPath(
     workspaceFolder.uri,
-    '.ticket-manager-test',
+    '.praxis-test',
     `${name}-${uniqueSuffix}`
   );
   const plansRootUri = vscode.Uri.joinPath(rootUri, 'product', 'docs', 'plans');
@@ -125,7 +125,7 @@ suite('markdownPlanParser', () => {
     }
     const parentUri = vscode.Uri.joinPath(
       workspaceFolder.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `empty-repositories-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     const repoOneUri = vscode.Uri.joinPath(parentUri, 'repo-one');
@@ -151,7 +151,7 @@ suite('markdownPlanParser', () => {
     }
     const emptyUri = vscode.Uri.joinPath(
       workspaceFolder.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `empty-plans-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     fixtureRoots.push(emptyUri);
@@ -172,7 +172,7 @@ suite('markdownPlanParser', () => {
     }
     const plansUri = vscode.Uri.joinPath(
       workspaceFolder.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `loose-tickets-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     fixtureRoots.push(plansUri);
@@ -196,7 +196,7 @@ suite('markdownPlanParser', () => {
     }
     const repoUri = vscode.Uri.joinPath(
       workspaceFolder.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `csharp-features-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     const sourceFeaturesUri = vscode.Uri.joinPath(repoUri, 'Traka.Integration.Engine', 'Features');
@@ -226,7 +226,7 @@ suite('markdownPlanParser', () => {
     }
     const parentUri = vscode.Uri.joinPath(
       workspaceFolder.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `parent-with-child-plans-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     const childFeatureUri = vscode.Uri.joinPath(
@@ -380,7 +380,7 @@ NullReferenceException in ISyncResultBuilder when sync completes.
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const rootUri = vscode.Uri.joinPath(
       workspaceFolder!.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `bugs-only-${uniqueSuffix}`
     );
     fixtureRoots.push(rootUri);
@@ -425,7 +425,7 @@ Sync manager times out after 30s.
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const rootUri = vscode.Uri.joinPath(
       workspaceFolder!.uri,
-      '.ticket-manager-test',
+      '.praxis-test',
       `mixed-${uniqueSuffix}`
     );
     fixtureRoots.push(rootUri);

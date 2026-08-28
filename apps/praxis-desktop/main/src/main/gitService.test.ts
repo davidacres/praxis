@@ -15,16 +15,16 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
 }
 
 test('handles missing Git, non-repositories, worktrees, shallow history, and detached HEAD', async () => {
-  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'ticket-manager-git-'));
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'praxis-git-'));
   const repository = path.join(root, 'repo');
   const worktree = path.join(root, 'worktree');
   const shallow = path.join(root, 'shallow');
-  const originalGitPath = process.env.TICKET_MANAGER_GIT_PATH;
+  const originalGitPath = process.env.PRAXIS_GIT_PATH;
   try {
     await fsp.mkdir(repository);
-    process.env.TICKET_MANAGER_GIT_PATH = path.join(root, 'missing-git');
+    process.env.PRAXIS_GIT_PATH = path.join(root, 'missing-git');
     await assert.rejects(() => loadGitRepository(repository), /Git could not complete/);
-    delete process.env.TICKET_MANAGER_GIT_PATH;
+    delete process.env.PRAXIS_GIT_PATH;
     await assert.rejects(() => loadGitRepository(root), /Git could not complete/);
     assert.equal((await preflightGitRepository()).status, 'no-workspace');
     assert.equal((await preflightGitRepository(root)).status, 'not-a-repository');
@@ -113,20 +113,20 @@ test('handles missing Git, non-repositories, worktrees, shallow history, and det
     const detachedSnapshot = await loadGitRepository(repository, { force: true });
     assert.equal(detachedSnapshot.currentBranch, undefined);
   } finally {
-    if (originalGitPath === undefined) delete process.env.TICKET_MANAGER_GIT_PATH;
-    else process.env.TICKET_MANAGER_GIT_PATH = originalGitPath;
+    if (originalGitPath === undefined) delete process.env.PRAXIS_GIT_PATH;
+    else process.env.PRAXIS_GIT_PATH = originalGitPath;
     await fsp.rm(root, { recursive: true, force: true });
   }
 });
 
 test('git operations refuse an empty repository path instead of guessing one', async () => {
   // Git is per-project. This used to fall back to a
-  // TICKET_MANAGER_DEFAULT_REPOSITORY env var and then to `process.cwd()`,
+  // PRAXIS_DEFAULT_REPOSITORY env var and then to `process.cwd()`,
   // which silently resolved against whatever directory the app was launched
   // from — so a Refresh with no path quietly swapped to an unrelated
   // repository. Refusing is the honest answer.
-  const originalDefault = process.env.TICKET_MANAGER_DEFAULT_REPOSITORY;
-  process.env.TICKET_MANAGER_DEFAULT_REPOSITORY = process.cwd();
+  const originalDefault = process.env.PRAXIS_DEFAULT_REPOSITORY;
+  process.env.PRAXIS_DEFAULT_REPOSITORY = process.cwd();
   try {
     for (const empty of ['', '   ']) {
       await assert.rejects(
@@ -141,7 +141,7 @@ test('git operations refuse an empty repository path instead of guessing one', a
       /No repository path was supplied/
     );
   } finally {
-    if (originalDefault === undefined) delete process.env.TICKET_MANAGER_DEFAULT_REPOSITORY;
-    else process.env.TICKET_MANAGER_DEFAULT_REPOSITORY = originalDefault;
+    if (originalDefault === undefined) delete process.env.PRAXIS_DEFAULT_REPOSITORY;
+    else process.env.PRAXIS_DEFAULT_REPOSITORY = originalDefault;
   }
 });

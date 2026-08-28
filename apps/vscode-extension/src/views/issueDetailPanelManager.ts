@@ -512,32 +512,32 @@ export class IssueDetailPanelManager implements vscode.Disposable {
     }
 
     if (type === 'assignToMe') {
-      await vscode.commands.executeCommand('ticketManager.assignToMe', this.activeIssueKey);
+      await vscode.commands.executeCommand('praxis.assignToMe', this.activeIssueKey);
       return;
     }
 
     if (type === 'assignToAi') {
       const provider = asString(message.provider) as AiProvider | undefined;
       if (provider) {
-        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey, provider);
+        await vscode.commands.executeCommand('praxis.assignToAi', this.activeIssueKey, provider);
       } else {
-        await vscode.commands.executeCommand('ticketManager.assignToAi', this.activeIssueKey);
+        await vscode.commands.executeCommand('praxis.assignToAi', this.activeIssueKey);
       }
       return;
     }
 
     if (type === 'localPeerReview') {
-      await vscode.commands.executeCommand('ticketManager.localPeerReview', this.activeIssueKey);
+      await vscode.commands.executeCommand('praxis.localPeerReview', this.activeIssueKey);
       return;
     }
 
     if (type === 'openAnalysisWindow') {
-      await vscode.commands.executeCommand('ticketManager.openAnalysisWindow', this.activeIssueKey);
+      await vscode.commands.executeCommand('praxis.openAnalysisWindow', this.activeIssueKey);
       return;
     }
 
     if (type === 'viewAiSession') {
-      await vscode.commands.executeCommand('ticketManager.viewAgentSession', this.activeIssueKey);
+      await vscode.commands.executeCommand('praxis.viewAgentSession', this.activeIssueKey);
       return;
     }
 
@@ -700,7 +700,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
       if (!subTaskKey) {
         return;
       }
-      await vscode.commands.executeCommand('ticketManager.startSubTaskDelivery', this.activeIssueKey, subTaskKey);
+      await vscode.commands.executeCommand('praxis.startSubTaskDelivery', this.activeIssueKey, subTaskKey);
       return;
     }
 
@@ -1051,7 +1051,7 @@ export class IssueDetailPanelManager implements vscode.Disposable {
   private createPanelWithHtml(issueKey: string): void {
     const nonce = createNonce();
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.issueDetailPanel',
+      'praxis.issueDetailPanel',
       issueKey,
       vscode.ViewColumn.Beside,
       {

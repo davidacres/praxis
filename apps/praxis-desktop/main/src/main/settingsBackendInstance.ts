@@ -11,13 +11,13 @@ import { SharedSettingsBackend } from './adapters/sharedSettingsBackend';
  * Computed eagerly so `connectionStoreInstance` (which needs the same path
  * for its underlying `JsonKeyValueStore`) can share it.
  *
- * `TICKET_MANAGER_SETTINGS_PATH` overrides the shared location. It exists for
+ * `PRAXIS_SETTINGS_PATH` overrides the shared location. It exists for
  * the Playwright e2e suite: `--user-data-dir` isolates Electron's own state
  * but not this file, so without the override every test run would read and
  * write the developer's real settings (and leak test connections into them).
  */
 export function getSharedSettingsFilePath(): string {
-  const override = process.env.TICKET_MANAGER_SETTINGS_PATH;
+  const override = process.env.PRAXIS_SETTINGS_PATH;
   if (override) {
     return override;
   }

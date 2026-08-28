@@ -20,7 +20,7 @@ Currently, the Live Folder to Jira migration command creates remote issues but l
 
 ## Current State
 
-- `Ticket Manager: Migrate Live Folder to Jira Cloud` command exists but doesn't clean up
+- `Praxis: Migrate Live Folder to Jira Cloud` command exists but doesn't clean up
 - Migration mapping not persisted (can't resume or prevent duplicates)
 - No post-migration cleanup UI
 - File identification is structural (folder layout) not semantic (front matter)
@@ -79,7 +79,7 @@ interface MigrationMapping {
 ```
 
 **Persist to:**
-- Workspace state: `ticketManager.liveFolderMigrationMappings` (fast resume)
+- Workspace state: `praxis.liveFolderMigrationMappings` (fast resume)
 - Optional sidecar file: `.vscode/live-folder-migrations.json` (audit trail, human-readable)
 
 ### Phase 3: Safe Migration Command Refactor
@@ -238,17 +238,17 @@ Documentation files will be preserved:
 Add to `package.json` settings:
 
 ```json
-"ticketManager.liveFolderMigration.deleteWorkItemsAfterMigration": {
+"praxis.liveFolderMigration.deleteWorkItemsAfterMigration": {
   "type": "boolean",
   "default": false,
   "description": "Automatically delete local work-item markdown files after successful Jira migration (not recommended without backup)"
 },
-"ticketManager.liveFolderMigration.exportMappingFile": {
+"praxis.liveFolderMigration.exportMappingFile": {
   "type": "boolean",
   "default": true,
   "description": "Export migration mapping to .vscode/live-folder-migrations.json for audit trail"
 },
-"ticketManager.liveFolderMigration.preserveLocalCopies": {
+"praxis.liveFolderMigration.preserveLocalCopies": {
   "type": "boolean",
   "default": true,
   "description": "Keep local markdown files after migration (recommended for rollback)"

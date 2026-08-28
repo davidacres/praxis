@@ -32,7 +32,7 @@ export function IssuePeek({ issueKey, connectionId }: IssuePeekProps) {
   useEffect(() => {
     let cancelled = false;
     setIssue(null);
-    void window.ticketManager.issue
+    void window.praxis.issue
       .get(issueKey, connectionId)
       .then(details => {
         if (!cancelled) {

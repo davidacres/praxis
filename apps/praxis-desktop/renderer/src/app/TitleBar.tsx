@@ -71,15 +71,15 @@ export function TitleBar({
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   useEffect(() => {
-    void window.ticketManager.window.isMaximized().then(setMaximized);
-    return window.ticketManager.window.onMaximizeChange(setMaximized);
+    void window.praxis.window.isMaximized().then(setMaximized);
+    return window.praxis.window.onMaximizeChange(setMaximized);
   }, []);
 
   useEffect(() => {
     const onReloadShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r') {
         event.preventDefault();
-        void window.ticketManager.window.reload();
+        void window.praxis.window.reload();
       }
     };
     window.addEventListener('keydown', onReloadShortcut);
@@ -259,7 +259,7 @@ export function TitleBar({
           aria-label="Reload window"
           title="Reload window (⌘R / Ctrl+R)"
           data-testid="titlebar-reload"
-          onClick={() => void window.ticketManager.window.reload()}
+          onClick={() => void window.praxis.window.reload()}
         >
           <Icon name="refresh" />
         </button>
@@ -289,21 +289,21 @@ export function TitleBar({
           <button
             className="caption-btn"
             aria-label="Minimize"
-            onClick={() => void window.ticketManager.window.minimize()}
+            onClick={() => void window.praxis.window.minimize()}
           >
             <Icon name="window-minimize" size={12} strokeWidth={1} />
           </button>
           <button
             className="caption-btn"
             aria-label={maximized ? 'Restore' : 'Maximize'}
-            onClick={() => void window.ticketManager.window.toggleMaximize()}
+            onClick={() => void window.praxis.window.toggleMaximize()}
           >
             <Icon name={maximized ? 'window-restore' : 'window-maximize'} size={12} strokeWidth={1} />
           </button>
           <button
             className="caption-btn caption-close"
             aria-label="Close window"
-            onClick={() => void window.ticketManager.window.close()}
+            onClick={() => void window.praxis.window.close()}
           >
             <Icon name="window-close" size={12} strokeWidth={1} />
           </button>

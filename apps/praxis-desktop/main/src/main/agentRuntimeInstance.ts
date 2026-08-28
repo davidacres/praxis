@@ -9,12 +9,12 @@ let manager: AgentRuntimeManager | undefined;
 export function getAgentRuntimeManager(): AgentRuntimeManager {
   if (!manager) {
     const workingDirectory = getSettingsBackend().read().ai.workingDirectory.trim() || process.cwd();
-    const projectRoot = path.join(workingDirectory, '.ticket-manager');
+    const projectRoot = path.join(workingDirectory, '.praxis');
     const userRoot = app.getPath('userData');
     manager = new AgentRuntimeManager({
       userAgentsPath: path.join(userRoot, 'agents'),
       projectAgentsPath: path.join(projectRoot, 'agents'),
-      allowProjectAgents: process.env.TICKET_MANAGER_ALLOW_PROJECT_AGENTS !== '0',
+      allowProjectAgents: process.env.PRAXIS_ALLOW_PROJECT_AGENTS !== '0',
       skillRoots: [path.join(userRoot, 'skills'), path.join(projectRoot, 'skills')],
       trustedSkillRoots: [path.join(userRoot, 'skills')]
     });

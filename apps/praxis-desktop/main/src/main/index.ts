@@ -111,7 +111,7 @@ function migrateLegacyUserData(): void {
 }
 
 /**
- * Single instance: OAuth callbacks arrive as `ticketmanager://` URLs, which
+ * Single instance: OAuth callbacks arrive as `praxis://` URLs, which
  * the OS delivers by launching a second process — forward its argv URL to the
  * first instance's OAuth manager instead of opening another window. The lock
  * is per userData dir, so parallel e2e instances don't collide.
@@ -185,7 +185,7 @@ function createMainWindow(): void {
   }
   win.once('ready-to-show', () => win.show());
 
-  const devServerUrl = process.env.TICKET_MANAGER_DEV_SERVER_URL;
+  const devServerUrl = process.env.PRAXIS_DEV_SERVER_URL;
   if (devServerUrl) {
     void win.loadURL(devServerUrl);
   } else {
@@ -207,7 +207,7 @@ void app.whenReady().then(async () => {
   await initSettingsBackend();
 
   // Desktop OAuth for HTTP MCP servers (e.g. Atlassian Cloud): register the
-  // ticketmanager:// protocol so the OAuth redirect lands back in this app —
+  // praxis:// protocol so the OAuth redirect lands back in this app —
   // a stable scheme URL is what org admins allowlist (a localhost port reads
   // as an untrusted app to restricted Atlassian orgs). Dev/unpackaged runs
   // need the explicit executable + app path in the registry entry. Falls back
@@ -221,7 +221,7 @@ void app.whenReady().then(async () => {
       : app.setAsDefaultProtocolClient(OAUTH_SCHEME);
   getDesktopMcpOAuthManager().setSchemeRedirectEnabled(schemeRegistered);
   if (!schemeRegistered) {
-    console.warn('[oauth] ticketmanager:// registration failed; falling back to loopback redirect');
+    console.warn('[oauth] praxis:// registration failed; falling back to loopback redirect');
   }
 
   setMcpOAuthProviderSource(() => getDesktopMcpOAuthManager());

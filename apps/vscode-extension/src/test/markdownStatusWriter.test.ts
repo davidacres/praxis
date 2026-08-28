@@ -34,7 +34,7 @@ function tmpUri(name: string): vscode.Uri {
   const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return vscode.Uri.joinPath(
     workspaceFolder.uri,
-    '.ticket-manager-test',
+    '.praxis-test',
     `status-${unique}`,
     `${name}.md`
   );

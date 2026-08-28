@@ -117,8 +117,8 @@ test('composer selects a board and open ticket, names the session, and streams t
   await win.keyboard.type("printf 'SESSION_TERMINAL_CONTEXT\\n'");
   await win.keyboard.press('Enter');
   await expect.poll(async () => win.evaluate(async () => {
-    const sessions = await window.ticketManager.terminal.list();
-    return sessions.length ? (await window.ticketManager.terminal.getContext(sessions[0].id)).output : '';
+    const sessions = await window.praxis.terminal.list();
+    return sessions.length ? (await window.praxis.terminal.getContext(sessions[0].id)).output : '';
   })).toContain('SESSION_TERMINAL_CONTEXT');
   await win.getByLabel('Close panel').click();
   await expect(win.getByTestId('attach-terminal-context')).toBeVisible();
@@ -258,7 +258,7 @@ test('API session executes a tracker tool and shows the call and result inline',
   const win = app.window;
 
   await win.evaluate(async () => {
-    await window.ticketManager.ai.delegate({
+    await window.praxis.ai.delegate({
       issueKey: 'APP-101',
       provider: 'vercel-gateway',
       task: { goal: 'Inspect this ticket using the tracker.' }

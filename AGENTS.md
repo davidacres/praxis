@@ -10,13 +10,13 @@ A monorepo with **two front-ends over one shared core**:
 | Workspace | npm name | What it is |
 | --- | --- | --- |
 | `packages/core` | `@praxis/core` | Shared types, settings, Git parsing, AI/MCP plumbing. CommonJS. Consumed by both surfaces. |
-| `apps/vscode-extension` | `ticket-manager` | The VS Code extension. Renders its UI as **webview panels**. |
+| `apps/vscode-extension` | `praxis` | The VS Code extension. Renders its UI as **webview panels**. |
 | `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The **Praxis** desktop renderer — React + Vite. Ordinary DOM, no webviews. |
 | `apps/praxis-desktop/main` | `@praxis/desktop-main` | Electron main + preload + the Playwright e2e suite. Hosts the renderer build. |
 
-The extension's npm name is `ticket-manager`, not `@praxis/*`, and must stay that
+The extension's npm name is `praxis`, not `@praxis/*`, and must stay that
 way: with publisher `davidacres` it forms the marketplace ID
-`davidacres.ticket-manager`. Renaming it orphans the extension for everyone who
+`davidacres.praxis`. Renaming it orphans the extension for everyone who
 already has it installed.
 
 The two UI surfaces share `core` but **share no UI code and no CSS**. Rules below

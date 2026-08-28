@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import { AppConfigStore } from '../config/jiraConfig';
 
-const CONFIG_SECTION = 'ticketManager';
+const CONFIG_SECTION = 'praxis';
 
 interface AiConfigSnapshot {
   provider: unknown;

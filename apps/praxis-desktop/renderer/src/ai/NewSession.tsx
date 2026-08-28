@@ -139,7 +139,7 @@ export function NewSession({
     }
     let cancelled = false;
     setTicketsLoading(true);
-    window.ticketManager.board
+    window.praxis.board
       .get(selectedBoard)
       .then(details => {
         if (cancelled) return;
@@ -189,7 +189,7 @@ export function NewSession({
   }, [boardMenuPos, ticketMenuPos]);
 
   useEffect(() => {
-    window.ticketManager.ai
+    window.praxis.ai
       .listProviderStatuses()
       .then(setProviderStatuses)
       .catch(() => setProviderStatuses([]));
@@ -198,7 +198,7 @@ export function NewSession({
     // always reported as "configured" (it needs no API key from us) even
     // when its binary isn't installed, so auto-picking "first configured"
     // could silently swap the session onto a provider the user never chose.
-    window.ticketManager.settings
+    window.praxis.settings
       .get()
       .then(settings => setSelectedProvider(current => current ?? settings.ai.activeProvider))
       .catch(() => {});
@@ -249,7 +249,7 @@ export function NewSession({
     }
     let cancelled = false;
     setModelsLoading(true);
-    Promise.all([fetchModelOptions(selectedProvider, false), window.ticketManager.settings.get()])
+    Promise.all([fetchModelOptions(selectedProvider, false), window.praxis.settings.get()])
       .then(([options, settings]) => {
         if (cancelled) {
           return;
@@ -281,7 +281,7 @@ export function NewSession({
       return;
     }
     setModelsLoading(true);
-    Promise.all([fetchModelOptions(selectedProvider, true), window.ticketManager.settings.get()])
+    Promise.all([fetchModelOptions(selectedProvider, true), window.praxis.settings.get()])
       .then(([options, settings]) => {
         const curated = options
           ? applyEnabledModelCuration(options, settings.ai.providers[selectedProvider]?.enabledModelIds)

@@ -1,5 +1,5 @@
 # Package Registry: the .vsix is published as a Generic package named
-# `ticket-manager` under Deploy → Package Registry. Publish runs automatically
+# `praxis` under Deploy → Package Registry. Publish runs automatically
 # on version tags (v0.1.0 or 0.1.0) and can be triggered manually from other
 # pipelines.
 
@@ -13,7 +13,7 @@ variables:
   SECRET_DETECTION_ENABLED: 'true'
   # Public npm for vsce / TypeScript / esbuild when the org registry cannot resolve them.
   NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/'
-  PACKAGE_NAME: ticket-manager
+  PACKAGE_NAME: praxis
 
 secret_detection:
   stage: secret-detection
@@ -73,7 +73,7 @@ package:vsix:
         --out "$VSIX"
       cp scripts/install-dist.ps1 ../artifacts/install.ps1
       cat > ../artifacts/README.txt <<EOF
-Ticket Manager ${VERSION}
+Praxis ${VERSION}
 ========================
 
 This package contains:
@@ -93,7 +93,7 @@ EOF
       echo "Packaged:"
       ls -la ../artifacts/
   artifacts:
-    name: "ticket-manager-$CI_COMMIT_SHORT_SHA"
+    name: "praxis-$CI_COMMIT_SHORT_SHA"
     paths:
       - artifacts/*.vsix
       - artifacts/install.ps1

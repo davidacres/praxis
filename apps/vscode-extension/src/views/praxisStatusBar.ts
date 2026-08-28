@@ -10,9 +10,9 @@ import type { AiProvider, BackendMode, ConnectionCheck } from '@praxis/core';
 type StatusTone = 'ok' | 'warning' | 'error' | 'loading';
 
 /** Contributed product icon id from package.json → contributes.icons. */
-export const TICKET_MANAGER_STATUS_BAR_ICON = 'ticket-manager-ticket';
+export const PRAXIS_STATUS_BAR_ICON = 'praxis-ticket';
 
-export interface TicketManagerStatusSnapshot {
+export interface PraxisStatusSnapshot {
   backendMode?: BackendMode;
   /** Human-readable label of the active connection (when multi-connection mode is active). */
   connectionLabel?: string;
@@ -31,7 +31,7 @@ export interface TicketManagerStatusSnapshot {
   isChecking: boolean;
 }
 
-export interface TicketManagerStatusPresentation {
+export interface PraxisStatusPresentation {
   text: string;
   accessibilityLabel: string;
   tooltipMarkdown: string;
@@ -65,7 +65,7 @@ export function getBackendModeLabel(mode: BackendMode | undefined): string {
   }
 }
 
-function getProviderSummary(snapshot: TicketManagerStatusSnapshot): {
+function getProviderSummary(snapshot: PraxisStatusSnapshot): {
   shortLabel: string;
   detailLabel: string;
 } {
@@ -84,7 +84,7 @@ function getProviderSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
-function getAiSummary(snapshot: TicketManagerStatusSnapshot): {
+function getAiSummary(snapshot: PraxisStatusSnapshot): {
   shortLabel: string;
   detailLabel: string;
   tone: 'ok' | 'warning';
@@ -115,7 +115,7 @@ function getAiSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
-function getSessionAttentionSummary(snapshot: TicketManagerStatusSnapshot): {
+function getSessionAttentionSummary(snapshot: PraxisStatusSnapshot): {
   shortLabel?: string;
   detailLines: string[];
   hasAttention: boolean;
@@ -158,7 +158,7 @@ function getSessionAttentionSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
-function getAnalysisSummary(snapshot: TicketManagerStatusSnapshot): {
+function getAnalysisSummary(snapshot: PraxisStatusSnapshot): {
   shortLabel: string;
   detailLabel: string;
   tone: 'ok' | 'warning';
@@ -188,9 +188,9 @@ function getAnalysisSummary(snapshot: TicketManagerStatusSnapshot): {
   };
 }
 
-export function buildTicketManagerStatusPresentation(
-  snapshot: TicketManagerStatusSnapshot
-): TicketManagerStatusPresentation {
+export function buildPraxisStatusPresentation(
+  snapshot: PraxisStatusSnapshot
+): PraxisStatusPresentation {
   const providerSummary = getProviderSummary(snapshot);
   const aiSummary = getAiSummary(snapshot);
   const sessionAttention = getSessionAttentionSummary(snapshot);
@@ -226,7 +226,7 @@ export function buildTicketManagerStatusPresentation(
     : providerSummary.detailLabel;
 
   const tooltipLines = [
-    '**Ticket Manager**',
+    '**Praxis**',
     '',
     escapeMarkdown(providerLine),
     escapeMarkdown(aiSummary.detailLabel),
@@ -234,7 +234,7 @@ export function buildTicketManagerStatusPresentation(
     ...sessionAttention.detailLines.map(line => escapeMarkdown(line)),
     snapshot.lastError ? `Last error: ${escapeMarkdown(snapshot.lastError)}` : undefined,
     '',
-    '[Open Sessions](command:ticketManager.activeSessions.focus) | [Configure AI](command:ticketManager.configureAi) | [Open Ticket Manager Settings](command:ticketManager.openSettings) | [Check Connection](command:ticketManager.checkConnection)'
+    '[Open Sessions](command:praxis.activeSessions.focus) | [Configure AI](command:praxis.configureAi) | [Open Praxis Settings](command:praxis.openSettings) | [Check Connection](command:praxis.checkConnection)'
   ].filter((line): line is string => line !== undefined);
 
   const sessionAttentionSuffix = sessionAttention.shortLabel
@@ -243,8 +243,8 @@ export function buildTicketManagerStatusPresentation(
 
   const accessibilityLabel = `${providerSummary.shortLabel} • ${aiSummary.shortLabel} • Analysis ${analysisSummary.shortLabel}${sessionAttentionSuffix}`;
   const text = toneIcon
-    ? `$(${TICKET_MANAGER_STATUS_BAR_ICON}) ${toneIcon}`
-    : `$(${TICKET_MANAGER_STATUS_BAR_ICON})`;
+    ? `$(${PRAXIS_STATUS_BAR_ICON}) ${toneIcon}`
+    : `$(${PRAXIS_STATUS_BAR_ICON})`;
 
   return {
     text,
@@ -254,11 +254,11 @@ export function buildTicketManagerStatusPresentation(
   };
 }
 
-export class TicketManagerStatusBar implements vscode.Disposable {
+export class PraxisStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
   private readonly disposables: vscode.Disposable[] = [];
   private refreshVersion = 0;
-  private snapshot: TicketManagerStatusSnapshot = {
+  private snapshot: PraxisStatusSnapshot = {
     aiProviders: [],
     activeProvider: 'none',
     isChecking: false
@@ -272,8 +272,8 @@ export class TicketManagerStatusBar implements vscode.Disposable {
     private readonly backendRouter?: BackendRouter
   ) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    this.item.name = 'Ticket Manager Status';
-    this.item.command = 'ticketManager.openSettings';
+    this.item.name = 'Praxis Status';
+    this.item.command = 'praxis.openSettings';
     this.item.show();
 
     if (this.aiSessionManager) {
@@ -413,21 +413,21 @@ export class TicketManagerStatusBar implements vscode.Disposable {
   }
 
   private render(): void {
-    const presentation = buildTicketManagerStatusPresentation(this.snapshot);
+    const presentation = buildPraxisStatusPresentation(this.snapshot);
     const tooltip = new vscode.MarkdownString(presentation.tooltipMarkdown, true);
     tooltip.isTrusted = {
       enabledCommands: [
-        'ticketManager.activeSessions.focus',
-        'ticketManager.configureAi',
-        'ticketManager.openSettings',
-        'ticketManager.checkConnection'
+        'praxis.activeSessions.focus',
+        'praxis.configureAi',
+        'praxis.openSettings',
+        'praxis.checkConnection'
       ]
     };
 
     this.item.text = presentation.text;
     this.item.tooltip = tooltip;
     this.item.accessibilityInformation = {
-      label: `Ticket Manager: ${presentation.accessibilityLabel}`
+      label: `Praxis: ${presentation.accessibilityLabel}`
     };
     this.item.backgroundColor =
       presentation.tone === 'error'

@@ -185,7 +185,7 @@ async function runMarkdownFeaturePlanImport(deps: CommandDependencies): Promise<
   const projectName = (
     await vscode.window.showInputBox({
       title: 'Project name',
-      prompt: 'Display name for the project in Ticket Manager.',
+      prompt: 'Display name for the project in Praxis.',
       value: 'Traka HIS Integration'
     })
   )?.trim();
@@ -467,7 +467,7 @@ async function runLiveFolderToJiraMcpMigration(deps: CommandDependencies): Promi
   const switchChoice = await vscode.window.showInformationMessage(
     failures.length === 0
       ? `Migrated ${feature.key} to ${epicKey}. Created ${createdCount} child issues.`
-      : `Migrated ${feature.key} to ${epicKey} with ${failures.length} issue creation failure(s). See Ticket Manager output for details.`,
+      : `Migrated ${feature.key} to ${epicKey} with ${failures.length} issue creation failure(s). See Praxis output for details.`,
     'Switch to Jira MCP',
     'Stay on Live Folder'
   );
@@ -843,7 +843,7 @@ async function promptForUserWorkspaceBoardInput(): Promise<Array<{
     const name = (
       await vscode.window.showInputBox({
         title: `Create Board — Board name (${liveFolderPath})`,
-        prompt: 'Name for the board shown in Ticket Manager.',
+        prompt: 'Name for the board shown in Praxis.',
         value: projectName,
         ignoreFocusOut: true,
         validateInput: value => (value.trim().length > 0 ? undefined : 'Board name is required.')
@@ -1126,10 +1126,10 @@ function resolveCreateIssueDefaults(
 
 export function registerCommands(deps: CommandDependencies): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand('ticketManager.refresh', async () => {
+    vscode.commands.registerCommand('praxis.refresh', async () => {
       await refreshViews(deps);
     }),
-    vscode.commands.registerCommand('ticketManager.configureConnection', async () => {
+    vscode.commands.registerCommand('praxis.configureConnection', async () => {
       try {
         const choice = await vscode.window.showInformationMessage(
           'Jira MCP is configured via `.vscode/mcp.json`. Edit your MCP servers file to add or update a Jira server, then reopen this connection.',
@@ -1147,7 +1147,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.checkConnection', async () => {
+    vscode.commands.registerCommand('praxis.checkConnection', async () => {
       try {
         const result = await deps.backendService.checkConnection();
         deps.onConnectionCheck?.(result);
@@ -1159,22 +1159,22 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.setBackendMode', async () => {
+    vscode.commands.registerCommand('praxis.setBackendMode', async () => {
       // Reset configured context so the setup sidebar becomes visible
-      await vscode.commands.executeCommand('setContext', 'ticketManager.configured', false);
-      await vscode.commands.executeCommand('setContext', 'ticketManager.mode', 'unconfigured');
+      await vscode.commands.executeCommand('setContext', 'praxis.configured', false);
+      await vscode.commands.executeCommand('setContext', 'praxis.mode', 'unconfigured');
       deps.setupSidebarViewProvider.resetToModeSelection();
       // Reveal the setup view in the active sidebar mode
       if (deps.revealSetupView) {
         await deps.revealSetupView();
         return;
       }
-      await vscode.commands.executeCommand('ticketManager.setup.focus');
+      await vscode.commands.executeCommand('praxis.setup.focus');
     }),
-    vscode.commands.registerCommand('ticketManager.importMarkdownFeaturePlan', async () => {
+    vscode.commands.registerCommand('praxis.importMarkdownFeaturePlan', async () => {
       await runMarkdownFeaturePlanImport(deps);
     }),
-    vscode.commands.registerCommand('ticketManager.migrateLiveFolderToJiraMcp', async () => {
+    vscode.commands.registerCommand('praxis.migrateLiveFolderToJiraMcp', async () => {
       try {
         await runLiveFolderToJiraMcpMigration(deps);
       } catch (error) {
@@ -1184,7 +1184,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.linkJiraMcpEpic', async () => {
+    vscode.commands.registerCommand('praxis.linkJiraMcpEpic', async () => {
       try {
         await linkJiraMcpEpicToWorkspace(deps);
       } catch (error) {
@@ -1194,7 +1194,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.linkJiraMcpBoardQuery', async () => {
+    vscode.commands.registerCommand('praxis.linkJiraMcpBoardQuery', async () => {
       try {
         await linkJiraMcpBoardQueryToWorkspace(deps);
       } catch (error) {
@@ -1204,12 +1204,12 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.configureBoardColumns', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.configureBoardColumns', async (arg?: unknown) => {
       const board =
         resolveBoard(deps.boardsProvider, arg, deps.boardStore) ??
         deps.boardPanelManager.getActiveBoard();
       if (!board) {
-        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
+        await vscode.commands.executeCommand('praxis.openConnectionsManager');
         return;
       }
 
@@ -1223,7 +1223,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.openBoard', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.openBoard', async (arg?: unknown) => {
       const board = resolveBoard(deps.boardsProvider, arg, deps.boardStore);
       if (!board) {
         await vscode.window.showInformationMessage('Select a board first.');
@@ -1233,7 +1233,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       await deps.boardStore.setLastSelectedBoardId(board.id);
       await deps.boardPanelManager.openBoard(board);
     }),
-    vscode.commands.registerCommand('ticketManager.createIssue', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.createIssue', async (arg?: unknown) => {
       try {
         if (await deps.openCreateIssueForm?.(resolveCreateIssueDefaults(deps, arg))) {
           return;
@@ -1252,7 +1252,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         deps.boardPanelManager.setSelectedIssueKey(createdIssue.key);
         await deps.revealIssueDetailsTree();
         // Open the full detail page for the new issue, matching the behaviour
-        // of ticketManager.issueDetails rather than only revealing the sidebar.
+        // of praxis.issueDetails rather than only revealing the sidebar.
         await deps.issueDetailPanelManager.open(createdIssue.key);
         await vscode.window.showInformationMessage(
           draft.parentKey
@@ -1266,13 +1266,13 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.createIdea', async () => {
+    vscode.commands.registerCommand('praxis.createIdea', async () => {
       try {
         if (await deps.openCreateIssueForm?.({ issueType: 'Idea' })) {
           return;
         }
 
-        await vscode.commands.executeCommand('ticketManager.createIssue', { issueType: 'Idea' });
+        await vscode.commands.executeCommand('praxis.createIssue', { issueType: 'Idea' });
       } catch (error) {
         reportCommandError(deps, 'create-idea', error);
         await vscode.window.showErrorMessage(
@@ -1280,7 +1280,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.createBoard', async () => {
+    vscode.commands.registerCommand('praxis.createBoard', async () => {
       try {
         const mode = deps.backendService.mode;
         const userWorkspaceConnection = deps.connectionStore
@@ -1369,7 +1369,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
         if (mode === 'jiracloud' || mode === 'gitlab') {
           // Track an existing remote board rather than inventing one locally.
-          await vscode.commands.executeCommand('ticketManager.addBoard');
+          await vscode.commands.executeCommand('praxis.addBoard');
           return;
         }
 
@@ -1381,7 +1381,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         }
 
         // Demo / other modes: open Connections & Boards to add or track boards.
-        await vscode.commands.executeCommand('ticketManager.openConnectionsManager');
+        await vscode.commands.executeCommand('praxis.openConnectionsManager');
       } catch (error) {
         reportCommandError(deps, 'create-board', error);
         await vscode.window.showErrorMessage(
@@ -1389,7 +1389,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.setBoardProjects', async () => {
+    vscode.commands.registerCommand('praxis.setBoardProjects', async () => {
       const filters = deps.boardStore.getFilters();
       const projects = await deps.backendService.getProjects();
 
@@ -1418,7 +1418,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         projectKeys: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setBoardTypes', async () => {
+    vscode.commands.registerCommand('praxis.setBoardTypes', async () => {
       const filters = deps.boardStore.getFilters();
       const picked = await vscode.window.showQuickPick(
         [
@@ -1441,7 +1441,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         types: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setBoardSearchText', async () => {
+    vscode.commands.registerCommand('praxis.setBoardSearchText', async () => {
       const filters = deps.boardStore.getFilters();
       const searchText = await vscode.window.showInputBox({
         title: 'Board Search',
@@ -1458,10 +1458,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         searchText
       });
     }),
-    vscode.commands.registerCommand('ticketManager.clearBoardFilters', async () => {
+    vscode.commands.registerCommand('praxis.clearBoardFilters', async () => {
       await deps.boardStore.clearFilters();
     }),
-    vscode.commands.registerCommand('ticketManager.setProjects', async () => {
+    vscode.commands.registerCommand('praxis.setProjects', async () => {
       const filters = deps.filterStore.getFilters();
       const projects = await deps.backendService.getProjects();
 
@@ -1491,7 +1491,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         parentKey: undefined
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setStatuses', async () => {
+    vscode.commands.registerCommand('praxis.setStatuses', async () => {
       const filters = deps.filterStore.getFilters();
       const metadata = await deps.backendService.getFilterMetadata(filters);
       const knownStatuses = unique([
@@ -1521,7 +1521,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         statuses: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setIssueTypes', async () => {
+    vscode.commands.registerCommand('praxis.setIssueTypes', async () => {
       const filters = deps.filterStore.getFilters();
       const metadata = await deps.backendService.getFilterMetadata(filters);
       const knownIssueTypes = unique([
@@ -1553,7 +1553,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         issueTypes: picked.map(item => item.label)
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setSearchText', async () => {
+    vscode.commands.registerCommand('praxis.setSearchText', async () => {
       const filters = deps.filterStore.getFilters();
       const searchText = await vscode.window.showInputBox({
         title: 'Search Text',
@@ -1570,7 +1570,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         searchText
       });
     }),
-    vscode.commands.registerCommand('ticketManager.toggleAssigneeMode', async () => {
+    vscode.commands.registerCommand('praxis.toggleAssigneeMode', async () => {
       const filters = deps.filterStore.getFilters();
       const picked = await vscode.window.showQuickPick<
         { label: string; description: string; value: AssigneeMode }
@@ -1601,7 +1601,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         assigneeMode: picked.value
       });
     }),
-    vscode.commands.registerCommand('ticketManager.setParentScope', async () => {
+    vscode.commands.registerCommand('praxis.setParentScope', async () => {
       const filters = deps.filterStore.getFilters();
       const parentSearchText = await vscode.window.showInputBox({
         title: 'Parent Item Search',
@@ -1646,16 +1646,16 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         parentKey: picked.label
       });
     }),
-    vscode.commands.registerCommand('ticketManager.clearParentScope', async () => {
+    vscode.commands.registerCommand('praxis.clearParentScope', async () => {
       await deps.filterStore.updateFilters({
         parentKey: undefined
       });
     }),
-    vscode.commands.registerCommand('ticketManager.clearFilters', async () => {
+    vscode.commands.registerCommand('praxis.clearFilters', async () => {
       await deps.filterStore.clearFilters();
       await deps.detailsProvider.setIssue(undefined);
     }),
-    vscode.commands.registerCommand('ticketManager.changeStatus', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.changeStatus', async (arg?: unknown) => {
       const issue = resolveIssue(deps.detailsProvider, arg);
       if (!issue) {
         await vscode.window.showInformationMessage('Select an issue first.');
@@ -1701,7 +1701,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         }
       }
     }),
-    vscode.commands.registerCommand('ticketManager.openIssueFullDetails', async (issueKey?: unknown) => {
+    vscode.commands.registerCommand('praxis.openIssueFullDetails', async (issueKey?: unknown) => {
       const key =
         typeof issueKey === 'string' && issueKey.trim().length > 0
           ? issueKey.trim()
@@ -1725,10 +1725,10 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
         );
       }
     }),
-    vscode.commands.registerCommand('ticketManager.openInBrowser', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.openInBrowser', async (arg?: unknown) => {
       await openIssueInBrowser(deps, arg);
     }),
-    vscode.commands.registerCommand('ticketManager.copyKey', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.copyKey', async (arg?: unknown) => {
       const issue = resolveIssue(deps.detailsProvider, arg);
       if (!issue) {
         await vscode.window.showInformationMessage('Select an issue first.');
@@ -1738,37 +1738,37 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       await vscode.env.clipboard.writeText(issue.key);
       await vscode.window.showInformationMessage(`Copied ${issue.key} to the clipboard.`);
     }),
-    vscode.commands.registerCommand('ticketManager.loadMore', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.loadMore', async (arg?: unknown) => {
       if (arg instanceof LoadMoreNode || arg === undefined) {
         await deps.issuesProvider.loadMore();
       }
     }),
-    vscode.commands.registerCommand('ticketManager.newProject', () => {
-      const enabled = vscode.workspace.getConfiguration('ticketManager').get<boolean>('enableNewProject', true);
+    vscode.commands.registerCommand('praxis.newProject', () => {
+      const enabled = vscode.workspace.getConfiguration('praxis').get<boolean>('enableNewProject', true);
       if (!enabled) {
         vscode.window.showInformationMessage(
-          'The New Project wizard is a preview feature. Enable it in Settings → Ticket Manager → Enable New Project.',
+          'The New Project wizard is a preview feature. Enable it in Settings → Praxis → Enable New Project.',
           'Open Settings'
         ).then(choice => {
           if (choice === 'Open Settings') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'ticketManager.enableNewProject');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'praxis.enableNewProject');
           }
         });
         return;
       }
       deps.newProjectWizardPanel.open();
     }),
-    vscode.commands.registerCommand('ticketManager.openSetup', () => {
+    vscode.commands.registerCommand('praxis.openSetup', () => {
       void deps.setupWizardPanel.open();
     }),
-    vscode.commands.registerCommand('ticketManager.openTaskDesigner', () => {
+    vscode.commands.registerCommand('praxis.openTaskDesigner', () => {
       const board = deps.boardPanelManager.getActiveBoard() ?? resolveBoard(deps.boardsProvider, undefined, deps.boardStore);
       deps.taskDesignerPanelManager.open(
         board ? { id: board.id, name: board.name, connectionId: board.connectionId } : undefined
       );
     }),
 
-    vscode.commands.registerCommand('ticketManager.assignWorkflowPack', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.assignWorkflowPack', async (arg?: unknown) => {
       if (!deps.aiSessionManager) {
         vscode.window.showWarningMessage('Workflow assignment is not configured.');
         return;
@@ -1811,7 +1811,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
 
     // ── AI Agent Delegation Commands ──────────────────────
 
-    vscode.commands.registerCommand('ticketManager.delegateToAiAgent', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.delegateToAiAgent', async (arg?: unknown) => {
       if (!deps.vercelAgentService || !deps.copilotSessionPanelManager || !deps.aiSessionManager) {
         vscode.window.showWarningMessage('AI Agent delegation is not configured.');
         return;
@@ -1886,7 +1886,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       const gateway = getVercelGatewayStartOptions(deps);
       if (!deps.configStore.getConfiguredAiProviders().includes('vercel-gateway')) {
         vscode.window.showErrorMessage(
-          'Vercel AI Gateway is not configured. Run Ticket Manager: Configure AI.'
+          'Vercel AI Gateway is not configured. Run Praxis: Configure AI.'
         );
         return;
       }
@@ -1922,11 +1922,11 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
     }),
 
     // Deprecated alias kept for existing keybindings/menus.
-    vscode.commands.registerCommand('ticketManager.delegateToCopilot', async (arg?: unknown) => {
-      await vscode.commands.executeCommand('ticketManager.delegateToAiAgent', arg);
+    vscode.commands.registerCommand('praxis.delegateToCopilot', async (arg?: unknown) => {
+      await vscode.commands.executeCommand('praxis.delegateToAiAgent', arg);
     }),
 
-    vscode.commands.registerCommand('ticketManager.viewAgentSession', (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.viewAgentSession', (arg?: unknown) => {
       if (!deps.copilotSessionPanelManager) {
         return;
       }
@@ -1938,7 +1938,7 @@ export function registerCommands(deps: CommandDependencies): vscode.Disposable[]
       deps.copilotSessionPanelManager.open(issueKey);
     }),
 
-    vscode.commands.registerCommand('ticketManager.abortAgentSession', async (arg?: unknown) => {
+    vscode.commands.registerCommand('praxis.abortAgentSession', async (arg?: unknown) => {
       if (!deps.vercelAgentService) {
         return;
       }

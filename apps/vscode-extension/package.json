@@ -1,17 +1,17 @@
 {
-  "name": "ticket-manager",
-  "displayName": "Ticket Manager",
+  "name": "praxis",
+  "displayName": "Praxis",
   "version": "0.2.1",
-  "publisher": "davidacres",
+  "publisher": "praxis",
   "author": {
-    "name": "davidacres"
+    "name": "David Acres"
   },
-  "description": "A compact issue and board sidebar for VS Code with Jira MCP, demo, and file-backed modes.",
+  "description": "Issue and board sidebar for VS Code \u2014 Jira MCP, GitLab, GitHub, demo, and file-backed planning modes.",
   "license": "MIT",
-  "homepage": "https://github.com/davidacres/ticket-manager-extension",
+  "homepage": "https://github.com/davidacres/praxis",
   "repository": {
     "type": "git",
-    "url": "https://github.com/davidacres/ticket-manager-extension.git"
+    "url": "https://github.com/davidacres/praxis.git"
   },
   "pricing": "Free",
   "type": "commonjs",
@@ -57,7 +57,7 @@
     "publish:gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/publish-gitlab.ps1",
     "publish:github": "./scripts/publish-github.sh",
     "install:from-gitlab": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/install-from-gitlab.ps1",
-    "open:ticket-manager": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-ticket-manager-vscode.ps1",
+    "open:praxis": "powershell -ExecutionPolicy Bypass -File ./scripts/launch-praxis-vscode.ps1",
     "docs:commands": "node ./scripts/generate-command-reference.cjs",
     "bedrock:glm-test": "node ./scripts/test-bedrock-glm5.cjs",
     "bedrock:proxy": "node ./scripts/bedrock-sanitize-proxy.cjs",
@@ -70,10 +70,10 @@
   },
   "contributes": {
     "icons": {
-      "ticket-manager-ticket": {
-        "description": "Ticket Manager ticket icon",
+      "praxis-ticket": {
+        "description": "Praxis ticket icon",
         "default": {
-          "fontPath": "media/ticket-manager-icons.woff",
+          "fontPath": "media/praxis-icons.woff",
           "fontCharacter": "\\ea01"
         }
       }
@@ -81,748 +81,748 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "ticketManager",
+          "id": "praxis",
           "title": "Tickets",
           "icon": "media/activitybar-ticket.svg"
         },
         {
-          "id": "ticketManagerWorkMode",
+          "id": "praxisWorkMode",
           "title": "Work Mode",
           "icon": "media/activitybar-ticket.svg"
         }
       ]
     },
     "views": {
-      "ticketManager": [
+      "praxis": [
         {
-          "id": "ticketManager.setup",
+          "id": "praxis.setup",
           "name": "Configure Project",
           "type": "webview",
-          "when": "!ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "!praxis.configured && praxis.boardsSidebarMode == classic"
         },
         {
-          "id": "ticketManager.boards",
+          "id": "praxis.boards",
           "name": "Boards",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "praxis.configured && praxis.boardsSidebarMode == classic"
         },
         {
-          "id": "ticketManager.epics",
+          "id": "praxis.epics",
           "name": "EPICs",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "praxis.configured && praxis.boardsSidebarMode == classic"
         },
         {
-          "id": "ticketManager.myIssues",
+          "id": "praxis.myIssues",
           "name": "My Issues",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "praxis.configured && praxis.boardsSidebarMode == classic"
         },
         {
-          "id": "ticketManager.activeSessions",
+          "id": "praxis.activeSessions",
           "name": "Sessions",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "praxis.configured && praxis.boardsSidebarMode == classic"
         },
         {
-          "id": "ticketManager.issueDetails",
+          "id": "praxis.issueDetails",
           "name": "Issue Details",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == classic"
+          "when": "praxis.configured && praxis.boardsSidebarMode == classic"
         }
       ],
-      "ticketManagerWorkMode": [
+      "praxisWorkMode": [
         {
-          "id": "ticketManager.workModeSetup",
+          "id": "praxis.workModeSetup",
           "name": "Configure Project",
           "type": "webview",
-          "when": "!ticketManager.configured && ticketManager.boardsSidebarMode == work"
+          "when": "!praxis.configured && praxis.boardsSidebarMode == work"
         },
         {
-          "id": "ticketManager.workModeBoards",
+          "id": "praxis.workModeBoards",
           "name": "Work Mode",
           "type": "webview",
-          "when": "ticketManager.configured && ticketManager.boardsSidebarMode == work"
+          "when": "praxis.configured && praxis.boardsSidebarMode == work"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "ticketManager.myIssues",
-        "contents": "Welcome to Ticket Manager!\\nConfigure a project to get started.\\n[$(plug) Connections & Boards](command:ticketManager.openConnectionsManager)\\n[$(gear) Configure Project (legacy)](command:ticketManager.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
+        "view": "praxis.myIssues",
+        "contents": "Welcome to Praxis!\\nConfigure a project to get started.\\n[$(plug) Connections & Boards](command:praxis.openConnectionsManager)\\n[$(gear) Configure Project (legacy)](command:praxis.openSetup)\\n\\nAlready configured? [Set Backend Mode](command:praxis.setBackendMode)"
       },
       {
-        "view": "ticketManager.activeSessions",
+        "view": "praxis.activeSessions",
         "contents": "Assigned AI work and live agent runs appear here. Double-click a session to open the full session details tab."
       },
       {
-        "view": "ticketManager.issueDetails",
+        "view": "praxis.issueDetails",
         "contents": "Select an issue in **My Issues** or on a board to inspect its details and transitions."
       },
       {
-        "view": "ticketManager.epics",
+        "view": "praxis.epics",
         "contents": "Browse and manage EPICs for the current project scope."
       },
       {
-        "view": "ticketManager.boards",
-        "contents": "Browse boards and open a board tab.\n[$(add) Create Board](command:ticketManager.createBoard)\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+        "view": "praxis.boards",
+        "contents": "Browse boards and open a board tab.\n[$(add) Create Board](command:praxis.createBoard)\n[Set Board Search](command:praxis.setBoardSearchText)\n[Set Board Projects](command:praxis.setBoardProjects)\n[Set Board Types](command:praxis.setBoardTypes)"
       },
       {
-        "view": "ticketManager.workModeBoards",
-        "contents": "Browse boards in Work Mode and open a board tab.\n[$(add) Create Board](command:ticketManager.createBoard)\n[Set Board Search](command:ticketManager.setBoardSearchText)\n[Set Board Projects](command:ticketManager.setBoardProjects)\n[Set Board Types](command:ticketManager.setBoardTypes)"
+        "view": "praxis.workModeBoards",
+        "contents": "Browse boards in Work Mode and open a board tab.\n[$(add) Create Board](command:praxis.createBoard)\n[Set Board Search](command:praxis.setBoardSearchText)\n[Set Board Projects](command:praxis.setBoardProjects)\n[Set Board Types](command:praxis.setBoardTypes)"
       },
       {
-        "view": "ticketManager.workModeSetup",
-        "contents": "Welcome to Ticket Manager!\nConfigure a project to get started.\n[$(gear) Configure Project](command:ticketManager.openSetup)\n\nAlready configured? [Set Backend Mode](command:ticketManager.setBackendMode)"
+        "view": "praxis.workModeSetup",
+        "contents": "Welcome to Praxis!\nConfigure a project to get started.\n[$(gear) Configure Project](command:praxis.openSetup)\n\nAlready configured? [Set Backend Mode](command:praxis.setBackendMode)"
       }
     ],
     "commands": [
       {
-        "command": "ticketManager.refresh",
+        "command": "praxis.refresh",
         "title": "Refresh",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(refresh)"
       },
       {
-        "command": "ticketManager.configureConnection",
+        "command": "praxis.configureConnection",
         "title": "Configure Jira MCP Connection",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(plug)"
       },
       {
-        "command": "ticketManager.checkConnection",
+        "command": "praxis.checkConnection",
         "title": "Check Connection",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "ticketManager.setBackendMode",
+        "command": "praxis.setBackendMode",
         "title": "Set Backend Mode",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(symbol-namespace)"
       },
       {
-        "command": "ticketManager.openSetup",
+        "command": "praxis.openSetup",
         "title": "Configure Project",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(gear)"
       },
       {
-        "command": "ticketManager.openTaskDesigner",
+        "command": "praxis.openTaskDesigner",
         "title": "Open Task Designer",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(symbol-misc)"
       },
       {
-        "command": "ticketManager.openConnectionsManager",
+        "command": "praxis.openConnectionsManager",
         "title": "Open Connections & Boards",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(plug)"
       },
       {
-        "command": "ticketManager.addConnection",
+        "command": "praxis.addConnection",
         "title": "Add Connection",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(add)"
       },
       {
-        "command": "ticketManager.addBoard",
+        "command": "praxis.addBoard",
         "title": "Add Tracked Board",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(add)"
       },
       {
-        "command": "ticketManager.startSubTaskDelivery",
+        "command": "praxis.startSubTaskDelivery",
         "title": "Start Sub-Task Delivery",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(play)"
       },
       {
-        "command": "ticketManager.openSettings",
+        "command": "praxis.openSettings",
         "title": "Open Settings",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(gear)"
       },
       {
-        "command": "ticketManager.toggleWorkMode",
+        "command": "praxis.toggleWorkMode",
         "title": "Toggle Work Mode",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(layout-sidebar-right)"
       },
       {
-        "command": "ticketManager.configureAi",
+        "command": "praxis.configureAi",
         "title": "Configure AI",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.openAiGatewaySettings",
+        "command": "praxis.openAiGatewaySettings",
         "title": "AI Gateway Settings",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(key)"
       },
       {
-        "command": "ticketManager.delegateToAiAgent",
+        "command": "praxis.delegateToAiAgent",
         "title": "Delegate to AI Agent",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.delegateToCopilot",
+        "command": "praxis.delegateToCopilot",
         "title": "Delegate to AI Agent (Deprecated)",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.assignWorkflowPack",
+        "command": "praxis.assignWorkflowPack",
         "title": "Assign Workflow Pack",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(symbol-key)"
       },
       {
-        "command": "ticketManager.viewAgentSession",
+        "command": "praxis.viewAgentSession",
         "title": "View AI Session",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(eye)"
       },
       {
-        "command": "ticketManager.abortAgentSession",
+        "command": "praxis.abortAgentSession",
         "title": "Abort Agent Session",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(debug-stop)"
       },
       {
-        "command": "ticketManager.importMarkdownFeaturePlan",
+        "command": "praxis.importMarkdownFeaturePlan",
         "title": "Import Plan from Markdown Features",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(file-code)"
       },
       {
-        "command": "ticketManager.importMarkdownFiles",
+        "command": "praxis.importMarkdownFiles",
         "title": "Import Markdown Files to Template Format",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(file-code)"
       },
       {
-        "command": "ticketManager.migrateLiveFolderToJiraMcp",
+        "command": "praxis.migrateLiveFolderToJiraMcp",
         "title": "Migrate Live Folder to Jira MCP",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(cloud-upload)"
       },
       {
-        "command": "ticketManager.linkJiraMcpEpic",
+        "command": "praxis.linkJiraMcpEpic",
         "title": "Link Jira MCP Epic",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(link)"
       },
       {
-        "command": "ticketManager.linkJiraMcpBoardQuery",
+        "command": "praxis.linkJiraMcpBoardQuery",
         "title": "Link Jira MCP Board Query",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(list-filter)"
       },
       {
-        "command": "ticketManager.newProject",
+        "command": "praxis.newProject",
         "title": "New Project",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(rocket)"
       },
       {
-        "command": "ticketManager.openBoard",
+        "command": "praxis.openBoard",
         "title": "Open Board",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "ticketManager.createIssue",
+        "command": "praxis.createIssue",
         "title": "Create Issue",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(add)"
       },
       {
-        "command": "ticketManager.createIdea",
+        "command": "praxis.createIdea",
         "title": "Create Idea",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(lightbulb)"
       },
       {
-        "command": "ticketManager.createBoard",
+        "command": "praxis.createBoard",
         "title": "Create Board",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(add)"
       },
       {
-        "command": "ticketManager.createEpic",
+        "command": "praxis.createEpic",
         "title": "Create EPIC",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(add)"
       },
       {
-        "command": "ticketManager.searchIssues",
+        "command": "praxis.searchIssues",
         "title": "Search Issues",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(search)"
       },
       {
-        "command": "ticketManager.searchIssuesActive",
+        "command": "praxis.searchIssuesActive",
         "title": "Search Issues",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": {
           "light": "media/search-active-light.svg",
           "dark": "media/search-active-dark.svg"
         }
       },
       {
-        "command": "ticketManager.searchEpics",
+        "command": "praxis.searchEpics",
         "title": "Search EPICs",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(search)"
       },
       {
-        "command": "ticketManager.searchEpicsActive",
+        "command": "praxis.searchEpicsActive",
         "title": "Search EPICs",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": {
           "light": "media/search-active-light.svg",
           "dark": "media/search-active-dark.svg"
         }
       },
       {
-        "command": "ticketManager.searchBoards",
+        "command": "praxis.searchBoards",
         "title": "Search Boards",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(search)"
       },
       {
-        "command": "ticketManager.searchBoardsActive",
+        "command": "praxis.searchBoardsActive",
         "title": "Search Boards",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": {
           "light": "media/search-active-light.svg",
           "dark": "media/search-active-dark.svg"
         }
       },
       {
-        "command": "ticketManager.configureBoardColumns",
+        "command": "praxis.configureBoardColumns",
         "title": "Configure Board Settings",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "ticketManager.setBoardProjects",
+        "command": "praxis.setBoardProjects",
         "title": "Set Board Projects",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(repo)"
       },
       {
-        "command": "ticketManager.setBoardTypes",
+        "command": "praxis.setBoardTypes",
         "title": "Set Board Types",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(list-tree)"
       },
       {
-        "command": "ticketManager.setBoardSearchText",
+        "command": "praxis.setBoardSearchText",
         "title": "Set Board Search Text",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(search)"
       },
       {
-        "command": "ticketManager.clearBoardFilters",
+        "command": "praxis.clearBoardFilters",
         "title": "Clear Board Filters",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(clear-all)"
       },
       {
-        "command": "ticketManager.setProjects",
+        "command": "praxis.setProjects",
         "title": "Set Projects",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(repo)"
       },
       {
-        "command": "ticketManager.setStatuses",
+        "command": "praxis.setStatuses",
         "title": "Set Status Filter",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(list-selection)"
       },
       {
-        "command": "ticketManager.setIssueTypes",
+        "command": "praxis.setIssueTypes",
         "title": "Set Issue Type Filter",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(symbol-class)"
       },
       {
-        "command": "ticketManager.setSearchText",
+        "command": "praxis.setSearchText",
         "title": "Set Search Text",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(search)"
       },
       {
-        "command": "ticketManager.toggleAssigneeMode",
+        "command": "praxis.toggleAssigneeMode",
         "title": "Toggle Assignee Scope",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(account)"
       },
       {
-        "command": "ticketManager.setParentScope",
+        "command": "praxis.setParentScope",
         "title": "Set Parent Item Scope",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(milestone)"
       },
       {
-        "command": "ticketManager.clearParentScope",
+        "command": "praxis.clearParentScope",
         "title": "Clear Parent Item Scope",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(close)"
       },
       {
-        "command": "ticketManager.clearFilters",
+        "command": "praxis.clearFilters",
         "title": "Clear Filters",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(clear-all)"
       },
       {
-        "command": "ticketManager.changeStatus",
+        "command": "praxis.changeStatus",
         "title": "Change Status",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(play-circle)"
       },
       {
-        "command": "ticketManager.openIssueFullDetails",
+        "command": "praxis.openIssueFullDetails",
         "title": "Open Full Issue Details",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(preview)"
       },
       {
-        "command": "ticketManager.openInBrowser",
+        "command": "praxis.openInBrowser",
         "title": "Open External Link",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(link-external)"
       },
       {
-        "command": "ticketManager.copyKey",
+        "command": "praxis.copyKey",
         "title": "Copy Issue Key",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(copy)"
       },
       {
-        "command": "ticketManager.loadMore",
+        "command": "praxis.loadMore",
         "title": "Load More",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(chevron-down)"
       },
       {
-        "command": "ticketManager.assignToMe",
+        "command": "praxis.assignToMe",
         "title": "Assign to Me",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(person)"
       },
       {
-        "command": "ticketManager.assignToAi",
+        "command": "praxis.assignToAi",
         "title": "Delegate to AI Agent",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(hubot)"
       },
       {
-        "command": "ticketManager.unassignAi",
+        "command": "praxis.unassignAi",
         "title": "Abandon AI Session",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(close)"
       },
       {
-        "command": "ticketManager.reviewWithAi",
+        "command": "praxis.reviewWithAi",
         "title": "Review Ticket with AI",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(comment-discussion)"
       },
       {
-        "command": "ticketManager.openAnalysisWindow",
+        "command": "praxis.openAnalysisWindow",
         "title": "View Analysis",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(comment)"
       },
       {
-        "command": "ticketManager.confirmAnalysisComplete",
+        "command": "praxis.confirmAnalysisComplete",
         "title": "Confirm Analysis Complete",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(pass)"
       },
       {
-        "command": "ticketManager.localPeerReview",
+        "command": "praxis.localPeerReview",
         "title": "Local Peer Review (LPR)",
-        "category": "Ticket Manager",
+        "category": "Praxis",
         "icon": "$(checklist)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "ticketManager.refresh",
-          "when": "view == ticketManager.myIssues",
+          "command": "praxis.refresh",
+          "when": "view == praxis.myIssues",
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.refresh",
-          "when": "view == ticketManager.epics",
+          "command": "praxis.refresh",
+          "when": "view == praxis.epics",
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.createEpic",
-          "when": "view == ticketManager.epics",
+          "command": "praxis.createEpic",
+          "when": "view == praxis.epics",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.searchEpics",
-          "when": "view == ticketManager.epics && !ticketManager.epicsSearchActive",
+          "command": "praxis.searchEpics",
+          "when": "view == praxis.epics && !praxis.epicsSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.searchEpicsActive",
-          "when": "view == ticketManager.epics && ticketManager.epicsSearchActive",
+          "command": "praxis.searchEpicsActive",
+          "when": "view == praxis.epics && praxis.epicsSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.createIssue",
-          "when": "view == ticketManager.myIssues",
+          "command": "praxis.createIssue",
+          "when": "view == praxis.myIssues",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.createIdea",
-          "when": "view == ticketManager.myIssues && config.ticketManager.enableCreateIdea",
+          "command": "praxis.createIdea",
+          "when": "view == praxis.myIssues && config.praxis.enableCreateIdea",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.searchIssues",
-          "when": "view == ticketManager.myIssues && !ticketManager.issuesSearchActive",
+          "command": "praxis.searchIssues",
+          "when": "view == praxis.myIssues && !praxis.issuesSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.searchIssuesActive",
-          "when": "view == ticketManager.myIssues && ticketManager.issuesSearchActive",
+          "command": "praxis.searchIssuesActive",
+          "when": "view == praxis.myIssues && praxis.issuesSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.setProjects",
-          "when": "view == ticketManager.myIssues",
+          "command": "praxis.setProjects",
+          "when": "view == praxis.myIssues",
           "group": "navigation@4"
         },
         {
-          "command": "ticketManager.setParentScope",
-          "when": "view == ticketManager.myIssues",
+          "command": "praxis.setParentScope",
+          "when": "view == praxis.myIssues",
           "group": "navigation@5"
         },
         {
-          "command": "ticketManager.refresh",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.refresh",
+          "when": "view == praxis.boards",
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.createBoard",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.createBoard",
+          "when": "view == praxis.boards",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.searchBoards",
-          "when": "view == ticketManager.boards && !ticketManager.boardsSearchActive",
+          "command": "praxis.searchBoards",
+          "when": "view == praxis.boards && !praxis.boardsSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.searchBoardsActive",
-          "when": "view == ticketManager.boards && ticketManager.boardsSearchActive",
+          "command": "praxis.searchBoardsActive",
+          "when": "view == praxis.boards && praxis.boardsSearchActive",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.setBoardProjects",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.setBoardProjects",
+          "when": "view == praxis.boards",
           "group": "navigation@4"
         },
         {
-          "command": "ticketManager.setBoardTypes",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.setBoardTypes",
+          "when": "view == praxis.boards",
           "group": "navigation@5"
         },
         {
-          "command": "ticketManager.openConnectionsManager",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.openConnectionsManager",
+          "when": "view == praxis.boards",
           "group": "navigation@6"
         },
         {
-          "command": "ticketManager.clearBoardFilters",
-          "when": "view == ticketManager.boards"
+          "command": "praxis.clearBoardFilters",
+          "when": "view == praxis.boards"
         },
         {
-          "command": "ticketManager.setBackendMode",
-          "when": "view == ticketManager.boards"
+          "command": "praxis.setBackendMode",
+          "when": "view == praxis.boards"
         },
         {
-          "command": "ticketManager.toggleWorkMode",
-          "when": "view == ticketManager.boards",
+          "command": "praxis.toggleWorkMode",
+          "when": "view == praxis.boards",
           "group": "navigation@8"
         },
         {
-          "command": "ticketManager.configureConnection",
-          "when": "view == ticketManager.myIssues && ticketManager.mode == jira"
+          "command": "praxis.configureConnection",
+          "when": "view == praxis.myIssues && praxis.mode == jira"
         },
         {
-          "command": "ticketManager.setBackendMode",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.setBackendMode",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.checkConnection",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.checkConnection",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.setStatuses",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.setStatuses",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.setIssueTypes",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.setIssueTypes",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.toggleAssigneeMode",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.toggleAssigneeMode",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.clearParentScope",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.clearParentScope",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.clearFilters",
-          "when": "view == ticketManager.myIssues"
+          "command": "praxis.clearFilters",
+          "when": "view == praxis.myIssues"
         },
         {
-          "command": "ticketManager.refresh",
-          "when": "view == ticketManager.activeSessions",
+          "command": "praxis.refresh",
+          "when": "view == praxis.activeSessions",
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.changeStatus",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.changeStatus",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@1"
         },
         {
-          "command": "ticketManager.openInBrowser",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.openInBrowser",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@2"
         },
         {
-          "command": "ticketManager.openIssueFullDetails",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.openIssueFullDetails",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@3"
         },
         {
-          "command": "ticketManager.assignToAi",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.assignToAi",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@4"
         },
         {
-          "command": "ticketManager.openAnalysisWindow",
-          "when": "view == ticketManager.issueDetails && ticketManager.analysisGateEnabled",
+          "command": "praxis.openAnalysisWindow",
+          "when": "view == praxis.issueDetails && praxis.analysisGateEnabled",
           "group": "navigation@4.5"
         },
         {
-          "command": "ticketManager.assignWorkflowPack",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.assignWorkflowPack",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@5"
         },
         {
-          "command": "ticketManager.unassignAi",
-          "when": "view == ticketManager.issueDetails",
+          "command": "praxis.unassignAi",
+          "when": "view == praxis.issueDetails",
           "group": "navigation@6"
         },
         {
-          "command": "ticketManager.toggleWorkMode",
-          "when": "view == ticketManager.workModeBoards",
+          "command": "praxis.toggleWorkMode",
+          "when": "view == praxis.workModeBoards",
           "group": "navigation@2"
         }
       ],
       "view/item/context": [
         {
-          "command": "ticketManager.openInBrowser",
-          "when": "view == ticketManager.myIssues && viewItem == issue",
+          "command": "praxis.openInBrowser",
+          "when": "view == praxis.myIssues && viewItem == issue",
           "group": "inline@1"
         },
         {
-          "command": "ticketManager.changeStatus",
-          "when": "view == ticketManager.myIssues && viewItem == issue",
+          "command": "praxis.changeStatus",
+          "when": "view == praxis.myIssues && viewItem == issue",
           "group": "inline@2"
         },
         {
-          "command": "ticketManager.copyKey",
-          "when": "view == ticketManager.myIssues && viewItem == issue",
+          "command": "praxis.copyKey",
+          "when": "view == praxis.myIssues && viewItem == issue",
           "group": "secondary"
         },
         {
-          "command": "ticketManager.loadMore",
-          "when": "view == ticketManager.myIssues && viewItem == loadMore",
+          "command": "praxis.loadMore",
+          "when": "view == praxis.myIssues && viewItem == loadMore",
           "group": "inline@1"
         },
         {
-          "command": "ticketManager.openBoard",
-          "when": "view == ticketManager.boards && viewItem == board",
+          "command": "praxis.openBoard",
+          "when": "view == praxis.boards && viewItem == board",
           "group": "inline@1"
         },
         {
-          "command": "ticketManager.configureBoardColumns",
-          "when": "view == ticketManager.boards && viewItem == board",
+          "command": "praxis.configureBoardColumns",
+          "when": "view == praxis.boards && viewItem == board",
           "group": "inline@2"
         },
         {
-          "command": "ticketManager.configureBoardColumns",
-          "when": "view == ticketManager.workModeBoards && viewItem == board",
+          "command": "praxis.configureBoardColumns",
+          "when": "view == praxis.workModeBoards && viewItem == board",
           "group": "inline@1"
         },
         {
-          "command": "ticketManager.createIssue",
-          "when": "view == ticketManager.boards && viewItem == board",
+          "command": "praxis.createIssue",
+          "when": "view == praxis.boards && viewItem == board",
           "group": "inline@3"
         },
         {
-          "command": "ticketManager.openIssueFullDetails",
-          "when": "view == ticketManager.issueDetails && viewItem == issueKey",
+          "command": "praxis.openIssueFullDetails",
+          "when": "view == praxis.issueDetails && viewItem == issueKey",
           "group": "inline@1"
         },
         {
-          "command": "ticketManager.assignToAi",
-          "when": "(view == ticketManager.myIssues || view == ticketManager.boards) && viewItem == issue",
+          "command": "praxis.assignToAi",
+          "when": "(view == praxis.myIssues || view == praxis.boards) && viewItem == issue",
           "group": "ai@1"
         },
         {
-          "command": "ticketManager.openAnalysisWindow",
-          "when": "(view == ticketManager.myIssues || view == ticketManager.boards) && viewItem == issue && ticketManager.analysisGateEnabled",
+          "command": "praxis.openAnalysisWindow",
+          "when": "(view == praxis.myIssues || view == praxis.boards) && viewItem == issue && praxis.analysisGateEnabled",
           "group": "ai@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "ticketManager.searchIssuesActive",
+          "command": "praxis.searchIssuesActive",
           "when": "false"
         },
         {
-          "command": "ticketManager.searchEpicsActive",
+          "command": "praxis.searchEpicsActive",
           "when": "false"
         },
         {
-          "command": "ticketManager.searchBoardsActive",
+          "command": "praxis.searchBoardsActive",
           "when": "false"
         },
         {
-          "command": "ticketManager.createIdea",
-          "when": "config.ticketManager.enableCreateIdea"
+          "command": "praxis.createIdea",
+          "when": "config.praxis.enableCreateIdea"
         },
         {
-          "command": "ticketManager.newProject",
-          "when": "config.ticketManager.enableNewProject"
+          "command": "praxis.newProject",
+          "when": "config.praxis.enableNewProject"
         },
         {
-          "command": "ticketManager.toggleWorkMode"
+          "command": "praxis.toggleWorkMode"
         }
       ]
     },
     "configuration": {
-      "title": "Ticket Manager",
+      "title": "Praxis",
       "properties": {
-        "ticketManager.backendMode": {
+        "praxis.backendMode": {
           "type": "string",
           "enum": [
             "jiracloud",
@@ -843,7 +843,7 @@
           "scope": "window",
           "description": "Choose whether the app uses Jira MCP, Demo, GitHub, GitLab, Live Folder, or User Workspace mode."
         },
-        "ticketManager.connectionType": {
+        "praxis.connectionType": {
           "type": "string",
           "enum": [
             "stdio",
@@ -857,13 +857,13 @@
           "scope": "window",
           "description": "Legacy Jira MCP transport selector retained for compatibility with existing setup flows and integration tests."
         },
-        "ticketManager.stdioCommand": {
+        "praxis.stdioCommand": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Legacy Jira MCP stdio command retained for compatibility with existing setup flows and integration tests."
         },
-        "ticketManager.stdioArgs": {
+        "praxis.stdioArgs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -872,23 +872,23 @@
           "scope": "window",
           "description": "Legacy Jira MCP stdio command arguments retained for compatibility with existing setup flows and integration tests."
         },
-        "ticketManager.stdioCwd": {
+        "praxis.stdioCwd": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Legacy Jira MCP stdio working directory retained for compatibility with existing setup flows and integration tests."
         },
-        "ticketManager.httpUrl": {
+        "praxis.httpUrl": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Legacy Jira MCP HTTP endpoint URL retained for compatibility with existing setup flows and integration tests."
         },
-        "ticketManager.connections": {
+        "praxis.connections": {
           "type": "array",
           "scope": "window",
           "default": [],
-          "description": "Named backend connections. Each entry is one configured backend instance (Jira server, GitLab host, Live Folder root, etc.). Use the Ticket Manager: Connections command to manage these via the UI.",
+          "description": "Named backend connections. Each entry is one configured backend instance (Jira server, GitLab host, Live Folder root, etc.). Use the Praxis: Connections command to manage these via the UI.",
           "items": {
             "type": "object",
             "required": [
@@ -924,7 +924,7 @@
             }
           }
         },
-        "ticketManager.boards": {
+        "praxis.boards": {
           "type": "array",
           "scope": "window",
           "default": [],
@@ -938,7 +938,7 @@
             "properties": {
               "connectionId": {
                 "type": "string",
-                "description": "Id of the connection this board belongs to (must match an entry in ticketManager.connections)."
+                "description": "Id of the connection this board belongs to (must match an entry in praxis.connections)."
               },
               "boardId": {
                 "type": "string",
@@ -951,44 +951,44 @@
             }
           }
         },
-        "ticketManager.jiraMcpSiteUrl": {
+        "praxis.jiraMcpSiteUrl": {
           "type": "string",
           "default": "",
           "format": "uri",
           "scope": "window",
           "description": "Base URL of the Jira instance that MCP tools connect to in Jira MCP mode. Used for display and as a fallback when no MCP connection reports a URL."
         },
-        "ticketManager.jiraMcpDefaultProjectKey": {
+        "praxis.jiraMcpDefaultProjectKey": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Default Jira project key for new issues created through the Jira MCP backend when the form does not specify one."
         },
-        "ticketManager.jiraMcpEpicKey": {
+        "praxis.jiraMcpEpicKey": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Optional Jira Epic key associated with this workspace in Jira MCP mode. Boards follow this epic and Jira issue creation uses it as the default parent epic."
         },
-        "ticketManager.jiraMcpEpicBoardName": {
+        "praxis.jiraMcpEpicBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Optional display name for the Jira MCP epic board in this workspace."
         },
-        "ticketManager.jiraMcpBoardJql": {
+        "praxis.jiraMcpBoardJql": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Optional Jira JQL query associated with this workspace in Jira MCP mode. When set, a JQL board is shown in addition to any linked epic board."
         },
-        "ticketManager.jiraMcpBoardName": {
+        "praxis.jiraMcpBoardName": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Optional display name for the Jira MCP JQL board in this workspace."
         },
-        "ticketManager.enableCreateIdea": {
+        "praxis.enableCreateIdea": {
           "type": "boolean",
           "default": false,
           "scope": "window",
@@ -997,7 +997,7 @@
             "preview"
           ]
         },
-        "ticketManager.enableNewProject": {
+        "praxis.enableNewProject": {
           "type": "boolean",
           "default": true,
           "scope": "window",
@@ -1006,7 +1006,7 @@
             "preview"
           ]
         },
-        "ticketManager.boardsSidebarPreviewMode": {
+        "praxis.boardsSidebarPreviewMode": {
           "type": "string",
           "default": "classic",
           "enum": [
@@ -1023,31 +1023,31 @@
             "preview"
           ]
         },
-        "ticketManager.liveFolderPath": {
+        "praxis.liveFolderPath": {
           "type": "string",
           "default": "",
           "scope": "window",
           "markdownDescription": "Path to the plans folder used in **Live Folder** mode. The extension reads and writes the markdown planning files under this directory. Set per workspace; a global value is ignored for workspace projects."
         },
-        "ticketManager.liveFolderProjectKey": {
+        "praxis.liveFolderProjectKey": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Project key prefix for issues synthesised from the Live Folder plans tree (e.g. APP produces APP-F01, APP-S01-1)."
         },
-        "ticketManager.liveFolderProjectName": {
+        "praxis.liveFolderProjectName": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Display name for the Live Folder project."
         },
-        "ticketManager.liveFolderAllowIssueCreation": {
+        "praxis.liveFolderAllowIssueCreation": {
           "type": "boolean",
           "default": true,
           "scope": "window",
           "markdownDescription": "When enabled (default), creating an issue in **Live Folder** mode writes a new markdown file into the plans tree. When disabled, the folder is treated as read-only."
         },
-        "ticketManager.ai.provider": {
+        "praxis.ai.provider": {
           "type": "string",
           "default": "none",
           "enum": [
@@ -1061,43 +1061,43 @@
           "scope": "window",
           "description": "Active AI provider for analysis and agent workflows."
         },
-        "ticketManager.ai.credential": {
+        "praxis.ai.credential": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Credential (API key or token) for the active AI provider. Prefer the extension's secret storage; this setting is a fallback."
         },
-        "ticketManager.ai.agentName": {
+        "praxis.ai.agentName": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Agent or model name to use with the active AI provider."
         },
-        "ticketManager.ai.runtimePath": {
+        "praxis.ai.runtimePath": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Path to the CLI runtime for CLI-based AI providers."
         },
-        "ticketManager.ai.vercelUrl": {
+        "praxis.ai.vercelUrl": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Base URL for the Vercel AI Gateway. Leave empty to use the default endpoint."
         },
-        "ticketManager.gitlabProjectPath": {
+        "praxis.gitlabProjectPath": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "GitLab project path (group/subgroup/project) for GitLab mode."
         },
-        "ticketManager.gitlabListAllAccessibleBoards": {
+        "praxis.gitlabListAllAccessibleBoards": {
           "type": "boolean",
           "default": false,
           "scope": "window",
           "description": "When enabled, list every GitLab board the token can access rather than only those under the configured project."
         },
-        "ticketManager.gitlabSelectedBoardRefs": {
+        "praxis.gitlabSelectedBoardRefs": {
           "type": "array",
           "default": [],
           "scope": "window",
@@ -1106,44 +1106,44 @@
           },
           "description": "References of the GitLab boards to track."
         },
-        "ticketManager.requestTimeoutMs": {
+        "praxis.requestTimeoutMs": {
           "type": "number",
           "default": 30000,
           "minimum": 1000,
           "description": "Timeout, in milliseconds, for MCP requests."
         },
-        "ticketManager.defaultPageSize": {
+        "praxis.defaultPageSize": {
           "type": "number",
           "default": 25,
           "minimum": 5,
           "maximum": 100,
           "description": "Number of issues to request per page."
         },
-        "ticketManager.delivery.defaultBaseBranch": {
+        "praxis.delivery.defaultBaseBranch": {
           "type": "string",
           "default": "",
           "scope": "window",
           "markdownDescription": "Default base branch to use when a Jira ticket does not specify one (e.g. `main`, `develop`). When empty, the agent will post a clarification comment asking for the branch."
         },
-        "ticketManager.delivery.autoMergeSubTasks": {
+        "praxis.delivery.autoMergeSubTasks": {
           "type": "boolean",
           "default": true,
           "scope": "window",
           "markdownDescription": "When enabled (default), completed sub-task branches are automatically merged into the feature branch without creating a merge request. A single MR is raised from the feature branch to the base branch after all sub-tasks complete. When disabled, each sub-task creates its own MR targeting the feature branch."
         },
-        "ticketManager.workspaceMcpServerName": {
+        "praxis.workspaceMcpServerName": {
           "type": "string",
           "default": "",
           "scope": "window",
           "description": "Optional workspace MCP server name to use from .vscode/mcp.json when Jira via MCP mode is not manually configured."
         },
-        "ticketManager.userMcpServerRef": {
+        "praxis.userMcpServerRef": {
           "type": "string",
           "default": "",
           "scope": "application",
           "description": "Optional user/profile MCP server reference to use when Jira via MCP mode is not manually configured and no workspace MCP server is selected."
         },
-        "ticketManager.priorityColors": {
+        "praxis.priorityColors": {
           "type": "object",
           "default": {
             "Critical": "#DC2626",

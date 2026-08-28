@@ -56,7 +56,7 @@ export class UserWorkspaceBoardWizardPanel {
       this.existingPaths = new Set(existingPaths.map(value => toStoredFolderPath(value).toLowerCase()));
       this.existingKeys = new Set(existingKeys.map(value => value.trim().toUpperCase()));
       this.panel = vscode.window.createWebviewPanel(
-        'ticketManager.userWorkspaceBoardWizard',
+        'praxis.userWorkspaceBoardWizard',
         'Create User Workspace Boards',
         vscode.ViewColumn.Active,
         { enableScripts: true, retainContextWhenHidden: true }

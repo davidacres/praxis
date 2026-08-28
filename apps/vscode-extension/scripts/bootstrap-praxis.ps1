@@ -1,21 +1,21 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  One-shot Ticket Manager install from GitLab Package Registry (no repo clone).
+  One-shot Praxis install from GitLab Package Registry (no repo clone).
 
 .DESCRIPTION
   Downloads install-from-gitlab.ps1 from the floating "latest" package pointer,
   then runs it. Auth via glab or GITLAB_TOKEN.
 
 .EXAMPLE
-  powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap-ticket-manager.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap-praxis.ps1
 #>
 [CmdletBinding()]
 param(
   [string]$Version,
   [string]$Token,
   [string]$GitLabHost = 'git.tools.dev.assaabloyglobalsolutions.net',
-  [string]$ProjectPath = 'traka/software/ai/tools/ticket-manager-extension'
+  [string]$ProjectPath = 'traka/software/ai/tools/praxis'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,8 +45,8 @@ Or: `$env:GITLAB_TOKEN = '<PAT with read_api>'
 }
 
 $projectId = [uri]::EscapeDataString($ProjectPath)
-$uri = "https://$GitLabHost/api/v4/projects/$projectId/packages/generic/ticket-manager/latest/install-from-gitlab.ps1"
-$scriptPath = Join-Path $env:TEMP 'ticket-manager-install-from-gitlab.ps1'
+$uri = "https://$GitLabHost/api/v4/projects/$projectId/packages/generic/praxis/latest/install-from-gitlab.ps1"
+$scriptPath = Join-Path $env:TEMP 'praxis-install-from-gitlab.ps1'
 
 Write-Host "==> Fetching installer from Package Registry" -ForegroundColor Cyan
 Invoke-WebRequest -Uri $uri -Headers @{ 'PRIVATE-TOKEN' = $tok } -OutFile $scriptPath -UseBasicParsing

@@ -20,7 +20,7 @@ function createNonce(): string {
 }
 
 export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
-  public static readonly viewId = 'ticketManager.setup';
+  public static readonly viewId = 'praxis.setup';
 
   private view?: vscode.WebviewView;
   private setupStep: 0 | 1 = 0;
@@ -394,7 +394,7 @@ export class SetupSidebarViewProvider implements vscode.WebviewViewProvider, vsc
         mode: 'userworkspace',
         emoji: '🧰',
         title: 'Create User Workspace',
-        desc: 'Store Ticket Manager boards outside VS Code workspaces and add plan-folder boards later.'
+        desc: 'Store Praxis boards outside VS Code workspaces and add plan-folder boards later.'
       });
     }
 
@@ -456,7 +456,7 @@ ${fields}
   <label>Plans Folder Path</label>
   <input type="text" data-field="liveFolderPath" value="${folderPath}" placeholder="e.g. C:\\project or C:\\project\\plans" />
   <button class="btn-browse" data-action="browse">Browse\u2026</button>
-  <div class="help-text">Select a plans folder or a parent folder. Ticket Manager will search for features/feature-NN-*/feature.md.</div>
+  <div class="help-text">Select a plans folder or a parent folder. Praxis will search for features/feature-NN-*/feature.md.</div>
 </div>
 <div class="form-group">
   <label>Project Key</label>
@@ -469,7 +469,7 @@ ${fields}
   }
 
   private renderUserWorkspaceFields(): string {
-    return `<p class="info-text">Create a user-scoped Ticket Manager workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
+    return `<p class="info-text">Create a user-scoped Praxis workspace outside the current VS Code workspace. After saving, use <strong>Create Board</strong> to add boards that point at markdown plans folders.</p>`;
   }
 
   private renderJiraFields(): string {
@@ -532,7 +532,7 @@ ${connFields}`;
           this.setupMode = mode;
           this.setupStep = 1;
           if (mode === 'jiracloud') {
-            const config = vscode.workspace.getConfiguration('ticketManager');
+            const config = vscode.workspace.getConfiguration('praxis');
             this.setupFields.jiraMcpSiteUrl = config.get<string>('jiraMcpSiteUrl', '');
             this.setupFields.jiraMcpEpicKey = config.get<string>('jiraMcpEpicKey', '');
             this.setupFields.jiraMcpBoardJql = config.get<string>('jiraMcpBoardJql', '');
@@ -603,7 +603,7 @@ ${connFields}`;
 
     const savedMode = this.setupMode;
 
-    const config = vscode.workspace.getConfiguration('ticketManager');
+    const config = vscode.workspace.getConfiguration('praxis');
     const target =
       this.setupMode === 'userworkspace'
         ? vscode.ConfigurationTarget.Global
@@ -652,7 +652,7 @@ ${connFields}`;
     );
 
     // Don't reset state or re-render here.  The onDidChangeConfiguration
-    // handler sets ticketManager.configured = true, which hides this sidebar
+    // handler sets praxis.configured = true, which hides this sidebar
     // via the when-clause.  If the view later becomes visible again (e.g. on
     // mode reset), the onDidChangeVisibility handler resets to step 0.
   }

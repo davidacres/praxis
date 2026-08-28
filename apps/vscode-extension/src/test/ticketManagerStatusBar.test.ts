@@ -1,12 +1,12 @@
 import * as assert from 'assert';
 import {
-  buildTicketManagerStatusPresentation,
+  buildPraxisStatusPresentation,
   getBackendModeLabel
-} from '../views/ticketManagerStatusBar';
+} from '../views/praxisStatusBar';
 
-suite('TicketManagerStatusBar', () => {
+suite('PraxisStatusBar', () => {
   test('shows setup warning when no providers are configured', () => {
-    const presentation = buildTicketManagerStatusPresentation({
+    const presentation = buildPraxisStatusPresentation({
       providerCount: 0,
       connection: undefined,
       aiProviders: [],
@@ -16,15 +16,15 @@ suite('TicketManagerStatusBar', () => {
     });
 
     assert.strictEqual(presentation.tone, 'warning');
-    assert.strictEqual(presentation.text, '$(ticket-manager-ticket) $(warning)');
+    assert.strictEqual(presentation.text, '$(praxis-ticket) $(warning)');
     assert.ok(presentation.accessibilityLabel.includes('no providers'));
     assert.ok(presentation.tooltipMarkdown.includes('No providers configured\\.'));
     assert.ok(presentation.tooltipMarkdown.includes('Configure AI'));
-    assert.ok(presentation.tooltipMarkdown.includes('Open Ticket Manager Settings'));
+    assert.ok(presentation.tooltipMarkdown.includes('Open Praxis Settings'));
   });
 
   test('shows provider count and configured AI in healthy state', () => {
-    const presentation = buildTicketManagerStatusPresentation({
+    const presentation = buildPraxisStatusPresentation({
       backendMode: 'jiracloud',
       providerCount: 3,
       connection: {
@@ -42,7 +42,7 @@ suite('TicketManagerStatusBar', () => {
 
     assert.strictEqual(getBackendModeLabel('jiracloud'), 'Jira MCP');
     assert.strictEqual(presentation.tone, 'ok');
-    assert.strictEqual(presentation.text, '$(ticket-manager-ticket)');
+    assert.strictEqual(presentation.text, '$(praxis-ticket)');
     assert.ok(presentation.accessibilityLabel.includes('3 providers'));
     assert.ok(presentation.accessibilityLabel.includes('Vercel AI Gateway'));
     assert.ok(presentation.tooltipMarkdown.includes('Connected to 3 providers\\.'));
@@ -51,7 +51,7 @@ suite('TicketManagerStatusBar', () => {
   });
 
   test('last error takes precedence over healthy connection state', () => {
-    const presentation = buildTicketManagerStatusPresentation({
+    const presentation = buildPraxisStatusPresentation({
       backendMode: 'livefolder',
       providerCount: 2,
       connection: {
@@ -67,7 +67,7 @@ suite('TicketManagerStatusBar', () => {
     });
 
     assert.strictEqual(presentation.tone, 'error');
-    assert.strictEqual(presentation.text, '$(ticket-manager-ticket) $(error)');
+    assert.strictEqual(presentation.text, '$(praxis-ticket) $(error)');
     assert.ok(presentation.accessibilityLabel.includes('2 providers'));
     assert.ok(presentation.accessibilityLabel.includes('Vercel AI Gateway'));
     assert.ok(presentation.tooltipMarkdown.includes('Connected to 2 providers\\.'));
@@ -75,7 +75,7 @@ suite('TicketManagerStatusBar', () => {
   });
 
   test('surfaces paused sessions and pending approvals as attention state', () => {
-    const presentation = buildTicketManagerStatusPresentation({
+    const presentation = buildPraxisStatusPresentation({
       backendMode: 'jiracloud',
       providerCount: 1,
       connection: {
@@ -94,7 +94,7 @@ suite('TicketManagerStatusBar', () => {
     });
 
     assert.strictEqual(presentation.tone, 'warning');
-    assert.strictEqual(presentation.text, '$(ticket-manager-ticket) $(warning)');
+    assert.strictEqual(presentation.text, '$(praxis-ticket) $(warning)');
     assert.ok(presentation.accessibilityLabel.includes('1 provider'));
     assert.ok(presentation.accessibilityLabel.includes('1 approval'));
     assert.ok(presentation.accessibilityLabel.includes('2 paused'));

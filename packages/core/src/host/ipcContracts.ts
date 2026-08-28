@@ -57,7 +57,7 @@ import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolu
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
  * Electron main process (registers ipcMain.handle per method) and the preload script (wraps
- * each into window.ticketManager.*). No runtime code crosses this boundary.
+ * each into window.praxis.*). No runtime code crosses this boundary.
  */
 export interface BoardIpc {
   /**
@@ -491,7 +491,7 @@ export interface AiIpc {
   ): Promise<{ started: boolean; noteCount: number }>;
 }
 
-export interface TicketManagerIpc {
+export interface PraxisIpc {
   app: AppIpc;
   board: BoardIpc;
   issue: IssueIpc;

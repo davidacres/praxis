@@ -664,7 +664,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
   }
 
   public dispose(): void {
-    void this.pauseAllTasks('Session paused because Ticket Manager was shut down.');
+    void this.pauseAllTasks('Session paused because Praxis was shut down.');
   }
 
   private async failTaskForTimeout(issueKey: string, timeoutMs: number): Promise<void> {

@@ -37,7 +37,7 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 test.beforeEach(async () => {
-  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-livefolder-'));
+  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-livefolder-'));
   writeFixtureLiveFolder(liveFolderDir);
 
   app = await launchTestApp();

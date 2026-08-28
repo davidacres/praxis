@@ -30,11 +30,11 @@ async function configureCopilotProvider(win: TestApp['window'], cliPath: string)
   await win.evaluate(
     async ({ cliPath }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
         };
       };
-      await w.ticketManager.settings.set({ ai: { providers: { 'copilot-cli': { cliPath } } } });
+      await w.praxis.settings.set({ ai: { providers: { 'copilot-cli': { cliPath } } } });
     },
     { cliPath }
   );
@@ -44,7 +44,7 @@ async function delegate(win: TestApp['window'], issueKey: string, goal: string):
   await win.evaluate(
     async ({ issueKey, goal }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           ai: {
             delegate: (input: {
               issueKey: string;
@@ -54,7 +54,7 @@ async function delegate(win: TestApp['window'], issueKey: string, goal: string):
           };
         };
       };
-      await w.ticketManager.ai.delegate({
+      await w.praxis.ai.delegate({
         issueKey,
         provider: 'copilot-cli',
         task: { goal, maxSteps: 3, timeoutMs: 30000 }
@@ -70,11 +70,11 @@ async function readSession(
 ): Promise<{ state: string; responseText?: string } | undefined> {
   return win.evaluate(async issueKey => {
     const w = window as unknown as {
-      ticketManager: {
+      praxis: {
         ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string; responseText?: string }>> };
       };
     };
-    const sessions = await w.ticketManager.ai.listSessions();
+    const sessions = await w.praxis.ai.listSessions();
     return sessions.find(s => s.issueKey === issueKey);
   }, issueKey);
 }
@@ -109,8 +109,8 @@ test('abort kills the Copilot runtime process cleanly', async () => {
   expect(psBefore).toContain('fakeCopilotRuntime.mjs');
 
   await win.evaluate(async issueKey => {
-    const w = window as unknown as { ticketManager: { ai: { abort: (issueKey: string) => Promise<void> } } };
-    await w.ticketManager.ai.abort(issueKey);
+    const w = window as unknown as { praxis: { ai: { abort: (issueKey: string) => Promise<void> } } };
+    await w.praxis.ai.abort(issueKey);
   }, 'APP-204');
 
   await expect.poll(async () => (await readSession(win, 'APP-204'))?.state, { timeout: 10000 }).toBe('aborted');

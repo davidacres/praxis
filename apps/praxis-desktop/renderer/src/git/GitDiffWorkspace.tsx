@@ -172,7 +172,7 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
     setLoading(true);
     setError(undefined);
     try {
-      const next = await window.ticketManager.git.getComparison(repositoryPath, { ...request, contextLines, ignoreWhitespace });
+      const next = await window.praxis.git.getComparison(repositoryPath, { ...request, contextLines, ignoreWhitespace });
       setDocument(next);
       setSelectedFileId(current => {
         if (current && next.files.some(file => file.id === current)) return current;
@@ -210,7 +210,7 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
     setBusy(`${action}:${hunk.id}`);
     setError(undefined);
     try {
-      await window.ticketManager.git.applyHunk(repositoryPath, { action, path: selectedFile.displayPath, patch });
+      await window.praxis.git.applyHunk(repositoryPath, { action, path: selectedFile.displayPath, patch });
       await onStatusChanged?.();
       await load();
     } catch (reason) {
@@ -225,8 +225,8 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
     setBusy(`file:${selectedFile.id}`);
     setError(undefined);
     try {
-      if (request.kind === 'working') await window.ticketManager.git.stage(repositoryPath, [selectedFile.displayPath]);
-      else await window.ticketManager.git.unstage(repositoryPath, [selectedFile.displayPath]);
+      if (request.kind === 'working') await window.praxis.git.stage(repositoryPath, [selectedFile.displayPath]);
+      else await window.praxis.git.unstage(repositoryPath, [selectedFile.displayPath]);
       await onStatusChanged?.();
       await load();
     } catch (reason) {
@@ -242,7 +242,7 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
     setBusy(`discard-file:${selectedFile.id}`);
     setError(undefined);
     try {
-      await window.ticketManager.git.discard(repositoryPath, [selectedFile.displayPath]);
+      await window.praxis.git.discard(repositoryPath, [selectedFile.displayPath]);
       await onStatusChanged?.();
       await load();
     } catch (reason) {
@@ -260,8 +260,8 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
     setError(undefined);
     const ref = request.kind === 'commit' ? request.left : request.kind === 'compare' ? request.right : undefined;
     try {
-      if (view === 'history') setFileHistory(await window.ticketManager.git.getFileHistory(repositoryPath, selectedFile.displayPath, ref));
-      else setBlame(await window.ticketManager.git.getBlame(repositoryPath, selectedFile.displayPath, ref));
+      if (view === 'history') setFileHistory(await window.praxis.git.getFileHistory(repositoryPath, selectedFile.displayPath, ref));
+      else setBlame(await window.praxis.git.getBlame(repositoryPath, selectedFile.displayPath, ref));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {

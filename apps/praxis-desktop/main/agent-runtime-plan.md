@@ -1,7 +1,7 @@
 # Unified Agent Runtime With Automatic Discovery and Skill Loading
 
 **Status:** Implemented — discovery, skill indexing, IPC, host loading, capability negotiation, and session skill activation
-**Owner:** Ticket Manager desktop app
+**Owner:** Praxis desktop app
 **Scope:** `packages/core`, `apps/praxis-desktop/main`, and the shared renderer settings UI
 **Priority:** P1
 **Risk:** High
@@ -16,7 +16,7 @@ Create one desktop agent runtime that automatically discovers and loads:
 - Future compatible agent hosts
 - Shared and per-agent skills
 
-The intended experience mirrors VS Code's configuration-driven discovery: a user installs or configures an agent host, Ticket Manager discovers its manifest, negotiates its capabilities, and makes compatible skills available without adding provider-specific orchestration to the Electron shell.
+The intended experience mirrors VS Code's configuration-driven discovery: a user installs or configures an agent host, Praxis discovers its manifest, negotiates its capabilities, and makes compatible skills available without adding provider-specific orchestration to the Electron shell.
 
 ## Desired Outcomes
 
@@ -52,7 +52,7 @@ Project-level configuration may use this layout:
 
 ```text
 <project>/
-  .ticket-manager/
+  .praxis/
     agents/
       claude/
         agent.json
@@ -118,9 +118,9 @@ Detect installed and project-configured agent hosts without hard-coding provider
 
 Scan in deterministic order:
 
-1. Built-in host descriptors shipped with Ticket Manager.
+1. Built-in host descriptors shipped with Praxis.
 2. User-level `agents` directory beneath Electron `userData`.
-3. Trusted project-level `.ticket-manager/agents` directory.
+3. Trusted project-level `.praxis/agents` directory.
 4. Explicit paths from the merged runtime configuration.
 
 Agent IDs must be unique after merging. A higher-precedence source may override a lower-precedence manifest only when the user has explicitly enabled overrides.
@@ -269,9 +269,9 @@ The registry records skill source, fingerprint, trust state, metadata, and compa
 
 ### Skill Sources and Precedence
 
-1. Built-in Ticket Manager skills
+1. Built-in Praxis skills
 2. User-level skills
-3. Trusted project-level `.ticket-manager/skills`
+3. Trusted project-level `.praxis/skills`
 4. Per-agent skill paths from an `agent.json` manifest
 5. Explicit configuration paths
 
@@ -310,7 +310,7 @@ Arbitrary prose must not be inferred into executable tool schemas. A skill needs
 
 ## 7. Configuration
 
-Example `.ticket-manager/agent-runtime.json`:
+Example `.praxis/agent-runtime.json`:
 
 ```json
 {
@@ -371,7 +371,7 @@ The gateway is used only for:
 It does not discover agents, launch processes, load skills, or grant tools.
 
 ```text
-Ticket Manager UI
+Praxis UI
         |
         v
 Unified Agent Runtime
@@ -502,7 +502,7 @@ npm --workspace @praxis/desktop-main run test:e2e
 
 ## Final Workflow
 
-1. The user launches Ticket Manager.
+1. The user launches Praxis.
 2. The runtime merges configuration and scans approved agent roots.
 3. It validates manifests and displays discovered hosts without eagerly launching on-demand processes.
 4. It scans skill roots and indexes validated metadata.

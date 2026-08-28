@@ -116,7 +116,7 @@ export function SessionsPage({
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.ai
+    void window.praxis.ai
       .getStatus()
       .then(next => {
         if (!cancelled) {
@@ -130,26 +130,26 @@ export function SessionsPage({
   }, []);
 
   useEffect(() => {
-    void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
-    const unsubscribeAvailability = window.ticketManager.terminal.onContextAvailability(event => {
+    void window.praxis.terminal.list().then(setTerminalSessions).catch(() => undefined);
+    const unsubscribeAvailability = window.praxis.terminal.onContextAvailability(event => {
       setTerminalSessions(current => {
         if (current.some(session => session.id === event.sessionId)) {
           return current.map(session => session.id === event.sessionId
             ? { ...session, hasContext: event.terminalHasContext }
             : session);
         }
-        void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
+        void window.praxis.terminal.list().then(setTerminalSessions).catch(() => undefined);
         return current;
       });
     });
-    const unsubscribeExit = window.ticketManager.terminal.onExit(event => {
+    const unsubscribeExit = window.praxis.terminal.onExit(event => {
       setTerminalSessions(current => current.map(session => session.id === event.sessionId
         ? { ...session, exited: true }
         : session));
     });
     const unsubscribeActive = onActiveTerminalChanged(sessionId => {
       setActiveTerminalId(sessionId);
-      void window.ticketManager.terminal.list().then(setTerminalSessions).catch(() => undefined);
+      void window.praxis.terminal.list().then(setTerminalSessions).catch(() => undefined);
     });
     return () => { unsubscribeAvailability(); unsubscribeExit(); unsubscribeActive(); };
   }, []);
@@ -189,10 +189,10 @@ export function SessionsPage({
       return;
     }
     let cancelled = false;
-    void window.ticketManager.ai.getAnalysis(selected.issueKey).then(next => {
+    void window.praxis.ai.getAnalysis(selected.issueKey).then(next => {
       if (!cancelled) setAnalysisState(next);
     });
-    const unsubscribe = window.ticketManager.ai.onAnalysisChanged(next => {
+    const unsubscribe = window.praxis.ai.onAnalysisChanged(next => {
       if (next.issueKey === selected.issueKey) setAnalysisState(next);
     });
     return () => {
@@ -209,12 +209,12 @@ export function SessionsPage({
       let message = followUp.trim();
       if (attachTerminalContext) {
         if (!terminalForContext) throw new Error('The selected terminal has no recent output to attach.');
-        const context = await window.ticketManager.terminal.getContext(terminalForContext.id);
+        const context = await window.praxis.terminal.getContext(terminalForContext.id);
         if (!context.output) throw new Error('The selected terminal has no recent output to attach.');
         const escapeContext = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         message = `<terminal_context cwd="${escapeContext(context.cwd)}" captured_at="${context.capturedAt}">\n${escapeContext(context.output)}\n</terminal_context>\n\n${message}`;
       }
-      await window.ticketManager.ai.continueSession(selected.issueKey, message);
+      await window.praxis.ai.continueSession(selected.issueKey, message);
       setFollowUp('');
       setAttachTerminalContext(false);
     } catch (error) {
@@ -229,7 +229,7 @@ export function SessionsPage({
     setAbortingSession(true);
     setFollowUpError(undefined);
     try {
-      await window.ticketManager.ai.abort(selected.issueKey);
+      await window.praxis.ai.abort(selected.issueKey);
     } catch (error) {
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -242,13 +242,13 @@ export function SessionsPage({
     setSwitchingMode(true);
     setFollowUpError(undefined);
     try {
-      await window.ticketManager.ai.switchSessionMode(selected.issueKey, mode);
+      await window.praxis.ai.switchSessionMode(selected.issueKey, mode);
       const transition = mode === 'analysis'
         ? 'Switch this conversation into Analysis mode. Inspect the relevant ticket and workspace read-only, then return a concrete analysis and implementation plan. Do not make changes.'
         : mode === 'review'
           ? 'Switch this conversation into Review mode. Review the relevant ticket, workspace, and current implementation read-only, then report findings, risks, and actionable recommendations. Do not make changes.'
           : 'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.';
-      await window.ticketManager.ai.continueSession(selected.issueKey, transition);
+      await window.praxis.ai.continueSession(selected.issueKey, transition);
     } catch (error) {
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -265,13 +265,13 @@ export function SessionsPage({
     setConfirmingAnalysis(true);
     setFollowUpError(undefined);
     try {
-      await window.ticketManager.ai.setAnalysisConfirmed(selected.issueKey, true);
-      await window.ticketManager.ai.continueSession(
+      await window.praxis.ai.setAnalysisConfirmed(selected.issueKey, true);
+      await window.praxis.ai.continueSession(
         selected.issueKey,
         'I confirm the analysis and implementation plan. Continue in this same session and implement the ticket now. Test the result and report back.'
       );
     } catch (error) {
-      await window.ticketManager.ai.setAnalysisConfirmed(selected.issueKey, false).catch(() => undefined);
+      await window.praxis.ai.setAnalysisConfirmed(selected.issueKey, false).catch(() => undefined);
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setConfirmingAnalysis(false);
@@ -297,7 +297,7 @@ export function SessionsPage({
     setSessionMutationKey(session.issueKey);
     setSessionListError(undefined);
     try {
-      await window.ticketManager.ai.renameSession(session.issueKey, title);
+      await window.praxis.ai.renameSession(session.issueKey, title);
       setEditingSessionKey(undefined);
     } catch (error) {
       setSessionListError(error instanceof Error ? error.message : String(error));
@@ -310,7 +310,7 @@ export function SessionsPage({
     setSessionMutationKey(session.issueKey);
     setSessionListError(undefined);
     try {
-      await window.ticketManager.ai.deleteSession(session.issueKey);
+      await window.praxis.ai.deleteSession(session.issueKey);
       setEditingSessionKey(undefined);
     } catch (error) {
       setSessionListError(error instanceof Error ? error.message : String(error));
@@ -495,7 +495,7 @@ export function SessionsPage({
                 <button
                   className="btn"
                   data-testid="session-abort-btn"
-                  onClick={() => void window.ticketManager.ai.abort(selected.issueKey)}
+                  onClick={() => void window.praxis.ai.abort(selected.issueKey)}
                 >
                   <Icon name="close" size={13} />
                   Abort
@@ -538,7 +538,7 @@ export function SessionsPage({
                 }
                 const respond = (decision: PermissionDecision) => {
                   setRespondingTo(selected.issueKey);
-                  void window.ticketManager.ai
+                  void window.praxis.ai
                     .respondToPermission(selected.issueKey, decision)
                     .finally(() => setRespondingTo(undefined));
                 };

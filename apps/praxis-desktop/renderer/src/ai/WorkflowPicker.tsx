@@ -25,7 +25,7 @@ export function WorkflowPicker({ current, onSelect, onClose }: WorkflowPickerPro
 
   useEffect(() => {
     let cancelled = false;
-    window.ticketManager.ai
+    window.praxis.ai
       .listWorkflowPacks()
       .then(discovered => {
         if (cancelled) {

@@ -49,7 +49,7 @@ class VsCodeMcpOAuthProvider implements OAuthClientProvider {
 
   public get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: 'Ticket Manager',
+      client_name: 'Praxis',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
@@ -127,7 +127,7 @@ class VsCodeMcpOAuthProvider implements OAuthClientProvider {
   }
 
   private secretKey(kind: 'client' | 'tokens' | 'verifier' | 'discovery'): string {
-    return `ticketManager.mcp.oauth.${kind}.${buildServerKey(this.serverUrl)}`;
+    return `praxis.mcp.oauth.${kind}.${buildServerKey(this.serverUrl)}`;
   }
 }
 

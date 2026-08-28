@@ -28,7 +28,7 @@ export function GitConflictWorkspace({ repositoryPath, path, onClose, onResolved
 
   useEffect(() => {
     setLoading(true);
-    window.ticketManager.git.getConflict(repositoryPath, path).then(next => {
+    window.praxis.git.getConflict(repositoryPath, path).then(next => {
       setConflict(next);
       setResult(next.result);
       setError(undefined);
@@ -54,7 +54,7 @@ export function GitConflictWorkspace({ repositoryPath, path, onClose, onResolved
     setBusy(true);
     setError(undefined);
     try {
-      await window.ticketManager.git.resolveConflict(repositoryPath, path, strategy === 'manual' ? { strategy, content: result } : { strategy });
+      await window.praxis.git.resolveConflict(repositoryPath, path, strategy === 'manual' ? { strategy, content: result } : { strategy });
       await onResolved();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));

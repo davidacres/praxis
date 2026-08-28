@@ -60,7 +60,7 @@ function gatewayEnv(baseUrl: string): Record<string, string | undefined> {
 
 /** Temp dir posing as a repo with one workflow pack under .github/skills. */
 function makeWorkspaceWithPack(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-wf-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-'));
   tempDirs.push(dir);
   const skillDir = path.join(dir, '.github', 'skills', 'dotnet-api');
   fs.mkdirSync(skillDir, { recursive: true });
@@ -287,7 +287,7 @@ test('analysis runs through the selected OpenAI provider and model', async () =>
     { ...NO_GATEWAY_ENV }
   );
   const win = app.window;
-  await win.evaluate(() => window.ticketManager.ai.setProviderApiKey('openai', 'openai-e2e-key'));
+  await win.evaluate(() => window.praxis.ai.setProviderApiKey('openai', 'openai-e2e-key'));
 
   await openFirstDemoIssue(win);
   await expect(win.locator('[data-testid="issue-detail-ai-provider"]')).toHaveValue('openai');
@@ -355,7 +355,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
 
   // Live-folder fixture: the decomposition finalizer creates real sub-task
   // markdown files, so this backend proves the whole chain.
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-decomp-'));
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-decomp-'));
   tempDirs.push(liveFolderDir);
   const featureDir = path.join(liveFolderDir, 'features', 'feature-01-demo-feature');
   fs.mkdirSync(featureDir, { recursive: true });

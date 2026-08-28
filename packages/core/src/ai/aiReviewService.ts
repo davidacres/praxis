@@ -56,7 +56,7 @@ on workflow pack selection. Do not infer or auto-pick a workflow pack from the t
 content of the ticket.
 
 Only populate "workflowReference" when one of these is true:
-  (a) A workflow pack is already assigned in Ticket Manager — echo its id.
+  (a) A workflow pack is already assigned in Praxis — echo its id.
   (b) The ticket description or a comment explicitly names one of the available workflow packs
       (e.g. a line like "Workflow pack: add-edit-dotnet-web-api"). Wording such as
       "use no workflow", "no workflow pack", or the absence of any such line means no workflow
@@ -68,7 +68,7 @@ Return exactly one JSON code block and nothing else.
 Schema:
 {
   "status": "ready" | "needs_clarification",
-  "workflowReference": "optional — only set when the ticket or Ticket Manager explicitly names a workflow pack",
+  "workflowReference": "optional — only set when the ticket or Praxis explicitly names a workflow pack",
   "comment": "required when status is needs_clarification"
 }
 
@@ -986,13 +986,13 @@ export async function assessGatewayImplementationReadiness(
     : '';
   const assignedWorkflowContext = options?.assignedWorkflow
     ? [
-        'Currently assigned workflow pack in Ticket Manager:',
+        'Currently assigned workflow pack in Praxis:',
         `- Name: ${options.assignedWorkflow.name}`,
         `- Id: ${options.assignedWorkflow.id}`,
         `- File: ${options.assignedWorkflow.instructionsPath}`,
         options.assignedWorkflow.link ? `- Link: ${options.assignedWorkflow.link}` : undefined
       ].filter((line): line is string => Boolean(line)).join('\n')
-    : 'Currently assigned workflow pack in Ticket Manager: none. (This is acceptable — workflow packs are optional.)';
+    : 'Currently assigned workflow pack in Praxis: none. (This is acceptable — workflow packs are optional.)';
   const workflowContext = buildWorkflowPromptContext(options?.availableWorkflows ?? []);
 
   const content = await runReviewGatewayPrompt(

@@ -71,7 +71,7 @@ export async function resolveSuggestedPlansFolderUri(): Promise<vscode.Uri | und
 // ── Main generator ──────────────────────────────────────────────────
 
 /**
- * Reads a markdown plans folder and produces a Ticket Manager JSONC plan
+ * Reads a markdown plans folder and produces a Praxis JSONC plan
  * document that can be saved directly to disk and loaded in File mode.
  */
 export async function generateTicketPlanFromMarkdownFeatures(

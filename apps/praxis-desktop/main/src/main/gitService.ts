@@ -37,7 +37,7 @@ async function gitExecutable(): Promise<string> {
   } catch {
     // Unit/integration callers can exercise repository discovery before the Electron app has initialised settings.
   }
-  return process.env.TICKET_MANAGER_GIT_PATH?.trim() || configuredPath || 'git';
+  return process.env.PRAXIS_GIT_PATH?.trim() || configuredPath || 'git';
 }
 
 async function git(args: string[], cwd: string): Promise<string> {
@@ -72,7 +72,7 @@ async function gitWithInput(args: string[], cwd: string, input: string): Promise
 
 /**
  * Git is per-project, so the caller must always say which repository it means.
- * This used to fall back to a `TICKET_MANAGER_DEFAULT_REPOSITORY` env var and
+ * This used to fall back to a `PRAXIS_DEFAULT_REPOSITORY` env var and
  * then to `process.cwd()`, which silently resolved against whatever directory
  * the app process was launched from — a repository the user never asked for.
  * Refusing is the honest answer; every caller has the path.

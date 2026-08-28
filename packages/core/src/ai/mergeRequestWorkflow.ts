@@ -163,7 +163,7 @@ export function buildMergeRequestReplyComment(result: MergeRequestFeedbackResult
 
 export function buildMergeRequestFailureReplyComment(failureReason: string): string {
   return [
-    'Ticket Manager could not fully process the latest merge request feedback automatically.',
+    'Praxis could not fully process the latest merge request feedback automatically.',
     '',
     failureReason.trim()
   ].join('\n');
@@ -171,7 +171,7 @@ export function buildMergeRequestFailureReplyComment(failureReason: string): str
 
 export function buildMergeRequestCreatedComment(mergeRequestUrl: string): string {
   return [
-    'Ticket Manager created a merge request for this completed ticket.',
+    'Praxis created a merge request for this completed ticket.',
     '',
     `Merge request: ${mergeRequestUrl}`
   ].join('\n');

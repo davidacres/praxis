@@ -78,7 +78,7 @@ test.afterEach(async () => {
 });
 
 async function launchWithMultiRootFixture(): Promise<void> {
-  parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-multi-'));
+  parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-multi-'));
   writeFixtureMultiRoot(parentDir);
   app = await launchTestApp({
     connections: [

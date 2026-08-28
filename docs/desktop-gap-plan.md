@@ -41,7 +41,7 @@ Other findings that shape the plan:
 | `packages/core/src/ai/` | Everything except the 3 coupled files. Add small host seams: `AiSessionStateStore` (memento analog), `AiEventEmitter`, secret lookup via existing `SecretsStore` interface | M |
 | Extension adapters | Thin shims so the extension keeps working against core (memento-backed state store, its existing webviews) — replaces its `src/ai/` copies | S |
 | Desktop main (`electron-app/src/main/ai/`) | `aiSessionService.ts` (owns runtime instances), `aiIpc.ts` (invoke + event-push channels), wire `AiSessionManager` over `jsonKeyValueStore` | M |
-| Preload + `ticketManager.d.ts` | `ai.*` surface: configure provider, list/start/abort sessions, subscribe to session events, list workflow packs, review requests | S |
+| Preload + `praxis.d.ts` | `ai.*` surface: configure provider, list/start/abort sessions, subscribe to session events, list workflow packs, review requests | S |
 | Frontend React | Sessions sidebar section, session console view (event stream), gateway settings section, workflow pack picker, "delegate" / "review with AI" actions on issue detail, wire the dormant `NewSession` composer | L |
 | Local tools on desktop | `LocalToolExecutor` runs as the desktop user's shell — same trust model as the extension running in the user's VS Code. Keep allowlist + sandbox defaults identical | S |
 

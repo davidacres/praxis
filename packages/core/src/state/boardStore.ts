@@ -2,8 +2,8 @@ import { Emitter, type Disposable } from '../host/emitter';
 import type { HostStorage } from '../host/stateStore';
 import type { BoardFilters, PersistedBoardFilterState, TrackedBoardRef } from '../types';
 
-const BOARD_FILTERS_KEY = 'ticketManager.boards.filters';
-const WORK_MODE_LAYOUT_KEY = 'ticketManager.workMode.layout';
+const BOARD_FILTERS_KEY = 'praxis.boards.filters';
+const WORK_MODE_LAYOUT_KEY = 'praxis.workMode.layout';
 
 interface PersistedWorkModeLayout {
   boardOrder?: string[];

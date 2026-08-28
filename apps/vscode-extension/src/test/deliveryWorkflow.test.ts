@@ -127,7 +127,7 @@ suite('deliveryWorkflow', () => {
 
     assert.ok(comment.includes('AI readiness analysis passed'));
     assert.ok(comment.includes('Analysis result: READY'));
-    assert.ok(comment.includes('Ticket Manager is now preparing the delivery workflow.'));
+    assert.ok(comment.includes('Praxis is now preparing the delivery workflow.'));
   });
 
   test('rewrites powershell file publish commands to be worktree-scoped', () => {
@@ -198,7 +198,7 @@ suite('deliveryWorkflow', () => {
       '  "commitHash": "abc1234",',
       '  "pushedRef": "origin/KAMAI-39-ship-the-msi-delivery-change",',
       '  "buildIdentifier": "01",',
-      '  "artifactPaths": ["dist/TicketManager-KAMAI-39.msi"]',
+      '  "artifactPaths": ["dist/Praxis-KAMAI-39.msi"]',
       '}',
       '```'
     ].join('\n');
@@ -211,7 +211,7 @@ suite('deliveryWorkflow', () => {
       commitHash: 'abc1234',
       pushedRef: 'origin/KAMAI-39-ship-the-msi-delivery-change',
       buildIdentifier: '01',
-      artifactPaths: ['dist/TicketManager-KAMAI-39.msi'],
+      artifactPaths: ['dist/Praxis-KAMAI-39.msi'],
       failureReason: undefined
     });
   });

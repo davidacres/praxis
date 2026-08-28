@@ -40,11 +40,11 @@ test('allowing a pending permission lets the session continue to completion', as
   await win.evaluate(
     async ({ cliPath }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
         };
       };
-      await w.ticketManager.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } });
+      await w.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } });
     },
     { cliPath: FIXTURE_PATH }
   );
@@ -83,11 +83,11 @@ test('denying a pending permission is honored by the agent', async () => {
   await win.evaluate(
     async ({ cliPath }) => {
       const w = window as unknown as {
-        ticketManager: {
+        praxis: {
           settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
         };
       };
-      await w.ticketManager.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } });
+      await w.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath } } } });
     },
     { cliPath: FIXTURE_PATH }
   );

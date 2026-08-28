@@ -87,7 +87,7 @@ test('creating a demo issue with the full field set shows it on the board', asyn
 });
 
 test('creating a live folder task under a feature writes the markdown file', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-newissue-'));
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-'));
   try {
     writeFixtureLiveFolder(liveFolderDir);
     await launchWithLiveFolder(liveFolderDir, true);
@@ -128,7 +128,7 @@ test('creating a live folder task under a feature writes the markdown file', asy
 });
 
 test('live folder without allowIssueCreation shows a disabled create button with a hint', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-newissue-gated-'));
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-gated-'));
   try {
     writeFixtureLiveFolder(liveFolderDir);
     await launchWithLiveFolder(liveFolderDir, false);
@@ -179,7 +179,7 @@ test('New idea opens the create form preset to Idea with the research transcript
 });
 
 test('creating a live folder idea writes the research transcript into the markdown', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ticket-manager-newidea-'));
+  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newidea-'));
   try {
     writeFixtureLiveFolder(liveFolderDir);
     app = await launchTestApp({

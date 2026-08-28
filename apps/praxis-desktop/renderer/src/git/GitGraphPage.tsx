@@ -70,13 +70,13 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     setError(undefined);
     try {
       const next = options?.force
-        ? await window.ticketManager.git.refresh(target)
-        : await window.ticketManager.git.open(target);
+        ? await window.praxis.git.refresh(target)
+        : await window.praxis.git.open(target);
       setSnapshot(next);
       setCompareLeft(current => current || next.currentBranch || next.branches.find(branch => !branch.isRemote)?.name || 'HEAD');
       setCompareRight(current => current || next.branches.find(branch => !branch.isRemote && branch.name !== next.currentBranch)?.name || next.currentBranch || 'HEAD');
       setSelectedHash(current => current && next.commits.some(commit => commit.hash === current) ? current : next.commits[0]?.hash);
-      const nextStatus = await window.ticketManager.git.status(next.repositoryPath);
+      const nextStatus = await window.praxis.git.status(next.repositoryPath);
       setStatus(nextStatus);
       setConflictPath(nextStatus.files.find(file => file.conflicted)?.path);
     } catch (reason) {
@@ -90,7 +90,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     setLoading(true);
     setError(undefined);
     try {
-      const result = await window.ticketManager.git.preflight(candidate);
+      const result = await window.praxis.git.preflight(candidate);
       setPreflight(result);
       // Both statuses carry a resolved repositoryPath; checking keeps that
       // guarantee honest rather than asserting it away.
@@ -134,20 +134,20 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     setSnapshot(next);
     defaultFocusApplied.current = false;
     setBranchFilter(undefined);
-    const nextStatus = await window.ticketManager.git.status(next.repositoryPath);
+    const nextStatus = await window.praxis.git.status(next.repositoryPath);
     setStatus(nextStatus);
     setConflictPath(nextStatus.files.find(file => file.conflicted)?.path);
     setSelectedHash(next.commits[0]?.hash);
   };
 
   const refreshStatus = async () => {
-    if (snapshot) setStatus(await window.ticketManager.git.status(snapshot.repositoryPath));
+    if (snapshot) setStatus(await window.praxis.git.status(snapshot.repositoryPath));
   };
 
   useEffect(() => {
     if (!snapshot || !selectedHash) return;
     setDetails(undefined);
-    void window.ticketManager.git.getCommit(snapshot.repositoryPath, selectedHash)
+    void window.praxis.git.getCommit(snapshot.repositoryPath, selectedHash)
       .then(setDetails)
       .catch(reason => setError(reason instanceof Error ? reason.message : String(reason)));
   }, [snapshot, selectedHash]);
@@ -156,7 +156,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     const intervalMinutes = gitSettings.fetchIntervalMinutes;
     if (!snapshot || intervalMinutes <= 0) return;
     const timer = window.setInterval(() => {
-      void runAction('Fetching remote refs', async () => adoptSnapshot(await window.ticketManager.git.fetch(snapshot.repositoryPath)));
+      void runAction('Fetching remote refs', async () => adoptSnapshot(await window.praxis.git.fetch(snapshot.repositoryPath)));
     }, intervalMinutes * 60_000);
     return () => window.clearInterval(timer);
   }, [snapshot?.repositoryPath, gitSettings.fetchIntervalMinutes]);
@@ -212,20 +212,20 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
 
   if (snapshot && conflictPath) {
     return <section className="git-page git-page-diff" aria-label="Git Graph" data-testid="git-graph-page">
-      <GitConflictWorkspace repositoryPath={snapshot.repositoryPath} path={conflictPath} canAbort={Boolean(status?.operation)} onClose={() => setConflictPath(undefined)} onResolved={async () => { const next = await window.ticketManager.git.status(snapshot.repositoryPath); setStatus(next); setConflictPath(next.files.find(file => file.conflicted)?.path); }} onAbort={async () => { await adoptSnapshot(await window.ticketManager.git.abortConflict(snapshot.repositoryPath)); setConflictPath(undefined); }} />
+      <GitConflictWorkspace repositoryPath={snapshot.repositoryPath} path={conflictPath} canAbort={Boolean(status?.operation)} onClose={() => setConflictPath(undefined)} onResolved={async () => { const next = await window.praxis.git.status(snapshot.repositoryPath); setStatus(next); setConflictPath(next.files.find(file => file.conflicted)?.path); }} onAbort={async () => { await adoptSnapshot(await window.praxis.git.abortConflict(snapshot.repositoryPath)); setConflictPath(undefined); }} />
     </section>;
   }
 
   if (!snapshot && !loading) {
     const chooseFolder = async () => {
-      const picked = await window.ticketManager.dialog.pickFolder('Choose Git workspace');
+      const picked = await window.praxis.dialog.pickFolder('Choose Git workspace');
       if (picked) await inspectAndLoad(picked);
     };
     const initialize = async () => {
       if (!preflight?.requestedPath || !window.confirm(`Initialize Git in ${preflight.requestedPath}? This creates a .git directory in that folder.`)) return;
       setLoading(true);
       try {
-        const result = await window.ticketManager.git.initialize(preflight.requestedPath);
+        const result = await window.praxis.git.initialize(preflight.requestedPath);
         setPreflight(result);
         if (result.repositoryPath) await load(result.repositoryPath);
       } catch (reason) {
@@ -236,12 +236,12 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
     const clone = async () => {
       const url = window.prompt('Repository URL');
       if (!url) return;
-      const parent = await window.ticketManager.dialog.pickFolder('Choose clone destination');
+      const parent = await window.praxis.dialog.pickFolder('Choose clone destination');
       if (!parent) return;
       const name = window.prompt('Folder name (optional)') ?? undefined;
       setLoading(true);
       try {
-        const result = await window.ticketManager.git.clone(url, parent, name);
+        const result = await window.praxis.git.clone(url, parent, name);
         setPreflight(result);
         if (result.repositoryPath) await load(result.repositoryPath);
       } catch (reason) {
@@ -276,7 +276,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
         <div className="git-header-actions">
           <label className="git-search"><span>⌕</span><input aria-label="Search commits" placeholder="Search commits" value={query} onChange={event => setQuery(event.target.value)} /></label>
           <button className="git-button" onClick={() => { if (snapshot) void load(snapshot.repositoryPath, { force: true }); }} disabled={loading || !snapshot}>{loading ? 'Loading…' : '↻ Refresh'}</button>
-          <button className="git-button git-open-button" data-testid="git-open-repository" onClick={() => void window.ticketManager.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })} disabled={loading}>Open repository</button>
+          <button className="git-button git-open-button" data-testid="git-open-repository" onClick={() => void window.praxis.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })} disabled={loading}>Open repository</button>
           <button className={`git-button git-settings-button${settingsOpen ? ' active' : ''}`} aria-label="Git settings" onClick={() => setSettingsOpen(value => !value)}>⚙</button>
           {snapshot && <button className={`git-button git-changes-button${changesOpen ? ' active' : ''}`} data-testid="git-changes" onClick={() => { setChangesOpen(value => !value); void refreshStatus(); }}>Changes{status?.files.length ? ` ${status.files.length}` : ''}</button>}
         </div>
@@ -294,15 +294,15 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
         <label className="git-date-filter">From <input aria-label="From date" type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} /></label>
         <label className="git-date-filter">To <input aria-label="To date" type="date" value={toDate} onChange={event => setToDate(event.target.value)} /></label>
         {snapshot && <>
-          <button className="git-action-button" onClick={() => { const name = window.prompt('New branch name'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.ticketManager.git.createBranch(snapshot.repositoryPath, name))); }}>+ Branch</button>
-          <button className="git-action-button" disabled={!branchFilter || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Switch to ${branchFilter}?`)) void runAction('Checking out branch', async () => adoptSnapshot(await window.ticketManager.git.checkout(snapshot.repositoryPath, branchFilter))); }}>Checkout</button>
-          <button className="git-action-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (!branchFilter) return; const name = window.prompt(`Rename ${branchFilter} to:`, branchFilter); if (name && name !== branchFilter) void runAction('Renaming branch', async () => adoptSnapshot(await window.ticketManager.git.renameBranch(snapshot.repositoryPath, branchFilter, name))); }}>Rename</button>
-          <button className="git-action-button git-danger-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isCurrent || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Delete branch ${branchFilter}? Git will only delete it when it has been merged.`)) void runAction('Deleting branch', async () => adoptSnapshot(await window.ticketManager.git.deleteBranch(snapshot.repositoryPath, branchFilter))); }}>Delete</button>
-          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Merge ${branchFilter} into ${snapshot.currentBranch ?? 'the checked-out branch'}? Praxis will preserve the branch history and open the conflict editor if needed.`)) void runAction('Merging branch', async () => adoptSnapshot(await window.ticketManager.git.merge(snapshot.repositoryPath, branchFilter))); }}>Merge into current</button>
-          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Rebase ${snapshot.currentBranch ?? 'the checked-out branch'} onto ${branchFilter}? This rewrites the current branch’s commits and should not be used after sharing them.`)) void runAction('Rebasing branch', async () => adoptSnapshot(await window.ticketManager.git.rebase(snapshot.repositoryPath, branchFilter))); }}>Rebase current</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pulling changes', async () => adoptSnapshot(await window.ticketManager.git.pull(snapshot.repositoryPath)))}>Pull</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pushing changes', async () => adoptSnapshot(await window.ticketManager.git.push(snapshot.repositoryPath)))}>Push</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => { if (window.confirm('Restore the most recent Praxis stash onto the current branch? Conflicts will open in the resolver.')) void runAction('Restoring stash', async () => adoptSnapshot(await window.ticketManager.git.popStash(snapshot.repositoryPath))); }}>Pop stash</button>
+          <button className="git-action-button" onClick={() => { const name = window.prompt('New branch name'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name))); }}>+ Branch</button>
+          <button className="git-action-button" disabled={!branchFilter || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Switch to ${branchFilter}?`)) void runAction('Checking out branch', async () => adoptSnapshot(await window.praxis.git.checkout(snapshot.repositoryPath, branchFilter))); }}>Checkout</button>
+          <button className="git-action-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (!branchFilter) return; const name = window.prompt(`Rename ${branchFilter} to:`, branchFilter); if (name && name !== branchFilter) void runAction('Renaming branch', async () => adoptSnapshot(await window.praxis.git.renameBranch(snapshot.repositoryPath, branchFilter, name))); }}>Rename</button>
+          <button className="git-action-button git-danger-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isCurrent || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Delete branch ${branchFilter}? Git will only delete it when it has been merged.`)) void runAction('Deleting branch', async () => adoptSnapshot(await window.praxis.git.deleteBranch(snapshot.repositoryPath, branchFilter))); }}>Delete</button>
+          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Merge ${branchFilter} into ${snapshot.currentBranch ?? 'the checked-out branch'}? Praxis will preserve the branch history and open the conflict editor if needed.`)) void runAction('Merging branch', async () => adoptSnapshot(await window.praxis.git.merge(snapshot.repositoryPath, branchFilter))); }}>Merge into current</button>
+          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Rebase ${snapshot.currentBranch ?? 'the checked-out branch'} onto ${branchFilter}? This rewrites the current branch’s commits and should not be used after sharing them.`)) void runAction('Rebasing branch', async () => adoptSnapshot(await window.praxis.git.rebase(snapshot.repositoryPath, branchFilter))); }}>Rebase current</button>
+          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pulling changes', async () => adoptSnapshot(await window.praxis.git.pull(snapshot.repositoryPath)))}>Pull</button>
+          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pushing changes', async () => adoptSnapshot(await window.praxis.git.push(snapshot.repositoryPath)))}>Push</button>
+          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => { if (window.confirm('Restore the most recent Praxis stash onto the current branch? Conflicts will open in the resolver.')) void runAction('Restoring stash', async () => adoptSnapshot(await window.praxis.git.popStash(snapshot.repositoryPath))); }}>Pop stash</button>
           <button className={`git-action-button${compareOpen ? ' active' : ''}`} onClick={() => { setCompareOpen(value => !value); setSettingsOpen(false); }}>Compare…</button>
         </>}
         <span className="git-toolbar-spacer" />
@@ -337,10 +337,10 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
       {!loading && !snapshot && !error && <div className="git-empty"><div className="git-empty-icon">⌘</div><h2>No repository selected</h2><p>Open a folder containing a Git repository to explore its history.</p></div>}
 
       {changesOpen && snapshot && status && <section className="git-changes-panel" aria-label="Working tree changes" data-testid="git-changes-panel">
-        <div className="git-changes-heading"><div><strong>Working tree</strong><span>{status.files.length ? `${status.files.length} changed files` : 'Clean'}</span></div><div className="git-changes-actions">{status.files.some(file => !file.staged) && <button onClick={() => openDiff({ kind: 'working' })}>Review unstaged</button>}{status.files.some(file => file.staged) && <button onClick={() => openDiff({ kind: 'staged' })}>Review staged</button>}{status.files.length > 0 && <button onClick={() => { const message = window.prompt('Optional stash description:', 'Work in progress'); if (message !== null) void runAction('Stashing changes', async () => adoptSnapshot(await window.ticketManager.git.stash(snapshot.repositoryPath, message))); }}>Stash changes</button>}{status.files.length > 0 && <button onClick={() => void runAction('Staging all files', async () => { const next = await window.ticketManager.git.stage(snapshot.repositoryPath, status.files.map(file => file.path)); setStatus(next); return next; })}>Stage all</button>}<button onClick={() => void refreshStatus()}>↻</button></div></div>
+        <div className="git-changes-heading"><div><strong>Working tree</strong><span>{status.files.length ? `${status.files.length} changed files` : 'Clean'}</span></div><div className="git-changes-actions">{status.files.some(file => !file.staged) && <button onClick={() => openDiff({ kind: 'working' })}>Review unstaged</button>}{status.files.some(file => file.staged) && <button onClick={() => openDiff({ kind: 'staged' })}>Review staged</button>}{status.files.length > 0 && <button onClick={() => { const message = window.prompt('Optional stash description:', 'Work in progress'); if (message !== null) void runAction('Stashing changes', async () => adoptSnapshot(await window.praxis.git.stash(snapshot.repositoryPath, message))); }}>Stash changes</button>}{status.files.length > 0 && <button onClick={() => void runAction('Staging all files', async () => { const next = await window.praxis.git.stage(snapshot.repositoryPath, status.files.map(file => file.path)); setStatus(next); return next; })}>Stage all</button>}<button onClick={() => void refreshStatus()}>↻</button></div></div>
         {status.files.length === 0 ? <div className="git-clean-state"><span>✓</span><div><b>Everything is committed</b><small>No local file changes to stage.</small></div></div> : <>
-          <div className="git-change-list">{status.files.map(file => <div className={`git-change-row${file.conflicted ? ' conflicted' : ''}`} key={file.path}>{file.conflicted ? <span className="git-conflict-indicator">!</span> : <input aria-label={`${file.staged ? 'Unstage' : 'Stage'} ${file.path}`} type="checkbox" checked={file.staged} onChange={() => void runAction(file.staged ? 'Unstaging file' : 'Staging file', async () => { const next = file.staged ? await window.ticketManager.git.unstage(snapshot.repositoryPath, [file.path]) : await window.ticketManager.git.stage(snapshot.repositoryPath, [file.path]); setStatus(next); return next; })} />}<span className="git-change-status">{file.indexStatus !== ' ' ? file.indexStatus : file.worktreeStatus}</span><button className="git-change-file" onClick={() => file.conflicted ? setConflictPath(file.path) : openDiff({ kind: file.staged ? 'staged' : 'working' }, file.path)}>{file.path}</button><small>{file.conflicted ? 'resolve' : file.staged ? 'staged' : 'unstaged'}</small></div>)}</div>
-          <div className="git-commit-form"><textarea aria-label="Commit message" placeholder="Describe the changes…" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} /><button disabled={!status.files.some(file => file.staged) || !commitMessage.trim() || busyAction !== undefined} onClick={() => void runAction('Committing changes', async () => { const next = await window.ticketManager.git.commit(snapshot.repositoryPath, commitMessage); setCommitMessage(''); await adoptSnapshot(next); return next; })}>Commit staged</button></div>
+          <div className="git-change-list">{status.files.map(file => <div className={`git-change-row${file.conflicted ? ' conflicted' : ''}`} key={file.path}>{file.conflicted ? <span className="git-conflict-indicator">!</span> : <input aria-label={`${file.staged ? 'Unstage' : 'Stage'} ${file.path}`} type="checkbox" checked={file.staged} onChange={() => void runAction(file.staged ? 'Unstaging file' : 'Staging file', async () => { const next = file.staged ? await window.praxis.git.unstage(snapshot.repositoryPath, [file.path]) : await window.praxis.git.stage(snapshot.repositoryPath, [file.path]); setStatus(next); return next; })} />}<span className="git-change-status">{file.indexStatus !== ' ' ? file.indexStatus : file.worktreeStatus}</span><button className="git-change-file" onClick={() => file.conflicted ? setConflictPath(file.path) : openDiff({ kind: file.staged ? 'staged' : 'working' }, file.path)}>{file.path}</button><small>{file.conflicted ? 'resolve' : file.staged ? 'staged' : 'unstaged'}</small></div>)}</div>
+          <div className="git-commit-form"><textarea aria-label="Commit message" placeholder="Describe the changes…" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} /><button disabled={!status.files.some(file => file.staged) || !commitMessage.trim() || busyAction !== undefined} onClick={() => void runAction('Committing changes', async () => { const next = await window.praxis.git.commit(snapshot.repositoryPath, commitMessage); setCommitMessage(''); await adoptSnapshot(next); return next; })}>Commit staged</button></div>
         </>}
       </section>}
 
@@ -348,7 +348,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
         <aside className="git-refs" aria-label="Branches">
           <div className="git-panel-title">Branches <span>{snapshot.branches.length}</span></div>
           <div className="git-ref-group">LOCAL</div>
-          {visibleBranches.filter(branch => !branch.isRemote).sort((a, b) => Number(pinnedBranches.has(b.name)) - Number(pinnedBranches.has(a.name))).map(branch => <button key={branch.ref} title={`${branch.name} · double-click to check out · right-click to ${pinnedBranches.has(branch.name) ? 'unpin' : 'pin'}`} className={`git-ref-row${branchFilter === branch.name ? ' selected' : ''}${pinnedBranches.has(branch.name) ? ' pinned' : ''}`} onClick={() => setBranchFilter(branchFilter === branch.name ? undefined : branch.name)} onDoubleClick={() => { if (!branch.isCurrent) void runAction('Checking out branch', async () => adoptSnapshot(await window.ticketManager.git.checkout(snapshot.repositoryPath, branch.name))); }} onContextMenu={event => { event.preventDefault(); setPinnedBranches(current => { const next = new Set(current); if (next.has(branch.name)) next.delete(branch.name); else next.add(branch.name); return next; }); }}><i style={{ background: resolveRefColor(branch.name) }} /> <span>{branch.name}</span>{pinnedBranches.has(branch.name) && <em>PIN</em>}{branch.isCurrent && <b>HEAD</b>}</button>)}
+          {visibleBranches.filter(branch => !branch.isRemote).sort((a, b) => Number(pinnedBranches.has(b.name)) - Number(pinnedBranches.has(a.name))).map(branch => <button key={branch.ref} title={`${branch.name} · double-click to check out · right-click to ${pinnedBranches.has(branch.name) ? 'unpin' : 'pin'}`} className={`git-ref-row${branchFilter === branch.name ? ' selected' : ''}${pinnedBranches.has(branch.name) ? ' pinned' : ''}`} onClick={() => setBranchFilter(branchFilter === branch.name ? undefined : branch.name)} onDoubleClick={() => { if (!branch.isCurrent) void runAction('Checking out branch', async () => adoptSnapshot(await window.praxis.git.checkout(snapshot.repositoryPath, branch.name))); }} onContextMenu={event => { event.preventDefault(); setPinnedBranches(current => { const next = new Set(current); if (next.has(branch.name)) next.delete(branch.name); else next.add(branch.name); return next; }); }}><i style={{ background: resolveRefColor(branch.name) }} /> <span>{branch.name}</span>{pinnedBranches.has(branch.name) && <em>PIN</em>}{branch.isCurrent && <b>HEAD</b>}</button>)}
           <div className="git-ref-group">REMOTE</div>
           {visibleBranches.filter(branch => branch.isRemote).slice(0, 12).map(branch => <button key={branch.ref} title={branch.name} className="git-ref-row remote" onClick={() => setBranchFilter(branch.name)}><i style={{ background: resolveRefColor(branch.name) }} /> <span>{branch.name}</span></button>)}
           {snapshot.tags.length > 0 && <><div className="git-ref-group">TAGS</div>{snapshot.tags.slice(0, 12).map(tag => <div key={tag} title={tag} className="git-ref-row git-tag-row"><i style={{ background: resolveRefColor(`tag:${tag}`) }} /> <span>{tag}</span></div>)}</>}
@@ -418,10 +418,10 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
       {commitMenu && snapshot && <div className="git-context-menu" style={{ left: commitMenu.x, top: commitMenu.y }} role="menu" aria-label="Commit actions">
         <div><strong>{commitMenu.hash.slice(0, 8)}</strong><button onClick={() => setCommitMenu(undefined)}>×</button></div>
         <button role="menuitem" onClick={() => { setCompareBaseHash(commitMenu.hash); setCommitMenu(undefined); }}>Set as comparison start</button>
-        <button role="menuitem" onClick={() => { const name = window.prompt('New branch name:'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.ticketManager.git.createBranch(snapshot.repositoryPath, name, commitMenu.hash))); setCommitMenu(undefined); }}>Create branch here</button>
+        <button role="menuitem" onClick={() => { const name = window.prompt('New branch name:'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name, commitMenu.hash))); setCommitMenu(undefined); }}>Create branch here</button>
         <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(commitMenu.hash); setCommitMenu(undefined); }}>Copy commit SHA</button>
-        <button role="menuitem" onClick={() => { if (window.confirm(`Cherry-pick ${commitMenu.hash.slice(0, 8)} onto ${snapshot.currentBranch ?? 'the current branch'}?`)) void runAction('Cherry-picking commit', async () => adoptSnapshot(await window.ticketManager.git.cherryPick(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Cherry-pick commit</button>
-        <button className="danger" role="menuitem" onClick={() => { if (window.confirm(`Create a new commit that reverses ${commitMenu.hash.slice(0, 8)}? Published history will be preserved.`)) void runAction('Reverting commit', async () => adoptSnapshot(await window.ticketManager.git.revert(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Revert with new commit</button>
+        <button role="menuitem" onClick={() => { if (window.confirm(`Cherry-pick ${commitMenu.hash.slice(0, 8)} onto ${snapshot.currentBranch ?? 'the current branch'}?`)) void runAction('Cherry-picking commit', async () => adoptSnapshot(await window.praxis.git.cherryPick(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Cherry-pick commit</button>
+        <button className="danger" role="menuitem" onClick={() => { if (window.confirm(`Create a new commit that reverses ${commitMenu.hash.slice(0, 8)}? Published history will be preserved.`)) void runAction('Reverting commit', async () => adoptSnapshot(await window.praxis.git.revert(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Revert with new commit</button>
       </div>}
     </section>
   );

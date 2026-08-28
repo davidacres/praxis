@@ -38,7 +38,7 @@ function buildDocument(pkg) {
   });
 
   const lines = [
-    '# Ticket Manager Command Reference',
+    '# Praxis Command Reference',
     '',
     '> This file is generated from `apps/vscode-extension/package.json` by `npm run docs:commands` (delegates to `node apps/vscode-extension/scripts/generate-command-reference.cjs`).',
     '',

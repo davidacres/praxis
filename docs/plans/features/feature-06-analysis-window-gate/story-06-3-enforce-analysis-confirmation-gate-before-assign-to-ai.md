@@ -14,7 +14,7 @@ Require explicit user confirmation that analysis is complete before allowing Ass
 
 ## Implementation Activities
 1. Add explicit analysis-complete confirmation command and action:
-   - ticketManager.confirmAnalysisComplete
+   - praxis.confirmAnalysisComplete
 2. Track per-issue analysis confirmation state in persisted session metadata.
 3. Gate Assign to AI command path to block execution when analysis is not confirmed complete.
 4. Provide actionable user-facing feedback when Assign to AI is blocked.

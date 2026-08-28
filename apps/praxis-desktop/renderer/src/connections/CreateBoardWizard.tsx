@@ -42,7 +42,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     setError(undefined);
     setEmptyDiscovery(false);
     try {
-      const found = await window.ticketManager.userWorkspace.discoverBoardDrafts(connection.id, path);
+      const found = await window.praxis.userWorkspace.discoverBoardDrafts(connection.id, path);
       setDrafts(found);
       if (found.length === 0) {
         setEmptyDiscovery(true);
@@ -58,7 +58,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
   };
 
   const onBrowse = async () => {
-    const picked = await window.ticketManager.dialog.pickFolder();
+    const picked = await window.praxis.dialog.pickFolder();
     if (picked) {
       setFolderPath(picked);
       void runDiscover(picked);
@@ -74,7 +74,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
   const newCount = drafts.filter(row => !row.alreadyAdded).length;
 
   const onSubmit = async () => {
-    const validationError = await window.ticketManager.userWorkspace.validateBoardDrafts(
+    const validationError = await window.praxis.userWorkspace.validateBoardDrafts(
       connection.id,
       drafts
     );
@@ -89,7 +89,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
         if (draft.alreadyAdded) {
           continue;
         }
-        await window.ticketManager.userWorkspace.createBoard(connection.id, {
+        await window.praxis.userWorkspace.createBoard(connection.id, {
           name: draft.name.trim(),
           projectKey: draft.projectKey.trim(),
           projectName: draft.projectName.trim() || undefined,

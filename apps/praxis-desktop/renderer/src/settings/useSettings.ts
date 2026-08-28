@@ -7,7 +7,7 @@ interface SettingsState {
 }
 
 /**
- * Loads settings on mount via `window.ticketManager.settings.get()` and keeps
+ * Loads settings on mount via `window.praxis.settings.get()` and keeps
  * the value live in sync with the `settings:changed` push channel (which
  * fires for both local writes and external changes — e.g. the VS Code
  * extension editing the shared file).
@@ -25,7 +25,7 @@ export function useSettings(): {
 
   useEffect(() => {
     let cancelled = false;
-    void window.ticketManager.settings
+    void window.praxis.settings
       .get()
       .then(settings => {
         if (cancelled) {
@@ -40,7 +40,7 @@ export function useSettings(): {
         setState(current => ({ ...current, error: err instanceof Error ? err.message : String(err) }));
       });
 
-    const unsubscribe = window.ticketManager.settings.onChanged(settings => {
+    const unsubscribe = window.praxis.settings.onChanged(settings => {
       if (cancelled) {
         return;
       }
@@ -55,7 +55,7 @@ export function useSettings(): {
 
   const update = useCallback(async (patch: AppSettingsPatch): Promise<void> => {
     try {
-      await window.ticketManager.settings.set(patch);
+      await window.praxis.settings.set(patch);
     } catch (err) {
       setState(current => ({ ...current, error: err instanceof Error ? err.message : String(err) }));
       throw err;

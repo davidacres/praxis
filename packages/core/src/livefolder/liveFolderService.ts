@@ -70,7 +70,7 @@ const STATUSES = [
 
 const STATUS_NAMES = STATUSES.map(s => s.name);
 const LIVE_FOLDER_CREATION_DISABLED_ERROR =
-  'Live Folder issue creation is disabled. Enable ticketManager.liveFolderAllowIssueCreation to create markdown issues.';
+  'Live Folder issue creation is disabled. Enable praxis.liveFolderAllowIssueCreation to create markdown issues.';
 
 type CreatableLiveFolderIssueType = 'Feature' | 'Idea' | 'Story' | 'Task' | 'Bug';
 
@@ -907,7 +907,7 @@ export class LiveFolderService implements IssueTrackerService {
   private async loadInitial(): Promise<void> {
     const folderPath = this.configStore.getLiveFolderPath();
     if (!folderPath) {
-      throw new Error('Live Folder path is not configured. Set ticketManager.liveFolderPath.');
+      throw new Error('Live Folder path is not configured. Set praxis.liveFolderPath.');
     }
 
     this.projectKey = this.configStore.getLiveFolderProjectKey() || 'LIVE';

@@ -17,7 +17,7 @@ The current environment cannot capture real extension screenshots automatically,
 
 ## Capture guidance
 
-- Use VS Code with the Ticket Manager extension loaded in a realistic configured workspace.
+- Use VS Code with the Praxis extension loaded in a realistic configured workspace.
 - Prefer consistent theme, window size, and scale across screenshots.
 - Capture examples that show tracked boards, real issue cards, and populated AI/session surfaces.
 - For Task Designer, include ticket nodes, note nodes, website preview nodes, connectors, and zoom controls.

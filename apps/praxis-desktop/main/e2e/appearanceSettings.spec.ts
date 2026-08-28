@@ -5,7 +5,7 @@ import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 /**
  * The suite runs fully isolated (see launchTestApp.ts): each test gets its own
- * settings file via `TICKET_MANAGER_SETTINGS_PATH`, seeded here with the
+ * settings file via `PRAXIS_SETTINGS_PATH`, seeded here with the
  * shipped appearance defaults so assertions do not depend on any local
  * customisation. The developer's real settings file is never touched.
  */
@@ -62,7 +62,7 @@ test('persists the selected theme and mode through app settings', async () => {
   await window.locator('[data-testid="theme-card-anthropic-dark"]').click();
   await window.getByRole('button', { name: 'System' }).click();
   await window.waitForTimeout(300);
-  const appearance = await window.evaluate(() => window.ticketManager.settings.get().then(settings => settings.appearance));
+  const appearance = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance));
   expect(appearance.themeId).toBe('anthropic-dark');
   expect(appearance.themeMode).toBe('system');
   await window.reload();
@@ -123,7 +123,7 @@ test('creates a custom theme with editable colors and persists it', async () => 
   await editor.getByLabel('Name').fill('Ocean Custom');
   await editor.getByLabel('Accent').last().fill('#149eca');
   await editor.getByRole('button', { name: 'Save theme' }).click();
-  const custom = await window.evaluate(() => window.ticketManager.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
+  const custom = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance.customThemes.at(-1)));
   expect(custom?.name).toBe('Ocean Custom');
   await expect(window.locator('html')).toHaveAttribute('data-theme', custom!.id);
   await window.reload();

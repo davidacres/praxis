@@ -10,7 +10,7 @@ const DEFAULT_LIVEFOLDER_BOARD_ICON = '#f59e0b';
 
 /** Icon color for the board list / board panel header (matches Boards sidebar). */
 export function resolveBackendModeBoardIconColor(mode: BackendMode): string {
-  const cfg = vscode.workspace.getConfiguration('ticketManager');
+  const cfg = vscode.workspace.getConfiguration('praxis');
   const key =
     mode === 'jiracloud'
       ? 'jiraBoardListIconColor'

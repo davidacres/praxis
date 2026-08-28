@@ -1,4 +1,4 @@
-# Ticket Manager Command Reference
+# Praxis Command Reference
 
 > This file is generated from `apps/vscode-extension/package.json` by `npm run docs:commands` (delegates to `node apps/vscode-extension/scripts/generate-command-reference.cjs`).
 
@@ -8,67 +8,67 @@ Total contributed commands: 61
 
 | Command Title | Command Id | Category | Icon |
 | --- | --- | --- | --- |
-| Abandon AI Session | `ticketManager.unassignAi` | Ticket Manager | $(close) |
-| Abort Agent Session | `ticketManager.abortAgentSession` | Ticket Manager | $(debug-stop) |
-| Add Connection | `ticketManager.addConnection` | Ticket Manager | $(add) |
-| Add Tracked Board | `ticketManager.addBoard` | Ticket Manager | $(add) |
-| AI Gateway Settings | `ticketManager.openAiGatewaySettings` | Ticket Manager | $(key) |
-| Assign to Me | `ticketManager.assignToMe` | Ticket Manager | $(person) |
-| Assign Workflow Pack | `ticketManager.assignWorkflowPack` | Ticket Manager | $(symbol-key) |
-| Change Status | `ticketManager.changeStatus` | Ticket Manager | $(play-circle) |
-| Check Connection | `ticketManager.checkConnection` | Ticket Manager | $(debug-alt) |
-| Clear Board Filters | `ticketManager.clearBoardFilters` | Ticket Manager | $(clear-all) |
-| Clear Filters | `ticketManager.clearFilters` | Ticket Manager | $(clear-all) |
-| Clear Parent Item Scope | `ticketManager.clearParentScope` | Ticket Manager | $(close) |
-| Configure AI | `ticketManager.configureAi` | Ticket Manager | $(hubot) |
-| Configure Board Settings | `ticketManager.configureBoardColumns` | Ticket Manager | $(settings-gear) |
-| Configure Jira MCP Connection | `ticketManager.configureConnection` | Ticket Manager | $(plug) |
-| Configure Project | `ticketManager.openSetup` | Ticket Manager | $(gear) |
-| Confirm Analysis Complete | `ticketManager.confirmAnalysisComplete` | Ticket Manager | $(pass) |
-| Copy Issue Key | `ticketManager.copyKey` | Ticket Manager | $(copy) |
-| Create Board | `ticketManager.createBoard` | Ticket Manager | $(add) |
-| Create EPIC | `ticketManager.createEpic` | Ticket Manager | $(add) |
-| Create Idea | `ticketManager.createIdea` | Ticket Manager | $(lightbulb) |
-| Create Issue | `ticketManager.createIssue` | Ticket Manager | $(add) |
-| Delegate to AI Agent | `ticketManager.delegateToAiAgent` | Ticket Manager | $(hubot) |
-| Delegate to AI Agent | `ticketManager.assignToAi` | Ticket Manager | $(hubot) |
-| Delegate to AI Agent (Deprecated) | `ticketManager.delegateToCopilot` | Ticket Manager | $(hubot) |
-| Import Markdown Files to Template Format | `ticketManager.importMarkdownFiles` | Ticket Manager | $(file-code) |
-| Import Plan from Markdown Features | `ticketManager.importMarkdownFeaturePlan` | Ticket Manager | $(file-code) |
-| Link Jira MCP Board Query | `ticketManager.linkJiraMcpBoardQuery` | Ticket Manager | $(list-filter) |
-| Link Jira MCP Epic | `ticketManager.linkJiraMcpEpic` | Ticket Manager | $(link) |
-| Load More | `ticketManager.loadMore` | Ticket Manager | $(chevron-down) |
-| Local Peer Review (LPR) | `ticketManager.localPeerReview` | Ticket Manager | $(checklist) |
-| Migrate Live Folder to Jira MCP | `ticketManager.migrateLiveFolderToJiraMcp` | Ticket Manager | $(cloud-upload) |
-| New Project | `ticketManager.newProject` | Ticket Manager | $(rocket) |
-| Open Board | `ticketManager.openBoard` | Ticket Manager | $(go-to-file) |
-| Open Connections & Boards | `ticketManager.openConnectionsManager` | Ticket Manager | $(plug) |
-| Open External Link | `ticketManager.openInBrowser` | Ticket Manager | $(link-external) |
-| Open Full Issue Details | `ticketManager.openIssueFullDetails` | Ticket Manager | $(preview) |
-| Open Settings | `ticketManager.openSettings` | Ticket Manager | $(gear) |
-| Open Task Designer | `ticketManager.openTaskDesigner` | Ticket Manager | $(symbol-misc) |
-| Refresh | `ticketManager.refresh` | Ticket Manager | $(refresh) |
-| Review Ticket with AI | `ticketManager.reviewWithAi` | Ticket Manager | $(comment-discussion) |
-| Search Boards | `ticketManager.searchBoards` | Ticket Manager | $(search) |
-| Search Boards | `ticketManager.searchBoardsActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
-| Search EPICs | `ticketManager.searchEpics` | Ticket Manager | $(search) |
-| Search EPICs | `ticketManager.searchEpicsActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
-| Search Issues | `ticketManager.searchIssues` | Ticket Manager | $(search) |
-| Search Issues | `ticketManager.searchIssuesActive` | Ticket Manager | media/search-active-light.svg / media/search-active-dark.svg |
-| Set Backend Mode | `ticketManager.setBackendMode` | Ticket Manager | $(symbol-namespace) |
-| Set Board Projects | `ticketManager.setBoardProjects` | Ticket Manager | $(repo) |
-| Set Board Search Text | `ticketManager.setBoardSearchText` | Ticket Manager | $(search) |
-| Set Board Types | `ticketManager.setBoardTypes` | Ticket Manager | $(list-tree) |
-| Set Issue Type Filter | `ticketManager.setIssueTypes` | Ticket Manager | $(symbol-class) |
-| Set Parent Item Scope | `ticketManager.setParentScope` | Ticket Manager | $(milestone) |
-| Set Projects | `ticketManager.setProjects` | Ticket Manager | $(repo) |
-| Set Search Text | `ticketManager.setSearchText` | Ticket Manager | $(search) |
-| Set Status Filter | `ticketManager.setStatuses` | Ticket Manager | $(list-selection) |
-| Start Sub-Task Delivery | `ticketManager.startSubTaskDelivery` | Ticket Manager | $(play) |
-| Toggle Assignee Scope | `ticketManager.toggleAssigneeMode` | Ticket Manager | $(account) |
-| Toggle Work Mode | `ticketManager.toggleWorkMode` | Ticket Manager | $(layout-sidebar-right) |
-| View AI Session | `ticketManager.viewAgentSession` | Ticket Manager | $(eye) |
-| View Analysis | `ticketManager.openAnalysisWindow` | Ticket Manager | $(comment) |
+| Abandon AI Session | `praxis.unassignAi` | Praxis | $(close) |
+| Abort Agent Session | `praxis.abortAgentSession` | Praxis | $(debug-stop) |
+| Add Connection | `praxis.addConnection` | Praxis | $(add) |
+| Add Tracked Board | `praxis.addBoard` | Praxis | $(add) |
+| AI Gateway Settings | `praxis.openAiGatewaySettings` | Praxis | $(key) |
+| Assign to Me | `praxis.assignToMe` | Praxis | $(person) |
+| Assign Workflow Pack | `praxis.assignWorkflowPack` | Praxis | $(symbol-key) |
+| Change Status | `praxis.changeStatus` | Praxis | $(play-circle) |
+| Check Connection | `praxis.checkConnection` | Praxis | $(debug-alt) |
+| Clear Board Filters | `praxis.clearBoardFilters` | Praxis | $(clear-all) |
+| Clear Filters | `praxis.clearFilters` | Praxis | $(clear-all) |
+| Clear Parent Item Scope | `praxis.clearParentScope` | Praxis | $(close) |
+| Configure AI | `praxis.configureAi` | Praxis | $(hubot) |
+| Configure Board Settings | `praxis.configureBoardColumns` | Praxis | $(settings-gear) |
+| Configure Jira MCP Connection | `praxis.configureConnection` | Praxis | $(plug) |
+| Configure Project | `praxis.openSetup` | Praxis | $(gear) |
+| Confirm Analysis Complete | `praxis.confirmAnalysisComplete` | Praxis | $(pass) |
+| Copy Issue Key | `praxis.copyKey` | Praxis | $(copy) |
+| Create Board | `praxis.createBoard` | Praxis | $(add) |
+| Create EPIC | `praxis.createEpic` | Praxis | $(add) |
+| Create Idea | `praxis.createIdea` | Praxis | $(lightbulb) |
+| Create Issue | `praxis.createIssue` | Praxis | $(add) |
+| Delegate to AI Agent | `praxis.delegateToAiAgent` | Praxis | $(hubot) |
+| Delegate to AI Agent | `praxis.assignToAi` | Praxis | $(hubot) |
+| Delegate to AI Agent (Deprecated) | `praxis.delegateToCopilot` | Praxis | $(hubot) |
+| Import Markdown Files to Template Format | `praxis.importMarkdownFiles` | Praxis | $(file-code) |
+| Import Plan from Markdown Features | `praxis.importMarkdownFeaturePlan` | Praxis | $(file-code) |
+| Link Jira MCP Board Query | `praxis.linkJiraMcpBoardQuery` | Praxis | $(list-filter) |
+| Link Jira MCP Epic | `praxis.linkJiraMcpEpic` | Praxis | $(link) |
+| Load More | `praxis.loadMore` | Praxis | $(chevron-down) |
+| Local Peer Review (LPR) | `praxis.localPeerReview` | Praxis | $(checklist) |
+| Migrate Live Folder to Jira MCP | `praxis.migrateLiveFolderToJiraMcp` | Praxis | $(cloud-upload) |
+| New Project | `praxis.newProject` | Praxis | $(rocket) |
+| Open Board | `praxis.openBoard` | Praxis | $(go-to-file) |
+| Open Connections & Boards | `praxis.openConnectionsManager` | Praxis | $(plug) |
+| Open External Link | `praxis.openInBrowser` | Praxis | $(link-external) |
+| Open Full Issue Details | `praxis.openIssueFullDetails` | Praxis | $(preview) |
+| Open Settings | `praxis.openSettings` | Praxis | $(gear) |
+| Open Task Designer | `praxis.openTaskDesigner` | Praxis | $(symbol-misc) |
+| Refresh | `praxis.refresh` | Praxis | $(refresh) |
+| Review Ticket with AI | `praxis.reviewWithAi` | Praxis | $(comment-discussion) |
+| Search Boards | `praxis.searchBoards` | Praxis | $(search) |
+| Search Boards | `praxis.searchBoardsActive` | Praxis | media/search-active-light.svg / media/search-active-dark.svg |
+| Search EPICs | `praxis.searchEpics` | Praxis | $(search) |
+| Search EPICs | `praxis.searchEpicsActive` | Praxis | media/search-active-light.svg / media/search-active-dark.svg |
+| Search Issues | `praxis.searchIssues` | Praxis | $(search) |
+| Search Issues | `praxis.searchIssuesActive` | Praxis | media/search-active-light.svg / media/search-active-dark.svg |
+| Set Backend Mode | `praxis.setBackendMode` | Praxis | $(symbol-namespace) |
+| Set Board Projects | `praxis.setBoardProjects` | Praxis | $(repo) |
+| Set Board Search Text | `praxis.setBoardSearchText` | Praxis | $(search) |
+| Set Board Types | `praxis.setBoardTypes` | Praxis | $(list-tree) |
+| Set Issue Type Filter | `praxis.setIssueTypes` | Praxis | $(symbol-class) |
+| Set Parent Item Scope | `praxis.setParentScope` | Praxis | $(milestone) |
+| Set Projects | `praxis.setProjects` | Praxis | $(repo) |
+| Set Search Text | `praxis.setSearchText` | Praxis | $(search) |
+| Set Status Filter | `praxis.setStatuses` | Praxis | $(list-selection) |
+| Start Sub-Task Delivery | `praxis.startSubTaskDelivery` | Praxis | $(play) |
+| Toggle Assignee Scope | `praxis.toggleAssigneeMode` | Praxis | $(account) |
+| Toggle Work Mode | `praxis.toggleWorkMode` | Praxis | $(layout-sidebar-right) |
+| View AI Session | `praxis.viewAgentSession` | Praxis | $(eye) |
+| View Analysis | `praxis.openAnalysisWindow` | Praxis | $(comment) |
 
 ## Notes
 

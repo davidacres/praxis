@@ -43,10 +43,10 @@ export function providerIconName(provider: AiProvider): 'terminal' | 'globe' {
 /** Fetches a provider's full model catalog (unfiltered — callers apply their own curation/selection). */
 export function fetchModelOptions(provider: AiProvider, forceRefresh: boolean): Promise<ModelOptions | undefined> {
   if (ACP_PROVIDERS.has(provider)) {
-    return window.ticketManager.ai.listCliModelOptions(provider);
+    return window.praxis.ai.listCliModelOptions(provider);
   }
   if (API_MODEL_PROVIDERS.has(provider)) {
-    return window.ticketManager.ai.listApiModelOptions(provider, forceRefresh);
+    return window.praxis.ai.listApiModelOptions(provider, forceRefresh);
   }
   return Promise.resolve(undefined);
 }

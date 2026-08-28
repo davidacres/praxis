@@ -183,7 +183,7 @@ export class NewProjectWizardPanel implements vscode.Disposable {
   private ensurePanel(): void {
     if (this.panel) { return; }
     this.panel = vscode.window.createWebviewPanel(
-      'ticketManager.newProjectWizard',
+      'praxis.newProjectWizard',
       'New Project',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }

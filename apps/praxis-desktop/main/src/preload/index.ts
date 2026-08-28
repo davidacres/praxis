@@ -23,14 +23,14 @@ import type {
   TaskDesignerPersistedState,
   TaskDesignerRecommendationConnector,
   TaskDesignerRecommendationNode,
-  TicketManagerIpc,
+  PraxisIpc,
   TrackedBoard,
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, UpdateProjectInput } from '@praxis/core';
 
-const ticketManager: TicketManagerIpc = {
+const praxis: PraxisIpc = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion')
   },
@@ -331,4 +331,4 @@ const ticketManager: TicketManagerIpc = {
   }
 };
 
-contextBridge.exposeInMainWorld('ticketManager', ticketManager);
+contextBridge.exposeInMainWorld('praxis', praxis);

@@ -1,5 +1,5 @@
 /**
- * Converts external markdown files to the canonical ticket-manager template format.
+ * Converts external markdown files to the canonical praxis template format.
  *
  * This is a one-time conversion command that:
  * 1. Strips blockquote prefixes from field lines (`> **Status:**` → `**Status:**`)
@@ -184,13 +184,13 @@ export async function importMarkdownFiles(
  * Register the import command.
  */
 export function registerImportCommand(context: vscode.ExtensionContext): vscode.Disposable {
-  return vscode.commands.registerCommand('ticketManager.importMarkdownFiles', async () => {
+  return vscode.commands.registerCommand('praxis.importMarkdownFiles', async () => {
     const folders = await vscode.window.showOpenDialog({
       canSelectFolders: true,
       canSelectFiles: false,
       canSelectMany: false,
       openLabel: 'Select folder to import',
-      title: 'Import Markdown Files to Ticket Manager Format'
+      title: 'Import Markdown Files to Praxis Format'
     });
 
     if (!folders || folders.length === 0) {

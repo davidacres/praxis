@@ -12,7 +12,7 @@ import {
   type TaskDesignerPersistedStateRecoveryResult
 } from './taskDesignerStatePersistence';
 
-const TASK_DESIGNER_STATE_KEY = 'ticketManager.taskDesigner.canvasState';
+const TASK_DESIGNER_STATE_KEY = 'praxis.taskDesigner.canvasState';
 const MASTER_PLAN_DIRECTORY_NAME = 'plans';
 const MASTER_PLAN_FILE_NAME = 'master-plan.md';
 const GENERATED_FEATURES_ROOT_SEGMENT = 'features';
@@ -1066,7 +1066,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     }
     const nonce = createNonce();
     const panel = vscode.window.createWebviewPanel(
-      'ticketManager.taskDesigner',
+      'praxis.taskDesigner',
       panelTitle,
       vscode.ViewColumn.Active,
       {
@@ -4268,7 +4268,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
     if (canvasSurface instanceof HTMLElement) {
       canvasSurface.addEventListener('dragover', event => {
         const types = event.dataTransfer?.types ?? [];
-        const hasIssueData = types.includes('application/x-ticket-manager-issue') || types.includes('text/plain');
+        const hasIssueData = types.includes('application/x-praxis-issue') || types.includes('text/plain');
         if (!hasIssueData) {
           return;
         }
@@ -4279,7 +4279,7 @@ export class TaskDesignerPanelManager implements vscode.Disposable {
       });
 
       canvasSurface.addEventListener('drop', event => {
-        const issueKey = (event.dataTransfer?.getData('application/x-ticket-manager-issue') || event.dataTransfer?.getData('text/plain') || '').trim();
+        const issueKey = (event.dataTransfer?.getData('application/x-praxis-issue') || event.dataTransfer?.getData('text/plain') || '').trim();
         if (!issueKey || !(canvasSurface instanceof HTMLElement)) {
           return;
         }

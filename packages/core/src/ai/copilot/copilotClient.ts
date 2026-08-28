@@ -129,7 +129,7 @@ export class CopilotClientWrapper {
     }
     if (!this.session) {
       const sessionConfig = {
-        clientName: 'ticket-manager',
+        clientName: 'praxis',
         model: this.options.model,
         onPermissionRequest: async (request: copilotSdk.PermissionRequest) =>
           toPermissionResult(await this.options.requestPermission(summarizePermissionRequest(request)))

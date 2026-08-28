@@ -26,9 +26,9 @@ execFileSync(
     '-f',
     'woff',
     '--font-name',
-    'ticket-manager-icons'
+    'praxis-icons'
   ],
   { cwd: root, stdio: 'inherit', shell: true }
 );
 
-console.log(`Wrote ${path.join(outDir, 'ticket-manager-icons.woff')}`);
+console.log(`Wrote ${path.join(outDir, 'praxis-icons.woff')}`);

@@ -31,7 +31,7 @@ setWindowActive(document.hasFocus());
 window.addEventListener('focus', () => setWindowActive(true));
 window.addEventListener('blur', () => setWindowActive(false));
 
-void window.ticketManager.settings.get().then(settings => {
+void window.praxis.settings.get().then(settings => {
   registerCustomThemes(settings.appearance.customThemes);
   applyThemePreference(settings.appearance.themeId, settings.appearance.themeMode);
   registerCustomSurfacePacks(settings.appearance.customSurfacePacks);

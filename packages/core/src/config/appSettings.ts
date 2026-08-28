@@ -928,11 +928,11 @@ export function resolveSharedSettingsPath(
 
   if (platform === 'win32') {
     const base = env.APPDATA ?? join(env.home, 'AppData', 'Roaming');
-    return join(base, 'ticket-manager', 'settings.json');
+    return join(base, 'praxis', 'settings.json');
   }
   if (platform === 'darwin') {
-    return join(env.home, 'Library', 'Application Support', 'ticket-manager', 'settings.json');
+    return join(env.home, 'Library', 'Application Support', 'praxis', 'settings.json');
   }
   const base = env.XDG_CONFIG_HOME ?? join(env.home, '.config');
-  return join(base, 'ticket-manager', 'settings.json');
+  return join(base, 'praxis', 'settings.json');
 }

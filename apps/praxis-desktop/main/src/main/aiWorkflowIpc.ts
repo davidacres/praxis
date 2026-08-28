@@ -8,14 +8,14 @@ import {
   discoverWorkspaceAgentWorkflows,
   extractDeliveryBaseBranch,
   isFeatureRequestTicket,
-  isTicketManagerManagedMergeRequestNote,
+  isPraxisManagedMergeRequestNote,
   parseDeliveryTaskResult,
   parseFeatureDecompositionResult,
   parseMergeRequestFeedbackResult,
   resolveDeliveryPublishCommand,
   resolveWorkflowReference,
   validateDeliveryWorkflowSettings,
-  wrapTicketManagerManagedMergeRequestNote,
+  wrapPraxisManagedMergeRequestNote,
   type AgentSessionRecord,
   type AiAnalysisMessage,
   type AiAnalysisState,
@@ -37,7 +37,7 @@ import { getConnectionStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getServiceForConnection } from './serviceRegistry';
 
-export const ANALYSIS_STORAGE_KEY = 'ticketManager.issueAnalysis';
+export const ANALYSIS_STORAGE_KEY = 'praxis.issueAnalysis';
 
 /** Persisted subset of AiAnalysisState (`busy` is runtime-only). */
 interface StoredAnalysis {
@@ -528,7 +528,7 @@ export function registerAiWorkflowIpc(): void {
         return { started: false, noteCount: 0 };
       }
       const notes = (await api.listMergeRequestDiscussions(open.iid)).filter(
-        note => !note.system && !isTicketManagerManagedMergeRequestNote(note.body)
+        note => !note.system && !isPraxisManagedMergeRequestNote(note.body)
       );
       const handled = sessionManager.getAgentSession(issueKey)?.delivery?.mergeRequest?.handledNotes ?? {};
       const fresh = notes.filter(note => handled[note.id] !== note.updatedAt);
@@ -721,7 +721,7 @@ export function registerAiWorkflowIpc(): void {
           const api = await buildGitLabApi(connectionId);
           await api.addMergeRequestNote(
             delivery.mergeRequest.iid,
-            wrapTicketManagerManagedMergeRequestNote(result.replyComment)
+            wrapPraxisManagedMergeRequestNote(result.replyComment)
           );
         }
         sessionManager.updateAgentDelivery(issueKey, {

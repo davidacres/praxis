@@ -26,24 +26,24 @@ app.whenReady().then(async () => {
   try {
     result = await win.webContents.executeJavaScript(`
     (async () => {
-      const boards = await window.ticketManager.board.list({ projectKeys: [], types: [], searchText: '' });
-      const details = boards.length ? await window.ticketManager.board.get(boards[0]) : null;
+      const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
+      const details = boards.length ? await window.praxis.board.get(boards[0]) : null;
       const firstIssueKey = details && details.issues.length ? details.issues[0].key : null;
       let issueBefore = null;
       let issueAfter = null;
       let commentAdded = false;
       let transitionError = null;
       if (firstIssueKey) {
-        issueBefore = await window.ticketManager.issue.get(firstIssueKey);
-        await window.ticketManager.issue.addComment(firstIssueKey, 'smoke test comment');
+        issueBefore = await window.praxis.issue.get(firstIssueKey);
+        await window.praxis.issue.addComment(firstIssueKey, 'smoke test comment');
         if (issueBefore.transitions && issueBefore.transitions.length) {
           try {
-            await window.ticketManager.issue.transition(firstIssueKey, issueBefore.transitions[0].id);
+            await window.praxis.issue.transition(firstIssueKey, issueBefore.transitions[0].id);
           } catch (err) {
             transitionError = err instanceof Error ? err.message : String(err);
           }
         }
-        issueAfter = await window.ticketManager.issue.get(firstIssueKey);
+        issueAfter = await window.praxis.issue.get(firstIssueKey);
         commentAdded = issueAfter.comments.some(c => c.body === 'smoke test comment');
       }
       return {

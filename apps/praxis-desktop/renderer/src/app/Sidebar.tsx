@@ -27,7 +27,7 @@ interface FeatureDef {
 
 /**
  * The bottom block, in the same idiom as the reference "Customizations" list:
- * glyph, label, right-aligned count. These are the Ticket Manager surfaces that
+ * glyph, label, right-aligned count. These are the Praxis surfaces that
  * are not boards.
  */
 const FEATURES: FeatureDef[] = [
@@ -100,7 +100,7 @@ export function Sidebar({
   // have no connection, so they fall back to the demo mark.
   const boardMode = (board: Board) =>
     connections.find(connection => connection.id === board.connectionId)?.mode ?? 'demo';
-  // The "Ticket Manager" footer carries its own toggle, separate from the
+  // The "Praxis" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
