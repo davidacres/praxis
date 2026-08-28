@@ -1,3 +1,24 @@
+/*
+ * DUPLICATE OF packages/core/src/livefolder/markdownPlanParser.ts — not yet collapsed.
+ *
+ * Every other module the extension duplicated has been deleted in favour of
+ * core's copy. These three livefolder modules are the exception: they are not
+ * stale copies but parallel implementations typed against `vscode.Uri` and
+ * `vscode.workspace.fs`, where core's equivalents take plain string paths and
+ * inject file IO. Collapsing them means rewriting the path handling across
+ * ~2,600 lines and adapting Uri <-> string at the extension boundary, in the
+ * same way adapters/vsCodeHostStorage.ts adapts storage.
+ *
+ * That refactor is deliberately not attempted here because it cannot be
+ * verified in this environment: `npm test` for this package launches a real
+ * VS Code via @vscode/test-cli, and the download for 1.135.0 on darwin-arm64
+ * ships its binary as `Code` while vscode-test spawns `Electron`. Symlinking
+ * around the name gets past the spawn but the process is then SIGKILLed,
+ * because the substitution breaks the bundle's code signature.
+ *
+ * Until these are collapsed, a behavioural change to plan parsing or live
+ * folder sync must be made in BOTH this file and its core counterpart.
+ */
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
