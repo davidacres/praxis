@@ -96,8 +96,18 @@ test('adding and removing a connection updates the list', async () => {
   const row = window.locator('[data-testid="connection-row"]', { hasText: name });
   await expect(row).toBeVisible();
 
-  // The saved connection stays selected; removal is a two-step confirm.
-  await window.locator('[data-testid="conn-remove-btn"]').click();
-  await window.locator('[data-testid="conn-remove-confirm-btn"]').click();
+  // The saved connection stays selected; removal is a two-step confirm. Both
+  // buttons carry `disabled={busy}`, and the row can appear from the list
+  // refresh while the form is still saving — so wait for each to be *enabled*
+  // rather than merely present, otherwise the click lands in the disabled
+  // window and is dropped. This was an intermittent failure under load.
+  const removeButton = window.locator('[data-testid="conn-remove-btn"]');
+  await expect(removeButton).toBeEnabled();
+  await removeButton.click();
+
+  const confirmButton = window.locator('[data-testid="conn-remove-confirm-btn"]');
+  await expect(confirmButton).toBeEnabled();
+  await confirmButton.click();
+
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).not.toBeVisible();
 });

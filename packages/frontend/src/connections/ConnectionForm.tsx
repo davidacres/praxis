@@ -335,14 +335,23 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
   };
 
   const remove = async () => {
-    if (!persistedId) {
+    // `persistedId` is state — seeded at mount, set on first save — while
+    // `existing` is the prop the parent supplies once the connection reaches
+    // the list. Right after saving a new connection the two can disagree for a
+    // frame, and this used to `return` on that gap: the row stayed, no error
+    // appeared, and the click was simply lost. Fall back to the prop, and if
+    // there genuinely is no id, say so rather than failing silently.
+    const targetId = persistedId ?? existing?.id;
+    if (!targetId) {
+      setSaveError('This connection has not been saved yet, so there is nothing to remove.');
+      setConfirmingRemove(false);
       return;
     }
     setSaving(true);
     setSaveError(undefined);
     try {
-      await window.ticketManager.connection.remove(persistedId);
-      onRemoved(persistedId);
+      await window.ticketManager.connection.remove(targetId);
+      onRemoved(targetId);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
       setConfirmingRemove(false);
