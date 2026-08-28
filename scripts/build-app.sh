@@ -15,8 +15,8 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORE="$REPO_ROOT/packages/core"
-FRONTEND="$REPO_ROOT/packages/frontend"
-ELECTRON_APP="$REPO_ROOT/packages/electron-app"
+FRONTEND="$REPO_ROOT/apps/praxis-desktop/renderer"
+ELECTRON_APP="$REPO_ROOT/apps/praxis-desktop/main"
 
 step() { printf '\033[36m==> %s\033[0m\n' "$1"; }
 ok() { printf '\033[32m  + %s\033[0m\n' "$1"; }

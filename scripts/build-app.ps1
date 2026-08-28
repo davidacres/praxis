@@ -7,14 +7,14 @@
   Orchestrates the full pipeline:
 
     1. packages/core          -> tsc, produces out/ with the runtime library
-    2. packages/frontend      -> vite build, produces dist/ that the renderer loads
-    3. packages/electron-app  -> tsc, produces out/main + out/preload
-    4. copy-renderer step     -> packages/frontend/dist -> packages/electron-app/renderer
+    2. apps/praxis-desktop/renderer      -> vite build, produces dist/ that the renderer loads
+    3. apps/praxis-desktop/main  -> tsc, produces out/main + out/preload
+    4. copy-renderer step     -> apps/praxis-desktop/renderer/dist -> apps/praxis-desktop/main/renderer
                                  (so `loadFile('../../renderer/index.html')` resolves
-                                 inside the asar — see packages/electron-app/src/main/index.ts)
-    5. electron-builder       -> produces packages/electron-app/dist/Praxis-*-setup.exe
+                                 inside the asar — see apps/praxis-desktop/main/src/main/index.ts)
+    5. electron-builder       -> produces apps/praxis-desktop/main/dist/Praxis-*-setup.exe
 
-  The setup executable lands in packages/electron-app/dist/ and can be
+  The setup executable lands in apps/praxis-desktop/main/dist/ and can be
   double-clicked to install Praxis.
 
 .PARAMETER SkipBuild
@@ -23,7 +23,7 @@
 
 .PARAMETER Target
   Optional electron-builder target override. Defaults to the NSIS target
-  configured in packages/electron-app/package.json (build.win.target). Pass
+  configured in apps/praxis-desktop/main/package.json (build.win.target). Pass
   'nsis' or 'portable' to produce alternative formats, or 'dir' to produce
   an unpacked directory (useful for smoke-testing the launcher without
   installing).
@@ -50,8 +50,8 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $core = Join-Path $repoRoot 'packages/core'
-$frontend = Join-Path $repoRoot 'packages/frontend'
-$electronApp = Join-Path $repoRoot 'packages/electron-app'
+$frontend = Join-Path $repoRoot 'apps/praxis-desktop/renderer'
+$electronApp = Join-Path $repoRoot 'apps/praxis-desktop/main'
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg) { Write-Host "  + $msg" -ForegroundColor Green }
@@ -95,11 +95,11 @@ if ($SkipBuild) {
   Invoke-Npm $core 'compile'
   Write-Ok 'core -> out/'
 
-  Write-Step 'Building packages/frontend'
+  Write-Step 'Building apps/praxis-desktop/renderer'
   Invoke-Npm $frontend 'build'
   Write-Ok 'frontend -> dist/'
 
-  Write-Step 'Compiling packages/electron-app'
+  Write-Step 'Compiling apps/praxis-desktop/main'
   Invoke-Npm $electronApp 'compile'
   Write-Ok 'electron-app -> out/'
 

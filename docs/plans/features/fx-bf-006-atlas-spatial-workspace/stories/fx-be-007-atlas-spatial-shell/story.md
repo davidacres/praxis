@@ -10,7 +10,7 @@ validation:
   - npm run frontend:build
   - npm run electron:check-types
   - npm run electron:copy-renderer
-  - npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/atlas.spec.ts
+  - npm run test:e2e --workspace @praxis/desktop-main -- e2e/atlas.spec.ts
 ---
 
 ## Atlas spatial shell and continuous zoom vertical slice

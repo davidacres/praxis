@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-038]
-validation: [npm run build --workspace @ticket-manager/frontend, packages/electron-app/output/playwright/praxis-diff-workspace.png]
+validation: [npm run build --workspace @praxis/desktop-renderer, apps/praxis-desktop/main/output/playwright/praxis-diff-workspace.png]
 ---
 
 ## Clean Responsive Diff Workspace

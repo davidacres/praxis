@@ -34,7 +34,11 @@ test:
   script:
     - npm ci || npm install
     - npm run check-types
-    - npm test
+    # Named explicitly rather than via `npm test`, which now aggregates all three
+    # surfaces. The other two cannot run in this image: the desktop e2e suite
+    # needs an Electron display and `test:vscode` launches a real VS Code.
+    - npm run test:core
+    - npm run build:vscode
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -57,7 +61,7 @@ package:vsix:
     - npm ci || npm install
     - |
       set -euo pipefail
-      cd packages/vscode-extension
+      cd apps/vscode-extension
       VERSION="$(node -p "require('./package.json').version")"
       NAME="$(node -p "require('./package.json').name")"
       mkdir -p ../artifacts
@@ -131,7 +135,7 @@ publish:gitlab-package:
       echo "Published. Package Registry → ${PACKAGE_NAME} → ${VERSION}"
       echo "  ${CI_PROJECT_URL}/-/packages"
       echo
-      echo "Local: run pwsh ./packages/vscode-extension/scripts/build.ps1 + pwsh ./packages/vscode-extension/scripts/publish-gitlab.ps1 to upload the store-side metadata sidecars (.json/.svg/.md)."
+      echo "Local: run pwsh ./apps/vscode-extension/scripts/build.ps1 + pwsh ./apps/vscode-extension/scripts/publish-gitlab.ps1 to upload the store-side metadata sidecars (.json/.svg/.md)."
   rules:
     - if: $CI_COMMIT_TAG =~ /^v?[0-9]+\.[0-9]+\.[0-9]+/
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

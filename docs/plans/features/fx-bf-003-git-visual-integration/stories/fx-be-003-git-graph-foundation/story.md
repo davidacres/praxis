@@ -20,23 +20,23 @@ Deliver the first read-only vertical slice: choose or detect a repository, load 
 
 ## Validation
 
-- `npm run check-types --workspace @ticket-manager/core`
-- `npm run check-types --workspace @ticket-manager/electron-app`
-- `npm run check-types --workspace @ticket-manager/frontend`
+- `npm run check-types --workspace @praxis/core`
+- `npm run check-types --workspace @praxis/desktop-main`
+- `npm run check-types --workspace @praxis/desktop-renderer`
 - Targeted unit tests for Git parsing and graph layout.
 - Electron/manual check using a fixture repository with two branches and a merge.
 - Focused visual check at narrow and wide editor sizes, with reduced motion and branch colors disabled.
 
 ## Latest evidence
 
-- `npm run compile --workspace=@ticket-manager/core` passed.
-- `npm run check-types --workspace=@ticket-manager/electron-app` passed.
-- `npm run check-types --workspace=@ticket-manager/frontend` passed.
-- `npm run build --workspace=@ticket-manager/frontend` passed.
+- `npm run compile --workspace=@praxis/core` passed.
+- `npm run check-types --workspace=@praxis/desktop-main` passed.
+- `npm run check-types --workspace=@praxis/desktop-renderer` passed.
+- `npm run build --workspace=@praxis/desktop-renderer` passed.
 - `npx playwright test e2e/gitGraph.spec.ts --config=playwright.config.ts` passed.
-- `npm run test:git --workspace=@ticket-manager/electron-app` passed, covering missing Git, non-repositories, worktrees, shallow history, and detached HEAD.
-- Screenshot: `packages/electron-app/output/playwright/git-graph.png`.
-- Screenshot: `packages/electron-app/output/playwright/git-graph-narrow-reduced-motion.png`.
+- `npm run test:git --workspace=@praxis/desktop-main` passed, covering missing Git, non-repositories, worktrees, shallow history, and detached HEAD.
+- Screenshot: `apps/praxis-desktop/main/output/playwright/git-graph.png`.
+- Screenshot: `apps/praxis-desktop/main/output/playwright/git-graph-narrow-reduced-motion.png`.
 - Core graph tests cover linear, split, merge, criss-cross, detached, multiple refs, and a 5,000-commit history benchmark.
 - The Electron visual flow covers keyboard commit selection, settings persistence, merge filtering, zoom, working-tree changes, and narrow reduced-motion layout.
 - The horizontal timeline mode and fetch interval setting are wired through the desktop settings and Git IPC layers.

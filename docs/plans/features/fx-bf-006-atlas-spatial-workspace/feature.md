@@ -22,7 +22,7 @@ the space maps to real data; nothing animates for decoration alone.
 
 ## Fit decision
 
-Atlas belongs in `packages/frontend` (renderer) plus `packages/core` (shared
+Atlas belongs in `apps/praxis-desktop/renderer` (renderer) plus `packages/core` (shared
 serializable contracts). `packages/core` owns the Atlas snapshot model and a
 deterministic layout solver, with no dependency on Jira, GitLab, board UI state,
 Git, or AI provider internals. The renderer owns the WebGL scene, camera, and
@@ -139,7 +139,7 @@ Electron main (existing IPC): projects, boards, issues, agent sessions, live eve
   -> preload: existing typed contracts + a live activity subscription
   -> packages/core: AtlasSnapshotBuilder (projects -> boards -> issues+links -> sessions, serializable)
   -> packages/core: AtlasLayoutSolver (deterministic 3D positions per tier, immutable output)
-  -> packages/frontend: AtlasPage
+  -> apps/praxis-desktop/renderer: AtlasPage
        - scene graph (r3f/drei), starfield, LOD tiers
        - semantic-zoom camera rig (eased fly-to, breadcrumb, overview snap, exit)
        - node encoding + raycast selection (three-mesh-bvh)

@@ -8,12 +8,12 @@ updated: 2026-08-27
 tasks: [TASK-038, TASK-039, TASK-040, TASK-041, TASK-042, TASK-043]
 dependencies: [FX-BE-003]
 validation:
-  - npm run test --workspace @ticket-manager/core
-  - npm run test:git --workspace @ticket-manager/electron-app
-  - npm run check-types --workspace @ticket-manager/electron-app
-  - npm run build --workspace @ticket-manager/frontend
-  - npm run copy-renderer --workspace @ticket-manager/electron-app
-  - npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts
+  - npm run test --workspace @praxis/core
+  - npm run test:git --workspace @praxis/desktop-main
+  - npm run check-types --workspace @praxis/desktop-main
+  - npm run build --workspace @praxis/desktop-renderer
+  - npm run copy-renderer --workspace @praxis/desktop-main
+  - npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts
   - git diff --check
 ---
 

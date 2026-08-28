@@ -12,7 +12,7 @@ Give Praxis a clear, editor-sized view of repository history and a clean, easy d
 
 ## Fit decision
 
-This belongs in `packages/electron-app` + `packages/frontend` as a first-class `Git Graph` page. Electron’s main process owns subprocess execution, repository discovery, caching, and mutation safety; the preload exposes a narrow typed IPC contract; React owns rendering and interaction. `packages/core` owns shared serializable contracts. The VS Code extension is not part of this delivery because adding a second Git host would duplicate process/error/cache behavior.
+This belongs in `apps/praxis-desktop/main` + `apps/praxis-desktop/renderer` as a first-class `Git Graph` page. Electron’s main process owns subprocess execution, repository discovery, caching, and mutation safety; the preload exposes a narrow typed IPC contract; React owns rendering and interaction. `packages/core` owns shared serializable contracts. The VS Code extension is not part of this delivery because adding a second Git host would duplicate process/error/cache behavior.
 
 The existing desktop service/IPC patterns are reused, but the new Git layer must be independently testable and must not depend on Jira, GitLab, board state, or AI providers. Git operations must never be run in the renderer.
 
@@ -78,7 +78,7 @@ Use structured separators and machine-readable formats wherever Git provides the
 ## Delivery gates
 
 1. Fit and visual contract reviewed in the feature plan before implementation. **Complete.**
-2. Backend tests cover missing Git, non-repository folders, worktrees, shallow history, malformed output, merge commits, tags, and remote refs. **Complete through `packages/electron-app` Git integration fixtures and `packages/core` parser tests.**
+2. Backend tests cover missing Git, non-repository folders, worktrees, shallow history, malformed output, merge commits, tags, and remote refs. **Complete through `apps/praxis-desktop/main` Git integration fixtures and `packages/core` parser tests.**
 3. Graph tests cover linear, split, merge, criss-cross, detached HEAD, and multiple refs on one commit. **Complete, including the 5,000-commit benchmark.**
 4. Renderer tests cover selection, filters, zoom/pan, inspector, empty/error/loading states, and reduced motion. **Wide, narrow/reduced-motion, and horizontal timeline Electron visual tests complete; keyboard commit selection and settings persistence are covered.**
 5. Core, Electron, and frontend type checks plus a focused Electron visual pass are green on the current repository. **Complete.**

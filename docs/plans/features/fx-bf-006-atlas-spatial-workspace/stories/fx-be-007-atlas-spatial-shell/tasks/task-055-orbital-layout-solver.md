@@ -5,7 +5,7 @@ status: proposed
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-054]
-validation: ["npm run core:check-types", "npm run test --workspace @ticket-manager/core"]
+validation: ["npm run core:check-types", "npm run test --workspace @praxis/core"]
 ---
 
 ## Deterministic orbital layout solver in core

@@ -7,21 +7,40 @@ source; `CLAUDE.md` points here.
 
 A monorepo with **two front-ends over one shared core**:
 
-| Package | What it is |
-| --- | --- |
-| `packages/core` | Shared types, settings, Git parsing, AI/MCP plumbing. CommonJS. Consumed by every other package. |
-| `packages/vscode-extension` | The VS Code extension (`ticket-manager`). Renders its UI as **webview panels**. |
-| `packages/frontend` | The **Praxis** desktop renderer — React + Vite. Ordinary DOM, no webviews. |
-| `packages/electron-app` | Electron main + preload + the Playwright e2e suite. Hosts the frontend build. |
-| `packages/pty-host` | Terminal host process. |
+| Workspace | npm name | What it is |
+| --- | --- | --- |
+| `packages/core` | `@praxis/core` | Shared types, settings, Git parsing, AI/MCP plumbing. CommonJS. Consumed by both surfaces. |
+| `apps/vscode-extension` | `ticket-manager` | The VS Code extension. Renders its UI as **webview panels**. |
+| `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The **Praxis** desktop renderer — React + Vite. Ordinary DOM, no webviews. |
+| `apps/praxis-desktop/main` | `@praxis/desktop-main` | Electron main + preload + the Playwright e2e suite. Hosts the renderer build. |
+
+The extension's npm name is `ticket-manager`, not `@praxis/*`, and must stay that
+way: with publisher `davidacres` it forms the marketplace ID
+`davidacres.ticket-manager`. Renaming it orphans the extension for everyone who
+already has it installed.
 
 The two UI surfaces share `core` but **share no UI code and no CSS**. Rules below
 are labelled with the surface they apply to — applying a webview rule inside the
 Electron renderer (or the reverse) is a common and costly mistake.
 
+## Shared logic belongs in core
+
+The extension used to carry ~50 copies of modules core already owned — shims,
+byte-identical duplicates, and files that had silently drifted apart. Those are
+gone. When both surfaces need the same logic, it goes in `packages/core`, stays
+host-agnostic, and each surface supplies its own bindings via an adapter
+(`apps/vscode-extension/src/adapters/`).
+
+Three exceptions remain, and each carries a header comment saying so:
+`livefolder/markdownPlanParser.ts`, `livefolder/liveFolderService.ts`, and
+`livefolder/markdownStatusWriter.ts` still exist in both places, because the
+extension's versions are typed against `vscode.Uri` where core's take string
+paths. **Until they are collapsed, a behavioural change to plan parsing or live
+folder sync has to be made in both copies.**
+
 ---
 
-# VS Code extension (`packages/vscode-extension`)
+# VS Code extension (`apps/vscode-extension`)
 
 ## Webview Panel Rules
 
@@ -135,7 +154,7 @@ Notes:
 
 ---
 
-# Praxis desktop app (`packages/frontend` + `packages/electron-app`)
+# Praxis desktop app (`apps/praxis-desktop/renderer` + `apps/praxis-desktop/main`)
 
 Plain React in a normal DOM. **None of the webview rules above apply here** — there is
 no `createWebviewPanel`, no injected body padding, and no `--vscode-*` tokens.
@@ -165,7 +184,7 @@ exactly what lets any pack compose with any palette.
   Adding a material means **adding a library entry — never a new `[data-surface]`
   block**, and never a change to the panes.
 - **Texture tiles are generated, not hand-authored.** Run
-  `npm run textures --workspace=@ticket-manager/frontend` (renders through Electron's
+  `npm run textures --workspace=@praxis/desktop-renderer` (renders through Electron's
   own Chromium into `src/assets/surfaces/`). Do not hand-edit the `.webp` files.
 - **A pattern's colour is baked into an SVG `data:` URI**, so it cannot follow a `var()`.
   It must be re-baked whenever the palette changes — see `refreshSurfacePattern`, wired
@@ -181,7 +200,7 @@ exactly what lets any pack compose with any palette.
 
 ## Renderer CSP
 
-`packages/frontend/index.html` carries the CSP, and it **must** keep `img-src 'self' data:`.
+`apps/praxis-desktop/renderer/index.html` carries the CSP, and it **must** keep `img-src 'self' data:`.
 The surface pattern and grain layers are inline SVG / data tiles; without that directive
 they compute correctly but silently never paint — a failure that looks like a styling bug
 and is genuinely hard to trace. An e2e test decodes a live tile through `Image()` to catch
@@ -191,7 +210,7 @@ a regression loudly.
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and
   merged with `mergeAppSettings`. IPC: `settings.get` / `settings.set` / `settings.onChanged`.
-- **`packages/frontend/src/settingsDefaults.ts` is a hand-maintained, browser-safe mirror
+- **`apps/praxis-desktop/renderer/src/settingsDefaults.ts` is a hand-maintained, browser-safe mirror
   of core's `DEFAULT_APP_SETTINGS`.** Core is CommonJS and pulls in `chokidar` and
   `markdown-it`, so it cannot be tree-shaken into the renderer bundle. **Add an appearance
   field to core and you must add it here too**, or the Settings page silently drifts from
@@ -202,19 +221,34 @@ a regression loudly.
 
 ## Build and test
 
+Root scripts are prefixed by the surface they act on. `build` and `test` with no
+prefix run **everything**, in dependency order.
+
 ```bash
-# core must be rebuilt before other packages see its type changes
-npm run compile --workspace=@ticket-manager/core
+npm run build          # core -> renderer -> copy-renderer -> desktop -> vscode
+npm run test           # test:core, test:desktop, test:vscode
+npm run check-types    # every workspace
 
-npm run build --workspace=@ticket-manager/frontend
-npm run copy-renderer --workspace=@ticket-manager/electron-app   # REQUIRED before e2e
-npm run compile --workspace=@ticket-manager/electron-app
+# or one surface at a time
+npm run build:core     # must precede the others: they consume its emitted types
+npm run build:renderer
+npm run desktop:copy-renderer   # REQUIRED before e2e
+npm run build:desktop
 
-npm test --workspace=@ticket-manager/core                        # node:test
-cd packages/electron-app && npx playwright test                  # e2e
+npm run test:core             # node:test
+npm run test:desktop          # Playwright e2e
+npm run test:desktop:git      # gitService unit tests
+npm run test:vscode           # launches a real VS Code (see caveat below)
 ```
 
-**The e2e suite loads the pre-built renderer** from `packages/electron-app/renderer/`, not
+`npm run test:vscode` cannot run everywhere. `@vscode/test-cli` downloads VS Code
+and spawns a binary named `Electron`, but recent macOS arm64 builds ship theirs as
+`Code`. Symlinking gets past the spawn and the process is then SIGKILLed, because
+substituting the binary invalidates the bundle's code signature. Treat a green
+typecheck plus a clean esbuild bundle as the local signal, and rely on CI for the
+integration suite.
+
+**The e2e suite loads the pre-built renderer** from `apps/praxis-desktop/main/renderer/`, not
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run
 `copy-renderer`.
 

@@ -12,7 +12,7 @@ validation: ["npm run frontend:build", "npm run electron:check-types"]
 
 ## Goal
 
-Build `AtlasPage` in `packages/frontend`: an r3f canvas with a starfield, four
+Build `AtlasPage` in `apps/praxis-desktop/renderer`: an r3f canvas with a starfield, four
 level-of-detail tiers (universe, project, board, task) driven by `AtlasLayout`,
 instanced distant bodies with full meshes near the camera, and a semantic-zoom
 camera rig — eased fly-to between focus targets, a breadcrumb trail, a back

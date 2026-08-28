@@ -34,7 +34,7 @@ Praxis needs one obvious navigation model: projects and boards live in the sideb
 - `npm run frontend:build`
 - `npm run electron:check-types`
 - `npm run electron:copy-renderer`
-- `npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/projects.spec.ts`
+- `npm run test:e2e --workspace @praxis/desktop-main -- e2e/projects.spec.ts`
 
 ## Close when
 

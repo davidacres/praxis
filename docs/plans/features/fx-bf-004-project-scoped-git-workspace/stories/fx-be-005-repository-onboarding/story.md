@@ -10,7 +10,7 @@ dependencies: [FX-BF-003]
 validation:
   - npm run frontend:build
   - npm run electron:check-types
-  - npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts
+  - npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts
 ---
 
 ## Project-scoped Git entry point and repository onboarding

@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-038, TASK-041]
-validation: [npm run test:git --workspace @ticket-manager/electron-app, packages/electron-app/output/playwright/praxis-conflict-editor.png]
+validation: [npm run test:git --workspace @praxis/desktop-main, apps/praxis-desktop/main/output/playwright/praxis-conflict-editor.png]
 ---
 
 ## Three-Way Conflict Resolution

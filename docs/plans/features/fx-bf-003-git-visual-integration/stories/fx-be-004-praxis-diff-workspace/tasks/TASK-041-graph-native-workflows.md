@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-039]
-validation: [npm run check-types --workspace @ticket-manager/frontend, packages/electron-app/e2e/gitGraph.spec.ts]
+validation: [npm run check-types --workspace @praxis/desktop-renderer, apps/praxis-desktop/main/e2e/gitGraph.spec.ts]
 ---
 
 ## Graph-Native Workflows, History, And Blame

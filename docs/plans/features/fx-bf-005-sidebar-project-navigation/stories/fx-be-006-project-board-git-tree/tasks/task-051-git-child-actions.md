@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-006
 updated: 2026-08-27
 dependencies: [TASK-049]
-validation: ["npm run electron:check-types", "npm run test:e2e --workspace @ticket-manager/electron-app -- e2e/gitGraph.spec.ts"]
+validation: ["npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
 ## Connect Git child actions to Graph, Changes, and Conflict contexts

@@ -4,10 +4,10 @@ node_modules/
 # TypeScript build output (extension entry: out/extension.js)
 out/
 dist/
-# Renderer staging area: packages/frontend/dist is copied here by the
-# electron-builder pipeline (see packages/electron-app/scripts/copy-renderer.cjs)
+# Renderer staging area: apps/praxis-desktop/renderer/dist is copied here by the
+# electron-builder pipeline (see apps/praxis-desktop/main/scripts/copy-renderer.cjs)
 # so the packaged app can load the renderer via a relative path inside the asar.
-packages/electron-app/renderer/
+apps/praxis-desktop/main/renderer/
 *.tsbuildinfo
 
 # Packaged extension
@@ -68,4 +68,4 @@ Desktop.ini
 # Playwright run artefacts (regenerated on every `playwright test`)
 test-results/
 playwright-report/
-packages/electron-app/output/
+apps/praxis-desktop/main/output/

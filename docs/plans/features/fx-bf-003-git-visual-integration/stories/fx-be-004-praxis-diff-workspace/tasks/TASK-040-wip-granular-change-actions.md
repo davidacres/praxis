@@ -5,7 +5,7 @@ status: complete
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-038, TASK-039]
-validation: [npm run test:git --workspace @ticket-manager/electron-app, packages/electron-app/e2e/gitGraph.spec.ts]
+validation: [npm run test:git --workspace @praxis/desktop-main, apps/praxis-desktop/main/e2e/gitGraph.spec.ts]
 ---
 
 ## WIP And Granular Change Actions
