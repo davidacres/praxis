@@ -403,7 +403,6 @@ test('feature decomposition creates the sub-task issues and lists them', async (
   const win = app.window;
 
   // Create the feature-request ticket through the normal New Issue flow.
-  await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
   await win.locator('[data-testid="board-new-issue-btn"]').click();
   await win.locator('[data-testid="new-issue-type"]').selectOption('Feature');
@@ -437,7 +436,6 @@ test('local peer review runs the three sections against the gateway', async () =
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
     timeout: 15000
   });
-  await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]').first().click();
   await win.locator('[data-testid="issue-card"]').first().click();
   await win.locator('[data-testid="issue-ai-lpr-btn"]').click();

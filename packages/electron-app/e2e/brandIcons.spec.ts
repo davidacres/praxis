@@ -28,7 +28,6 @@ test('board list shows brand artwork by default', async () => {
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="nav-board"]').click();
 
   // The built-in demo boards are always present; with brand artwork on they
   // carry the demo brand mark instead of the Scrum/Kanban type glyph.
@@ -43,7 +42,6 @@ test('seeded off, board rows use the generic board-type icons', async () => {
   app = await launchTestApp({ appearance: { showBrandArtwork: false } });
   window = app.window;
 
-  await window.locator('[data-testid="nav-board"]').click();
 
   const demoRow = window.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' });
   await expect(demoRow).toBeVisible();
@@ -67,7 +65,6 @@ test('toggling the Board Settings artwork option swaps board icons live', async 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
   await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
-  await window.locator('[data-testid="nav-board"]').click();
   await expect(window.locator('[data-testid="board-brand-icon"]')).toHaveCount(0);
 
   // Back on.
@@ -76,7 +73,6 @@ test('toggling the Board Settings artwork option swaps board icons live', async 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
   await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
-  await window.locator('[data-testid="nav-board"]').click();
   await expect(
     window.locator('[data-testid="board-brand-icon"][data-mode="demo"]').first()
   ).toBeVisible();
@@ -102,7 +98,6 @@ test('a GitLab board row carries the GitLab brand mark', async () => {
   });
   window = app.window;
 
-  await window.locator('[data-testid="nav-board"]').click();
 
   const row = window.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' });
   await expect(row).toBeVisible();

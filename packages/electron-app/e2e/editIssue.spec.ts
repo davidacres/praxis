@@ -86,7 +86,6 @@ test.afterEach(async () => {
 test('editing a live folder issue writes the priority back to markdown', async () => {
   await launchWithEditFixture();
 
-  await window.locator('[data-testid="nav-board"]').click();
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
 
   await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();

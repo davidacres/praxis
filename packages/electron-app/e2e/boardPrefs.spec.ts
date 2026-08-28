@@ -18,7 +18,6 @@ test.afterEach(async () => {
  * profile is the persistence check.
  */
 async function openApplicationBoard(win: Page) {
-  await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
   await win.locator('[data-testid="issue-card"]').first().waitFor();
 }

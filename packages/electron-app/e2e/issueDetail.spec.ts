@@ -22,7 +22,6 @@ test('issue detail shows sub-tasks, linked issues, attachments and essential hea
   app = await launchTestApp();
   window = app.window;
 
-  await window.locator('[data-testid="nav-board"]').click();
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Platform Overview' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'APP-100' }).click();
 

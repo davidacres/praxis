@@ -20,7 +20,6 @@ test.afterEach(async () => {
  * "Assigned to me" = 15 even-indexed bulk + APP-101 + APP-103.
  */
 async function openApplicationBoard(win: Page) {
-  await win.locator('[data-testid="nav-board"]').click();
   await win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' }).click();
   await win.locator('[data-testid="issue-card"]').first().waitFor();
   await win.locator('[data-testid="titlebar-context"]').click();

@@ -60,7 +60,6 @@ async function launchWithLiveFolder(liveFolderDir: string, allowIssueCreation: b
     ]
   });
   window = app.window;
-  await window.locator('[data-testid="nav-board"]').click();
   await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
 }
 
@@ -200,7 +199,6 @@ test('creating a live folder idea writes the research transcript into the markdo
       ]
     });
     window = app.window;
-    await window.locator('[data-testid="nav-board"]').click();
     await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
 
     await window.locator('[data-testid="board-new-idea-btn"]').click();

@@ -101,7 +101,6 @@ async function launchWithMultiRootFixture(): Promise<void> {
 test('a parent folder with two plans roots lists one board per root', async () => {
   await launchWithMultiRootFixture();
 
-  await window.locator('[data-testid="nav-board"]').click();
 
   // Exactly two boards belong to the E2E Multi connection: the primary
   // (legacy identity "E2E Multi (Live)") plus the one extra plans root.
@@ -124,7 +123,6 @@ test('a parent folder with two plans roots lists one board per root', async () =
 test('each board shows only its own root’s issues', async () => {
   await launchWithMultiRootFixture();
 
-  await window.locator('[data-testid="nav-board"]').click();
 
   // Two roots, two boards. The primary has no `—` suffix; exactly one of
   // the two possible "extra" boards (with the `— proj-{name}` suffix)

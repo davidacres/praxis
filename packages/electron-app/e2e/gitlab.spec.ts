@@ -146,7 +146,6 @@ test('tracked board renders issue cards and accepts a new comment via the mock',
   // hides the form and surfaces the connections panel. To see the board we
   // switch to the Boards nav (the sidebar entry labelled "Boards"), which
   // refreshes `boards` and reveals the now-tracked "Demo Board" entry.
-  await window.locator('[data-testid="nav-board"]').click();
   const navItem = window.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' });
   await expect(navItem).toBeVisible();
   await navItem.click();

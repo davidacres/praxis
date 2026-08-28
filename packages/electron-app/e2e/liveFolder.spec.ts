@@ -62,7 +62,6 @@ async function addLiveFolderConnection(name: string): Promise<void> {
 test('live folder board lists the fixture feature task', async () => {
   await addLiveFolderConnection('e2e-livefolder');
 
-  await window.locator('[data-testid="nav-board"]').click();
   const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' });
   await expect(boardItem).toBeVisible();
   await boardItem.click();
@@ -73,7 +72,6 @@ test('live folder board lists the fixture feature task', async () => {
 
 test('transitioning a live folder issue writes the new status back to markdown', async () => {
   await addLiveFolderConnection('e2e-livefolder');
-  await window.locator('[data-testid="nav-board"]').click();
   await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
@@ -90,7 +88,6 @@ test('transitioning a live folder issue writes the new status back to markdown',
 
 test('adding a comment on a live folder issue writes it back to markdown', async () => {
   await addLiveFolderConnection('e2e-livefolder');
-  await window.locator('[data-testid="nav-board"]').click();
   await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
