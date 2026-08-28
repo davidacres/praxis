@@ -141,7 +141,6 @@ test('creating a workspace board through the wizard lists it and shows it in the
   );
 
   // The board also surfaces in the sidebar nav and its cards render.
-  await window.locator('[data-testid="nav-board"]').click();
   await expect(window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME })).toBeVisible();
 
   await window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME }).click();
@@ -157,7 +156,6 @@ test('deleting a workspace board removes it', async () => {
   await expect(boardRow).toHaveCount(0);
 
   // Sidebar entry is gone too.
-  await window.locator('[data-testid="nav-board"]').click();
   await expect(window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME })).toHaveCount(0);
 });
 

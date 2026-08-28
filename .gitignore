@@ -64,3 +64,8 @@ Desktop.ini
 
 # Claude Code local user state (per-user, never commit)
 .claude/settings.local.json
+
+# Playwright run artefacts (regenerated on every `playwright test`)
+test-results/
+playwright-report/
+packages/electron-app/output/

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Board, BoardDetails, Connection, ProjectRecord } from '@ticket-manager/core';
+import { boardTypeIcon, boardTypeLabel } from './boardMeta';
+import { BrandModeIcon } from './BrandModeIcon';
 import { Icon, type IconName } from './Icon';
 import { IssuePeek } from './IssuePeek';
 import { useSettings } from './useSettings';
@@ -87,6 +89,13 @@ export function Sidebar({
   const [searching, setSearching] = useState(false);
   const { settings } = useSettings();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
+  // Brand artwork (extension parity) vs generic board-type glyphs — Appearance
+  // setting, applied live through the settings push channel.
+  const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
+  // A board's mark comes from its connection's backend. The built-in boards
+  // have no connection, so they fall back to the demo mark.
+  const boardMode = (board: Board) =>
+    connections.find(connection => connection.id === board.connectionId)?.mode ?? 'demo';
   // The "Ticket Manager" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
@@ -283,7 +292,7 @@ export function Sidebar({
                 <span className={`tree-twisty${boardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
               </button>
             </div>
-            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" onClick={() => onSelectBoard(board)}><span className="tree-icon"><Icon name="columns" size={14} /></span><span className="tree-label">{board.name}</span></button>)}</div>}
+            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" title={boardTypeLabel(board)} onClick={() => onSelectBoard(board)}><span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span><span className="tree-label">{board.name}</span></button>)}</div>}
           </>
         )}
       </div>

@@ -110,7 +110,6 @@ test('saving a live folder connection auto-tracks its board', async () => {
     await expect(trackedRow).toContainText('livefolder-e2el');
 
     // …and the board itself is listed in the sidebar.
-    await window.locator('[data-testid="nav-board"]').click();
     await expect(
       window.locator('[data-testid="board-nav-item"]', { hasText: 'E2E Live (Live)' })
     ).toBeVisible();
