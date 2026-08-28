@@ -102,6 +102,11 @@ export function App() {
     () => localStorage.getItem('praxis-active-workspace') ?? undefined
   );
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
+  // Whether `workspaces.list()` has returned at least once. The seed-on-first-run
+  // effect must wait for this: on relaunch `projects.list()` resolves before
+  // `workspaces.list()`, and gating on the still-empty `workspaces` array alone
+  // re-seeds "My Workspace" every launch.
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
   const workspaceBootstrap = useRef(false);
   const [composerBoardId, setComposerBoardId] = useState<string>();
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -233,6 +238,7 @@ export function App() {
   const refreshWorkspaces = useCallback(() => {
     void window.praxis.workspaces.list().then(items => {
       setWorkspaces(items);
+      setWorkspacesLoaded(true);
       if (items.length && !items.some(item => item.id === activeWorkspaceId)) {
         setActiveWorkspaceId(items[0].id);
         localStorage.setItem('praxis-active-workspace', items[0].id);
@@ -250,7 +256,7 @@ export function App() {
   // First run with projects but no saved workspaces: seed one so the switcher
   // always has a current context.
   useEffect(() => {
-    if (workspaceBootstrap.current || !projects.length || workspaces.length) return;
+    if (workspaceBootstrap.current || !workspacesLoaded || !projects.length || workspaces.length) return;
     workspaceBootstrap.current = true;
     void window.praxis.workspaces
       .create({ name: 'My Workspace', description: 'Your Praxis projects', projectIds: projects.map(project => project.id) })
@@ -260,12 +266,27 @@ export function App() {
         localStorage.setItem('praxis-active-workspace', workspace.id);
       })
       .catch(error => console.error('Failed to create default workspace:', error));
-  }, [projects, workspaces.length]);
+  }, [projects, workspaces.length, workspacesLoaded]);
 
   const selectWorkspace = useCallback((workspaceId: string) => {
     setActiveWorkspaceId(workspaceId);
     localStorage.setItem('praxis-active-workspace', workspaceId);
   }, []);
+
+  // Remove a saved workspace. The projects it grouped are untouched — only the
+  // named context goes. If it was the active one, fall back to the first that
+  // remains (or "All projects" when none do).
+  const deleteWorkspace = useCallback((workspaceId: string) => {
+    void window.praxis.workspaces.remove(workspaceId).then(() => {
+      setWorkspaces(current => current.filter(item => item.id !== workspaceId));
+      if (workspaceId === activeWorkspaceId) {
+        const fallback = workspaces.find(item => item.id !== workspaceId)?.id;
+        setActiveWorkspaceId(fallback);
+        if (fallback) localStorage.setItem('praxis-active-workspace', fallback);
+        else localStorage.removeItem('praxis-active-workspace');
+      }
+    }).catch(error => console.error('Failed to delete workspace:', error));
+  }, [activeWorkspaceId, workspaces]);
 
   const createWorkspace = useCallback(() => setWorkspaceDialogOpen(true), []);
 
@@ -799,6 +820,7 @@ export function App() {
                   workspaces={workspaces}
                   activeWorkspaceId={activeWorkspaceId}
                   onSelectWorkspace={selectWorkspace}
+                  onDeleteWorkspace={deleteWorkspace}
                   onCreateWorkspace={createWorkspace}
                   onSaveWorkspace={saveWorkspaceToFile}
                   onOpenWorkspace={openWorkspaceFromFile}
@@ -826,6 +848,13 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
+                  onDeleteBoard={board => {
+                    if (!board.connectionId) return;
+                    void window.praxis.userWorkspace.deleteBoard(board.connectionId, board.id).then(() => {
+                      refreshBoards();
+                      refreshConnections();
+                    });
+                  }}
                 />
               )}
             </div>

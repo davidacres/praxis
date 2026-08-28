@@ -13,6 +13,9 @@ import type {
 import type { IssueTrackerService } from './issueTrackerService';
 
 export function buildStubBackendMessage(mode: BackendMode): string {
+  if (mode === 'demo') {
+    return 'Demo mode is disabled. Start Praxis with --demo to load sample data.';
+  }
   if (mode === 'github') {
     return 'GitHub project mode is not implemented yet. Current GitHub support is limited to setup metadata.';
   }

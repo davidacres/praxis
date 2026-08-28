@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import type { Board, BoardFilters } from '@praxis/core';
-import { getDemoService } from './demoServiceInstance';
+import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
 import { getServiceForConnection, getSupportedConnections } from './serviceRegistry';
 import { getProjectManager } from './projectStoreInstance';
 import { projectConnectionId } from '@praxis/core';
@@ -16,7 +16,9 @@ export function registerBoardIpc(): void {
         return boards.map(board => ({ ...board, connectionId }));
       }
 
-      const demoBoards = await getDemoService().getBoards(filters);
+      const demoBoards = isDemoModeEnabled()
+        ? await getDemoService().getBoards(filters)
+        : [];
       const projectBoards = (await Promise.all(
         getProjectManager().list().map(async project => {
           const connectionId = projectConnectionId(project.id);

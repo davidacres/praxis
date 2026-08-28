@@ -59,6 +59,7 @@ export interface SidebarProps {
   onAddExistingProject: () => void;
   onSelectProject: (project: ProjectRecord) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
+  onDeleteBoard: (board: Board) => void;
   selectedProjectId?: string;
   /** Selected issue for the peek card pinned above the footer (classic mode). */
   selectedIssueKey?: string;
@@ -67,6 +68,7 @@ export interface SidebarProps {
   workspaces: WorkspaceRecord[];
   activeWorkspaceId?: string;
   onSelectWorkspace: (workspaceId: string) => void;
+  onDeleteWorkspace: (workspaceId: string) => void;
   onCreateWorkspace: () => void;
   onSaveWorkspace: () => void;
   onOpenWorkspace: () => void;
@@ -91,12 +93,14 @@ export function Sidebar({
   onAddExistingProject,
   onSelectProject,
   onSelectGit,
+  onDeleteBoard,
   selectedProjectId,
   selectedIssueKey,
   selectedIssueConnectionId,
   workspaces,
   activeWorkspaceId,
   onSelectWorkspace,
+  onDeleteWorkspace,
   onCreateWorkspace,
   onSaveWorkspace,
   onOpenWorkspace
@@ -172,14 +176,25 @@ export function Sidebar({
           {workspaceMenuOpen && (
             <div className="workspace-menu" role="menu">
               {workspaces.map(workspace => (
-                <button
-                  key={workspace.id}
-                  role="menuitem"
-                  className={workspace.id === activeWorkspaceId ? 'active' : ''}
-                  onClick={() => { onSelectWorkspace(workspace.id); setWorkspaceMenuOpen(false); }}
-                >
-                  <Icon name="organization" size={13} /><span>{workspace.name}</span><small>{workspace.projectIds.length}</small>
-                </button>
+                <div key={workspace.id} role="none" className="workspace-menu-row">
+                  <button
+                    role="menuitem"
+                    className={`workspace-menu-select${workspace.id === activeWorkspaceId ? ' active' : ''}`}
+                    onClick={() => { onSelectWorkspace(workspace.id); setWorkspaceMenuOpen(false); }}
+                  >
+                    <Icon name="organization" size={13} /><span>{workspace.name}</span>
+                  </button>
+                  <small className="workspace-menu-count">{workspace.projectIds.length}</small>
+                  <button
+                    type="button"
+                    className="workspace-menu-delete"
+                    aria-label={`Delete workspace ${workspace.name}`}
+                    title="Delete workspace"
+                    onClick={() => onDeleteWorkspace(workspace.id)}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
+                </div>
               ))}
               <div className="workspace-menu-divider" />
               <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
@@ -357,7 +372,19 @@ export function Sidebar({
                 <span className={`tree-twisty${boardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
               </button>
             </div>
-            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" title={boardTypeLabel(board)} onClick={() => onSelectBoard(board)}><span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span><span className="tree-label">{board.name}</span>{board.connectionId && <ConnectionStatusDot check={connectionChecks[board.connectionId]} />}</button>)}</div>}
+            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => {
+              const missing = board.availability === 'missing';
+              const canDelete = board.type === 'plan' && Boolean(board.connectionId);
+              return <div key={`${board.connectionId}:${board.id}`} className={`tree-row board-tree-row${board.id === selectedBoardId ? ' active' : ''}${missing ? ' missing' : ''}`} data-testid="board-nav-item" title={missing ? board.availabilityMessage ?? 'This board folder is missing.' : boardTypeLabel(board)}>
+                <button className="board-tree-main" disabled={missing} onClick={() => onSelectBoard(board)}>
+                  <span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span>
+                  <span className="tree-label">{board.name}</span>
+                  {missing && <span className="board-availability-warning" data-testid="board-missing-icon" title="Board folder is missing"><Icon name="warning" size={14} /></span>}
+                  {board.connectionId && !missing && <ConnectionStatusDot check={connectionChecks[board.connectionId]} />}
+                </button>
+                {canDelete && <button className="board-tree-delete" data-testid="board-delete-btn" aria-label={`Delete board ${board.name}`} title="Delete this board" onClick={() => onDeleteBoard(board)}><Icon name="trash" size={12} /></button>}
+              </div>;
+            })}</div>}
           </>
         )}
       </div>

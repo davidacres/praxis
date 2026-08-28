@@ -26,6 +26,7 @@
 #   ./scripts/run-app.sh              # build + launch
 #   ./scripts/run-app.sh --dev        # launch against the Vite dev server (hot reload)
 #   ./scripts/run-app.sh --skip-build # launch whatever is already compiled
+#   ./scripts/run-app.sh --demo       # launch with built-in sample data
 #   ./scripts/run-app.sh --dev --port 5174
 
 set -euo pipefail
@@ -33,12 +34,14 @@ set -euo pipefail
 DEV=0
 SKIP_BUILD=0
 PORT=5173
+DEMO=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dev) DEV=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --port) PORT="$2"; shift 2 ;;
+    --demo) DEMO=1; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -155,7 +158,11 @@ else
 fi
 
 step 'Launching Electron'
-(cd "$ELECTRON_APP" && npx electron .) || EXIT_CODE=$?
+if [[ "$DEMO" -eq 1 ]]; then
+  (cd "$ELECTRON_APP" && npx electron . --demo) || EXIT_CODE=$?
+else
+  (cd "$ELECTRON_APP" && npx electron .) || EXIT_CODE=$?
+fi
 
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   printf '\033[33mElectron exited with code %s\033[0m\n' "$EXIT_CODE"

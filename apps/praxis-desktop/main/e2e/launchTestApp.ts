@@ -34,6 +34,8 @@ export interface LaunchOptions {
    * assert on the splash itself — every other test wants it out of the way.
    */
   keepSplash?: boolean;
+  /** Enable the built-in fixtures for tests that exercise the demo backend. */
+  demoMode?: boolean;
 }
 
 export async function launchTestApp(
@@ -63,7 +65,11 @@ export async function launchTestApp(
   }
 
   const electronApp = await electron.launch({
-    args: [path.join(__dirname, '..'), `--user-data-dir=${userDataDir}`],
+    args: [
+      path.join(__dirname, '..'),
+      `--user-data-dir=${userDataDir}`,
+      ...(options?.demoMode === false ? [] : ['--demo'])
+    ],
     cwd: path.join(__dirname, '..'),
     env
   });

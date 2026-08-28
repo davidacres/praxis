@@ -28,6 +28,9 @@
 .PARAMETER Port
   Port for the Vite dev server in -Dev mode. Default 5173.
 
+.PARAMETER Demo
+  Launch with the built-in sample data.
+
 .EXAMPLE
   npm run app
 
@@ -41,6 +44,7 @@
 param(
   [switch]$Dev,
   [switch]$SkipBuild,
+  [switch]$Demo,
   [int]$Port = 5173
 )
 
@@ -147,9 +151,11 @@ try {
   }
 
   Write-Step 'Launching Electron'
+  $electronArgs = @()
+  if ($Demo) { $electronArgs += '--demo' }
   Push-Location $electronApp
   try {
-    npx electron .
+    npx electron . @electronArgs
     $exitCode = $LASTEXITCODE
   } finally {
     Pop-Location

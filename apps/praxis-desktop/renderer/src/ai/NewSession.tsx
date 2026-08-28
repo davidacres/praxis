@@ -109,7 +109,8 @@ export function NewSession({
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const noticeVisible = connectionCount === 0 && !dismissed;
-  const selectedBoard = boards.find(board => board.id === selectedBoardId);
+  const selectableBoards = boards.filter(board => board.availability !== 'missing');
+  const selectedBoard = selectableBoards.find(board => board.id === selectedBoardId);
   const enabledModelKey = selectedProvider
     ? JSON.stringify(liveSettings?.ai.providers[selectedProvider]?.enabledModelIds ?? null)
     : '';
@@ -126,10 +127,10 @@ export function NewSession({
   }, [selectedBoard, toolModeForBoard]);
 
   useEffect(() => {
-    if (selectedBoardId !== FREEFORM_BOARD_ID && !boards.some(board => board.id === selectedBoardId)) {
-      setSelectedBoardId(boards[0]?.id ?? '');
+    if (selectedBoardId !== FREEFORM_BOARD_ID && selectedBoardId && !selectableBoards.some(board => board.id === selectedBoardId)) {
+      setSelectedBoardId('');
     }
-  }, [boards, selectedBoardId]);
+  }, [selectableBoards, selectedBoardId]);
 
   useEffect(() => {
     setOpenTickets([]);
@@ -376,7 +377,7 @@ export function NewSession({
           </div>
         )}
         <h1 className="session-heading">
-          {selectedBoard ? 'New session in' : 'New session'}{' '}
+          {selectedBoard ? 'New session in' : 'No board'}{' '}
           <button
             ref={boardChipRef}
             className="heading-chip"
@@ -387,7 +388,7 @@ export function NewSession({
             onClick={() => toggleHeadingMenu('board', boardChipRef)}
           >
             <Icon name="folder" size={17} />
-            <span>{selectedBoard?.name ?? 'No board · free-form chat'}</span>
+            <span>{selectedBoard?.name ?? 'No board'}</span>
             <Icon name="chevron-down" size={14} />
           </button>{' '}
           {boardMenuPos && createPortal(
@@ -415,8 +416,8 @@ export function NewSession({
                   <small>Start a completely free-form chat</small>
                 </span>
               </button>
-              {boards.length === 0 && <div className="popover-label">No boards available</div>}
-              {boards.map(board => (
+              {selectableBoards.length === 0 && <div className="popover-label">No boards available</div>}
+              {selectableBoards.map(board => (
                 <button
                   key={`${board.connectionId ?? 'demo'}:${board.id}`}
                   type="button"
@@ -450,7 +451,7 @@ export function NewSession({
             onClick={() => toggleHeadingMenu('ticket', ticketChipRef)}
           >
             <Icon name="ticket" size={17} />
-            <span>{ticketsLoading ? 'Loading tickets…' : selectedIssueKey || 'No ticket · free-form chat'}</span>
+            <span>{ticketsLoading ? 'Loading tickets…' : selectedIssueKey || 'No ticket'}</span>
             <Icon name="chevron-down" size={14} />
           </button>
           {ticketMenuPos && createPortal(
