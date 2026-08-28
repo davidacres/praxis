@@ -1,4 +1,4 @@
-import * as fs from 'node:fs/promises';
+import { liveFolderFs } from './liveFolderFs';
 import { readUtf8 } from './markdownPlanParser';
 import { ensureFrontMatter, type IssueType } from './markdownTemplate';
 import { composeIdeaContent } from '../issues/ideaTranscript';
@@ -53,7 +53,7 @@ export async function writeStatusToMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -114,7 +114,7 @@ export async function updateFeatureStoryTable(
   }
 
   const updated = lines.join('\n');
-  await fs.writeFile(featureMdPath, updated, 'utf-8');
+  await liveFolderFs().writeFile(featureMdPath, updated);
   return true;
 }
 
@@ -172,12 +172,12 @@ export async function appendFeatureItemTableRow(
     } else {
       nextLines.splice(insertIndex, 0, row);
     }
-    await fs.writeFile(featureMdPath, nextLines.join('\n'), 'utf-8');
+    await liveFolderFs().writeFile(featureMdPath, nextLines.join('\n'));
     return true;
   }
 
   const updated = `${normalized.trimEnd()}\n\n## Items\n\n| Ref | Type | Name | Status |\n| --- | --- | --- | --- |\n${row}\n`;
-  await fs.writeFile(featureMdPath, updated, 'utf-8');
+  await liveFolderFs().writeFile(featureMdPath, updated);
   return true;
 }
 
@@ -236,7 +236,7 @@ export async function appendCommentToMarkdownFile(
     updated = `${normalized.trimEnd()}\n\n## Comments\n\n${commentBlock}\n`;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
 }
 
 /**
@@ -273,7 +273,7 @@ export async function writeDescriptionToMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -297,7 +297,7 @@ export async function writeSummaryToMarkdownFile(
   if (updated === content) {
     return false;
   }
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -337,7 +337,7 @@ export async function writeIdeaTranscriptToMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -360,7 +360,7 @@ export async function writePriorityToMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -401,7 +401,7 @@ export async function writeModelToMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -418,7 +418,7 @@ export async function writeSeverityToMarkdownFile(
   if (updated === content) {
     return false;
   }
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -435,7 +435,7 @@ export async function writeReportedByToMarkdownFile(
   if (updated === content) {
     return false;
   }
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
 
@@ -455,6 +455,6 @@ export async function upgradeMarkdownFile(
     return false;
   }
 
-  await fs.writeFile(filePath, updated, 'utf-8');
+  await liveFolderFs().writeFile(filePath, updated);
   return true;
 }
