@@ -47,9 +47,12 @@ export function resolveDeliveryPublishCommand(publishCommand: string, worktreePa
   }
 
   const scriptPath = stripMatchingQuotes(powershellFileMatch.groups.script.trim());
-  const resolvedScriptPath = path.isAbsolute(scriptPath)
+  // This builds a PowerShell command line for a Windows delivery runner, so path
+  // joins must use Windows semantics even when the orchestrator runs on Linux or
+  // macOS — `path.resolve` on a posix host would mangle `.\scripts\x.ps1`.
+  const resolvedScriptPath = path.win32.isAbsolute(scriptPath)
     ? scriptPath
-    : path.resolve(worktreePath, scriptPath);
+    : path.win32.resolve(worktreePath, scriptPath);
   const suffix = powershellFileMatch.groups.suffix?.trim();
 
   return [

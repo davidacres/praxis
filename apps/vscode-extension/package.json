@@ -1023,6 +1023,89 @@
             "preview"
           ]
         },
+        "ticketManager.liveFolderPath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Path to the plans folder used in **Live Folder** mode. The extension reads and writes the markdown planning files under this directory. Set per workspace; a global value is ignored for workspace projects."
+        },
+        "ticketManager.liveFolderProjectKey": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Project key prefix for issues synthesised from the Live Folder plans tree (e.g. APP produces APP-F01, APP-S01-1)."
+        },
+        "ticketManager.liveFolderProjectName": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Display name for the Live Folder project."
+        },
+        "ticketManager.liveFolderAllowIssueCreation": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "When enabled (default), creating an issue in **Live Folder** mode writes a new markdown file into the plans tree. When disabled, the folder is treated as read-only."
+        },
+        "ticketManager.ai.provider": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "vercel-gateway"
+          ],
+          "enumItemLabels": [
+            "None",
+            "Vercel AI Gateway"
+          ],
+          "scope": "window",
+          "description": "Active AI provider for analysis and agent workflows."
+        },
+        "ticketManager.ai.credential": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Credential (API key or token) for the active AI provider. Prefer the extension's secret storage; this setting is a fallback."
+        },
+        "ticketManager.ai.agentName": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Agent or model name to use with the active AI provider."
+        },
+        "ticketManager.ai.runtimePath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Path to the CLI runtime for CLI-based AI providers."
+        },
+        "ticketManager.ai.vercelUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "Base URL for the Vercel AI Gateway. Leave empty to use the default endpoint."
+        },
+        "ticketManager.gitlabProjectPath": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "GitLab project path (group/subgroup/project) for GitLab mode."
+        },
+        "ticketManager.gitlabListAllAccessibleBoards": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "When enabled, list every GitLab board the token can access rather than only those under the configured project."
+        },
+        "ticketManager.gitlabSelectedBoardRefs": {
+          "type": "array",
+          "default": [],
+          "scope": "window",
+          "items": {
+            "type": "string"
+          },
+          "description": "References of the GitLab boards to track."
+        },
         "ticketManager.requestTimeoutMs": {
           "type": "number",
           "default": 30000,

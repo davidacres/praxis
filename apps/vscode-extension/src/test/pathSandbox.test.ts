@@ -3,7 +3,12 @@ import * as nodePath from 'node:path';
 import { PathSandboxError, resolveSandboxedPath } from '@praxis/core';
 
 suite('pathSandbox', () => {
-  const root = nodePath.resolve('C:/work/project');
+  // Build genuinely-absolute paths for whichever platform the suite runs on:
+  // `C:/work/project` is absolute on Windows but a relative segment on posix,
+  // which is why the earlier hard-coded form only rejected the escape on Windows.
+  const fsRoot = nodePath.parse(nodePath.resolve('.')).root;
+  const root = nodePath.join(fsRoot, 'work', 'project');
+  const outside = nodePath.join(fsRoot, 'other', 'file.txt');
 
   test('resolves relative paths under working directory', () => {
     const resolved = resolveSandboxedPath(root, 'src/a.ts');
@@ -19,7 +24,7 @@ suite('pathSandbox', () => {
 
   test('rejects absolute path outside working directory', () => {
     assert.throws(
-      () => resolveSandboxedPath(root, 'C:/other/file.txt'),
+      () => resolveSandboxedPath(root, outside),
       (error: unknown) => error instanceof PathSandboxError
     );
   });

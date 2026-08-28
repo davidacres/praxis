@@ -89,7 +89,10 @@ function resolvePlansPathForRepository(
       const isOrphanRootMarker =
         planPath === repositoryPath &&
         planRoot.featureEntryCount === 0 &&
-        !existingPaths.has(toStoredFolderPath(planPath).toLowerCase());
+        // `existingPaths` is keyed by `toStoredFolderPath(raw)` with no resolve,
+        // so test membership the same way — resolving a Windows-style path on a
+        // posix host prepends cwd and the lookup would always miss.
+        !existingPaths.has(toStoredFolderPath(planRoot.plansPath).toLowerCase());
       return !isOrphanRootMarker;
     })
     .filter(planRoot => {
