@@ -6942,3 +6942,27 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .startup-splash-dot-core { stop-color: var(--accent); }
 .startup-splash-dot-shadow { stop-color: color-mix(in srgb, var(--accent) 72%, black); }
 .startup-splash-head { filter: drop-shadow(0 4px 8px color-mix(in srgb, var(--bg) 72%, transparent)); }
+
+/* ── Saved workspaces: switcher, dropdown menu, create dialog ─────────── */
+.workspace-switcher { position: relative; flex: 1; min-width: 0; }
+.workspace-switcher-button { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 4px 5px; border: 0; border-radius: 5px; color: var(--text); background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.workspace-switcher-button:hover, .workspace-switcher-button[aria-expanded="true"] { background: var(--bg-hover); }
+.workspace-switcher-mark { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 5px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg)); flex: 0 0 auto; }
+.workspace-switcher-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.workspace-switcher-button > svg { margin-left: auto; color: var(--text-tertiary); flex: 0 0 auto; }
+.workspace-menu { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; min-width: 220px; padding: 5px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elevated); box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+.workspace-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 5px; color: var(--text); background: transparent; font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.workspace-menu button:hover, .workspace-menu button.active { color: var(--accent); background: var(--bg-hover); }
+.workspace-menu button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-menu button small { margin-left: auto; color: var(--text-tertiary); }
+.workspace-menu-divider { height: 1px; margin: 4px 2px; background: var(--border); }
+.workspace-dialog-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 28px; background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(5px); }
+.workspace-dialog { width: min(440px, 100%); padding: 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-elevated); box-shadow: 0 24px 70px rgba(0,0,0,.34); }
+.workspace-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.workspace-dialog-header h2 { margin: 4px 0 0; font-size: 20px; }
+.workspace-dialog-intro { margin: 14px 0 20px; color: var(--text-tertiary); font-size: 12px; line-height: 1.55; }
+.workspace-dialog .field-label { display: block; margin: 13px 0 6px; color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.workspace-dialog .field-label span { color: var(--text-tertiary); font-weight: 400; }
+.workspace-dialog input, .workspace-dialog textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; color: var(--text); background: var(--bg); font: inherit; font-size: 12px; resize: vertical; }
+.workspace-dialog input:focus, .workspace-dialog textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); border-color: var(--accent); }
+.workspace-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord } from '@praxis/core';
+import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord, WorkspaceRecord } from '@praxis/core';
 import { boardTypeIcon, boardTypeLabel } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -63,6 +63,13 @@ export interface SidebarProps {
   /** Selected issue for the peek card pinned above the footer (classic mode). */
   selectedIssueKey?: string;
   selectedIssueConnectionId?: string;
+  /** Saved workspaces and the active-workspace switcher. */
+  workspaces: WorkspaceRecord[];
+  activeWorkspaceId?: string;
+  onSelectWorkspace: (workspaceId: string) => void;
+  onCreateWorkspace: () => void;
+  onSaveWorkspace: () => void;
+  onOpenWorkspace: () => void;
 }
 
 export function Sidebar({
@@ -86,7 +93,13 @@ export function Sidebar({
   onSelectGit,
   selectedProjectId,
   selectedIssueKey,
-  selectedIssueConnectionId
+  selectedIssueConnectionId,
+  workspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
+  onCreateWorkspace,
+  onSaveWorkspace,
+  onOpenWorkspace
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
@@ -106,10 +119,18 @@ export function Sidebar({
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [boardsCollapsed, setBoardsCollapsed] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+
+  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
+  // The switcher scopes the Projects tree to the active workspace; with no
+  // workspace selected every project shows.
+  const visibleProjects = activeWorkspace
+    ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
+    : projects;
 
   const projectEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return projects.map(project => {
+    return visibleProjects.map(project => {
       const defaultBoard = boards.find(board => board.id === project.defaultBoardId && board.connectionId === `project:${project.id}`);
       const linkedBoards = project.linkedBoards.flatMap(link => {
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
@@ -127,7 +148,7 @@ export function Sidebar({
         visible: matchesProject || Boolean(matchesDefault) || matchingLinkedBoards.length > 0
       };
     }).filter(entry => entry.visible);
-  }, [boards, projects, query]);
+  }, [boards, visibleProjects, query]);
   const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ project, defaultBoard, linkedBoards }) => [
     ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
     ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
@@ -137,7 +158,44 @@ export function Sidebar({
   return (
     <nav className="sidebar" aria-label="Workspace">
       <div className="sidebar-header">
-        <h2 className="sidebar-title">Workspace</h2>
+        <div className="workspace-switcher">
+          <button
+            className="workspace-switcher-button"
+            aria-expanded={workspaceMenuOpen}
+            aria-label="Select workspace"
+            onClick={() => setWorkspaceMenuOpen(open => !open)}
+          >
+            <span className="workspace-switcher-mark"><Icon name="organization" size={14} /></span>
+            <span className="workspace-switcher-name">{activeWorkspace?.name ?? 'All projects'}</span>
+            <Icon name="chevron-down" size={13} />
+          </button>
+          {workspaceMenuOpen && (
+            <div className="workspace-menu" role="menu">
+              {workspaces.map(workspace => (
+                <button
+                  key={workspace.id}
+                  role="menuitem"
+                  className={workspace.id === activeWorkspaceId ? 'active' : ''}
+                  onClick={() => { onSelectWorkspace(workspace.id); setWorkspaceMenuOpen(false); }}
+                >
+                  <Icon name="organization" size={13} /><span>{workspace.name}</span><small>{workspace.projectIds.length}</small>
+                </button>
+              ))}
+              <div className="workspace-menu-divider" />
+              <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
+                <Icon name="plus" size={13} /><span>New workspace</span>
+              </button>
+              {activeWorkspace && (
+                <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="archive" size={13} /><span>Save to file</span>
+                </button>
+              )}
+              <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
+                <Icon name="folder-open" size={13} /><span>Open workspace file</span>
+              </button>
+            </div>
+          )}
+        </div>
         <div className="new-menu-anchor">
           <button
             className="new-pill new-pill-icon"

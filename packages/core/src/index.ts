@@ -49,6 +49,8 @@ export * from './projects/projectTypes';
 export * from './projects/projectTemplates';
 export * from './projects/projectStore';
 export * from './projects/projectService';
+export * from './workspaces/workspaceTypes';
+export * from './workspaces/workspaceStore';
 export * from './mcp/clientFactory';
 export * from './gitlab/gitLabApiService';
 export * from './gitlab/gitLabConfigStore';

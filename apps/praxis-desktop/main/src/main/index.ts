@@ -23,6 +23,7 @@ import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
 import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
 import { registerProjectIpc } from './projectIpc';
+import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
 import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
@@ -247,6 +248,7 @@ void app.whenReady().then(async () => {
   registerAiWorkflowIpc();
   registerTaskDesignerIpc();
   registerProjectIpc();
+  registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
   registerGitIpc();

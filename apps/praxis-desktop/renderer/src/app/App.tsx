@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   AgentSessionRecord,
   AiProvider,
@@ -9,7 +9,7 @@ import type {
   IssueSummary,
   TaskDesignerCanvasNode,
   TaskDesignerTicketNode
-  , ProjectRecord
+  , ProjectRecord, WorkspaceRecord
 } from '@praxis/core';
 import { IssueDetail } from '../issues/IssueDetail';
 import { Connections } from '../connections/Connections';
@@ -37,6 +37,7 @@ import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
 import { OverviewPage } from './OverviewPage';
+import { WorkspaceDialog } from './WorkspaceDialog';
 import { useSettings } from '../settings/useSettings';
 import {
   EMPTY_BOARD_FILTER,
@@ -96,6 +97,12 @@ export function App() {
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | undefined>(
+    () => localStorage.getItem('praxis-active-workspace') ?? undefined
+  );
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
+  const workspaceBootstrap = useRef(false);
   const [composerBoardId, setComposerBoardId] = useState<string>();
   const [connections, setConnections] = useState<Connection[]>([]);
   /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
@@ -223,11 +230,68 @@ export function App() {
     void window.praxis.projects.list().then(setProjects).catch(error => console.error('Failed to load projects:', error));
   }, []);
 
+  const refreshWorkspaces = useCallback(() => {
+    void window.praxis.workspaces.list().then(items => {
+      setWorkspaces(items);
+      if (items.length && !items.some(item => item.id === activeWorkspaceId)) {
+        setActiveWorkspaceId(items[0].id);
+        localStorage.setItem('praxis-active-workspace', items[0].id);
+      }
+    }).catch(error => console.error('Failed to load workspaces:', error));
+  }, [activeWorkspaceId]);
+
   useEffect(() => {
     refreshBoards();
     refreshConnections();
     refreshProjects();
-  }, [refreshBoards, refreshConnections, refreshProjects]);
+    refreshWorkspaces();
+  }, [refreshBoards, refreshConnections, refreshProjects, refreshWorkspaces]);
+
+  // First run with projects but no saved workspaces: seed one so the switcher
+  // always has a current context.
+  useEffect(() => {
+    if (workspaceBootstrap.current || !projects.length || workspaces.length) return;
+    workspaceBootstrap.current = true;
+    void window.praxis.workspaces
+      .create({ name: 'My Workspace', description: 'Your Praxis projects', projectIds: projects.map(project => project.id) })
+      .then(workspace => {
+        setWorkspaces([workspace]);
+        setActiveWorkspaceId(workspace.id);
+        localStorage.setItem('praxis-active-workspace', workspace.id);
+      })
+      .catch(error => console.error('Failed to create default workspace:', error));
+  }, [projects, workspaces.length]);
+
+  const selectWorkspace = useCallback((workspaceId: string) => {
+    setActiveWorkspaceId(workspaceId);
+    localStorage.setItem('praxis-active-workspace', workspaceId);
+  }, []);
+
+  const createWorkspace = useCallback(() => setWorkspaceDialogOpen(true), []);
+
+  const saveNewWorkspace = useCallback((name: string, description: string) => {
+    void window.praxis.workspaces.create({ name, description, projectIds: [] }).then(workspace => {
+      setWorkspaces(current => [...current, workspace]);
+      setActiveWorkspaceId(workspace.id);
+      localStorage.setItem('praxis-active-workspace', workspace.id);
+      setWorkspaceDialogOpen(false);
+    }).catch(error => console.error('Failed to create workspace:', error));
+  }, []);
+
+  const saveWorkspaceToFile = useCallback(() => {
+    if (activeWorkspaceId) {
+      void window.praxis.workspaces.saveToFile(activeWorkspaceId).catch(error => console.error('Failed to save workspace:', error));
+    }
+  }, [activeWorkspaceId]);
+
+  const openWorkspaceFromFile = useCallback(() => {
+    void window.praxis.workspaces.openFromFile().then(workspace => {
+      if (!workspace) return;
+      setWorkspaces(current => [...current.filter(item => item.id !== workspace.id), workspace]);
+      setActiveWorkspaceId(workspace.id);
+      localStorage.setItem('praxis-active-workspace', workspace.id);
+    }).catch(error => console.error('Failed to open workspace:', error));
+  }, []);
 
   // Connection health dots: run `connection.check` lazily per non-demo
   // connection, fire-and-forget. A dead or slow backend must never block (or
@@ -732,6 +796,12 @@ export function App() {
                 <Sidebar
                   boards={boards}
                   projects={projects}
+                  workspaces={workspaces}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelectWorkspace={selectWorkspace}
+                  onCreateWorkspace={createWorkspace}
+                  onSaveWorkspace={saveWorkspaceToFile}
+                  onOpenWorkspace={openWorkspaceFromFile}
                   connections={connections}
                   connectionChecks={connectionChecks}
                   selectedBoardId={route.boardId}
@@ -964,6 +1034,9 @@ export function App() {
             setShowSplash(true);
           }}
         />
+      )}
+      {workspaceDialogOpen && (
+        <WorkspaceDialog onCancel={() => setWorkspaceDialogOpen(false)} onCreate={saveNewWorkspace} />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
     </div>

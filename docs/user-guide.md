@@ -56,6 +56,29 @@ Beyond the sidebar views, Praxis includes:
 - Local Peer Review panel
 - Copilot / agent session panel
 
+### Praxis desktop workspaces
+
+The Praxis desktop app adds a saved workspace layer above Projects. A workspace
+is a named operating context for a collection of projects, connections,
+objectives, and the current project context. Projects remain the owners of
+their boards and repository folders.
+
+Use the workspace selector at the top of the desktop sidebar to:
+
+- create a workspace,
+- switch between workspaces,
+- save the current workspace to a `.praxis-workspace.json` file, or
+- open a previously saved workspace file.
+
+Workspace files are versioned. They record `schemaVersion`,
+`createdWithAppVersion`, and `lastSavedWithAppVersion`. Praxis refuses a file
+with a newer unsupported schema instead of overwriting local workspace data.
+Secrets and credentials are never exported.
+
+Desktop navigation is contextual: Epics and Issues appear when a board is
+selected; Repository tools appear under their owning project; global surfaces
+such as Overview, Connections, and Agents remain available independently.
+
 ## Screenshots and walkthroughs
 
 The repository does not currently include checked-in screenshot assets, but this section defines the intended walkthrough coverage for the main product areas.

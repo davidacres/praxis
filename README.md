@@ -62,6 +62,15 @@ Split, and Hunk views, file/hunk/selected-line staging, confirmed discard,
 branch and commit actions, stash workflows, and three-way conflict resolution.
 Focused evidence is captured under `apps/praxis-desktop/main/output/playwright/`.
 
+### Praxis desktop saved workspaces
+
+The sidebar has a workspace switcher above the project tree. A workspace is a
+named context that groups project references without copying project data; the
+tree is scoped to the active workspace. Workspaces can be created, switched,
+saved to a portable `.praxis-workspace.json` file, and re-opened. Exported files
+carry a `schemaVersion` and the Praxis versions that created and last saved them,
+and contain references only — never connection secrets.
+
 `@praxis/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
 
 ## What the extension includes
