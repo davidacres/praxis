@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection, ProjectRecord } from '@ticket-manager/core';
+import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord } from '@ticket-manager/core';
 import { boardTypeIcon, boardTypeLabel } from './boardMeta';
 import { BrandModeIcon } from './BrandModeIcon';
+import { ConnectionStatusDot } from './ConnectionStatusDot';
 import { Icon, type IconName } from './Icon';
 import { IssuePeek } from './IssuePeek';
 import { useSettings } from './useSettings';
@@ -42,6 +43,8 @@ export interface SidebarProps {
   boards: Board[];
   projects: ProjectRecord[];
   connections: Connection[];
+  /** Latest health check per connection id; undefined entries are still checking. */
+  connectionChecks: Record<string, ConnectionCheck | undefined>;
   selectedBoardId: string | undefined;
   detailsByBoardId: Record<string, BoardDetails | undefined>;
   onSelectBoard: (board: Board) => void;
@@ -66,6 +69,7 @@ export function Sidebar({
   boards,
   projects,
   connections,
+  connectionChecks,
   selectedBoardId,
   detailsByBoardId,
   onSelectBoard,
@@ -278,8 +282,11 @@ export function Sidebar({
                         {!projectGitCollapsed && <button
                           className={`tree-row project-git-row${activeFeature === 'git' && selectedProjectId === project.id ? ' active' : ''}`}
                           data-testid="project-git-nav-item"
-                          disabled={!project.workspaceFolder}
-                          title={!project.workspaceFolder ? 'Attach a workspace folder to enable Git' : undefined}
+                          // Reachable without a workspace on purpose: Git Graph
+                          // then shows the setup screen, which explains what is
+                          // missing and offers Choose folder / Clone. A disabled
+                          // control would leave the user with no way forward.
+                          title={!project.workspaceFolder ? 'Set up a Git workspace for this project' : undefined}
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className="tree-row project-git-child" data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
@@ -292,7 +299,7 @@ export function Sidebar({
                 <span className={`tree-twisty${boardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
               </button>
             </div>
-            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" title={boardTypeLabel(board)} onClick={() => onSelectBoard(board)}><span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span><span className="tree-label">{board.name}</span></button>)}</div>}
+            {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => <button key={`${board.connectionId}:${board.id}`} className={`tree-row${board.id === selectedBoardId ? ' active' : ''}`} data-testid="board-nav-item" title={boardTypeLabel(board)} onClick={() => onSelectBoard(board)}><span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span><span className="tree-label">{board.name}</span>{board.connectionId && <ConnectionStatusDot check={connectionChecks[board.connectionId]} />}</button>)}</div>}
           </>
         )}
       </div>

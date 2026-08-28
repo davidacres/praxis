@@ -13,8 +13,6 @@ test.afterEach(async () => { await closeTestApp(app); });
 
 test('creates a folderless Product project through the six-step wizard and opens its board', async () => {
   const page = app.window;
-  await page.getByTestId('startup-splash').click();
-  await expect(page.getByTestId('startup-splash')).not.toBeVisible();
   await expect(page.getByTestId('project-empty-state')).toBeVisible();
   await expect(page).toHaveScreenshot('project-empty-state.png');
   await page.getByTestId('new-menu').click();

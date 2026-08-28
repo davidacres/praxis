@@ -131,16 +131,17 @@ test('connection groups carry a health dot from connection checks', async () => 
   );
   const win = app.window;
 
-  // Group headers are the non-stacked tree rows; board rows stack label+sub.
-  const gitlabGroup = win.locator('.tree-row:not(.tree-row-stacked)', { hasText: 'Mock GitLab' });
-  await gitlabGroup.waitFor();
-  await expect(gitlabGroup.locator('[data-testid="status-dot"]')).toHaveAttribute(
+  // The sidebar lists boards flat rather than grouping them under a connection
+  // header, so the health dot rides on the board row itself.
+  const gitlabBoard = win.locator('[data-testid="board-nav-item"]', { hasText: 'Demo Board' });
+  await gitlabBoard.waitFor();
+  await expect(gitlabBoard.locator('[data-testid="status-dot"]')).toHaveAttribute(
     'data-status',
     'ok',
     { timeout: 15000 }
   );
 
-  // The built-in demo backend is always local — its group carries no dot.
-  const demoGroup = win.locator('.tree-row:not(.tree-row-stacked)', { hasText: 'Demo' });
-  await expect(demoGroup.locator('[data-testid="status-dot"]')).toHaveCount(0);
+  // The built-in boards are local and carry no connection — so no dot.
+  const builtInBoard = win.locator('[data-testid="board-nav-item"]', { hasText: 'Application Board' });
+  await expect(builtInBoard.locator('[data-testid="status-dot"]')).toHaveCount(0);
 });
