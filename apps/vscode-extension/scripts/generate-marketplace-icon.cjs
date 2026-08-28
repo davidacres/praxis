@@ -1,75 +1,65 @@
 'use strict';
 
+/*
+ * Regenerate media/marketplace-icon.png (128x128) — the VS Code marketplace
+ * icon — by downscaling the canonical Praxis brand mark that the desktop app
+ * ships. Keeping one source of truth means the extension and the app never
+ * drift apart visually.
+ *
+ * Source:  apps/praxis-desktop/renderer/src/assets/praxis-icon-v3.png (1024x1024)
+ * Needs:   `sips` (bundled on macOS) or ImageMagick (`magick` / `convert`).
+ *          On a box with neither, resize praxis-icon-v3.png to 128x128 by hand.
+ *
+ * The scalable companion, media/icon.svg, is edited directly — the store
+ * sidecar in scripts/build.ps1 prefers it and embeds it as a data URL.
+ */
+
 const fs = require('node:fs');
 const path = require('node:path');
-const { createCanvas } = require('canvas');
+const { execFileSync } = require('node:child_process');
 
 const SIZE = 128;
-const OUT = path.join(__dirname, '..', 'media', 'marketplace-icon.png');
+const mediaDir = path.join(__dirname, '..', 'media');
+const OUT = path.join(mediaDir, 'marketplace-icon.png');
+const SRC = path.join(
+  __dirname,
+  '..',
+  '..',
+  'praxis-desktop',
+  'renderer',
+  'src',
+  'assets',
+  'praxis-icon-v3.png'
+);
 
-const BG_TOP = '#4f8ff7';
-const BG_BOTTOM = '#1d4ed8';
-const TICKET = '#ffffff';
-const LINE = '#c7ddff';
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+if (!fs.existsSync(SRC)) {
+  console.error(`Brand source not found: ${SRC}`);
+  process.exit(1);
 }
 
-function drawTicketIcon(ctx) {
-  const x = 30;
-  const y = 38;
-  const w = 68;
-  const h = 48;
-  const r = 8;
-  const notch = 7;
-
-  ctx.beginPath();
-  ctx.moveTo(x + r + notch, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h / 2 - notch);
-  ctx.quadraticCurveTo(x + w + notch, y + h / 2, x + w, y + h / 2 + notch);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r + notch, y + h);
-  ctx.quadraticCurveTo(x + notch, y + h, x + notch, y + h - r);
-  ctx.lineTo(x + notch, y + h / 2 + notch);
-  ctx.quadraticCurveTo(x - notch, y + h / 2, x + notch, y + h / 2 - notch);
-  ctx.lineTo(x + notch, y + r);
-  ctx.quadraticCurveTo(x + notch, y, x + r + notch, y);
-  ctx.closePath();
-  ctx.fillStyle = TICKET;
-  ctx.fill();
-
-  ctx.fillStyle = LINE;
-  roundRect(ctx, x + 22, y + 14, 38, 5, 2.5);
-  ctx.fill();
-  roundRect(ctx, x + 22, y + 27, 26, 5, 2.5);
-  ctx.fill();
+function have(cmd) {
+  const dirs = (process.env.PATH || '').split(path.delimiter);
+  return dirs.some(dir => {
+    try {
+      fs.accessSync(path.join(dir, cmd), fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
-const canvas = createCanvas(SIZE, SIZE);
-const ctx = canvas.getContext('2d');
+if (have('sips')) {
+  execFileSync('sips', ['-z', String(SIZE), String(SIZE), '--setProperty', 'format', 'png', SRC, '--out', OUT], {
+    stdio: 'ignore'
+  });
+} else if (have('magick')) {
+  execFileSync('magick', [SRC, '-resize', `${SIZE}x${SIZE}`, OUT], { stdio: 'ignore' });
+} else if (have('convert')) {
+  execFileSync('convert', [SRC, '-resize', `${SIZE}x${SIZE}`, OUT], { stdio: 'ignore' });
+} else {
+  console.error('Need `sips` (macOS) or ImageMagick. Resize praxis-icon-v3.png to 128x128 manually.');
+  process.exit(1);
+}
 
-const gradient = ctx.createLinearGradient(0, 0, SIZE, SIZE);
-gradient.addColorStop(0, BG_TOP);
-gradient.addColorStop(1, BG_BOTTOM);
-ctx.fillStyle = gradient;
-roundRect(ctx, 8, 8, 112, 112, 26);
-ctx.fill();
-
-drawTicketIcon(ctx);
-
-fs.writeFileSync(OUT, canvas.toBuffer('image/png'));
-console.log(`Wrote ${OUT}`);
+console.log(`Wrote ${OUT} (${SIZE}x${SIZE}, from ${path.relative(process.cwd(), SRC)})`);

@@ -83,12 +83,12 @@
         {
           "id": "praxis",
           "title": "Tickets",
-          "icon": "media/activitybar-ticket.svg"
+          "icon": "media/activitybar-praxis.svg"
         },
         {
           "id": "praxisWorkMode",
           "title": "Work Mode",
-          "icon": "media/activitybar-ticket.svg"
+          "icon": "media/activitybar-praxis.svg"
         }
       ]
     },
