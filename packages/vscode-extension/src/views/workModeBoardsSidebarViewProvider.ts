@@ -3,7 +3,7 @@ import type { AiSessionManager } from '@ticket-manager/core';
 import type { AgentSessionRecord } from '@ticket-manager/core';
 import type { IssueTrackerService } from '@ticket-manager/core';
 import type { ConnectionStore } from '@ticket-manager/core';
-import { BoardStore } from '../state/boardStore';
+import { BoardStore } from '@ticket-manager/core';
 import type { AiAssignment, AiProvider, BackendMode, Board, BoardDetails } from '@ticket-manager/core';
 import { parseHexRgb } from '@ticket-manager/core';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';

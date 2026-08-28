@@ -5,7 +5,7 @@ import { buildSwimLaneRows } from '@ticket-manager/core';
 import { issueTypeHex, issueTypePillInlineStyle } from '@ticket-manager/core';
 import { resolveStatusDotColor, statusLabelInlineStyle } from '@ticket-manager/core';
 import type { IssueTrackerService } from '@ticket-manager/core';
-import type { BoardColumnStore } from '../state/boardColumnStore';
+import type { BoardColumnStore } from '@ticket-manager/core';
 import type { AiProvider, Board, BoardColumn, BoardDetails, IssueSummary } from '@ticket-manager/core';
 import { applyBoardColumnPreferences, getDefaultStatusColumnOrder } from './boardColumnLayout';
 import { boardListModeIconSvg, resolveBackendModeBoardIconColor } from './boardModeIcon';

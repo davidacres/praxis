@@ -2,8 +2,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { IssueTrackerService } from '@ticket-manager/core';
 import { AppConfigStore } from '../config/jiraConfig';
-import { BoardStore } from '../state/boardStore';
-import { FilterStore } from '../state/filterStore';
+import { BoardStore } from '@ticket-manager/core';
+import { FilterStore } from '@ticket-manager/core';
 import type {
   AssigneeMode,
   BackendMode,
@@ -36,7 +36,7 @@ import {
   isAllowedParentType
 } from '@ticket-manager/core';
 import type { VercelAgentService } from '@ticket-manager/core';
-import { promptForAgentWorkflowSelection } from '../ai/agentWorkflowCatalog';
+import { promptForAgentWorkflowSelection } from '../ai/agentWorkflowPicker';
 import { stageIssueAttachments } from '@ticket-manager/core';
 import type { CopilotSessionPanelManager } from '../views/copilotSessionPanel';
 import type { AiSessionManager } from '@ticket-manager/core';

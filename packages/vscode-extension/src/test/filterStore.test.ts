@@ -1,6 +1,7 @@
 import * as assert from 'node:assert';
 import type { Memento, ExtensionContext } from 'vscode';
-import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from '../state/filterStore';
+import { FilterStore, shouldAdoptJiraMcpEpicIssueScope } from '@ticket-manager/core';
+import { vsCodeHostStorage } from '../adapters/vsCodeHostStorage';
 
 class MemoryMemento implements Memento {
   private readonly store = new Map<string, unknown>();
@@ -79,29 +80,29 @@ suite('FilterStore', () => {
 
   test('persists status filters across store instances', async () => {
     const context = createContext();
-    const firstStore = new FilterStore(context);
+    const firstStore = new FilterStore(vsCodeHostStorage(context));
 
     await firstStore.updateFilters({ statuses: ['Blocked', 'In Progress'] });
 
-    const secondStore = new FilterStore(context);
+    const secondStore = new FilterStore(vsCodeHostStorage(context));
     assert.deepStrictEqual(secondStore.getFilters().statuses, ['Blocked', 'In Progress']);
   });
 
   test('persists EPIC status filters independently from My Issues statuses', async () => {
     const context = createContext();
-    const firstStore = new FilterStore(context);
+    const firstStore = new FilterStore(vsCodeHostStorage(context));
 
     await firstStore.updateFilters({ statuses: ['Blocked'] });
     await firstStore.setEpicStatuses(['In Progress']);
 
-    const secondStore = new FilterStore(context);
+    const secondStore = new FilterStore(vsCodeHostStorage(context));
     assert.deepStrictEqual(secondStore.getFilters().statuses, ['Blocked']);
     assert.deepStrictEqual(secondStore.getEpicStatuses(), ['In Progress']);
   });
 
   test('clearing My Issues filters does not clear EPIC status filters', async () => {
     const context = createContext();
-    const store = new FilterStore(context);
+    const store = new FilterStore(vsCodeHostStorage(context));
 
     await store.updateFilters({ statuses: ['Blocked'] });
     await store.setEpicStatuses(['In Progress']);
