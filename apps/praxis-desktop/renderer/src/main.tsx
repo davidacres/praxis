@@ -23,6 +23,12 @@ applySurfacePack(getInitialSurfaceId(), getInitialSurfaceOpts());
 // from the live theme.
 window.addEventListener('tm-theme-changed', () => refreshSurfacePattern());
 
+// Motif motion is baked in or left out at paint time, not toggled in CSS — a
+// reduced-motion query inside an SVG-as-image is ignored by the renderer, so
+// the preference can only be honoured by re-baking when it changes.
+window.matchMedia('(prefers-reduced-motion: reduce)')
+  .addEventListener('change', () => refreshSurfacePattern());
+
 // The Aurora Glass ambient layer pauses its animation while the window is not
 // focused (see surfaces.css). Renderer-only — no IPC needed for window blur.
 const setWindowActive = (active: boolean) =>
@@ -40,6 +46,7 @@ void window.praxis.settings.get().then(settings => {
     texture: settings.appearance.surface.texture,
     translucency: settings.appearance.surface.translucency,
     windowVibrancy: settings.appearance.surface.windowVibrancy,
+    animateMotifs: settings.appearance.surface.animateMotifs,
     motif: settings.appearance.surface.motif
   });
 }).catch(() => {

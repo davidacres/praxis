@@ -183,6 +183,13 @@ export interface AppearanceSettings {
     /** Opt in to native OS window vibrancy (phase 3+). */
     windowVibrancy: boolean;
     /**
+     * Master gate on motif motion. The per-motif `animation` style below picks
+     * *which* movement; this switches all of it off in one place, the way
+     * `texture` gates the grain. The OS `prefers-reduced-motion` preference
+     * overrides it in the renderer regardless.
+     */
+    animateMotifs: boolean;
+    /**
      * The user's Motif override. The motif (hexagon, grid, weave …) is
      * independent of the material, so it can be worn over any theme *and* any
      * pack. Fields left out fall back to the active pack's own pattern, so a
@@ -282,7 +289,35 @@ export interface SurfaceMotifSettings {
   outline?: number;
   /** Colour of that offset line; defaults to a mode-appropriate tone. */
   outlineInk?: string;
+  /**
+   * How the motif moves. Orthogonal to which pattern it is, so any style rides
+   * over any pattern. Held flat rather than nested because a pack's pattern and
+   * the user's override are merged by shallow spread — a nested object would
+   * replace wholesale and break partial overrides.
+   */
+  animation?: SurfaceMotifAnimation;
+  /** Multiplier on the style's base duration. Higher is faster. */
+  animationSpeed?: number;
+  /** Reveal styles only: loop, or draw once and rest complete (the default). */
+  animationRepeat?: boolean;
 }
+
+/**
+ * The motif animation styles. Two families: `draw` / `plot` / `iterate` are
+ * *reveal* styles baked into the motif's own SVG (they need its geometry);
+ * the rest act on the painted layer through CSS. `cyberpunk` uses both.
+ */
+export type SurfaceMotifAnimation =
+  | 'none'
+  | 'draw'
+  | 'plot'
+  | 'iterate'
+  | 'shimmer'
+  | 'glow'
+  | 'drift'
+  | 'ripple'
+  | 'neon'
+  | 'cyberpunk';
 
 export type TerminalCursorStyle = 'block' | 'underline' | 'bar';
 
@@ -348,7 +383,7 @@ function builtInLook(id: string, name: string, surfacePackId: string): Appearanc
     themeId: 'praxis-dark',
     themeMode: 'dark',
     surfacePackId,
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
     priorityColors: { ...DEFAULT_PRIORITY_COLORS },
     showBrandArtwork: true
   };
@@ -412,7 +447,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
     customThemes: [],
     surfacePackId: 'parchment',
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
     installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'],
     customSurfacePacks: [],
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
@@ -566,6 +601,7 @@ function readSurface(value: unknown, fallback: AppearanceSettings['surface']): A
     translucency: readBoolean(value.translucency, fallback.translucency),
     texture: readBoolean(value.texture, fallback.texture),
     windowVibrancy: readBoolean(value.windowVibrancy, fallback.windowVibrancy),
+    animateMotifs: readBoolean(value.animateMotifs, fallback.animateMotifs),
     ...(motif ? { motif } : {})
   };
 }
@@ -582,6 +618,15 @@ const SURFACE_BLEND_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 const SURFACE_ANCHORS: ReadonlySet<string> = new Set(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
+
+/**
+ * The animation style reaches CSS as a `data-motif-anim` attribute value and
+ * selects a keyframe block, so — like `blend` and the anchors — it is validated
+ * to a literal from a fixed set rather than passed through as user text.
+ */
+const SURFACE_MOTIF_ANIMATIONS: ReadonlySet<string> = new Set([
+  'none', 'draw', 'plot', 'iterate', 'shimmer', 'glow', 'drift', 'ripple', 'neon', 'cyberpunk'
+]);
 
 function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefined {
   if (!isRecord(value) || typeof value.id !== 'string' || !/^[a-z0-9-]{1,32}$/.test(value.id)) {
@@ -615,6 +660,9 @@ function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefine
         .slice(0, 4)
     : [];
   const anchors = anchorList.length ? { anchors: anchorList } : {};
+  const animation = typeof value.animation === 'string' && SURFACE_MOTIF_ANIMATIONS.has(value.animation)
+    ? { animation: value.animation as SurfaceMotifAnimation }
+    : {};
   return {
     id: value.id,
     scale: clampNumber(value.scale, 8, 400, 120),
@@ -626,6 +674,9 @@ function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefine
     fade: clampNumber(value.fade, 0.05, 1, 0.62),
     fill: clampNumber(value.fill, 0, 1, 0),
     outline: clampNumber(value.outline, 0, 1, 0),
+    animationSpeed: clampNumber(value.animationSpeed, 0.25, 4, 1),
+    animationRepeat: readBoolean(value.animationRepeat, false),
+    ...animation,
     ...anchor,
     ...anchors,
     ...inkColor,

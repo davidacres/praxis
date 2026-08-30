@@ -23,9 +23,10 @@ import { useSettings } from './useSettings';
 import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
-  DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, perceptualOpacityScale,
-  resolveSurfacePattern, SURFACE_PATTERNS,
-  type SurfacePatternAnchor, type SurfacePatternInk, type SurfacePatternPlacement, type SurfacePatternSpec
+  DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, isRevealAnimation,
+  perceptualOpacityScale, resolveSurfacePattern, SURFACE_MOTIF_ANIMATIONS, SURFACE_PATTERNS,
+  type SurfaceMotifAnimation, type SurfacePatternAnchor, type SurfacePatternInk,
+  type SurfacePatternPlacement, type SurfacePatternSpec
 } from './surfacePatterns';
 
 export type SettingsCategory =
@@ -1588,18 +1589,20 @@ const MOTIF_ANCHORS: Array<[SurfacePatternAnchor, string]> = [
  * clears the override entirely.
  */
 function MotifPanel({
-  pack, motif, disabled, onChange
+  pack, motif, disabled, animationsEnabled, onChange
 }: {
   pack?: SurfacePackDefinition;
   motif?: SurfaceMotifSettings;
   disabled?: boolean;
+  /** The master gate. False greys the motion controls and says why. */
+  animationsEnabled: boolean;
   onChange: (motif: SurfaceMotifSettings | undefined) => void;
 }) {
   const base = pack?.pattern;
   const effective: SurfacePatternSpec = {
     id: 'none', scale: 62, opacity: 0.3, ink: 'accent',
     placement: 'tile', anchor: 'top-right', spread: DEFAULT_MOTIF_SPREAD, fade: DEFAULT_MOTIF_FADE,
-    fill: 0, outline: 0,
+    fill: 0, outline: 0, animation: 'none', animationSpeed: 1, animationRepeat: false,
     ...(base ?? {}),
     ...(motif ?? {})
   };
@@ -1607,6 +1610,12 @@ function MotifPanel({
     onChange({ ...effective, ...patch } as SurfaceMotifSettings);
   const isCorner = effective.placement === 'corner';
   const overridden = motif !== undefined;
+  const definition = findSurfacePattern(effective.id);
+  const style = effective.animation ?? 'none';
+  // Motion controls are dead while the master gate is off, the pattern is None,
+  // or the panel itself is disabled — one condition, so they never disagree.
+  const motionOff = Boolean(disabled) || !animationsEnabled || effective.id === 'none';
+  const isReveal = isRevealAnimation(style);
   // The plural `anchors` supersedes the legacy single `anchor`; fall back to it,
   // then to the default corner, so a pack that only sets `anchor` still lights up.
   const corners: SurfacePatternAnchor[] = effective.anchors?.length
@@ -1627,7 +1636,10 @@ function MotifPanel({
       <div className="surface-motif-head">
         <div>
           <strong>Motif</strong>
-          <span>The mark laid on the material. Independent of the pack, so it rides over any theme.</span>
+          <span>
+            The mark laid on the material. Independent of the pack, so it rides over any theme.
+            {!animationsEnabled && ' Motion is off — turn on Animate motifs below.'}
+          </span>
         </div>
         {overridden && (
           <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => onChange(undefined)}>
@@ -1696,7 +1708,7 @@ function MotifPanel({
 
         <label className="surface-dial"><span className="surface-dial-label">Solid cells <em>{Math.round((effective.fill ?? 0) * 100)}%</em></span>
           <input type="range" min={0} max={100} step={17} value={Math.round((effective.fill ?? 0) * 100)}
-            disabled={disabled || effective.id !== 'hexagon'} data-testid="motif-fill"
+            disabled={disabled || !definition?.fillable} data-testid="motif-fill"
             onChange={e => set({ fill: Number(e.target.value) / 100 })} /></label>
 
         <label className="surface-dial">
@@ -1714,6 +1726,39 @@ function MotifPanel({
           <input type="range" min={5} max={200} step={5} value={Math.round((effective.weight ?? 0.055) * 1000)}
             disabled={disabled || effective.id === 'none'} data-testid="motif-weight"
             onChange={e => set({ weight: Number(e.target.value) / 1000 })} /></label>
+
+        <label className="surface-dial"><span className="surface-dial-label">Animation</span>
+          <select value={style} disabled={motionOff} data-testid="motif-animation"
+            onChange={e => set({ animation: e.target.value as SurfaceMotifAnimation })}>
+            {SURFACE_MOTIF_ANIMATIONS.map(entry => (
+              <option
+                key={entry.id}
+                value={entry.id}
+                // Plot walks a head along one continuous line, and only a
+                // pattern that declares a route has one to walk.
+                disabled={entry.id === 'plot' && !definition?.route}
+              >{entry.name}</option>
+            ))}
+          </select></label>
+
+        {style !== 'none' && (
+          <label className="surface-dial">
+            <span className="surface-dial-label">Speed <em>{(effective.animationSpeed ?? 1).toFixed(2)}×</em></span>
+            <input type="range" min={25} max={400} step={5} value={Math.round((effective.animationSpeed ?? 1) * 100)}
+              disabled={motionOff} data-testid="motif-speed"
+              onChange={e => set({ animationSpeed: Number(e.target.value) / 100 })} /></label>
+        )}
+
+        {isReveal && (
+          <label className="surface-dial surface-motif-repeat">
+            <span className="surface-dial-label">Repeat</span>
+            <span>
+              <input type="checkbox" checked={effective.animationRepeat ?? false}
+                disabled={motionOff} data-testid="motif-repeat"
+                onChange={e => set({ animationRepeat: e.target.checked })} />
+              <em>{effective.animationRepeat ? 'Loops' : 'Draws once, then rests complete'}</em>
+            </span></label>
+        )}
 
         <label className="surface-dial"><span className="surface-dial-label">Colour</span>
           <select value={effective.ink ?? 'accent'} disabled={disabled || effective.id === 'none'} data-testid="motif-ink"
@@ -1952,6 +1997,7 @@ function LooksStrip({
       texture: look.surface.texture,
       translucency: look.surface.translucency,
       windowVibrancy: look.surface.windowVibrancy,
+      animateMotifs: look.surface.animateMotifs,
       motif: look.surface.motif
     });
     void update({
@@ -2301,6 +2347,7 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
       texture: opts.texture,
       translucency: opts.translucency,
       windowVibrancy: opts.windowVibrancy,
+      animateMotifs: opts.animateMotifs,
       motif: opts.motif
     });
   const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
@@ -2395,6 +2442,7 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
           />
         )}
         <MotifPanel
+          animationsEnabled={surfaceOpts.animateMotifs}
           pack={activeSurfacePack}
           motif={surfaceOpts.motif}
           disabled={surfaceId === 'flat'}
@@ -2434,6 +2482,17 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
             const updated = { ...surfaceOpts, texture: next };
             applySurface(surfaceId, updated);
             void update({ appearance: { surface: { texture: next } } });
+          }}
+        />
+        <Toggle
+          label="Animate motifs"
+          description="Let the motif move — draw itself, shimmer, glow, and the rest. The style is chosen per motif below. Always off when the OS asks for reduced motion."
+          checked={surfaceOpts.animateMotifs}
+          testId="surface-animate-toggle"
+          onChange={next => {
+            const updated = { ...surfaceOpts, animateMotifs: next };
+            applySurface(surfaceId, updated);
+            void update({ appearance: { surface: { animateMotifs: next } } });
           }}
         />
         <Toggle

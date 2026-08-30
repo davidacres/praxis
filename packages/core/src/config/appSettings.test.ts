@@ -29,7 +29,8 @@ test('sanitize fills surface defaults for a brand-new profile', () => {
     intensity: 1,
     translucency: true,
     texture: true,
-    windowVibrancy: false
+    windowVibrancy: false,
+    animateMotifs: true
   });
   assert.deepEqual(settings.appearance.customSurfacePacks, []);
   assert.ok(settings.appearance.installedSurfacePackIds.includes('flat'));
@@ -222,6 +223,43 @@ test('a motif corner list is filtered to the real corners, de-duplicated, and ca
     settings.appearance.surface.motif!.anchors,
     ['top-right', 'bottom-left', 'top-left', 'bottom-right']
   );
+});
+
+test('an unknown motif animation falls back rather than reaching CSS', () => {
+  // The style names a keyframe block and is written to a `data-motif-anim`
+  // attribute, so — like the blend keywords — only a known literal survives.
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: { motif: { id: 'mandelbrot', scale: 62, opacity: 0.3, animation: 'rm -rf' } }
+    }
+  });
+  assert.equal(settings.appearance.surface.motif!.animation, undefined);
+});
+
+test('a motif animation style, speed and repeat round-trip and clamp', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: {
+        motif: {
+          id: 'mandelbrot', scale: 62, opacity: 0.3,
+          animation: 'draw', animationSpeed: 99, animationRepeat: true
+        }
+      }
+    }
+  });
+  const motif = settings.appearance.surface.motif!;
+  assert.equal(motif.animation, 'draw');
+  assert.equal(motif.animationSpeed, 4); // clamped down from 99
+  assert.equal(motif.animationRepeat, true);
+});
+
+test('motif animation is gated by a master switch that defaults on', () => {
+  assert.equal(DEFAULT_APP_SETTINGS.appearance.surface.animateMotifs, true);
+  const off = sanitizeAppSettings({ appearance: { surface: { animateMotifs: false } } });
+  assert.equal(off.appearance.surface.animateMotifs, false);
+  // A non-boolean must not read as "on" by accident.
+  const junk = sanitizeAppSettings({ appearance: { surface: { animateMotifs: 'yes' } } });
+  assert.equal(junk.appearance.surface.animateMotifs, true);
 });
 
 test('an all-invalid motif corner list is dropped so the singular anchor still applies', () => {

@@ -216,6 +216,11 @@ export interface SurfaceOpts {
   /** Opt in to native OS window vibrancy behind a glass pack (phase 3+). */
   windowVibrancy: boolean;
   /**
+   * Master gate on motif motion, the way `texture` gates the grain. The motif's
+   * own `animation` style picks which movement; this switches all of it off.
+   */
+  animateMotifs: boolean;
+  /**
    * The user's Motif override. The motif is independent of the material: a pack
    * ships a sensible default, and anything set here wins, so a hexagon can be
    * worn over any theme *and* any material. Undefined fields fall back to the
@@ -224,7 +229,7 @@ export interface SurfaceOpts {
   motif?: Partial<SurfacePatternSpec>;
 }
 
-const DEFAULT_SURFACE_OPTS: SurfaceOpts = { intensity: 1, texture: true, translucency: true, windowVibrancy: false };
+const DEFAULT_SURFACE_OPTS: SurfaceOpts = { intensity: 1, texture: true, translucency: true, windowVibrancy: false, animateMotifs: true };
 
 export function getInitialSurfaceId(): string {
   const saved = localStorage.getItem('tm-surface-id');
@@ -240,6 +245,7 @@ export function getInitialSurfaceOpts(): SurfaceOpts {
       texture: typeof raw.texture === 'boolean' ? raw.texture : DEFAULT_SURFACE_OPTS.texture,
       translucency: typeof raw.translucency === 'boolean' ? raw.translucency : DEFAULT_SURFACE_OPTS.translucency,
       windowVibrancy: typeof raw.windowVibrancy === 'boolean' ? raw.windowVibrancy : DEFAULT_SURFACE_OPTS.windowVibrancy,
+      animateMotifs: typeof raw.animateMotifs === 'boolean' ? raw.animateMotifs : DEFAULT_SURFACE_OPTS.animateMotifs,
       motif: raw.motif && typeof raw.motif === 'object' ? raw.motif : undefined
     };
   } catch {
@@ -254,6 +260,18 @@ function prefersReducedTransparency(): boolean {
   return typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-transparency: reduce)').matches;
+}
+
+/**
+ * Motif motion is gated HERE rather than in CSS because the reveal styles live
+ * inside the motif's own SVG, and a `prefers-reduced-motion` query inside an
+ * SVG-as-image is NOT honoured by the renderer — verified, not assumed. Never
+ * baking the animation is the only way to respect the preference.
+ */
+export function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /**
@@ -297,17 +315,32 @@ const WATERMARK_KEYS = [
   '--surface-watermark-blend',
   '--surface-watermark-repeat',
   '--surface-watermark-attachment',
-  '--surface-watermark-position'
+  '--surface-watermark-position',
+  '--surface-watermark-ink',
+  '--surface-watermark-anim',
+  '--surface-watermark-filter',
+  '--surface-watermark-mask',
+  '--surface-watermark-mask-size',
+  '--surface-watermark-mask-repeat',
+  '--surface-watermark-mask-position',
+  '--surface-watermark-flicker'
 ] as const;
 
 /** Renders the effective motif into the `--surface-watermark-*` properties. */
 function paintSurfacePattern(
   pack: SurfacePackDefinition,
   textureOn: boolean,
-  motif: Partial<SurfacePatternSpec> | undefined
+  motif: Partial<SurfacePatternSpec> | undefined,
+  animateMotifs: boolean
 ): void {
   const root = document.documentElement;
-  const spec = effectiveSurfacePattern(pack, motif);
+  const base = effectiveSurfacePattern(pack, motif);
+  // The single place motion is decided. Forcing the style to `none` — rather
+  // than resolving it and disabling it downstream — is what keeps a still motif
+  // byte-identical to the pre-animation render, and is the only thing the
+  // reveal styles will respect (see `prefersReducedMotion`).
+  const motionOn = animateMotifs && !prefersReducedMotion();
+  const spec = base && !motionOn ? { ...base, animation: 'none' as const } : base;
   // The letterpress edge needs a tone that contrasts with the ground, so it
   // follows the mode unless the user pinned a colour: a highlight on dark, a
   // shadow on light. Resolved here because the pattern library is mode-blind.
@@ -338,6 +371,7 @@ function paintSurfacePattern(
     for (const key of WATERMARK_KEYS) {
       root.style.removeProperty(key);
     }
+    root.removeAttribute('data-motif-anim');
     return;
   }
   root.style.setProperty('--surface-watermark-image', resolved.image);
@@ -347,10 +381,30 @@ function paintSurfacePattern(
   root.style.setProperty('--surface-watermark-repeat', resolved.repeat);
   root.style.setProperty('--surface-watermark-attachment', resolved.attachment);
   root.style.setProperty('--surface-watermark-position', resolved.position);
+  // The ink is baked into the SVG, but a CSS glow needs it too — and it cannot
+  // read a `var()` out of a data URI, so it is published as its own token.
+  root.style.setProperty('--surface-watermark-ink', patternInk);
+  root.style.setProperty('--surface-watermark-anim', resolved.anim);
+  root.style.setProperty('--surface-watermark-filter', resolved.filter);
+  root.style.setProperty('--surface-watermark-mask', resolved.mask);
+  root.style.setProperty('--surface-watermark-mask-size', resolved.maskSize);
+  root.style.setProperty('--surface-watermark-mask-repeat', resolved.maskRepeat);
+  root.style.setProperty('--surface-watermark-mask-position', resolved.maskPosition);
+  root.style.setProperty('--surface-watermark-flicker', resolved.flicker);
+  if (resolved.animation === 'none') {
+    root.removeAttribute('data-motif-anim');
+  } else {
+    root.setAttribute('data-motif-anim', resolved.animation);
+  }
 }
 
 /** The pack + gates most recently applied, so a theme change can re-tint. */
-let activeSurface: { pack: SurfacePackDefinition; textureOn: boolean; motif?: Partial<SurfacePatternSpec> } | undefined;
+let activeSurface: {
+  pack: SurfacePackDefinition;
+  textureOn: boolean;
+  motif?: Partial<SurfacePatternSpec>;
+  animateMotifs: boolean;
+} | undefined;
 
 /**
  * Re-bakes the active pattern against the current theme's tokens. Wired to
@@ -358,7 +412,9 @@ let activeSurface: { pack: SurfacePackDefinition; textureOn: boolean; motif?: Pa
  */
 export function refreshSurfacePattern(): void {
   if (activeSurface) {
-    paintSurfacePattern(activeSurface.pack, activeSurface.textureOn, activeSurface.motif);
+    paintSurfacePattern(
+      activeSurface.pack, activeSurface.textureOn, activeSurface.motif, activeSurface.animateMotifs
+    );
   }
 }
 
@@ -426,13 +482,13 @@ export function applySurfacePack(packId: string, opts: SurfaceOpts = DEFAULT_SUR
   // The pattern is data (see surfacePatterns.ts) — resolve it to the watermark
   // properties every pane and the splash already read. Adding a material never
   // needs new CSS, only a new entry in the pattern library or a user's pick.
-  activeSurface = { pack, textureOn: opts.texture, motif: opts.motif };
-  paintSurfacePattern(pack, opts.texture, opts.motif);
+  activeSurface = { pack, textureOn: opts.texture, motif: opts.motif, animateMotifs: opts.animateMotifs };
+  paintSurfacePattern(pack, opts.texture, opts.motif, opts.animateMotifs);
 
   localStorage.setItem('tm-surface-id', pack.id);
   localStorage.setItem('tm-surface-opts', JSON.stringify({
     intensity, texture: opts.texture, translucency: opts.translucency,
-    windowVibrancy: opts.windowVibrancy, motif: opts.motif
+    windowVibrancy: opts.windowVibrancy, animateMotifs: opts.animateMotifs, motif: opts.motif
   }));
   window.dispatchEvent(new CustomEvent('tm-surface-changed', { detail: pack.id }));
   return pack;
