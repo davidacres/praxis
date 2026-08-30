@@ -1650,7 +1650,15 @@ function MotifPanel({
       <div className="surface-dials surface-motif-dials">
         <label className="surface-dial"><span className="surface-dial-label">Pattern</span>
           <select value={effective.id} disabled={disabled} data-testid="motif-pattern"
-            onChange={e => set({ id: e.target.value })}>
+            onChange={e => {
+              // Adopt the incoming pattern's own line weight. The library spans
+              // an order of magnitude — 0.012 for the Mandelbrot emblem against
+              // 0.1 for weave — because a mark drawn once at the full spread
+              // needs a far finer line than a lattice cell. Carrying the old
+              // value across renders the new motif unusably heavy or invisible.
+              const next = findSurfacePattern(e.target.value);
+              set({ id: e.target.value, ...(next ? { weight: next.weight } : {}) });
+            }}>
             {SURFACE_PATTERNS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select></label>
 

@@ -136,9 +136,13 @@ const HEX_RATIO = 3 / Math.sqrt(3);
    ───────────────────────────────────────────────────────────────────────── */
 
 /** The plane window the mark is drawn in: the whole set, plus a little air. */
-const MANDELBROT_VIEW = { x0: -2.12, x1: 0.42, y0: -0.98, y1: 0.98 };
+const MANDELBROT_VIEW = { x0: -2.08, x1: 0.4, y0: -1, y1: 1 };
 /** Cubic segments approximating the cardioid. The cusp falls out for free: c'(0) = 0. */
 const CARDIOID_SEGMENTS = 24;
+/** Highest denominator decorated on the cardioid. Higher q = a finer-encrusted edge. */
+const MAX_CARDIOID_Q = 8;
+/** Below this on-screen radius a bulb is noise, so it is culled rather than drawn. */
+const MIN_BULB_PX = 1.1;
 
 function cardioidPoint(t: number): [number, number] {
   return [Math.cos(t) / 2 - Math.cos(2 * t) / 4, Math.sin(t) / 2 - Math.sin(2 * t) / 4];
@@ -150,18 +154,48 @@ function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
 }
 
+interface Bulb { cx: number; cy: number; r: number; root: number }
+
+/**
+ * The bulbs growing off one disc. A component of radius `r` carries, at each
+ * rotation number p/q, a bulb of radius `r·sin(πp/q)/q²` tangent to it at angle
+ * `2πp/q` measured from where it meets its OWN parent. Applying that to the
+ * children too is what encrusts the boundary — a single generation reads as a
+ * circle with dots, which is the whole difference between this and a blob.
+ */
+function bulbsOn(disc: Bulb, maxQ: number, depth: number, scale: number): Bulb[] {
+  if (depth <= 0) return [];
+  const out: Bulb[] = [];
+  for (let q = 2; q <= maxQ; q += 1) {
+    for (let p = 1; p < q; p += 1) {
+      if (gcd(p, q) !== 1) continue;
+      const angle = disc.root + (2 * Math.PI * p) / q;
+      const r = (disc.r * Math.sin((Math.PI * p) / q)) / (q * q);
+      if (r * scale < MIN_BULB_PX) continue;
+      // The child's own root points back at this parent.
+      const child: Bulb = {
+        cx: disc.cx + Math.cos(angle) * (disc.r + r),
+        cy: disc.cy + Math.sin(angle) * (disc.r + r),
+        r,
+        root: angle + Math.PI
+      };
+      out.push(child, ...bulbsOn(child, Math.min(maxQ, 4), depth - 1, scale));
+    }
+  }
+  return out;
+}
+
 /**
  * The Mandelbrot silhouette, split into the order it should be built in:
- * cardioid first, then the bulbs by period, then the period-2 disc's own
- * decorations, then the antenna and its period-3 island. `iterate` reveals
- * these in exactly this order, so the mark assembles as if computing itself.
+ * cardioid, then the bulbs by period, then the encrusting sub-bulbs, then the
+ * antennae. `iterate` reveals these in exactly this order, so the mark
+ * assembles as if computing itself.
  */
 function mandelbrotParts(ink: string, weight: number, w: number, h: number, fill: number): string[] {
   const { x0, x1, y0, y1 } = MANDELBROT_VIEW;
   const planeW = x1 - x0;
   const planeH = y1 - y0;
   const s = Math.min(w / planeW, h / planeH);
-  // Centre the mark in the box, whichever axis it is letterboxed on.
   const ox = (w - planeW * s) / 2 - x0 * s;
   const oy = (h - planeH * s) / 2 + y1 * s;
   const n = (value: number) => Math.round(value * 100) / 100;
@@ -171,18 +205,19 @@ function mandelbrotParts(ink: string, weight: number, w: number, h: number, fill
   // the plane unit rather than the box — one weight then reads the same whether
   // the mark is a 62px tile or a 900px corner watermark.
   const sw = Math.max(0.4, weight * s);
-  const solid = fill > 0 ? ` fill="${ink}" fill-opacity="${Math.min(0.5, fill * 0.5)}"` : ' fill="none"';
+  // A solid emblem floods the whole body of the set, where a lattice's `fill`
+  // only tints a few scattered cells among many. The same dial therefore has to
+  // respond far more gently here, or a mid setting swamps the pane.
+  const solid = fill > 0 ? ` fill="${ink}" fill-opacity="${Math.min(0.22, fill * 0.22)}"` : ' fill="none"';
   const stroke = `stroke="${ink}" stroke-width="${n(sw)}" stroke-linecap="round" stroke-linejoin="round"`;
+  const hair = `fill="none" stroke="${ink}" stroke-width="${n(Math.max(0.3, sw * 0.62))}" stroke-linecap="round"`;
 
   // ── the main cardioid, as Hermite-derived cubics ──
   let d = '';
   for (let i = 0; i <= CARDIOID_SEGMENTS; i += 1) {
     const t = (i / CARDIOID_SEGMENTS) * Math.PI * 2;
     const [re, im] = cardioidPoint(t);
-    if (i === 0) {
-      d = `M${px(re)} ${py(im)}`;
-      continue;
-    }
+    if (i === 0) { d = `M${px(re)} ${py(im)}`; continue; }
     const prev = ((i - 1) / CARDIOID_SEGMENTS) * Math.PI * 2;
     const [pre, pim] = cardioidPoint(prev);
     const [dx0, dy0] = cardioidTangent(prev);
@@ -193,42 +228,53 @@ function mandelbrotParts(ink: string, weight: number, w: number, h: number, fill
   }
   const parts: string[] = [`<path d="${d}Z"${solid} ${stroke}/>`];
 
-  // ── bulbs on the cardioid, grouped by period so they reveal in order ──
-  const disc = (cx: number, cy: number, r: number) =>
-    `<circle cx="${px(cx)}" cy="${py(cy)}" r="${n(r * s)}"${solid} ${stroke}/>`;
-  for (let q = 2; q <= 6; q += 1) {
-    let group = '';
-    for (let bp = 1; bp < q; bp += 1) {
-      if (gcd(bp, q) !== 1) continue;
-      const t = (2 * Math.PI * bp) / q;
+  const disc = (b: Bulb) => `<circle cx="${px(b.cx)}" cy="${py(b.cy)}" r="${n(b.r * s)}"${solid} ${stroke}/>`;
+
+  // ── first generation on the cardioid, grouped by period so they reveal in order ──
+  const primary: Bulb[] = [];
+  for (let q = 2; q <= MAX_CARDIOID_Q; q += 1) {
+    const group: Bulb[] = [];
+    for (let p = 1; p < q; p += 1) {
+      if (gcd(p, q) !== 1) continue;
+      const t = (2 * Math.PI * p) / q;
       const [re, im] = cardioidPoint(t);
       const [tx, ty] = cardioidTangent(t);
       const len = Math.hypot(tx, ty) || 1;
       // Outward normal: the tangent turned −90°, which points away from the body.
-      const r = Math.sin((Math.PI * bp) / q) / (q * q);
-      group += disc(re + (ty / len) * r, im + (-tx / len) * r, r);
+      const nx = ty / len;
+      const ny = -tx / len;
+      const r = Math.sin((Math.PI * p) / q) / (q * q);
+      if (r * s < MIN_BULB_PX) continue;
+      group.push({ cx: re + nx * r, cy: im + ny * r, r, root: Math.atan2(ny, nx) + Math.PI });
     }
-    if (group) parts.push(group);
-  }
-
-  // ── the period-2 disc's own decorations, measured from where it attaches ──
-  const P2 = { cx: -1, cy: 0, r: 0.25 };
-  let secondary = '';
-  for (let q = 2; q <= 4; q += 1) {
-    for (let bp = 1; bp < q; bp += 1) {
-      if (gcd(bp, q) !== 1) continue;
-      const angle = (2 * Math.PI * bp) / q;
-      const r = (P2.r * Math.sin((Math.PI * bp) / q)) / (q * q);
-      secondary += disc(P2.cx + Math.cos(angle) * (P2.r + r), P2.cy + Math.sin(angle) * (P2.r + r), r);
+    if (group.length) {
+      primary.push(...group);
+      parts.push(group.map(disc).join(''));
     }
   }
-  parts.push(secondary);
 
-  // ── the antenna out to the tip at c = −2, and the period-3 island on it ──
-  parts.push(
-    `<path d="M${px(-1.4)} ${py(0)}H${px(-2)}" fill="none" ${stroke}/>` +
-    disc(-1.7549, 0, 0.032)
-  );
+  // ── the encrusting generations, which are what stop it reading as a circle ──
+  const secondary = primary.flatMap(b => bulbsOn(b, b.r > 0.05 ? 5 : 3, b.r > 0.05 ? 2 : 1, s));
+  parts.push(secondary.map(disc).join(''));
+
+  // ── antennae: the spokes off each bulb, plus the main one out to the tip ──
+  const spokes = [...primary, ...secondary]
+    // Big enough to carry one, and not the period-2 disc — the needle is its antenna.
+    .filter(b => b.r * s > MIN_BULB_PX * 3.2 && b.r < 0.15)
+    .map(b => {
+      // Straight out along the bulb's axis, away from where it joins its parent.
+      // Kept close to the bulb's own size: a longer spoke reads as a stray
+      // whisker leaving the mark rather than as part of its silhouette.
+      const a = b.root + Math.PI;
+      const from = b.r * 0.92;
+      const to = b.r * 2.2;
+      return `<path d="M${px(b.cx + Math.cos(a) * from)} ${py(b.cy + Math.sin(a) * from)}` +
+        `L${px(b.cx + Math.cos(a) * to)} ${py(b.cy + Math.sin(a) * to)}" ${hair}/>`;
+    }).join('');
+  // The needle along the real axis to the tip at c = −2, and its period-3 island.
+  const needle = `<path d="M${px(-1.4)} ${py(0)}H${px(-2)}" ${hair}/>` +
+    disc({ cx: -1.7549, cy: 0, r: 0.038, root: 0 });
+  parts.push(spokes + needle);
   return parts;
 }
 
@@ -349,8 +395,9 @@ const PATTERNS: SurfacePatternDefinition[] = [
     id: 'mandelbrot',
     name: 'Mandelbrot',
     fillable: true,
-    /** Follows the plane window's aspect (2.54 × 1.96) so the mark fills its box. */
-    tile: { width: 1, height: 0.772 },
+    /** Follows the plane window's aspect (2.48 × 2.0) so the mark fills its box
+     *  without clipping the antennae, which reach past the bulbs. */
+    tile: { width: 1, height: 0.806 },
     weight: 0.012,
     singular: true,
     parts: (ink, weight, w, h, fill = 0) => mandelbrotParts(ink, weight, w, h, fill),
