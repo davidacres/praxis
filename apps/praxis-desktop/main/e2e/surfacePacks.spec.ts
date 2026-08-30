@@ -186,18 +186,23 @@ test('solid cells scatter through a super-tile rather than repeating in step', a
   // not land in the same spot in every tile.
   await openSurface();
   await window.locator('[data-testid="motif-placement"]').selectOption('tile');
+  const width = async () => Number((await window.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-size').trim()))
+    .split('px')[0]);
+  const cell = Number(await window.locator('[data-testid="motif-scale"]').inputValue());
+
+  // Every dial round-trips through settings before the layer re-bakes, so poll
+  // for the repeat to actually collapse to one cell rather than reading the
+  // previous super-tile as the baseline — that race made this flake under load.
   await window.locator('[data-testid="motif-fill"]').fill('0');
-  const size = () => window.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-size').trim());
-  const plain = await size();
+  await expect.poll(width).toBe(cell);
 
   await window.locator('[data-testid="motif-fill"]').fill('51');
-  await expect.poll(size).not.toBe(plain);
+  // 3 cells wide, so the repeat is three times the plain tile's width.
+  await expect.poll(width).toBe(cell * 3);
   const tile = await window.evaluate(() =>
     decodeURIComponent(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-image')));
   expect(tile).toContain('fill-opacity="0.5"');
-  // 3 cells wide, so the repeat is three times the plain tile's width.
-  expect(Number((await size()).split('px')[0])).toBeCloseTo(Number(plain.split('px')[0]) * 3, 0);
 });
 
 test('the letterpress outline is opt-in and draws a second offset line', async () => {
@@ -335,7 +340,11 @@ test('Repeat is what turns a one-shot reveal into a loop', async () => {
   await window.locator('[data-testid="motif-animation"]').selectOption('draw');
   expect(await watermarkSvg()).not.toContain('infinite');
 
-  await window.locator('[data-testid="motif-repeat"]').check();
+  // `.click()` rather than `.check()`: the Repeat row mounts only for a reveal
+  // style, so it can be re-created by the settings echo mid-action and `.check()`
+  // reads the fresh element as unchanged. `toBeChecked` retries past that.
+  await window.locator('[data-testid="motif-repeat"]').click();
+  await expect(window.locator('[data-testid="motif-repeat"]')).toBeChecked();
   expect(await watermarkSvg()).toContain('infinite');
 });
 
