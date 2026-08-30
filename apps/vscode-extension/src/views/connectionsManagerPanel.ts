@@ -6,7 +6,7 @@ import type {
   ConnectionCheck,
   TrackedBoard
 } from '@praxis/core';
-import { ConnectionStore } from '@praxis/core';
+import { ConnectionStore, LiveFolderService } from '@praxis/core';
 import type { BackendRouter } from '../backends/backendRouter';
 
 /**
@@ -435,6 +435,20 @@ export class ConnectionsManagerPanel implements vscode.Disposable {
       // left over from earlier builds that incorrectly synthesized them.
       if (connection.mode === 'userworkspace') {
         await this.prunePlaceholderTrackedBoards(connection.id);
+      }
+      // Persist a Live Folder connection's project identity into its plans
+      // folder (`board.praxis.json`) so it travels with the folder. Rebuild the
+      // cached service first so it writes the just-saved values. Best-effort.
+      if (connection.mode === 'livefolder') {
+        this.backendRouter.evictService(connection.id);
+        try {
+          const service = await this.backendRouter.serviceFor(connection.id);
+          if (service instanceof LiveFolderService) {
+            await service.syncBoardConfigToFolder({ includeAllowIssueCreation: true });
+          }
+        } catch {
+          // Folder unreadable / not a plans folder yet — nothing to sync.
+        }
       }
       // Auto-synthesize one board for modes without discoverable boards so
       // the explicit-assignment flow stays uniform.

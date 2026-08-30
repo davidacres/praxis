@@ -107,6 +107,7 @@ surface and host integrations. Last audited: 2026-08-23.
 | Feature | Extension | Desktop | Notes |
 |---|---|---|---|
 | Settings UI (appearance, behaviour) | ✓ | ✓ | VS Code settings vs in-app Settings page |
+| Workspace-first startup and restore | n/a | ✓ | Getting Started validates restore state, shows recent workspaces, and requires a workspace before project creation |
 | Theme switching | ✓ | ✓ | Extension follows VS Code theme; desktop has its own switcher |
 | Status bar (connection state) | ✓ | ✗ | |
 | Output / log panel | ✓ | ? | Desktop bottom panel has Output/Terminal tabs — shell only |

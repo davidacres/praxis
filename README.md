@@ -78,6 +78,12 @@ saved to a portable `.praxis-workspace.json` file, and re-opened. Exported files
 carry a `schemaVersion` and the Praxis versions that created and last saved them,
 and contain references only — never connection secrets.
 
+Desktop Settings → Startup includes **Reopen last workspace**. It restores the
+last valid workspace and durable project, board, or global view. When there is
+no valid open workspace, Praxis shows a full-window Getting Started experience
+for creating or opening one. Projects are always created inside the open
+workspace; the first project becomes its default.
+
 `@praxis/core` is the only package imported by both UIs. Each shell has its own React components and CSS — components in `vscode-extension/src/views/` are not reused by `frontend/src/`. Run `npm install` once at the repo root; the four workspaces share a hoisted `node_modules/`.
 
 ## What the extension includes

@@ -321,6 +321,9 @@ export class UserWorkspaceService implements IssueTrackerService {
       if (result.status === 'error') {
         throw new Error(result.message);
       }
+      // Make the folder self-describing: write board.praxis.json so the board's
+      // identity travels with the plans folder rather than living only here.
+      await service.syncBoardConfigToFolder();
       return createBoardSummary(created);
     } catch (error) {
       this.disposeBoardService(created.id);

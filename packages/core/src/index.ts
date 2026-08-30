@@ -19,6 +19,7 @@ export * from './ai/agentTypes';
 export * from './ai/agentWorkflowCatalog';
 export * from './ai/agentPrompt';
 export * from './ai/agentRuntime';
+export * from './ai/toolEventClassify';
 export * from './ai/tools';
 export * from './ai/aiReviewService';
 export * from './ai/deliveryWorkflow';
@@ -37,6 +38,7 @@ export * from './ai/aiSessionManager';
 export * from './backends/issueTrackerService';
 export * from './backends/stubBackendService';
 export * from './demo/demoService';
+export * from './livefolder/boardConfigFile';
 export * from './livefolder/liveFolderFs';
 export * from './livefolder/liveFolderService';
 export * from './livefolder/liveFolderWatch';
@@ -60,6 +62,7 @@ export * from './jira/jiraMcpConnectionResolver';
 export * from './jira/jiraService';
 export * from './git/gitGraph';
 export * from './git/gitParsing';
+export * from './git/gitWorktreeManager';
 
 // Host-agnostic helpers both UI surfaces use. These existed as byte-identical
 // copies inside the VS Code extension until those copies were deleted; they are

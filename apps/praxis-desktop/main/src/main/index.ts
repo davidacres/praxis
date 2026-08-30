@@ -154,8 +154,8 @@ function wantsWindowVibrancyAtLaunch(): boolean {
 function createMainWindow(): void {
   const vibrancy = wantsWindowVibrancyAtLaunch();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 840,
+    width: 1664,
+    height: 1092,
     minWidth: 720,
     minHeight: 480,
     icon: getDevAppIcon(),

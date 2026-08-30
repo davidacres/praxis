@@ -261,7 +261,9 @@ export interface AppIpc {
 export interface ProjectsIpc {
   list(): Promise<ProjectRecord[]>;
   get(projectId: string): Promise<ProjectRecord | undefined>;
-  create(input: CreateProjectInput): Promise<ProjectRecord>;
+  /** Creates a project and assigns it to an existing workspace atomically. */
+  create(input: CreateProjectInput, workspaceId: string): Promise<ProjectRecord>;
+  useExisting(projectId: string, workspaceId: string): Promise<ProjectRecord>;
   update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord>;
   inspectFolder(folderPath: string): Promise<FolderInspection>;
   attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;
@@ -344,8 +346,17 @@ export interface AiDelegateInput {
   goal?: string;
   /** Task overrides; any omitted field falls back to a default built from the issue. */
   task?: Partial<AgentTaskDefinition>;
-  /** Working directory the agent's local tools run in. Defaults to the app's cwd. */
+  /**
+   * Working directory the agent's local tools run in. Required for a full-tools
+   * session (the main process rejects the delegate otherwise); read-only and
+   * project-only sessions may omit it.
+   */
   workingDirectory?: string;
+  /**
+   * Run this session in a dedicated git worktree branched off `workingDirectory`'s
+   * current branch, instead of editing the working tree in place.
+   */
+  runInWorktree?: boolean;
   /** Provider override for this session; defaults to `settings.ai.activeProvider`. */
   provider?: AiProvider;
   /** Model id override for this session; omitted to use the selected provider's default. */
@@ -404,6 +415,11 @@ export interface AiIpc {
   abort(issueKey: string): Promise<void>;
   /** Sends a follow-up message and continues the existing recorded session. */
   continueSession(issueKey: string, message: string): Promise<void>;
+  /**
+   * Removes the git worktree a session was created in (branch and checkout).
+   * Fails if the session has no worktree or its task is still running.
+   */
+  removeWorktree(issueKey: string): Promise<void>;
   /** Switches the active phase of a session and continues it with that mode's contract. */
   switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
   /**

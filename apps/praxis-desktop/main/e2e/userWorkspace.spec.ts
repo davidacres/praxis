@@ -165,6 +165,8 @@ test('a missing workspace folder is marked and can be deleted from the sidebar',
 
   await window.reload();
   await dismissSplash(window);
+  await window.getByTestId('new-menu').click();
+  await window.getByTestId('new-session').click();
   const boardRow = window.locator('[data-testid="board-nav-item"]', { hasText: BOARD_NAME });
   await expect(boardRow).toBeVisible();
   await expect(boardRow.locator('[data-testid="board-missing-icon"]')).toBeVisible();

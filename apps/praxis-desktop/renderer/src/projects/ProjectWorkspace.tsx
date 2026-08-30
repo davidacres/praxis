@@ -1,19 +1,60 @@
-import type { Board, ProjectRecord } from '@praxis/core';
+import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
+import { PROJECT_BRIEF_FIELDS } from '@praxis/core/out/projects/projectTemplates';
 import { Icon } from '../ui/Icon';
+import { agentStateLabel, isTerminalAgentState } from '../ai/aiSessionState';
 
-export function ProjectWorkspace({ project, boards, onOpenBoard, onOpenGit }: { project: ProjectRecord; boards: Board[]; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
-  const projectBoards = boards.filter(board => board.connectionId === `project:${project.id}` || project.linkedBoards.some(link => link.connectionId === board.connectionId && link.boardId === board.id));
-  const defaultBoard = projectBoards.find(board => board.id === project.defaultBoardId);
-  const linkedBoards = projectBoards.filter(board => board.id !== defaultBoard?.id);
-  const hasWorkspace = Boolean(project.workspaceFolder);
-  const hasGit = project.folderInspection?.hasGit;
-  return <main className="project-workspace" data-testid="project-workspace">
-    <header className="project-workspace-header"><div><span className="project-type-badge">{project.type}</span><h1>{project.name}</h1><p>{project.key} · {hasWorkspace ? project.workspaceFolder : 'No workspace folder attached'}</p></div><button className="btn" onClick={onOpenGit} title={!hasWorkspace ? 'Set up a Git workspace for this project' : undefined}><Icon name="git-branch" size={14} /> Git Graph</button></header>
-    <section className="project-workspace-section" aria-labelledby="project-work-heading"><div className="section-heading"><div><span className="git-eyebrow">PROJECT WORK</span><h2 id="project-work-heading">Boards</h2></div><span className="project-workspace-count">{projectBoards.length}</span></div><div className="project-board-grid">
-      {defaultBoard && <button className="project-board-card project-board-card-primary" data-testid="project-work-board" onClick={() => onOpenBoard(defaultBoard.id)}><span className="project-board-card-icon"><Icon name="columns" size={20} /></span><span><strong>{defaultBoard.name}</strong><small>Default board · {project.workItems.length} starter items</small></span><Icon name="chevron-right" size={16} /></button>}
-      {linkedBoards.map(board => <button className="project-board-card" data-testid="project-linked-board" key={`${board.connectionId}:${board.id}`} onClick={() => onOpenBoard(board.id)}><span className="project-board-card-icon"><Icon name="link" size={18} /></span><span><strong>{board.name}</strong><small>Linked board</small></span><Icon name="chevron-right" size={16} /></button>)}
-      {projectBoards.length === 0 && <div className="project-workspace-empty">This project does not have a board yet.</div>}
-    </div></section>
-    <section className="project-workspace-section" aria-labelledby="project-git-heading"><div className="section-heading"><div><span className="git-eyebrow">REPOSITORY TOOLS</span><h2 id="project-git-heading">Git</h2></div></div><button className="project-git-card" data-testid="project-git-card" onClick={onOpenGit}><span className="project-git-card-icon"><Icon name="git-branch" size={21} /></span><span><strong>{!hasWorkspace ? 'Attach a workspace to enable Git' : hasGit ? 'Open Git Graph and diffs' : 'Set up Git for this workspace'}</strong><small>{!hasWorkspace ? 'Repository history belongs to a project folder.' : hasGit ? 'Branches, history, changes, and conflicts' : 'Praxis will check the folder and offer to initialize Git.'}</small></span><Icon name="chevron-right" size={17} /></button></section>
+function relativeDate(value: string | undefined): string {
+  if (!value) return 'No activity yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No activity yet';
+  const days = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 30) return `${days} days ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function isComplete(status: string): boolean {
+  const value = status.toLowerCase();
+  return value.includes('done') || value.includes('complete');
+}
+
+export function ProjectWorkspace({ project, sessions }: { project: ProjectRecord; sessions: AgentSessionRecord[] }) {
+  const projectKeys = new Set(project.workItems.map(item => item.key));
+  const projectSessions = sessions.filter(session => projectKeys.has(session.issueKey) || Boolean(project.workspaceFolder && session.workingDirectory === project.workspaceFolder));
+  const activeSessions = projectSessions.filter(session => !isTerminalAgentState(session.state));
+  const completedItems = project.workItems.filter(item => isComplete(item.status)).length;
+  const briefFields = PROJECT_BRIEF_FIELDS[project.type];
+  const completedBrief = briefFields.filter(field => Boolean(project.brief[field.key]?.trim())).length;
+  const totalSteps = projectSessions.reduce((sum, session) => sum + session.stepCount, 0);
+  const latestItem = [...project.workItems].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const latestSession = [...projectSessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+  const lastActivity = [project.updatedAt, latestItem?.updatedAt, latestSession?.startedAt].filter(Boolean).sort().at(-1);
+  const statusCounts = project.workflowStages.map(stage => ({ name: stage.name, count: project.workItems.filter(item => item.status.toLowerCase() === stage.name.toLowerCase()).length }));
+  const maxStatusCount = Math.max(1, ...statusCounts.map(item => item.count));
+  const activity = [
+    ...project.workItems.map(item => ({ date: item.updatedAt, icon: isComplete(item.status) ? 'check-square' as const : 'ticket' as const, title: item.summary, detail: `${item.key} · ${item.status}` })),
+    ...projectSessions.map(session => ({ date: session.startedAt, icon: 'chats' as const, title: session.title || session.issueKey, detail: `AI session · ${agentStateLabel(session.state)}` }))
+  ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  return <main className="project-dashboard" data-testid="project-dashboard">
+    <header className="project-dashboard-header">
+      <div><span className="project-type-badge">{project.type}</span><h1>{project.name}</h1><p>{project.key} · {project.purpose || 'A focused project space for planning, delivery, and learning.'}</p></div>
+      <div className="project-dashboard-updated"><span>LAST ACTIVITY</span><strong>{relativeDate(lastActivity)}</strong></div>
+    </header>
+
+    <section className="project-dashboard-metrics" aria-label="Project health">
+      <article><span className="project-dashboard-metric-icon"><Icon name="ticket" size={16} /></span><div><small>WORK ITEMS</small><strong>{project.workItems.length}</strong><em>{completedItems} complete</em></div></article>
+      <article><span className="project-dashboard-metric-icon"><Icon name="target" size={16} /></span><div><small>BRIEF READY</small><strong>{completedBrief}/{briefFields.length}</strong><em>{completedBrief === briefFields.length ? 'Fully shaped' : 'Sections answered'}</em></div></article>
+      <article><span className="project-dashboard-metric-icon"><Icon name="chats" size={16} /></span><div><small>SESSIONS</small><strong>{projectSessions.length}</strong><em>{activeSessions.length ? `${activeSessions.length} active now` : 'No active sessions'}</em></div></article>
+      <article><span className="project-dashboard-metric-icon"><Icon name="zap" size={16} /></span><div><small>AI STEPS</small><strong>{totalSteps.toLocaleString()}</strong><em>{project.defaultAiToolMode === 'project-only' ? 'Project tools' : 'Configured tools'}</em></div></article>
+    </section>
+
+    <div className="project-dashboard-grid">
+      <section className="project-dashboard-card project-dashboard-progress" aria-labelledby="project-progress-title"><div className="project-dashboard-card-heading"><div><span className="git-eyebrow">MOMENTUM</span><h2 id="project-progress-title">Work progress</h2></div><span>{completedItems}/{project.workItems.length} complete</span></div><div className="project-dashboard-bars">{statusCounts.map(item => <div className="project-dashboard-bar-row" key={item.name}><span>{item.name}</span><div><i style={{ width: `${(item.count / maxStatusCount) * 100}%` }} /></div><strong>{item.count}</strong></div>)}</div>{project.workItems.length === 0 && <p className="project-dashboard-empty">Work items will appear here as the project takes shape.</p>}</section>
+      <section className="project-dashboard-card project-dashboard-brief" aria-labelledby="project-brief-title"><div className="project-dashboard-card-heading"><div><span className="git-eyebrow">NORTH STAR</span><h2 id="project-brief-title">Project brief</h2></div><span>{completedBrief}/{briefFields.length}</span></div><p>{project.purpose || 'Add a purpose in project details to keep the team aligned.'}</p><div className="project-dashboard-brief-list">{briefFields.slice(0, 4).map(field => <div key={field.key}><span className={project.brief[field.key]?.trim() ? 'is-ready' : undefined}><Icon name={project.brief[field.key]?.trim() ? 'check' : 'dot'} size={12} /></span><strong>{field.label}</strong><small>{project.brief[field.key]?.trim() || 'Not answered yet'}</small></div>)}</div></section>
+      <section className="project-dashboard-card project-dashboard-activity" aria-labelledby="project-activity-title"><div className="project-dashboard-card-heading"><div><span className="git-eyebrow">SIGNALS</span><h2 id="project-activity-title">Recent activity</h2></div><span>{activity.length ? 'Latest' : 'Waiting'}</span></div>{activity.length ? <div className="project-dashboard-activity-list">{activity.map(item => <div key={`${item.date}-${item.title}`}><span><Icon name={item.icon} size={13} /></span><div><strong>{item.title}</strong><small>{item.detail}</small></div><time>{relativeDate(item.date)}</time></div>)}</div> : <p className="project-dashboard-empty">No project activity yet. Start with a work item or an AI session.</p>}</section>
+      <section className="project-dashboard-card project-dashboard-sessions" aria-labelledby="project-sessions-title"><div className="project-dashboard-card-heading"><div><span className="git-eyebrow">RUNTIME</span><h2 id="project-sessions-title">Sessions</h2></div><span>{activeSessions.length ? `${activeSessions.length} active` : 'Quiet'}</span></div>{projectSessions.length ? <div className="project-dashboard-session-list">{projectSessions.slice(0, 4).map(session => <div key={session.sessionId}><span className={isTerminalAgentState(session.state) ? undefined : 'is-live'}><Icon name="chats" size={13} /></span><div><strong>{session.title || session.issueKey}</strong><small>{agentStateLabel(session.state)} · {session.stepCount} steps</small></div><time>{relativeDate(session.startedAt)}</time></div>)}</div> : <div className="project-dashboard-empty project-dashboard-empty-session"><Icon name="chats" size={22} /><p>Sessions will show up here when work begins.</p></div>}</section>
+    </div>
   </main>;
 }

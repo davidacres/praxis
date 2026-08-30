@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { readBoardConfigFile, writeBoardConfigFile, type BoardConfigFile } from './boardConfigFile';
 import { liveFolderFs } from './liveFolderFs';
 import { liveFolderWatch, type LiveFolderWatcher } from './liveFolderWatch';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
@@ -225,6 +226,8 @@ export class LiveFolderService implements IssueTrackerService {
   private issues: LiveIssue[] = [];
   private projectKey = '';
   private projectName = '';
+  /** `board.praxis.json` from the primary plans root — overrides the connection's settings. */
+  private boardConfig: BoardConfigFile = {};
   private plansRootPath?: string;
   /** The resolved directory containing feature-NN-* folders (may differ from plansRootPath). */
   private featuresRootPath?: string;
@@ -253,6 +256,42 @@ export class LiveFolderService implements IssueTrackerService {
   public readonly onDidReceiveExternalComment: Event<ExternalCommentEvent> = this._onDidReceiveExternalComment.event;
 
   public constructor(private readonly configStore: LiveFolderConfigProvider) {}
+
+  /** `board.praxis.json` wins over the connection setting when it specifies a value. */
+  private allowsIssueCreation(): boolean {
+    return this.boardConfig.allowIssueCreation ?? this.configStore.getLiveFolderAllowIssueCreation();
+  }
+
+  /**
+   * Materialize the connection's project identity into `board.praxis.json` in the
+   * plans root so it travels with the folder. Called by the create-board and
+   * connection-edit flows so the file stays in sync with what the user set.
+   *
+   * `allowIssueCreation` is only written when the caller says it is a real
+   * per-board setting (the desktop connection form) — never from the user
+   * workspace path, where it is a single app-wide toggle.
+   */
+  public async syncBoardConfigToFolder(options?: { includeAllowIssueCreation?: boolean }): Promise<void> {
+    await this.ensureLoaded();
+    if (!this.plansRootPath) {
+      return;
+    }
+    const next: BoardConfigFile = {
+      projectKey: this.configStore.getLiveFolderProjectKey() || undefined,
+      projectName: this.configStore.getLiveFolderProjectName() || undefined,
+      ...(options?.includeAllowIssueCreation
+        ? { allowIssueCreation: this.configStore.getLiveFolderAllowIssueCreation() }
+        : {})
+    };
+    const configFilePath = path.join(this.plansRootPath, 'board.praxis.json');
+    this.recentWrites.add(configFilePath);
+    setTimeout(() => this.recentWrites.delete(configFilePath), 2000);
+    await writeBoardConfigFile(this.plansRootPath, next);
+    this.boardConfig = await readBoardConfigFile(this.plansRootPath);
+    this.projectKey = this.boardConfig.projectKey ?? (this.configStore.getLiveFolderProjectKey() || 'LIVE');
+    this.projectName =
+      this.boardConfig.projectName ?? (this.configStore.getLiveFolderProjectName() || 'Live Folder');
+  }
 
   // ── Lifecycle ───────────────────────────────────────────────────
 
@@ -286,7 +325,7 @@ export class LiveFolderService implements IssueTrackerService {
       await this.ensureLoaded();
       return {
         status: 'ok',
-        message: `Live Folder: ${this.issues.length} items from ${this.plansRootPath ?? '(not set)'} (${this.configStore.getLiveFolderAllowIssueCreation() ? 'issue creation enabled' : 'issue creation disabled'})`,
+        message: `Live Folder: ${this.issues.length} items from ${this.plansRootPath ?? '(not set)'} (${this.allowsIssueCreation() ? 'issue creation enabled' : 'issue creation disabled'})`,
         toolCount: 0,
         projectCount: 1
       };
@@ -467,7 +506,7 @@ export class LiveFolderService implements IssueTrackerService {
 
   public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
     await this.ensureLoaded();
-    if (!this.configStore.getLiveFolderAllowIssueCreation()) {
+    if (!this.allowsIssueCreation()) {
       throw new Error(LIVE_FOLDER_CREATION_DISABLED_ERROR);
     }
     // Multi-root v1: writes always land in the primary root. Refuse loudly when
@@ -944,6 +983,14 @@ export class LiveFolderService implements IssueTrackerService {
       this.featuresRootPath = parsed.featuresRootPath;
     }
 
+    // A `board.praxis.json` in the primary plans root overrides the connection's
+    // project identity so it travels with the folder. Re-read on every load so
+    // an external edit to the file is picked up on the next reload.
+    this.boardConfig = await readBoardConfigFile(this.plansRootPath);
+    this.projectKey = this.boardConfig.projectKey ?? (this.configStore.getLiveFolderProjectKey() || 'LIVE');
+    this.projectName =
+      this.boardConfig.projectName ?? (this.configStore.getLiveFolderProjectName() || 'Live Folder');
+
     // Multi-board discovery: every other plans root under the configured folder
     // becomes its own board. Extra roots are parsed read-only (no template
     // upgrade writes) so pointing at a parent folder never mutates sibling
@@ -967,6 +1014,15 @@ export class LiveFolderService implements IssueTrackerService {
       // Discovery failure leaves the primary root as the only board.
     }
 
+    // Each secondary root may carry its own `board.praxis.json`; its
+    // `projectName` names that board. Issue keys still share the primary
+    // `projectKey` (per-root keys are a separate change).
+    const rootConfigs = await Promise.all(
+      rootParses.map((rootParsed, index) =>
+        index === 0 ? Promise.resolve(this.boardConfig) : readBoardConfigFile(rootParsed.plansRootPath)
+      )
+    );
+
     this.issuesByRoot.clear();
     this.boardRoots = rootParses.map((rootParsed, index) => {
       this.issuesByRoot.set(rootParsed.plansRootPath, this.buildIssueModel(rootParsed));
@@ -980,9 +1036,10 @@ export class LiveFolderService implements IssueTrackerService {
           featuresRootPath: rootParsed.featuresRootPath
         };
       }
+      const rootName = rootConfigs[index]?.projectName || path.basename(rootParsed.plansRootPath);
       return {
         id: `livefolder-${this.projectKey.toLowerCase()}-${hashRootPath(rootParsed.plansRootPath)}`,
-        name: `${this.projectName} — ${path.basename(rootParsed.plansRootPath)} (Live)`,
+        name: `${this.projectName} — ${rootName} (Live)`,
         rootPath: rootParsed.plansRootPath,
         featuresRootPath: rootParsed.featuresRootPath
       };

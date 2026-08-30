@@ -36,7 +36,22 @@ export interface LaunchOptions {
   keepSplash?: boolean;
   /** Enable the built-in fixtures for tests that exercise the demo backend. */
   demoMode?: boolean;
+  /**
+   * Seed and open a minimal workspace so the app boots into the normal shell
+   * instead of the Getting Started onboarding screen. Defaults to `true`; pass
+   * `false` for tests that exercise the onboarding flow itself.
+   */
+  workspace?: boolean;
+  /**
+   * With `workspace`, restore into the New Session composer (the pre-onboarding
+   * default landing spot most legacy specs assume). Defaults to `true`; pass
+   * `false` to land on the workspace's own default route (Overview / project home).
+   */
+  openNewSession?: boolean;
 }
+
+const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
+const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 
 export async function launchTestApp(
   seedSettings?: Record<string, unknown>,
@@ -52,7 +67,10 @@ export async function launchTestApp(
 
   const env: Record<string, string> = {
     ...process.env,
-    PRAXIS_SETTINGS_PATH: settingsPath
+    PRAXIS_SETTINGS_PATH: settingsPath,
+    // Full-tools AI sessions require a working folder; give every test profile
+    // one (its own isolated user-data dir) unless a test overrides it.
+    PRAXIS_AI_WORKING_DIR: userDataDir
   } as Record<string, string>;
   // Per-test env overrides; `undefined` deletes a variable so a developer's
   // real credentials (e.g. AI_GATEWAY_API_KEY) can't leak into a test.
@@ -78,7 +96,39 @@ export async function launchTestApp(
   if (!options?.keepSplash) {
     await dismissSplash(window);
   }
+
+  if (options?.workspace !== false) {
+    await seedWorkspace(window, options?.openNewSession !== false);
+    await window.waitForLoadState('domcontentloaded');
+    if (!options?.keepSplash) {
+      await dismissSplash(window);
+    }
+  }
+
   return { electronApp, window, userDataDir, settingsPath };
+}
+
+/**
+ * Creates (or reuses) a workspace and marks it active, then reloads so the app's
+ * startup path restores into it — past the Getting Started screen. With
+ * `openNewSession`, also seeds the durable route so it restores into the New
+ * Session composer, matching the pre-onboarding default most specs assume.
+ */
+async function seedWorkspace(window: Page, openNewSession: boolean): Promise<void> {
+  await window.evaluate(
+    async ({ activeKey, routeKey, openNewSession }) => {
+      const existing = await window.praxis.workspaces.list();
+      const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
+      localStorage.setItem(activeKey, workspace.id);
+      if (openNewSession) {
+        localStorage.setItem(routeKey, JSON.stringify({ newSession: true }));
+      } else {
+        localStorage.removeItem(routeKey);
+      }
+    },
+    { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession }
+  );
+  await window.reload();
 }
 
 /**

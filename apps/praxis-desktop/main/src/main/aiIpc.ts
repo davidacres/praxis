@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import * as nodePath from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
 import {
   clearProviderApiKey,
   discoverWorkspaceAgentWorkflows,
+  GitWorktreeManager,
   PROVIDER_DESCRIPTORS,
   stageIssueAttachments,
   storeProviderApiKey,
   resetProviderApiKeys,
+  WorktreeConflictError,
   type AgentSessionRecord,
   type AgentTaskDefinition,
   type AgentToolMode,
@@ -28,6 +31,7 @@ import {
   getAiSessionManager,
   getCopilotAgentHost,
   getVercelAgentService,
+  hasActiveTask,
   listAiProviderStatuses,
   listApiModelOptions,
   listCliModelOptions,
@@ -42,6 +46,7 @@ import { getSettingsBackend } from './settingsBackendInstance';
 import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
+import { getCurrentBranch } from './gitService';
 
 /** Builds the default general task for an issue when the caller didn't supply one. */
 function buildDefaultTask(
@@ -374,8 +379,58 @@ export function registerAiIpc(): void {
         }
       }
       const workingDirectory =
-        input.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
+        input.workingDirectory?.trim() ||
+        settings.ai.workingDirectory.trim() ||
+        process.env.PRAXIS_AI_WORKING_DIR?.trim() ||
+        undefined;
       const toolMode = isAnalysisSession ? 'read-only' : (input.toolMode ?? 'full');
+
+      // A full-tools session edits and runs commands in its working directory —
+      // require an explicit one rather than silently defaulting to the app's cwd.
+      if (toolMode === 'full' && !workingDirectory) {
+        throw new Error(
+          'Choose a working folder for this session — full-tools sessions no longer default to the app directory.'
+        );
+      }
+
+      // Optional: run the session in a dedicated git worktree branched off the
+      // working directory's current branch, instead of editing it in place.
+      let worktree:
+        | { worktreePath: string; branchName: string; baseBranch: string; worktreeName: string }
+        | undefined;
+      if (input.runInWorktree) {
+        if (!workingDirectory) {
+          throw new Error('Pick a git repository folder to run this session in a worktree.');
+        }
+        const baseBranch =
+          (await getCurrentBranch(workingDirectory)) ?? settings.delivery.defaultBaseBranch.trim();
+        if (!baseBranch) {
+          throw new Error('Could not determine a base branch for the worktree (detached HEAD?).');
+        }
+        const manager = new GitWorktreeManager({ appendLine: message => console.log(`[ai] ${message}`) });
+        try {
+          const prepared = await manager.prepareDeliveryWorktree(
+            { key: issue.key, summary: issue.summary, branch: (issue as { branch?: string }).branch },
+            baseBranch,
+            workingDirectory,
+            { forceClean: false }
+          );
+          worktree = {
+            worktreePath: prepared.worktreePath,
+            branchName: prepared.branchName,
+            baseBranch: prepared.baseBranch,
+            worktreeName: prepared.worktreeName
+          };
+        } catch (error) {
+          if (error instanceof WorktreeConflictError) {
+            throw new Error(
+              `A worktree for ${issue.key} already exists at ${error.worktreePath}. Remove it (or that session) and retry.`
+            );
+          }
+          throw error;
+        }
+      }
+      const effectiveWorkingDirectory = worktree?.worktreePath ?? workingDirectory;
 
       // Runtime skills are activated only when explicitly requested. Their full
       // instructions are injected after metadata discovery, preserving progressive
@@ -391,7 +446,7 @@ export function registerAiIpc(): void {
         await getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
           runtimePath,
           model: input.model || model,
-          workingDirectory,
+          workingDirectory: effectiveWorkingDirectory,
           toolMode
         });
       } else if (descriptor.kind === 'cli-agent') {
@@ -399,7 +454,7 @@ export function registerAiIpc(): void {
         await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
           command,
           args,
-          workingDirectory,
+          workingDirectory: effectiveWorkingDirectory,
           model: input.model,
           toolMode
         });
@@ -407,7 +462,7 @@ export function registerAiIpc(): void {
         await agentService.startTask(issue, taskDefinition, {
           apiKey: gateway!.apiKey,
           gatewayUrl: gateway!.gatewayUrl,
-          workingDirectory,
+          workingDirectory: effectiveWorkingDirectory,
           model: input.model || gateway!.model,
           provider,
           toolMode,
@@ -421,12 +476,50 @@ export function registerAiIpc(): void {
       if (input.connectionId) {
         sessionManager.updateAgentRuntime(issue.key, { connectionId: input.connectionId });
       }
-      return record;
+      if (worktree) {
+        sessionManager.updateAgentRuntime(issue.key, {
+          workingDirectory: worktree.worktreePath,
+          worktreePath: worktree.worktreePath,
+          worktreeBranch: worktree.branchName,
+          worktreeBaseBranch: worktree.baseBranch,
+          worktreeName: worktree.worktreeName
+        });
+      }
+      return sessionManager.getAgentSession(issue.key) ?? record;
     }
   );
 
   ipcMain.handle('ai:abort', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     await abortActiveTask(issueKey);
+  });
+
+  ipcMain.handle('ai:removeWorktree', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
+    const record = sessionManager.getAgentSession(issueKey);
+    if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+    if (hasActiveTask(issueKey)) {
+      throw new Error('Wait for the current session to finish before removing its worktree.');
+    }
+    const worktreePath = record.worktreePath?.trim();
+    const worktreeBranch = record.worktreeBranch?.trim();
+    if (!worktreePath || !worktreeBranch) {
+      throw new Error(`Session ${issueKey} has no dedicated worktree.`);
+    }
+    const manager = new GitWorktreeManager({ appendLine: message => console.log(`[ai] ${message}`) });
+    try {
+      await manager.removeDeliveryWorktree(worktreePath, { worktreePath, branchName: worktreeBranch });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not remove the session worktree: ${detail}`);
+    }
+    // The session ran in the worktree, so point it back at the main checkout.
+    const mainRoot = nodePath.dirname(nodePath.dirname(worktreePath));
+    sessionManager.updateAgentRuntime(issueKey, {
+      workingDirectory: mainRoot,
+      worktreePath: '',
+      worktreeBranch: '',
+      worktreeBaseBranch: '',
+      worktreeName: ''
+    });
   });
 
   ipcMain.handle(

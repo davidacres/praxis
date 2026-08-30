@@ -71,13 +71,15 @@ function createFixtureRepository(): string {
  * to a project and navigating through that project's Git entry.
  */
 async function openProjectGit(repository: string): Promise<void> {
-  const project = await app.window.evaluate(async folder => window.praxis.projects.create({
+  const project = await app.window.evaluate(async folder => {
+    const workspaceId = (await window.praxis.workspaces.list())[0].id;
+    return window.praxis.projects.create({
     name: 'Git Fixture', key: 'GITFIX', type: 'software', purpose: 'Git graph fixture', brief: {},
     startingPoint: 'existing-folder', folderPath: folder,
     workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
     starterTickets: [{ summary: 'Repository work', description: 'Fixture', issueType: 'Task', status: 'todo' }],
     defaultAiToolMode: 'read-only'
-  }), repository);
+  }, workspaceId); }, repository);
   await app.window.reload();
   await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
   await app.window.getByTestId('project-git-nav-item').click();

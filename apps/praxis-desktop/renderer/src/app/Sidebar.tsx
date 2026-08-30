@@ -72,6 +72,7 @@ export interface SidebarProps {
   onCreateWorkspace: () => void;
   onSaveWorkspace: () => void;
   onOpenWorkspace: () => void;
+  onCloseWorkspace: () => void;
 }
 
 export function Sidebar({
@@ -103,7 +104,8 @@ export function Sidebar({
   onDeleteWorkspace,
   onCreateWorkspace,
   onSaveWorkspace,
-  onOpenWorkspace
+  onOpenWorkspace,
+  onCloseWorkspace
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [query, setQuery] = useState('');
@@ -140,6 +142,7 @@ export function Sidebar({
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
         return board ? [{ link, board }] : [];
       });
+      const importedPlans = linkedBoards.some(({ link }) => link.connectionId.startsWith('project-plans-'));
       const matchesProject = !needle || `${project.name} ${project.key} ${project.type}`.toLowerCase().includes(needle);
       const matchesDefault = defaultBoard?.name.toLowerCase().includes(needle);
       const matchingLinkedBoards = needle && !matchesProject
@@ -147,13 +150,19 @@ export function Sidebar({
         : linkedBoards;
       return {
         project,
-        defaultBoard: !needle || matchesProject || matchesDefault ? defaultBoard : undefined,
+        // An existing-folder project with detected plans is represented by
+        // its live source board; hiding the empty Praxis board avoids making
+        // users choose between two competing “defaults”.
+        defaultBoard: !importedPlans && (!needle || matchesProject || matchesDefault) ? defaultBoard : undefined,
         linkedBoards: matchingLinkedBoards,
         visible: matchesProject || Boolean(matchesDefault) || matchingLinkedBoards.length > 0
       };
     }).filter(entry => entry.visible);
   }, [boards, visibleProjects, query]);
   const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ project, defaultBoard, linkedBoards }) => [
+    // Keep hidden imported-project boards out of the global Boards section;
+    // they are implementation details once the live source is linked.
+    `${`project:${project.id}`}:${project.defaultBoardId}`,
     ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
     ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
   ])), [projectEntries]);
@@ -198,7 +207,10 @@ export function Sidebar({
               ))}
               <div className="workspace-menu-divider" />
               <button role="menuitem" onClick={() => { onCreateWorkspace(); setWorkspaceMenuOpen(false); }}>
-                <Icon name="plus" size={13} /><span>New workspace</span>
+                <Icon name="plus" size={13} /><span>Create blank workspace</span>
+              </button>
+              <button role="menuitem" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
+                <Icon name="organization" size={13} /><span>Create New Workspace</span>
               </button>
               {activeWorkspace && (
                 <button role="menuitem" onClick={() => { onSaveWorkspace(); setWorkspaceMenuOpen(false); }}>
@@ -208,6 +220,11 @@ export function Sidebar({
               <button role="menuitem" onClick={() => { onOpenWorkspace(); setWorkspaceMenuOpen(false); }}>
                 <Icon name="folder-open" size={13} /><span>Open workspace file</span>
               </button>
+              {activeWorkspace && (
+                <button role="menuitem" className="workspace-menu-close" onClick={() => { onCloseWorkspace(); setWorkspaceMenuOpen(false); }}>
+                  <Icon name="close" size={13} /><span>Close workspace</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -223,7 +240,7 @@ export function Sidebar({
           </button>
           {newMenuOpen && <div className="new-menu" role="menu">
             {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
-            {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Add Existing Project</strong><small>Bring an existing folder into Projects</small></span></button>}
+            {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span></button>}
             <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start AI on an existing ticket</small></span></button>
           </div>}
         </div>
@@ -297,7 +314,7 @@ export function Sidebar({
                   data-testid="toggle-projects"
                   onClick={() => setProjectsCollapsed(value => !value)}
                 >
-                  <span className={`tree-twisty${projectsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span>
+                  <span className={`tree-section-icon${projectsCollapsed ? '' : ' open'}`}><Icon name={projectsCollapsed ? 'folder' : 'folder-open'} size={14} /></span>
                   <span>Projects</span>
                   <span className="tree-meta">{projects.length}</span>
                 </button>
@@ -317,7 +334,7 @@ export function Sidebar({
                           aria-label={`${projectCollapsed ? 'Expand' : 'Collapse'} ${project.name}`}
                           aria-expanded={!projectCollapsed}
                           onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
-                        ><span className={`tree-twisty${projectCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span></button>
+                        ><span className={`tree-section-icon${projectCollapsed ? '' : ' open'}`}><Icon name={projectCollapsed ? 'folder' : 'folder-open'} size={14} /></span></button>
                         <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
                           <span className="tree-icon project-icon"><Icon name="folder-open" size={15} /></span>
                           <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span>
@@ -326,7 +343,7 @@ export function Sidebar({
                       </div>
                       {!projectCollapsed && <div className="project-tree-children">
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectBoardsCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:boards`]: !projectBoardsCollapsed }))}>
-                          <span className={`tree-twisty${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={11} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
+                          <span className={`tree-section-icon${projectBoardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={13} /></span><span>Boards</span><span className="tree-meta">{childCount}</span>
                         </button>
                         {!projectBoardsCollapsed && <>
                         {defaultBoard && <button
@@ -350,7 +367,7 @@ export function Sidebar({
                         </button>)}
                         </>}
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectGitCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:git`]: !projectGitCollapsed }))}>
-                          <span className={`tree-twisty${projectGitCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={11} /></span><span>Git</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
+                          <span className={`tree-section-icon${projectGitCollapsed ? '' : ' open'}`}><Icon name="git-branch" size={13} /></span><span>Repository</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
                         </button>
                         {!projectGitCollapsed && <button
                           className={`tree-row project-git-row${activeFeature === 'git' && selectedProjectId === project.id ? ' active' : ''}`}
@@ -369,7 +386,7 @@ export function Sidebar({
             </>}
             <div className="sidebar-section-heading">
               <button className="sidebar-section-label sidebar-section-button sidebar-section-toggle" aria-expanded={!boardsCollapsed} data-testid="toggle-boards" onClick={() => setBoardsCollapsed(value => !value)}>
-                <span className={`tree-twisty${boardsCollapsed ? '' : ' open'}`}><Icon name="chevron-right" size={13} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
+                <span className={`tree-section-icon${boardsCollapsed ? '' : ' open'}`}><Icon name="columns" size={14} /></span><span>Boards</span><span className="tree-meta">{externalBoards.length}</span>
               </button>
             </div>
             {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => {
@@ -403,9 +420,7 @@ export function Sidebar({
           <span className="sidebar-section-label" style={{ margin: 0 }}>
             Praxis
           </span>
-          <span className={`tree-twisty${featuresCollapsed ? '' : ' open'}`}>
-            <Icon name="chevron-right" size={13} />
-          </span>
+          <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}><Icon name="tools" size={14} /></span>
         </button>
         {!featuresCollapsed &&
           FEATURES.map(feature => (

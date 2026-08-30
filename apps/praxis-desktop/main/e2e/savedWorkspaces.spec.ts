@@ -10,91 +10,72 @@ test.afterEach(async () => {
   }
 });
 
-/**
- * The sidebar seeds a single "My Workspace" the first time the app has projects
- * but no saved workspaces. That seeding must not run again once a workspace
- * exists — on relaunch `projects.list()` resolves before `workspaces.list()`, so
- * a bootstrap that only checks the in-memory workspace count re-seeds and the
- * switcher then lists "My Workspace" twice.
- */
-test('does not seed a second "My Workspace" across relaunches', async () => {
+const productInput = {
+  name: 'Portal', key: 'PORTAL', type: 'product' as const, purpose: 'Workspace membership', brief: {},
+  startingPoint: 'app-storage' as const,
+  workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
+  starterTickets: [{ summary: 'First task', description: 'Placeholder', issueType: 'Task', status: 'Todo' }],
+  defaultAiToolMode: 'project-only' as const
+};
+
+test('project creation requires a valid workspace and assigns the first project as default', async () => {
   app = await launchTestApp();
-  let win = app.window;
+  const result = await app.window.evaluate(async input => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    let missingError = '';
+    try { await window.praxis.projects.create(input, 'workspace-missing'); }
+    catch (error) { missingError = error instanceof Error ? error.message : String(error); }
+    const project = await window.praxis.projects.create(input, workspace.id);
+    return { missingError, project, workspace: await window.praxis.workspaces.get(workspace.id) };
+  }, productInput);
 
-  await win.evaluate(() => window.praxis.projects.create({
-    name: 'Portal', key: 'PORTAL', type: 'product', purpose: 'Switcher seeding', brief: {},
-    startingPoint: 'app-storage',
-    workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
-    starterTickets: [{ summary: 'First task', description: 'Placeholder', issueType: 'Task', status: 'todo' }],
-    defaultAiToolMode: 'read-only'
-  }));
-  await win.reload();
+  expect(result.missingError).toContain('valid workspace');
+  expect(result.workspace?.projectIds).toContain(result.project.id);
+  expect(result.workspace?.defaultProjectId).toBe(result.project.id);
 
-  const openSwitcher = async () => {
-    await win.getByRole('button', { name: 'Select workspace' }).click();
-    return win.locator('.workspace-menu');
-  };
-
-  // First launch: exactly one seeded workspace.
-  await expect(win.getByTestId('project-nav-item').filter({ hasText: 'Portal' })).toBeVisible();
-  let menu = await openSwitcher();
-  await expect(menu.locator('button', { hasText: 'My Workspace' })).toHaveCount(1);
-  await win.keyboard.press('Escape');
-
-  await expect
-    .poll(() => win.evaluate(() => window.praxis.workspaces.list().then(w => w.length)))
-    .toBe(1);
-
-  // Relaunch into the same profile — the seed must not run a second time.
-  const reuse = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
-  await app.electronApp.close();
-  app = await launchTestApp(undefined, reuse);
-  win = app.window;
-
-  await expect(win.getByTestId('project-nav-item').filter({ hasText: 'Portal' })).toBeVisible();
-  menu = await openSwitcher();
-  await expect(menu.locator('button', { hasText: 'My Workspace' })).toHaveCount(1);
-
-  expect(await win.evaluate(() => window.praxis.workspaces.list().then(w => w.length))).toBe(1);
+  await app.window.evaluate(() => window.praxis.settings.set({ startup: { reopenLastWorkspace: false } }));
+  await app.window.reload();
+  await app.window.getByRole('button', { name: /Test Workspace/ }).click();
+  await expect(app.window.getByTestId('project-home')).toContainText('Portal');
 });
 
-/**
- * The switcher's per-row trash icon removes a saved workspace (the grouped
- * projects are untouched). This is the only in-app way to clear a stray
- * workspace — e.g. a duplicate left behind by the pre-fix seeding bug.
- */
-test('trash icon in the switcher deletes a saved workspace', async () => {
+test('deleting the active workspace returns to Getting Started without deleting projects', async () => {
   app = await launchTestApp();
   const win = app.window;
-
-  const projectId = await win.evaluate(() => window.praxis.projects.create({
-    name: 'Portal', key: 'PORTAL', type: 'product', purpose: 'Delete workspace', brief: {},
-    startingPoint: 'app-storage',
-    workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
-    starterTickets: [{ summary: 'First task', description: 'Placeholder', issueType: 'Task', status: 'todo' }],
-    defaultAiToolMode: 'read-only'
-  }).then(project => project.id));
-  await win.reload(); // seeds "My Workspace"
-
-  // Let the seed finish before adding a second workspace — creating one while
-  // the seed's write is still in flight races two saves onto the same file.
-  await expect
-    .poll(() => win.evaluate(() => window.praxis.workspaces.list().then(w => w.length)))
-    .toBe(1);
-
-  // A second workspace alongside the seed. It carries the project too, so the
-  // Projects tree stays populated whichever workspace ends up active.
-  await win.evaluate(id => window.praxis.workspaces.create({ name: 'Client work', description: '', projectIds: [id] }), projectId);
+  const project = await win.evaluate(async input => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    return window.praxis.projects.create(input, workspace.id);
+  }, productInput);
   await win.reload();
 
-  await expect(win.getByTestId('project-nav-item').filter({ hasText: 'Portal' })).toBeVisible();
   await win.getByRole('button', { name: 'Select workspace' }).click();
-  const menu = win.locator('.workspace-menu');
-  await expect(menu.locator('.workspace-menu-row')).toHaveCount(2);
+  await win.getByRole('button', { name: /Delete workspace Test Workspace/ }).click();
 
-  await menu.getByRole('button', { name: 'Delete workspace Client work' }).click();
+  await expect(win.getByTestId('getting-started')).toBeVisible();
+  expect(await win.evaluate(id => window.praxis.projects.get(id), project.id)).toBeTruthy();
+});
 
-  await expect(menu.locator('.workspace-menu-row')).toHaveCount(1);
-  await expect(menu.locator('.workspace-menu-row', { hasText: 'My Workspace' })).toHaveCount(1);
-  expect(await win.evaluate(() => window.praxis.workspaces.list().then(w => w.length))).toBe(1);
+test('closing the active workspace returns to the Open Workspace screen', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await win.reload();
+  await win.getByRole('button', { name: 'Select workspace' }).click();
+  await expect(win.getByRole('menuitem', { name: 'Close workspace' })).toBeVisible();
+  await win.getByRole('menuitem', { name: 'Close workspace' }).click();
+  await expect(win.getByTestId('getting-started')).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
+});
+
+test('Create New Workspace uses the Open Workspace screen while blank creation stays separate', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await win.reload();
+  await win.getByRole('button', { name: 'Select workspace' }).click();
+  await expect(win.getByRole('menuitem', { name: 'Create blank workspace' })).toBeVisible();
+  await expect(win.getByRole('menuitem', { name: 'Create New Workspace' })).toBeVisible();
+  await win.getByRole('menuitem', { name: 'Create New Workspace' }).click();
+  await expect(win.getByTestId('getting-started')).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Open a workspace' })).toBeVisible();
+  await win.getByRole('button', { name: 'Create Workspace' }).click();
+  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
 });

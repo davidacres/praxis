@@ -421,6 +421,19 @@ export class BackendRouter implements IssueTrackerService {
     return service;
   }
 
+  /**
+   * Drops the cached service for one connection so the next `serviceFor()`
+   * rebuilds it against updated settings/secrets. Used after the connection
+   * form is saved.
+   */
+  public evictService(connectionId: string): void {
+    const cached = this.perConnectionServices.get(connectionId);
+    if (cached) {
+      cached.dispose();
+      this.perConnectionServices.delete(connectionId);
+    }
+  }
+
   public dispose(): void {
     this.disposeActiveService();
     this.perConnectionServices.forEach(service => service.dispose());

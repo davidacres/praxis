@@ -35,6 +35,8 @@ export interface FolderInspection {
   manifests: string[];
   languages: string[];
   frameworks: string[];
+  /** Markdown planning files found under a conventional plans folder. */
+  planFiles?: string[];
 }
 
 export interface ProjectRecord {

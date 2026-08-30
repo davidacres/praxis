@@ -150,7 +150,19 @@ export class AiSessionManager {
   /** Update provider-owned runtime metadata after a native session is created or resumed. */
   public updateAgentRuntime(
     issueKey: string,
-    runtime: Partial<Pick<AgentSessionRecord, 'workingDirectory' | 'toolMode' | 'runtimeSessionId' | 'connectionId'>>
+    runtime: Partial<
+      Pick<
+        AgentSessionRecord,
+        | 'workingDirectory'
+        | 'toolMode'
+        | 'runtimeSessionId'
+        | 'connectionId'
+        | 'worktreePath'
+        | 'worktreeBranch'
+        | 'worktreeBaseBranch'
+        | 'worktreeName'
+      >
+    >
   ): void {
     const record = this.agentSessions.get(issueKey);
     if (!record) return;
@@ -160,6 +172,12 @@ export class AiSessionManager {
     if (runtime.toolMode !== undefined) record.toolMode = runtime.toolMode;
     if (runtime.runtimeSessionId !== undefined) record.runtimeSessionId = runtime.runtimeSessionId;
     if (runtime.connectionId !== undefined) record.connectionId = runtime.connectionId;
+    if (runtime.worktreePath !== undefined) record.worktreePath = runtime.worktreePath.trim() || undefined;
+    if (runtime.worktreeBranch !== undefined) record.worktreeBranch = runtime.worktreeBranch.trim() || undefined;
+    if (runtime.worktreeBaseBranch !== undefined) {
+      record.worktreeBaseBranch = runtime.worktreeBaseBranch.trim() || undefined;
+    }
+    if (runtime.worktreeName !== undefined) record.worktreeName = runtime.worktreeName.trim() || undefined;
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
   }
@@ -487,7 +505,14 @@ export class AiSessionManager {
       ) {
         result.set(key, {
           ...value,
-          toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full'
+          toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
+          events: Array.isArray(value.events)
+            ? value.events.map(event =>
+                event && typeof event === 'object' && event.data && typeof event.data !== 'object'
+                  ? { ...event, data: undefined }
+                  : event
+              )
+            : []
         });
       }
     }

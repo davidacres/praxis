@@ -7,6 +7,7 @@ import {
   type AgentEventType,
   type AgentSessionRecord,
   type AgentTaskDefinition,
+  type AgentToolEventData,
   type AgentToolMode
 } from '../agentTypes';
 import type { AiSessionManager } from '../aiSessionManager';
@@ -57,8 +58,13 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function evt(type: AgentEventType, summary: string, detail?: string): AgentEventSummary {
-  return { timestamp: now(), type, summary, detail };
+function evt(
+  type: AgentEventType,
+  summary: string,
+  detail?: string,
+  data?: AgentToolEventData
+): AgentEventSummary {
+  return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
 }
 
 export class CopilotAgentHost {
@@ -129,11 +135,28 @@ export class CopilotAgentHost {
 
   private handleToolEvent(issueKey: string, toolEvent: CopilotToolEvent): void {
     if (toolEvent.phase === 'start') {
-      this.appendEvent(issueKey, evt('tool_start', `Running tool: ${toolEvent.toolName}`));
+      this.appendEvent(
+        issueKey,
+        evt('tool_start', `Running tool: ${toolEvent.toolName}`, undefined, {
+          callId: toolEvent.toolCallId,
+          toolName: toolEvent.toolName,
+          kind: 'other'
+        })
+      );
     } else {
       this.appendEvent(
         issueKey,
-        evt('tool_complete', `Tool ${toolEvent.success === false ? 'failed' : 'completed'}: ${toolEvent.toolName}`),
+        evt(
+          'tool_complete',
+          `Tool ${toolEvent.success === false ? 'failed' : 'completed'}: ${toolEvent.toolName}`,
+          undefined,
+          {
+            callId: toolEvent.toolCallId,
+            toolName: toolEvent.toolName,
+            kind: 'other',
+            ok: toolEvent.success !== false
+          }
+        ),
         1
       );
     }

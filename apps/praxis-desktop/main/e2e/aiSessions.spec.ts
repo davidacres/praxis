@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 import { startMockGatewayServer, type MockGatewayServer } from './mockGatewayServer';
@@ -293,4 +296,44 @@ test('composer surfaces the provider-not-configured error when no API key exists
   );
   // Still on the composer — no navigation happened.
   await expect(win.locator('[data-testid="sessions-view"]')).toHaveCount(0);
+});
+
+test('a write_file tool call renders a red/green diff after the write is approved', async () => {
+  mock = await startMockGatewayServer({
+    mode: 'complete',
+    toolCall: {
+      name: 'write_file',
+      arguments: { path: 'notes.md', content: 'first line\nsecond line added by the agent\n' }
+    },
+    reply: 'Updated notes.md.'
+  });
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-writefile-'));
+  fs.writeFileSync(path.join(workDir, 'notes.md'), 'first line\n', 'utf8');
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+
+  await win.evaluate(async workingDirectory => {
+    await window.praxis.ai.delegate({
+      provider: 'vercel-gateway',
+      toolMode: 'full',
+      workingDirectory,
+      task: { goal: 'Add a second line to notes.md.' }
+    });
+  }, workDir);
+  await win.locator('[data-testid="nav-sessions"]').click();
+
+  // The write needs approval before it applies.
+  await win.locator('[data-testid="session-permission-allow-once"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+
+  const diff = win.locator('[data-testid="session-tool-diff"]');
+  await expect(diff).toBeVisible();
+  await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
+  expect(fs.readFileSync(path.join(workDir, 'notes.md'), 'utf8')).toContain('second line added by the agent');
+
+  fs.rmSync(workDir, { recursive: true, force: true });
 });

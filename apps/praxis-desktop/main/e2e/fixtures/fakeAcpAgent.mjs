@@ -127,6 +127,37 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     });
   }
 
+  if (promptText.includes('WITH_DIFF')) {
+    // Announce an edit tool call, then complete it with a `diff` content block —
+    // the shape `acpAgentHost.readAcpToolContent` turns into a rendered diff.
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'tool_call',
+        toolCallId: 'diff-1',
+        title: 'Edit notes.md',
+        kind: 'edit',
+        status: 'pending'
+      }
+    });
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'diff-1',
+        status: 'completed',
+        content: [
+          {
+            type: 'diff',
+            path: 'notes.md',
+            oldText: 'first line\n',
+            newText: 'first line\nsecond line added by the agent\n'
+          }
+        ]
+      }
+    });
+  }
+
   return { stopReason: 'end_turn' };
 });
 

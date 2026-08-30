@@ -20,7 +20,7 @@ test.afterEach(async () => {
  * to capture the options the app passes and to complete the flow headlessly.
  */
 test('save and open filter on the .workspace.praxis extension and round-trip', async () => {
-  app = await launchTestApp();
+  app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wsfile-'));
   const chosenPath = path.join(dir, 'chosen.workspace.praxis');
@@ -55,6 +55,12 @@ test('save and open filter on the .workspace.praxis extension and round-trip', a
   expect(calls.save.defaultPath).toBe('client-work.workspace.praxis');
   expect(calls.save.filters[0]).toEqual({ name: 'Praxis Workspace', extensions: ['praxis'] });
   expect(calls.open.filters[0]).toEqual({ name: 'Praxis Workspace', extensions: ['praxis'] });
+
+  await win.evaluate(() => window.praxis.settings.set({ startup: { reopenLastWorkspace: false } }));
+  await win.reload();
+  await expect(win.getByTestId('getting-started')).toBeVisible();
+  await win.getByRole('button', { name: 'Open Workspace File' }).click();
+  await expect(win.getByRole('button', { name: 'Select workspace' })).toContainText('Client Work');
 
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -8,8 +8,12 @@ import {
   type AgentEventType,
   type AgentSessionRecord,
   type AgentTaskDefinition,
+  type AgentToolEventData,
+  type AgentToolFileChange,
   type AgentToolMode
 } from '../agentTypes';
+import { mapAcpToolKind } from '../toolEventClassify';
+import { createUnifiedDiff } from '../tools/unifiedDiff';
 import type { AiSessionManager } from '../aiSessionManager';
 import type { ModelOptions } from '../providers/modelCatalog';
 import type { PermissionDecision } from '../tools';
@@ -63,8 +67,36 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function evt(type: AgentEventType, summary: string, detail?: string): AgentEventSummary {
-  return { timestamp: now(), type, summary, detail };
+function evt(
+  type: AgentEventType,
+  summary: string,
+  detail?: string,
+  data?: AgentToolEventData
+): AgentEventSummary {
+  return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
+}
+
+/** Pulls diff blocks and text output out of an ACP tool-call content array. */
+function readAcpToolContent(content: acp.ToolCallContent[] | null | undefined): {
+  fileChanges: AgentToolFileChange[];
+  output: string;
+} {
+  const fileChanges: AgentToolFileChange[] = [];
+  const textParts: string[] = [];
+  for (const block of content ?? []) {
+    if (block.type === 'diff') {
+      const oldText = block.oldText ?? '';
+      fileChanges.push({
+        path: block.path,
+        oldText,
+        newText: block.newText,
+        diff: createUnifiedDiff(block.path, oldText, block.newText)
+      });
+    } else if (block.type === 'content' && block.content?.type === 'text') {
+      textParts.push(block.content.text);
+    }
+  }
+  return { fileChanges, output: textParts.join('\n').trim() };
 }
 
 export class AcpAgentHost {
@@ -231,16 +263,48 @@ export class AcpAgentHost {
         }
         break;
       }
-      case 'tool_call':
-        this.appendEvent(issueKey, evt('tool_start', `Running tool: ${update.title || update.name || update.toolCallId}`));
+      case 'tool_call': {
+        const toolName = update.title || update.name || update.toolCallId;
+        this.appendEvent(
+          issueKey,
+          evt('tool_start', `Running tool: ${toolName}`, undefined, {
+            callId: update.toolCallId,
+            toolName,
+            kind: mapAcpToolKind(update.kind ?? undefined),
+            argsSummary: update.title ?? undefined
+          })
+        );
         break;
+      }
       case 'tool_call_update':
         if (update.status === 'completed' || update.status === 'failed') {
+          const ok = update.status === 'completed';
+          const { fileChanges, output } = readAcpToolContent(update.content);
+          const rawOutput =
+            output ||
+            (typeof update.rawOutput === 'string'
+              ? update.rawOutput
+              : update.rawOutput
+                ? JSON.stringify(update.rawOutput, null, 2)
+                : '');
+          const detail =
+            fileChanges.map(change => change.diff ?? '').join('\n').trim() || rawOutput || undefined;
           this.appendEvent(
             issueKey,
             evt(
               'tool_complete',
-              `Tool ${update.status === 'completed' ? 'completed' : 'failed'}: ${update.toolCallId}`
+              `Tool ${ok ? 'completed' : 'failed'}: ${update.title || update.name || update.toolCallId}`,
+              detail?.slice(0, 2000),
+              {
+                callId: update.toolCallId,
+                toolName: update.title ?? update.name ?? undefined,
+                // `kind` is often only on the initial `tool_call`; diff blocks in
+                // the result imply a write even when this update omits it.
+                kind: fileChanges.length > 0 ? 'write' : mapAcpToolKind(update.kind ?? undefined),
+                ok,
+                ...(fileChanges.length > 0 ? { fileChanges, diff: fileChanges[0]?.diff } : {}),
+                ...(rawOutput ? { output: rawOutput } : {})
+              }
             ),
             1
           );

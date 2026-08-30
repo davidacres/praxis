@@ -321,7 +321,22 @@ test('Aurora Glass frosts the sidebar and the translucency dial collapses it', a
   await expect.poll(async () => isTranslucent(await fill())).toBe(true);
   expect(await backdrop()).toContain('blur');
 
+  // Sessions owns nested list/console surfaces. They must keep the premium
+  // material visible instead of covering the pane with opaque legacy fills.
+  await window.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Done' }).click();
+  await window.locator('[data-testid="nav-sessions"]').click();
+  await expect(window.locator('[data-testid="sessions-view"]')).toBeVisible();
+  const sessionFills = await window.locator('[data-testid="sessions-view"]').evaluate(view => ({
+    list: getComputedStyle(view.querySelector('.sessions-list')!).backgroundColor,
+    console: getComputedStyle(view.querySelector('.session-console')!).backgroundColor
+  }));
+  expect(isTranslucent(sessionFills.list)).toBe(true);
+  expect(isTranslucent(sessionFills.console)).toBe(true);
+  await window.screenshot({ path: 'output/playwright/sessions-aurora-glass.png', fullPage: true });
+
   // Turning translucency off forces the gate to 0 → panel resolves back to opaque.
+  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
   await window.locator('[data-testid="surface-translucency-toggle"]').click();
   await expect.poll(() =>
     window.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--surface-translucency').trim())

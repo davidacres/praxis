@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   ProjectStore,
+  WorkspaceStore,
   validateProjectRecord,
   type AttachProjectFolderInput,
   type AttachProjectFolderResult,
@@ -26,9 +27,12 @@ export class ProjectManager {
     let stat: fs.Stats | undefined;
     try { stat = fs.statSync(resolved); } catch { /* absent is reported, not thrown */ }
     if (!stat?.isDirectory()) {
-      return { path: resolved, exists: !!stat, isDirectory: false, hasGit: false, projectFileExists: false, manifests: [], languages: [], frameworks: [] };
+      return { path: resolved, exists: !!stat, isDirectory: false, hasGit: false, projectFileExists: false, manifests: [], languages: [], frameworks: [], planFiles: [] };
     }
-    const files = walkFiles(resolved, 3, 3000);
+    // Inspect the selected project tree deeply enough to reach conventional
+    // plans roots (for example docs/plans/features/.../tasks), while keeping
+    // the existing file-count cap and skipping dependency/build directories.
+    const files = walkFiles(resolved, 16, 5000);
     const relative = files.map(file => path.relative(resolved, file));
     const lowerNames = new Set(relative.map(file => file.toLowerCase()));
     const manifests = relative.filter(file => isManifest(path.basename(file))).sort();
@@ -48,11 +52,15 @@ export class ProjectManager {
     if (relative.some(file => /\.csproj$/i.test(file))) frameworks.push('.NET');
     if (lowerNames.has('manage.py')) frameworks.push('Django');
     const readme = relative.find(file => /^readme(?:\.[^/]+)?$/i.test(file));
+    const planFiles = relative.filter(file => {
+      const normalized = file.replaceAll('\\\\', '/');
+      return /^(?:plans|plan|docs\/plans)(?:\/).+\.md$/i.test(normalized);
+    }).sort();
     return {
       path: resolved, exists: true, isDirectory: true,
       hasGit: fs.existsSync(path.join(resolved, '.git')),
       readme, projectFileExists: fs.existsSync(path.join(resolved, 'PROJECT.md')),
-      manifests, languages, frameworks: [...new Set(frameworks)].sort()
+      manifests, languages, frameworks: [...new Set(frameworks)].sort(), planFiles
     };
   }
 
@@ -95,6 +103,65 @@ export class ProjectManager {
       if (createdFolder && folder) await fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
       else if (createdProjectFile && folder) await fs.promises.unlink(path.join(folder, 'PROJECT.md')).catch(() => undefined);
       throw error;
+    }
+  }
+
+  /**
+   * The desktop creation boundary. Validate the target before touching disk,
+   * then coordinate project and workspace persistence. Existing projects can
+   * still be referenced by more than one workspace; only creation is strict.
+   */
+  public async createInWorkspace(
+    input: CreateProjectInput,
+    workspaceId: string,
+    workspaces: WorkspaceStore,
+    appVersion: string
+  ): Promise<ProjectRecord> {
+    if (!workspaceId?.trim() || !workspaces.get(workspaceId)) {
+      throw new Error('Open a valid workspace before creating a project.');
+    }
+    const project = await this.create(input);
+    try {
+      const workspace = workspaces.get(workspaceId);
+      if (!workspace) throw new Error(`Workspace ${workspaceId} was not found.`);
+      await workspaces.update(workspaceId, {
+        projectIds: [...workspace.projectIds, project.id],
+        defaultProjectId: workspace.defaultProjectId ?? project.id
+      }, appVersion);
+      return project;
+    } catch (error) {
+      await this.store.remove(project.id).catch(() => undefined);
+      await this.removeCreatedArtifacts(input, project);
+      throw error;
+    }
+  }
+
+  public async useInWorkspace(
+    projectId: string,
+    workspaceId: string,
+    workspaces: WorkspaceStore,
+    appVersion: string
+  ): Promise<ProjectRecord> {
+    const project = this.store.get(projectId);
+    if (!project) throw new Error(`Project ${projectId} was not found.`);
+    const workspace = workspaces.get(workspaceId);
+    if (!workspace) throw new Error('Open a valid workspace before using an existing project.');
+    if (!workspace.projectIds.includes(project.id)) {
+      await workspaces.update(workspaceId, {
+        projectIds: [...workspace.projectIds, project.id],
+        defaultProjectId: workspace.defaultProjectId ?? project.id
+      }, appVersion);
+    }
+    return project;
+  }
+
+  private async removeCreatedArtifacts(input: CreateProjectInput, project: ProjectRecord): Promise<void> {
+    const folder = project.workspaceFolder;
+    if (!folder) return;
+    if (input.startingPoint === 'new-folder') {
+      await fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
+    } else if (project.projectFileStatus === 'created') {
+      await fs.promises.unlink(path.join(folder, 'PROJECT.md')).catch(() => undefined);
     }
   }
 
@@ -141,7 +208,9 @@ function validateCreateInput(input: CreateProjectInput, projects: ProjectRecord[
   if ((input.type === 'software' || input.type === 'experiment') && input.startingPoint === 'app-storage') throw new Error('Software and Experiment projects require a new or existing folder.');
   if (input.startingPoint === 'app-storage' && input.type !== 'product' && input.type !== 'research') throw new Error('Only Product and Research projects can use app storage without a folder.');
   if (input.workflowStages.length < 2) throw new Error('At least two workflow stages are required.');
-  if (!input.starterTickets.length) throw new Error('At least one starter ticket is required.');
+  // Existing folders may already contain their own plans/tickets; importing
+  // the project should not force Praxis to invent a starter ticket.
+  if (input.startingPoint !== 'existing-folder' && !input.starterTickets.length) throw new Error('At least one starter ticket is required.');
 }
 
 function requireExistingDirectory(value: string): void { if (!fs.existsSync(value) || !fs.statSync(value).isDirectory()) throw new Error(`${value} is not an existing folder.`); }

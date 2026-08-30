@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import type { Connection, TrackedBoard } from '@praxis/core';
+import { LiveFolderService, type Connection, type TrackedBoard } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getServiceForConnection, resetServiceForConnection } from './serviceRegistry';
 
@@ -15,6 +15,19 @@ export function registerConnectionIpc(): void {
     // The service cached for this connection captured the old settings (e.g. a
     // live folder path) at construction — drop it so the next call rebuilds.
     resetServiceForConnection(connection.id);
+    // Persist the (possibly changed) project identity into the plans folder so
+    // board.praxis.json stays in sync with the connection. Best-effort: a bad
+    // folder path must not block saving the connection.
+    if (connection.mode === 'livefolder') {
+      try {
+        const service = await getServiceForConnection(connection.id);
+        if (service instanceof LiveFolderService) {
+          await service.syncBoardConfigToFolder({ includeAllowIssueCreation: true });
+        }
+      } catch {
+        // Folder unreadable / not a plans folder yet — nothing to sync.
+      }
+    }
   });
 
   ipcMain.handle('connection:remove', async (_event, connectionId: string) => {

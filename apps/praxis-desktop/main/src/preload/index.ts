@@ -165,6 +165,7 @@ const praxis: PraxisIpc = {
     abort: (issueKey: string) => ipcRenderer.invoke('ai:abort', issueKey),
     continueSession: (issueKey: string, message: string) =>
       ipcRenderer.invoke('ai:continueSession', issueKey, message),
+    removeWorktree: (issueKey: string) => ipcRenderer.invoke('ai:removeWorktree', issueKey),
     switchSessionMode: (issueKey: string, mode: SessionMode) =>
       ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),
     respondToPermission: (issueKey: string, decision: PermissionDecision) =>
@@ -252,7 +253,8 @@ const praxis: PraxisIpc = {
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     get: (projectId: string) => ipcRenderer.invoke('projects:get', projectId),
-    create: (input: CreateProjectInput) => ipcRenderer.invoke('projects:create', input),
+    create: (input: CreateProjectInput, workspaceId: string) => ipcRenderer.invoke('projects:create', input, workspaceId),
+    useExisting: (projectId: string, workspaceId: string) => ipcRenderer.invoke('projects:useExisting', projectId, workspaceId),
     update: (projectId: string, patch: UpdateProjectInput) => ipcRenderer.invoke('projects:update', projectId, patch),
     inspectFolder: (folderPath: string) => ipcRenderer.invoke('projects:inspectFolder', folderPath),
     attachFolder: (projectId: string, input: AttachProjectFolderInput) => ipcRenderer.invoke('projects:attachFolder', projectId, input),
