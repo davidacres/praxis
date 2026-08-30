@@ -5,11 +5,13 @@ import type {
   AgentRuntimeSnapshot,
   AppSettings,
   AppSettingsPatch,
+  AppearanceLook,
   SurfaceMotifSettings,
   BoardsSidebarMode,
   Connection
 } from '@praxis/core';
 import {
+  BUILT_IN_LOOKS,
   DEFAULT_APP_SETTINGS,
   normalizePriorityColor,
   PRIORITY_NAMES
@@ -18,7 +20,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { MODEL_PROVIDERS } from '../ai/modelProviders';
 import { useSettings } from './useSettings';
-import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference } from './themes';
+import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
   DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, perceptualOpacityScale,
@@ -37,7 +39,9 @@ export type SettingsCategory =
   | 'delivery'
   | 'mcp'
   | 'preview'
-  | 'themes'
+  | 'appearance-themes'
+  | 'appearance-looks'
+  | 'appearance-surfaces'
   | 'appearance'
   | 'terminal';
 
@@ -47,6 +51,40 @@ interface CategoryDef {
   icon: IconName;
   description: string;
 }
+
+/** A collapsible parent in the settings nav. Its children are real categories; the header itself only expands/collapses. */
+interface NavGroupDef {
+  id: string;
+  label: string;
+  icon: IconName;
+  children: SettingsCategory[];
+}
+
+const APPEARANCE_GROUP: NavGroupDef = {
+  id: 'appearance-group',
+  label: 'Appearance',
+  icon: 'theme',
+  children: ['appearance-themes', 'appearance-looks', 'appearance-surfaces']
+};
+
+/** Ordered nav model — flat items with the Appearance group spliced in where "Themes" used to sit. */
+type NavEntry = { type: 'item'; category: SettingsCategory } | { type: 'group'; group: NavGroupDef };
+
+const NAV: NavEntry[] = [
+  { type: 'item', category: 'overview' },
+  { type: 'item', category: 'startup' },
+  { type: 'group', group: APPEARANCE_GROUP },
+  { type: 'item', category: 'terminal' },
+  { type: 'item', category: 'connections' },
+  { type: 'item', category: 'jira' },
+  { type: 'item', category: 'ai' },
+  { type: 'item', category: 'agent-runtime' },
+  { type: 'item', category: 'performance' },
+  { type: 'item', category: 'delivery' },
+  { type: 'item', category: 'mcp' },
+  { type: 'item', category: 'preview' },
+  { type: 'item', category: 'appearance' }
+];
 
 const CATEGORIES: CategoryDef[] = [
   {
@@ -62,10 +100,22 @@ const CATEGORIES: CategoryDef[] = [
     description: 'Choose what Praxis opens when the desktop app starts.'
   },
   {
-    id: 'themes',
+    id: 'appearance-themes',
     label: 'Themes',
     icon: 'theme',
     description: 'Choose a complete color palette for the Praxis interface.'
+  },
+  {
+    id: 'appearance-looks',
+    label: 'Looks',
+    icon: 'sparkles',
+    description: 'One-click presets that bundle a theme, surface, motif, and colours.'
+  },
+  {
+    id: 'appearance-surfaces',
+    label: 'Surfaces',
+    icon: 'sliders',
+    description: 'The material layer — texture, grain, depth, translucency — worn over any theme.'
   },
   {
     id: 'terminal',
@@ -150,20 +200,18 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
   return (
     <div className="settings-page">
       <nav className="settings-nav" aria-label="Settings categories">
-        {CATEGORIES.map(category => (
-          <button
-            key={category.id}
-            className={`settings-nav-item${active === category.id ? ' active' : ''}`}
-            onClick={() => setActive(category.id)}
-            data-testid={`settings-nav-${category.id}`}
-            type="button"
-          >
-            <span className="tree-icon">
-              <Icon name={category.icon} size={15} />
-            </span>
-            <span className="settings-nav-label">{category.label}</span>
-          </button>
-        ))}
+        {NAV.map(entry =>
+          entry.type === 'item' ? (
+            <NavItem
+              key={entry.category}
+              def={CATEGORIES.find(category => category.id === entry.category)!}
+              active={active}
+              onSelect={setActive}
+            />
+          ) : (
+            <NavGroup key={entry.group.id} group={entry.group} active={active} onSelect={setActive} />
+          )
+        )}
       </nav>
       <div className="settings-content">
         {error && <div className="error-banner">{error}</div>}
@@ -181,11 +229,85 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
         {active === 'preview' && <PreviewSection settings={settings} update={update} />}
-        {active === 'themes' && <ThemesSection settings={settings} update={update} />}
+        {active === 'appearance-themes' && <ThemesGallerySection settings={settings} update={update} />}
+        {active === 'appearance-looks' && <LooksSection settings={settings} update={update} />}
+        {active === 'appearance-surfaces' && <SurfacesSection settings={settings} update={update} />}
         {active === 'appearance' && <AppearanceSection settings={settings} update={update} />}
         {active === 'terminal' && <TerminalSection settings={settings} update={update} />}
       </div>
     </div>
+  );
+}
+
+function NavItem({
+  def,
+  active,
+  onSelect,
+  nested
+}: {
+  def: CategoryDef;
+  active: SettingsCategory;
+  onSelect: (id: SettingsCategory) => void;
+  nested?: boolean;
+}) {
+  return (
+    <button
+      className={`settings-nav-item${nested ? ' nested' : ''}${active === def.id ? ' active' : ''}`}
+      onClick={() => onSelect(def.id)}
+      data-testid={`settings-nav-${def.id}`}
+      type="button"
+    >
+      <span className="tree-icon">
+        <Icon name={def.icon} size={15} />
+      </span>
+      <span className="settings-nav-label">{def.label}</span>
+    </button>
+  );
+}
+
+function NavGroup({
+  group,
+  active,
+  onSelect
+}: {
+  group: NavGroupDef;
+  active: SettingsCategory;
+  onSelect: (id: SettingsCategory) => void;
+}) {
+  const containsActive = group.children.includes(active);
+  const [open, setOpen] = useState(containsActive);
+  useEffect(() => {
+    if (containsActive) setOpen(true);
+  }, [containsActive]);
+
+  return (
+    <>
+      <button
+        className={`settings-nav-item settings-nav-group${open ? ' open' : ''}${containsActive ? ' has-active' : ''}`}
+        onClick={() => setOpen(value => !value)}
+        data-testid={`settings-nav-${group.id}`}
+        aria-expanded={open}
+        type="button"
+      >
+        <span className="settings-nav-chevron">
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />
+        </span>
+        <span className="tree-icon">
+          <Icon name={group.icon} size={15} />
+        </span>
+        <span className="settings-nav-label">{group.label}</span>
+      </button>
+      {open &&
+        group.children.map(childId => (
+          <NavItem
+            key={childId}
+            def={CATEGORIES.find(category => category.id === childId)!}
+            active={active}
+            onSelect={onSelect}
+            nested
+          />
+        ))}
+    </>
   );
 }
 
@@ -1485,6 +1607,20 @@ function MotifPanel({
     onChange({ ...effective, ...patch } as SurfaceMotifSettings);
   const isCorner = effective.placement === 'corner';
   const overridden = motif !== undefined;
+  // The plural `anchors` supersedes the legacy single `anchor`; fall back to it,
+  // then to the default corner, so a pack that only sets `anchor` still lights up.
+  const corners: SurfacePatternAnchor[] = effective.anchors?.length
+    ? effective.anchors
+    : effective.anchor
+      ? [effective.anchor]
+      : ['top-right'];
+  const toggleCorner = (value: SurfacePatternAnchor) => {
+    const next = corners.includes(value)
+      ? corners.filter(corner => corner !== value)
+      : [...corners, value];
+    // Always keep at least one corner lit — deselecting the last is a no-op.
+    set({ anchors: next.length ? next : corners });
+  };
 
   return (
     <section className={`surface-motif${disabled ? ' disabled' : ''}`} data-testid="motif-panel">
@@ -1514,11 +1650,30 @@ function MotifPanel({
           </select></label>
 
         {isCorner && (
-          <label className="surface-dial"><span className="surface-dial-label">Anchor</span>
-            <select value={effective.anchor} disabled={disabled} data-testid="motif-anchor"
-              onChange={e => set({ anchor: e.target.value as SurfacePatternAnchor })}>
-              {MOTIF_ANCHORS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select></label>
+          <div className="surface-dial surface-motif-corners-field">
+            <span className="surface-dial-label">Corners <em>{corners.length} of 4</em></span>
+            <div className="surface-motif-corners" role="group" aria-label="Motif corners" data-testid="motif-corners">
+              {MOTIF_ANCHORS.map(([value, label]) => {
+                const on = corners.includes(value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`surface-corner${on ? ' on' : ''}`}
+                    data-corner={value}
+                    data-testid={`motif-corner-${value}`}
+                    aria-pressed={on}
+                    aria-label={label}
+                    title={label}
+                    disabled={disabled}
+                    onClick={() => toggleCorner(value)}
+                  >
+                    <span className="surface-corner-dot" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         <label className="surface-dial"><span className="surface-dial-label">Cell size <em>{Math.round(effective.scale)}px</em></span>
@@ -1583,59 +1738,414 @@ function MotifPanel({
   );
 }
 
-function ThemesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
-  const category = CATEGORIES.find(c => c.id === 'themes')!;
+/** The look-scoped slice of the live appearance — everything a Look captures bar its id/name. */
+function currentLookFields(settings: AppSettings): Omit<AppearanceLook, 'id' | 'name'> {
+  const a = settings.appearance;
+  return {
+    themeId: a.themeId,
+    themeMode: a.themeMode,
+    surfacePackId: a.surfacePackId,
+    surface: a.surface,
+    priorityColors: a.priorityColors,
+    showBrandArtwork: a.showBrandArtwork
+  };
+}
+
+/** Merge incoming library records into the profile's, keeping the profile's copy on an id clash. */
+function mergeById<T extends { id: string }>(existing: T[], incoming: unknown[]): T[] {
+  const seen = new Set(existing.map(item => item.id));
+  const extra = incoming.filter(
+    (item): item is T => Boolean(item) && typeof (item as T).id === 'string' && !seen.has((item as T).id)
+  );
+  return [...existing, ...extra];
+}
+
+/** Neutral palette used when a Look references a custom theme that has since been deleted. */
+const FALLBACK_LOOK_PREVIEW: ThemePreviewColors = {
+  canvas: '#1c1c1c', panel: '#242424', raised: '#161616', border: '#3d3d3d',
+  text: '#e4e4e4', muted: '#8a8a8a', accent: '#7c5cff',
+  success: '#3fb950', warning: '#d29922', danger: '#f47067'
+};
+
+const LOOK_IDS = new Set(BUILT_IN_LOOKS.map(look => look.id));
+
+/**
+ * The surface material a Look card should paint over its palette mock. Renders
+ * the Look's pack pattern (with any motif override) from the shared library —
+ * tinted for *that Look's* theme, not the live one — shrunk and lifted so it
+ * reads at thumbnail size. Returns `undefined` for Flat / a pattern-less pack.
+ */
+function lookSurfacePreview(
+  look: AppearanceLook,
+  themePreview: ThemePreviewColors
+): { image?: string; size?: string; opacity: number; blend: string; glass: boolean } | undefined {
+  const pack = allSurfacePacks().find(entry => entry.id === look.surfacePackId);
+  const motif = look.surface.motif;
+  const base = pack?.pattern;
+  const spec = motif && Object.keys(motif).length
+    ? { ...(base ?? { id: 'none', scale: 96, opacity: 0.08 }), ...motif }
+    : base;
+  const glass = Boolean(pack?.glass);
+  if (!spec || spec.id === 'none' || (spec.opacity ?? 0) <= 0) {
+    return glass ? { opacity: 0, blend: 'normal', glass } : undefined;
+  }
+  const ink = spec.ink === 'text'
+    ? themePreview.text
+    : spec.ink === 'custom' && spec.inkColor
+      ? spec.inkColor
+      : themePreview.accent;
+  const resolved = resolveSurfacePattern(
+    {
+      ...spec,
+      placement: 'tile',
+      scale: Math.max(13, (spec.scale ?? 96) * 0.46),
+      opacity: Math.min(
+        0.34,
+        (spec.opacity ?? 0.1) * 2.6 * perceptualOpacityScale(ink, themePreview.panel)
+      )
+    },
+    ink
+  );
+  if (!resolved) {
+    return glass ? { opacity: 0, blend: 'normal', glass } : undefined;
+  }
+  return { image: resolved.image, size: resolved.size, opacity: Number(resolved.opacity), blend: resolved.blend, glass };
+}
+
+/**
+ * A Look card — the theme gallery's app-chrome mock painted in the Look's
+ * palette, with its surface material layered over it, so theme + colours +
+ * surface all read at a glance. Hover reveals rename / duplicate / export /
+ * delete.
+ */
+function LookPreviewCard({
+  look, active, packName, canDelete, renaming,
+  onApply, onStartRename, onCommitRename, onCancelRename, onDuplicate, onExport, onDelete
+}: {
+  look: AppearanceLook;
+  active: boolean;
+  packName: string;
+  canDelete: boolean;
+  renaming: { value: string; set: (value: string) => void } | undefined;
+  onApply: () => void;
+  onStartRename: () => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
+  onDuplicate: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+}) {
+  const themePreview = allThemes().find(theme => theme.id === look.themeId)?.preview ?? FALLBACK_LOOK_PREVIEW;
+  const previewStyle = {
+    '--preview-canvas': themePreview.canvas,
+    '--preview-panel': themePreview.panel,
+    '--preview-raised': themePreview.raised,
+    '--preview-border': themePreview.border,
+    '--preview-text': themePreview.text,
+    '--preview-muted': themePreview.muted,
+    '--preview-accent': themePreview.accent,
+    '--preview-success': themePreview.success,
+    '--preview-warning': themePreview.warning,
+    '--preview-danger': themePreview.danger
+  } as CSSProperties;
+  const surface = lookSurfacePreview(look, themePreview);
+
+  return (
+    <div
+      className={`theme-gallery-card look-card${active ? ' active' : ''}`}
+      style={previewStyle}
+      data-testid={`look-card-${look.id}`}
+    >
+      <button
+        type="button"
+        className="look-card-apply"
+        aria-pressed={active}
+        aria-label={`Apply the ${look.name} Look`}
+        onClick={onApply}
+      >
+        <span className="theme-card-preview" aria-hidden="true">
+          <span className="theme-preview-titlebar"><i /><i /><i /><b /></span>
+          <span className="theme-preview-layout">
+            <span className="theme-preview-sidebar"><i className="wide" /><i /><i /><i className="short" /></span>
+            <span className="theme-preview-content">
+              <span className="theme-preview-heading"><i /><b /><b /></span>
+              <i className="line wide" /><i className="line" />
+              <span className="theme-preview-status"><i /><i /><i /></span>
+              <i className="line wide" /><i className="line short" />
+            </span>
+          </span>
+          <span className="theme-preview-spectrum"><i /><i /><i /><i /></span>
+          {surface?.image && (
+            <span
+              className="look-card-surface"
+              style={{
+                backgroundImage: surface.image,
+                backgroundSize: surface.size,
+                opacity: surface.opacity,
+                mixBlendMode: surface.blend as CSSProperties['mixBlendMode']
+              }}
+            />
+          )}
+          {surface?.glass && <span className="look-card-glass" />}
+        </span>
+      </button>
+      <div className="theme-card-meta">
+        <span>
+          {renaming ? (
+            <input
+              autoFocus
+              className="look-card-rename"
+              value={renaming.value}
+              maxLength={80}
+              aria-label={`Rename ${look.name}`}
+              onChange={event => renaming.set(event.target.value)}
+              onBlur={onCommitRename}
+              onKeyDown={event => {
+                if (event.key === 'Enter') onCommitRename();
+                if (event.key === 'Escape') onCancelRename();
+              }}
+            />
+          ) : (
+            <strong>{look.name}</strong>
+          )}
+          <small>{packName}</small>
+        </span>
+        {active && <span className="theme-card-active">Active</span>}
+      </div>
+      <div className="look-card-actions">
+        <button type="button" title="Rename" aria-label={`Rename ${look.name}`} data-testid={`look-rename-${look.id}`} onClick={onStartRename}>✎</button>
+        <button type="button" title="Duplicate" aria-label={`Duplicate ${look.name}`} onClick={onDuplicate}>⧉</button>
+        <button type="button" title="Export" aria-label={`Export ${look.name}`} onClick={onExport}>↧</button>
+        <button type="button" title="Delete" aria-label={`Delete ${look.name}`} className="danger" disabled={!canDelete} data-testid={`look-delete-${look.id}`} onClick={onDelete}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Looks gallery — switchable presets that bundle the whole appearance stack
+ * (theme, mode, surface pack, dials/motif, priority colours, brand artwork),
+ * grouped into Built in / Custom exactly like the theme gallery. Selecting a
+ * Look applies it in one shot; while a Look is selected every edit anywhere in
+ * Appearance is folded back into it by core's `mirrorActiveLook`, so this only
+ * handles select / save / rename / duplicate / delete / export / import.
+ */
+function LooksStrip({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const looks = settings.appearance.looks;
+  const activeLookId = settings.appearance.activeLookId;
+  const [naming, setNaming] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [renamingId, setRenamingId] = useState<string>();
+  const [renameDraft, setRenameDraft] = useState('');
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const applyLook = (look: AppearanceLook) => {
+    applyThemePreference(look.themeId, look.themeMode as ThemeModePreference);
+    applySurfacePack(look.surfacePackId, {
+      intensity: look.surface.intensity,
+      texture: look.surface.texture,
+      translucency: look.surface.translucency,
+      windowVibrancy: look.surface.windowVibrancy,
+      motif: look.surface.motif
+    });
+    void update({
+      appearance: {
+        themeId: look.themeId,
+        themeMode: look.themeMode,
+        surfacePackId: look.surfacePackId,
+        surface: look.surface,
+        priorityColors: look.priorityColors,
+        showBrandArtwork: look.showBrandArtwork,
+        activeLookId: look.id
+      }
+    });
+  };
+
+  const saveCurrent = () => {
+    const name = draftName.trim();
+    if (!name) return;
+    const look: AppearanceLook = { id: `look-${Date.now().toString(36)}`, name, ...currentLookFields(settings) };
+    void update({ appearance: { looks: [...looks, look], activeLookId: look.id } });
+    setNaming(false);
+    setDraftName('');
+  };
+
+  const commitRename = (id: string) => {
+    const name = renameDraft.trim();
+    setRenamingId(undefined);
+    if (!name) return;
+    void update({ appearance: { looks: looks.map(look => (look.id === id ? { ...look, name } : look)) } });
+  };
+
+  const duplicate = (look: AppearanceLook) => {
+    const copy: AppearanceLook = { ...look, id: `look-${Date.now().toString(36)}`, name: `${look.name} copy` };
+    void update({ appearance: { looks: [...looks, copy] } });
+  };
+
+  const remove = (id: string) => {
+    void update({
+      appearance: {
+        looks: looks.filter(look => look.id !== id),
+        ...(activeLookId === id ? { activeLookId: '' } : {})
+      }
+    });
+  };
+
+  const exportLook = (look: AppearanceLook) => {
+    const customThemes = (settings.appearance.customThemes ?? []).filter(theme => theme.id === look.themeId);
+    const customSurfacePacks = (settings.appearance.customSurfacePacks ?? []).filter(pack => pack.id === look.surfacePackId);
+    const blob = new Blob([JSON.stringify({ look, customThemes, customSurfacePacks }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${look.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'look'}.look.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importLook = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as {
+        look?: Partial<AppearanceLook>;
+        customThemes?: unknown[];
+        customSurfacePacks?: unknown[];
+      };
+      const raw = parsed.look;
+      if (!raw || typeof raw.themeId !== 'string' || typeof raw.surfacePackId !== 'string') {
+        throw new Error('Not a Look file');
+      }
+      const nextThemes = mergeById(
+        settings.appearance.customThemes ?? [],
+        Array.isArray(parsed.customThemes) ? parsed.customThemes : []
+      );
+      const nextPacks = mergeById(
+        settings.appearance.customSurfacePacks ?? [],
+        Array.isArray(parsed.customSurfacePacks) ? parsed.customSurfacePacks : []
+      );
+      const look: AppearanceLook = {
+        id: `look-${Date.now().toString(36)}`,
+        name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'Imported look',
+        themeId: raw.themeId,
+        themeMode: raw.themeMode === 'light' || raw.themeMode === 'system' ? raw.themeMode : 'dark',
+        surfacePackId: raw.surfacePackId,
+        surface:
+          raw.surface && typeof raw.surface === 'object'
+            ? (raw.surface as AppearanceLook['surface'])
+            : settings.appearance.surface,
+        priorityColors:
+          raw.priorityColors && typeof raw.priorityColors === 'object'
+            ? (raw.priorityColors as Record<string, string>)
+            : settings.appearance.priorityColors,
+        showBrandArtwork: typeof raw.showBrandArtwork === 'boolean' ? raw.showBrandArtwork : true
+      };
+      registerCustomThemes(nextThemes);
+      registerCustomSurfacePacks(nextPacks);
+      // The settings backend re-sanitises this write, so a hand-edited file can
+      // only ever land a well-formed Look / library record.
+      await update({ appearance: { customThemes: nextThemes, customSurfacePacks: nextPacks, looks: [...looks, look] } });
+      applyLook(look);
+    } catch {
+      /* A malformed file is ignored without disturbing the current Looks. */
+    }
+  };
+
+  const builtInLooks = looks.filter(look => LOOK_IDS.has(look.id));
+  const customLooks = looks.filter(look => !LOOK_IDS.has(look.id));
+  const packNameOf = (look: AppearanceLook) =>
+    allSurfacePacks().find(pack => pack.id === look.surfacePackId)?.name ?? look.surfacePackId;
+
+  const renderCard = (look: AppearanceLook) => (
+    <LookPreviewCard
+      key={look.id}
+      look={look}
+      active={look.id === activeLookId}
+      packName={packNameOf(look)}
+      canDelete={looks.length > 1}
+      renaming={renamingId === look.id ? { value: renameDraft, set: setRenameDraft } : undefined}
+      onApply={() => applyLook(look)}
+      onStartRename={() => { setRenamingId(look.id); setRenameDraft(look.name); }}
+      onCommitRename={() => commitRename(look.id)}
+      onCancelRename={() => setRenamingId(undefined)}
+      onDuplicate={() => duplicate(look)}
+      onExport={() => exportLook(look)}
+      onDelete={() => remove(look.id)}
+    />
+  );
+
+  return (
+    <section className="looks-strip" data-testid="looks-strip">
+      <div className="looks-gallery-toolbar">
+        {naming ? (
+          <span className="looks-name-field">
+            <input
+              autoFocus
+              value={draftName}
+              maxLength={80}
+              placeholder="Look name"
+              aria-label="New Look name"
+              data-testid="look-name-input"
+              onChange={event => setDraftName(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') saveCurrent();
+                if (event.key === 'Escape') {
+                  setNaming(false);
+                  setDraftName('');
+                }
+              }}
+            />
+            <button type="button" className="primary" disabled={!draftName.trim()} onClick={saveCurrent} data-testid="look-save-confirm">
+              Save
+            </button>
+            <button type="button" onClick={() => { setNaming(false); setDraftName(''); }}>Cancel</button>
+          </span>
+        ) : (
+          <button type="button" className="btn btn-secondary" data-testid="look-save" onClick={() => setNaming(true)}>
+            ＋ Save current as Look
+          </button>
+        )}
+        <label className="btn btn-secondary">
+          Import Look
+          <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={event => void importLook(event)} />
+        </label>
+        <span>
+          {activeLookId
+            ? 'Editing any appearance setting updates the selected Look.'
+            : 'Pick a Look to apply it everywhere.'}
+        </span>
+      </div>
+
+      <section className="theme-gallery-section">
+        <h4>Built in</h4>
+        <div className="theme-gallery-grid">{builtInLooks.map(renderCard)}</div>
+      </section>
+
+      {customLooks.length > 0 && (
+        <section className="theme-gallery-section">
+          <h4>Custom</h4>
+          <div className="theme-gallery-grid">{customLooks.map(renderCard)}</div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function ThemesGallerySection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
+  const category = CATEGORIES.find(c => c.id === 'appearance-themes')!;
   const [selectedTheme, setSelectedTheme] = useState(() => settings.appearance.themeId || getInitialThemeId());
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<ThemeDefinition & { source: 'custom' }>();
   const [, refreshCustomThemes] = useState(0);
   const installedIds = settings.appearance.installedThemeIds ?? [];
   const custom = settings.appearance.customThemes ?? [];
-
-  const surfaceId = settings.appearance.surfacePackId;
-  const surfaceOpts = settings.appearance.surface;
-  const customSurfacePacks = settings.appearance.customSurfacePacks ?? [];
-  const applySurface = (id: string, opts: typeof surfaceOpts) =>
-    applySurfacePack(id, {
-      intensity: opts.intensity,
-      texture: opts.texture,
-      translucency: opts.translucency,
-      windowVibrancy: opts.windowVibrancy,
-      motif: opts.motif
-    });
-  const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
-  const visibleSurfacePacks = allSurfacePacks().filter(pack => pack.supports.includes(currentMode));
-  const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
-  const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
-  const [vibrancySupported, setVibrancySupported] = useState(false);
-  useEffect(() => {
-    void window.praxis.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
-  }, []);
-
-  const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
-    registerCustomSurfacePacks(packs);
-    if (nextActiveId) {
-      applySurface(nextActiveId, surfaceOpts);
-    }
-    return update({ appearance: { customSurfacePacks: packs, ...(nextActiveId ? { surfacePackId: nextActiveId } : {}) } });
-  };
-  const newCustomSurface = (): CustomSurfacePack => ({
-    id: `custom-${Date.now().toString(36)}`,
-    name: 'My surface',
-    description: '',
-    basePackId: 'parchment',
-    pattern: { id: 'hexagon', scale: 124, opacity: 0.08, ink: 'accent', weight: 0.8 },
-    tokens: dialsToTokens(DEFAULT_SURFACE_DIALS)
-  });
-  const exportSurface = (pack: CustomSurfacePack) => {
-    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'surface'}.surface.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
 
   useEffect(() => {
     registerCustomThemes(custom);
@@ -1766,11 +2276,74 @@ function ThemesSection({ settings, update }: { settings: AppSettings; update: (p
         </section>
       )}
       {visible.length === 0 && <div className="placeholder-text">No themes match “{query}”.</div>}
+    </>
+  );
+}
 
+function LooksSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
+  const category = CATEGORIES.find(c => c.id === 'appearance-looks')!;
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <LooksStrip settings={settings} update={update} />
+    </>
+  );
+}
+
+function SurfacesSection({ settings, update }: { settings: AppSettings; update: (patch: AppSettingsPatch) => Promise<void> }) {
+  const category = CATEGORIES.find(c => c.id === 'appearance-surfaces')!;
+  const surfaceId = settings.appearance.surfacePackId;
+  const surfaceOpts = settings.appearance.surface;
+  const customSurfacePacks = settings.appearance.customSurfacePacks ?? [];
+  const applySurface = (id: string, opts: typeof surfaceOpts) =>
+    applySurfacePack(id, {
+      intensity: opts.intensity,
+      texture: opts.texture,
+      translucency: opts.translucency,
+      windowVibrancy: opts.windowVibrancy,
+      motif: opts.motif
+    });
+  const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
+  const visibleSurfacePacks = allSurfacePacks().filter(pack => pack.supports.includes(currentMode));
+  const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
+  const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
+  const [vibrancySupported, setVibrancySupported] = useState(false);
+  useEffect(() => {
+    void window.praxis.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
+  }, []);
+  useEffect(() => {
+    registerCustomSurfacePacks(customSurfacePacks);
+  }, [customSurfacePacks]);
+
+  const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
+    registerCustomSurfacePacks(packs);
+    if (nextActiveId) {
+      applySurface(nextActiveId, surfaceOpts);
+    }
+    return update({ appearance: { customSurfacePacks: packs, ...(nextActiveId ? { surfacePackId: nextActiveId } : {}) } });
+  };
+  const newCustomSurface = (): CustomSurfacePack => ({
+    id: `custom-${Date.now().toString(36)}`,
+    name: 'My surface',
+    description: '',
+    basePackId: 'parchment',
+    pattern: { id: 'hexagon', scale: 124, opacity: 0.08, ink: 'accent', weight: 0.8 },
+    tokens: dialsToTokens(DEFAULT_SURFACE_DIALS)
+  });
+  const exportSurface = (pack: CustomSurfacePack) => {
+    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${pack.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase() || 'surface'}.surface.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <>
+      <CategoryHeader category={category} />
       <section className="theme-gallery-section surface-section" data-testid="surface-section">
-        <div className="theme-marketplace-heading">
-          <div><h4>Surface</h4><p>A material layer — texture, grain, depth, translucency — on top of the theme above. Composes with any theme.</p></div>
-        </div>
         <div className="theme-gallery-grid surface-pack-grid">
           {visibleSurfacePacks.map(pack => (
             <div className="surface-pack-card-wrap" key={pack.id}>

@@ -182,6 +182,9 @@ function readPatternSpec(value: unknown): SurfacePatternSpec | undefined {
     inkColor: typeof raw.inkColor === 'string' ? raw.inkColor : undefined,
     placement: raw.placement === 'corner' ? 'corner' : 'tile',
     anchor: typeof raw.anchor === 'string' ? raw.anchor as SurfacePatternSpec['anchor'] : undefined,
+    anchors: Array.isArray(raw.anchors)
+      ? (raw.anchors.filter((item): item is string => typeof item === 'string') as SurfacePatternSpec['anchors'])
+      : undefined,
     spread: Math.min(2400, Math.max(120, num(raw.spread, 720))),
     fade: Math.min(1, Math.max(0.05, num(raw.fade, 0.62))),
     fill: Math.min(1, Math.max(0, num(raw.fill, 0))),

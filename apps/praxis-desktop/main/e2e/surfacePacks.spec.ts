@@ -22,8 +22,15 @@ test.afterEach(async () => {
 
 async function openSurface(): Promise<void> {
   await window.locator('[data-testid="titlebar-themes"]').click();
+  // Surfaces is now its own node under Settings → Appearance.
+  await window.locator('[data-testid="settings-nav-appearance-surfaces"]').click();
   await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
   await expect(window.locator('[data-testid="surface-section"]')).toBeVisible();
+}
+
+/** Jump to the Themes node (its palette gallery) without leaving the open dialog. */
+async function openThemesGallery(): Promise<void> {
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
 }
 
 /** Loads the pane's watermark tile as an image — proves the data URI is not CSP-blocked. */
@@ -106,6 +113,49 @@ test('the default motif is one anchored corner mark, not wallpaper', async () =>
   }
 });
 
+test('the corner picker mirrors the motif into every selected corner', async () => {
+  await openSurface();
+  await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
+
+  const layer = () => window.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      image: style.getPropertyValue('--surface-watermark-image').trim(),
+      position: style.getPropertyValue('--surface-watermark-position').trim(),
+      attachment: style.getPropertyValue('--surface-watermark-attachment').trim()
+    };
+  });
+  // One `data:` SVG per corner layer (the tile's own `url(#sp)` refs live
+  // inside each URI, so counting `url(` would over-count).
+  const layerCount = (value: string) => (value.match(/data:image\/svg\+xml/g) ?? []).length;
+
+  // Parchment ships one corner (top-right).
+  await expect(window.locator('[data-testid="motif-corner-top-right"]')).toHaveAttribute('aria-pressed', 'true');
+  expect(layerCount((await layer()).image)).toBe(1);
+
+  // Add the opposite corner — now two independent faded layers, one per corner.
+  await window.locator('[data-testid="motif-corner-bottom-left"]').click();
+  await expect(window.locator('[data-testid="motif-corner-bottom-left"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => layerCount((await layer()).image)).toBe(2);
+  const twoUp = await layer();
+  expect(twoUp.position).toBe('right top, left bottom');
+  expect(twoUp.attachment).toBe('fixed, fixed');
+
+  // Deselecting down to one corner works; deselecting the last is a no-op —
+  // a corner motif always keeps at least one.
+  await window.locator('[data-testid="motif-corner-top-right"]').click();
+  await window.locator('[data-testid="motif-corner-bottom-left"]').click();
+  await expect(window.locator('[data-testid="motif-corner-bottom-left"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => layerCount((await layer()).image)).toBe(1);
+
+  // That two-corner-then-trimmed choice survives a relaunch.
+  await window.locator('[data-testid="motif-corner-top-right"]').click();
+  await window.reload();
+  await openSurface();
+  await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
+  await expect.poll(async () => layerCount((await layer()).image)).toBe(2);
+});
+
 test('the motif rides over any pack, and Reset hands it back', async () => {
   // The point of splitting motif from material: pick hexagon on a pack whose
   // own motif is a triangle lattice, recolour it, and the pack keeps its own
@@ -122,7 +172,7 @@ test('the motif rides over any pack, and Reset hands it back', async () => {
   await expect(window.locator('html')).toHaveAttribute('data-surface', 'graphite');
 
   await window.reload();
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await openSurface();
   await expect.poll(tile).toContain('#4ec9b0');
 
   // Reset drops the override; the pack's own triangle motif returns.
@@ -229,7 +279,7 @@ test('the Intensity dial scales the texture and is disabled for Flat', async () 
   await expect.poll(readIntensity).toBe('0.4');
 
   await window.reload();
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await openSurface();
   expect(await readIntensity()).toBe('0.4');
 
   await window.locator('[data-testid="surface-card-flat"]').click();
@@ -335,8 +385,7 @@ test('Aurora Glass frosts the sidebar and the translucency dial collapses it', a
   await window.screenshot({ path: 'output/playwright/sessions-aurora-glass.png', fullPage: true });
 
   // Turning translucency off forces the gate to 0 → panel resolves back to opaque.
-  await window.locator('[data-testid="titlebar-themes"]').click();
-  await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
+  await openSurface();
   await window.locator('[data-testid="surface-translucency-toggle"]').click();
   await expect.poll(() =>
     window.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--surface-translucency').trim())
@@ -348,10 +397,11 @@ test('Noir is offered under a dark theme and hidden under a light one', async ()
   await openSurface();
   await expect(window.locator('[data-testid="surface-card-noir"]')).toBeVisible();
 
-  // Swap to the light Praxis theme, reopen the panel.
+  // Swap to the light Praxis theme on the Themes node, then back to Surfaces.
+  await openThemesGallery();
   await window.locator('[data-testid="theme-card-praxis-light"]').click();
   await expect(window.locator('html')).toHaveAttribute('data-mode', 'light');
-  await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
+  await openSurface();
   await expect(window.locator('[data-testid="surface-card-noir"]')).toHaveCount(0);
   await expect(window.locator('[data-testid="surface-card-aurora-glass"]')).toBeVisible();
 });
@@ -408,7 +458,7 @@ test('the Window-blur toggle is present on a vibrancy-capable OS and persists', 
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
 
   await window.reload();
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await openSurface();
   await expect(window.locator('[data-testid="surface-vibrancy-toggle"]')).toHaveAttribute('aria-checked', 'true');
 });
 

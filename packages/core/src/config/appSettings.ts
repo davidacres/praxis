@@ -208,6 +208,39 @@ export interface AppearanceSettings {
      */
     pattern?: SurfaceMotifSettings;
   }>;
+  /**
+   * Saved appearance presets ("Looks"). Each bundles the whole appearance stack —
+   * theme, mode, surface pack, dials/motif, priority colours, brand-artwork
+   * toggle — so the user can switch the entire look in one click. The live
+   * `appearance` fields above stay the source of truth for rendering; the active
+   * Look is kept mirrored to them on every appearance write (see
+   * `mirrorActiveLook`). Ships four built-ins; users add their own.
+   */
+  looks: AppearanceLook[];
+  /**
+   * Id of the Look currently selected in Settings. `''` means detached — no Look
+   * is selected and edits are not mirrored anywhere.
+   */
+  activeLookId: string;
+}
+
+/**
+ * A saved appearance preset. Captures everything in the Appearance section except
+ * the libraries (`customThemes`, `customSurfacePacks`, `installed*Ids`), which are
+ * shared across every Look.
+ */
+export interface AppearanceLook {
+  /** Built-ins: `look-parchment` | `look-blueprint` | `look-aurora` | `look-flat`. User packs: `look-<base36>`. */
+  id: string;
+  /** User-facing name, ≤ 80 chars. */
+  name: string;
+  themeId: string;
+  themeMode: 'light' | 'dark' | 'system';
+  surfacePackId: string;
+  /** The surface dials + motif override, same shape as `AppearanceSettings['surface']`. */
+  surface: AppearanceSettings['surface'];
+  priorityColors: Record<string, string>;
+  showBrandArtwork: boolean;
 }
 
 /**
@@ -231,8 +264,14 @@ export interface SurfaceMotifSettings {
   blend?: string;
   /** `tile` repeats everywhere; `corner` is one anchored, fading motif. */
   placement?: 'tile' | 'corner';
-  /** Which window corner a `corner` motif grows from. */
+  /** Which window corner a `corner` motif grows from. Legacy single-corner form. */
   anchor?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  /**
+   * The corners a `corner` motif is mirrored into — one to four. Supersedes the
+   * singular `anchor` whenever it is present and non-empty; `anchor` is kept so
+   * older profiles and pack definitions keep working.
+   */
+  anchors?: Array<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'>;
   /** How far a `corner` motif spreads, in CSS pixels. */
   spread?: number;
   /** 0..1 — how far across the spread it fades to nothing. */
@@ -291,6 +330,38 @@ export interface AppSettings {
   gitVisual: GitVisualSettings;
 }
 
+/** The priority-colour map every fresh profile and every built-in Look starts from. */
+const DEFAULT_PRIORITY_COLORS: Record<string, string> = {
+  Critical: '#DC2626',
+  Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
+  High: '#F59E0B',
+  Medium: 'linear-gradient(to bottom, #F59E0B, #3B82F6)',
+  Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
+  Lowest: '#22C55E'
+};
+
+/** One shipped Look: the default theme/dials, differing only by surface pack. */
+function builtInLook(id: string, name: string, surfacePackId: string): AppearanceLook {
+  return {
+    id,
+    name,
+    themeId: 'praxis-dark',
+    themeMode: 'dark',
+    surfacePackId,
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    priorityColors: { ...DEFAULT_PRIORITY_COLORS },
+    showBrandArtwork: true
+  };
+}
+
+/** The four Looks the strip is seeded with. `look-parchment` equals today's shipped appearance. */
+export const BUILT_IN_LOOKS: AppearanceLook[] = [
+  builtInLook('look-parchment', 'Parchment', 'parchment'),
+  builtInLook('look-blueprint', 'Blueprint', 'blueprint'),
+  builtInLook('look-aurora', 'Aurora', 'aurora-glass'),
+  builtInLook('look-flat', 'Flat', 'flat')
+];
+
 /** Shipped defaults — kept in sync with `package.json` contributes.configuration. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   ai: {
@@ -344,14 +415,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
     installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'],
     customSurfacePacks: [],
-    priorityColors: {
-      Critical: '#DC2626',
-      Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
-      High: '#F59E0B',
-      Medium: 'linear-gradient(to bottom, #F59E0B, #3B82F6)',
-      Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
-      Lowest: '#22C55E'
-    }
+    looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
+    activeLookId: 'look-parchment',
+    priorityColors: { ...DEFAULT_PRIORITY_COLORS }
   },
   terminal: {
     defaultProfileId: '',
@@ -404,6 +470,8 @@ export interface AppSettingsPatch {
     surface?: Partial<AppearanceSettings['surface']>;
     installedSurfacePackIds?: string[];
     customSurfacePacks?: AppearanceSettings['customSurfacePacks'];
+    looks?: AppearanceLook[];
+    activeLookId?: string;
   };
   terminal?: Partial<TerminalSettings>;
   git?: Partial<GitSettings>;
@@ -535,6 +603,18 @@ function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefine
   const anchor = typeof value.anchor === 'string' && SURFACE_ANCHORS.has(value.anchor)
     ? { anchor: value.anchor as SurfaceMotifSettings['anchor'] }
     : {};
+  // Each corner is baked into a separate SVG layer, so validate to the literal
+  // set, de-duplicate, and cap at the four real corners. An empty result is
+  // dropped so the singular `anchor` (or the default) still applies.
+  const anchorList = Array.isArray(value.anchors)
+    ? (value.anchors.filter(
+        (item): item is NonNullable<SurfaceMotifSettings['anchor']> =>
+          typeof item === 'string' && SURFACE_ANCHORS.has(item)
+      ) as NonNullable<SurfaceMotifSettings['anchors']>)
+        .filter((item, index, list) => list.indexOf(item) === index)
+        .slice(0, 4)
+    : [];
+  const anchors = anchorList.length ? { anchors: anchorList } : {};
   return {
     id: value.id,
     scale: clampNumber(value.scale, 8, 400, 120),
@@ -547,6 +627,7 @@ function readSurfacePatternSpec(value: unknown): SurfaceMotifSettings | undefine
     fill: clampNumber(value.fill, 0, 1, 0),
     outline: clampNumber(value.outline, 0, 1, 0),
     ...anchor,
+    ...anchors,
     ...inkColor,
     ...outlineInk,
     ...blend
@@ -577,6 +658,35 @@ function readCustomSurfacePacks(value: unknown): AppearanceSettings['customSurfa
       ) as Record<string, string>
     };
   });
+}
+
+/**
+ * Validates the saved Looks. Each entry must name a real-shaped preset; the
+ * theme/pack ids are only shape-checked (the renderer owns the catalogues and
+ * ignores ids it does not know), and the nested dials/colours reuse the same
+ * validators as the live `appearance` fields. An absent or non-array value falls
+ * back to the shipped built-ins.
+ */
+function readLooks(value: unknown, fallback: AppearanceSettings['looks']): AppearanceSettings['looks'] {
+  if (!Array.isArray(value)) {
+    return fallback.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } }));
+  }
+  return value
+    .filter(item => isRecord(item)
+      && typeof item.id === 'string' && /^look-[a-z0-9-]+$/.test(item.id)
+      && typeof item.name === 'string' && item.name.trim().length > 0
+      && typeof item.themeId === 'string' && /^[a-z0-9-]+$/.test(item.themeId)
+      && typeof item.surfacePackId === 'string' && /^[a-z0-9-]+$/.test(item.surfacePackId))
+    .map(item => ({
+      id: item.id as string,
+      name: (item.name as string).trim().slice(0, 80),
+      themeId: item.themeId as string,
+      themeMode: readThemeMode(item.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode),
+      surfacePackId: item.surfacePackId as string,
+      surface: readSurface(item.surface, DEFAULT_APP_SETTINGS.appearance.surface),
+      priorityColors: readPriorityColors(item.priorityColors),
+      showBrandArtwork: readBoolean(item.showBrandArtwork, DEFAULT_APP_SETTINGS.appearance.showBrandArtwork)
+    }));
 }
 
 /**
@@ -750,6 +860,20 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       }
     : { ...DEFAULT_APP_SETTINGS.preview };
 
+  // Looks + the active id are resolved first so the id can be blanked when it
+  // names no surviving Look ("detached"). Only a fresh profile inherits the
+  // default `activeLookId`; an existing profile with no stored Looks gets the
+  // built-ins but stays detached, so we never retroactively claim its setup
+  // matches one.
+  const hasAppearance = isRecord(raw) && isRecord(raw.appearance);
+  const appearanceLooks = hasAppearance
+    ? readLooks((raw.appearance as Record<string, unknown>).looks, DEFAULT_APP_SETTINGS.appearance.looks)
+    : readLooks(undefined, DEFAULT_APP_SETTINGS.appearance.looks);
+  const requestedLookId = hasAppearance
+    ? readString((raw.appearance as Record<string, unknown>).activeLookId, '')
+    : DEFAULT_APP_SETTINGS.appearance.activeLookId;
+  const appearanceActiveLookId = appearanceLooks.some(look => look.id === requestedLookId) ? requestedLookId : '';
+
   const appearance: AppearanceSettings = isRecord(raw) && isRecord(raw.appearance)
     ? {
         showBrandArtwork: readBoolean(
@@ -765,6 +889,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,surface: readSurface(raw.appearance.surface, DEFAULT_APP_SETTINGS.appearance.surface)
         ,installedSurfacePackIds: readThemeIds(raw.appearance.installedSurfacePackIds, DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds)
         ,customSurfacePacks: readCustomSurfacePacks(raw.appearance.customSurfacePacks)
+        ,looks: appearanceLooks
+        ,activeLookId: appearanceActiveLookId
       }
     : {
         showBrandArtwork: DEFAULT_APP_SETTINGS.appearance.showBrandArtwork,
@@ -777,6 +903,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,surface: { ...DEFAULT_APP_SETTINGS.appearance.surface }
         ,installedSurfacePackIds: [...DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds]
         ,customSurfacePacks: []
+        ,looks: appearanceLooks
+        ,activeLookId: appearanceActiveLookId
       };
 
   const git: GitSettings = isRecord(raw) && isRecord(raw.git)
@@ -843,6 +971,38 @@ function mergeAiProviderConfigs(
   return out;
 }
 
+/**
+ * Keeps the active Look mirrored to the live appearance fields. Runs after every
+ * appearance write that *edits* the current Look — never a switch to another one
+ * (`activeLookId` present in the patch) or a wholesale `looks` rewrite. Both UI
+ * surfaces funnel through `mergeAppSettings`, so no individual control needs its
+ * own wiring. Replaces the matching entry with a fresh object so `base` is never
+ * mutated.
+ */
+function mirrorActiveLook(appearance: AppearanceSettings, patch: AppSettingsPatch): void {
+  if (!patch.appearance) return;
+  if (patch.appearance.activeLookId !== undefined || patch.appearance.looks !== undefined) return;
+  const id = appearance.activeLookId;
+  if (!id) return;
+  const index = appearance.looks.findIndex(look => look.id === id);
+  if (index < 0) return;
+  appearance.looks = appearance.looks.map((look, i) => i === index
+    ? {
+        id: look.id,
+        name: look.name,
+        themeId: appearance.themeId,
+        themeMode: appearance.themeMode,
+        surfacePackId: appearance.surfacePackId,
+        surface: {
+          ...appearance.surface,
+          ...(appearance.surface.motif ? { motif: { ...appearance.surface.motif } } : {})
+        },
+        priorityColors: { ...appearance.priorityColors },
+        showBrandArtwork: appearance.showBrandArtwork
+      }
+    : look);
+}
+
 /** Deep-merge a patch over a base — returns a new object, never mutating inputs. */
 export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): AppSettings {
   const ai: AiSettings = {
@@ -896,10 +1056,13 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     surface: { ...base.appearance.surface, ...(patch.appearance?.surface ?? {}) },
     installedSurfacePackIds: patch.appearance?.installedSurfacePackIds ? [...new Set(patch.appearance.installedSurfacePackIds)] : [...base.appearance.installedSurfacePackIds],
     customSurfacePacks: patch.appearance?.customSurfacePacks ? [...patch.appearance.customSurfacePacks] : [...base.appearance.customSurfacePacks],
+    looks: patch.appearance?.looks ? [...patch.appearance.looks] : [...base.appearance.looks],
+    activeLookId: patch.appearance?.activeLookId ?? base.appearance.activeLookId,
     priorityColors: isRecord(patch.appearance) && isRecord(patch.appearance.priorityColors)
       ? { ...base.appearance.priorityColors, ...patch.appearance.priorityColors }
       : { ...base.appearance.priorityColors }
   };
+  mirrorActiveLook(appearance, patch);
 
   const terminal: TerminalSettings = {
     ...base.terminal,
