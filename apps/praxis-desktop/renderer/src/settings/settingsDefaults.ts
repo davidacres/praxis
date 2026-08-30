@@ -47,6 +47,38 @@ export const PRIORITY_NAMES: readonly string[] = [
   'Lowest'
 ];
 
+/** Priority-colour map every fresh profile and every built-in Look starts from. Mirrors core. */
+const DEFAULT_PRIORITY_COLORS = {
+  Critical: '#DC2626',
+  Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
+  High: '#F59E0B',
+  Medium: 'linear-gradient(to bottom, #F59E0B, #3B82F6)',
+  Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
+  Lowest: '#22C55E'
+} as const;
+
+/** One shipped Look — mirrors core's `builtInLook`; differ only by surface pack. */
+function builtInLook(id: string, name: string, surfacePackId: string) {
+  return {
+    id,
+    name,
+    themeId: 'praxis-dark',
+    themeMode: 'dark' as 'light' | 'dark' | 'system',
+    surfacePackId,
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    priorityColors: { ...DEFAULT_PRIORITY_COLORS } as Record<string, string>,
+    showBrandArtwork: true
+  };
+}
+
+/** The four Looks the strip is seeded with — keep in sync with core's `BUILT_IN_LOOKS`. */
+export const BUILT_IN_LOOKS = [
+  builtInLook('look-parchment', 'Parchment', 'parchment'),
+  builtInLook('look-blueprint', 'Blueprint', 'blueprint'),
+  builtInLook('look-aurora', 'Aurora', 'aurora-glass'),
+  builtInLook('look-flat', 'Flat', 'flat')
+];
+
 /** Defaults for the runtime Settings shape — keep in sync with `DEFAULT_APP_SETTINGS` in core. */
 export const DEFAULT_APP_SETTINGS = {
   ai: {
@@ -92,14 +124,9 @@ export const DEFAULT_APP_SETTINGS = {
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
     installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'] as string[],
     customSurfacePacks: [] as Array<{ id: string; name: string; description: string; basePackId?: string; tokens: Record<string, string> }>,
-    priorityColors: {
-      Critical: '#DC2626',
-      Highest: 'linear-gradient(to bottom, #DC2626, #EA580C)',
-      High: '#F59E0B',
-      Medium: 'linear-gradient(to bottom, #F59E0B, #3B82F6)',
-      Low: 'linear-gradient(to bottom, #3B82F6, #22C55E)',
-      Lowest: '#22C55E'
-    }
+    looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
+    activeLookId: 'look-parchment',
+    priorityColors: { ...DEFAULT_PRIORITY_COLORS } as Record<string, string>
   },
   git: {
     executablePath: '',

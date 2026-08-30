@@ -200,8 +200,13 @@ export interface SurfacePatternSpec {
   blend?: string;
   /** `tile` repeats everywhere; `corner` is one anchored, fading motif. */
   placement?: SurfacePatternPlacement;
-  /** Which window corner a `corner` motif grows from. */
+  /** Which window corner a `corner` motif grows from. Legacy single-corner form. */
   anchor?: SurfacePatternAnchor;
+  /**
+   * Corners a `corner` motif is mirrored into — one to four, each its own faded
+   * layer. Supersedes `anchor` when present and non-empty.
+   */
+  anchors?: SurfacePatternAnchor[];
   /** How far a `corner` motif spreads, in CSS pixels. */
   spread?: number;
   /** 0..1 — how far across the spread the motif fades to nothing. */
@@ -366,31 +371,42 @@ export function resolveSurfacePattern(
     };
   }
 
-  // Corner: one motif `spread` px square, the tile repeated inside it through an
-  // SVG <pattern>, masked by a gradient running away from the anchor. Painted
-  // fixed so every pane samples the same viewport-anchored image.
+  // Corner: one motif per selected corner, each `spread` px square, the tile
+  // repeated inside it through an SVG <pattern> and masked by a gradient running
+  // away from that corner. Painted fixed so every pane samples the same
+  // viewport-anchored image; the layers are comma-joined so one to four corners
+  // compose as a single multi-layer background.
   const spread = Math.max(120, spec.spread ?? DEFAULT_MOTIF_SPREAD);
   const fade = Math.min(1, Math.max(0.05, spec.fade ?? DEFAULT_MOTIF_FADE));
-  const anchor = ANCHORS[spec.anchor ?? 'top-right'] ?? ANCHORS['top-right'];
-  const [x1, y1, x2, y2] = anchor.grad;
-  const defs =
-    `<defs>` +
-    `<linearGradient id="sf" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">` +
-    `<stop offset="0" stop-color="#fff" stop-opacity="1"/>` +
-    `<stop offset="${fade}" stop-color="#fff" stop-opacity="0"/>` +
-    `</linearGradient>` +
-    `<mask id="sm"><rect width="${spread}" height="${spread}" fill="url(#sf)"/></mask>` +
-    `<pattern id="sp" width="${tileWidth}" height="${tileHeight}" patternUnits="userSpaceOnUse">` +
-    drawBody() +
-    `</pattern>` +
-    `</defs>`;
-  const rect = `<rect width="${spread}" height="${spread}" fill="url(#sp)" mask="url(#sm)"/>`;
+  const requested = spec.anchors && spec.anchors.length ? spec.anchors : [spec.anchor ?? 'top-right'];
+  const corners = requested
+    .filter((name): name is SurfacePatternAnchor => name in ANCHORS)
+    .filter((name, index, list) => list.indexOf(name) === index)
+    .slice(0, 4);
+  const chosen = corners.length ? corners : (['top-right'] as SurfacePatternAnchor[]);
+  const layers = chosen.map(name => {
+    const anchor = ANCHORS[name];
+    const [x1, y1, x2, y2] = anchor.grad;
+    const defs =
+      `<defs>` +
+      `<linearGradient id="sf" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">` +
+      `<stop offset="0" stop-color="#fff" stop-opacity="1"/>` +
+      `<stop offset="${fade}" stop-color="#fff" stop-opacity="0"/>` +
+      `</linearGradient>` +
+      `<mask id="sm"><rect width="${spread}" height="${spread}" fill="url(#sf)"/></mask>` +
+      `<pattern id="sp" width="${tileWidth}" height="${tileHeight}" patternUnits="userSpaceOnUse">` +
+      drawBody() +
+      `</pattern>` +
+      `</defs>`;
+    const rect = `<rect width="${spread}" height="${spread}" fill="url(#sp)" mask="url(#sm)"/>`;
+    return { image: `url("${svg(spread, spread, defs, rect)}")`, position: anchor.position };
+  });
   return {
     ...common,
-    image: `url("${svg(spread, spread, defs, rect)}")`,
-    size: `${spread}px ${spread}px`,
-    repeat: 'no-repeat',
-    attachment: 'fixed',
-    position: anchor.position
+    image: layers.map(layer => layer.image).join(', '),
+    size: chosen.map(() => `${spread}px ${spread}px`).join(', '),
+    repeat: chosen.map(() => 'no-repeat').join(', '),
+    attachment: chosen.map(() => 'fixed').join(', '),
+    position: layers.map(layer => layer.position).join(', ')
   };
 }

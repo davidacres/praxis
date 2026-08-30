@@ -207,6 +207,33 @@ test('an unknown motif anchor falls back rather than reaching CSS', () => {
   assert.equal(settings.appearance.surface.motif!.anchor, undefined);
 });
 
+test('a motif corner list is filtered to the real corners, de-duplicated, and capped at four', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: {
+        motif: {
+          id: 'hexagon', scale: 62, opacity: 0.3, placement: 'corner',
+          anchors: ['top-right', 'bottom-left', 'top-right', 'nowhere', 'top-left', 'bottom-right', 'top-left']
+        }
+      }
+    }
+  });
+  assert.deepEqual(
+    settings.appearance.surface.motif!.anchors,
+    ['top-right', 'bottom-left', 'top-left', 'bottom-right']
+  );
+});
+
+test('an all-invalid motif corner list is dropped so the singular anchor still applies', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      surface: { motif: { id: 'grid', scale: 40, opacity: 0.2, anchor: 'bottom-left', anchors: ['nope', 42] } }
+    }
+  });
+  assert.equal(settings.appearance.surface.motif!.anchors, undefined);
+  assert.equal(settings.appearance.surface.motif!.anchor, 'bottom-left');
+});
+
 test('a custom pack drops an unsafe pattern id or blend rather than passing it to CSS', () => {
   const settings = sanitizeAppSettings({
     appearance: {
@@ -221,4 +248,96 @@ test('a custom pack drops an unsafe pattern id or blend rather than passing it t
   // …and a blend outside the CSS keyword set is dropped, keeping the rest.
   assert.equal(settings.appearance.customSurfacePacks[1]!.pattern!.id, 'grid');
   assert.equal(settings.appearance.customSurfacePacks[1]!.pattern!.blend, undefined);
+});
+
+/* ── Looks (switchable appearance presets) ──────────────────────────────── */
+
+test('a fresh profile ships the four built-in Looks with Parchment active', () => {
+  const settings = sanitizeAppSettings({});
+  assert.deepEqual(
+    settings.appearance.looks.map(look => look.id),
+    ['look-parchment', 'look-blueprint', 'look-aurora', 'look-flat']
+  );
+  assert.equal(settings.appearance.activeLookId, 'look-parchment');
+  // look-parchment must equal today's shipped appearance so nothing shifts.
+  const parchment = settings.appearance.looks[0]!;
+  assert.equal(parchment.surfacePackId, 'parchment');
+  assert.equal(parchment.themeId, 'praxis-dark');
+});
+
+test('an existing profile with no stored Looks gets the built-ins but stays detached', () => {
+  const settings = sanitizeAppSettings({ appearance: { themeId: 'github-dark', surfacePackId: 'flat' } });
+  assert.equal(settings.appearance.looks.length, 4);
+  assert.equal(settings.appearance.activeLookId, '');
+});
+
+test('an activeLookId that names no Look is blanked', () => {
+  const settings = sanitizeAppSettings({ appearance: { activeLookId: 'look-ghost' } });
+  assert.equal(settings.appearance.activeLookId, '');
+});
+
+test('readLooks drops a malformed entry and clamps a nested surface dial', () => {
+  const settings = sanitizeAppSettings({
+    appearance: {
+      looks: [
+        { id: 'bad id', name: 'Nope', themeId: 'praxis-dark', surfacePackId: 'flat' },
+        { id: 'look-mine', name: '  My Look  ', themeId: 'praxis-dark', themeMode: 'light',
+          surfacePackId: 'graphite', surface: { intensity: 9, texture: 'yes', translucency: false },
+          priorityColors: {}, showBrandArtwork: false }
+      ]
+    }
+  });
+  assert.equal(settings.appearance.looks.length, 1);
+  const look = settings.appearance.looks[0]!;
+  assert.equal(look.id, 'look-mine');
+  assert.equal(look.name, 'My Look');
+  assert.equal(look.themeMode, 'light');
+  assert.equal(look.surface.intensity, 1);       // clamped from 9
+  assert.equal(look.surface.texture, true);      // non-boolean → default
+  assert.equal(look.surface.translucency, false);
+  assert.equal(look.showBrandArtwork, false);
+});
+
+test('editing an appearance field while a Look is active mirrors into that Look', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    appearance: { surfacePackId: 'graphite' }
+  });
+  assert.equal(merged.appearance.surfacePackId, 'graphite');
+  const parchment = merged.appearance.looks.find(look => look.id === 'look-parchment')!;
+  assert.equal(parchment.surfacePackId, 'graphite');
+  // base is never mutated
+  assert.equal(
+    DEFAULT_APP_SETTINGS.appearance.looks.find(look => look.id === 'look-parchment')!.surfacePackId,
+    'parchment'
+  );
+});
+
+test('switching Look (activeLookId in the patch) does not clobber the target Look', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    appearance: { surfacePackId: 'graphite', activeLookId: 'look-flat' }
+  });
+  assert.equal(merged.appearance.activeLookId, 'look-flat');
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-parchment')!.surfacePackId, 'parchment');
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-flat')!.surfacePackId, 'flat');
+});
+
+test('a wholesale looks rewrite is not second-guessed by the mirror', () => {
+  const rename = DEFAULT_APP_SETTINGS.appearance.looks.map(look =>
+    look.id === 'look-parchment' ? { ...look, name: 'Renamed' } : look);
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    appearance: { looks: rename, surfacePackId: 'graphite' }
+  });
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-parchment')!.name, 'Renamed');
+  // the mirror stayed out of it — no surfacePackId snapshot onto the entry
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-parchment')!.surfacePackId, 'parchment');
+});
+
+test('a detached profile ignores appearance edits for mirroring', () => {
+  const base = sanitizeAppSettings({ appearance: { themeId: 'github-dark' } }); // activeLookId === ''
+  const merged = mergeAppSettings(base, { appearance: { surfacePackId: 'graphite' } });
+  assert.equal(merged.appearance.activeLookId, '');
+  assert.deepEqual(
+    merged.appearance.looks.map(look => look.surfacePackId),
+    base.appearance.looks.map(look => look.surfacePackId)
+  );
 });

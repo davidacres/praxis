@@ -960,7 +960,7 @@ export function App() {
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
-        onOpenThemes={() => setSettingsDialogCategory('themes')}
+        onOpenThemes={() => setSettingsDialogCategory('appearance-themes')}
         boardFilter={
           selectedBoard && boardDetails && !route.feature && !route.newIssue && !route.view
             ? {
