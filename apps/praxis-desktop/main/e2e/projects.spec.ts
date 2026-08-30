@@ -253,6 +253,7 @@ test('imports detected plans as a read-only board for an existing-folder project
     await app.window.reload();
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Imported Plans' });
     await expect(projectTree.getByTestId('project-linked-board-nav-item')).toContainText('Imported Plans (Live)');
+    await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans (Live)' })).toHaveCount(0);
     await projectTree.getByTestId('project-linked-board-nav-item').click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
     await app.window.screenshot({ path: 'output/playwright/project-imported-plans-board.png', fullPage: true });

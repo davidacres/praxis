@@ -142,12 +142,24 @@ export function Sidebar({
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
         return board ? [{ link, board }] : [];
       });
-      const importedPlans = linkedBoards.some(({ link }) => link.connectionId.startsWith('project-plans-'));
+      // A live-folder connection can expose more than the one board that was
+      // initially linked (one board per discovered plans root). They belong to
+      // the same project and must not fall through into the global Boards node.
+      const linkedConnectionIds = new Set(project.linkedBoards.map(link => link.connectionId));
+      const discoveredLinkedBoards = boards
+        .filter(board => board.connectionId && linkedConnectionIds.has(board.connectionId))
+        .filter(board => !linkedBoards.some(({ link }) => link.connectionId === board.connectionId && link.boardId === board.id))
+        .map(board => ({
+          link: { connectionId: board.connectionId!, boardId: board.id, displayName: board.name },
+          board
+        }));
+      const allLinkedBoards = [...linkedBoards, ...discoveredLinkedBoards];
+      const importedPlans = allLinkedBoards.some(({ link }) => link.connectionId.startsWith('project-plans-'));
       const matchesProject = !needle || `${project.name} ${project.key} ${project.type}`.toLowerCase().includes(needle);
       const matchesDefault = defaultBoard?.name.toLowerCase().includes(needle);
       const matchingLinkedBoards = needle && !matchesProject
-        ? linkedBoards.filter(({ link, board }) => `${link.displayName} ${board.name}`.toLowerCase().includes(needle))
-        : linkedBoards;
+        ? allLinkedBoards.filter(({ link, board }) => `${link.displayName} ${board.name}`.toLowerCase().includes(needle))
+        : allLinkedBoards;
       return {
         project,
         // An existing-folder project with detected plans is represented by
@@ -166,7 +178,14 @@ export function Sidebar({
     ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
     ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
   ])), [projectEntries]);
-  const externalBoards = boards.filter(board => !projectBoardKeys.has(`${board.connectionId ?? ''}:${board.id}`));
+  const projectConnectionIds = useMemo(
+    () => new Set(projects.flatMap(project => project.linkedBoards.map(link => link.connectionId))),
+    [projects]
+  );
+  const externalBoards = boards.filter(board =>
+    !projectBoardKeys.has(`${board.connectionId ?? ''}:${board.id}`) &&
+    !projectConnectionIds.has(board.connectionId ?? '')
+  );
 
   return (
     <nav className="sidebar" aria-label="Workspace">
@@ -334,7 +353,7 @@ export function Sidebar({
                           aria-label={`${projectCollapsed ? 'Expand' : 'Collapse'} ${project.name}`}
                           aria-expanded={!projectCollapsed}
                           onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
-                        ><span className={`tree-section-icon${projectCollapsed ? '' : ' open'}`}><Icon name={projectCollapsed ? 'folder' : 'folder-open'} size={14} /></span></button>
+                        ><span className="tree-section-icon"><Icon name={projectCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
                         <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
                           <span className="tree-icon project-icon"><Icon name="folder-open" size={15} /></span>
                           <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span>
