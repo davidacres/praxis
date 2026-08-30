@@ -35,6 +35,19 @@
   --surface-watermark-attachment: scroll;
   --surface-watermark-position: center;
 
+  /* Motif motion. Every one of these is inert by default, so a still motif
+     costs exactly nothing — the same contract `flat` has for the material.
+     applySurfacePack writes them as COMPLETE literal values rather than having
+     the stylesheet compose them from nested var()s; see the backdrop-filter
+     note below for why this codebase does not trust that indirection. */
+  --surface-watermark-ink: currentColor;
+  --surface-watermark-anim: none;
+  --surface-watermark-filter: none;
+  --surface-watermark-mask: none;
+  --surface-watermark-mask-size: auto;
+  --surface-watermark-mask-repeat: no-repeat;
+  --surface-watermark-mask-position: 0 0;
+
   /* Panel material */
   --surface-panel-border-color: var(--border);
   --surface-radius-boost: 0px;
@@ -288,4 +301,77 @@
   :root[data-vibrancy='glass'] body {
     background-color: var(--bg);
   }
+}
+
+/* ── Motif animation ────────────────────────────────────────────────────
+   A fifth axis, orthogonal to the four theming ones: it describes how the
+   motif MOVES, not what material it is. So this is deliberately NOT a
+   `[data-surface]` block — every style below rides over any pack and any
+   pattern, which is the same split that lets a motif ride over any theme.
+
+   The reveal styles (draw / plot / iterate) are absent from this file on
+   purpose: they need the motif's geometry, so they are baked into its own SVG
+   by `resolveSurfacePattern`. The styles here need only the painted layer.
+
+   IMPORTANT: `prefers-reduced-motion` is handled in `paintSurfacePattern`, not
+   here. A reduced-motion query inside an SVG-as-image is not honoured by the
+   renderer, so the reveal styles can only be stopped by never baking them —
+   and gating both families in one place is what keeps them consistent. */
+
+/* Registered so keyframes can animate it: a plain custom property is not
+   interpolable, and this one is multiplied into the layer's computed opacity.
+   Modulating strength this way lets a style breathe or flicker WITHOUT
+   touching --surface-watermark-opacity, which the contrast guard polices. */
+@property --surface-watermark-flicker {
+  syntax: '<number>';
+  /* MUST inherit: applySurfacePack sets this on :root, but the layer that reads
+     it is a ::before on each pane. With `inherits: false` the root value never
+     reaches the pseudo-element and it silently falls back to 1 — the
+     compensation computes cleanly and does nothing at all. Keyframes animating
+     it on the pseudo-element still win over the inherited value. */
+  inherits: true;
+  initial-value: 1;
+}
+
+@keyframes motif-shimmer {
+  from { mask-position: 140% 140%; }
+  to   { mask-position: -40% -40%; }
+}
+@keyframes motif-glow {
+  from { --surface-watermark-flicker: .72; filter: drop-shadow(0 0 2px var(--surface-watermark-ink)); }
+  to   { --surface-watermark-flicker: 1;   filter: drop-shadow(0 0 10px var(--surface-watermark-ink)); }
+}
+@keyframes motif-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 400px 260px; }
+}
+@keyframes motif-ripple {
+  from { mask-size: 8% 8%; }
+  to   { mask-size: 320% 320%; }
+}
+/* A failing sign: mostly lit, with two short brownouts per cycle. */
+@keyframes motif-neon {
+  0%, 41%, 47%, 78%, 83%, 100% { --surface-watermark-flicker: 1; }
+  43% { --surface-watermark-flicker: .28; }
+  45% { --surface-watermark-flicker: .85; }
+  80% { --surface-watermark-flicker: .45; }
+}
+/* Scanlines rolling under a jittering signal. The chromatic ghosts that give
+   this style its colour split are baked into the SVG, not done here. */
+@keyframes motif-cyberpunk {
+  0%   { mask-position: 0 0;    --surface-watermark-flicker: 1.2; }
+  35%  { mask-position: 0 -6px; --surface-watermark-flicker: 1.2; }
+  38%  { mask-position: 3px -8px; --surface-watermark-flicker: .7; }
+  41%  { mask-position: -2px -9px; --surface-watermark-flicker: 1.35; }
+  70%  { mask-position: 0 -14px; --surface-watermark-flicker: 1.2; }
+  100% { mask-position: 0 -20px; --surface-watermark-flicker: 1.2; }
+}
+
+/* Motif motion pauses with the window, exactly as the Aurora ambient layer
+   does — an animation nobody is looking at is pure battery. */
+:root[data-window-active='false'] .pane-sidebar::before,
+:root[data-window-active='false'] .pane-main::before,
+:root[data-window-active='false'] .pane-aux::before,
+:root[data-window-active='false'] .startup-splash::before {
+  animation-play-state: paused;
 }

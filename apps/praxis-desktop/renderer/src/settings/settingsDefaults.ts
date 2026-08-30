@@ -65,7 +65,7 @@ function builtInLook(id: string, name: string, surfacePackId: string) {
     themeId: 'praxis-dark',
     themeMode: 'dark' as 'light' | 'dark' | 'system',
     surfacePackId,
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
     priorityColors: { ...DEFAULT_PRIORITY_COLORS } as Record<string, string>,
     showBrandArtwork: true
   };
@@ -121,7 +121,7 @@ export const DEFAULT_APP_SETTINGS = {
     installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'] as string[],
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
     installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'] as string[],
     customSurfacePacks: [] as Array<{ id: string; name: string; description: string; basePackId?: string; tokens: Record<string, string> }>,
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),

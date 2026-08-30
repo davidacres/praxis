@@ -13,7 +13,10 @@
  * stylesheet block.
  */
 import type { AppearanceSettings } from '@praxis/core';
-import { findSurfacePattern, type SurfacePatternSpec } from './surfacePatterns';
+import {
+  findSurfacePattern, SURFACE_MOTIF_ANIMATIONS,
+  type SurfaceMotifAnimation, type SurfacePatternSpec
+} from './surfacePatterns';
 
 export type SurfaceMode = 'light' | 'dark';
 
@@ -191,7 +194,14 @@ function readPatternSpec(value: unknown): SurfacePatternSpec | undefined {
     outline: Math.min(1, Math.max(0, num(raw.outline, 0))),
     outlineInk: typeof raw.outlineInk === 'string' ? raw.outlineInk : undefined,
     weight: Math.min(1, Math.max(0.005, num(raw.weight, 0.055))),
-    blend: typeof raw.blend === 'string' ? raw.blend : undefined
+    blend: typeof raw.blend === 'string' ? raw.blend : undefined,
+    // The style selects a keyframe block by name, so — like core's validator —
+    // it is matched against the known set rather than passed through.
+    animation: SURFACE_MOTIF_ANIMATIONS.some(entry => entry.id === raw.animation)
+      ? raw.animation as SurfaceMotifAnimation
+      : undefined,
+    animationSpeed: Math.min(4, Math.max(0.25, num(raw.animationSpeed, 1))),
+    animationRepeat: raw.animationRepeat === true
   };
 }
 

@@ -641,7 +641,21 @@ textarea {
      pane continuously instead of restarting at each pane boundary. */
   background-attachment: var(--surface-watermark-attachment);
   mix-blend-mode: var(--surface-watermark-blend);
-  opacity: calc(var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture));
+  /* `--surface-watermark-flicker` is a registered property defaulting to 1, so
+     a still motif computes exactly as before; an animated one modulates its
+     strength here rather than by rewriting the declared opacity. */
+  opacity: calc(
+    var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture)
+    * var(--surface-watermark-flicker, 1)
+  );
+  /* Motif motion. All inert by default — see the motif-animation section in
+     surfaces.css. Written as whole literals by applySurfacePack. */
+  animation: var(--surface-watermark-anim, none);
+  filter: var(--surface-watermark-filter, none);
+  mask-image: var(--surface-watermark-mask, none);
+  mask-size: var(--surface-watermark-mask-size, auto);
+  mask-repeat: var(--surface-watermark-mask-repeat, no-repeat);
+  mask-position: var(--surface-watermark-mask-position, 0 0);
 }
 .pane-sidebar > *,
 .pane-main > *,
@@ -7289,7 +7303,21 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
      pane continuously instead of restarting at each pane boundary. */
   background-attachment: var(--surface-watermark-attachment);
   mix-blend-mode: var(--surface-watermark-blend);
-  opacity: calc(var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture));
+  /* `--surface-watermark-flicker` is a registered property defaulting to 1, so
+     a still motif computes exactly as before; an animated one modulates its
+     strength here rather than by rewriting the declared opacity. */
+  opacity: calc(
+    var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture)
+    * var(--surface-watermark-flicker, 1)
+  );
+  /* Motif motion. All inert by default — see the motif-animation section in
+     surfaces.css. Written as whole literals by applySurfacePack. */
+  animation: var(--surface-watermark-anim, none);
+  filter: var(--surface-watermark-filter, none);
+  mask-image: var(--surface-watermark-mask, none);
+  mask-size: var(--surface-watermark-mask-size, auto);
+  mask-repeat: var(--surface-watermark-mask-repeat, no-repeat);
+  mask-position: var(--surface-watermark-mask-position, 0 0);
 }
 .startup-splash-svg,
 .startup-splash-version { position: relative; z-index: 1; }

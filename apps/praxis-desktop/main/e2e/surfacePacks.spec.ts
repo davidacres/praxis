@@ -254,6 +254,166 @@ test('the startup splash carries the same watermark as the panes', async () => {
   expect(layer.opacity).toBeGreaterThan(0);
 });
 
+/* ── Motif animation ──────────────────────────────────────────────────────
+   The Mandelbrot is the first singular motif — an emblem drawn once rather
+   than a lattice — and the first to carry motion. Both halves matter: an
+   animated motif must move, and a still one must show the FINISHED mark
+   immediately rather than a half-drawn one. */
+
+/** The decoded SVG of the live watermark, so the baked-in animation is inspectable. */
+async function watermarkSvg(): Promise<string> {
+  return window.evaluate(() =>
+    decodeURIComponent(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-image')));
+}
+
+/** Picks the Mandelbrot, and returns the Motif panel ready for more edits. */
+async function chooseMandelbrot(): Promise<void> {
+  await openSurface();
+  await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
+  await window.locator('[data-testid="motif-pattern"]').selectOption('mandelbrot');
+}
+
+test('the Mandelbrot motif paints as real geometry and its tile actually loads', async () => {
+  await chooseMandelbrot();
+  // The CSP guard: the motif is a data: URI, and `img-src data:` is what lets
+  // it paint at all. Without it the layer computes fine and silently never
+  // shows — so decode it through a real Image() rather than trusting the token.
+  expect(await watermarkLoads()).toMatch(/^OK /);
+
+  const svg = await watermarkSvg();
+  // The exact cardioid and the period-2 disc are what make this the Mandelbrot
+  // rather than a blob: cubic segments for the boundary, circles for the bulbs.
+  expect(svg).toContain('<path');
+  expect(svg).toContain('<circle');
+  expect(svg.match(/<circle/g)!.length).toBeGreaterThan(8);
+});
+
+test('with animation off the motif is baked complete, with no keyframes at all', async () => {
+  await chooseMandelbrot();
+  await window.locator('[data-testid="motif-animation"]').selectOption('none');
+
+  const svg = await watermarkSvg();
+  // "Off" must mean the finished mark, immediately — not a stopped animation.
+  expect(svg).not.toContain('@keyframes');
+  expect(svg).not.toContain('stroke-dashoffset');
+  expect(svg).toContain('<path');
+  await expect(window.locator('html')).not.toHaveAttribute('data-motif-anim', /./);
+
+  const layer = await window.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      anim: style.getPropertyValue('--surface-watermark-anim').trim(),
+      mask: style.getPropertyValue('--surface-watermark-mask').trim(),
+      filter: style.getPropertyValue('--surface-watermark-filter').trim()
+    };
+  });
+  expect(layer.anim).toBe('none');
+  expect(layer.mask).toBe('none');
+  expect(layer.filter).toBe('none');
+});
+
+test('Draw bakes the reveal into the motif SVG and rests on the complete mark', async () => {
+  await chooseMandelbrot();
+  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'draw');
+
+  const svg = await watermarkSvg();
+  // The reveal has to live INSIDE the image: only the SVG knows the geometry.
+  expect(svg).toContain('@keyframes mkd');
+  expect(svg).toContain('stroke-dashoffset');
+  // `pathLength` is what lets one dasharray reveal every shape exactly, with no
+  // per-pattern length maths.
+  expect(svg).toContain('pathLength="1000"');
+  // `both` (not `infinite`) is what makes it settle on the finished mark.
+  expect(svg).toMatch(/animation:mkd \d+ms [^;]* 1 both/);
+  // The parts are staggered so the set assembles rather than flashing in.
+  expect(svg).toContain('animation-delay');
+});
+
+test('Repeat is what turns a one-shot reveal into a loop', async () => {
+  await chooseMandelbrot();
+  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  expect(await watermarkSvg()).not.toContain('infinite');
+
+  await window.locator('[data-testid="motif-repeat"]').check();
+  expect(await watermarkSvg()).toContain('infinite');
+});
+
+test('layer-family styles drive CSS and leave the motif SVG untouched', async () => {
+  await chooseMandelbrot();
+  await window.locator('[data-testid="motif-animation"]').selectOption('shimmer');
+  await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'shimmer');
+
+  // Shimmer is pure CSS over the painted layer, so it works on every pattern in
+  // the library without any pattern knowing about it.
+  const svg = await watermarkSvg();
+  expect(svg).not.toContain('@keyframes');
+
+  const layer = await window.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    return {
+      anim: style.getPropertyValue('--surface-watermark-anim').trim(),
+      mask: style.getPropertyValue('--surface-watermark-mask').trim(),
+      flicker: style.getPropertyValue('--surface-watermark-flicker').trim()
+    };
+  });
+  expect(layer.anim).toContain('motif-shimmer');
+  expect(layer.mask).toContain('linear-gradient');
+  // A mask can only subtract, so the resting alpha sits below 1 and this puts
+  // the average strength back — deliberately NOT by raising the declared opacity.
+  expect(Number(layer.flicker)).toBeGreaterThan(1);
+});
+
+test('an animated motif never raises the declared strength past the contrast ceiling', async () => {
+  // The masking styles compensate through `--surface-watermark-flicker`, so the
+  // token the contrast guard polices must be untouched by the animation choice.
+  await chooseMandelbrot();
+  const strength = async () => window.evaluate(() =>
+    Number(getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-opacity')));
+
+  await window.locator('[data-testid="motif-animation"]').selectOption('none');
+  const still = await strength();
+  for (const style of ['shimmer', 'ripple', 'cyberpunk', 'glow']) {
+    await window.locator('[data-testid="motif-animation"]').selectOption(style);
+    expect(await strength(), `${style} watermark opacity`).toBeCloseTo(still, 5);
+    expect(await strength(), `${style} contrast ceiling`).toBeLessThanOrEqual(0.4);
+  }
+});
+
+test('the master switch stops every motif animation, whatever the style says', async () => {
+  await chooseMandelbrot();
+  await window.locator('[data-testid="motif-animation"]').selectOption('draw');
+  await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'draw');
+
+  // The gate is applied at bake time, not by disabling a running animation —
+  // which is the only thing the in-SVG reveal styles would respect.
+  await window.locator('[data-testid="surface-animate-toggle"]').scrollIntoViewIfNeeded();
+  await window.locator('[data-testid="surface-animate-toggle"]').click();
+  await expect(window.locator('html')).not.toHaveAttribute('data-motif-anim', /./);
+  expect(await watermarkSvg()).not.toContain('@keyframes');
+
+  // ...and the style is remembered, so switching back restores it.
+  await window.locator('[data-testid="surface-animate-toggle"]').click();
+  await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'draw');
+});
+
+test('the motif rides over any pack, and animation rides over any motif', async () => {
+  await openSurface();
+  await window.locator('[data-testid="surface-card-graphite"]').click();
+  await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
+  // Graphite ships a triangle lattice; a lattice takes the same layer styles.
+  await window.locator('[data-testid="motif-animation"]').selectOption('glow');
+  await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'glow');
+  const filter = await window.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-filter').trim());
+  expect(filter).toContain('drop-shadow');
+  // The glow tints from the live theme, so the ink has to be published as its
+  // own token — CSS cannot read a colour back out of a data URI.
+  const ink = await window.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--surface-watermark-ink').trim());
+  expect(ink).toMatch(/^#|^rgb/);
+});
+
 test('switches surface pack, composing over the current theme, and persists it', async () => {
   await openSurface();
   await expect(window.locator('[data-testid="surface-card-parchment"]')).toHaveAttribute('aria-pressed', 'true');
