@@ -119,7 +119,7 @@ import {
   buildMergeRequestReplyComment,
   parseMergeRequestFeedbackResult
 } from '@praxis/core';
-import { GitWorktreeManager, WorktreeConflictError } from './git/gitWorktreeManager';
+import { GitWorktreeManager, WorktreeConflictError } from '@praxis/core';
 import { promptForAgentWorkflowSelection } from './ai/agentWorkflowPicker';
 import { discoverWorkspaceAgentWorkflows, resolveWorkflowReference } from '@praxis/core';
 import { stageIssueAttachments } from '@praxis/core';

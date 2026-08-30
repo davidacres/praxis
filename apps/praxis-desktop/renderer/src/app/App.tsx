@@ -38,6 +38,7 @@ import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
 import { OverviewPage } from './OverviewPage';
 import { WorkspaceDialog } from './WorkspaceDialog';
+import { GettingStarted } from './GettingStarted';
 import { useSettings } from '../settings/useSettings';
 import {
   EMPTY_BOARD_FILTER,
@@ -54,6 +55,8 @@ const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
  * plain index into a list of routes.
  */
 interface Route {
+  /** Durable selection of the empty New Session surface (never its draft text). */
+  newSession?: boolean;
   projectId?: string;
   feature?: FeatureId;
   boardId?: string;
@@ -82,6 +85,101 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   git: 'Git Graph'
 };
 
+const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
+const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
+const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
+
+/**
+ * Restores only durable navigation context. Transient forms and AI tool modes
+ * deliberately fall away so a relaunch cannot reopen an unfinished action.
+ */
+function readLastWorkspaceRoute(): Route {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAST_WORKSPACE_ROUTE_KEY) ?? '{}') as Record<string, unknown>;
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    const feature = typeof stored.feature === 'string' && stored.feature in FEATURE_TITLES
+      ? stored.feature as FeatureId
+      : undefined;
+    const gitView = stored.gitView === 'changes' || stored.gitView === 'conflicts' || stored.gitView === 'graph'
+      ? stored.gitView
+      : undefined;
+    return {
+      ...(stored.newSession === true ? { newSession: true } : {}),
+      ...(typeof stored.projectId === 'string' ? { projectId: stored.projectId } : {}),
+      ...(feature ? { feature } : {}),
+      ...(typeof stored.boardId === 'string' ? { boardId: stored.boardId } : {}),
+      ...(typeof stored.issueKey === 'string' ? { issueKey: stored.issueKey } : {}),
+      ...(typeof stored.sessionKey === 'string' ? { sessionKey: stored.sessionKey } : {}),
+      ...(gitView ? { gitView } : {})
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writeLastWorkspaceRoute(route: Route): void {
+  const durableRoute: Route = {
+    ...(!route.projectId && !route.feature && !route.boardId ? { newSession: true } : {}),
+    ...(route.projectId ? { projectId: route.projectId } : {}),
+    ...(route.feature ? { feature: route.feature } : {}),
+    ...(route.boardId ? { boardId: route.boardId } : {}),
+    ...(route.issueKey ? { issueKey: route.issueKey } : {}),
+    ...(route.sessionKey ? { sessionKey: route.sessionKey } : {}),
+    ...(route.gitView ? { gitView: route.gitView } : {})
+  };
+  localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
+}
+
+function readRecentWorkspaceIds(): string[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(RECENT_WORKSPACES_KEY) ?? '[]') as unknown;
+    return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function routeForOpenedWorkspace(workspace: WorkspaceRecord, projects: ProjectRecord[]): Route {
+  return workspace.defaultProjectId && projects.some(project => project.id === workspace.defaultProjectId)
+    ? { projectId: workspace.defaultProjectId }
+    : { feature: 'overview' };
+}
+
+function restoredRouteForWorkspace(
+  stored: Route,
+  workspace: WorkspaceRecord,
+  projects: ProjectRecord[],
+  boards: Board[]
+): Route {
+  const workspaceProjects = projects.filter(project => workspace.projectIds.includes(project.id));
+  const project = stored.projectId && workspaceProjects.find(candidate => candidate.id === stored.projectId);
+  const board = stored.boardId && boards.find(candidate => {
+    if (candidate.id !== stored.boardId) return false;
+    const directProjectId = candidate.connectionId?.startsWith('project:')
+      ? candidate.connectionId.slice('project:'.length)
+      : undefined;
+    return directProjectId
+      ? workspace.projectIds.includes(directProjectId)
+      : workspaceProjects.some(candidateProject => candidateProject.linkedBoards.some(link =>
+          link.boardId === candidate.id && link.connectionId === candidate.connectionId));
+  });
+  if (stored.projectId && !project) return routeForOpenedWorkspace(workspace, projects);
+  if (stored.boardId && !board) return routeForOpenedWorkspace(workspace, projects);
+  if (stored.feature === 'git' && !project) return routeForOpenedWorkspace(workspace, projects);
+  if (stored.newSession) return { newSession: true };
+  if (project || board || stored.feature) {
+    return {
+      ...(project ? { projectId: project.id } : {}),
+      ...(stored.feature ? { feature: stored.feature } : {}),
+      ...(board ? { boardId: board.id } : {}),
+      ...(board && stored.issueKey ? { issueKey: stored.issueKey } : {}),
+      ...(stored.feature === 'sessions' && stored.sessionKey ? { sessionKey: stored.sessionKey } : {}),
+      ...(stored.feature === 'git' && stored.gitView ? { gitView: stored.gitView } : {})
+    };
+  }
+  return routeForOpenedWorkspace(workspace, projects);
+}
+
 export function App() {
   const { settings } = useSettings();
   const [appVersion, setAppVersion] = useState<string>();
@@ -97,17 +195,17 @@ export function App() {
 
   const [boards, setBoards] = useState<Board[]>([]);
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | undefined>(
-    () => localStorage.getItem('praxis-active-workspace') ?? undefined
-  );
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>();
+  const [recentWorkspaceIds, setRecentWorkspaceIds] = useState(readRecentWorkspaceIds);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   // Whether `workspaces.list()` has returned at least once. The seed-on-first-run
   // effect must wait for this: on relaunch `projects.list()` resolves before
   // `workspaces.list()`, and gating on the still-empty `workspaces` array alone
   // re-seeds "My Workspace" every launch.
   const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
-  const workspaceBootstrap = useRef(false);
+  const [boardsLoaded, setBoardsLoaded] = useState(false);
   const [composerBoardId, setComposerBoardId] = useState<string>();
   const [connections, setConnections] = useState<Connection[]>([]);
   /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
@@ -130,6 +228,10 @@ export function App() {
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
+  const [projectWizardPresentation, setProjectWizardPresentation] = useState<'dialog' | 'onboarding'>('dialog');
+  const [startupResolved, setStartupResolved] = useState(false);
+  const [gettingStarted, setGettingStarted] = useState(true);
+  const [createdWorkspaceId, setCreatedWorkspaceId] = useState<string>();
   const [selectedDesignerNode, setSelectedDesignerNode] = useState<TaskDesignerCanvasNode>();
   const [boardFilterState, setBoardFilterState] = useState<{
     boardId: string;
@@ -139,6 +241,30 @@ export function App() {
     boardId: string;
     value: BoardFilterPresentation;
   }>();
+
+  useEffect(() => {
+    if (!settings || startupResolved || !workspacesLoaded || !projectsLoaded || !boardsLoaded) return;
+    const savedWorkspaceId = localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? undefined;
+    const savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
+    if (settings.startup.reopenLastWorkspace && savedWorkspace) {
+      setActiveWorkspaceId(savedWorkspace.id);
+      setNav({ entries: [restoredRouteForWorkspace(readLastWorkspaceRoute(), savedWorkspace, projects, boards)], index: 0 });
+      setGettingStarted(false);
+    } else {
+      setActiveWorkspaceId(undefined);
+      setGettingStarted(true);
+      if (savedWorkspaceId && !savedWorkspace) localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+    }
+    const validIds = new Set(workspaces.map(workspace => workspace.id));
+    const cleanedRecentIds = recentWorkspaceIds.filter(id => validIds.has(id));
+    setRecentWorkspaceIds(cleanedRecentIds);
+    localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(cleanedRecentIds));
+    setStartupResolved(true);
+  }, [boards, boardsLoaded, projects, projectsLoaded, recentWorkspaceIds, settings, startupResolved, workspaces, workspacesLoaded]);
+
+  useEffect(() => {
+    if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(route);
+  }, [activeWorkspaceId, gettingStarted, route, startupResolved]);
 
   useEffect(() => {
     if (!settingsDialogCategory) {
@@ -220,8 +346,8 @@ export function App() {
   const refreshBoards = useCallback(() => {
     void window.praxis.board
       .list(EMPTY_FILTERS)
-      .then(setBoards)
-      .catch(error => console.error('Failed to load boards:', error));
+      .then(items => { setBoards(items); setBoardsLoaded(true); })
+      .catch(error => { setBoardsLoaded(true); console.error('Failed to load boards:', error); });
   }, []);
 
   const refreshConnections = useCallback(() => {
@@ -232,19 +358,17 @@ export function App() {
   }, []);
 
   const refreshProjects = useCallback(() => {
-    void window.praxis.projects.list().then(setProjects).catch(error => console.error('Failed to load projects:', error));
+    void window.praxis.projects.list()
+      .then(items => { setProjects(items); setProjectsLoaded(true); })
+      .catch(error => { setProjectsLoaded(true); console.error('Failed to load projects:', error); });
   }, []);
 
   const refreshWorkspaces = useCallback(() => {
     void window.praxis.workspaces.list().then(items => {
       setWorkspaces(items);
       setWorkspacesLoaded(true);
-      if (items.length && !items.some(item => item.id === activeWorkspaceId)) {
-        setActiveWorkspaceId(items[0].id);
-        localStorage.setItem('praxis-active-workspace', items[0].id);
-      }
-    }).catch(error => console.error('Failed to load workspaces:', error));
-  }, [activeWorkspaceId]);
+    }).catch(error => { setWorkspacesLoaded(true); console.error('Failed to load workspaces:', error); });
+  }, []);
 
   useEffect(() => {
     refreshBoards();
@@ -253,24 +377,35 @@ export function App() {
     refreshWorkspaces();
   }, [refreshBoards, refreshConnections, refreshProjects, refreshWorkspaces]);
 
-  // First run with projects but no saved workspaces: seed one so the switcher
-  // always has a current context.
-  useEffect(() => {
-    if (workspaceBootstrap.current || !workspacesLoaded || !projects.length || workspaces.length) return;
-    workspaceBootstrap.current = true;
-    void window.praxis.workspaces
-      .create({ name: 'My Workspace', description: 'Your Praxis projects', projectIds: projects.map(project => project.id) })
-      .then(workspace => {
-        setWorkspaces([workspace]);
-        setActiveWorkspaceId(workspace.id);
-        localStorage.setItem('praxis-active-workspace', workspace.id);
-      })
-      .catch(error => console.error('Failed to create default workspace:', error));
-  }, [projects, workspaces.length, workspacesLoaded]);
+  const touchWorkspace = useCallback((workspaceId: string) => {
+    setRecentWorkspaceIds(current => {
+      const next = [workspaceId, ...current.filter(id => id !== workspaceId)];
+      localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
-  const selectWorkspace = useCallback((workspaceId: string) => {
+  const openWorkspace = useCallback((workspaceId: string) => {
+    const workspace = workspaces.find(candidate => candidate.id === workspaceId);
+    if (!workspace) {
+      setGettingStarted(true);
+      return;
+    }
     setActiveWorkspaceId(workspaceId);
-    localStorage.setItem('praxis-active-workspace', workspaceId);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspaceId);
+    touchWorkspace(workspaceId);
+    setCreatedWorkspaceId(undefined);
+    setGettingStarted(false);
+    setNav({ entries: [routeForOpenedWorkspace(workspace, projects)], index: 0 });
+  }, [projects, touchWorkspace, workspaces]);
+
+  const closeWorkspace = useCallback(() => {
+    setActiveWorkspaceId(undefined);
+    localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+    setCreatedWorkspaceId(undefined);
+    setProjectWizardMode(undefined);
+    setGettingStarted(true);
+    setNav({ entries: [{ feature: 'overview' }], index: 0 });
   }, []);
 
   // Remove a saved workspace. The projects it grouped are untouched — only the
@@ -280,11 +415,15 @@ export function App() {
     void window.praxis.workspaces.remove(workspaceId).then(() => {
       setWorkspaces(current => current.filter(item => item.id !== workspaceId));
       if (workspaceId === activeWorkspaceId) {
-        const fallback = workspaces.find(item => item.id !== workspaceId)?.id;
-        setActiveWorkspaceId(fallback);
-        if (fallback) localStorage.setItem('praxis-active-workspace', fallback);
-        else localStorage.removeItem('praxis-active-workspace');
+        setActiveWorkspaceId(undefined);
+        localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+        setGettingStarted(true);
       }
+      setRecentWorkspaceIds(current => {
+        const next = current.filter(id => id !== workspaceId);
+        localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(next));
+        return next;
+      });
     }).catch(error => console.error('Failed to delete workspace:', error));
   }, [activeWorkspaceId, workspaces]);
 
@@ -294,10 +433,22 @@ export function App() {
     void window.praxis.workspaces.create({ name, description, projectIds: [] }).then(workspace => {
       setWorkspaces(current => [...current, workspace]);
       setActiveWorkspaceId(workspace.id);
-      localStorage.setItem('praxis-active-workspace', workspace.id);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+      touchWorkspace(workspace.id);
+      setNav({ entries: [{ feature: 'overview' }], index: 0 });
       setWorkspaceDialogOpen(false);
     }).catch(error => console.error('Failed to create workspace:', error));
-  }, []);
+  }, [touchWorkspace]);
+
+  const createWorkspaceFromGettingStarted = useCallback(async (name: string, description: string) => {
+    const workspace = await window.praxis.workspaces.create({ name, description, projectIds: [] });
+    setWorkspaces(current => [...current, workspace]);
+    setActiveWorkspaceId(workspace.id);
+    localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+    touchWorkspace(workspace.id);
+    setCreatedWorkspaceId(workspace.id);
+    setNav({ entries: [{ feature: 'overview' }], index: 0 });
+  }, [touchWorkspace]);
 
   const saveWorkspaceToFile = useCallback(() => {
     if (activeWorkspaceId) {
@@ -310,9 +461,24 @@ export function App() {
       if (!workspace) return;
       setWorkspaces(current => [...current.filter(item => item.id !== workspace.id), workspace]);
       setActiveWorkspaceId(workspace.id);
-      localStorage.setItem('praxis-active-workspace', workspace.id);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+      touchWorkspace(workspace.id);
+      setCreatedWorkspaceId(undefined);
+      setGettingStarted(false);
+      setNav({ entries: [routeForOpenedWorkspace(workspace, projects)], index: 0 });
     }).catch(error => console.error('Failed to open workspace:', error));
-  }, []);
+  }, [projects, touchWorkspace]);
+
+  const requestProjectWizard = useCallback((wizardMode: 'create' | 'existing', presentation: 'dialog' | 'onboarding' = 'dialog') => {
+    if (!activeWorkspaceId || !workspaces.some(workspace => workspace.id === activeWorkspaceId)) {
+      setProjectWizardMode(undefined);
+      setGettingStarted(true);
+      return;
+    }
+    setGettingStarted(false);
+    setProjectWizardPresentation(presentation);
+    setProjectWizardMode(wizardMode);
+  }, [activeWorkspaceId, workspaces]);
 
   // Connection health dots: run `connection.check` lazily per non-demo
   // connection, fire-and-forget. A dead or slow backend must never block (or
@@ -400,7 +566,19 @@ export function App() {
     () => boards.find(board => board.id === route.boardId),
     [boards, route.boardId]
   );
-  const selectedProject = projects.find(project => project.id === route.projectId);
+  const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
+  const workspaceProjects = activeWorkspace
+    ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
+    : [];
+  const selectedProject = workspaceProjects.find(project => project.id === route.projectId);
+  const workspaceBoards = activeWorkspace
+    ? boards.filter(board => {
+        const directProjectId = board.connectionId?.startsWith('project:')
+          ? board.connectionId.slice('project:'.length)
+          : undefined;
+        return directProjectId ? activeWorkspace.projectIds.includes(directProjectId) : true;
+      })
+    : [];
 
   // Match BoardView's previous keyed-local-state behaviour: selecting another
   // board starts with a clean query instead of reviving criteria from the last
@@ -534,7 +712,12 @@ export function App() {
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
-  const contextLabel = route.newIssue
+  const onboardingProjectWizard = Boolean(projectWizardMode && projectWizardPresentation === 'onboarding');
+  const contextLabel = onboardingProjectWizard
+    ? projectWizardMode === 'existing' ? 'Create from folder' : 'Create project'
+    : gettingStarted
+    ? 'Getting Started'
+    : route.newIssue
     ? route.newIssueType === 'Idea'
       ? 'New idea'
       : 'New issue'
@@ -542,7 +725,11 @@ export function App() {
     : route.feature
       ? FEATURE_TITLES[route.feature]
       : selectedBoard?.name ?? 'New session';
-  const contextDetail = route.feature
+  const contextDetail = onboardingProjectWizard
+    ? activeWorkspace?.name ?? 'Praxis'
+    : gettingStarted
+    ? 'Praxis'
+    : route.feature
     ? 'Praxis'
     : connection?.name ?? backendModeMeta(selectedBoard?.connectionId ? undefined : 'demo').label;
   const selectedBoardFilters =
@@ -562,7 +749,7 @@ export function App() {
 
   const centre = () => {
     if (selectedProject && route.feature !== 'git') {
-      return <ProjectWorkspace project={selectedProject} boards={boards} onOpenBoard={boardId => navigate({ boardId })} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />;
+      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;
     }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
@@ -578,12 +765,12 @@ export function App() {
     if (route.feature === 'overview') {
       return (
         <OverviewPage
-          projects={projects}
-          boards={boards}
+          projects={workspaceProjects}
+          boards={workspaceBoards}
           connections={connections}
           sessions={agentSessions}
           connectionChecks={connectionChecks}
-          onNewProject={() => setProjectWizardMode('create')}
+          onNewProject={() => requestProjectWizard('create')}
           onNewSession={() => navigate({})}
           onOpenProjects={() => navigate({})}
           onOpenSessions={() => navigate({ feature: 'sessions' })}
@@ -661,10 +848,10 @@ export function App() {
     if (!selectedBoard) {
       return (
         <NewSession
-          boards={boards}
-          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode }) => {
+          boards={workspaceBoards}
+          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree }) => {
             const project = board?.connectionId?.startsWith('project:')
-              ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))
+              ? workspaceProjects.find(item => item.id === board.connectionId?.slice('project:'.length))
               : undefined;
             const record = await window.praxis.ai.delegate({
               ...(issueKey ? { issueKey } : {}),
@@ -674,18 +861,20 @@ export function App() {
               provider,
               model,
               toolMode: project?.defaultAiToolMode ?? toolMode,
-              workingDirectory: project?.workspaceFolder
+              workingDirectory: project?.workspaceFolder ?? workingDirectory,
+              ...(runInWorktree ? { runInWorktree: true } : {})
             });
             await window.praxis.ai.renameSession(record.issueKey, title);
             navigate({ feature: 'sessions', sessionKey: record.issueKey });
           }}
+          defaultWorkingDirectory={boardProject?.workspaceFolder}
           connectionCount={connections.length}
           onOpenConnections={() => {
             refreshConnections();
             navigate({ feature: 'connections' });
           }}
-          projectCount={projects.length}
-          onNewProject={newProjectEnabled ? () => setProjectWizardMode('create') : undefined}
+          projectCount={workspaceProjects.length}
+          onNewProject={newProjectEnabled ? () => requestProjectWizard('create') : undefined}
           toolModeForBoard={board => board.connectionId?.startsWith('project:')
             ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))?.defaultAiToolMode
             : undefined}
@@ -798,6 +987,47 @@ export function App() {
         }
       />
 
+      {projectWizardMode && projectWizardPresentation === 'onboarding' && activeWorkspaceId ? (
+        <div className="project-onboarding-frame" data-testid="project-wizard-onboarding">
+          <NewProjectWizard
+            workspaceId={activeWorkspaceId}
+            workspaceName={activeWorkspace?.name}
+            presentation="onboarding"
+            mode={projectWizardMode}
+            onCancel={() => setProjectWizardMode(undefined)}
+            onCreated={project => {
+              setProjectWizardMode(undefined);
+              setProjects(current => [...current.filter(item => item.id !== project.id), project]);
+              setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
+                ? {
+                    ...workspace,
+                    projectIds: [...new Set([...workspace.projectIds, project.id])],
+                    defaultProjectId: workspace.defaultProjectId ?? project.id
+                  }
+                : workspace));
+              refreshBoards();
+              refreshConnections();
+              navigate({ projectId: project.id });
+            }}
+          />
+        </div>
+      ) : gettingStarted ? (
+        <GettingStarted
+          workspaces={workspaces}
+          recentWorkspaceIds={recentWorkspaceIds}
+          createdWorkspace={workspaces.find(workspace => workspace.id === createdWorkspaceId)}
+          onOpenWorkspace={openWorkspace}
+          onOpenWorkspaceFile={openWorkspaceFromFile}
+          onCreateWorkspace={createWorkspaceFromGettingStarted}
+          onCreateProject={() => requestProjectWizard('create', 'onboarding')}
+          onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
+          onContinueEmpty={() => {
+            setCreatedWorkspaceId(undefined);
+            setGettingStarted(false);
+            setNav({ entries: [{ feature: 'overview' }], index: 0 });
+          }}
+        />
+      ) : (
       <div className="shell">
         {sidebarVisible && (
           <>
@@ -815,15 +1045,16 @@ export function App() {
                 />
               ) : (
                 <Sidebar
-                  boards={boards}
-                  projects={projects}
+                  boards={workspaceBoards}
+                  projects={workspaceProjects}
                   workspaces={workspaces}
                   activeWorkspaceId={activeWorkspaceId}
-                  onSelectWorkspace={selectWorkspace}
+                  onSelectWorkspace={openWorkspace}
                   onDeleteWorkspace={deleteWorkspace}
                   onCreateWorkspace={createWorkspace}
                   onSaveWorkspace={saveWorkspaceToFile}
                   onOpenWorkspace={openWorkspaceFromFile}
+                  onCloseWorkspace={closeWorkspace}
                   connections={connections}
                   connectionChecks={connectionChecks}
                   selectedBoardId={route.boardId}
@@ -841,8 +1072,8 @@ export function App() {
                   }}
                   featureCounts={featureCounts}
                   onNewSession={() => navigate({})}
-                  onNewProject={() => setProjectWizardMode('create')}
-                  onAddExistingProject={() => setProjectWizardMode('existing')}
+                  onNewProject={() => requestProjectWizard('create')}
+                  onAddExistingProject={() => requestProjectWizard('existing')}
                   onSelectProject={project => navigate({ projectId: project.id })}
                   selectedProjectId={route.projectId}
                   selectedIssueKey={route.issueKey}
@@ -980,8 +1211,9 @@ export function App() {
           )}
         </div>
       </div>
+      )}
 
-      {projectWizardMode && newProjectEnabled && (
+      {projectWizardMode && projectWizardPresentation === 'dialog' && activeWorkspaceId && (
         <div className="project-dialog-backdrop" data-testid="project-dialog-backdrop">
           <div
             className="project-dialog-shell"
@@ -990,12 +1222,22 @@ export function App() {
             aria-labelledby="new-project-dialog-title"
           >
             <NewProjectWizard
+              workspaceId={activeWorkspaceId}
+              workspaceName={activeWorkspace?.name}
               mode={projectWizardMode}
               onCancel={() => setProjectWizardMode(undefined)}
               onCreated={project => {
                 setProjectWizardMode(undefined);
                 setProjects(current => [...current.filter(item => item.id !== project.id), project]);
+                setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
+                  ? {
+                      ...workspace,
+                      projectIds: [...new Set([...workspace.projectIds, project.id])],
+                      defaultProjectId: workspace.defaultProjectId ?? project.id
+                    }
+                  : workspace));
                 refreshBoards();
+                refreshConnections();
                 navigate({ projectId: project.id });
               }}
             />

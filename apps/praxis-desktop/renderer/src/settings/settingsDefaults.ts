@@ -74,6 +74,9 @@ export const DEFAULT_APP_SETTINGS = {
     workspaceServerName: '',
     userServerRef: ''
   },
+  startup: {
+    reopenLastWorkspace: true
+  },
   preview: {
     enableCreateIdea: false,
     enableNewProject: true,

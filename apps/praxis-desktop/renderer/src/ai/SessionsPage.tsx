@@ -18,6 +18,7 @@ import {
 } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
+import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
 
 export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
@@ -44,6 +45,12 @@ function pendingPermissionEvent(events: AgentEventSummary[]): AgentEventSummary 
 function formatTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString();
+}
+
+/** Last path segment, for a compact working-directory label. */
+function basename(fsPath: string): string {
+  const parts = fsPath.split(/[/\\]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? fsPath;
 }
 
 function formatStarted(iso: string): string {
@@ -109,6 +116,7 @@ export function SessionsPage({
   const [sessionMutationKey, setSessionMutationKey] = useState<string | undefined>();
   const [sessionListError, setSessionListError] = useState<string | undefined>();
   const [switchingMode, setSwitchingMode] = useState(false);
+  const [removingWorktree, setRemovingWorktree] = useState(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
@@ -253,6 +261,22 @@ export function SessionsPage({
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setSwitchingMode(false);
+    }
+  };
+
+  const removeWorktree = async () => {
+    if (!selected?.worktreePath || removingWorktree) return;
+    if (!window.confirm(`Remove the git worktree for this session?\n\n${selected.worktreePath}\n\nThe branch ${selected.worktreeBranch ?? ''} and its checkout are deleted.`)) {
+      return;
+    }
+    setRemovingWorktree(true);
+    setFollowUpError(undefined);
+    try {
+      await window.praxis.ai.removeWorktree(selected.issueKey);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRemovingWorktree(false);
     }
   };
 
@@ -491,6 +515,38 @@ export function SessionsPage({
                   ? 'Project-board tools only'
                   : selected.toolMode === 'read-only' ? 'Read-only tools' : 'Full tools'}
               </span>
+              {selected.workingDirectory && (
+                <span
+                  className="session-item-meta"
+                  data-testid="session-working-directory"
+                  title={selected.workingDirectory}
+                >
+                  <Icon name="folder" size={12} /> {basename(selected.workingDirectory)}
+                </span>
+              )}
+              {selected.worktreeBranch && (
+                <span
+                  className="session-item-meta"
+                  data-testid="session-worktree"
+                  title={selected.worktreePath}
+                >
+                  <Icon name="git-branch" size={12} /> {selected.worktreeBranch}
+                  {selected.worktreeBaseBranch && (
+                    <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
+                  )}
+                </span>
+              )}
+              {isTerminalAgentState(selected.state) && selected.worktreePath && (
+                <button
+                  className="btn"
+                  data-testid="session-remove-worktree"
+                  disabled={removingWorktree}
+                  onClick={() => void removeWorktree()}
+                >
+                  <Icon name="git-branch" size={13} />
+                  {removingWorktree ? 'Removing…' : 'Remove worktree'}
+                </button>
+              )}
               {!isTerminalAgentState(selected.state) && (
                 <button
                   className="btn"
@@ -587,6 +643,11 @@ export function SessionsPage({
               </div>
               {conversationEvents.map((event, index) => {
                 if (event.type === 'tool_start' || event.type === 'tool_complete') {
+                  const view = resolveToolView(event);
+                  const argsLabel = toolArgsLabel(event);
+                  const fileChanges = event.data?.fileChanges?.filter(change => change.diff);
+                  const singleDiff = event.data?.diff;
+                  const shellOutput = event.data?.output ?? event.detail ?? '';
                   return (
                     <details
                       className={`session-chat-tool${event.type === 'tool_start' ? ' is-running' : ''}`}
@@ -597,9 +658,25 @@ export function SessionsPage({
                       <summary>
                         <Icon name={event.type === 'tool_start' ? 'tools' : 'check-square'} size={13} />
                         <span>{event.summary}</span>
+                        {argsLabel && <code className="session-tool-args">{argsLabel}</code>}
                         <span className="session-chat-tool-time">{formatTime(event.timestamp)}</span>
                       </summary>
-                      {event.detail && <pre>{event.detail}</pre>}
+                      {event.type === 'tool_complete' && view === 'shell' ? (
+                        <ToolTerminal text={shellOutput} />
+                      ) : event.type === 'tool_complete' && view === 'write' && (fileChanges?.length || singleDiff) ? (
+                        fileChanges?.length ? (
+                          fileChanges.map((change, changeIndex) => (
+                            <div className="session-tool-file" key={changeIndex}>
+                              <span className="session-tool-file-path">{change.path}</span>
+                              <ToolDiff diff={change.diff ?? ''} />
+                            </div>
+                          ))
+                        ) : (
+                          <ToolDiff diff={singleDiff ?? ''} />
+                        )
+                      ) : (
+                        event.detail && <pre>{event.detail}</pre>
+                      )}
                     </details>
                   );
                 }

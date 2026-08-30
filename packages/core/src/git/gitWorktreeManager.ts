@@ -2,11 +2,15 @@ import { execFile as execFileCallback } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as util from 'node:util';
-import type { OutputChannel } from 'vscode';
-import type { IssueDetails } from '@praxis/core';
-import { buildWorktreeName } from '@praxis/core';
+import type { IssueDetails } from '../types';
+import { buildWorktreeName } from '../ai/agentPrompt';
 
 const execFile = util.promisify(execFileCallback);
+
+/** Minimal logger seam so this stays host-agnostic (VS Code's `OutputChannel` satisfies it structurally). */
+export interface WorktreeLogger {
+  appendLine(message: string): void;
+}
 
 export class WorktreeConflictError extends Error {
   public readonly worktreePath: string;
@@ -49,7 +53,7 @@ export function resolveRepoWorktreeRoot(repoRoot: string): string {
 }
 
 export class GitWorktreeManager {
-  public constructor(private readonly output: Pick<OutputChannel, 'appendLine'>) {}
+  public constructor(private readonly output: WorktreeLogger) {}
 
   private async ensureSymlinkSupport(repoRoot: string): Promise<void> {
     if (process.platform !== 'win32') {
@@ -128,6 +132,25 @@ export class GitWorktreeManager {
       branchName: worktreeName,
       baseBranch
     };
+  }
+
+  /**
+   * Removes the worktree checkout and its branch. `contextPath` is any path inside
+   * the repository — including the worktree being removed itself. `git worktree
+   * remove` must run from the *main* working tree, so the main repo root is
+   * resolved from the shared git dir rather than from `contextPath` directly.
+   */
+  public async removeDeliveryWorktree(
+    contextPath: string,
+    worktree: { worktreePath: string; branchName: string }
+  ): Promise<void> {
+    const commonDir = await readStdout(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      contextPath
+    ).catch(() => '');
+    const mainRoot = commonDir ? path.dirname(commonDir) : path.dirname(path.dirname(worktree.worktreePath));
+    await this.removeWorktree(mainRoot, worktree.worktreePath, worktree.branchName);
   }
 
   /**

@@ -13,6 +13,12 @@ import { Icon } from '../ui/Icon';
 import { fetchModelOptions, MODEL_PROVIDERS, PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { useSettings } from '../settings/useSettings';
 
+/** Last path segment, for a compact working-folder chip label. */
+function basename(fsPath: string): string {
+  const parts = fsPath.split(/[/\\]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? fsPath;
+}
+
 /** Applies a provider's curated `enabledModelIds` (Settings → AI Provider → Models) to a fetched catalog. */
 function applyEnabledModelCuration(options: ModelOptions, enabledModelIds: string[] | undefined): ModelOptions {
   if (!enabledModelIds) {
@@ -45,7 +51,11 @@ export interface NewSessionProps {
     model?: string;
     toolMode: AgentToolMode;
     mode: SessionMode;
+    workingDirectory?: string;
+    runInWorktree?: boolean;
   }) => Promise<void>;
+  /** Working folder pre-selected by the caller (e.g. the chosen project board's folder). */
+  defaultWorkingDirectory?: string;
   /**
    * Number of configured tracker connections. Zero means every board on screen
    * comes from the built-in demo backend, which is worth saying out loud before
@@ -74,7 +84,8 @@ export function NewSession({
   projectCount = 0,
   onNewProject
   , toolModeForBoard,
-  onSelectedBoardChange
+  onSelectedBoardChange,
+  defaultWorkingDirectory
 }: NewSessionProps) {
   const { settings: liveSettings } = useSettings();
   const [goal, setGoal] = useState('');
@@ -104,6 +115,10 @@ export function NewSession({
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
   const [toolMode, setToolMode] = useState<AgentToolMode>('full');
   const [mode, setMode] = useState<SessionMode>('chat');
+  const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
+  const [runInWorktree, setRunInWorktree] = useState(false);
+  const [folderIsRepo, setFolderIsRepo] = useState(false);
+  const folderLocked = Boolean(defaultWorkingDirectory);
   const [modelFilter, setModelFilter] = useState('');
   const [modelMenuPos, setModelMenuPos] = useState<{ top: number; left: number } | undefined>();
   const modelChipRef = useRef<HTMLButtonElement | null>(null);
@@ -118,6 +133,46 @@ export function NewSession({
   useEffect(() => {
     onSelectedBoardChange?.(selectedBoard);
   }, [onSelectedBoardChange, selectedBoard]);
+
+  // A project board owns the working folder; otherwise keep the user's pick,
+  // seeded from the global default (Settings → AI Provider → Working directory).
+  useEffect(() => {
+    if (defaultWorkingDirectory) {
+      setWorkingDirectory(defaultWorkingDirectory);
+      return;
+    }
+    const globalDefault = liveSettings?.ai.workingDirectory?.trim();
+    if (globalDefault) {
+      setWorkingDirectory(current => current ?? globalDefault);
+    }
+  }, [defaultWorkingDirectory, liveSettings?.ai.workingDirectory]);
+
+  // Only offer "run in a worktree" when the chosen folder is a git repo.
+  useEffect(() => {
+    setFolderIsRepo(false);
+    if (!workingDirectory) {
+      setRunInWorktree(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void window.praxis.git
+        .preflight(workingDirectory)
+        .then(result => {
+          if (cancelled) return;
+          const isRepo = result.status === 'repository' || result.status === 'worktree';
+          setFolderIsRepo(isRepo);
+          if (!isRepo) setRunInWorktree(false);
+        })
+        .catch(() => {
+          if (!cancelled) setFolderIsRepo(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [workingDirectory]);
 
   useEffect(() => {
     if (selectedBoard) {
@@ -190,19 +245,17 @@ export function NewSession({
   }, [boardMenuPos, ticketMenuPos]);
 
   useEffect(() => {
-    window.praxis.ai
-      .listProviderStatuses()
-      .then(setProviderStatuses)
+    // Default to the app's active provider (Settings → AI Provider) only when it
+    // is actually configured — otherwise leave the picker empty so the composer
+    // never shows a provider that isn't in the (configured-only) menu, and never
+    // silently swaps the session onto a provider the user never chose.
+    Promise.all([window.praxis.ai.listProviderStatuses(), window.praxis.settings.get()])
+      .then(([statuses, settings]) => {
+        setProviderStatuses(statuses);
+        const active = statuses.find(status => status.provider === settings.ai.activeProvider && status.configured);
+        setSelectedProvider(current => current ?? active?.provider);
+      })
       .catch(() => setProviderStatuses([]));
-    // Default to the app's active provider (Settings → AI Provider), not
-    // just "whichever happens to be configured" — a CLI-hosted provider is
-    // always reported as "configured" (it needs no API key from us) even
-    // when its binary isn't installed, so auto-picking "first configured"
-    // could silently swap the session onto a provider the user never chose.
-    window.praxis.settings
-      .get()
-      .then(settings => setSelectedProvider(current => current ?? settings.ai.activeProvider))
-      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -357,7 +410,9 @@ export function NewSession({
         provider: selectedProvider,
         model: selectedModel,
         toolMode,
-        mode
+        mode,
+        ...(workingDirectory ? { workingDirectory } : {}),
+        ...(runInWorktree ? { runInWorktree: true } : {})
       });
       setGoal('');
     } catch (err) {
@@ -365,6 +420,11 @@ export function NewSession({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const pickFolder = async () => {
+    const picked = await window.praxis.dialog.pickFolder('Select the session working folder');
+    if (picked) setWorkingDirectory(picked);
   };
 
   return (
@@ -737,6 +797,45 @@ export function NewSession({
               <Icon name={toolMode === 'full' ? 'tools' : 'search'} size={14} />
               {toolMode === 'project-only' ? 'Project only' : toolMode === 'full' ? 'Full tools' : 'Read only'}
             </button>
+            {toolMode !== 'project-only' && (
+              <button
+                className="composer-chip"
+                type="button"
+                data-testid="new-session-folder"
+                title={workingDirectory ? workingDirectory : 'Choose the folder the agent works in'}
+                disabled={folderLocked}
+                onClick={() => void pickFolder()}
+              >
+                <Icon name="folder" size={14} />
+                {workingDirectory ? basename(workingDirectory) : 'Working folder'}
+                {workingDirectory && !folderLocked && (
+                  <span
+                    role="button"
+                    aria-label="Clear working folder"
+                    className="composer-chip-clear"
+                    onClick={event => {
+                      event.stopPropagation();
+                      setWorkingDirectory(undefined);
+                    }}
+                  >
+                    <Icon name="close" size={11} />
+                  </span>
+                )}
+              </button>
+            )}
+            {toolMode === 'full' && folderIsRepo && (
+              <button
+                className={`composer-chip${runInWorktree ? ' active' : ''}`}
+                type="button"
+                data-testid="new-session-worktree"
+                aria-pressed={runInWorktree}
+                title="Run this session in a dedicated git worktree branched off the folder's current branch"
+                onClick={() => setRunInWorktree(current => !current)}
+              >
+                <Icon name="git-branch" size={14} />
+                Git worktree
+              </button>
+            )}
             <span className="spacer" />
             <button className="composer-chip" aria-label="Dictate">
               <Icon name="mic" size={15} />

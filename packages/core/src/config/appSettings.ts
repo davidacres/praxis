@@ -134,6 +134,11 @@ export interface PreviewSettings {
   boardsSidebarMode: BoardsSidebarMode;
 }
 
+export interface StartupSettings {
+  /** Reopen the last valid desktop workspace and durable view instead of Getting Started. */
+  reopenLastWorkspace: boolean;
+}
+
 export interface AppearanceSettings {
   /**
    * When true (default), the board list shows each backend's brand artwork
@@ -278,6 +283,7 @@ export interface AppSettings {
   performance: PerformanceSettings;
   delivery: DeliverySettings;
   mcpServer: McpServerSettings;
+  startup: StartupSettings;
   preview: PreviewSettings;
   appearance: AppearanceSettings;
   terminal: TerminalSettings;
@@ -319,6 +325,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   mcpServer: {
     workspaceServerName: '',
     userServerRef: ''
+  },
+  startup: {
+    reopenLastWorkspace: true
   },
   preview: {
     enableCreateIdea: false,
@@ -382,6 +391,7 @@ export interface AppSettingsPatch {
   performance?: Partial<PerformanceSettings>;
   delivery?: Partial<DeliverySettings>;
   mcpServer?: Partial<McpServerSettings>;
+  startup?: Partial<StartupSettings>;
   preview?: Partial<PreviewSettings>;
   appearance?: {
     showBrandArtwork?: boolean;
@@ -720,6 +730,15 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       }
     : { ...DEFAULT_APP_SETTINGS.mcpServer };
 
+  const startup: StartupSettings = isRecord(raw) && isRecord(raw.startup)
+    ? {
+        reopenLastWorkspace: readBoolean(
+          raw.startup.reopenLastWorkspace,
+          DEFAULT_APP_SETTINGS.startup.reopenLastWorkspace
+        )
+      }
+    : { ...DEFAULT_APP_SETTINGS.startup };
+
   const preview: PreviewSettings = isRecord(raw) && isRecord(raw.preview)
     ? {
         enableCreateIdea: readBoolean(raw.preview.enableCreateIdea, DEFAULT_APP_SETTINGS.preview.enableCreateIdea),
@@ -800,6 +819,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     performance,
     delivery,
     mcpServer,
+    startup,
     preview,
     appearance,
     terminal,
@@ -856,6 +876,11 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     ...(patch.mcpServer ?? {})
   };
 
+  const startup: StartupSettings = {
+    ...base.startup,
+    ...(patch.startup ?? {})
+  };
+
   const preview: PreviewSettings = {
     ...base.preview,
     ...(patch.preview ?? {})
@@ -889,6 +914,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     performance,
     delivery,
     mcpServer,
+    startup,
     preview,
     appearance,
     terminal,

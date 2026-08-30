@@ -14,12 +14,14 @@ test('Git Graph explains that a project workspace is required', async () => {
   // Git is per-project now, so the explainer is reached through a project that
   // has no workspace folder yet. The entry point stays enabled on purpose: the
   // setup screen is what tells the user what is missing and offers a way out.
-  const project = await app.window.evaluate(() => window.praxis.projects.create({
+  const project = await app.window.evaluate(async () => {
+    const workspaceId = (await window.praxis.workspaces.list())[0].id;
+    return window.praxis.projects.create({
     name: 'Folderless', key: 'NOFOLDER', type: 'product', purpose: 'Workspace explainer', brief: {},
     startingPoint: 'app-storage', workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
     starterTickets: [{ summary: 'First task', description: 'Placeholder', issueType: 'Task', status: 'todo' }],
     defaultAiToolMode: 'read-only'
-  }));
+  }, workspaceId); });
   await app.window.reload();
   await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
   await app.window.getByTestId('project-git-nav-item').click();
@@ -41,11 +43,13 @@ test('project Git navigation opens the graph for its workspace repository', asyn
     fs.writeFileSync(path.join(repository, 'README.md'), 'project\n');
     execFileSync('git', ['add', 'README.md'], { cwd: repository });
     execFileSync('git', ['commit', '-m', 'project repository'], { cwd: repository });
-    const project = await app.window.evaluate(async folder => window.praxis.projects.create({
+    const project = await app.window.evaluate(async folder => {
+      const workspaceId = (await window.praxis.workspaces.list())[0].id;
+      return window.praxis.projects.create({
       name: 'Git Project', key: 'GITTEST', type: 'software', purpose: 'Repository test', brief: {},
       startingPoint: 'existing-folder', folderPath: folder, workflowStages: [{ id: 'todo', name: 'Todo' }, { id: 'done', name: 'Done' }],
       starterTickets: [{ summary: 'Repository work', description: 'Verify Git context', issueType: 'Task', status: 'todo' }], defaultAiToolMode: 'read-only'
-    }), repository);
+    }, workspaceId); }, repository);
     await app.window.reload();
     await app.window.getByTestId('project-nav-item').filter({ hasText: project.name }).click();
     await app.window.getByTestId('project-git-nav-item').click();

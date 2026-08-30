@@ -28,6 +28,7 @@ import {
 
 export type SettingsCategory =
   | 'overview'
+  | 'startup'
   | 'connections'
   | 'jira'
   | 'ai'
@@ -53,6 +54,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Overview',
     icon: 'home',
     description: 'Quick summary of where settings live and what is currently configured.'
+  },
+  {
+    id: 'startup',
+    label: 'Startup',
+    icon: 'rocket',
+    description: 'Choose what Praxis opens when the desktop app starts.'
   },
   {
     id: 'themes',
@@ -163,6 +170,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'overview' && (
           <OverviewSection settings={settings} onReset={() => void update({ ...DEFAULT_APP_SETTINGS })} />
         )}
+        {active === 'startup' && <StartupSection settings={settings} update={update} />}
         {active === 'connections' && (
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
@@ -377,6 +385,28 @@ function OverviewSection({
           Reset to defaults
         </button>
       </div>
+    </>
+  );
+}
+
+function StartupSection({
+  settings,
+  update
+}: {
+  settings: AppSettings;
+  update: (patch: AppSettingsPatch) => Promise<void>;
+}) {
+  const category = CATEGORIES.find(c => c.id === 'startup')!;
+  return (
+    <>
+      <CategoryHeader category={category} />
+      <Toggle
+        label="Reopen last workspace"
+        description="Restore the last valid workspace and durable view. Turn this off to choose a workspace from Getting Started."
+        checked={settings.startup.reopenLastWorkspace}
+        testId="startup-reopen-last-workspace"
+        onChange={next => void update({ startup: { reopenLastWorkspace: next } })}
+      />
     </>
   );
 }

@@ -149,6 +149,22 @@ test('delegate completes a session against a real ACP agent subprocess', async (
   );
 });
 
+test('an ACP diff tool call renders as a red/green diff in the console', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-203', 'claude-code-cli', 'WITH_DIFF please edit notes.md');
+  await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-203' }).click();
+
+  const diff = win.locator('[data-testid="session-tool-diff"]');
+  await expect(diff).toBeVisible();
+  await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
+});
+
 test('ticket-selected Claude Code runs review and analysis without using Vercel', async () => {
   app = await launchTestApp(undefined, undefined, {
     AI_GATEWAY_API_KEY: undefined,

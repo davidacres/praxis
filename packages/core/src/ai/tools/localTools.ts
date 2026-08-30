@@ -2,8 +2,9 @@ import * as nodeFs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import * as nodeChildProcess from 'node:child_process';
 import type { GatewayToolDefinition } from '../gateway';
-import type { AgentToolMode } from '../agentTypes';
+import type { AgentToolEventData, AgentToolMode } from '../agentTypes';
 import { PathSandboxError, resolveSandboxedPath } from './pathSandbox';
+import { createUnifiedDiff } from './unifiedDiff';
 
 export type PermissionDecision = 'allow_once' | 'allow_always' | 'deny';
 
@@ -25,11 +26,15 @@ export interface LocalToolContext {
 export interface ToolExecutionResult {
   ok: boolean;
   content: string;
+  /** Structured metadata for the UI (diffs, shell output). The `content` string stays authoritative for the model. */
+  data?: AgentToolEventData;
 }
 
 const SHELL_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_READ_BYTES = 512 * 1024;
 const MAX_LIST_ENTRIES = 500;
+/** Above this size a write is applied but no diff is computed (keeps event payloads bounded). */
+const MAX_DIFF_BYTES = 256 * 1024;
 
 export const LOCAL_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   {
@@ -194,9 +199,19 @@ export class LocalToolExecutor {
       return { ok: false, content: 'Permission denied for write_file' };
     }
 
+    const previous = await nodeFs.readFile(absolute, 'utf8').catch(() => '');
     await nodeFs.mkdir(nodePath.dirname(absolute), { recursive: true });
     await nodeFs.writeFile(absolute, content, 'utf8');
-    return { ok: true, content: `Wrote ${content.length} characters to ${inputPath}` };
+
+    const data: AgentToolEventData = { toolName: 'write_file', kind: 'write', ok: true };
+    if (content.length > MAX_DIFF_BYTES || content.includes('\0')) {
+      data.output = `File written (${content.length} bytes); too large or binary to diff.`;
+    } else {
+      const diff = createUnifiedDiff(inputPath, previous, content);
+      data.diff = diff;
+      data.fileChanges = [{ path: inputPath, diff, oldText: previous, newText: content }];
+    }
+    return { ok: true, content: `Wrote ${content.length} characters to ${inputPath}`, data };
   }
 
   private async listDir(inputPath: string): Promise<ToolExecutionResult> {
@@ -254,14 +269,29 @@ export class LocalToolExecutor {
           windowsHide: true
         },
         (error, stdout, stderr) => {
+          const out = stdout?.toString() ?? '';
+          const err = stderr?.toString() ?? '';
           const parts = [
-            stdout?.toString() ?? '',
-            stderr?.toString() ?? '',
+            out,
+            err,
             error ? `exit error: ${error.message}` : ''
           ].filter(part => part.trim().length > 0);
+          const exitCode =
+            error && typeof (error as { code?: unknown }).code === 'number'
+              ? ((error as { code: number }).code)
+              : error
+                ? 1
+                : 0;
           resolve({
             ok: !error,
-            content: parts.join('\n').trim() || '(no output)'
+            content: parts.join('\n').trim() || '(no output)',
+            data: {
+              toolName: 'run_shell',
+              kind: 'shell',
+              ok: !error,
+              output: [out, err].filter(part => part.trim().length > 0).join('\n').trim(),
+              exitCode
+            }
           });
         }
       );

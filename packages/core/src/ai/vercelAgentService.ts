@@ -8,9 +8,11 @@ import {
   AGENT_DEFAULTS,
   type AgentEventSummary,
   type AgentEventType,
+  type AgentToolEventData,
   type AgentTaskDefinition,
   type AgentToolMode
 } from './agentTypes';
+import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   resolveGatewayApiKeyFromEnv,
@@ -47,8 +49,13 @@ function now(): string {
   return new Date().toISOString();
 }
 
-function evt(type: AgentEventType, summary: string, detail?: string): AgentEventSummary {
-  return { timestamp: now(), type, summary, detail };
+function evt(
+  type: AgentEventType,
+  summary: string,
+  detail?: string,
+  data?: AgentToolEventData
+): AgentEventSummary {
+  return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
 }
 
 export interface VercelAgentLogger {
@@ -278,7 +285,12 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       case 'tool_start':
         this.appendEvent(
           issueKey,
-          evt('tool_start', `Running tool: ${event.name}`, JSON.stringify(event.arguments, null, 2))
+          evt('tool_start', `Running tool: ${event.name}`, JSON.stringify(event.arguments, null, 2), {
+            toolName: event.name,
+            kind: classifyLocalTool(event.name),
+            args: event.arguments,
+            argsSummary: summariseToolArgs(event.name, event.arguments)
+          })
         );
         break;
       case 'tool_complete':
@@ -287,7 +299,13 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
           evt(
             'tool_complete',
             `Tool ${event.ok ? 'completed' : 'failed'}: ${event.name}`,
-            event.content.slice(0, 2000)
+            event.content.slice(0, 2000),
+            {
+              ...(event.data ?? {}),
+              toolName: event.name,
+              ok: event.ok,
+              kind: event.data?.kind ?? classifyLocalTool(event.name)
+            }
           ),
           1
         );

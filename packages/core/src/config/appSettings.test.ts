@@ -2,6 +2,26 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { DEFAULT_APP_SETTINGS, mergeAppSettings, sanitizeAppSettings } from './appSettings';
 
+test('startup defaults to reopening the last workspace and preserves an explicit opt-out', () => {
+  assert.equal(sanitizeAppSettings({}).startup.reopenLastWorkspace, true);
+  assert.equal(
+    sanitizeAppSettings({ startup: { reopenLastWorkspace: false } }).startup.reopenLastWorkspace,
+    false
+  );
+  assert.equal(
+    sanitizeAppSettings({ startup: { reopenLastWorkspace: 'yes' } }).startup.reopenLastWorkspace,
+    true
+  );
+});
+
+test('merge updates the startup preference without changing other settings', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    startup: { reopenLastWorkspace: false }
+  });
+  assert.equal(merged.startup.reopenLastWorkspace, false);
+  assert.equal(merged.preview.enableNewProject, DEFAULT_APP_SETTINGS.preview.enableNewProject);
+});
+
 test('sanitize fills surface defaults for a brand-new profile', () => {
   const settings = sanitizeAppSettings({});
   assert.equal(settings.appearance.surfacePackId, 'parchment');

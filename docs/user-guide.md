@@ -75,6 +75,19 @@ Workspace files are versioned. They record `schemaVersion`,
 with a newer unsupported schema instead of overwriting local workspace data.
 Secrets and credentials are never exported.
 
+By default, Praxis reopens the selected workspace and the last durable view you
+used. Change this under **Settings → Startup → Reopen last workspace**. When the
+setting is off, Praxis opens Getting Started after the startup splash so you can
+choose, create, or import a workspace. Missing or deleted saved workspaces also
+fall back safely. Transient create forms are not restored.
+
+A workspace is required before creating or adding a project. On first launch,
+Getting Started asks for a workspace name and optional description, then offers
+**Create New Project**, **Add Existing Project**, or **Continue with Empty
+Workspace**. The existing project wizard opens in the selected workspace. Its
+first project becomes the workspace default; projects can later be referenced
+by more than one workspace.
+
 Desktop navigation is contextual: Epics and Issues appear when a board is
 selected; Repository tools appear under their owning project; global surfaces
 such as Overview, Connections, and Agents remain available independently.

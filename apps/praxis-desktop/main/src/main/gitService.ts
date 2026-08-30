@@ -108,6 +108,12 @@ export async function preflightGitRepository(input?: string): Promise<GitReposit
   }
 }
 
+/** The repository's current branch name, or `undefined` on a detached HEAD or a non-repo path. */
+export async function getCurrentBranch(repositoryPath: string): Promise<string | undefined> {
+  const branch = (await git(['symbolic-ref', '--quiet', '--short', 'HEAD'], repositoryPath).catch(() => '')).trim();
+  return branch || undefined;
+}
+
 export async function initializeGitRepository(repositoryPath: string): Promise<GitRepositoryPreflight> {
   const preflight = await preflightGitRepository(repositoryPath);
   if (preflight.status !== 'not-a-repository') throw new Error(preflight.message);

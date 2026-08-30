@@ -42,6 +42,13 @@ export class ProjectStore {
     return cloneProject(project);
   }
 
+  public async remove(projectId: string): Promise<void> {
+    const projects = this.list();
+    const next = projects.filter(project => project.id !== projectId);
+    if (next.length === projects.length) throw new Error(`Project ${projectId} was not found.`);
+    await this.state.update(PROJECTS_KEY, next);
+  }
+
   public async update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord> {
     const project = this.require(projectId);
     const next: ProjectRecord = {

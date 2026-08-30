@@ -10,3 +10,4 @@ export {
 } from './localTools';
 
 export { resolveSandboxedPath } from './pathSandbox';
+export { createUnifiedDiff } from './unifiedDiff';

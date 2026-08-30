@@ -159,12 +159,44 @@ export interface DeliverySessionMetadata {
   featureDecomposition?: FeatureDecompositionMetadata;
 }
 
+/** One file touched by a tool call, with a unified diff when the before/after text is known. */
+export interface AgentToolFileChange {
+  path: string;
+  diff?: string;
+  oldText?: string;
+  newText?: string;
+}
+
+/**
+ * Structured companion to an `AgentEventSummary` for `tool_start` / `tool_complete`
+ * events. Optional and provider-agnostic — hosts that cannot supply a field leave
+ * it unset and the renderer falls back to the plain `detail` string.
+ */
+export interface AgentToolEventData {
+  callId?: string;
+  toolName?: string;
+  kind?: 'shell' | 'write' | 'read' | 'list' | 'search' | 'tracker' | 'other';
+  /** One-line digest of the arguments, for the `tool_start` summary row. */
+  argsSummary?: string;
+  /** Raw arguments (`tool_start`). */
+  args?: Record<string, unknown>;
+  ok?: boolean;
+  /** Unified-diff text for a single-file write. */
+  diff?: string;
+  fileChanges?: AgentToolFileChange[];
+  /** Terminal-style stdout/stderr for a shell command. */
+  output?: string;
+  exitCode?: number;
+}
+
 /** Compact event record for display and persistence (not the raw SDK event). */
 export interface AgentEventSummary {
   timestamp: string;
   type: AgentEventType;
   summary: string;
   detail?: string;
+  /** Structured tool metadata for `tool_start` / `tool_complete`; absent on older records. */
+  data?: AgentToolEventData;
 }
 
 export type AgentEventType =
@@ -215,6 +247,14 @@ export interface AgentSessionRecord {
   model?: string;
   /** Stable workspace root used for every turn in this session. */
   workingDirectory?: string;
+  /** When this session runs in a dedicated git worktree: its checkout path. */
+  worktreePath?: string;
+  /** The branch `git worktree add -b` created for this session. */
+  worktreeBranch?: string;
+  /** The branch the session worktree was based on. */
+  worktreeBaseBranch?: string;
+  /** The worktree directory name (also the branch name). */
+  worktreeName?: string;
   /** Host-enforced tool access. Older sessions default to full access. */
   toolMode?: AgentToolMode;
   /** Provider-owned identifier used when the runtime supports native resume. */

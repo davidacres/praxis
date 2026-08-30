@@ -6,6 +6,11 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
  */
 export function registerDialogIpc(): void {
   ipcMain.handle('dialog:pickFolder', async (event, title?: string) => {
+    // e2e can't drive the native dialog; PRAXIS_E2E_PICK_FOLDER stands in for it.
+    const stub = process.env.PRAXIS_E2E_PICK_FOLDER?.trim();
+    if (stub) {
+      return stub;
+    }
     const win = BrowserWindow.fromWebContents(event.sender);
     const options: Electron.OpenDialogOptions = {
       title: title ?? 'Select folder',

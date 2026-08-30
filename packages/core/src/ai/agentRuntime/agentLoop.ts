@@ -8,18 +8,22 @@ import {
   type WireMessage
 } from '../gateway';
 import type { ProviderAdapter } from '../providers/providerAdapter';
+import type { AgentToolEventData } from '../agentTypes';
 
 export type AgentLoopEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'message'; text: string }
   | { type: 'tool_start'; callId: string; name: string; arguments: Record<string, unknown> }
-  | { type: 'tool_complete'; callId: string; name: string; ok: boolean; content: string }
+  | { type: 'tool_complete'; callId: string; name: string; ok: boolean; content: string; data?: AgentToolEventData }
   | { type: 'step'; stepCount: number }
   | { type: 'completed'; text: string }
   | { type: 'error'; message: string };
 
 export interface AgentToolExecutor {
-  execute(name: string, args: Record<string, unknown>): Promise<{ ok: boolean; content: string }>;
+  execute(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<{ ok: boolean; content: string; data?: AgentToolEventData }>;
 }
 
 export interface AgentLoopOptions {
@@ -172,7 +176,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           callId: call.id,
           name: call.name,
           ok: result.ok,
-          content: result.content
+          content: result.content,
+          data: result.data
         });
         toolResults.push({ callId: call.id, content: result.content });
       }
