@@ -22,6 +22,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build core
+        run: npm run build:core
+
       - name: Compile extension
         run: npm run compile --workspace=praxis
 
