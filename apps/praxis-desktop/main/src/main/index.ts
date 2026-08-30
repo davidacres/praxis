@@ -151,6 +151,52 @@ function wantsWindowVibrancyAtLaunch(): boolean {
   }
 }
 
+/**
+ * The renderer's embedded browser (a chat link opened in the right-hand pane)
+ * is the only `<webview>` in the app, and it renders arbitrary web pages. Lock
+ * every guest down centrally rather than trusting the renderer's attributes:
+ *
+ * - `will-attach-webview` is the one hook that runs *before* the guest exists,
+ *   so it is where a preload path or `nodeIntegration` injected into the tag
+ *   has to be stripped. Anything but an http(s) `src` is refused outright.
+ * - A page that calls `window.open` (or a `target=_blank` link) would otherwise
+ *   pop a chrome-less Electron window with no address bar. Deny the popup and
+ *   navigate the guest itself instead, so following a link stays inside the
+ *   pane the user opened it in.
+ * - `will-navigate` keeps the guest on http(s): a page must not be able to walk
+ *   it onto `file://` and read the user's disk.
+ */
+function hardenWebviewGuests(): void {
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event, webPreferences, params) => {
+      delete webPreferences.preload;
+      webPreferences.nodeIntegration = false;
+      webPreferences.nodeIntegrationInSubFrames = false;
+      webPreferences.contextIsolation = true;
+      if (!/^https?:\/\//i.test(String(params.src ?? ''))) {
+        console.warn(`webview — refusing to attach a guest for: ${String(params.src)}`);
+        event.preventDefault();
+      }
+    });
+
+    if (contents.getType() !== 'webview') {
+      return;
+    }
+    contents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//i.test(url)) {
+        void contents.loadURL(url);
+      }
+      return { action: 'deny' };
+    });
+    contents.on('will-navigate', (event, url) => {
+      if (!/^https?:\/\//i.test(url)) {
+        event.preventDefault();
+        console.warn(`webview — blocked navigation to a non-http(s) URL: ${url}`);
+      }
+    });
+  });
+}
+
 function createMainWindow(): void {
   const vibrancy = wantsWindowVibrancyAtLaunch();
   const win = new BrowserWindow({
@@ -176,7 +222,12 @@ function createMainWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Enables the <webview> guest the renderer's embedded browser uses to
+      // show a page linked from an AI session chat inside the right-hand pane.
+      // `hardenWebviewGuests` below strips every dangerous preference off the
+      // guest before it attaches, so this stays a plain sandboxed browser.
+      webviewTag: true
     }
   });
 
@@ -232,6 +283,8 @@ void app.whenReady().then(async () => {
 
   // No File/Edit/View/Window/Help menubar — the custom title bar is the only chrome.
   Menu.setApplicationMenu(null);
+
+  hardenWebviewGuests();
 
   registerBoardIpc();
   registerIssueIpc();

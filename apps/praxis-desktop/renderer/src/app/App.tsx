@@ -25,6 +25,7 @@ import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
 import { BottomPanel } from './BottomPanel';
+import { EmbeddedBrowser, type BrowserRequest } from './EmbeddedBrowser';
 import { SessionsPage } from '../ai/SessionsPage';
 import { Icon } from '../ui/Icon';
 import { backendModeMeta, boardTypeToken } from '../board/boardMeta';
@@ -221,6 +222,13 @@ export function App() {
   );
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [auxVisible, setAuxVisible] = useState(true);
+  /**
+   * The page the right-hand pane is showing as an embedded browser, set by
+   * following a link in an AI session chat. Deliberately not part of `Route`:
+   * it is a transient viewer, not a navigable location, so back/forward and a
+   * relaunch never resurrect a page the user has moved on from.
+   */
+  const [browserRequest, setBrowserRequest] = useState<BrowserRequest | undefined>();
   const [panelVisible, setPanelVisible] = useState(false);
   const [detailExpanded, setDetailExpanded] = useState(false);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
@@ -314,6 +322,34 @@ export function App() {
     },
     []
   );
+
+  /**
+   * A link clicked in a chat. Web pages open in the right-hand pane so the
+   * conversation stays on screen beside them; every other scheme (mailto:,
+   * a custom app scheme) is the OS's business and goes to the system browser,
+   * which refuses anything but http(s) itself.
+   */
+  const handleOpenLink = useCallback((url: string) => {
+    if (!/^https?:\/\//i.test(url)) {
+      void window.praxis.shell.openExternal(url);
+      return;
+    }
+    // The token makes a repeat click on the same link re-navigate the pane
+    // even after the user has browsed away from that page inside it.
+    setBrowserRequest(current => ({ url, token: (current?.token ?? 0) + 1 }));
+    setDetailExpanded(false);
+    setAuxVisible(true);
+  }, []);
+
+  // Selecting a work item is an explicit request for the details pane, so it
+  // takes the pane back from the browser. Without this, opening an issue after
+  // following a chat link looks broken: the selection lands behind a web page
+  // with no hint that closing the browser is what reveals it.
+  useEffect(() => {
+    if (route.issueKey !== undefined) {
+      setBrowserRequest(undefined);
+    }
+  }, [route.issueKey]);
 
   const handleDesignerSelectionChange = useCallback((node: TaskDesignerCanvasNode | undefined) => {
     setSelectedDesignerNode(node);
@@ -789,6 +825,7 @@ export function App() {
           onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
           onNewSession={() => navigate({})}
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+          onOpenLink={handleOpenLink}
         />
       );
     }
@@ -927,10 +964,13 @@ export function App() {
   // Project workspaces use the secondary pane for editable project details.
   // Git Graph owns its own inspector column, so the global issue pane remains
   // hidden there to preserve topology and diff width.
+  // The browser is a pane the user summoned outright, so it shows wherever
+  // they were — including the two features that otherwise own their own right
+  // column — but still hides with the pane toggle like everything else here.
   const showAux = auxVisible
-    && route.feature !== 'overview'
-    && route.feature !== 'git';
-  const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
+    && (browserRequest !== undefined || (route.feature !== 'overview' && route.feature !== 'git'));
+  const detailIsExpanded =
+    detailExpanded && showAux && route.issueKey !== undefined && browserRequest === undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]
     : undefined;
@@ -1117,7 +1157,12 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.view === 'designer' ? (
+                  {browserRequest ? (
+                    <EmbeddedBrowser
+                      request={browserRequest}
+                      onClose={() => setBrowserRequest(undefined)}
+                    />
+                  ) : route.view === 'designer' ? (
                     selectedDesignerNode ? (
                       <TaskDesignerItemDetail
                         node={selectedDesignerNode}

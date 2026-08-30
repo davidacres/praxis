@@ -4897,6 +4897,21 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font: 10px/1.4 var(--font-mono);
 }
 
+/* Links found in chat text. `session-chat-message` sets `white-space: pre-wrap`,
+   so a long URL has to be told it may break, or it pushes the bubble wide. */
+.session-chat-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.session-chat-link:hover {
+  text-decoration-color: var(--accent);
+}
+
 .session-chat-author {
   margin-bottom: 4px;
   color: var(--text-tertiary);
@@ -7434,3 +7449,77 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 @media (max-width: 900px) { .project-dashboard { padding: 26px 24px 38px; }.project-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.project-dashboard-grid { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .project-dashboard { padding: 20px 16px 30px; }.project-dashboard-header { display: block; }.project-dashboard-updated { width: fit-content; margin-top: 16px; text-align: left; }.project-dashboard-metrics { grid-template-columns: 1fr 1fr; gap: 8px; }.project-dashboard-metrics article { padding: 11px; }.project-dashboard-metric-icon { width: 26px; height: 26px; }.project-dashboard-metrics strong { font-size: 18px; }.project-dashboard-card { padding: 15px; }.project-dashboard-brief-list > div { grid-template-columns: 18px minmax(62px, .4fr) minmax(0, 1fr); } }
+
+/* Embedded browser — the right-hand pane showing a page opened from a chat
+   link. The <webview> is an out-of-process guest, so it paints its own page
+   background; everything here is the chrome around it. */
+.embedded-browser {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.embedded-browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.embedded-browser-address {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--bg-sunken);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.embedded-browser-address:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  text-overflow: clip;
+}
+
+.embedded-browser-title {
+  flex-shrink: 0;
+  overflow: hidden;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.embedded-browser-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  font-size: 11px;
+}
+
+/* `display: flex` on a <webview> collapses the guest to zero height in
+   Chromium — it needs to stay the default `inline-flex` the tag ships with,
+   so the fill comes from flex sizing on the row instead. */
+.embedded-browser-view {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: none;
+  background: #fff;
+}

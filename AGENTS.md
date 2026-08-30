@@ -227,6 +227,23 @@ they compute correctly but silently never paint — a failure that looks like a 
 and is genuinely hard to trace. An e2e test decodes a live tile through `Image()` to catch
 a regression loudly.
 
+## Embedded browser (`<webview>`)
+
+A link clicked in an AI session chat opens the page in the **right-hand pane**, not the
+system browser. That pane is an Electron `<webview>` guest — deliberately **not** an
+`<iframe>`: the renderer CSP above is `default-src 'self'`, so an iframe to a remote
+origin is blocked before `X-Frame-Options` even gets a say.
+
+Two halves in `apps/praxis-desktop/main/src/main/index.ts` must stay in step:
+
+- `webviewTag: true` on the main window's `webPreferences`, and
+- `hardenWebviewGuests()`, which strips `preload` / `nodeIntegration` off every guest,
+  refuses a non-http(s) `src`, turns a popup into an in-place navigation, and stops a
+  page walking the guest onto `file://`.
+
+The tag's attributes in the renderer are **not** the security boundary — that function
+is. Harden a new guest capability there, never by loosening what the renderer passes.
+
 ## Settings
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and

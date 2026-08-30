@@ -19,6 +19,7 @@ import {
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
+import { ChatText } from './chatText';
 
 export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
@@ -27,6 +28,11 @@ export interface SessionsPageProps {
   onSelect: (issueKey: string) => void;
   onNewSession: () => void;
   onOpenAiSettings: () => void;
+  /**
+   * Opens a link found in the chat. The shell shows web pages in the embedded
+   * browser in the right-hand pane; anything else goes to the system browser.
+   */
+  onOpenLink?: (url: string) => void;
 }
 
 /**
@@ -101,7 +107,8 @@ export function SessionsPage({
   selectedKey,
   onSelect,
   onNewSession,
-  onOpenAiSettings
+  onOpenAiSettings,
+  onOpenLink
 }: SessionsPageProps) {
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
@@ -639,7 +646,7 @@ export function SessionsPage({
             <div className="session-chat-scroll" ref={eventsRef} data-testid="session-chat-thread">
               <div className="session-chat-message is-user">
                 <div className="session-chat-author">You</div>
-                <div>{selected.taskDefinition.goal}</div>
+                <div><ChatText text={selected.taskDefinition.goal} onOpenLink={onOpenLink} /></div>
               </div>
               {conversationEvents.map((event, index) => {
                 if (event.type === 'tool_start' || event.type === 'tool_complete') {
@@ -694,14 +701,16 @@ export function SessionsPage({
                         <pre>{terminalContext.output}</pre>
                       </details>
                     )}
-                    <div>{terminalContext?.message ?? event.detail}</div>
+                    <div>
+                      <ChatText text={terminalContext?.message ?? event.detail ?? ''} onOpenLink={onOpenLink} />
+                    </div>
                   </div>
                 );
               })}
               {selected.responseText && selected.responseText !== latestEventResponse && (
                 <div className="session-chat-message is-assistant" data-testid="session-response">
                   <div className="session-chat-author">AI agent</div>
-                  <div>{selected.responseText}</div>
+                  <div><ChatText text={selected.responseText} onOpenLink={onOpenLink} /></div>
                 </div>
               )}
               {!selected.responseText && conversationEvents.length === 0 && (
