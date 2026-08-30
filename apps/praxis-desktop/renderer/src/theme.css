@@ -1547,11 +1547,16 @@ textarea {
   cursor: pointer;
 }
 .project-tree-toggle { display: flex; align-items: center; padding: 0 0 0 2px; }
+.project-tree-toggle .tree-section-icon { width: 16px; flex-basis: 16px; }
 .project-tree-content { display: flex; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; padding: 5px 12px 5px 0; text-align: left; }
 .project-tree-content .tree-icon { margin-top: 1px; }
 .project-icon { color: var(--accent); }
 .project-tree-children { position: relative; }
 .project-tree-children::before { content: ''; position: absolute; top: 0; bottom: 4px; left: 17px; width: 1px; background: var(--border); }
+.project-tree-children > .sidebar-subsection-toggle,
+.project-tree-children > .tree-row { position: relative; }
+.project-tree-children > .sidebar-subsection-toggle::before,
+.project-tree-children > .tree-row::before { content: ''; position: absolute; top: 50%; left: 17px; width: 13px; height: 1px; background: var(--border); }
 .project-board-row { height: 28px; padding-left: 32px; }
 .project-board-icon { color: var(--text-secondary); }
 .linked-board-icon { color: var(--text-tertiary); }
