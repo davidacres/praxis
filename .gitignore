@@ -65,6 +65,9 @@ Desktop.ini
 # Claude Code local user state (per-user, never commit)
 .claude/settings.local.json
 
+# Local agent worktrees (separate repositories, never commit to Praxis)
+.worktrees/
+
 # Playwright run artefacts (regenerated on every `playwright test`)
 test-results/
 playwright-report/
