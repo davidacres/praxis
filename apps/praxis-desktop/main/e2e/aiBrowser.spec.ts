@@ -149,4 +149,13 @@ test('the toolbar navigates the in-app browser by hand', async () => {
   await url.fill(`${pageOrigin}/`);
   await url.press('Enter');
   await expect(url).toHaveValue(new RegExp(pageOrigin.replace(/[.]/g, '\\.')), { timeout: 15000 });
+
+  // Maximize widens the dock to fill the console; restore brings it back.
+  const dock = win.locator('.session-browser-dock');
+  const narrow = (await dock.boundingBox())!.width;
+  await win.locator('[data-testid="browser-maximize-btn"]').click();
+  await expect(win.locator('.session-console.browser-maximized')).toBeVisible();
+  expect((await dock.boundingBox())!.width).toBeGreaterThan(narrow + 100);
+  await win.locator('[data-testid="browser-maximize-btn"]').click();
+  await expect(win.locator('.session-console.browser-maximized')).toHaveCount(0);
 });

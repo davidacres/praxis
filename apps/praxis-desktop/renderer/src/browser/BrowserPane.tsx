@@ -14,11 +14,15 @@ export function BrowserPane({
   initialUrl,
   onNavigate,
   suspended = false,
+  maximized = false,
+  onToggleMaximize,
   onClose
 }: {
   initialUrl?: string;
   onNavigate?: (url: string) => void;
   suspended?: boolean;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
   onClose?: () => void;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -134,6 +138,18 @@ export function BrowserPane({
           }}
         />
         {state?.loading && <span className="browser-loading" aria-label="Loading" />}
+        {onToggleMaximize && (
+          <button
+            className="icon-btn icon-btn-sm"
+            aria-label={maximized ? 'Restore browser' : 'Maximize browser'}
+            aria-pressed={maximized}
+            title={maximized ? 'Restore browser' : 'Maximize browser'}
+            data-testid="browser-maximize-btn"
+            onClick={onToggleMaximize}
+          >
+            <Icon name={maximized ? 'window-restore' : 'window-maximize'} size={13} />
+          </button>
+        )}
         {onClose && (
           <button className="icon-btn icon-btn-sm" aria-label="Close browser" onClick={onClose}>
             <Icon name="close" size={13} />
