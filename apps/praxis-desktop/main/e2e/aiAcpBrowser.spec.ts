@@ -82,12 +82,16 @@ test('the browser stays connected across a follow-up turn', async () => {
   // A follow-up turn must reach the same MCP endpoint — no "disconnected".
   await win.locator('[data-testid="session-follow-up-input"]').fill('USE_BROWSER second pass');
   await win.locator('[data-testid="session-follow-up-send"]').click();
-  await expect(win.locator('[data-testid="session-chat-thread"]')).not.toContainText('NO_MCP_SERVER', { timeout: 20000 });
-  await win.waitForTimeout(1500);
-  const logs = await win.evaluate(() => window.praxis.log.getRecent());
-  console.log('FAKE_ACP lines:\n' + logs.filter(l => l.includes('FAKE_ACP')).join('\n'));
-  const results = await win.locator('[data-testid="session-chat-thread"]').innerText();
-  expect((results.match(/BROWSER RESULT/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  // Both turns produced a live browser result off the same (reused) endpoint —
+  // never "no MCP server" / a failed call.
+  await expect
+    .poll(async () => {
+      const text = await win.locator('[data-testid="session-chat-thread"]').innerText();
+      return (text.match(/needle 90210/g) ?? []).length;
+    }, { timeout: 20000 })
+    .toBeGreaterThanOrEqual(2);
+  await expect(win.locator('[data-testid="session-chat-thread"]')).not.toContainText('NO_MCP_SERVER');
+  await expect(win.locator('[data-testid="session-chat-thread"]')).not.toContainText('MCP_CALL_FAILED');
 });
 
 test('an unlisted host prompts on the session card, then proceeds when allowed', async () => {

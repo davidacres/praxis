@@ -63,7 +63,6 @@ const modelConfigOption = () => ({
 
 app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
   browserMcp = (ctx.params.mcpServers ?? []).find(server => server.name === 'praxis-browser');
-  process.stderr.write(`FAKE_ACP: session/new mcpServers=${JSON.stringify(ctx.params.mcpServers ?? [])}\n`);
   return { sessionId: 'fake-session-1', configOptions: [modelConfigOption()] };
 });
 
@@ -78,8 +77,6 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   const promptText = ctx.params.prompt
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('');
-
-  process.stderr.write(`FAKE_ACP: session/prompt hasBrowserMcp=${Boolean(browserMcp)} useBrowser=${promptText.includes('USE_BROWSER')} len=${promptText.length}\n`);
 
   await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
     sessionId: ctx.params.sessionId,
