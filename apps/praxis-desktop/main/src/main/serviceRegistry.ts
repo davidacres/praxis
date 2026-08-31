@@ -302,4 +302,12 @@ export function disposeAllServices(): void {
     service.dispose();
   }
   gitLabServices.clear();
+
+  // A folder-backed project owns a FolderService, and therefore a chokidar
+  // watcher, exactly like a folder connection does — leaving these out held the
+  // process open past window close.
+  for (const service of projectServices.values()) {
+    service.dispose();
+  }
+  projectServices.clear();
 }
