@@ -43,25 +43,31 @@ function readConfig(dir: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(path.join(dir, 'board.praxis.json'), 'utf8'));
 }
 
-test('creating a user-workspace board writes board.praxis.json into the plans folder', async () => {
+test('importing a plans folder writes board.praxis.json into it', async () => {
   folder = writePlansFolder();
-  app = await launchTestApp({
-    connections: [{ id: 'e2e-uw', name: 'E2E UW', mode: 'userworkspace', settings: {} }]
-  });
+  app = await launchTestApp({ connections: [] });
   const win = app.window;
 
-  const board = await win.evaluate(async liveFolderPath => {
-    return window.praxis.userWorkspace.createBoard('e2e-uw', {
-      name: 'Widgets',
-      projectKey: 'WIDG',
-      projectName: 'Widgets Project',
-      liveFolderPath
-    });
+  const projects = await win.evaluate(async plansFolderPath => {
+    const workspaces = await window.praxis.workspaces.list();
+    return window.praxis.projects.createFromImports(
+      [{
+        repositoryName: 'Widgets',
+        repositoryRootPath: plansFolderPath,
+        plansFolderPath,
+        projectKey: 'WIDG',
+        projectName: 'Widgets Project',
+        alreadyAdded: false
+      }],
+      workspaces[0].id
+    );
   }, folder);
-  expect(board.projectKey).toBe('WIDG');
+  expect(projects).toHaveLength(1);
+  expect(projects[0].key).toBe('WIDG');
+  expect(projects[0].storage).toBe('folder');
 
   expect(fs.existsSync(path.join(folder, 'board.praxis.json'))).toBe(true);
-  // Create seeds identity only — allowIssueCreation stays an app-wide toggle here.
+  // Import seeds identity only — allowIssueCreation stays an app-wide toggle here.
   expect(readConfig(folder)).toEqual({ projectKey: 'WIDG', projectName: 'Widgets Project' });
 });
 
@@ -77,7 +83,7 @@ test('editing a live-folder connection re-syncs board.praxis.json', async () => 
       {
         id: 'e2e-lf',
         name: 'E2E LF',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: { path: folder, projectKey: 'OLD', projectName: 'Old Name', allowIssueCreation: false }
       }
     ]
@@ -90,7 +96,7 @@ test('editing a live-folder connection re-syncs board.praxis.json', async () => 
     await window.praxis.connection.update({
       id: 'e2e-lf',
       name: 'E2E LF',
-      mode: 'livefolder',
+      mode: 'folder',
       settings: { path: folderPath, projectKey: 'NEW', projectName: 'New Name', allowIssueCreation: true }
     });
   }, folder);

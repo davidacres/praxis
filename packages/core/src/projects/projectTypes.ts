@@ -43,6 +43,8 @@ export interface ProjectDocument {
   relativePath: string;
   name: string;
   type?: string;
+  /** Normalized planning status parsed from front matter or legacy headings. */
+  status?: string;
   content?: string;
 }
 
@@ -51,6 +53,15 @@ export interface ProjectDocumentsResult {
   documents: ProjectDocument[];
 }
 
+/**
+ * Where a project's work items live.
+ *
+ * `app` keeps them in this record's `workItems` array (the app's own JSON).
+ * `folder` makes the markdown plans tree under `workspaceFolder` the source of
+ * truth — `workItems` is then unused and the board is served by `FolderService`.
+ */
+export type ProjectStorage = 'app' | 'folder';
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -58,6 +69,8 @@ export interface ProjectRecord {
   type: ProjectType;
   purpose: string;
   brief: Record<string, string>;
+  /** Defaults to `app` when absent, which is what every project written before this field was. */
+  storage?: ProjectStorage;
   workspaceFolder?: string;
   workflowStages: ProjectWorkflowStage[];
   defaultBoardId: string;
@@ -77,6 +90,8 @@ export interface CreateProjectInput {
   purpose: string;
   brief: Record<string, string>;
   startingPoint: ProjectStartingPoint;
+  /** Defaults to `app`. `folder` requires a resolved `workspaceFolder`. */
+  storage?: ProjectStorage;
   /** Existing folder, or the parent folder when startingPoint is new-folder. */
   folderPath?: string;
   folderName?: string;

@@ -40,7 +40,10 @@ test('opens Settings from the title bar as a dismissible popover dialog', async 
 });
 
 test('theme gallery previews and persists the selected complete palette', async () => {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(27);
   await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
@@ -51,14 +54,20 @@ test('theme gallery previews and persists the selected complete palette', async 
 
   await window.reload();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.getByRole('searchbox', { name: 'Search themes' }).fill('github');
   await expect(window.locator('[data-testid^="theme-card-github-"]')).toHaveCount(2);
   await expect(window.locator('[data-testid^="theme-card-humanist-"]')).toHaveCount(0);
 });
 
 test('persists the selected theme and mode through app settings', async () => {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-anthropic-dark"]').click();
   await window.getByRole('button', { name: 'System' }).click();
   await window.waitForTimeout(300);
@@ -72,7 +81,10 @@ test('persists the selected theme and mode through app settings', async () => {
 test('startup splash inherits the saved app theme', async () => {
   // launchTestApp already dismissed the first splash; the reload below brings a
   // fresh one back, which is the one these colour assertions read.
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-humanist-light"]').click();
   await window.reload();
 
@@ -107,7 +119,10 @@ test('startup splash inherits the saved app theme', async () => {
 });
 
 test('installs a marketplace theme and makes it available on reload', async () => {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   const marketplace = window.locator('[data-testid="theme-card-dracula-dark"]');
   await expect(marketplace).toHaveAttribute('aria-label', /available in marketplace/);
   await marketplace.click();
@@ -117,7 +132,10 @@ test('installs a marketplace theme and makes it available on reload', async () =
 });
 
 test('creates a custom theme with editable colors and persists it', async () => {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.getByRole('button', { name: /Create custom theme/ }).click();
   const editor = window.getByRole('region', { name: 'Custom theme editor' });
   await editor.getByLabel('Name').fill('Ocean Custom');

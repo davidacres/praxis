@@ -12,19 +12,15 @@ import type {
 
 type McpClientInstance = Client;
 
-/**
- * Host-neutral replacement for `vscode.OutputChannel` — anything with an
- * `appendLine` (the extension's output channel, a console shim on desktop).
- */
+/** A log sink — anything with an `appendLine` (a console shim on desktop). */
 export interface McpLogSink {
   appendLine(message: string): void;
 }
 
 /**
  * The slice of an OAuth manager the client needs: build an auth provider for a
- * server URL and await the browser round-trip's authorization code. The VS
- * Code host implements this over its UriHandler; the desktop host leaves it
- * unset for now.
+ * server URL and await the browser round-trip's authorization code. The desktop
+ * host wires this in at startup via `setMcpOAuthProviderSource`.
  */
 export interface McpOAuthProviderSource {
   createProvider(serverUrl: string, oauthClient?: OAuthClientOverride): OAuthClientProvider;
@@ -34,9 +30,9 @@ export interface McpOAuthProviderSource {
 let oauthProviderSource: (() => McpOAuthProviderSource | undefined) | undefined;
 
 /**
- * Registers the host's OAuth provider source. Hosts without an OAuth flow
- * (desktop v1) simply never call this — HTTP servers demanding OAuth then get
- * a clear credentials error instead of a browser round-trip.
+ * Registers the OAuth provider source. If it is never called, HTTP servers
+ * demanding OAuth get a clear credentials error instead of a browser
+ * round-trip.
  */
 export function setMcpOAuthProviderSource(
   source: (() => McpOAuthProviderSource | undefined) | undefined

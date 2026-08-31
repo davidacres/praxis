@@ -27,6 +27,7 @@ import {
   PRIORITY_OPTIONS,
   SEVERITY_OPTIONS
 } from './issueDraftFields';
+import { resolveBackendMode } from '../board/boardMeta';
 import {
   fetchModelOptions,
   MODEL_PROVIDERS,
@@ -293,7 +294,7 @@ type EditableField = keyof EditDraft;
 
 const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> = {
   demo: new Set(['summary', 'description', 'assignee', 'priority', 'issueType', 'parentKey']),
-  livefolder: new Set([
+  folder: new Set([
     'summary',
     'description',
     'assignee',
@@ -302,15 +303,9 @@ const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> =
     'reportedBy',
     'ideaTranscript'
   ]),
-  userworkspace: new Set([
-    'summary',
-    'description',
-    'assignee',
-    'priority',
-    'severity',
-    'reportedBy',
-    'ideaTranscript'
-  ]),
+  // App-storage projects: `ProjectIssueTrackerService.updateIssue` only writes
+  // these three, so offering more would silently drop the edit.
+  project: new Set(['summary', 'description', 'issueType']),
   jiracloud: new Set(['summary', 'description', 'assignee', 'priority', 'issueType', 'parentKey']),
   gitlab: new Set(['summary', 'description', 'assignee']),
   github: new Set(['summary', 'description', 'assignee'])
@@ -558,10 +553,7 @@ export function IssueDetail({
         if (cancelled) {
           return;
         }
-        const connection = connectionId
-          ? connections.find(entry => entry.id === connectionId)
-          : undefined;
-        setConnectionMode(connection?.mode ?? 'demo');
+        setConnectionMode(resolveBackendMode(connectionId, connections));
       })
       .catch(() => {
         if (!cancelled) {

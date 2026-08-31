@@ -354,9 +354,9 @@ test('feature decomposition creates the sub-task issues and lists them', async (
 
   // Live-folder fixture: the decomposition finalizer creates real sub-task
   // markdown files, so this backend proves the whole chain.
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-decomp-'));
-  tempDirs.push(liveFolderDir);
-  const featureDir = path.join(liveFolderDir, 'features', 'feature-01-demo-feature');
+  const plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-decomp-'));
+  tempDirs.push(plansDir);
+  const featureDir = path.join(plansDir, 'features', 'feature-01-demo-feature');
   fs.mkdirSync(featureDir, { recursive: true });
   fs.writeFileSync(
     path.join(featureDir, 'feature.md'),
@@ -385,10 +385,10 @@ test('feature decomposition creates the sub-task issues and lists them', async (
       connections: [
         {
           id: 'e2e-live-decomp',
-          name: 'e2e-livefolder-decomp',
-          mode: 'livefolder',
+          name: 'e2e-folder-decomp',
+          mode: 'folder',
           settings: {
-            path: liveFolderDir,
+            path: plansDir,
             projectKey: 'LIVE',
             projectName: 'Live E2E',
             allowIssueCreation: true
@@ -402,7 +402,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
   const win = app.window;
 
   // Create the feature-request ticket through the normal New Issue flow.
-  await win.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+  await win.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
   await win.locator('[data-testid="board-new-issue-btn"]').click();
   await win.locator('[data-testid="new-issue-type"]').selectOption('Feature');
   await win.locator('[data-testid="new-issue-summary"]').fill('e2e feature request');

@@ -7,13 +7,17 @@ const CONNECTIONS_KEY = 'connections';
 const BOARDS_KEY = 'boards';
 const SECRET_PREFIX = 'praxis.connection';
 
+/**
+ * Modes a stored connection may declare. `project` is deliberately absent — a
+ * project's board is reached through the synthetic `project:<id>` connection id
+ * and never has a row in this store.
+ */
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'jiracloud',
   'demo',
   'github',
   'gitlab',
-  'livefolder',
-  'userworkspace'
+  'folder'
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,11 +76,8 @@ function secretKey(connectionId: string, name: string): string {
  * Reads and writes the multi-connection configuration that replaces the
  * single global `backendMode` model. Connections and tracked boards live in
  * the `connections` / `boards` settings keys; per-connection secrets live in
- * SecretsStore keyed by connection id. Host-agnostic: the VS Code adapter
- * backs `settings` with `vscode.workspace.getConfiguration('praxis')`
- * and forwards `vscode.workspace.onDidChangeConfiguration` into
- * `notifyChanged()`; the Electron adapter backs it with a JSON settings file
- * and has no external change source to forward.
+ * SecretsStore keyed by connection id. The Electron adapter backs `settings`
+ * with a JSON settings file and has no external change source to forward.
  */
 export class ConnectionStore implements Disposable {
   private readonly onDidChangeEmitter = new Emitter<void>();

@@ -37,7 +37,7 @@ export interface BoardViewProps {
    */
   onNewIdea: () => void;
   /**
-   * False when the board's backend cannot create tickets (e.g. a live folder
+   * False when the board's backend cannot create tickets (e.g. a folder
    * connection without `allowIssueCreation`) — the button stays visible but
    * disabled, with `createIssueHint` explaining why.
    */
@@ -53,6 +53,8 @@ export interface BoardViewProps {
   onIssueMove: (issueKey: string, targetStatus: string, connectionId: string | undefined) => Promise<void> | void;
   /** Opens this board in the Task Designer canvas. */
   onOpenDesigner: () => void;
+  openSettings?: boolean;
+  onSettingsOpened?: () => void;
 }
 
 /** Two initials, so the assignee avatar reads the way a tracker's does. */
@@ -139,7 +141,9 @@ export function BoardView({
   canCreateIssue,
   createIssueHint,
   onIssueMove,
-  onOpenDesigner
+  onOpenDesigner,
+  openSettings = false,
+  onSettingsOpened
 }: BoardViewProps) {
   const boardId = details.board.id;
   const { settings } = useSettings();
@@ -601,6 +605,8 @@ export function BoardView({
           <Icon name="graph" size={14} />
         </button>
         <BoardSettingsMenu
+          open={openSettings}
+          onOpenChange={value => { if (!value) onSettingsOpened?.(); }}
           prefs={prefs}
           onChange={updatePrefs}
           statusOrder={statusOrder}

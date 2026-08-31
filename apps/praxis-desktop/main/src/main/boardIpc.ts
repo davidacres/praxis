@@ -29,7 +29,7 @@ export function registerBoardIpc(): void {
       )).flat();
 
       // `allSettled`, not `all`: a connection whose backing store is unreachable —
-      // a live folder on a disconnected drive, a deleted directory — must not take
+      // a folder on a disconnected drive, a deleted directory — must not take
       // the rest of the board list down with it. One bad connection used to reject
       // the whole handler, leaving the app with no boards at all and no error.
       const settled = await Promise.allSettled(

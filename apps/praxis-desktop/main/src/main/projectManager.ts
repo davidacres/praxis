@@ -4,6 +4,7 @@ import {
   ProjectStore,
   WorkspaceStore,
   validateProjectRecord,
+  discoverPlanFolders,
   type AttachProjectFolderInput,
   type AttachProjectFolderResult,
   type CreateProjectInput,
@@ -30,7 +31,7 @@ export class ProjectManager {
     if (!plansRoot || !fs.existsSync(plansRoot)) return { exists: false, documents: [] };
     return { exists: true, documents: walkMarkdownFiles(plansRoot).map(file => {
       const content = fs.readFileSync(file, 'utf8');
-      return { relativePath: path.relative(plansRoot, file).replaceAll(path.sep, '/'), name: documentName(content, path.basename(file)), type: documentType(content) };
+      return { relativePath: path.relative(plansRoot, file).replaceAll(path.sep, '/'), name: documentName(content, path.basename(file)), type: documentType(content), status: documentStatus(content) };
     }) };
   }
 
@@ -43,13 +44,13 @@ export class ProjectManager {
       throw new Error('That project document is outside docs/plans.');
     }
     const content = fs.readFileSync(resolved, 'utf8');
-    return { relativePath: path.relative(plansRoot, resolved).replaceAll(path.sep, '/'), name: documentName(content, path.basename(resolved)), type: documentType(content), content };
+    return { relativePath: path.relative(plansRoot, resolved).replaceAll(path.sep, '/'), name: documentName(content, path.basename(resolved)), type: documentType(content), status: documentStatus(content), content };
   }
 
   private requireProject(projectId: string): ProjectRecord { const project = this.store.get(projectId); if (!project) throw new Error(`Project ${projectId} was not found.`); return project; }
   private plansRoot(folder?: string): string | undefined { return folder ? path.resolve(folder, 'docs', 'plans') : undefined; }
 
-  public inspectFolder(folderPath: string): FolderInspection {
+  public async inspectFolder(folderPath: string): Promise<FolderInspection> {
     const resolved = path.resolve(folderPath.trim());
     let stat: fs.Stats | undefined;
     try { stat = fs.statSync(resolved); } catch { /* absent is reported, not thrown */ }
@@ -59,6 +60,12 @@ export class ProjectManager {
     // Inspect the selected project tree deeply enough to reach conventional
     // plans roots (for example docs/plans/features/.../tasks), while keeping
     // the existing file-count cap and skipping dependency/build directories.
+    // Plans roots are discovered with the same scanner the import planner and
+    // FolderService use, so "does this folder have plans?" has one answer.
+    let planRoots: string[] = [];
+    try {
+      planRoots = (await discoverPlanFolders(resolved)).map(match => match.plansRootPath);
+    } catch { /* an unreadable tree simply reports no plans */ }
     const files = walkFiles(resolved, 16, 5000);
     const relative = files.map(file => path.relative(resolved, file));
     const lowerNames = new Set(relative.map(file => file.toLowerCase()));
@@ -79,9 +86,21 @@ export class ProjectManager {
     if (relative.some(file => /\.csproj$/i.test(file))) frameworks.push('.NET');
     if (lowerNames.has('manage.py')) frameworks.push('Django');
     const readme = relative.find(file => /^readme(?:\.[^/]+)?$/i.test(file));
+    // Any markdown under a plans root counts, wherever that root sits. This
+    // used to match only `plans/`, `plan/` or `docs/plans/` — the same
+    // hardcoded-path guess that made the import planner point boards at empty
+    // directories. `discoverPlanFolders` is the one authority on what a plans
+    // root looks like, so ask it instead of re-guessing the layout here.
+    const planRootPrefixes = planRoots.map(root => {
+      const rel = path.relative(resolved, root).replaceAll('\\', '/');
+      return rel.length > 0 ? `${rel}/` : '';
+    });
     const planFiles = relative.filter(file => {
-      const normalized = file.replaceAll('\\\\', '/');
-      return /^(?:plans|plan|docs\/plans)(?:\/).+\.md$/i.test(normalized);
+      if (!/\.md$/i.test(file)) {
+        return false;
+      }
+      const normalized = file.replaceAll('\\', '/');
+      return planRootPrefixes.some(prefix => normalized.startsWith(prefix));
     }).sort();
     return {
       path: resolved, exists: true, isDirectory: true,
@@ -100,13 +119,18 @@ export class ProjectManager {
     if (folder && input.startingPoint === 'existing-folder') requireExistingDirectory(folder);
     const now = new Date().toISOString();
     const id = `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // A folder-backed project reads its work items from the markdown plans on
+    // disk, so starter tickets would be written nowhere — drop them rather than
+    // storing items its board will never show.
+    const storage = folder && input.storage === 'folder' ? 'folder' : 'app';
     const project: ProjectRecord = {
       id, name: input.name.trim(), key: input.key.trim().toUpperCase(), type: input.type,
       purpose: input.purpose.trim(), brief: cleanBrief(input.brief), workspaceFolder: folder,
+      storage,
       workflowStages: input.workflowStages.map(stage => ({ id: stage.id, name: stage.name.trim() })),
       defaultBoardId: `${id}-board`, linkedBoards: [],
       defaultAiToolMode: folder ? input.defaultAiToolMode : 'project-only',
-      workItems: input.starterTickets.map((ticket, index) => ({
+      workItems: storage === 'folder' ? [] : input.starterTickets.map((ticket, index) => ({
         id: `${id}-item-${index + 1}`, key: `${input.key.trim().toUpperCase()}-${index + 1}`,
         summary: ticket.summary.trim(), description: ticket.description.trim(),
         issueType: ticket.issueType.trim() || 'Task', status: ticket.status,
@@ -120,10 +144,10 @@ export class ProjectManager {
     try {
       if (folder && input.startingPoint === 'new-folder') { await fs.promises.mkdir(folder); createdFolder = true; }
       if (folder) {
-        project.folderInspection = this.inspectFolder(folder);
+        project.folderInspection = await this.inspectFolder(folder);
         const snapshot = await writeProjectSnapshot(folder, project);
         project.projectFileStatus = snapshot; createdProjectFile = snapshot === 'created';
-        project.folderInspection = this.inspectFolder(folder);
+        project.folderInspection = await this.inspectFolder(folder);
       }
       return await this.store.create(project);
     } catch (error) {
@@ -205,7 +229,7 @@ export class ProjectManager {
       let status: AttachProjectFolderResult['projectFileStatus'] = 'not-requested';
       const next = { ...project, workspaceFolder: folder, defaultAiToolMode: project.type === 'software' || project.type === 'experiment' ? 'full' as const : 'read-only' as const, updatedAt: new Date().toISOString() };
       if (input.createProjectFile !== false) { status = await writeProjectSnapshot(folder, next); createdProjectFile = status === 'created'; }
-      next.projectFileStatus = status; next.folderInspection = this.inspectFolder(folder);
+      next.projectFileStatus = status; next.folderInspection = await this.inspectFolder(folder);
       const saved = await this.store.replace(next);
       return { project: saved, projectFileStatus: status };
     } catch (error) {
@@ -256,6 +280,13 @@ function documentType(content: string): string {
   return frontmatter?.match(/^type:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim()
     || /^\*\*Type:\*\*\s*(.+)$/m.exec(content)?.[1]?.trim()
     || 'Other';
+}
+function documentStatus(content: string): string | undefined {
+  const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  const raw = frontmatter?.match(/^status:\s*["']?(.+?)["']?\s*$/m)?.[1]
+    || /^\*\*Status:\*\*\s*(.+)$/m.exec(content)?.[1];
+  const normalized = raw?.replace(/^[^A-Za-z0-9]+/, '').trim().replace(/[-_]+/g, ' ');
+  return normalized || undefined;
 }
 async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> { const target = path.join(folder, 'PROJECT.md'); try { const handle = await fs.promises.open(target, 'wx'); await handle.writeFile(renderSnapshot(project), 'utf8'); await handle.close(); return 'created'; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'retained'; throw error; } }
 function renderSnapshot(project: ProjectRecord): string { const fields = Object.entries(project.brief).map(([key, value]) => `## ${key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}\n\n${value || '_Not specified_'}\n`).join('\n'); return `# ${project.name}\n\n- Key: ${project.key}\n- Type: ${project.type}\n- Created: ${project.createdAt}\n\n## Purpose\n\n${project.purpose || '_Not specified_'}\n\n${fields}\n## Workflow\n\n${project.workflowStages.map(stage => `- ${stage.name}`).join('\n')}\n`; }

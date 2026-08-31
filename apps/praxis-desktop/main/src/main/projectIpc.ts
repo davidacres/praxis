@@ -3,26 +3,50 @@ import type { AttachProjectFolderInput, Connection, CreateProjectInput, ProjectB
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
+import { toStoredFolderPath } from '@praxis/core';
 
 /**
  * Existing folders are already the source of truth for their planning files.
- * Register that source as a read-only Live Folder connection so the imported
- * project immediately has a board backed by the files on disk (rather than an
- * empty Praxis-owned board beside them).
+ * Register that source as a read-only folder connection so the project has a
+ * board backed by the files on disk rather than an empty Praxis-owned board.
+ *
+ * Only for `storage: 'app'` projects. A folder-backed project's *own* board
+ * already reads those files, so adding this connection would produce two boards
+ * over one folder — and the sidebar, seeing a `project-plans-*` link, would
+ * suppress the project's own board as "the empty Praxis board" and show the
+ * duplicate instead. That suppression predates `ProjectRecord.storage`.
  */
 async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectRecord> {
   const folder = project.workspaceFolder;
-  if (!folder || !(project.folderInspection?.planFiles?.length)) {
+  if (project.storage === 'folder' || !folder || !(project.folderInspection?.planFiles?.length)) {
     return project;
   }
 
   const connections = getConnectionStore();
+  // A folder connection may already cover this folder — the user pointed one at
+  // it before creating the project. Adding a second would put two boards over
+  // one folder, so leave the existing connection to serve it.
+  const normalizedFolder = toStoredFolderPath(folder).toLowerCase();
+  const alreadyConnected = connections.getConnections().some(candidate => {
+    if (candidate.mode !== 'folder') {
+      return false;
+    }
+    const roots = candidate.settings['roots'];
+    const configured = Array.isArray(roots)
+      ? roots.filter((value): value is string => typeof value === 'string')
+      : typeof candidate.settings['path'] === 'string' ? [candidate.settings['path'] as string] : [];
+    return configured.some(root => toStoredFolderPath(root).toLowerCase() === normalizedFolder);
+  });
+  if (alreadyConnected) {
+    return project;
+  }
+
   const connection: Connection = {
     id: `project-plans-${project.id}`,
     name: `${project.name} plans`,
-    mode: 'livefolder',
+    mode: 'folder',
     settings: {
-      path: folder,
+      roots: [folder],
       projectKey: project.key,
       projectName: project.name,
       // Imported plans stay safe/read-only until the user explicitly enables
@@ -32,7 +56,7 @@ async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectReco
   };
   await connections.addConnection(connection);
   try {
-    const board = { connectionId: connection.id, boardId: `livefolder-${project.key.toLowerCase()}`, displayName: `${project.name} (Live)` };
+    const board = { connectionId: connection.id, boardId: `folder-${project.key.toLowerCase()}`, displayName: project.name };
     await connections.addTrackedBoard(board);
     return await getProjectStore().linkBoard(project.id, {
       connectionId: board.connectionId,

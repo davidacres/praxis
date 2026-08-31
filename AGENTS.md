@@ -5,160 +5,29 @@ source; `CLAUDE.md` points here.
 
 ## Project Overview
 
-A monorepo with **two front-ends over one shared core**:
+A monorepo: the **Praxis** desktop app over a shared core.
 
 | Workspace | npm name | What it is |
 | --- | --- | --- |
-| `packages/core` | `@praxis/core` | Shared types, settings, Git parsing, AI/MCP plumbing. CommonJS. Consumed by both surfaces. |
-| `apps/vscode-extension` | `praxis` | The VS Code extension. Renders its UI as **webview panels**. |
-| `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The **Praxis** desktop renderer — React + Vite. Ordinary DOM, no webviews. |
+| `packages/core` | `@praxis/core` | Shared types, settings, Git parsing, folder/plans parsing, AI/MCP plumbing. CommonJS. |
+| `apps/praxis-desktop/renderer` | `@praxis/desktop-renderer` | The desktop renderer — React + Vite. Ordinary DOM. |
 | `apps/praxis-desktop/main` | `@praxis/desktop-main` | Electron main + preload + the Playwright e2e suite. Hosts the renderer build. |
 
-The extension's npm name is `praxis`, not `@praxis/*`, and must stay that
-way: with publisher `davidacres` it forms the marketplace ID
-`davidacres.praxis`. Renaming it orphans the extension for everyone who
-already has it installed.
-
-The two UI surfaces share `core` but **share no UI code and no CSS**. Rules below
-are labelled with the surface they apply to — applying a webview rule inside the
-Electron renderer (or the reverse) is a common and costly mistake.
+Core is consumed only by the Electron app (`main` directly, `renderer` for
+types). It targets Node/Electron — no host-abstraction ports.
 
 ## Shared logic belongs in core
 
-The extension used to carry ~50 copies of modules core already owned — shims,
-byte-identical duplicates, and files that had silently drifted apart, including
-a ~2,600-line fork of the whole live-folder parser. Those are all gone. When
-both surfaces need the same logic it lives in `packages/core`, stays
-host-agnostic, and each surface supplies its own bindings through an adapter in
-`apps/vscode-extension/src/adapters/`.
-
-Where core needs a host capability it can't assume — VS Code's `Memento`,
-`workspace.fs`, a file watcher — it exposes a small port with a `node:fs`-style
-default and a `setX()` swap (`setLiveFolderFs`, `setLiveFolderWatch`,
-`setMcpOAuthProviderSource`). The extension calls those in `activate()`; the
-desktop app takes the defaults. Add a host capability the same way rather than
-forking a module.
-
----
-
-# VS Code extension (`apps/vscode-extension`)
-
-## Webview Panel Rules
-
-**CRITICAL: VS Code Insiders webview rendering requirement**
-
-When creating webview panels (`createWebviewPanel`), `panel.webview.html` MUST be set
-synchronously — in the same execution block — immediately after panel creation. Any `await`
-between `createWebviewPanel()` and the `webview.html` assignment will cause the webview to
-render blank in VS Code Insiders.
-
-Wrong:
-```typescript
-const panel = vscode.window.createWebviewPanel(...);
-await fetchData();              // async gap breaks rendering in Insiders
-panel.webview.html = getHtml(); // too late — blank forever
-```
-
-Right:
-```typescript
-await fetchData();              // fetch data first
-const panel = vscode.window.createWebviewPanel(...);
-panel.webview.html = getHtml(); // set immediately — works
-```
-
-If a panel needs to be refreshed with new data, dispose the old panel and create a new one
-rather than setting `webview.html` on an existing panel after an async operation. See
-`IssueDetailPanelManager.createPanelWithHtml()` and `refreshIfShowing()` for the pattern.
-
-**CSP pattern**: All webview panels should use:
-```
-default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';
-```
-Use `<style>` without a nonce attribute, and `<script nonce="${nonce}">` for scripts.
-
-**IMPORTANT: Script runtime scope**
-
-Code inside `<script nonce="...">` runs in the webview browser context and cannot call
-TypeScript helper functions declared in the extension host file scope.
-
-If script code needs helper logic (for example color/format utilities used by `renderNodes`),
-define that logic inside the webview script block (or serialize required values) rather than
-calling host-scope functions directly.
-
-Regression note:
-- Calling host-only helpers from webview script previously caused runtime errors that broke node
-	rendering and ticket add flows in Task Designer.
-
-## Webview Layout Rules
-
-**CRITICAL: Remove VS Code's default body padding to avoid the black left/right gutter**
-
-VS Code injects a default `body { padding: 0 20px }` into every webview. Any panel whose CSS
-does not override it shows a black gutter (the editor background) down the left and right edges,
-pushing all content inward. This was reported as "extra margin" / "black area on the left and
-right" of the board and other custom panes.
-
-**Rule:** Every webview's `body` rule MUST explicitly set `padding: 0`. Do not rely on
-`margin: 0` — that does not remove the injected padding. Control all spacing yourself from an
-inner container, never from the default body padding.
-
-Wrong (inherits the ~20px gutter):
-```css
-body { margin: 0; display: flex; }
-```
-
-Right (no gutter; spacing owned by inner containers):
-```css
-body { margin: 0; padding: 0; display: flex; }
-```
-
-**Canonical full-pane layout (rounded panel)**
-
-The board (`boardPanelManager`), Issue Detail (`issueDetailPanelManager`) and Local Peer Review
-(`localPeerReviewPanel`) panes share one layout. Reuse it for any new full-pane screen so they
-stay visually consistent:
-
-```css
-body { margin: 0; padding: 0; /* removes the injected gutter */ }
-
-.page {                 /* outer frame: thin even margin around the panel */
-  box-sizing: border-box;
-  display: flex;
-  flex: 1;
-  width: 100%;
-  min-height: 100vh;
-  padding: 8px;
-}
-
-.panel-shell {          /* the rounded-corner panel */
-  box-sizing: border-box;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 8px;
-  background: var(--vscode-sideBar-background);
-  overflow: hidden;
-}
-
-.header, .content { padding: 16px; }   /* inner spacing lives here, not on body */
-```
-
-Notes:
-- For an edge-to-edge canvas (e.g. Task Designer) still set `body { padding: 0 }`, but use a
-  full-bleed root (`.shell { width: 100%; height: 100% }`) instead of the `.page` frame.
-- The visible spacing of a pane is `body(0) + .page padding + .panel-shell border + inner
-  padding`. To bring content closer to the edge, reduce `.page` padding — do NOT reintroduce
-  body padding.
-- Card/column styling inside the panel is independent of this frame; changing the frame must not
-  alter card colors.
+When both `main` and `renderer` need the same logic it lives in `packages/core`.
+The renderer imports **types only** from core at runtime — core is CommonJS and
+pulls in `chokidar` / `markdown-it`, so it cannot be tree-shaken into the browser
+bundle (see the `settingsDefaults.ts` note below).
 
 ---
 
 # Praxis desktop app (`apps/praxis-desktop/renderer` + `apps/praxis-desktop/main`)
 
-Plain React in a normal DOM. **None of the webview rules above apply here** — there is
-no `createWebviewPanel`, no injected body padding, and no `--vscode-*` tokens.
+Plain React in a normal DOM.
 
 `renderer/src` is grouped by feature. Put a new file in the folder that owns its
 screen; only genuinely cross-cutting primitives belong in `ui/`.
@@ -240,14 +109,29 @@ a regression loudly.
   validated to a strict literal in core — a hex, or a keyword from a fixed set. Never pass
   user text through into a stylesheet.
 
+## Workspace / project / connection model
+
+Three layers, each with one job:
+
+- **Workspace** (`.workspace.praxis` file, `WorkspaceRecord`) — a saved, shareable set
+  of project + connection references. Groups; owns no board data.
+- **Project** (`ProjectRecord`, `ProjectStore`) — the unit of planned work. One board.
+  `storage: 'app'` keeps work items in app JSON; `storage: 'folder'` backs them with a
+  markdown plans folder under `project.workspaceFolder`. Synthetic connection id
+  `project:<id>`, `mode: 'project'`.
+- **Connection** (`Connection`, `connectionStore`) — an external/system backend.
+  `mode ∈ { jiracloud | gitlab | github | demo | folder }`. `folder` points at one or
+  more plans-folder roots on disk (native multi-root; each root's `board.praxis.json`
+  carries its own `projectKey` / `projectName`).
+
 ## Build and test
 
 Root scripts are prefixed by the surface they act on. `build` and `test` with no
 prefix run **everything**, in dependency order.
 
 ```bash
-npm run build          # core -> renderer -> copy-renderer -> desktop -> vscode
-npm run test           # test:core, test:desktop, test:vscode
+npm run build          # core -> renderer -> copy-renderer -> desktop
+npm run test           # test:core, test:desktop
 npm run check-types    # every workspace
 
 # or one surface at a time
@@ -259,15 +143,7 @@ npm run build:desktop
 npm run test:core             # node:test
 npm run test:desktop          # Playwright e2e
 npm run test:desktop:git      # gitService unit tests
-npm run test:vscode           # launches a real VS Code (see caveat below)
 ```
-
-`npm run test:vscode` cannot run everywhere. `@vscode/test-cli` downloads VS Code
-and spawns a binary named `Electron`, but recent macOS arm64 builds ship theirs as
-`Code`. Symlinking gets past the spawn and the process is then SIGKILLed, because
-substituting the binary invalidates the bundle's code signature. Treat a green
-typecheck plus a clean esbuild bundle as the local signal, and rely on CI for the
-integration suite.
 
 **The e2e suite loads the pre-built renderer** from `apps/praxis-desktop/main/renderer/`, not
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run

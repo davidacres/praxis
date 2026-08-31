@@ -123,6 +123,36 @@ function jiraSettingsForSave(
   return cleaned;
 }
 
+/**
+ * A folder connection stores its plans folders as `roots: string[]`. The form
+ * edits them as one-per-line text (see `initialValues`), so split back on save
+ * and drop the legacy single-`path` key a pre-multi-root connection may carry.
+ */
+function folderSettingsForSave(values: FormValues): Record<string, unknown> {
+  const cleaned = pruneSettings(values);
+  delete cleaned['path'];
+  cleaned['roots'] = parseFolderRoots(values['roots']);
+  return cleaned;
+}
+
+/** One folder per line, blanks and duplicates removed, original order kept. */
+function parseFolderRoots(raw: string | boolean | undefined): string[] {
+  if (typeof raw !== 'string') {
+    return [];
+  }
+  const seen = new Set<string>();
+  const roots: string[] = [];
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || seen.has(trimmed.toLowerCase())) {
+      continue;
+    }
+    seen.add(trimmed.toLowerCase());
+    roots.push(trimmed);
+  }
+  return roots;
+}
+
 function initialValues(connection: Connection | undefined): FormValues {
   const values: FormValues = {};
   for (const [key, value] of Object.entries(connection?.settings ?? {})) {
@@ -134,14 +164,19 @@ function initialValues(connection: Connection | undefined): FormValues {
       values[key] = (value as string[]).join('\n');
     }
   }
+  // A folder connection written before multi-root has a single `path`; surface
+  // it as the first root so editing one does not silently drop its folder.
+  if (connection?.mode === 'folder' && !values['roots'] && typeof values['path'] === 'string') {
+    values['roots'] = values['path'];
+  }
   return values;
 }
 
 /**
- * Post-save policy for demo/livefolder: the connection owns exactly one board
- * by construction, so upsert the synthesized tracked board and prune anything
- * else (e.g. stale entries from before a project-key rename). Keeps the shared
- * settings file in the same shape the VS Code extension writes.
+ * Post-save policy for demo/folder: the connection derives one canonical board
+ * from its own settings, so upsert that synthesized tracked board and prune
+ * anything else (e.g. stale entries from before a project-key rename). A folder
+ * connection's extra roots are not tracked here — `getBoards()` surfaces them.
  */
 async function syncSynthesizedTrackedBoard(connection: Connection): Promise<void> {
   const canonical = createSynthesizedTrackedBoard(connection);
@@ -249,7 +284,9 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     const settings =
       mode === 'jiracloud'
         ? jiraSettingsForSave(values, jiraSetupMode, jiraAuthMethod)
-        : pruneSettings(values);
+        : mode === 'folder'
+          ? folderSettingsForSave(values)
+          : pruneSettings(values);
 
     let connection: Connection;
     if (persistedId) {
@@ -581,39 +618,72 @@ function ModeFields({
           Demo mode uses built-in sample data — no further configuration needed.
         </p>
       );
-    case 'livefolder':
+    case 'folder': {
+      // Edited as one-per-line text; `folderSettingsForSave` splits it into the
+      // stored `roots` array. An empty list still renders one blank row so
+      // there is always something to browse into.
+      const roots = textValue('roots').split('\n');
+      const rootRows = roots.length > 0 ? roots : [''];
+      const writeRoots = (next: string[]) => setValue('roots', next.join('\n'));
       return (
         <>
-          <FieldRow label="Folder" description="Root folder containing the plans structure (features/…).">
-            <div className="conn-path-row">
-              <input
-                className="input"
-                data-testid="conn-field-path"
-                value={textValue('path')}
-                placeholder={'C:\\path\\to\\plans'}
-                onChange={event => setValue('path', event.target.value)}
-              />
+          <FieldRow
+            label="Folders"
+            description="Each folder is searched for plans structures (features/…). Every plans root found becomes its own board."
+          >
+            <div className="conn-roots-list" data-testid="conn-field-roots">
+              {rootRows.map((root, index) => (
+                <div className="conn-path-row" key={index}>
+                  <input
+                    className="input"
+                    data-testid={`conn-field-root-${index}`}
+                    value={root}
+                    placeholder={'C:\\path\\to\\plans'}
+                    onChange={event =>
+                      writeRoots(rootRows.map((value, i) => (i === index ? event.target.value : value)))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    data-testid={`conn-browse-root-${index}`}
+                    onClick={() => {
+                      void window.praxis.dialog.pickFolder('Select plans folder').then(picked => {
+                        if (picked) {
+                          writeRoots(rootRows.map((value, i) => (i === index ? picked : value)));
+                        }
+                      });
+                    }}
+                  >
+                    <Icon name="folder-open" size={13} />
+                    Browse…
+                  </button>
+                  {rootRows.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn"
+                      aria-label={`Remove folder ${index + 1}`}
+                      data-testid={`conn-remove-root-${index}`}
+                      onClick={() => writeRoots(rootRows.filter((_, i) => i !== index))}
+                    >
+                      <Icon name="close" size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
               <button
                 type="button"
                 className="btn"
-                data-testid="conn-browse-path"
-                onClick={() => {
-                  void window.praxis.dialog
-                    .pickFolder('Select plans folder')
-                    .then(picked => {
-                      if (picked) {
-                        setValue('path', picked);
-                      }
-                    });
-                }}
+                data-testid="conn-add-root"
+                onClick={() => writeRoots([...rootRows, ''])}
               >
-                <Icon name="folder-open" size={13} />
-                Browse…
+                <Icon name="plus" size={13} />
+                Add folder
               </button>
             </div>
           </FieldRow>
-          {textField('projectKey', 'Project key', 'LIVE', 'Prefix for issue keys created in this folder.')}
-          {textField('projectName', 'Project name', 'Live Folder Project')}
+          {textField('projectKey', 'Project key', 'LIVE', 'Default prefix for issue keys. A folder with its own board.praxis.json overrides it.')}
+          {textField('projectName', 'Project name', 'Folder Project')}
           <Toggle
             label="Allow issue creation"
             description="When off, boards from this folder are read-only and the New issue button is disabled."
@@ -623,6 +693,7 @@ function ModeFields({
           />
         </>
       );
+    }
     case 'jiracloud':
       return (
         <>
@@ -874,13 +945,6 @@ function ModeFields({
             description, and assignee.
           </p>
         </>
-      );
-    case 'userworkspace':
-      return (
-        <p className="placeholder-text" data-testid="conn-mode-note">
-          User Workspace boards are local plans folders. Save the connection, then use
-          Create board in its Boards section below.
-        </p>
       );
     case 'github':
       return (

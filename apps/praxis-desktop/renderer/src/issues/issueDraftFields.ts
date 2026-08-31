@@ -6,7 +6,7 @@ import type { BackendMode } from '@praxis/core';
  * The parent-rule logic here mirrors core's `issues/issueHierarchy.ts`
  * (`getParentRule`). The frontend deliberately imports only *types* from
  * `@praxis/core` — a runtime import would drag node-only services
- * (chokidar/fs via liveFolderService) into the renderer bundle — so the small
+ * (chokidar/fs via folderService) into the renderer bundle — so the small
  * slice of hierarchy rules the form needs is duplicated here. The backend
  * stays the enforcer; these rules only decide which fields render, whether
  * the parent is required, and the helper text shown under the picker.
@@ -17,16 +17,19 @@ export const PRIORITY_OPTIONS = ['Critical', 'Highest', 'High', 'Medium', 'Low',
 export const SEVERITY_OPTIONS = ['Critical', 'High', 'Medium', 'Low'];
 
 /**
- * Issue types the create form offers, per backend mode. Mirrors the
- * extension's `DEFAULT_CREATABLE_TYPES` (`commands/registerCommands.ts`):
- * Jira Cloud's epic-level type is "Epic" where the file/backend modes use
- * "Feature", and only the MCP-backed modes can file Subtasks.
+ * Issue types the create form offers, per backend mode. Jira Cloud's
+ * epic-level type is "Epic" where the folder-backed modes use "Feature", and
+ * only the MCP-backed modes can file Subtasks.
  */
 export function getCreatableTypes(mode: BackendMode): string[] {
   if (mode === 'jiracloud') {
     return ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
   }
-  if (mode === 'livefolder' || mode === 'userworkspace') {
+  if (mode === 'folder') {
+    return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
+  }
+  // A project stores a free-form `issueType` string and has no subtask model.
+  if (mode === 'project') {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   return ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
@@ -40,12 +43,12 @@ export function isIdeaDraftType(issueType: string | undefined): boolean {
 export interface DraftParentRule {
   canHaveParent: boolean;
   requiresParent: boolean;
-  /** Field label ("Feature" for live folder children, "Epic" for Jira, …). */
+  /** Field label ("Feature" for folder children, "Epic" for Jira, …). */
   label: string;
   helperText: string;
   placeholder: string;
   /**
-   * livefolder/userworkspace semantics: a parent value that matches no
+   * folder-backed semantics: a parent value that matches no
    * existing item means "create a new Feature with this summary"
    * (`newParentSummary`). Other backends reject unknown parents.
    */
@@ -87,7 +90,20 @@ export function getDraftParentRule(
     };
   }
 
-  if (mode === 'livefolder' || mode === 'userworkspace') {
+  // Mirrors `getParentRule` in core: an app-storage project's work items have
+  // no parent field, so never offer the picker.
+  if (mode === 'project') {
+    return {
+      canHaveParent: false,
+      requiresParent: false,
+      label: 'Parent',
+      helperText: `${typeLabel} items in a project do not use a parent.`,
+      placeholder: '',
+      allowsNewParent: false
+    };
+  }
+
+  if (mode === 'folder') {
     return {
       canHaveParent: true,
       requiresParent: true,

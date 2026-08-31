@@ -39,16 +39,14 @@ export * from './ai/aiSessionManager';
 export * from './backends/issueTrackerService';
 export * from './backends/stubBackendService';
 export * from './demo/demoService';
-export * from './livefolder/boardConfigFile';
-export * from './livefolder/liveFolderFs';
-export * from './livefolder/liveFolderService';
-export * from './livefolder/liveFolderWatch';
-export * from './livefolder/markdownPlanParser';
-export * from './livefolder/markdownStatusWriter';
-export * from './userWorkspace/userWorkspaceStore';
-export * from './userWorkspace/userWorkspaceService';
-export * from './userWorkspace/boardDraftPlanner';
+export * from './folder/boardConfigFile';
+export * from './folder/folderFs';
+export * from './folder/folderService';
+export * from './folder/folderWatch';
+export * from './folder/markdownPlanParser';
+export * from './folder/markdownStatusWriter';
 export * from './projects/projectTypes';
+export * from './projects/projectImportPlanner';
 export * from './projects/projectTemplates';
 export * from './projects/projectStore';
 export * from './projects/projectService';
@@ -65,9 +63,7 @@ export * from './git/gitGraph';
 export * from './git/gitParsing';
 export * from './git/gitWorktreeManager';
 
-// Host-agnostic helpers both UI surfaces use. These existed as byte-identical
-// copies inside the VS Code extension until those copies were deleted; they are
-// exported here so the extension and the desktop app share one definition.
+// Board/issue helpers used by both the main process and the renderer.
 export * from './board/boardIssueFilters';
 export * from './board/boardTransitionResolver';
 export * from './board/issueTypeColors';
@@ -76,8 +72,8 @@ export * from './board/swimLanes';
 export * from './file/jiraArtifactArchive';
 export * from './issues/ideaTranscript';
 export * from './issues/issueHierarchy';
-export * from './livefolder/markdownTemplate';
-export * from './livefolder/pathUtils';
+export * from './folder/markdownTemplate';
+export * from './folder/pathUtils';
 export * from './ui/backendModeContext';
 export * from './ui/hexColor';
 export * from './ui/markdownToHtml';
