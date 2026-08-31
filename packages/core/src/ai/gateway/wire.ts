@@ -158,6 +158,28 @@ export function toolResultMessages(
   }));
 }
 
+/**
+ * Compacts a completed conversation for replay on a follow-up turn: strips the
+ * tool-call round-trips (assistant `tool_calls` + their `role: 'tool'` results)
+ * from earlier turns, keeping only the user/assistant text exchange. The raw
+ * tool output — fetched web pages, shell logs, diffs — is what the model
+ * already used to write its answer; re-sending it every turn just burns tokens.
+ * An assistant message that was purely a tool call collapses away entirely.
+ */
+export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): WireMessage[] {
+  const out: WireMessage[] = [];
+  for (const message of history) {
+    if (message.role === 'tool') continue;
+    if (message.role === 'assistant' && message.tool_calls?.length) {
+      const text = (message.content ?? '').trim();
+      if (text) out.push({ role: 'assistant', content: text });
+      continue;
+    }
+    out.push(message);
+  }
+  return out;
+}
+
 function parseSseData(line: string): Record<string, unknown> | null {
   if (!line.startsWith('data:')) {
     return null;

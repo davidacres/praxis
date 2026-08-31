@@ -23,6 +23,7 @@ export {
   buildChatRequest,
   assistantMessageWithToolCalls,
   toolResultMessages,
+  compactHistoryForReplay,
   consumeChatStream,
   collectChatCompletion,
   sanitizeToolCallId,

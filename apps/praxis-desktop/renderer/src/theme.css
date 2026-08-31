@@ -5124,12 +5124,35 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .session-chat-tool {
   width: min(760px, 92%);
-  margin: 0 0 var(--space-3);
-  border: 1px solid var(--border);
+  margin: 0 0 6px;
+  border: 1px solid var(--border-subtle, var(--border));
   border-radius: 6px;
-  background: var(--bg-elevated);
+  background: transparent;
   color: var(--text-tertiary);
+  font-size: 11px;
+}
+.session-chat-tool[open] { background: var(--bg-elevated); margin-bottom: var(--space-3); }
+
+/* One-line "what the agent is doing now" indicator — shown while a turn runs,
+   in place of streaming every tool block. */
+.session-activity-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: var(--space-2) 0 var(--space-3);
+  color: var(--text-secondary);
   font-size: 12px;
+}
+.session-activity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: session-activity-pulse 1.1s ease-in-out infinite;
+}
+@keyframes session-activity-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .session-chat-tool summary {

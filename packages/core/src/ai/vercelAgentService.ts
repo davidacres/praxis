@@ -15,6 +15,7 @@ import {
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
 import type { AiSessionManager } from './aiSessionManager';
 import {
+  compactHistoryForReplay,
   resolveGatewayApiKeyFromEnv,
   resolveGatewayUrlFromEnv,
   toWireModelId,
@@ -514,7 +515,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
-    const history = this.sessionManager.getAgentConversationHistory(issueKey);
+    // Replay the prior turns as a plain text exchange — old tool output does not
+    // need to travel back to the model on every follow-up.
+    const history = compactHistoryForReplay(this.sessionManager.getAgentConversationHistory(issueKey));
     const systemPrompt = `${buildSystemPrompt(record.taskDefinition, {
       key: issueKey,
       summary: record.taskDefinition.goal,
