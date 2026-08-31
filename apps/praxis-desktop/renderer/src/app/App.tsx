@@ -823,13 +823,15 @@ export function App() {
 
   const onboardingProjectWizard = Boolean(projectWizardMode && projectWizardPresentation === 'onboarding');
   // WebContentsView is a native sibling of the renderer and always paints
-  // above DOM z-index layers. Suspend it whenever an App-owned modal is above
-  // the current surface, otherwise the page can bleed through the dialog.
+  // above DOM z-index layers. Suspend it whenever an App-owned modal — or the
+  // startup splash — is above the current surface, otherwise the page bleeds
+  // through it.
   const nativeOverlayOpen = Boolean(
-    settingsDialogCategory
+    showSplash
+      || settingsDialogCategory
       || workspaceDialogOpen
       || whatsNewOpen
-      || (projectWizardMode && projectWizardPresentation === 'dialog')
+      || projectWizardMode
   );
   const contextLabel = onboardingProjectWizard
     ? projectWizardMode === 'existing' ? 'Create from folder' : 'Create project'
