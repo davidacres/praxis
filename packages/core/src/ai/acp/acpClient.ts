@@ -46,6 +46,12 @@ export interface AcpClientOptions {
   toolMode?: AgentToolMode;
   /** Provider-owned ACP session to resume when supported by the agent. */
   resumeSessionId?: string;
+  /**
+   * HTTP MCP servers to hand the agent in `session/new` (and `session/load`).
+   * Ignored unless the agent's `initialize` response advertises
+   * `mcpCapabilities.http`.
+   */
+  mcpServers?: Array<{ name: string; url: string; headers?: Record<string, string> }>;
   requestPermission: (request: AcpPermissionRequest) => Promise<PermissionDecision>;
   onSessionUpdate: (update: acp.SessionUpdate) => void;
   logSink?: LogSink;
@@ -199,18 +205,23 @@ export class AcpClientWrapper {
     if (!sessionId || !this.connection || !this.acpModule || !this.initializeResponse) return false;
     const capabilities = this.initializeResponse.agentCapabilities;
     if (!capabilities) return false;
+    // `session/resume` carries no `mcpServers` field, so a native resume would
+    // drop the in-app browser on every follow-up turn. When we have MCP servers
+    // to (re)attach, prefer `session/load`, which takes them.
+    const mcpServers = this.httpMcpServers();
+    const useLoad = capabilities.loadSession && (mcpServers.length > 0 || !capabilities.sessionCapabilities?.resume);
     try {
-      if (capabilities.sessionCapabilities?.resume) {
-        await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_resume, {
-          sessionId,
-          cwd: this.options.workingDirectory,
-          additionalDirectories: []
-        });
-      } else if (capabilities.loadSession) {
+      if (useLoad) {
         await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_load, {
           sessionId,
           cwd: this.options.workingDirectory,
-          mcpServers: [],
+          mcpServers,
+          additionalDirectories: []
+        });
+      } else if (capabilities.sessionCapabilities?.resume) {
+        await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_resume, {
+          sessionId,
+          cwd: this.options.workingDirectory,
           additionalDirectories: []
         });
       } else {
@@ -226,13 +237,31 @@ export class AcpClientWrapper {
     }
   }
 
+  /**
+   * The HTTP MCP servers to advertise on this session — only when the agent
+   * said it supports the `http` MCP transport in its `initialize` response.
+   */
+  private httpMcpServers(): acp.McpServer[] {
+    if (!this.initializeResponse?.agentCapabilities?.mcpCapabilities?.http) return [];
+    return (this.options.mcpServers ?? []).map(server => ({
+      type: 'http' as const,
+      name: server.name,
+      url: server.url,
+      headers: Object.entries(server.headers ?? {}).map(([name, value]) => ({ name, value }))
+    }));
+  }
+
   /** Creates the ACP session on first call (`session/new`); returns the existing one otherwise. */
   private async ensureSession(): Promise<acp.ActiveSession> {
     if (!this.connection) {
       throw new Error('ACP client is not connected.');
     }
     if (!this.session) {
-      this.session = await this.connection.agent.buildSession(this.options.workingDirectory).start();
+      let builder = this.connection.agent.buildSession(this.options.workingDirectory);
+      for (const mcpServer of this.httpMcpServers()) {
+        builder = builder.withMcpServer(mcpServer);
+      }
+      this.session = await builder.start();
     }
     return this.session;
   }

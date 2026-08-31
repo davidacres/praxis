@@ -128,6 +128,21 @@ const BUILT_IN: SurfacePackDefinition[] = [
     }
   },
   {
+    id: 'binary',
+    name: 'Binary',
+    description: 'A quiet field of 0s and 1s with a terminal-like rhythm. Technical, focused, and easy to read over any theme.',
+    supports: ['light', 'dark'],
+    glass: false,
+    phase: 1,
+    source: 'built-in',
+    pattern: { id: 'binary', scale: 112, opacity: 0.2, ink: 'accent' },
+    swatch: {
+      canvas: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%)',
+      panel: 'repeating-linear-gradient(90deg, color-mix(in srgb, var(--text) 5%, transparent) 0 1px, transparent 1px 8px)',
+      blend: 'screen'
+    }
+  },
+  {
     id: 'aurora-glass',
     name: 'Aurora Glass',
     description: 'Frosted translucent panels, a slow ambient gradient on the canvas, and an accent glow on focus. Uses native window blur where the OS supports it.',

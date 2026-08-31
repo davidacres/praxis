@@ -613,7 +613,7 @@ export function BoardView({
 
   if (effectiveColumns.length === 0 && !loading && !listError) {
     return (
-      <div className="board-shell" data-testid="board-view">
+      <div className="board-shell" data-testid="board-view" data-plain-surface={prefs.plainSurface ? '' : undefined}>
         {toolbar}
         <div className="empty-state">
           <Icon name="columns" size={28} />
@@ -624,7 +624,7 @@ export function BoardView({
   }
 
   return (
-      <div className="board-shell" data-testid="board-view">
+      <div className="board-shell" data-testid="board-view" data-plain-surface={prefs.plainSurface ? '' : undefined}>
         {toolbar}
         {listError && <div className="board-list-error">{listError}</div>}
       {loading && issues.length === 0 && !listError && (

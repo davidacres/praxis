@@ -21,6 +21,7 @@ export * from './ai/agentPrompt';
 export * from './ai/agentRuntime';
 export * from './ai/toolEventClassify';
 export * from './ai/tools';
+export * from './ai/browserMcpServer';
 export * from './ai/aiReviewService';
 export * from './ai/deliveryWorkflow';
 export * from './ai/featureDecompositionWorkflow';

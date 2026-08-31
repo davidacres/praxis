@@ -1,5 +1,6 @@
 # FX-BF-006: Praxis Atlas — Explorable Spatial Workspace
 
+**Type:** Feature
 **Status:** Proposed
 **Owner:** Electron desktop app
 **Priority:** P2
@@ -150,7 +151,9 @@ Electron main (existing IPC): projects, boards, issues, agent sessions, live eve
 Layout is recomputed from snapshots on a slow cadence and is pure. Activity is a
 fast, separate pass driven by the live subscription and never mutates layout.
 Selection and detail always resolve to the same DOM surfaces the rest of the app
-uses.
+uses — as of **FX-BF-008** those right-pane surfaces (project-details inspector,
+ticket details) are borderless and inherit the active theme / surface pack, so
+Atlas gets themed detail panes for free without an Atlas-specific style path.
 
 ## Data contracts
 
@@ -189,3 +192,20 @@ in, same layout out.
   plan for larger.
 - Reduced-motion and the board-as-accessible-path guarantees hold.
 - Settings, navigation, docs, and tests are updated together.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Dependencies
+
+
+
+## Comments
+
+

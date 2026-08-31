@@ -8,6 +8,8 @@ import {
   type AttachProjectFolderResult,
   type CreateProjectInput,
   type FolderInspection,
+  type ProjectDocument,
+  type ProjectDocumentsResult,
   type ProjectRecord
 } from '@praxis/core';
 
@@ -21,6 +23,31 @@ export class ProjectManager {
   public constructor(private readonly store: ProjectStore) {}
   public list(): ProjectRecord[] { return this.store.list(); }
   public get(projectId: string): ProjectRecord | undefined { return this.store.get(projectId); }
+
+  public listDocuments(projectId: string): ProjectDocumentsResult {
+    const project = this.requireProject(projectId);
+    const plansRoot = this.plansRoot(project.workspaceFolder);
+    if (!plansRoot || !fs.existsSync(plansRoot)) return { exists: false, documents: [] };
+    return { exists: true, documents: walkMarkdownFiles(plansRoot).map(file => {
+      const content = fs.readFileSync(file, 'utf8');
+      return { relativePath: path.relative(plansRoot, file).replaceAll(path.sep, '/'), name: documentName(content, path.basename(file)), type: documentType(content) };
+    }) };
+  }
+
+  public readDocument(projectId: string, relativePath: string): ProjectDocument {
+    const project = this.requireProject(projectId);
+    const plansRoot = this.plansRoot(project.workspaceFolder);
+    if (!plansRoot) throw new Error('This project has no workspace folder.');
+    const resolved = path.resolve(plansRoot, relativePath);
+    if (path.relative(plansRoot, resolved).startsWith('..') || path.extname(resolved).toLowerCase() !== '.md') {
+      throw new Error('That project document is outside docs/plans.');
+    }
+    const content = fs.readFileSync(resolved, 'utf8');
+    return { relativePath: path.relative(plansRoot, resolved).replaceAll(path.sep, '/'), name: documentName(content, path.basename(resolved)), type: documentType(content), content };
+  }
+
+  private requireProject(projectId: string): ProjectRecord { const project = this.store.get(projectId); if (!project) throw new Error(`Project ${projectId} was not found.`); return project; }
+  private plansRoot(folder?: string): string | undefined { return folder ? path.resolve(folder, 'docs', 'plans') : undefined; }
 
   public inspectFolder(folderPath: string): FolderInspection {
     const resolved = path.resolve(folderPath.trim());
@@ -217,5 +244,18 @@ function requireExistingDirectory(value: string): void { if (!fs.existsSync(valu
 function cleanBrief(brief: Record<string, string>): Record<string, string> { return Object.fromEntries(Object.entries(brief).map(([key, value]) => [key, value.trim()])); }
 function isManifest(name: string): boolean { return /^(package\.json|pyproject\.toml|requirements\.txt|cargo\.toml|go\.mod|pom\.xml|build\.gradle|composer\.json|gemfile|[^/]+\.csproj)$/i.test(name); }
 function walkFiles(root: string, maxDepth: number, maxFiles: number): string[] { const result: string[] = []; const visit = (dir: string, depth: number) => { if (depth > maxDepth || result.length >= maxFiles) return; let entries: fs.Dirent[] = []; try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; } for (const entry of entries) { if (result.length >= maxFiles || ['node_modules', '.git', 'dist', 'out'].includes(entry.name)) continue; const full = path.join(dir, entry.name); if (entry.isDirectory()) visit(full, depth + 1); else if (entry.isFile()) result.push(full); } }; visit(root, 0); return result; }
+function walkMarkdownFiles(root: string): string[] { return walkFiles(root, 12, 2000).filter(file => path.extname(file).toLowerCase() === '.md').sort((a, b) => a.localeCompare(b)); }
+function documentName(content: string, filename: string): string {
+  const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  const frontmatterName = frontmatter?.match(/^(?:name|title):\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim();
+  const heading = /^#\s+(.+)$/m.exec(content)?.[1]?.trim();
+  return frontmatterName || heading || filename.replace(/\.md$/i, '').replace(/[-_]+/g, ' ');
+}
+function documentType(content: string): string {
+  const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  return frontmatter?.match(/^type:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim()
+    || /^\*\*Type:\*\*\s*(.+)$/m.exec(content)?.[1]?.trim()
+    || 'Other';
+}
 async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> { const target = path.join(folder, 'PROJECT.md'); try { const handle = await fs.promises.open(target, 'wx'); await handle.writeFile(renderSnapshot(project), 'utf8'); await handle.close(); return 'created'; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'retained'; throw error; } }
 function renderSnapshot(project: ProjectRecord): string { const fields = Object.entries(project.brief).map(([key, value]) => `## ${key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}\n\n${value || '_Not specified_'}\n`).join('\n'); return `# ${project.name}\n\n- Key: ${project.key}\n- Type: ${project.type}\n- Created: ${project.createdAt}\n\n## Purpose\n\n${project.purpose || '_Not specified_'}\n\n${fields}\n## Workflow\n\n${project.workflowStages.map(stage => `- ${stage.name}`).join('\n')}\n`; }

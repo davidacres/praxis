@@ -408,6 +408,12 @@ export interface BoardColumnPreferences {
   maxAgeWeeks?: number;
   /** Per-column card order for visual priority; key is status name, value is ordered issue keys. */
   issueOrder?: Record<string, string[]>;
+  /**
+   * Suppress the surface-pack material (texture, watermark, tint, glass) behind
+   * this board so dense content stays legible. The colour theme still applies —
+   * the board just sits on a flat elevated fill instead of the material.
+   */
+  plainSurface?: boolean;
 }
 
 export interface ToolDescriptor {

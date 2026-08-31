@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type * as acp from '@agentclientprotocol/sdk' with { 'resolution-mode': 'import' };
 import type { AiProvider, IssueDetails } from '../../types';
-import { buildSystemPrompt } from '../agentPrompt';
+import { BROWSER_TOOLS_PROMPT, buildSystemPrompt } from '../agentPrompt';
 import {
   AGENT_DEFAULTS,
   type AgentEventSummary,
@@ -43,6 +43,17 @@ export interface AcpAgentStartOptions {
   model?: string;
   toolMode?: AgentToolMode;
   runtimeSessionId?: string;
+  /**
+   * HTTP MCP servers to expose to the agent for this session (e.g. the in-app
+   * browser). Applied only when the agent advertises `mcpCapabilities.http`.
+   */
+  mcpServers?: AcpHttpMcpServer[];
+}
+
+export interface AcpHttpMcpServer {
+  name: string;
+  url: string;
+  headers?: Record<string, string>;
 }
 
 export interface AcpPromptOptions extends AcpAgentStartOptions {
@@ -242,6 +253,36 @@ export class AcpAgentHost {
     });
   }
 
+  /**
+   * Raise a permission prompt that did not originate from the agent's own
+   * `session/request_permission` call — used by the in-app browser MCP server,
+   * whose tool calls the agent makes directly. Reuses the same pending-approval
+   * queue, so `respondToPermission` resolves it and the session's permission
+   * card renders it unchanged.
+   */
+  public promptExternalPermission(issueKey: string, title: string, kind: string): Promise<PermissionDecision> {
+    return this.requestPermission(issueKey, {
+      toolCallId: `external-${Date.now()}`,
+      title,
+      kind,
+      options: []
+    });
+  }
+
+  /**
+   * Record a tool call the agent made through an out-of-band MCP server (the
+   * in-app browser), so it appears in the transcript and step count like the
+   * agent's native tool calls. No-op once the task has ended.
+   */
+  public appendExternalToolEvent(issueKey: string, toolName: string, ok: boolean, content: string): void {
+    if (!this.activeTasks.has(issueKey)) return;
+    this.appendEvent(
+      issueKey,
+      evt('tool_complete', `${ok ? 'Tool' : 'Tool failed'}: ${toolName}`, content, { toolName }),
+      1
+    );
+  }
+
   private handleSessionUpdate(issueKey: string, update: acp.SessionUpdate, task: ActiveAcpTask): void {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk': {
@@ -328,11 +369,12 @@ export class AcpAgentHost {
     const workingDirectory = options.workingDirectory?.trim() || process.cwd();
     const toolMode = options.toolMode ?? (taskDefinition.kind === 'analysis' ? 'read-only' : 'full');
     const sessionId = randomUUID();
+    const hasBrowser = options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false;
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\nTool mode: ${
       toolMode === 'read-only'
         ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
         : 'FULL. Use tools as needed; honor every permission request.'
-    }`;
+    }${hasBrowser ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
     // ACP's `session/prompt` has no separate system-role slot in the
     // high-level `ActiveSession.prompt(text)` API — the CLI agent supplies
     // its own persona, so the task's own instructions travel as one prompt.
@@ -346,6 +388,7 @@ export class AcpAgentHost {
       env: options.env,
       workingDirectory,
       toolMode,
+      mcpServers: options.mcpServers,
       requestPermission: request => this.requestPermission(issue.key, request),
       onSessionUpdate: update => {
         const active = this.activeTasks.get(issue.key);
@@ -469,6 +512,10 @@ export class AcpAgentHost {
       toolMode === 'read-only'
         ? 'READ ONLY. Do not edit files, execute commands, or mutate external systems.'
         : 'FULL. Use tools as needed; honor every permission request.'
+    }${
+      (options.mcpServers?.some(server => server.name === 'praxis-browser') ?? false)
+        ? `\n\n${BROWSER_TOOLS_PROMPT}`
+        : ''
     }`;
     const prompt = [
       systemPrompt,
@@ -482,6 +529,7 @@ export class AcpAgentHost {
       env: options.env,
       workingDirectory,
       toolMode,
+      mcpServers: options.mcpServers,
       resumeSessionId: record.runtimeSessionId,
       requestPermission: request => this.requestPermission(issueKey, request),
       onSessionUpdate: update => {

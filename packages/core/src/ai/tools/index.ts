@@ -11,3 +11,17 @@ export {
 
 export { resolveSandboxedPath } from './pathSandbox';
 export { createUnifiedDiff } from './unifiedDiff';
+
+export {
+  BROWSER_TOOL_DEFINITIONS,
+  BROWSER_TOOL_NAMES,
+  blockedBrowserUrlReason,
+  browserHostAllowed,
+  createBrowserToolExtension,
+  executeBrowserTool,
+  type BrowserBridge,
+  type BrowserElement,
+  type BrowserPageState,
+  type BrowserToolContext,
+  type BrowserToolExtensionOptions
+} from './browserTools';

@@ -154,6 +154,22 @@
   --surface-radius-boost: 0px;
 }
 
+/* ── binary ─────────────────────────────────────────────────────────────
+   A low-contrast terminal-like field. The 0/1 glyphs come from the pattern
+   library; this block supplies only the material wash and panel edge. */
+:root[data-surface='binary'] {
+  --surface-app-bg-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 58%),
+    linear-gradient(315deg, color-mix(in srgb, var(--text) 4%, transparent), transparent 52%);
+  --surface-panel-tint-layer:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 48%);
+  --surface-texture-image: none;
+  --surface-texture-opacity: 0;
+  --surface-panel-border-color: color-mix(in srgb, var(--border) 58%, var(--accent) 24%);
+  --surface-accent-glow: inset 0 1px 0 color-mix(in srgb, var(--accent) 16%, transparent);
+  --surface-radius-boost: 0px;
+}
+
 /* ── aurora-glass (phase 2) ─────────────────────────────────────────────
    Frosted translucent panels + a slow ambient gradient on the canvas. The
    translucency values are LITERAL (no nested var()/calc — Chromium drops a

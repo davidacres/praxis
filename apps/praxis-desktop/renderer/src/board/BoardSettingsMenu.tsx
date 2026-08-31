@@ -208,6 +208,22 @@ export function BoardSettingsMenu({
           </div>
 
           <div className="board-prefs-section">
+            <div className="board-prefs-heading">Appearance</div>
+            <div className="board-prefs-row">
+              <button
+                type="button"
+                className={`chip${prefs.plainSurface ? ' filter-active' : ''}`}
+                data-testid="board-prefs-plain-surface"
+                title="Hide the theme's surface texture behind this board when it hurts readability. The colour theme still applies."
+                onClick={() => onChange({ ...prefs, plainSurface: prefs.plainSurface ? undefined : true })}
+              >
+                <Icon name="theme" size={11} />
+                Plain background
+              </button>
+            </div>
+          </div>
+
+          <div className="board-prefs-section">
             <div className="board-prefs-heading">Columns</div>
             {statusOrder.map((status, index) => (
               <div className="board-prefs-column-row" key={status} data-testid="board-prefs-column-row">

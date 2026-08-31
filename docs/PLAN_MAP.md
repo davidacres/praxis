@@ -32,6 +32,8 @@
 | TASK-051 | Task | Connect Git child actions to Graph, Changes, and Conflict contexts | Complete | TASK-049 |
 | TASK-052 | Task | Verify navigation semantics, accessibility, responsive layout, and migration snapshots | Complete | TASK-049, TASK-050, TASK-051 |
 | FX-BF-006 | Feature | Praxis Atlas — explorable spatial multi-project workspace | Proposed | FX-BF-005 |
+| FX-BF-008 | Feature | Project-details inspector and board surface controls | Complete | FX-BF-005 |
+| FX-BE-009 | Story | Project-details inspector, theme-aware detail panes, per-board plain background, sidebar board removal, no-boards centre state | Complete | FX-BF-008 |
 | FX-BE-007 | Story | Atlas spatial shell and continuous zoom vertical slice | Proposed | FX-BF-005 |
 | TASK-053 | Task | Renderer stack spike and visual contract gate | Proposed | FX-BF-005 |
 | TASK-054 | Task | Atlas snapshot model and builder in core | Proposed | TASK-053 |

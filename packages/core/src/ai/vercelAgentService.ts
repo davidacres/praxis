@@ -3,7 +3,7 @@ import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import type { AiProvider, IssueDetails } from '../types';
 import { runAgentLoop, type AgentLoopEvent, type WireMessage } from './agentRuntime';
-import { buildSystemPrompt, type PermissionInfo } from './agentPrompt';
+import { BROWSER_TOOLS_PROMPT, buildSystemPrompt, type PermissionInfo } from './agentPrompt';
 import {
   AGENT_DEFAULTS,
   type AgentEventSummary,
@@ -431,11 +431,12 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     const timeoutMs = taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
     const sessionId = randomUUID();
+    const hasBrowserTools = options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false;
     const systemPrompt = `${buildSystemPrompt(taskDefinition, issue)}\n\n${
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. You may inspect files and tracker data, but must not change files, run commands, or mutate tickets.'
         : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
-    }`;
+    }${hasBrowserTools ? `\n\n${BROWSER_TOOLS_PROMPT}` : ''}`;
     const userPrompt = this.buildInitialPrompt(issue, taskDefinition, workingDirectory);
 
     const task: ActiveTask = {
@@ -524,6 +525,10 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       toolMode === 'read-only'
         ? 'Tool mode: READ ONLY. Do not change files, run commands, or mutate tickets.'
         : 'Tool mode: FULL. Use the available tools as needed; mutating operations require user approval.'
+    }${
+      (options.toolExtension?.definitions.some(tool => tool.name === 'browser_navigate') ?? false)
+        ? `\n\n${BROWSER_TOOLS_PROMPT}`
+        : ''
     }`;
 
     const task: ActiveTask = {

@@ -9,6 +9,7 @@ import {
   stageIssueAttachments,
   storeProviderApiKey,
   resetProviderApiKeys,
+  createBrowserToolExtension,
   WorktreeConflictError,
   type AgentSessionRecord,
   type AgentTaskDefinition,
@@ -43,6 +44,8 @@ import {
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSecretsStore } from './connectionStoreInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
+import { AiBrowserBridge } from './aiBrowser';
+import { browserMcpServerForSession, disposeBrowserMcpForSession } from './browserMcp';
 import { getServiceForConnection } from './serviceRegistry';
 import { isAnalysisConfirmed } from './aiWorkflowIpc';
 import { reviewIssueWithRuntime } from './aiReviewRuntime';
@@ -212,6 +215,46 @@ function trackerToolExtension(
   };
 }
 
+type ToolExtension = NonNullable<VercelAgentStartOptions['toolExtension']>;
+
+/**
+ * The in-app browser tools, when the user has switched them on (Settings → AI
+ * Provider) and the session runs with full tool access. Navigation to a host not
+ * already on the allow-list prompts; `allow_always` adds the host to settings.
+ */
+function browserToolExtension(toolMode: AgentToolMode): ToolExtension | undefined {
+  if (toolMode !== 'full') return undefined;
+  const backend = getSettingsBackend();
+  const config = backend.read().ai.browserTools;
+  if (!config.enabled) return undefined;
+  return createBrowserToolExtension({
+    bridge: new AiBrowserBridge(),
+    allowedHosts: config.allowedHosts,
+    allowPrivateHosts: process.env.PRAXIS_BROWSER_ALLOW_LOOPBACK === '1',
+    onHostAllowed: host => {
+      const current = backend.read().ai.browserTools.allowedHosts;
+      if (!current.includes(host)) {
+        void backend.write({ ai: { browserTools: { allowedHosts: [...current, host] } } });
+      }
+    }
+  });
+}
+
+/** Concatenates tool extensions into one, dispatching `execute` by tool name. */
+function mergeToolExtensions(...parts: Array<ToolExtension | undefined>): ToolExtension | undefined {
+  const active = parts.filter((part): part is ToolExtension => Boolean(part));
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  return {
+    definitions: active.flatMap(part => [...part.definitions]),
+    execute(name, args, requestPermission) {
+      const owner = active.find(part => part.definitions.some(def => def.name === name));
+      if (!owner) return Promise.resolve({ ok: false, content: `Unknown tool: ${name}` });
+      return owner.execute(name, args, requestPermission);
+    }
+  };
+}
+
 /**
  * Registers the AI IPC channels: provider setup (`ai:getStatus`, `ai:setApiKey`),
  * session lifecycle (`ai:listSessions`, `ai:delegate`, `ai:abort`), and the
@@ -283,6 +326,7 @@ export function registerAiIpc(): void {
       throw new Error(`No agent session found for ${issueKey}.`);
     }
     await abortActiveTask(issueKey);
+    disposeBrowserMcpForSession(issueKey);
     sessionManager.removeAgentSession(issueKey);
     sessionManager.removeSession(issueKey);
     for (const win of BrowserWindow.getAllWindows()) {
@@ -451,12 +495,14 @@ export function registerAiIpc(): void {
         });
       } else if (descriptor.kind === 'cli-agent') {
         const { command, args } = resolveAcpStartOptions(provider);
+        const browserMcp = await browserMcpServerForSession(issue.key, toolMode);
         await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
           command,
           args,
           workingDirectory: effectiveWorkingDirectory,
           model: input.model,
-          toolMode
+          toolMode,
+          ...(browserMcp ? { mcpServers: [browserMcp] } : {})
         });
       } else {
         await agentService.startTask(issue, taskDefinition, {
@@ -466,7 +512,10 @@ export function registerAiIpc(): void {
           model: input.model || gateway!.model,
           provider,
           toolMode,
-          toolExtension: trackerToolExtension(issueService, toolMode)
+          toolExtension: mergeToolExtensions(
+            trackerToolExtension(issueService, toolMode),
+            browserToolExtension(toolMode)
+          )
         });
       }
       const record = sessionManager.getAgentSession(issue.key);
@@ -565,11 +614,13 @@ export function registerAiIpc(): void {
         return;
       }
       if (descriptor.kind === 'cli-agent') {
+        const browserMcp = await browserMcpServerForSession(issueKey, toolMode);
         await getAcpAgentHost().continueTask(issueKey, followUp, {
           ...resolveAcpStartOptions(provider),
           model: record.model,
           workingDirectory,
-          toolMode
+          toolMode,
+          ...(browserMcp ? { mcpServers: [browserMcp] } : {})
         });
         return;
       }
@@ -588,7 +639,10 @@ export function registerAiIpc(): void {
         model: record.model || connection.model,
         workingDirectory,
         toolMode,
-        toolExtension: trackerToolExtension(trackerService, toolMode)
+        toolExtension: mergeToolExtensions(
+          trackerToolExtension(trackerService, toolMode),
+          browserToolExtension(toolMode)
+        )
       }, followUp);
     }
   );

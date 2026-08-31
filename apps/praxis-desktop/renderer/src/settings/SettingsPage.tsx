@@ -1048,6 +1048,25 @@ function AiSection({
         testId="ai-analysis-gate-toggle"
         onChange={next => void update({ ai: { analysisGateEnabled: next } })}
       />
+      <Toggle
+        label="Let the AI use the in-app browser"
+        description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."
+        checked={settings.ai.browserTools.enabled}
+        testId="ai-browser-tools-toggle"
+        onChange={next => void update({ ai: { browserTools: { enabled: next } } })}
+      />
+      {settings.ai.browserTools.allowedHosts.length > 0 && (
+        <FieldRow
+          label="Allowed browser hosts"
+          description="Hosts the agent may open without asking (added when you choose “Always allow”). Edit the settings file to remove one."
+        >
+          <div className="ai-allowed-hosts" data-testid="ai-browser-allowed-hosts">
+            {settings.ai.browserTools.allowedHosts.map(host => (
+              <span key={host} className="chip">{host}</span>
+            ))}
+          </div>
+        </FieldRow>
+      )}
     </>
   );
 }
@@ -2501,6 +2520,15 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
             const updated = { ...surfaceOpts, animateMotifs: next };
             applySurface(surfaceId, updated);
             void update({ appearance: { surface: { animateMotifs: next } } });
+          }}
+        />
+        <Toggle
+          label="Plain chat background"
+          description="Drop the surface material behind the AI session view — its list and console — so long transcripts stay legible. The colour theme still applies. Each session can override this from its header."
+          checked={surfaceOpts.plainChatSurface}
+          testId="surface-plain-chat-toggle"
+          onChange={next => {
+            void update({ appearance: { surface: { plainChatSurface: next } } });
           }}
         />
         <Toggle

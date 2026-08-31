@@ -366,6 +366,28 @@ const PATTERNS: SurfacePatternDefinition[] = [
       `fill="none" stroke="${ink}" stroke-width="${weight * w}"/>`
   },
   {
+    /** Monospaced binary glyphs — a quiet terminal-like material rather than a ruled grid. */
+    id: 'binary',
+    name: 'Binary',
+    tile: { width: 1, height: 1 },
+    weight: 0.04,
+    body: (ink, weight, w, h) => {
+      const cols = 4;
+      const rows = 4;
+      const cellW = w / cols;
+      const cellH = h / rows;
+      const fontSize = Math.max(6, cellH * 0.42);
+      const glyphs = Array.from({ length: cols * rows }, (_, index) => {
+        const x = cellW * (index % cols) + cellW / 2;
+        const y = cellH * Math.floor(index / cols) + cellH * 0.67;
+        const value = (index * 7 + 3) % 2;
+        return `<text x="${x}" y="${y}" text-anchor="middle" fill="${ink}" ` +
+          `font-family="monospace" font-size="${fontSize}" font-weight="${weight > 0.06 ? 600 : 400}">${value}</text>`;
+      }).join('');
+      return `<g opacity="0.82">${glyphs}</g>`;
+    }
+  },
+  {
     /** Equilateral triangle lattice — denser, more technical than hexagon. */
     id: 'triangle',
     name: 'Triangle',

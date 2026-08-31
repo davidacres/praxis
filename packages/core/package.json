@@ -8,7 +8,7 @@
   "scripts": {
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
-    "test": "tsc -p . && node --test out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/localTools.test.js out/livefolder/boardConfigFile.test.js"
+    "test": "tsc -p . && node --test out/git/gitGraph.test.js out/git/gitParsing.test.js out/git/gitWorktreeManager.test.js out/config/appSettings.test.js out/ai/tools/unifiedDiff.test.js out/ai/tools/localTools.test.js out/ai/tools/browserTools.test.js out/ai/browserMcpServer.test.js out/livefolder/boardConfigFile.test.js"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.4.0",

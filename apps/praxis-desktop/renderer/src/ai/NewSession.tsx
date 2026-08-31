@@ -57,6 +57,16 @@ export interface NewSessionProps {
   /** Working folder pre-selected by the caller (e.g. the chosen project board's folder). */
   defaultWorkingDirectory?: string;
   /**
+   * When set, the composer is scoped to a project / workspace rather than a
+   * board and ticket: the board + ticket pickers are hidden (the session isn't
+   * tied to a ticket — "you should not have to use a board or ticket to work"),
+   * the heading names the scope, and the working folder shows as a read-only
+   * label instead of a picker.
+   */
+  scopeLabel?: string;
+  /** Seeds the tool-mode toggle — e.g. the scoped project's configured default. */
+  defaultToolMode?: AgentToolMode;
+  /**
    * Number of configured tracker connections. Zero means every board on screen
    * comes from the built-in demo backend, which is worth saying out loud before
    * someone starts a session against throwaway data.
@@ -85,7 +95,9 @@ export function NewSession({
   onNewProject
   , toolModeForBoard,
   onSelectedBoardChange,
-  defaultWorkingDirectory
+  defaultWorkingDirectory,
+  scopeLabel,
+  defaultToolMode
 }: NewSessionProps) {
   const { settings: liveSettings } = useSettings();
   const [goal, setGoal] = useState('');
@@ -113,7 +125,7 @@ export function NewSession({
   const [modelOptions, setModelOptions] = useState<ModelOptions | undefined>();
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | undefined>();
-  const [toolMode, setToolMode] = useState<AgentToolMode>('full');
+  const [toolMode, setToolMode] = useState<AgentToolMode>(defaultToolMode ?? 'full');
   const [mode, setMode] = useState<SessionMode>('chat');
   const [workingDirectory, setWorkingDirectory] = useState<string | undefined>(defaultWorkingDirectory);
   const [runInWorktree, setRunInWorktree] = useState(false);
@@ -436,6 +448,15 @@ export function NewSession({
             <button className="btn btn-primary" onClick={onNewProject}>New Project</button>
           </div>
         )}
+        {scopeLabel ? (
+          <h1 className="session-heading" data-testid="new-session-scope-heading">
+            New session in{' '}
+            <span className="heading-chip is-static">
+              <Icon name="folder" size={17} />
+              <span>{scopeLabel}</span>
+            </span>
+          </h1>
+        ) : (
         <h1 className="session-heading">
           {selectedBoard ? 'New session in' : 'No board'}{' '}
           <button
@@ -563,6 +584,7 @@ export function NewSession({
             document.body
           )}
         </h1>
+        )}
 
         <div className="new-session-name-row">
           <span>Session name</span>
@@ -798,17 +820,27 @@ export function NewSession({
               {toolMode === 'project-only' ? 'Project only' : toolMode === 'full' ? 'Full tools' : 'Read only'}
             </button>
             {toolMode !== 'project-only' && (
+              folderLocked && workingDirectory ? (
+                // A project supplies the folder: show it, don't ask for it.
+                <span
+                  className="composer-chip is-readonly"
+                  data-testid="new-session-folder"
+                  title={workingDirectory}
+                >
+                  <Icon name="folder" size={14} />
+                  {basename(workingDirectory)}
+                </span>
+              ) : (
               <button
                 className="composer-chip"
                 type="button"
                 data-testid="new-session-folder"
                 title={workingDirectory ? workingDirectory : 'Choose the folder the agent works in'}
-                disabled={folderLocked}
                 onClick={() => void pickFolder()}
               >
                 <Icon name="folder" size={14} />
                 {workingDirectory ? basename(workingDirectory) : 'Working folder'}
-                {workingDirectory && !folderLocked && (
+                {workingDirectory && (
                   <span
                     role="button"
                     aria-label="Clear working folder"
@@ -822,6 +854,7 @@ export function NewSession({
                   </span>
                 )}
               </button>
+              )
             )}
             {toolMode === 'full' && folderIsRepo && (
               <button

@@ -54,6 +54,19 @@ Answer the user's request directly and conversationally. Do not begin with a man
 Respect explicit permission boundaries and stop when the user's request is answered or the requested work is complete.
 `;
 
+/**
+ * Appended to the system prompt when the session has been granted the in-app
+ * browser tools, so the agent knows the capability exists (models otherwise
+ * deny it when asked, even with the tools in scope) and how to use it.
+ */
+export const BROWSER_TOOLS_PROMPT = `## In-app browser
+This session can drive a real web browser embedded in the app. Yes, you can browse the web here.
+- browser_navigate(url) — open a page (a first visit to a new host asks the user to allow it).
+- browser_read() — the current page as plain text.
+- browser_snapshot(filter?) — the page's interactive elements, each with a stable ref.
+- browser_click(ref) / browser_type(ref, text, submit?) — act on an element by ref.
+Use it whenever the user references a URL, asks you to look something up online, or check a web page.`;
+
 function slugifyNamingSegment(value: string): string {
   return value
     .normalize('NFKD')

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-30T01:28:58.133Z
+**Type:** Feature
+**Priority:** Medium
 id: FX-BF-004
 slug: project-scoped-git-workspace
 title: Project-scoped Git workspace and repository onboarding
@@ -42,3 +46,16 @@ Make Git Graph feel native to Praxis projects: Git tools appear in the context o
 ## Close when
 
 No Git Graph route invokes `git:open` without a validated project repository context; each empty/error state offers a safe next action; initialization is explicit and verified; and the packaged Electron project-to-graph flow passes at narrow and wide layouts.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

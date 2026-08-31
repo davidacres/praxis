@@ -10,7 +10,7 @@
   "scripts": {
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
-    "test:git": "npm run compile && node --test out/main/gitService.test.js",
+    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/adapters/jsonKeyValueStore.test.js",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run compile && npx playwright test",
     "copy-renderer": "node scripts/copy-renderer.cjs",

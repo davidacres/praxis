@@ -203,13 +203,13 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
 
   await win.locator('[data-testid="issue-primary-ai-btn"]').click();
   await expect(win.locator('[data-testid="sessions-view"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-runtime"]')).toContainText('claude-code-cli');
+  await expect(win.locator('[data-testid="session-provider"]')).toContainText('Claude Code');
   await expect(win.locator('[data-testid="session-chat-thread"]')).toContainText(
     'Hello from the fake ACP agent',
     { timeout: 15000 }
   );
   await expect(win.locator('[data-testid="session-analysis-confirm"]')).toBeVisible();
-  await expect(win.locator('[data-testid="session-tool-mode"]')).toHaveText('Read-only tools');
+  await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Read only');
 });
 
 test('abort kills the ACP agent subprocess cleanly', async () => {
