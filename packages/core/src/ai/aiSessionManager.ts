@@ -495,6 +495,17 @@ export class AiSessionManager {
     if (!stored || typeof stored !== 'object') {
       return new Map();
     }
+    // A process restart kills every in-flight task, but the record on disk still
+    // says planning/executing/awaiting. Left as-is it shows a ghost "running"
+    // session that Abort can't touch (there is no task). Settle those to
+    // `aborted` on load.
+    const INTERRUPTED_STATES: ReadonlySet<string> = new Set([
+      'planning',
+      'executing',
+      'awaiting_approval',
+      'awaiting_input'
+    ]);
+
     const result = new Map<string, AgentSessionRecord>();
     for (const [key, value] of Object.entries(stored)) {
       if (
@@ -503,16 +514,29 @@ export class AiSessionManager {
         typeof value.state === 'string' &&
         typeof value.taskDefinition === 'object'
       ) {
+        const interrupted = INTERRUPTED_STATES.has(value.state);
+        const events = Array.isArray(value.events)
+          ? value.events.map(event =>
+              event && typeof event === 'object' && event.data && typeof event.data !== 'object'
+                ? { ...event, data: undefined }
+                : event
+            )
+          : [];
         result.set(key, {
           ...value,
           toolMode: value.toolMode === 'read-only' || value.toolMode === 'project-only' ? value.toolMode : 'full',
-          events: Array.isArray(value.events)
-            ? value.events.map(event =>
-                event && typeof event === 'object' && event.data && typeof event.data !== 'object'
-                  ? { ...event, data: undefined }
-                  : event
-              )
-            : []
+          state: interrupted ? 'aborted' : value.state,
+          completedAt: interrupted ? (value.completedAt ?? new Date().toISOString()) : value.completedAt,
+          events: interrupted
+            ? [
+                ...events,
+                {
+                  timestamp: new Date().toISOString(),
+                  type: 'aborted' as const,
+                  summary: 'Session interrupted by an app restart'
+                }
+              ]
+            : events
         });
       }
     }

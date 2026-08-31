@@ -24,6 +24,14 @@ export function BrowserPane({
   const [urlDraft, setUrlDraft] = useState('');
   const [editing, setEditing] = useState(false);
 
+  // Kept in refs so the mount effect never re-subscribes / re-navigates when a
+  // parent re-render hands us a new callback identity or the input focus flips.
+  const onNavigateRef = useRef(onNavigate);
+  onNavigateRef.current = onNavigate;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  const restoredRef = useRef(false);
+
   const pushBounds = useCallback(() => {
     const el = surfaceRef.current;
     if (!el) return;
@@ -34,20 +42,21 @@ export function BrowserPane({
   useEffect(() => {
     void window.praxis.browser.attach();
     void window.praxis.browser.setVisible(true);
-    void window.praxis.browser.getState().then(async s => {
-      if (s) {
-        setState(s);
-        if (initialUrl && s.url !== initialUrl) {
-          await window.praxis.browser.navigate(initialUrl).catch(() => undefined);
-        }
-      } else if (initialUrl) {
-        await window.praxis.browser.navigate(initialUrl).catch(() => undefined);
+    void window.praxis.browser.getState().then(s => {
+      if (s) setState(s);
+      // Restore a persisted URL exactly once, and only if we're not already there.
+      if (!restoredRef.current && initialUrl && s?.url !== initialUrl) {
+        restoredRef.current = true;
+        void window.praxis.browser.navigate(initialUrl).catch(() => undefined);
+      } else {
+        restoredRef.current = true;
       }
     });
+
     const unsubscribe = window.praxis.browser.onDidNavigate(next => {
       setState(next);
-      onNavigate?.(next.url);
-      if (!editing) setUrlDraft(next.url);
+      onNavigateRef.current?.(next.url);
+      if (!editingRef.current) setUrlDraft(next.url);
     });
 
     pushBounds();
@@ -66,7 +75,9 @@ export function BrowserPane({
       window.clearInterval(poll);
       void window.praxis.browser.setVisible(false);
     };
-  }, [initialUrl, onNavigate, pushBounds, editing]);
+    // Mount once — callbacks and focus state are read through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const go = (raw: string) => {
     const trimmed = raw.trim();
