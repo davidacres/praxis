@@ -78,8 +78,7 @@ export const BACKEND_MODE_META: Record<BackendMode, BackendModeMeta> = {
   github: { label: 'GitHub', icon: 'git-branch', tone: 'var(--tone-github)' },
   gitlab: { label: 'GitLab', icon: 'git-branch', tone: 'var(--tone-gitlab)' },
   folder: { label: 'Folder', icon: 'folder', tone: 'var(--tone-folder)' },
-  project: { label: 'Project', icon: 'target', tone: 'var(--tone-workspace)' },
-  userworkspace: { label: 'User Workspace', icon: 'folder-open', tone: 'var(--tone-workspace)' }
+  project: { label: 'Project', icon: 'target', tone: 'var(--tone-workspace)' }
 };
 
 export function backendModeMeta(mode: BackendMode | undefined): BackendModeMeta {

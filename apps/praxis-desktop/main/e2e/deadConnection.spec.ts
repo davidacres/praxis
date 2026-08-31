@@ -13,8 +13,8 @@ test.beforeEach(async () => {
   app = await launchTestApp({
     connections: [
       {
-        id: 'dead-livefolder',
-        name: 'dead-livefolder',
+        id: 'dead-folder',
+        name: 'dead-folder',
         mode: 'folder',
         settings: { path: path.join(os.tmpdir(), 'praxis-does-not-exist-9f3a') }
       }

@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Board, Connection, TrackedBoard } from '@praxis/core';
+import type { Connection, TrackedBoard } from '@praxis/core';
 import { backendModeMeta } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
 import { BoardPicker } from './BoardPicker';
 import { ConnectionForm } from './ConnectionForm';
-import { CreateBoardWizard } from './CreateBoardWizard';
 import { supportsManualBoardSelection } from './connectionPolicy';
-
-const EMPTY_UW_BOARD_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
 export interface ConnectionsProps {
   /** Notified after any mutation so the app shell can refresh boards/counts. */
@@ -19,7 +16,6 @@ export interface ConnectionsProps {
  * idiom as the settings page). The detail pane is one of:
  *   - the add/edit form for the selected connection,
  *   - the board picker (for modes with discoverable remote boards),
- *   - the User Workspace "create board" wizard,
  *   - an empty prompt when nothing is selected.
  */
 export function Connections({ onChanged }: ConnectionsProps) {
@@ -27,9 +23,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
   const [pickingBoardsFor, setPickingBoardsFor] = useState<string | undefined>();
-  const [wizardFor, setWizardFor] = useState<string | undefined>();
   const [trackedBoards, setTrackedBoards] = useState<TrackedBoard[]>([]);
-  const [uwBoards, setUwBoards] = useState<Board[]>([]);
   const [error, setError] = useState<string | undefined>();
   const reloadSequence = useRef(0);
 
@@ -61,10 +55,6 @@ export function Connections({ onChanged }: ConnectionsProps) {
   const pickerConnection = pickingBoardsFor
     ? connections.find(c => c.id === pickingBoardsFor)
     : undefined;
-  const wizardConnection = wizardFor
-    ? connections.find(c => c.id === wizardFor)
-    : undefined;
-
   const reloadTracked = useCallback(() => {
     if (!selected) {
       setTrackedBoards([]);
@@ -78,19 +68,6 @@ export function Connections({ onChanged }: ConnectionsProps) {
 
   useEffect(reloadTracked, [reloadTracked]);
 
-  const reloadUwBoards = useCallback(() => {
-    if (!selected || selected.mode !== 'userworkspace') {
-      setUwBoards([]);
-      return;
-    }
-    window.praxis.board
-      .list(EMPTY_UW_BOARD_FILTERS, selected.id)
-      .then(setUwBoards)
-      .catch(() => setUwBoards([]));
-  }, [selected]);
-
-  useEffect(reloadUwBoards, [reloadUwBoards]);
-
   const removeTracked = (board: TrackedBoard) => {
     void window.praxis.connection
       .removeTrackedBoard(board.connectionId, board.boardId)
@@ -100,31 +77,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
       });
   };
 
-  const removeUwBoard = (board: Board) => {
-    if (!selected) {
-      return;
-    }
-    void window.praxis.userWorkspace
-      .deleteBoard(selected.id, board.id)
-      .then(() => {
-        reloadUwBoards();
-        onChanged?.();
-      });
-  };
-
   const detail = () => {
-    if (wizardConnection) {
-      return (
-        <CreateBoardWizard
-          connection={wizardConnection}
-          onDone={() => {
-            setWizardFor(undefined);
-            reloadUwBoards();
-            onChanged?.();
-          }}
-        />
-      );
-    }
     if (pickerConnection) {
       return (
         <BoardPicker
@@ -138,7 +91,6 @@ export function Connections({ onChanged }: ConnectionsProps) {
       );
     }
     if (creating || selected) {
-      const isUserWorkspace = selected?.mode === 'userworkspace';
       return (
         <>
           <ConnectionForm
@@ -186,44 +138,8 @@ export function Connections({ onChanged }: ConnectionsProps) {
                     Pick boards…
                   </button>
                 )}
-                {isUserWorkspace && (
-                  <button
-                    type="button"
-                    className="btn"
-                    data-testid="uw-create-board-btn"
-                    onClick={() => setWizardFor(selected.id)}
-                  >
-                    <Icon name="plus" size={13} />
-                    Create board…
-                  </button>
-                )}
               </div>
-              {isUserWorkspace ? (
-                uwBoards.length === 0 ? (
-                  <p className="placeholder-text">No workspace boards yet.</p>
-                ) : (
-                  uwBoards.map(board => (
-                    <div key={board.id} className="list-row" data-testid="uw-board-row">
-                      <div>
-                        <div className="list-row-title">{board.availability === 'missing' && <Icon name="warning" size={14} className="board-availability-warning" />}{board.name}</div>
-                        <div className="list-row-meta">
-                          {board.availability === 'missing' ? `Missing folder — ${board.locationName}` : `${board.projectKey} — ${board.locationName}`}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-icon"
-                        data-testid="uw-board-delete-btn"
-                        aria-label={`Delete board ${board.name}`}
-                        title="Delete this board"
-                        onClick={() => removeUwBoard(board)}
-                      >
-                        <Icon name="trash" size={13} />
-                      </button>
-                    </div>
-                  ))
-                )
-              ) : trackedBoards.length === 0 ? (
+              {trackedBoards.length === 0 ? (
                 <p className="placeholder-text">No tracked boards yet.</p>
               ) : (
                 trackedBoards.map(board => (
@@ -270,7 +186,6 @@ export function Connections({ onChanged }: ConnectionsProps) {
               setCreating(true);
               setSelectedId(undefined);
               setPickingBoardsFor(undefined);
-              setWizardFor(undefined);
             }}
           >
             <Icon name="plus" size={13} />
@@ -298,14 +213,12 @@ export function Connections({ onChanged }: ConnectionsProps) {
                   setCreating(false);
                   setSelectedId(connection.id);
                   setPickingBoardsFor(undefined);
-                  setWizardFor(undefined);
                 }}
                 onKeyDown={event => {
                   if (event.key === 'Enter') {
                     setCreating(false);
                     setSelectedId(connection.id);
                     setPickingBoardsFor(undefined);
-                    setWizardFor(undefined);
                   }
                 }}
               >

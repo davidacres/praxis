@@ -7,9 +7,9 @@ import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp;
 let window: Page;
-let liveFolderDir: string;
+let plansDir: string;
 
-function writeFixtureLiveFolder(root: string): void {
+function writeFixturePlansFolder(root: string): void {
   const featureDir = path.join(root, 'features', 'feature-01-demo-feature');
   fs.mkdirSync(featureDir, { recursive: true });
   fs.writeFileSync(
@@ -37,8 +37,8 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 test.beforeEach(async () => {
-  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-livefolder-'));
-  writeFixtureLiveFolder(liveFolderDir);
+  plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-folder-'));
+  writeFixturePlansFolder(plansDir);
 
   app = await launchTestApp();
   window = app.window;
@@ -46,23 +46,23 @@ test.beforeEach(async () => {
 
 test.afterEach(async () => {
   await closeTestApp(app);
-  fs.rmSync(liveFolderDir, { recursive: true, force: true });
+  fs.rmSync(plansDir, { recursive: true, force: true });
 });
 
-async function addLiveFolderConnection(name: string): Promise<void> {
+async function addFolderConnection(name: string): Promise<void> {
   await window.locator('[data-testid="nav-connections"]').click();
   await window.locator('[data-testid="add-connection-btn"]').click();
   await window.locator('[data-testid="conn-field-name"]').fill(name);
   await window.locator('[data-testid="conn-field-mode"]').selectOption('folder');
-  await window.locator('[data-testid="conn-field-root-0"]').fill(liveFolderDir);
+  await window.locator('[data-testid="conn-field-root-0"]').fill(plansDir);
   await window.locator('[data-testid="conn-save-btn"]').click();
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).toBeVisible();
 }
 
-test('live folder board lists the fixture feature task', async () => {
-  await addLiveFolderConnection('e2e-livefolder');
+test('folder board lists the fixture feature task', async () => {
+  await addFolderConnection('e2e-folder');
 
-  const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' });
+  const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' });
   await expect(boardItem).toBeVisible();
   await boardItem.click();
 
@@ -71,8 +71,8 @@ test('live folder board lists the fixture feature task', async () => {
 });
 
 test('transitioning a live folder issue writes the new status back to markdown', async () => {
-  await addLiveFolderConnection('e2e-livefolder');
-  await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+  await addFolderConnection('e2e-folder');
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
   const status = window.locator('[data-testid="issue-edit-status"]');
@@ -80,15 +80,15 @@ test('transitioning a live folder issue writes the new status back to markdown',
   await window.locator('[data-testid="issue-edit-save-btn"]').click();
   await expect(status.locator('option:checked')).toHaveText('Done');
 
-  const taskPath = path.join(liveFolderDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
+  const taskPath = path.join(plansDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
   await expect
     .poll(() => fs.readFileSync(taskPath, 'utf-8'))
     .toMatch(/\*\*Status:\*\*.*Complete/);
 });
 
 test('adding a comment on a live folder issue writes it back to markdown', async () => {
-  await addLiveFolderConnection('e2e-livefolder');
-  await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+  await addFolderConnection('e2e-folder');
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
   const commentBody = `e2e live folder comment ${Date.now()}`;
@@ -97,6 +97,6 @@ test('adding a comment on a live folder issue writes it back to markdown', async
 
   await expect(window.locator(`text=${commentBody}`)).toBeVisible();
 
-  const taskPath = path.join(liveFolderDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
+  const taskPath = path.join(plansDir, 'features', 'feature-01-demo-feature', 'task-01-01-do-the-thing.md');
   await expect.poll(() => fs.readFileSync(taskPath, 'utf-8')).toContain(commentBody);
 });

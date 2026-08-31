@@ -303,15 +303,6 @@ const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> =
     'reportedBy',
     'ideaTranscript'
   ]),
-  userworkspace: new Set([
-    'summary',
-    'description',
-    'assignee',
-    'priority',
-    'severity',
-    'reportedBy',
-    'ideaTranscript'
-  ]),
   // App-storage projects: `ProjectIssueTrackerService.updateIssue` only writes
   // these three, so offering more would silently drop the edit.
   project: new Set(['summary', 'description', 'issueType']),

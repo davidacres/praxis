@@ -16,7 +16,7 @@ test.afterEach(async () => {
 });
 
 /** Same fixture shape as liveFolder.spec.ts: one feature with one task. */
-function writeFixtureLiveFolder(root: string): void {
+function writeFixturePlansFolder(root: string): void {
   const featureDir = path.join(root, 'features', 'feature-01-demo-feature');
   fs.mkdirSync(featureDir, { recursive: true });
   fs.writeFileSync(
@@ -43,15 +43,15 @@ function writeFixtureLiveFolder(root: string): void {
   );
 }
 
-async function launchWithLiveFolder(liveFolderDir: string, allowIssueCreation: boolean): Promise<void> {
+async function launchWithFolderConnection(plansDir: string, allowIssueCreation: boolean): Promise<void> {
   app = await launchTestApp({
     connections: [
       {
         id: 'e2e-live-create',
-        name: 'e2e-livefolder-create',
+        name: 'e2e-folder-create',
         mode: 'folder',
         settings: {
-          path: liveFolderDir,
+          path: plansDir,
           projectKey: 'LIVE',
           projectName: 'Live E2E',
           ...(allowIssueCreation ? { allowIssueCreation: true } : {})
@@ -60,7 +60,7 @@ async function launchWithLiveFolder(liveFolderDir: string, allowIssueCreation: b
     ]
   });
   window = app.window;
-  await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+  await window.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
 }
 
 test('creating a demo issue with the full field set shows it on the board', async () => {
@@ -87,10 +87,10 @@ test('creating a demo issue with the full field set shows it on the board', asyn
 });
 
 test('creating a live folder task under a feature writes the markdown file', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-'));
+  const plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-'));
   try {
-    writeFixtureLiveFolder(liveFolderDir);
-    await launchWithLiveFolder(liveFolderDir, true);
+    writeFixturePlansFolder(plansDir);
+    await launchWithFolderConnection(plansDir, true);
 
     await window.locator('[data-testid="board-new-issue-btn"]').click();
     await expect(window.locator('[data-testid="new-issue-page"]')).toBeVisible();
@@ -114,7 +114,7 @@ test('creating a live folder task under a feature writes the markdown file', asy
 
     // The live folder backend physically writes a new markdown file under the
     // feature's folder, with the type/priority meta lines from the form.
-    const featureDir = path.join(liveFolderDir, 'features', 'feature-01-demo-feature');
+    const featureDir = path.join(plansDir, 'features', 'feature-01-demo-feature');
     const newTaskFiles = () =>
       fs.readdirSync(featureDir).filter(name => name.startsWith('task-') && !name.includes('do-the-thing'));
     await expect.poll(newTaskFiles).toHaveLength(1);
@@ -123,22 +123,22 @@ test('creating a live folder task under a feature writes the markdown file', asy
     expect(content).toContain(summary);
     expect(content).toMatch(/\*\*Priority:\*\*\s*High/);
   } finally {
-    fs.rmSync(liveFolderDir, { recursive: true, force: true });
+    fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });
 
 test('live folder without allowIssueCreation shows a disabled create button with a hint', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-gated-'));
+  const plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newissue-gated-'));
   try {
-    writeFixtureLiveFolder(liveFolderDir);
-    await launchWithLiveFolder(liveFolderDir, false);
+    writeFixturePlansFolder(plansDir);
+    await launchWithFolderConnection(plansDir, false);
 
     const button = window.locator('[data-testid="board-new-issue-btn"]');
     await expect(button).toBeVisible();
     await expect(button).toBeDisabled();
     await expect(button).toHaveAttribute('title', /Allow issue creation/);
   } finally {
-    fs.rmSync(liveFolderDir, { recursive: true, force: true });
+    fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });
 
@@ -179,18 +179,18 @@ test('New idea opens the create form preset to Idea with the research transcript
 });
 
 test('creating a live folder idea writes the research transcript into the markdown', async () => {
-  const liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newidea-'));
+  const plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-newidea-'));
   try {
-    writeFixtureLiveFolder(liveFolderDir);
+    writeFixturePlansFolder(plansDir);
     app = await launchTestApp({
       preview: { enableCreateIdea: true },
       connections: [
         {
           id: 'e2e-live-idea',
-          name: 'e2e-livefolder-idea',
+          name: 'e2e-folder-idea',
           mode: 'folder',
           settings: {
-            path: liveFolderDir,
+            path: plansDir,
             projectKey: 'LIVE',
             projectName: 'Live E2E',
             allowIssueCreation: true
@@ -199,7 +199,7 @@ test('creating a live folder idea writes the research transcript into the markdo
       ]
     });
     window = app.window;
-    await window.locator('[data-testid="board-nav-item"]', { hasText: '(Live)' }).click();
+    await window.locator('[data-testid="board-nav-item"]', { hasText: 'Live E2E' }).click();
 
     await window.locator('[data-testid="board-new-idea-btn"]').click();
     await expect(window.locator('[data-testid="new-issue-type"]')).toHaveValue('Idea');
@@ -220,7 +220,7 @@ test('creating a live folder idea writes the research transcript into the markdo
 
     // The backend writes idea-<seq>-<slug>.md under the feature folder with a
     // Research Transcript section carrying the form's transcript.
-    const featureDir = path.join(liveFolderDir, 'features', 'feature-01-demo-feature');
+    const featureDir = path.join(plansDir, 'features', 'feature-01-demo-feature');
     const ideaFiles = () => fs.readdirSync(featureDir).filter(name => name.startsWith('idea-'));
     await expect.poll(ideaFiles).toHaveLength(1);
     const content = fs.readFileSync(path.join(featureDir, ideaFiles()[0]), 'utf-8');
@@ -229,7 +229,7 @@ test('creating a live folder idea writes the research transcript into the markdo
     expect(content).toContain('## Research Transcript');
     expect(content).toContain('Transcript: idea research log.');
   } finally {
-    fs.rmSync(liveFolderDir, { recursive: true, force: true });
+    fs.rmSync(plansDir, { recursive: true, force: true });
   }
 });
 

@@ -251,13 +251,13 @@ test('imports detected plans as a read-only board for an existing-folder project
     }, folder);
     expect(result.project.linkedBoards).toHaveLength(1);
     expect(result.project.linkedBoards[0].connectionId).toContain('project-plans-');
-    expect(result.board?.name).toBe('Imported Plans (Live)');
+    expect(result.board?.name).toBe('Imported Plans');
     expect(result.details?.issues).toHaveLength(1);
     expect(result.details?.issues[0].summary).toBe('Imported planning work');
     await app.window.reload();
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Imported Plans' });
-    await expect(projectTree.getByTestId('project-linked-board-nav-item')).toContainText('Imported Plans (Live)');
-    await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans (Live)' })).toHaveCount(0);
+    await expect(projectTree.getByTestId('project-linked-board-nav-item')).toContainText('Imported Plans');
+    await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans' })).toHaveCount(0);
     await projectTree.getByTestId('project-linked-board-nav-item').click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
     const importedPlan = projectTree.getByTestId('project-document-nav-item').filter({ hasText: 'Imported planning work' });
@@ -482,7 +482,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     await expect(app.window.locator('.external-board-tree').getByTestId('board-nav-item').filter({ hasText: 'Delivery Workspace' })).toHaveCount(0);
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Delivery Workspace' });
     const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
-    await expect(linkedBoard).toContainText('Linked Delivery (Live)');
+    await expect(linkedBoard).toContainText('Linked Delivery');
     await expect(linkedBoard).toContainText('Linked');
     await linkedBoard.click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Linked delivery');
@@ -491,7 +491,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     const workProject = app.window.getByTestId('work-project').filter({ hasText: 'Delivery Workspace' });
     await expect(workProject).toContainText('2 boards');
     await expect(workProject.getByTestId('work-card')).toHaveCount(2);
-    await expect(workProject).toContainText('Linked Delivery (Live)');
+    await expect(workProject).toContainText('Linked Delivery');
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }

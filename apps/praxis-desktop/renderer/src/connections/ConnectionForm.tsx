@@ -946,13 +946,6 @@ function ModeFields({
           </p>
         </>
       );
-    case 'userworkspace':
-      return (
-        <p className="placeholder-text" data-testid="conn-mode-note">
-          User Workspace boards are local plans folders. Save the connection, then use
-          Create board in its Boards section below.
-        </p>
-      );
     case 'github':
       return (
         <p className="placeholder-text" data-testid="conn-mode-note">

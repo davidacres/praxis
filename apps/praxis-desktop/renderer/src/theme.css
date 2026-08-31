@@ -5764,6 +5764,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   overflow: hidden;
 }
 
+/* The import wizard is a table of rows — wider than the 520px default. */
+.modal-card.import-projects-card {
+  width: min(980px, 94vw);
+  max-height: 82vh;
+}
+
 .modal-header {
   display: flex;
   align-items: center;

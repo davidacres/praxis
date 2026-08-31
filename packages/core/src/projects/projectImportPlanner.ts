@@ -15,27 +15,25 @@ export interface DiscoveredPlanRoot {
   featureEntryCount: number;
 }
 
-export interface BoardDraftRow {
+export interface ProjectImportRow {
   repositoryName: string;
   repositoryRootPath: string;
   /** Stored (forward-slash) plans root path used as the board location. */
-  liveFolderPath: string;
+  plansFolderPath: string;
   projectKey: string;
   projectName: string;
   name: string;
   alreadyAdded: boolean;
 }
 
-export interface PlanBoardDraftsInput {
+export interface PlanProjectImportsInput {
   repositories: DiscoveredRepository[];
   planRoots: DiscoveredPlanRoot[];
-  /** Plans paths already registered as User Workspace boards. */
+  /** Plans folders already imported as projects. */
   existingPaths?: string[];
-  /** Project keys already used by User Workspace boards. */
+  /** Project keys already in use. */
   existingKeys?: string[];
 }
-
-const CANONICAL_PLANS_SEGMENTS = ['docs', 'plans'];
 
 function normalizeKeySet(values: readonly string[] | undefined): Set<string> {
   return new Set((values ?? []).map(value => value.trim().toUpperCase()).filter(Boolean));
@@ -56,7 +54,7 @@ function isSameOrInside(parentPath: string, candidatePath: string): boolean {
 
 export function suggestedProjectName(folderPath: string): string {
   const name = folderPath.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.trim() ?? '';
-  return name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || 'User Workspace Project';
+  return name.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Imported Project';
 }
 
 export function suggestedProjectKey(folderPath: string): string {
@@ -65,36 +63,29 @@ export function suggestedProjectKey(folderPath: string): string {
 }
 
 /**
- * Choose the plans root for a repository.
+ * Choose the plans root for a repository, or `undefined` when it has none.
  *
- * Rules:
- *  - Prefer a plans root owned by this repository (nearest enclosing repository wins),
- *    so a parent repository never adopts a child repository's plans folder.
- *  - Ignore an "empty marker" plans root that is the repository root itself and is not
- *    already registered. These are leftovers from interrupted runs and must not become
- *    the board location instead of the canonical `docs/plans`.
- *  - Otherwise fall back to the canonical `<repository>/docs/plans`.
+ * Prefers a plans root owned by this repository — nearest enclosing repository
+ * wins — so a parent repository never adopts a child's plans folder. The
+ * shallowest owned root is used.
+ *
+ * Returning `undefined` is the point. This used to fall back to a hardcoded
+ * `<repository>/docs/plans` guess, and it also discarded a plans root sitting
+ * at the repository root whenever that root had no `features/` entries — which
+ * is exactly what a plans folder tracking only bugs/tasks looks like. Between
+ * them, a repository whose plans lived anywhere but `docs/plans` got a project
+ * pointed at a guessed path: if that path happened to exist, the board was
+ * created and silently showed nothing. A repository with no discoverable plans
+ * is now simply not offered for import.
  */
 function resolvePlansPathForRepository(
   repository: DiscoveredRepository,
   repositories: DiscoveredRepository[],
-  planRoots: DiscoveredPlanRoot[],
-  existingPaths: Set<string>
-): string {
+  planRoots: DiscoveredPlanRoot[]
+): string | undefined {
   const repositoryPath = path.resolve(repository.rootPath);
 
   const ownedPlanRoots = planRoots
-    .filter(planRoot => {
-      const planPath = path.resolve(planRoot.plansPath);
-      const isOrphanRootMarker =
-        planPath === repositoryPath &&
-        planRoot.featureEntryCount === 0 &&
-        // `existingPaths` is keyed by `toStoredFolderPath(raw)` with no resolve,
-        // so test membership the same way — resolving a Windows-style path on a
-        // posix host prepends cwd and the lookup would always miss.
-        !existingPaths.has(toStoredFolderPath(planRoot.plansPath).toLowerCase());
-      return !isOrphanRootMarker;
-    })
     .filter(planRoot => {
       const planPath = path.resolve(planRoot.plansPath);
       const owner = repositories
@@ -104,34 +95,31 @@ function resolvePlansPathForRepository(
     })
     .sort((left, right) => left.plansPath.length - right.plansPath.length);
 
-  if (ownedPlanRoots.length > 0) {
-    return ownedPlanRoots[0].plansPath;
-  }
-  return path.join(repository.rootPath, ...CANONICAL_PLANS_SEGMENTS);
+  return ownedPlanRoots[0]?.plansPath;
 }
 
 /**
- * Build the editable board rows shown in the Create Boards table.
+ * Build the editable rows shown in the import table.
  *
  * Guarantees:
- *  - One row per discovered repository (or per plans root when no repositories exist).
- *  - Rows already registered as boards are flagged so they are never created twice.
- *  - Generated project keys are unique and never collide with existing board keys.
+ *  - One row per discovered repository that actually has a plans root, plus a
+ *    row per bare plans root when no repositories were found at all.
+ *  - A repository with no discoverable plans is skipped, never guessed at.
+ *  - Rows already imported are flagged so they are never created twice.
+ *  - Generated project keys are unique and never collide with existing keys.
  */
-export function planBoardDrafts(input: PlanBoardDraftsInput): BoardDraftRow[] {
+export function planProjectImports(input: PlanProjectImportsInput): ProjectImportRow[] {
   const existingPaths = normalizePathSet(input.existingPaths);
   const usedKeys = normalizeKeySet(input.existingKeys);
 
   const pairs = input.repositories.length > 0
-    ? input.repositories.map(repository => ({
-      repositoryRootPath: repository.rootPath,
-      plansPath: resolvePlansPathForRepository(
-        repository,
-        input.repositories,
-        input.planRoots,
-        existingPaths
-      )
-    }))
+    ? input.repositories
+      .map(repository => ({
+        repositoryRootPath: repository.rootPath,
+        plansPath: resolvePlansPathForRepository(repository, input.repositories, input.planRoots)
+      }))
+      .filter((pair): pair is { repositoryRootPath: string; plansPath: string } =>
+        pair.plansPath !== undefined)
     : input.planRoots.map(planRoot => ({
       repositoryRootPath: planRoot.plansPath,
       plansPath: planRoot.plansPath
@@ -139,7 +127,7 @@ export function planBoardDrafts(input: PlanBoardDraftsInput): BoardDraftRow[] {
 
   return pairs.map(pair => {
     const repositoryRootPath = toStoredFolderPath(pair.repositoryRootPath);
-    const liveFolderPath = toStoredFolderPath(pair.plansPath);
+    const plansFolderPath = toStoredFolderPath(pair.plansPath);
     const displayName = suggestedProjectName(repositoryRootPath);
 
     const base = suggestedProjectKey(repositoryRootPath);
@@ -154,18 +142,18 @@ export function planBoardDrafts(input: PlanBoardDraftsInput): BoardDraftRow[] {
     return {
       repositoryName: displayName,
       repositoryRootPath,
-      liveFolderPath,
+      plansFolderPath,
       projectKey,
       projectName: displayName,
       name: displayName,
-      alreadyAdded: existingPaths.has(liveFolderPath.toLowerCase())
+      alreadyAdded: existingPaths.has(plansFolderPath.toLowerCase())
     };
   });
 }
 
 /** Validate edited rows before any filesystem or board changes occur. */
-export function validateBoardDrafts(
-  rows: readonly BoardDraftRow[],
+export function validateProjectImports(
+  rows: readonly ProjectImportRow[],
   existingKeys: readonly string[] = []
 ): string | undefined {
   const keys = normalizeKeySet(existingKeys);

@@ -1,34 +1,35 @@
 import { useState } from 'react';
-import type { BoardDraftRow, Connection } from '@praxis/core';
+import type { ProjectImportRow } from '@praxis/core';
 
-export interface CreateBoardWizardProps {
-  connection: Connection;
+export interface ImportProjectsWizardProps {
+  /** Workspace the imported projects are added to. */
+  workspaceId: string;
   /**
-   * Called when the wizard closes — either after a successful save, or when
-   * the user backs out without saving. Mirrors `BoardPicker.onDone`.
+   * Called when the wizard closes — either after a successful import, or when
+   * the user backs out without importing.
    */
   onDone: () => void;
 }
 
 /**
- * Two-step "create board" wizard for a User Workspace connection.
+ * Two-step "import plans folders as projects" wizard.
  *
- * Step 1 — pick a parent folder and discover board candidates under it via
- * the main-process scanner. Matches the VS Code extension's "Find
- * repositories" behavior: every Git repository root becomes a row (even a
- * brand-new repo with no plans content yet), with any bare plans-only
- * folders as a fallback when no repositories are found.
- * Step 2 — edit the auto-suggested name/project key/project name per row
- * (already-added boards are shown but locked) and create every new row in
- * one batch.
+ * Step 1 — pick a parent folder and scan below it. Every Git repository that
+ * actually has a plans structure becomes a row; bare plans-only folders are the
+ * fallback when no repositories are found. A repository with no discoverable
+ * plans is not offered — it used to be guessed at as `<repo>/docs/plans`, which
+ * produced projects pointed at empty directories.
+ * Step 2 — tick the rows to import and edit their name/key (already-imported
+ * rows are shown but locked), then create them all in one batch.
  *
- * Single component, single root with the `conn-form` shell so the wizard and
- * the existing picker share the same layout idiom (view header + body).
+ * Each created project is `storage: 'folder'`, so the markdown files on disk
+ * stay the source of truth and its board reads them directly.
  */
-export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps) {
+export function ImportProjectsWizard({ workspaceId, onDone }: ImportProjectsWizardProps) {
   const [folderPath, setFolderPath] = useState('');
   const [discovering, setDiscovering] = useState(false);
-  const [drafts, setDrafts] = useState<BoardDraftRow[]>([]);
+  const [rows, setRows] = useState<ProjectImportRow[]>([]);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'folder' | 'details'>('folder');
   const [emptyDiscovery, setEmptyDiscovery] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -42,8 +43,9 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     setError(undefined);
     setEmptyDiscovery(false);
     try {
-      const found = await window.praxis.userWorkspace.discoverBoardDrafts(connection.id, path);
-      setDrafts(found);
+      const found = await window.praxis.projects.discoverImports(path);
+      setRows(found);
+      setSelectedPaths(new Set(found.filter(row => !row.alreadyAdded).map(row => row.repositoryRootPath)));
       if (found.length === 0) {
         setEmptyDiscovery(true);
         setStep('folder');
@@ -65,19 +67,27 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     }
   };
 
-  const updateDraft = (index: number, field: 'name' | 'projectKey' | 'projectName', value: string) => {
-    setDrafts(current =>
+  const updateRow = (index: number, field: 'name' | 'projectKey' | 'projectName', value: string) => {
+    setRows(current =>
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row))
     );
   };
 
-  const newCount = drafts.filter(row => !row.alreadyAdded).length;
+  const selectedRows = rows.filter(row => row.alreadyAdded || selectedPaths.has(row.repositoryRootPath));
+  const newCount = rows.filter(row => !row.alreadyAdded && selectedPaths.has(row.repositoryRootPath)).length;
+
+  const toggleRow = (row: ProjectImportRow) => {
+    if (row.alreadyAdded) return;
+    setSelectedPaths(current => {
+      const next = new Set(current);
+      if (next.has(row.repositoryRootPath)) next.delete(row.repositoryRootPath);
+      else next.add(row.repositoryRootPath);
+      return next;
+    });
+  };
 
   const onSubmit = async () => {
-    const validationError = await window.praxis.userWorkspace.validateBoardDrafts(
-      connection.id,
-      drafts
-    );
+    const validationError = await window.praxis.projects.validateImports(selectedRows);
     if (validationError) {
       setError(validationError);
       return;
@@ -85,17 +95,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
     setSubmitting(true);
     setError(undefined);
     try {
-      for (const draft of drafts) {
-        if (draft.alreadyAdded) {
-          continue;
-        }
-        await window.praxis.userWorkspace.createBoard(connection.id, {
-          name: draft.name.trim(),
-          projectKey: draft.projectKey.trim(),
-          projectName: draft.projectName.trim() || undefined,
-          liveFolderPath: draft.liveFolderPath
-        });
-      }
+      await window.praxis.projects.createFromImports(selectedRows, workspaceId);
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -107,25 +107,25 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
   const submitDisabled = submitting || newCount === 0;
 
   return (
-    <div className="conn-form" data-testid="uw-wizard">
+    <div className="conn-form" data-testid="import-projects-wizard">
       <header className="view-header">
-        <span className="view-title">Create board — {connection.name}</span>
+        <span className="view-title">Import plans folders as projects</span>
         <span className="spacer" />
         {step === 'details' && (
           <button
             type="button"
             className="btn btn-primary"
-            data-testid="uw-wizard-submit-btn"
+            data-testid="import-submit-btn"
             disabled={submitDisabled}
             onClick={() => void onSubmit()}
           >
-            {submitting ? 'Creating…' : `Create ${newCount} board${newCount === 1 ? '' : 's'}`}
+            {submitting ? 'Importing…' : `Import ${newCount} project${newCount === 1 ? '' : 's'}`}
           </button>
         )}
         <button
           type="button"
           className="btn"
-          data-testid="uw-wizard-cancel-btn"
+          data-testid="import-cancel-btn"
           disabled={submitting}
           onClick={onDone}
         >
@@ -134,7 +134,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
       </header>
       <div className="conn-form-body">
         {error && (
-          <div className="error-banner" data-testid="uw-wizard-error">
+          <div className="error-banner" data-testid="import-error">
             {error}
           </div>
         )}
@@ -142,16 +142,15 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
         {step === 'folder' && (
           <>
             <p className="placeholder-text">
-              Choose a parent folder. Every Git repository found below it becomes a board (a
-              brand-new repo with no plans yet is fine); plans-only folders are used as a fallback
-              when no repositories are found. Nothing is written to your repositories until you
-              create the boards.
+              Choose a parent folder. Every Git repository below it that has a plans structure
+              becomes a project; plans-only folders are used when no repositories are found.
+              Nothing is written to your repositories until you import.
             </p>
             <div className="form-row">
               <input
                 className="input"
                 type="text"
-                data-testid="uw-wizard-folder-input"
+                data-testid="import-folder-input"
                 placeholder={'C:\\path\\to\\plans-parent'}
                 value={folderPath}
                 onChange={event => setFolderPath(event.target.value)}
@@ -159,7 +158,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
               <button
                 type="button"
                 className="btn"
-                data-testid="uw-wizard-pick-folder-btn"
+                data-testid="import-pick-folder-btn"
                 onClick={() => void onBrowse()}
               >
                 Browse…
@@ -167,23 +166,23 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
               <button
                 type="button"
                 className="btn"
-                data-testid="uw-wizard-discover-btn"
+                data-testid="import-discover-btn"
                 disabled={discovering}
                 onClick={() => void runDiscover(folderPath)}
               >
-                {discovering ? 'Finding…' : 'Find repositories'}
+                {discovering ? 'Finding…' : 'Find plans folders'}
               </button>
             </div>
 
             {discovering && (
-              <p className="placeholder-text" data-testid="uw-wizard-loading">
+              <p className="placeholder-text" data-testid="import-loading">
                 Searching for repositories and plans folders…
               </p>
             )}
 
             {!discovering && emptyDiscovery && (
-              <p className="placeholder-text" data-testid="uw-wizard-empty">
-                No repositories or plans folders found under that folder.
+              <p className="placeholder-text" data-testid="import-empty">
+                No plans folders found under that folder.
               </p>
             )}
           </>
@@ -192,53 +191,64 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
         {step === 'details' && (
           <>
             <p className="placeholder-text">
-              Edit the board details below. Existing boards are shown but locked — they won't be
-              created again.
+              Tick the folders to import and edit their details. Folders already imported are shown
+              but locked — they won't be added twice.
             </p>
             <div className="board-draft-header">
-              <span>Repository</span>
+              <span>Import</span>
+              <span>Folder</span>
               <span>Project code</span>
               <span>Project name</span>
               <span>Board name</span>
             </div>
             <div className="board-draft-list">
-              {drafts.map((row, index) => (
+              {rows.map((row, index) => (
                 <div
                   key={row.repositoryRootPath}
                   className={`board-draft-row${row.alreadyAdded ? ' already-added' : ''}`}
-                  data-testid="uw-draft-row"
+                  data-testid="import-row"
                 >
+                  <label className="board-draft-select">
+                    <input
+                      type="checkbox"
+                      checked={row.alreadyAdded || selectedPaths.has(row.repositoryRootPath)}
+                      disabled={row.alreadyAdded}
+                      aria-label={`Import ${row.repositoryName}`}
+                      data-testid="import-row-select"
+                      onChange={() => toggleRow(row)}
+                    />
+                  </label>
                   <div className="board-draft-info">
                     <div className="board-draft-name">{row.repositoryName}</div>
-                    <div className="board-draft-path">{row.liveFolderPath}</div>
-                    {row.alreadyAdded && <span className="board-draft-badge">Already added</span>}
+                    <div className="board-draft-path">{row.plansFolderPath}</div>
+                    {row.alreadyAdded && <span className="board-draft-badge">Already imported</span>}
                   </div>
                   <input
                     className="input"
                     type="text"
                     aria-label="Project code"
-                    data-testid="uw-draft-projectKey"
+                    data-testid="import-row-projectKey"
                     value={row.projectKey}
                     disabled={row.alreadyAdded}
-                    onChange={event => updateDraft(index, 'projectKey', event.target.value)}
+                    onChange={event => updateRow(index, 'projectKey', event.target.value)}
                   />
                   <input
                     className="input"
                     type="text"
                     aria-label="Project name"
-                    data-testid="uw-draft-projectName"
+                    data-testid="import-row-projectName"
                     value={row.projectName}
                     disabled={row.alreadyAdded}
-                    onChange={event => updateDraft(index, 'projectName', event.target.value)}
+                    onChange={event => updateRow(index, 'projectName', event.target.value)}
                   />
                   <input
                     className="input"
                     type="text"
                     aria-label="Board name"
-                    data-testid="uw-draft-name"
+                    data-testid="import-row-name"
                     value={row.name}
                     disabled={row.alreadyAdded}
-                    onChange={event => updateDraft(index, 'name', event.target.value)}
+                    onChange={event => updateRow(index, 'name', event.target.value)}
                   />
                 </div>
               ))}
@@ -247,7 +257,7 @@ export function CreateBoardWizard({ connection, onDone }: CreateBoardWizardProps
               <button
                 type="button"
                 className="btn"
-                data-testid="uw-wizard-back-btn"
+                data-testid="import-back-btn"
                 onClick={() => setStep('folder')}
               >
                 Back
