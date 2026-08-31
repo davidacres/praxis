@@ -28,3 +28,11 @@ Allow users to create directed connections from one ticket node to another and r
 1. Connect at least two nodes and reopen the panel.
 2. Confirm connector rendering and direction.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

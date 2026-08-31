@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.001Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-045
 title: Implement Electron repository classification and safe initialization/open actions
 status: complete
@@ -24,3 +28,14 @@ Add main-process repository preflight using argument-array Git execution, filesy
 ## Notes
 
 Never initialize, checkout, or otherwise mutate as a side effect of opening Git Graph.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

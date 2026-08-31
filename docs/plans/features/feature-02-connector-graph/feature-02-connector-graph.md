@@ -36,3 +36,7 @@ Add directed connectors between ticket nodes, validate the graph, and compute ex
 1. Create connectors across at least three nodes and verify persistence.
 2. Verify invalid graph actions are blocked.
 3. Run `npm run check-types` after each story.
+
+## Comments
+
+

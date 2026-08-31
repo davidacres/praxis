@@ -26,3 +26,7 @@ export function getBoardPreferencesStore(): BoardColumnStore {
   }
   return instance;
 }
+
+export function resetBoardPreferencesStore(): void {
+  instance = undefined;
+}

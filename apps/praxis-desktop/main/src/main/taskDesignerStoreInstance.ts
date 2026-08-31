@@ -25,3 +25,7 @@ export function taskDesignerCanvasKey(boardId: string, connectionId?: string): s
   const connectionScope = connectionId?.trim() || 'default';
   return `canvas.${connectionScope}.${boardId}`;
 }
+
+export function resetTaskDesignerStore(): void {
+  instance = undefined;
+}

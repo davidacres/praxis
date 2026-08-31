@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.008Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-059
 title: Atlas navigation integration and vertical-slice verification
 status: proposed
@@ -31,3 +35,14 @@ board.
 - Deep links and back/forward history behave like the rest of the app.
 - Reduced motion is safe: no camera drift, no idle spin, instant transitions.
 - The usability check and its result are recorded in the story file.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.004Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-054
 title: Atlas snapshot model and builder in core
 status: proposed
@@ -25,3 +29,14 @@ lastActivityAt, awaitingApproval. No rendering, no IPC calls inside core.
 - Output is JSON-serializable and byte-stable for a fixed input.
 - The model does not import from Jira, GitLab, Git, board UI, or AI provider
   modules.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

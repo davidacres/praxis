@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.000Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-042
 title: Three-way conflict resolution
 status: complete
@@ -18,3 +22,14 @@ Resolve conflicts inside Praxis using current, incoming, and editable output pan
 
 - Text and binary conflicts have deliberate resolution paths.
 - Manual results reject unresolved markers, stage safely, and expose abort only when Git reports an abortable operation.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.000Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-043
 title: Verification, accessibility, and documentation
 status: complete
@@ -22,3 +26,14 @@ Prove the complete Praxis Git experience in the packaged renderer and keep live 
 ## Evidence
 
 Completed on 2026-08-27 with 7/7 core tests, the real-repository Git service suite, frontend production build, Electron type check, copied renderer, 3/3 Git Graph Electron tests, reviewed wide/narrow/conflict screenshots, and a clean `git diff --check`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

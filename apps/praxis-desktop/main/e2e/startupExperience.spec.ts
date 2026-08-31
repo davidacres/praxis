@@ -26,6 +26,17 @@ test('first launch leads directly into workspace setup beneath the title bar', a
   await win.screenshot({ path: 'output/playwright/getting-started-dark.png', fullPage: true });
 });
 
+test('workspace setup can be skipped to the empty Praxis shell', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
+  const win = app.window;
+
+  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
+  await win.getByRole('button', { name: 'Skip for now' }).click();
+  await expect(win.getByTestId('getting-started')).toHaveCount(0);
+  await expect(win.getByTestId('main-content-pane')).toBeVisible();
+  await expect(win.getByRole('button', { name: 'Select workspace' })).toBeVisible();
+});
+
 test('workspace setup offers project handoff and cancelling the wizard opens the empty shell', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
@@ -161,7 +172,7 @@ test('disabled restoration and a missing saved workspace both fail safely to Get
   await expect(win.getByTestId('getting-started')).toBeVisible();
 });
 
-test('Getting Started remains usable in a narrow reduced-motion window and light theme', async () => {
+test('Getting Started remains usable in a narrow reduced-motion window and light theme', { tag: '@theme' }, async () => {
   app = await launchTestApp({ appearance: { themeId: 'praxis-light', themeMode: 'light' } }, undefined, undefined, { workspace: false });
   const win = app.window;
   await win.setViewportSize({ width: 620, height: 720 });

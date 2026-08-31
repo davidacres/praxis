@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.002Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-047
 title: Integrate onboarding with Graph/diff loading and friendly error recovery
 status: complete
@@ -24,3 +28,14 @@ Ensure Git Graph and diff loading only run after successful preflight and that r
 ## Notes
 
 Preserve the existing clean diff workspace; onboarding should be a gateway, not a competing editor.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

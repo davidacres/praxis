@@ -1,6 +1,6 @@
 import type { KeyValueStore } from '../host/stateStore';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, WorkspaceRecord } from './workspaceTypes';
-import { validateWorkspace } from './workspaceTypes';
+import { CURRENT_WORKSPACE_SCHEMA_VERSION, validateWorkspace } from './workspaceTypes';
 
 const WORKSPACES_KEY = 'praxis.workspaces.v1';
 
@@ -26,7 +26,7 @@ export class WorkspaceStore {
       objectives: (input.objectives ?? []).map(item => item.trim()).filter(Boolean),
       defaultProjectId: input.defaultProjectId, createdAt: now, updatedAt: now,
       createdWithAppVersion: appVersion, lastSavedWithAppVersion: appVersion,
-      schemaVersion: 1
+      schemaVersion: CURRENT_WORKSPACE_SCHEMA_VERSION
     };
     validateWorkspace(workspace);
     const all = this.list();

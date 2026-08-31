@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.000Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-041
 title: Graph-native workflows, history, and blame
 status: complete
@@ -17,3 +21,14 @@ Keep common Git work anchored to visible branches, commits, and files rather tha
 ## Done when
 
 - Branch/ref and commit comparisons, create/checkout/rename/delete, merge/rebase, pinning, smart visibility, stash/pop, cherry-pick, revert, file history, and blame have clear entry points.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -188,7 +188,37 @@ interface SettingsPageProps {
 
 export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview' }: SettingsPageProps) {
   const [active, setActive] = useState<SettingsCategory>(initialCategory);
+  const [resettingData, setResettingData] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data'>();
   const { settings, update, error } = useSettings();
+
+  const resetToDefaults = async () => {
+    await update({ ...DEFAULT_APP_SETTINGS });
+    setResetConfirmation('sessions');
+  };
+
+  const clearProjectWorkspaceBoardData = async () => {
+    setResettingData(true);
+    try {
+      await window.praxis.settings.clearProjectWorkspaceBoardData();
+      await window.praxis.window.reload();
+    } finally {
+      setResettingData(false);
+    }
+  };
+
+  const confirmResetAction = async () => {
+    const action = resetConfirmation;
+    setResetConfirmation(undefined);
+    if (action === 'defaults') {
+      await resetToDefaults();
+    } else if (action === 'sessions') {
+      await window.praxis.settings.clearSessionData();
+      await window.praxis.window.reload();
+    } else if (action === 'project-data') {
+      await clearProjectWorkspaceBoardData();
+    }
+  };
 
   if (!settings) {
     return (
@@ -217,7 +247,12 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
       <div className="settings-content">
         {error && <div className="error-banner">{error}</div>}
         {active === 'overview' && (
-          <OverviewSection settings={settings} onReset={() => void update({ ...DEFAULT_APP_SETTINGS })} />
+          <OverviewSection
+            settings={settings}
+            onReset={() => setResetConfirmation('defaults')}
+            onClearProjectWorkspaceBoardData={() => setResetConfirmation('project-data')}
+            clearingProjectWorkspaceBoardData={resettingData}
+          />
         )}
         {active === 'startup' && <StartupSection settings={settings} update={update} />}
         {active === 'connections' && (
@@ -235,6 +270,58 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'appearance-surfaces' && <SurfacesSection settings={settings} update={update} />}
         {active === 'appearance' && <AppearanceSection settings={settings} update={update} />}
         {active === 'terminal' && <TerminalSection settings={settings} update={update} />}
+      </div>
+      {resetConfirmation && (
+        <ResetConfirmationDialog
+          action={resetConfirmation}
+          onCancel={() => setResetConfirmation(undefined)}
+          onConfirm={() => void confirmResetAction()}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResetConfirmationDialog({
+  action,
+  onCancel,
+  onConfirm
+}: {
+  action: 'defaults' | 'sessions' | 'project-data';
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const content = action === 'defaults'
+    ? {
+        title: 'Reset settings to defaults?',
+        message: 'All Praxis settings will be replaced with their shipped defaults. Connections and credentials will be kept.',
+        confirm: 'Reset settings'
+      }
+    : action === 'sessions'
+      ? {
+          title: 'Clear saved session data too?',
+          message: 'This removes saved AI sessions and issue-analysis history from this device. Connections and credentials will be kept.',
+          confirm: 'Clear session data'
+        }
+      : {
+          title: 'Clear project data?',
+          message: 'This removes app-owned projects, workspaces, tracked boards, board layouts, and task canvases. Portable workspace files and connections will be kept.',
+          confirm: 'Clear project data'
+        };
+
+  return (
+    <div className="modal-overlay" data-testid="reset-confirmation-overlay">
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="reset-confirmation-title">
+        <div className="modal-header">
+          <div>
+            <h2 id="reset-confirmation-title">{content.title}</h2>
+            <p>{content.message}</p>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn" onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn btn-danger" onClick={onConfirm}>{content.confirm}</button>
+        </div>
       </div>
     </div>
   );
@@ -460,10 +547,14 @@ function Toggle({
 
 function OverviewSection({
   settings,
-  onReset
+  onReset,
+  onClearProjectWorkspaceBoardData,
+  clearingProjectWorkspaceBoardData
 }: {
   settings: AppSettings;
   onReset: () => void;
+  onClearProjectWorkspaceBoardData: () => void;
+  clearingProjectWorkspaceBoardData: boolean;
 }) {
   const category = CATEGORIES.find(c => c.id === 'overview')!;
   return (
@@ -506,6 +597,21 @@ function OverviewSection({
         </div>
         <button className="btn" style={{ marginTop: 8 }} onClick={onReset}>
           Reset to defaults
+        </button>
+      </div>
+      <div className="section-divider">
+        <strong>Clear project data</strong>
+        <div className="settings-field-help">
+          Removes app-owned projects, workspaces, board layouts, and task canvases. Portable workspace files, connections, and credentials are kept.
+        </div>
+        <button
+          className="btn danger"
+          style={{ marginTop: 8 }}
+          onClick={onClearProjectWorkspaceBoardData}
+          disabled={clearingProjectWorkspaceBoardData}
+          data-testid="clear-project-workspace-board-data"
+        >
+          {clearingProjectWorkspaceBoardData ? 'Clearing…' : 'Clear project/workspace/board data'}
         </button>
       </div>
     </>

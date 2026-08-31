@@ -28,3 +28,11 @@ Verify that the designer graph survives reloads and recoverable errors without l
 1. Save a graph, reload the window, and confirm restoration.
 2. Trigger validation errors and confirm state is intact.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

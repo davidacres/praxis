@@ -36,3 +36,7 @@ Create the first functional version of the task designer as a standalone panel w
 1. Open the designer panel and verify the dotted surface renders.
 2. Add at least one ticket node and verify it survives a panel reopen.
 3. Run `npm run check-types` after each story.
+
+## Comments
+
+

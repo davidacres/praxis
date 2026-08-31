@@ -28,3 +28,11 @@ Ensure generated feature and story artifacts include priority, dependencies, com
 1. Generate artifacts and inspect metadata presence.
 2. Verify dependency references are explicit.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+
