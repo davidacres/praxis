@@ -822,6 +822,15 @@ export function App() {
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
   const onboardingProjectWizard = Boolean(projectWizardMode && projectWizardPresentation === 'onboarding');
+  // WebContentsView is a native sibling of the renderer and always paints
+  // above DOM z-index layers. Suspend it whenever an App-owned modal is above
+  // the current surface, otherwise the page can bleed through the dialog.
+  const nativeOverlayOpen = Boolean(
+    settingsDialogCategory
+      || workspaceDialogOpen
+      || whatsNewOpen
+      || (projectWizardMode && projectWizardPresentation === 'dialog')
+  );
   const contextLabel = onboardingProjectWizard
     ? projectWizardMode === 'existing' ? 'Create from folder' : 'Create project'
     : gettingStarted
@@ -946,7 +955,7 @@ export function App() {
           initialBrowserUrl={route.browserUrl}
           onBrowserOpenChange={handleBrowserOpenChange}
           onBrowserUrlChange={handleBrowserUrlChange}
-          browserSuspended={settingsDialogCategory !== undefined}
+          browserSuspended={nativeOverlayOpen}
         />
       );
     }
