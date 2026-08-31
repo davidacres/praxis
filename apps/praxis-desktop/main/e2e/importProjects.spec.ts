@@ -140,6 +140,28 @@ test('a repository whose plans sit outside docs/plans is still found', async () 
   }
 });
 
+test('the wizard is reachable from the sidebar New menu and imports through the UI', async () => {
+  // The only entry point used to be the "no boards" empty state, which demo
+  // fixtures or the New Session composer pre-empt — so the wizard was dead UI.
+  await window.getByTestId('new-menu').click();
+  await window.getByTestId('import-projects').click();
+  await expect(window.getByTestId('import-projects-wizard')).toBeVisible();
+
+  await window.getByTestId('import-folder-input').fill(plansDir);
+  await window.getByTestId('import-discover-btn').click();
+
+  const row = window.getByTestId('import-row');
+  await expect(row).toHaveCount(1);
+  await row.getByTestId('import-row-projectKey').fill('UIIMP');
+  await row.getByTestId('import-row-projectName').fill('UI Imported');
+  await window.getByTestId('import-submit-btn').click();
+
+  await expect(window.getByTestId('import-projects-wizard')).toHaveCount(0);
+  await expect(
+    window.getByTestId('project-tree').filter({ hasText: 'UI Imported' })
+  ).toBeVisible();
+});
+
 test('re-scanning an imported folder flags it rather than offering it twice', async () => {
   const rows = await discover(window, plansDir);
   await window.evaluate(async row => {

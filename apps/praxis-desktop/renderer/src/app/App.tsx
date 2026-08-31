@@ -1263,6 +1263,7 @@ export function App() {
                   onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
                   onNewProject={() => requestProjectWizard('create')}
                   onAddExistingProject={() => requestProjectWizard('existing')}
+                  onImportProjects={activeWorkspaceId ? () => setImportProjectsOpen(true) : undefined}
                   onSelectProject={project => navigate({ projectId: project.id })}
                   onOpenProjectDocument={(project, document) => {
                     void window.praxis.projects.readDocument(project.id, document.relativePath)
@@ -1533,6 +1534,10 @@ export function App() {
                 setImportProjectsOpen(false);
                 refreshProjects();
                 refreshBoards();
+                // The import adds its projects to the open workspace, and the
+                // sidebar scopes its tree to that record — without this the
+                // projects exist but stay filtered out of view.
+                refreshWorkspaces();
               }}
             />
           </div>
