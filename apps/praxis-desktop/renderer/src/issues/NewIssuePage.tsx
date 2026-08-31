@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Board, Connection, IssueSummary, UpdateIssueInput } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { resolveBackendMode } from '../board/boardMeta';
 import {
   getCreatableTypes,
   getDraftParentRule,
@@ -52,7 +53,9 @@ function FieldRow({
  * the ticket as created.
  */
 export function NewIssuePage({ board, connection, initialIssueType, onCancel, onCreated }: NewIssuePageProps) {
-  const mode = connection?.mode ?? 'demo';
+  // A project board's synthetic `project:<id>` connection has no row in the
+  // connection store, so derive the mode from the board's own connection id.
+  const mode = resolveBackendMode(connection?.id ?? board.connectionId, connection ? [connection] : []);
   const connectionId = connection?.id;
   const typeOptions = useMemo(() => getCreatableTypes(mode), [mode]);
 

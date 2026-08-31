@@ -78,11 +78,33 @@ export const BACKEND_MODE_META: Record<BackendMode, BackendModeMeta> = {
   github: { label: 'GitHub', icon: 'git-branch', tone: 'var(--tone-github)' },
   gitlab: { label: 'GitLab', icon: 'git-branch', tone: 'var(--tone-gitlab)' },
   folder: { label: 'Folder', icon: 'folder', tone: 'var(--tone-folder)' },
+  project: { label: 'Project', icon: 'target', tone: 'var(--tone-workspace)' },
   userworkspace: { label: 'User Workspace', icon: 'folder-open', tone: 'var(--tone-workspace)' }
 };
 
 export function backendModeMeta(mode: BackendMode | undefined): BackendModeMeta {
   return mode ? BACKEND_MODE_META[mode] : BACKEND_MODE_META.demo;
+}
+
+/** Connection-id prefix for a project's synthetic connection (`projectConnectionId` in core). */
+export const PROJECT_CONNECTION_PREFIX = 'project:';
+
+/**
+ * The backend mode behind a board's `connectionId`.
+ *
+ * A project's board is reached through the synthetic `project:<id>` id, which
+ * has no row in the connection store — looking it up there yields `undefined`
+ * and used to fall back to `demo`, so project boards were driven by demo's
+ * field rules. Resolve the prefix first.
+ */
+export function resolveBackendMode(
+  connectionId: string | undefined,
+  connections: ReadonlyArray<{ id: string; mode: BackendMode }>
+): BackendMode {
+  if (connectionId?.startsWith(PROJECT_CONNECTION_PREFIX)) {
+    return 'project';
+  }
+  return connections.find(connection => connection.id === connectionId)?.mode ?? 'demo';
 }
 
 /** Maps a Jira-style status category onto a tone for column dots and badges. */

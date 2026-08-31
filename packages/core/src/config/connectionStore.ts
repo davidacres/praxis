@@ -7,6 +7,11 @@ const CONNECTIONS_KEY = 'connections';
 const BOARDS_KEY = 'boards';
 const SECRET_PREFIX = 'praxis.connection';
 
+/**
+ * Modes a stored connection may declare. `project` is deliberately absent — a
+ * project's board is reached through the synthetic `project:<id>` connection id
+ * and never has a row in this store.
+ */
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'jiracloud',
   'demo',

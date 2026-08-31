@@ -1,6 +1,6 @@
 import type { Board, BoardDetails, Connection, IssueSummary, ProjectBoardReference, ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { backendModeMeta, boardTypeIcon, boardTypeLabel, statusTone } from '../board/boardMeta';
+import { backendModeMeta, boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 
 export interface WorkModeViewProps {
   projects: Array<{
@@ -69,7 +69,7 @@ export function WorkModeView({
           <header className="work-project-header"><Icon name="folder-open" size={15} /><strong>{project.name}</strong><span>{projectBoards.length} {projectBoards.length === 1 ? 'board' : 'boards'}</span></header>
           {projectBoards.map(board => {
         const connection = connections.find(candidate => candidate.id === board.connectionId);
-        const meta = backendModeMeta(connection?.mode ?? (board.connectionId ? undefined : 'demo'));
+        const meta = backendModeMeta(resolveBackendMode(board.connectionId, connections));
         const details = detailsByBoardId[board.id];
         const active = activeIssues(details);
 

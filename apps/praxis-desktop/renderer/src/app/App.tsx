@@ -1266,6 +1266,10 @@ export function App() {
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;
+                    // A project's board is intrinsic to the project — there is
+                    // nothing to untrack, and deleting it would mean deleting
+                    // the project. Delete the project itself instead.
+                    if (connectionId.startsWith('project:')) return;
                     // "Delete" means different things per backend: a user-workspace
                     // connection owns many boards (drop just this one); a folder
                     // connection *is* its single board (drop the connection); a
