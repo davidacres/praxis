@@ -118,6 +118,11 @@ export function validateProjectRecord(project: ProjectRecord): void {
   if (!project.workspaceFolder && (project.type === 'software' || project.type === 'experiment')) {
     throw new Error('Software and Experiment projects require a workspace folder.');
   }
+  // A folder-backed project reads its work items from the markdown plans tree,
+  // so it cannot exist without a folder to read.
+  if (project.storage === 'folder' && !project.workspaceFolder) {
+    throw new Error('A folder-backed project requires a workspace folder.');
+  }
 }
 
 function isProjectRecord(value: unknown): value is ProjectRecord {

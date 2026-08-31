@@ -6,7 +6,7 @@ import {
   FolderService,
   StubBackendService,
   UserWorkspaceService,
-  ProjectIssueTrackerService
+  createProjectService
 } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
@@ -23,7 +23,7 @@ const jiraServices = new Map<string, JiraService>();
 const gitLabServices = new Map<string, GitLabBoardService>();
 const userWorkspaceServices = new Map<string, UserWorkspaceService>();
 const stubServices = new Map<BackendMode, StubBackendService>();
-const projectServices = new Map<string, ProjectIssueTrackerService>();
+const projectServices = new Map<string, IssueTrackerService>();
 
 /**
  * Backend sinks tee into the shared log bus (the Output panel's source) while
@@ -212,7 +212,8 @@ export async function getServiceForConnection(
     const projectId = connectionId.slice('project:'.length);
     let service = projectServices.get(projectId);
     if (!service) {
-      service = new ProjectIssueTrackerService(getProjectStore(), projectId);
+      // Picks the app-storage or folder-backed implementation from the record.
+      service = createProjectService(getProjectStore(), projectId);
       projectServices.set(projectId, service);
     }
     return service;

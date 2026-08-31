@@ -6,8 +6,24 @@ import type {
 } from '../types';
 import type { ProjectRecord, ProjectWorkItem } from './projectTypes';
 import { ProjectStore } from './projectStore';
+import { FolderService, type FolderConfigProvider } from '../folder/folderService';
 
 export const projectConnectionId = (projectId: string) => `project:${projectId}`;
+
+/**
+ * The backend for a project's board.
+ *
+ * `storage: 'app'` keeps work items in the project record (`ProjectIssueTrackerService`);
+ * `storage: 'folder'` makes the markdown plans tree the source of truth and
+ * delegates to `FolderService` (`FolderBackedProjectService`). Both report
+ * `mode: 'project'` and present the project's own board identity, so callers
+ * never have to care which storage is behind it.
+ */
+export function createProjectService(store: ProjectStore, projectId: string): IssueTrackerService {
+  return store.get(projectId)?.storage === 'folder'
+    ? new FolderBackedProjectService(store, projectId)
+    : new ProjectIssueTrackerService(store, projectId);
+}
 
 export class ProjectIssueTrackerService implements IssueTrackerService {
   public readonly mode = 'project' as const;
@@ -110,6 +126,102 @@ export class ProjectIssueTrackerService implements IssueTrackerService {
   private issue(project: ProjectRecord, item: ProjectWorkItem): IssueSummary { return { id: item.id, key: item.key, summary: item.summary, description: item.description, issueType: item.issueType, status: item.status, statusCategory: item.status === project.workflowStages.at(-1)?.name ? 'done' : undefined, projectKey: project.key, projectName: project.name, created: item.createdAt, updated: item.updatedAt }; }
   private transitions(project: ProjectRecord, item: ProjectWorkItem): WorkflowTransition[] { return project.workflowStages.filter(stage => stage.name !== item.status).map(stage => ({ id: stage.id, name: `Move to ${stage.name}`, toStatus: stage.name })); }
   private filtered(filters: IssueFilters): IssueSummary[] { const project = this.requireProject(); let values = project.workItems.map(item => this.issue(project, item)); if (filters.projectKeys.length) values = values.filter(item => filters.projectKeys.includes(item.projectKey)); if (filters.statuses.length) values = values.filter(item => filters.statuses.includes(item.status)); if (filters.issueTypes.length) values = values.filter(item => filters.issueTypes.includes(item.issueType)); const needle = filters.searchText.trim().toLowerCase(); return needle ? values.filter(item => `${item.key} ${item.summary} ${item.description ?? ''}`.toLowerCase().includes(needle)) : values; }
+}
+
+/**
+ * A project whose work items are the markdown plans under its workspace folder.
+ *
+ * Everything issue-shaped is delegated to a `FolderService` pointed at that
+ * folder. Board-shaped calls are *not* delegated: the folder service names its
+ * own board `folder-<key>`, but this project's board must keep the project's
+ * identity (`defaultBoardId`, `project:<id>` connection) or navigation and the
+ * sidebar would lose it.
+ */
+class FolderBackedProjectService implements IssueTrackerService {
+  public readonly mode = 'project' as const;
+  private cached?: { folderPath: string; key: string; name: string; service: FolderService };
+
+  public constructor(private readonly store: ProjectStore, private readonly projectId: string) {}
+
+  public dispose(): void { this.cached?.service.dispose(); this.cached = undefined; }
+  public getDefaultPageSize(): number { return 100; }
+  public async reset(): Promise<void> { await this.folder().reset(); }
+  public async checkConnection(): Promise<ConnectionCheck> { return this.folder().checkConnection(); }
+  public async getProjects(): Promise<Project[]> {
+    const project = this.requireProject();
+    return [{ id: project.id, key: project.key, name: project.name }];
+  }
+  public async getIssues(filters: IssueFilters, startAt: number, pageSize: number): Promise<PagedIssues> {
+    // The folder service keys its own root board, not this project's board id —
+    // passing ours through would filter every issue out.
+    return this.folder().getIssues({ ...filters, boardId: undefined }, startAt, pageSize);
+  }
+  public async getFilterMetadata(filters: IssueFilters): Promise<FilterMetadata> { return this.folder().getFilterMetadata(filters); }
+  public async getParentItems(filters: IssueFilters, searchText?: string, options?: ParentItemQueryOptions): Promise<IssueSummary[]> {
+    return this.folder().getParentItems(filters, searchText, options);
+  }
+  public async supportsBoards(): Promise<boolean> { return true; }
+  public async getBoards(filters: BoardFilters): Promise<Board[]> {
+    const project = this.requireProject();
+    const board = this.board(project);
+    const needle = filters.searchText.trim().toLowerCase();
+    if (filters.projectKeys.length && !filters.projectKeys.includes(project.key)) return [];
+    if (filters.types.length && !filters.types.map(value => value.toLowerCase()).includes('project')) return [];
+    if (needle && !`${board.name} ${project.key} ${project.name}`.toLowerCase().includes(needle)) return [];
+    return [board];
+  }
+  public async getBoardDetails(_board: Board): Promise<BoardDetails> {
+    const project = this.requireProject();
+    const details = await this.folder().getBoardDetails(this.board(project));
+    return { ...details, board: this.board(project) };
+  }
+  public async createBoard(_input: CreateBoardInput): Promise<Board> { throw new Error('Every project has exactly one default board.'); }
+  public async updateBoard(_boardId: string, input: UpdateBoardInput): Promise<Board> {
+    if (!input.name?.trim()) return this.board(this.requireProject());
+    return this.board(await this.store.update(this.projectId, { name: input.name.trim() }));
+  }
+  public async deleteBoard(_boardId: string): Promise<void> { throw new Error('A project default board cannot be deleted.'); }
+  public async getIssue(issueKey: string): Promise<IssueDetails> { return this.folder().getIssue(issueKey); }
+  public async createIssue(input: CreateIssueInput): Promise<IssueDetails> {
+    return this.folder().createIssue({ ...input, projectKey: this.requireProject().key, boardId: undefined });
+  }
+  public async updateIssue(issueKey: string, input: UpdateIssueInput): Promise<IssueDetails> { return this.folder().updateIssue(issueKey, input); }
+  public async deleteIssue(issueKey: string): Promise<void> { await this.folder().deleteIssue(issueKey); }
+  public async addComment(issueKey: string, body: string): Promise<void> { await this.folder().addComment(issueKey, body); }
+  public async attachFile(issueKey: string, filePath: string, fileName?: string): Promise<void> { await this.folder().attachFile(issueKey, filePath, fileName); }
+  public async downloadAttachment(issueKey: string, attachment: IssueAttachment, targetFilePath: string): Promise<void> {
+    await this.folder().downloadAttachment(issueKey, attachment, targetFilePath);
+  }
+  public async getTransitions(issueKey: string): Promise<WorkflowTransition[]> { return this.folder().getTransitions(issueKey); }
+  public async transitionIssue(issueKey: string, transitionId: string): Promise<void> { await this.folder().transitionIssue(issueKey, transitionId); }
+  public async getBrowseUrl(issue: IssueSummary): Promise<string | undefined> { return this.folder().getBrowseUrl(issue); }
+  public async getSelfAssigneeLabel(): Promise<string | undefined> { return undefined; }
+
+  private requireProject(): ProjectRecord { const value = this.store.get(this.projectId); if (!value) throw new Error(`Project ${this.projectId} was not found.`); return value; }
+  private board(project: ProjectRecord): Board {
+    return { id: project.defaultBoardId, name: `${project.name} Board`, type: 'project', projectKey: project.key, projectName: project.name, locationName: project.workspaceFolder, connectionId: projectConnectionId(project.id) };
+  }
+  /** Rebuilt whenever the project's folder or identity changes, so a rename or move is picked up. */
+  private folder(): FolderService {
+    const project = this.requireProject();
+    const folderPath = project.workspaceFolder;
+    if (!folderPath) throw new Error(`Project ${project.name} is folder-backed but has no workspace folder.`);
+    if (this.cached && this.cached.folderPath === folderPath && this.cached.key === project.key && this.cached.name === project.name) {
+      return this.cached.service;
+    }
+    this.cached?.service.dispose();
+    const config: FolderConfigProvider = {
+      getDefaultPageSize: () => 100,
+      getFolderRoots: () => [folderPath],
+      getFolderProjectKey: () => project.key,
+      getFolderProjectName: () => project.name,
+      getFolderAllowIssueCreation: () => true,
+      getAiDefaultModel: () => ''
+    };
+    const service = new FolderService(config);
+    this.cached = { folderPath, key: project.key, name: project.name, service };
+    return service;
+  }
 }
 
 function unique(values: string[]): string[] { return [...new Set(values)].sort(); }
