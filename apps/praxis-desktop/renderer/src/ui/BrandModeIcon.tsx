@@ -110,5 +110,12 @@ function renderMark(mode: BackendMode, size: number, uid: string) {
           <path d="M5 8h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
         </svg>
       );
+    case 'project':
+      return (
+        <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx="7" cy="7" r="1.6" fill="currentColor" />
+        </svg>
+      );
   }
 }

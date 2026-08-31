@@ -10,7 +10,7 @@ import { ProjectStore } from './projectStore';
 export const projectConnectionId = (projectId: string) => `project:${projectId}`;
 
 export class ProjectIssueTrackerService implements IssueTrackerService {
-  public readonly mode = 'userworkspace' as const;
+  public readonly mode = 'project' as const;
   public constructor(private readonly store: ProjectStore, private readonly projectId: string) {}
   public dispose(): void {}
   public getDefaultPageSize(): number { return 100; }

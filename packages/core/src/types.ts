@@ -1,10 +1,18 @@
 export type ConnectionType = 'stdio' | 'http';
+/**
+ * How a board's issues are stored and reached.
+ *
+ * `project` is not a configurable connection type — it is the mode a Project's
+ * own board reports, reached through the synthetic `project:<id>` connection id
+ * rather than anything in the connection store.
+ */
 export type BackendMode =
   | 'jiracloud'
   | 'demo'
   | 'github'
   | 'gitlab'
   | 'folder'
+  | 'project'
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';

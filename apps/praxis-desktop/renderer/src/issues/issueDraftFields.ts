@@ -17,16 +17,19 @@ export const PRIORITY_OPTIONS = ['Critical', 'Highest', 'High', 'Medium', 'Low',
 export const SEVERITY_OPTIONS = ['Critical', 'High', 'Medium', 'Low'];
 
 /**
- * Issue types the create form offers, per backend mode. Mirrors the
- * extension's `DEFAULT_CREATABLE_TYPES` (`commands/registerCommands.ts`):
- * Jira Cloud's epic-level type is "Epic" where the file/backend modes use
- * "Feature", and only the MCP-backed modes can file Subtasks.
+ * Issue types the create form offers, per backend mode. Jira Cloud's
+ * epic-level type is "Epic" where the folder-backed modes use "Feature", and
+ * only the MCP-backed modes can file Subtasks.
  */
 export function getCreatableTypes(mode: BackendMode): string[] {
   if (mode === 'jiracloud') {
     return ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
   }
   if (mode === 'folder' || mode === 'userworkspace') {
+    return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
+  }
+  // A project stores a free-form `issueType` string and has no subtask model.
+  if (mode === 'project') {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   return ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
@@ -45,7 +48,7 @@ export interface DraftParentRule {
   helperText: string;
   placeholder: string;
   /**
-   * folder/userworkspace semantics: a parent value that matches no
+   * folder-backed semantics: a parent value that matches no
    * existing item means "create a new Feature with this summary"
    * (`newParentSummary`). Other backends reject unknown parents.
    */
@@ -83,6 +86,19 @@ export function getDraftParentRule(
       label: 'Parent',
       helperText: 'Subtasks must belong to a story, task, or bug.',
       placeholder: 'Enter a parent issue key',
+      allowsNewParent: false
+    };
+  }
+
+  // Mirrors `getParentRule` in core: an app-storage project's work items have
+  // no parent field, so never offer the picker.
+  if (mode === 'project') {
+    return {
+      canHaveParent: false,
+      requiresParent: false,
+      label: 'Parent',
+      helperText: `${typeLabel} items in a project do not use a parent.`,
+      placeholder: '',
       allowsNewParent: false
     };
   }
