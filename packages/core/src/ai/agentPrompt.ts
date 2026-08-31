@@ -61,11 +61,11 @@ Respect explicit permission boundaries and stop when the user's request is answe
  */
 export const BROWSER_TOOLS_PROMPT = `## In-app browser
 This session can drive a real web browser embedded in the app. Yes, you can browse the web here.
-- browser_navigate(url) — open a page (a first visit to a new host asks the user to allow it).
-- browser_read() — the current page as plain text.
+- browser_navigate(url) — open a page (a first visit to a new host asks the user to allow it). Returns the title, URL and a SHORT excerpt only.
+- browser_read() — the full current page as plain text. Call this only when you actually need to read the body; it can be large.
 - browser_snapshot(filter?) — the page's interactive elements, each with a stable ref.
-- browser_click(ref) / browser_type(ref, text, submit?) — act on an element by ref.
-Use it whenever the user references a URL, asks you to look something up online, or check a web page.`;
+- browser_click(ref) / browser_type(ref, text, submit?) — act on an element by ref; also return a short excerpt.
+Use it whenever the user references a URL, asks you to look something up online, or check a web page. Prefer browser_snapshot for navigation/forms and browser_read only for content you need — don't dump whole pages.`;
 
 function slugifyNamingSegment(value: string): string {
   return value

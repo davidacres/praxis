@@ -162,8 +162,14 @@ class AiBrowserManager {
     const text = await wc
       .executeJavaScript(
         `(() => {
-          const t = (document.body && document.body.innerText) || '';
-          return t.replace(/\\n{3,}/g, '\\n\\n').trim().slice(0, ${MAX_TEXT});
+          // Prefer the main content region so nav bars, cookie banners and
+          // footers don't pad every read.
+          const root = document.querySelector('main, article, [role=main]') || document.body;
+          const t = (root && root.innerText) || '';
+          const clean = t.replace(/\\n{3,}/g, '\\n\\n').trim();
+          return clean.length > ${MAX_TEXT}
+            ? clean.slice(0, ${MAX_TEXT}) + '\\n\\n…[truncated at ${MAX_TEXT} chars]'
+            : clean;
         })()`,
         true
       )
