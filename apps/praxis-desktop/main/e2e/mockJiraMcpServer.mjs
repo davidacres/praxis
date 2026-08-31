@@ -5,15 +5,13 @@
 //
 // Runs over stdio following the Model Context Protocol (MCP) and serves the
 // subset of `atlassian-jira_*` tools the production `JiraService` calls — see
-// `apps/vscode-extension/src/jira/jiraService.ts` (COMMUNITY_TOOLS) and the
-// companion in-process fixture
-// `apps/vscode-extension/src/test/fixtures/fakeJiraMcpServer.ts` for the
-// shape each handler must return.
+// `packages/core/src/jira/jiraService.ts` (COMMUNITY_TOOLS) for the shape each
+// handler must return.
 //
 // Design notes:
 //   * Uses the low-level `Server` class (vs `McpServer`) because the request
 //     handlers route through the same `tools/list` / `tools/call` JSON-RPC
-//     methods that the extension's `McpClientWrapper` already speaks.
+//     methods that `McpClientWrapper` already speaks.
 //   * State (issues, boards) is in-memory and process-local — the e2e only
 //     exercises a few happy-path calls so persistence is unnecessary.
 //   * Tool call responses are wrapped as a single JSON `text` content block so

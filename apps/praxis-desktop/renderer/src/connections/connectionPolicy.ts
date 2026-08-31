@@ -11,10 +11,9 @@ import type { BackendMode, Connection, TrackedBoard } from '@praxis/core';
 /** Modes offered in the "new connection" dropdown, in display order. */
 export const CONNECTION_MODES: readonly BackendMode[] = [
   'demo',
-  'livefolder',
+  'folder',
   'jiracloud',
   'gitlab',
-  'userworkspace',
   'github'
 ];
 
@@ -44,7 +43,7 @@ export function secretNamesForMode(mode: BackendMode): readonly string[] {
  * others) instead of opening the board picker.
  */
 export function autoSynthesizesBoard(mode: BackendMode): boolean {
-  return mode === 'livefolder' || mode === 'demo';
+  return mode === 'folder' || mode === 'demo';
 }
 
 /** Modes with discoverable remote boards the user tracks via the board picker. */
@@ -58,20 +57,20 @@ export function stringSetting(connection: Connection, key: string): string | und
 }
 
 /**
- * The tracked board a demo/livefolder connection owns by construction. The id
- * matches what the backend's `getBoards()` emits (`livefolder-<projectKey>`),
- * so the manager's tracked list and the sidebar's board list agree; it is also
- * what the VS Code extension writes for the same connection in the shared
- * settings file.
+ * The tracked board a demo/folder connection owns by construction. The id must
+ * match what `FolderService.getBoards()` emits for its primary root
+ * (`folder-<projectKey>`) so the manager's tracked list and the sidebar's board
+ * list agree. A folder connection with several roots exposes the extra boards
+ * through `getBoards()` — only the primary one is tracked here.
  */
 export function createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | undefined {
-  if (connection.mode === 'livefolder') {
+  if (connection.mode === 'folder') {
     const projectKey = stringSetting(connection, 'projectKey') ?? 'LIVE';
-    const projectName = stringSetting(connection, 'projectName') ?? 'Live Folder';
+    const projectName = stringSetting(connection, 'projectName') ?? 'Folder';
     return {
       connectionId: connection.id,
-      boardId: `livefolder-${projectKey.toLowerCase()}`,
-      displayName: `${projectName} (Live)`
+      boardId: `folder-${projectKey.toLowerCase()}`,
+      displayName: projectName
     };
   }
   if (connection.mode === 'demo') {

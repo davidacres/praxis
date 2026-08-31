@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectDocument, ProjectRecord, WorkspaceRecord } from '@praxis/core';
-import { boardTypeIcon, boardTypeLabel } from '../board/boardMeta';
+import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
 import { Icon, type IconName } from '../ui/Icon';
@@ -57,10 +57,13 @@ export interface SidebarProps {
   onNewSession: () => void;
   onNewProject: () => void;
   onAddExistingProject: () => void;
+  /** Opens the bulk "import plans folders as projects" wizard. */
+  onImportProjects?: () => void;
   onSelectProject: (project: ProjectRecord) => void;
   onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
   onDeleteBoard: (board: Board) => void;
+  onConfigureBoard: (board: Board) => void;
   selectedProjectId?: string;
   /** Selected issue for the peek card pinned above the footer (classic mode). */
   selectedIssueKey?: string;
@@ -93,10 +96,12 @@ export function Sidebar({
   onNewSession,
   onNewProject,
   onAddExistingProject,
+  onImportProjects,
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
   onDeleteBoard,
+  onConfigureBoard,
   selectedProjectId,
   selectedIssueKey,
   selectedIssueConnectionId,
@@ -114,13 +119,13 @@ export function Sidebar({
   const [searching, setSearching] = useState(false);
   const { settings } = useSettings();
   const newProjectEnabled = settings?.preview.enableNewProject ?? true;
-  // Brand artwork (extension parity) vs generic board-type glyphs — Appearance
-  // setting, applied live through the settings push channel.
+  // Brand artwork vs generic board-type glyphs — Appearance setting, applied
+  // live through the settings push channel.
   const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
-  // A board's mark comes from its connection's backend. The built-in boards
-  // have no connection, so they fall back to the demo mark.
-  const boardMode = (board: Board) =>
-    connections.find(connection => connection.id === board.connectionId)?.mode ?? 'demo';
+  // A board's mark comes from its backend. Project boards resolve through their
+  // synthetic `project:<id>` id; the built-in boards have no connection at all
+  // and fall back to the demo mark.
+  const boardMode = (board: Board) => resolveBackendMode(board.connectionId, connections);
   // The "Praxis" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
@@ -153,7 +158,7 @@ export function Sidebar({
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
         return board ? [{ link, board }] : [];
       });
-      // A live-folder connection can expose more than the one board that was
+      // A folder connection can expose more than the one board that was
       // initially linked (one board per discovered plans root). They belong to
       // the same project and must not fall through into the global Boards node.
       const linkedConnectionIds = new Set(project.linkedBoards.map(link => link.connectionId));
@@ -271,6 +276,7 @@ export function Sidebar({
           {newMenuOpen && <div className="new-menu" role="menu">
             {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
             {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span></button>}
+            {newProjectEnabled && onImportProjects && <button role="menuitem" data-testid="import-projects" onClick={() => { setNewMenuOpen(false); onImportProjects(); }}><Icon name="markdown" size={14} /><span><strong>Import plans folders</strong><small>Turn several folders of markdown plans into projects</small></span></button>}
             <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start an AI session in this workspace</small></span></button>
           </div>}
         </div>
@@ -400,6 +406,13 @@ export function Sidebar({
                               <span className="tree-label">{link.displayName}</span>
                               <span className="tree-badge">Linked</span>
                             </button>
+                            <button
+                              className="board-tree-configure"
+                              data-testid="board-configure-btn"
+                              aria-label={`Configure board ${board.name}`}
+                              title="Configure board"
+                              onClick={() => onConfigureBoard(board)}
+                            ><Icon name="gear" size={12} /></button>
                             {board.connectionId && <button
                               className="board-tree-delete"
                               data-testid="board-delete-btn"
@@ -439,7 +452,7 @@ export function Sidebar({
                                 <button className="project-document-group-toggle" aria-expanded={!groupCollapsed} data-testid="project-document-type-nav-item" onClick={() => setCollapsed(current => ({ ...current, [groupKey]: !groupCollapsed }))}>
                                   <span className="tree-section-icon"><Icon name={groupCollapsed ? 'chevron-right' : 'chevron-down'} size={10} /></span><span>{group.type}</span><span className="tree-meta">{group.documents.length}</span>
                                 </button>
-                                {!groupCollapsed && group.documents.map(document => <button className="tree-row project-document-row" key={document.relativePath} data-testid="project-document-nav-item" title={document.relativePath} onClick={() => onOpenProjectDocument(project, document)}><span className="tree-icon"><Icon name="markdown" size={13} /></span><span className="tree-label">{document.name}</span></button>)}
+                                {!groupCollapsed && group.documents.map(document => <button className="tree-row project-document-row" key={document.relativePath} data-testid="project-document-nav-item" title={document.relativePath} onClick={() => onOpenProjectDocument(project, document)}><span className="tree-icon"><Icon name="markdown" size={13} /></span><span className="tree-label">{document.name}</span>{document.status && <span className="status-dot" data-testid="project-document-status" style={{ background: statusTone(undefined, document.status) }} aria-label={`Status: ${documentStatusLabel(document.status)}`} title={documentStatusLabel(document.status)} />}</button>)}
                               </div>;
                             })}
                           </div>}
@@ -464,6 +477,7 @@ export function Sidebar({
                   {missing && <span className="board-availability-warning" data-testid="board-missing-icon" title="Board folder is missing"><Icon name="warning" size={14} /></span>}
                   {board.connectionId && !missing && <ConnectionStatusDot check={connectionChecks[board.connectionId]} />}
                 </button>
+                <button className="board-tree-configure" data-testid="board-configure-btn" aria-label={`Configure board ${board.name}`} title="Configure board" onClick={() => onConfigureBoard(board)}><Icon name="gear" size={12} /></button>
                 {canDelete && <button className="board-tree-delete" data-testid="board-delete-btn" aria-label={`${removeLabel} board ${board.name}`} title={board.type === 'plan' ? 'Delete this board' : 'Remove this board from Praxis'} onClick={() => onDeleteBoard(board)}><Icon name="trash" size={12} /></button>}
               </div>;
             })}</div>}
@@ -528,4 +542,8 @@ function formatDocumentType(type?: string): string {
   if (!value) return 'Other';
   if (value.toLowerCase() === 'other') return 'Other';
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() + (value.toLowerCase().endsWith('s') ? '' : 's');
+}
+
+function documentStatusLabel(status: string): string {
+  return status.replace(/[-_]+/g, ' ').trim().replace(/\b\w/g, character => character.toUpperCase());
 }

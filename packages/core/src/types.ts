@@ -1,11 +1,18 @@
 export type ConnectionType = 'stdio' | 'http';
+/**
+ * How a board's issues are stored and reached.
+ *
+ * `project` is not a configurable connection type — it is the mode a Project's
+ * own board reports, reached through the synthetic `project:<id>` connection id
+ * rather than anything in the connection store.
+ */
 export type BackendMode =
   | 'jiracloud'
   | 'demo'
   | 'github'
   | 'gitlab'
-  | 'livefolder'
-  | 'userworkspace';
+  | 'folder'
+  | 'project';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
 export type AiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli';
@@ -247,7 +254,7 @@ export interface CreateIssueInput {
   parentKey?: string;
   boardId?: string;
   /**
-   * livefolder/userworkspace only: when `parentKey` is absent and this is
+   * folder-backed only: when `parentKey` is absent and this is
    * non-empty, the service creates a Feature with this summary first, then
    * creates the requested item under it. Ignored by other backends.
    */
@@ -320,7 +327,7 @@ export interface PersistedBoardFilterState {
 
 /**
  * A named backend connection. Each connection is one configured backend
- * instance (e.g. one Jira server, one GitLab host, one Live Folder root).
+ * instance (e.g. one Jira server, one GitLab host, one folder connection).
  * `settings` is mode-specific; see ConnectionStore for the per-mode shape.
  */
 export interface Connection {

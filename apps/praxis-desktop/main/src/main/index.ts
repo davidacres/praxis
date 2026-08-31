@@ -4,8 +4,8 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
 import { registerBoardIpc } from './boardIpc';
 import { registerIssueIpc } from './issueIpc';
 import { registerConnectionIpc } from './connectionIpc';
-import { registerUserWorkspaceIpc } from './userWorkspaceIpc';
-import { registerLiveFolderIpc } from './liveFolderIpc';
+import { registerProjectImportIpc } from './projectImportIpc';
+import { registerFolderIpc } from './folderIpc';
 import { registerDialogIpc } from './dialogIpc';
 import { registerSettingsIpc } from './settingsIpc';
 import { registerLogIpc } from './logIpc';
@@ -239,8 +239,8 @@ void app.whenReady().then(async () => {
   registerBoardIpc();
   registerIssueIpc();
   registerConnectionIpc();
-  registerUserWorkspaceIpc();
-  registerLiveFolderIpc();
+  registerProjectImportIpc();
+  registerFolderIpc();
   registerDialogIpc();
   registerWindowIpc();
   registerSettingsIpc();
@@ -288,7 +288,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Close any live-folder/user-workspace file watchers before the process
+// Close any folder/user-workspace file watchers before the process
 // exits — an open chokidar watcher otherwise keeps the event loop alive and
 // hangs a graceful quit (see disposeAllServices' doc comment).
 app.on('before-quit', () => {

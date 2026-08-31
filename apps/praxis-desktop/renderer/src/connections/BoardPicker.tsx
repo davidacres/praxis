@@ -13,7 +13,7 @@ export interface BoardPickerProps {
  * Checkbox list of the boards a connection's backend reports, preselected from
  * the tracked-boards store. Saving writes the add/remove diff. Used for modes
  * with genuinely discoverable remote boards (jiracloud/gitlab); demo and
- * livefolder synthesize their single board instead (see connectionPolicy).
+ * folder connections synthesize their single board instead (see connectionPolicy).
  */
 export function BoardPicker({ connection, onDone }: BoardPickerProps) {
   const [loading, setLoading] = useState(true);

@@ -20,8 +20,8 @@ import type {
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
 import type { ActivatedSkill, AgentRuntimeSnapshot } from '../ai/agentRuntime';
-import type { IdentifiedPlanFolder } from '../livefolder/markdownPlanParser';
-import type { BoardDraftRow } from '../userWorkspace/boardDraftPlanner';
+import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
+import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
 import type {
   AgentSessionRecord,
@@ -95,7 +95,7 @@ export interface IssueIpc {
   /** Tracker-specific label for the authenticated user, used by "Assign to me". */
   getSelfAssigneeLabel(connectionId?: string): Promise<string | undefined>;
   getProjects(connectionId?: string): Promise<Project[]>;
-  /** Candidate parents for the create/edit form (Features for livefolder, Epics for Jira, …). */
+  /** Candidate parents for the create/edit form (Features for folder connections, Epics for Jira, …). */
   getParentItems(
     filters: IssueFilters,
     searchText?: string,
@@ -133,31 +133,11 @@ export interface ConnectionIpc {
 }
 
 /**
- * User Workspace slice: the board-creation wizard plus board lifecycle. Board
- * definitions live in a global store (`userWorkspace.json` on desktop,
- * `context.globalState` in the extension), so these take the connection id only
- * to route to the right backend — the store itself is shared.
- */
-export interface UserWorkspaceIpc {
-  /**
-   * Discovers board candidates under a picked folder — step 2 of the
-   * create-board wizard. Merges two scans (plan folders and Git repository
-   * roots) the same way the VS Code extension's "Find repositories" does,
-   * so a brand-new repo with no plans content yet still surfaces a row.
-   */
-  discoverBoardDrafts(connectionId: string, folderPath: string): Promise<BoardDraftRow[]>;
-  /** Re-validates edited draft rows (unique/well-formed project keys) before creation. */
-  validateBoardDrafts(connectionId: string, rows: BoardDraftRow[]): Promise<string | undefined>;
-  createBoard(connectionId: string, input: CreateBoardInput): Promise<Board>;
-  deleteBoard(connectionId: string, boardId: string): Promise<void>;
-}
-
-/**
- * Live Folder slice. A live-folder connection whose configured folder contains
+ * Folder slice. A folder connection whose configured folder contains
  * several plans roots exposes one board per root; this lets the renderer show
  * the discovery result without loading a board.
  */
-export interface LiveFolderIpc {
+export interface FolderIpc {
   /** All plans roots under the connection's configured folder (multi-board discovery). */
   discoverPlans(connectionId: string): Promise<IdentifiedPlanFolder[]>;
 }
@@ -310,6 +290,18 @@ export interface ProjectsIpc {
   unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord>;
   listDocuments(projectId: string): Promise<ProjectDocumentsResult>;
   readDocument(projectId: string, relativePath: string): Promise<ProjectDocument>;
+
+  /**
+   * Scans a picked parent folder for plans folders to import as projects —
+   * step 1 of the import wizard. Merges two scans (plans roots and Git
+   * repository roots); a repository with no discoverable plans is skipped
+   * rather than guessed at.
+   */
+  discoverImports(folderPath: string): Promise<ProjectImportRow[]>;
+  /** Re-validates edited rows (unique, well-formed project keys) before creation. */
+  validateImports(rows: ProjectImportRow[]): Promise<string | undefined>;
+  /** Creates a folder-backed project per selected row and adds them to the workspace. */
+  createFromImports(rows: ProjectImportRow[], workspaceId: string): Promise<ProjectRecord[]>;
 }
 
 /** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
@@ -565,8 +557,7 @@ export interface PraxisIpc {
   board: BoardIpc;
   issue: IssueIpc;
   connection: ConnectionIpc;
-  userWorkspace: UserWorkspaceIpc;
-  liveFolder: LiveFolderIpc;
+  folder: FolderIpc;
   window: WindowIpc;
   settings: SettingsIpc;
   log: LogIpc;

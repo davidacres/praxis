@@ -15,9 +15,21 @@ import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 let app: TestApp;
 let window: Page;
 
+/**
+ * Idempotent: the titlebar button *toggles* Settings, so clicking it when the
+ * dialog is already open would close it. The Appearance group's children only
+ * exist in the DOM while the group is expanded.
+ */
 async function openLooks(): Promise<void> {
-  await window.locator('[data-testid="titlebar-themes"]').click();
-  await window.locator('[data-testid="settings-nav-appearance-looks"]').click();
+  const group = window.locator('[data-testid="settings-nav-appearance-group"]');
+  const looks = window.locator('[data-testid="settings-nav-appearance-looks"]');
+  if (!(await group.isVisible())) {
+    await window.locator('[data-testid="titlebar-settings"]').click();
+  }
+  if (!(await looks.isVisible())) {
+    await group.click();
+  }
+  await looks.click();
   await expect(window.locator('[data-testid="looks-strip"]')).toBeVisible();
 }
 

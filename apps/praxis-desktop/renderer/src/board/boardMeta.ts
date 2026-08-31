@@ -29,9 +29,8 @@ const BOARD_TYPE_LABELS: Record<BoardTypeToken, string> = {
 };
 
 /**
- * Collapses the open `Board.type` string onto the tokens we render. Mirrors
- * `boardTypeToken` in the extension's classic sidebar, extended with the
- * `plan` bucket the Live Folder backend emits.
+ * Collapses the open `Board.type` string onto the tokens we render, including
+ * the `plan` bucket the folder backend emits.
  */
 export function boardTypeToken(board: Pick<Board, 'type' | 'id'>): BoardTypeToken {
   const normalized = board.type?.trim().toLowerCase();
@@ -52,7 +51,7 @@ export function boardTypeToken(board: Pick<Board, 'type' | 'id'>): BoardTypeToke
   if (board.id?.startsWith('jql:') || board.id?.startsWith('jql-custom:')) {
     return 'jql';
   }
-  if (board.id?.startsWith('livefolder-')) {
+  if (board.id?.startsWith('folder-')) {
     return 'plan';
   }
   return 'board';
@@ -78,12 +77,33 @@ export const BACKEND_MODE_META: Record<BackendMode, BackendModeMeta> = {
   demo: { label: 'Demo', icon: 'dot', tone: 'var(--tone-demo)' },
   github: { label: 'GitHub', icon: 'git-branch', tone: 'var(--tone-github)' },
   gitlab: { label: 'GitLab', icon: 'git-branch', tone: 'var(--tone-gitlab)' },
-  livefolder: { label: 'Live Folder', icon: 'folder', tone: 'var(--tone-livefolder)' },
-  userworkspace: { label: 'User Workspace', icon: 'folder-open', tone: 'var(--tone-workspace)' }
+  folder: { label: 'Folder', icon: 'folder', tone: 'var(--tone-folder)' },
+  project: { label: 'Project', icon: 'target', tone: 'var(--tone-workspace)' }
 };
 
 export function backendModeMeta(mode: BackendMode | undefined): BackendModeMeta {
   return mode ? BACKEND_MODE_META[mode] : BACKEND_MODE_META.demo;
+}
+
+/** Connection-id prefix for a project's synthetic connection (`projectConnectionId` in core). */
+export const PROJECT_CONNECTION_PREFIX = 'project:';
+
+/**
+ * The backend mode behind a board's `connectionId`.
+ *
+ * A project's board is reached through the synthetic `project:<id>` id, which
+ * has no row in the connection store — looking it up there yields `undefined`
+ * and used to fall back to `demo`, so project boards were driven by demo's
+ * field rules. Resolve the prefix first.
+ */
+export function resolveBackendMode(
+  connectionId: string | undefined,
+  connections: ReadonlyArray<{ id: string; mode: BackendMode }>
+): BackendMode {
+  if (connectionId?.startsWith(PROJECT_CONNECTION_PREFIX)) {
+    return 'project';
+  }
+  return connections.find(connection => connection.id === connectionId)?.mode ?? 'demo';
 }
 
 /** Maps a Jira-style status category onto a tone for column dots and badges. */

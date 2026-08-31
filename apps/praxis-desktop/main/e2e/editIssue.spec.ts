@@ -7,14 +7,14 @@ import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let window: Page;
-let liveFolderDir: string;
+let plansDir: string;
 
 /**
  * One feature with one task. The task carries a `**Priority:**` line so the
  * edit save can replace it via the live folder backend; newIssue.spec.ts
  * shows the same fixture shape.
  */
-function writeFixtureLiveFolder(root: string): void {
+function writeFixturePlansFolder(root: string): void {
   const featureDir = path.join(root, 'features', 'feature-01-demo-feature');
   fs.mkdirSync(featureDir, { recursive: true });
   fs.writeFileSync(
@@ -51,17 +51,17 @@ function writeFixtureLiveFolder(root: string): void {
 }
 
 async function launchWithEditFixture(): Promise<void> {
-  liveFolderDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-edit-'));
-  writeFixtureLiveFolder(liveFolderDir);
+  plansDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-edit-'));
+  writeFixturePlansFolder(plansDir);
 
   app = await launchTestApp({
     connections: [
       {
         id: 'e2e-edit',
         name: 'e2e-edit',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: {
-          path: liveFolderDir,
+          path: plansDir,
           projectKey: 'EDIT',
           projectName: 'Edit E2E',
           allowIssueCreation: true
@@ -77,9 +77,9 @@ test.afterEach(async () => {
     await closeTestApp(app);
     app = undefined;
   }
-  if (liveFolderDir) {
-    fs.rmSync(liveFolderDir, { recursive: true, force: true });
-    liveFolderDir = '';
+  if (plansDir) {
+    fs.rmSync(plansDir, { recursive: true, force: true });
+    plansDir = '';
   }
 });
 
@@ -99,7 +99,7 @@ test('editing a live folder issue writes the priority back to markdown', async (
   await window.locator('[data-testid="issue-edit-priority"]').selectOption('High');
 
   const taskPath = path.join(
-    liveFolderDir,
+    plansDir,
     'features',
     'feature-01-demo-feature',
     'task-01-01-edit-me-task.md'

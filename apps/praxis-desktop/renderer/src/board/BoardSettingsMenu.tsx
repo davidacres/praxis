@@ -30,6 +30,8 @@ export interface BoardSettingsMenuProps {
   /** The backend's canonical order; an order matching it is stored as "no custom order". */
   baseStatusOrder: string[];
   issueTypeOptions: string[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function BoardSettingsMenu({
@@ -37,13 +39,15 @@ export function BoardSettingsMenu({
   onChange,
   statusOrder,
   baseStatusOrder,
-  issueTypeOptions
+  issueTypeOptions,
+  open = false,
+  onOpenChange
 }: BoardSettingsMenuProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (!(open || internalOpen)) {
       return;
     }
     const onDocumentClick = (event: MouseEvent) => {
@@ -53,7 +57,13 @@ export function BoardSettingsMenu({
     };
     document.addEventListener('mousedown', onDocumentClick);
     return () => document.removeEventListener('mousedown', onDocumentClick);
-  }, [open]);
+  }, [open, internalOpen]);
+
+  const isOpen = open || internalOpen;
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next);
+    onOpenChange?.(next);
+  };
 
   const isCustomVisible = prefs.workflowStatuses.length > 0;
   const isVisible = (status: string) => !isCustomVisible || prefs.workflowStatuses.includes(status);
@@ -139,12 +149,12 @@ export function BoardSettingsMenu({
         data-testid="board-settings-btn"
         title="Board settings"
         aria-label="Board settings"
-        aria-expanded={open}
-        onClick={() => setOpen(current => !current)}
+        aria-expanded={isOpen}
+        onClick={() => setOpen(!isOpen)}
       >
         <Icon name="gear" size={14} />
       </button>
-      {open && (
+      {isOpen && (
         <div className="filter-menu-pop board-prefs-menu" data-testid="board-settings-menu">
           <div className="board-prefs-section">
             <div className="board-prefs-heading">Layout</div>

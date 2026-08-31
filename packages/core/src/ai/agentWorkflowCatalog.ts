@@ -5,10 +5,8 @@ import type { AgentWorkflowReference } from './agentTypes';
 
 /**
  * Workflow-pack catalog: discovery, parsing and issue→pack matching.
- * Host-agnostic (moved from the extension in Phase F); the interactive picker
- * stays in each host's UI layer — the extension's `showQuickPick` wrapper lives
- * in `vscode-extension/src/ai/agentWorkflowCatalog.ts`, the desktop renders a
- * React modal over `discoverWorkspaceAgentWorkflows`.
+ * The interactive picker stays in the UI layer — the desktop renders a React
+ * modal over `discoverWorkspaceAgentWorkflows`.
  */
 
 interface ParsedWorkflowMetadata {

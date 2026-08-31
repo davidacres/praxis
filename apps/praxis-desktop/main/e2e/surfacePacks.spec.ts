@@ -20,10 +20,24 @@ test.afterEach(async () => {
   await closeTestApp(app);
 });
 
+/**
+ * Navigate to Settings → Appearance → Surfaces from wherever the app is.
+ *
+ * Must be idempotent: several tests call it again after visiting another node,
+ * and the titlebar button *toggles* Settings, so clicking it blindly would
+ * close an already-open dialog. The Appearance group's children only exist in
+ * the DOM while it is expanded, hence the separate expand step.
+ */
 async function openSurface(): Promise<void> {
-  await window.locator('[data-testid="titlebar-themes"]').click();
-  // Surfaces is now its own node under Settings → Appearance.
-  await window.locator('[data-testid="settings-nav-appearance-surfaces"]').click();
+  const group = window.locator('[data-testid="settings-nav-appearance-group"]');
+  const surfaces = window.locator('[data-testid="settings-nav-appearance-surfaces"]');
+  if (!(await group.isVisible())) {
+    await window.locator('[data-testid="titlebar-settings"]').click();
+  }
+  if (!(await surfaces.isVisible())) {
+    await group.click();
+  }
+  await surfaces.click();
   await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
   await expect(window.locator('[data-testid="surface-section"]')).toBeVisible();
 }
@@ -85,7 +99,10 @@ test('the watermark is tinted from the live theme and re-bakes when the palette 
   const praxisInk = await inkOf();
   expect(praxisInk.toLowerCase()).toBe('#c6431f');
 
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-github-dark"]').click();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'github-dark');
   await expect.poll(inkOf).not.toBe(praxisInk);
@@ -233,7 +250,10 @@ test('motif strength is normalised so one value reads the same on every palette'
   expect(praxis).toBeGreaterThan(0.25);
   expect(praxis).toBeLessThanOrEqual(0.32);
 
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   for (const theme of ['catppuccin-mocha', 'github-light', 'nord-dark']) {
     await window.locator(`[data-testid="theme-card-${theme}"]`).click();
     await expect(window.locator('html')).toHaveAttribute('data-theme', theme);

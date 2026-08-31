@@ -10,7 +10,6 @@ import type {
   AppSettingsPatch,
   Board,
   BoardColumnPreferences,
-  BoardDraftRow,
   BoardFilters,
   BrowserNavigationState,
   Connection,
@@ -29,7 +28,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
-import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, UpdateProjectInput } from '@praxis/core';
+import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 
 const praxis: PraxisIpc = {
@@ -88,19 +87,9 @@ const praxis: PraxisIpc = {
     hasSecret: (connectionId: string, name: string) =>
       ipcRenderer.invoke('connection:hasSecret', connectionId, name)
   },
-  userWorkspace: {
-    discoverBoardDrafts: (connectionId: string, folderPath: string) =>
-      ipcRenderer.invoke('userWorkspace:discoverBoardDrafts', connectionId, folderPath),
-    validateBoardDrafts: (connectionId: string, rows: BoardDraftRow[]) =>
-      ipcRenderer.invoke('userWorkspace:validateBoardDrafts', connectionId, rows),
-    createBoard: (connectionId: string, input: CreateBoardInput) =>
-      ipcRenderer.invoke('userWorkspace:createBoard', connectionId, input),
-    deleteBoard: (connectionId: string, boardId: string) =>
-      ipcRenderer.invoke('userWorkspace:deleteBoard', connectionId, boardId)
-  },
-  liveFolder: {
+  folder: {
     discoverPlans: (connectionId: string) =>
-      ipcRenderer.invoke('liveFolder:discoverPlans', connectionId)
+      ipcRenderer.invoke('folder:discoverPlans', connectionId)
   },
   window: {
     reload: () => ipcRenderer.invoke('window:reload'),
@@ -279,6 +268,9 @@ const praxis: PraxisIpc = {
     unlinkBoard: (projectId: string, connectionId: string, boardId: string) => ipcRenderer.invoke('projects:unlinkBoard', projectId, connectionId, boardId)
     ,listDocuments: (projectId: string) => ipcRenderer.invoke('projects:listDocuments', projectId)
     ,readDocument: (projectId: string, relativePath: string) => ipcRenderer.invoke('projects:readDocument', projectId, relativePath)
+    ,discoverImports: (folderPath: string) => ipcRenderer.invoke('projects:discoverImports', folderPath)
+    ,validateImports: (rows: ProjectImportRow[]) => ipcRenderer.invoke('projects:validateImports', rows)
+    ,createFromImports: (rows: ProjectImportRow[], workspaceId: string) => ipcRenderer.invoke('projects:createFromImports', rows, workspaceId)
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),
