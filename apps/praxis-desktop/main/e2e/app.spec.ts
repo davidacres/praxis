@@ -30,6 +30,23 @@ test('groups all layout toggles on the right side of the title bar', async () =>
   await expect(window.locator('.pane-sidebar')).toHaveCount(0);
 });
 
+test('remembers which panels are open across a relaunch', async () => {
+  const toggles = window.locator('.titlebar-layout-toggles');
+  await expect(window.locator('.pane-sidebar')).toBeVisible();
+
+  // Collapse the sidebar and open the bottom panel.
+  await toggles.getByRole('button', { name: 'Toggle sidebar' }).click();
+  await toggles.getByRole('button', { name: 'Toggle panel' }).click();
+  await expect(window.locator('.pane-sidebar')).toHaveCount(0);
+  await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
+
+  await window.reload();
+  await window.locator('[data-testid="startup-splash"]').waitFor({ state: 'detached' }).catch(() => undefined);
+
+  await expect(window.locator('.pane-sidebar')).toHaveCount(0);
+  await expect(window.locator('[data-testid="bottom-panel"]')).toBeVisible();
+});
+
 test('displays the running Praxis version in the title bar', async () => {
   const version = await window.evaluate(() => window.praxis.app.getVersion());
   expect(version).toMatch(/^\d+\.\d+\.\d+$/);

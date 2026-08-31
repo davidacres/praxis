@@ -94,6 +94,25 @@ const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
 
+/** Persisted show/hide state for the shell panes — matches the `tm-pane-*`
+ *  width keys `useResizable` writes. */
+function readPaneVisible(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : raw === '1';
+  } catch {
+    return fallback;
+  }
+}
+
+function writePaneVisible(key: string, visible: boolean): void {
+  try {
+    localStorage.setItem(key, visible ? '1' : '0');
+  } catch {
+    // Private mode / storage disabled — the preference just won't persist.
+  }
+}
+
 function restorableBrowserUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.length > 2048) return false;
   try {
@@ -241,10 +260,14 @@ export function App() {
   const [mode, setMode] = useState<SidebarMode>(
     () => (localStorage.getItem('tm-sidebar-mode') as SidebarMode | null) ?? 'classic'
   );
-  const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [auxVisible, setAuxVisible] = useState(true);
-  const [panelVisible, setPanelVisible] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(() => readPaneVisible('tm-pane-sidebar-visible', true));
+  const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
+  const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
   const [detailExpanded, setDetailExpanded] = useState(false);
+
+  useEffect(() => writePaneVisible('tm-pane-sidebar-visible', sidebarVisible), [sidebarVisible]);
+  useEffect(() => writePaneVisible('tm-pane-aux-visible', auxVisible), [auxVisible]);
+  useEffect(() => writePaneVisible('tm-pane-panel-visible', panelVisible), [panelVisible]);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
