@@ -2,11 +2,9 @@ import type { Event, Disposable } from './emitter';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
 
 /**
- * Host-agnostic settings store. The Electron desktop app and the VS Code
- * extension share a single JSON file at the path returned by
- * `resolveSharedSettingsPath` and each host implements this interface over
- * its preferred I/O primitives (`fs.watch` on Electron, `vscode.workspace.fs`
- * + `createFileSystemWatcher` in VS Code).
+ * Settings store over a single JSON file at the path returned by
+ * `resolveSharedSettingsPath`. The Electron adapter implements it with
+ * `node:fs` + `fs.watch`.
  *
  * Implementations read eagerly at construction so the initial `read()` call is
  * synchronous and cheap; `write` is async because fs persistence is.

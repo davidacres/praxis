@@ -2,14 +2,10 @@ import * as path from 'node:path';
 import chokidar from 'chokidar';
 
 /**
- * Watches a live-folder plans root for markdown changes.
- *
- * Split from the parser/writer port because it is a different host capability:
- * the Electron app watches local disk with `chokidar`, while the VS Code
- * extension uses `vscode.workspace.createFileSystemWatcher` so notifications
- * arrive even when the workspace is remote. `LiveFolderService` owns the
- * debounce and self-write suppression; an implementation here only has to
- * deliver "an `.md` file under `rootPath` changed", by absolute path.
+ * Watches a live-folder plans root for markdown changes. `LiveFolderService`
+ * owns the debounce and self-write suppression; this only has to deliver "an
+ * `.md` file under `rootPath` changed", by absolute path. Backed by `chokidar`;
+ * core tests use the same implementation.
  */
 export interface LiveFolderWatcher {
   /** Stop watching and release resources. */
@@ -22,8 +18,7 @@ export type LiveFolderWatch = (
   onChange: (absolutePath: string) => void
 ) => LiveFolderWatcher;
 
-/** The default `chokidar` implementation — what the Electron app and core tests use. */
-export const nodeLiveFolderWatch: LiveFolderWatch = (rootPath, onChange) => {
+const nodeLiveFolderWatch: LiveFolderWatch = (rootPath, onChange) => {
   const watcher = chokidar.watch('**/*.md', {
     cwd: rootPath,
     ignoreInitial: true,
@@ -38,17 +33,7 @@ export const nodeLiveFolderWatch: LiveFolderWatch = (rootPath, onChange) => {
   };
 };
 
-let activeWatch: LiveFolderWatch = nodeLiveFolderWatch;
-
-/**
- * Replace the watch implementation the live-folder module uses. Call once at
- * host startup; `undefined` restores the `chokidar` default.
- */
-export function setLiveFolderWatch(next: LiveFolderWatch | undefined): void {
-  activeWatch = next ?? nodeLiveFolderWatch;
-}
-
-/** The watch implementation the live-folder module should use. */
+/** The watch implementation the live-folder module uses. */
 export function liveFolderWatch(): LiveFolderWatch {
-  return activeWatch;
+  return nodeLiveFolderWatch;
 }

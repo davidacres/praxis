@@ -65,9 +65,7 @@ export * from './git/gitGraph';
 export * from './git/gitParsing';
 export * from './git/gitWorktreeManager';
 
-// Host-agnostic helpers both UI surfaces use. These existed as byte-identical
-// copies inside the VS Code extension until those copies were deleted; they are
-// exported here so the extension and the desktop app share one definition.
+// Board/issue helpers used by both the main process and the renderer.
 export * from './board/boardIssueFilters';
 export * from './board/boardTransitionResolver';
 export * from './board/issueTypeColors';
