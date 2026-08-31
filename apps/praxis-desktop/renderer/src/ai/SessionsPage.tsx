@@ -33,6 +33,7 @@ export interface SessionsPageProps {
   initialBrowserUrl?: string;
   onBrowserOpenChange?: (open: boolean) => void;
   onBrowserUrlChange?: (url: string) => void;
+  browserSuspended?: boolean;
 }
 
 /** Which edge the session list docks to, and whether it's tucked away — a
@@ -172,7 +173,8 @@ export function SessionsPage({
   initialBrowserOpen,
   initialBrowserUrl,
   onBrowserOpenChange,
-  onBrowserUrlChange
+  onBrowserUrlChange,
+  browserSuspended
 }: SessionsPageProps) {
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
@@ -1049,6 +1051,7 @@ export function SessionsPage({
                 <BrowserPane
                   initialUrl={initialBrowserUrl}
                   onNavigate={onBrowserUrlChange}
+                  suspended={browserSuspended}
                   onClose={() => setBrowserVisibility(false)}
                 />
               </div>
