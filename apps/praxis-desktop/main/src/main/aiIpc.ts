@@ -540,6 +540,12 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:abort', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {
     await abortActiveTask(issueKey);
+    // Also settle a "ghost" session — one left non-terminal by a crash/restart
+    // with no task behind it, so Abort still gets the user out of it.
+    const record = sessionManager.getAgentSession(issueKey);
+    if (record && !hasActiveTask(issueKey) && !['completed', 'failed', 'aborted'].includes(record.state)) {
+      sessionManager.updateAgentState(issueKey, 'aborted');
+    }
   });
 
   ipcMain.handle('ai:removeWorktree', async (_event: Electron.IpcMainInvokeEvent, issueKey: string) => {

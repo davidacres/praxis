@@ -364,15 +364,29 @@ export function App() {
     setNav(current => {
       const currentRoute = current.entries[current.index];
       if (currentRoute.feature !== 'sessions') return current;
+      const nextOpen = patch.browserOpen ?? currentRoute.browserOpen;
+      const nextUrl = patch.browserUrl ?? currentRoute.browserUrl;
+      // No-op when nothing actually changed — otherwise the BrowserPane's
+      // onDidNavigate → route update → re-render can loop.
+      if (nextOpen === currentRoute.browserOpen && nextUrl === currentRoute.browserUrl) {
+        return current;
+      }
       const entries = [...current.entries];
-      entries[current.index] = {
-        ...currentRoute,
-        ...(patch.browserOpen !== undefined ? { browserOpen: patch.browserOpen } : {}),
-        ...(patch.browserUrl !== undefined ? { browserUrl: patch.browserUrl } : {})
-      };
+      entries[current.index] = { ...currentRoute, browserOpen: nextOpen, browserUrl: nextUrl };
       return { ...current, entries };
     });
   }, []);
+
+  const handleBrowserOpenChange = useCallback(
+    (browserOpen: boolean) => updateSessionBrowserRoute({ browserOpen }),
+    [updateSessionBrowserRoute]
+  );
+  const handleBrowserUrlChange = useCallback(
+    (browserUrl: string) => {
+      if (restorableBrowserUrl(browserUrl)) updateSessionBrowserRoute({ browserUrl });
+    },
+    [updateSessionBrowserRoute]
+  );
 
   const handleFilterPresentationChange = useCallback(
     (boardId: string, value: BoardFilterPresentation) => {
@@ -930,10 +944,8 @@ export function App() {
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
           initialBrowserOpen={route.browserOpen}
           initialBrowserUrl={route.browserUrl}
-          onBrowserOpenChange={browserOpen => updateSessionBrowserRoute({ browserOpen })}
-          onBrowserUrlChange={browserUrl => {
-            if (restorableBrowserUrl(browserUrl)) updateSessionBrowserRoute({ browserUrl });
-          }}
+          onBrowserOpenChange={handleBrowserOpenChange}
+          onBrowserUrlChange={handleBrowserUrlChange}
         />
       );
     }
