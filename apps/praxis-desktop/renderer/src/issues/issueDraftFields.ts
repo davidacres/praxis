@@ -6,7 +6,7 @@ import type { BackendMode } from '@praxis/core';
  * The parent-rule logic here mirrors core's `issues/issueHierarchy.ts`
  * (`getParentRule`). The frontend deliberately imports only *types* from
  * `@praxis/core` — a runtime import would drag node-only services
- * (chokidar/fs via liveFolderService) into the renderer bundle — so the small
+ * (chokidar/fs via folderService) into the renderer bundle — so the small
  * slice of hierarchy rules the form needs is duplicated here. The backend
  * stays the enforcer; these rules only decide which fields render, whether
  * the parent is required, and the helper text shown under the picker.
@@ -26,7 +26,7 @@ export function getCreatableTypes(mode: BackendMode): string[] {
   if (mode === 'jiracloud') {
     return ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
   }
-  if (mode === 'livefolder' || mode === 'userworkspace') {
+  if (mode === 'folder' || mode === 'userworkspace') {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   return ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
@@ -40,12 +40,12 @@ export function isIdeaDraftType(issueType: string | undefined): boolean {
 export interface DraftParentRule {
   canHaveParent: boolean;
   requiresParent: boolean;
-  /** Field label ("Feature" for live folder children, "Epic" for Jira, …). */
+  /** Field label ("Feature" for folder children, "Epic" for Jira, …). */
   label: string;
   helperText: string;
   placeholder: string;
   /**
-   * livefolder/userworkspace semantics: a parent value that matches no
+   * folder/userworkspace semantics: a parent value that matches no
    * existing item means "create a new Feature with this summary"
    * (`newParentSummary`). Other backends reject unknown parents.
    */
@@ -87,7 +87,7 @@ export function getDraftParentRule(
     };
   }
 
-  if (mode === 'livefolder' || mode === 'userworkspace') {
+  if (mode === 'folder' || mode === 'userworkspace') {
     return {
       canHaveParent: true,
       requiresParent: true,

@@ -1,10 +1,10 @@
 import * as path from 'node:path';
-import { liveFolderFs } from './liveFolderFs';
+import { folderFs } from './folderFs';
 
 /**
  * Optional per-plans-root board settings, stored as `board.praxis.json` in the
  * plans root (next to `master-plan.md` / `features/`). When present these values
- * win over the Live Folder connection's settings, so a board's identity travels
+ * win over the folder connection's settings, so a board's identity travels
  * with its folder instead of living only in the app's `settings.json`.
  *
  * Every field is optional; a missing or malformed file is treated as "no
@@ -29,7 +29,7 @@ function readString(value: unknown): string | undefined {
 export async function readBoardConfigFile(plansRootPath: string): Promise<BoardConfigFile> {
   let raw: string;
   try {
-    raw = await liveFolderFs().readFile(path.join(plansRootPath, BOARD_CONFIG_FILENAME));
+    raw = await folderFs().readFile(path.join(plansRootPath, BOARD_CONFIG_FILENAME));
   } catch {
     return {};
   }
@@ -65,7 +65,7 @@ export async function writeBoardConfigFile(
   if (typeof config.allowIssueCreation === 'boolean') {
     body.allowIssueCreation = config.allowIssueCreation;
   }
-  await liveFolderFs().writeFile(
+  await folderFs().writeFile(
     path.join(plansRootPath, BOARD_CONFIG_FILENAME),
     `${JSON.stringify(body, null, 2)}\n`
   );

@@ -12,7 +12,7 @@ const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'demo',
   'github',
   'gitlab',
-  'livefolder',
+  'folder',
   'userworkspace'
 ]);
 

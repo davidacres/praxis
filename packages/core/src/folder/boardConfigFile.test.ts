@@ -8,7 +8,7 @@ import {
   readBoardConfigFile,
   writeBoardConfigFile
 } from './boardConfigFile';
-import { LiveFolderService, type LiveFolderConfigProvider } from './liveFolderService';
+import { FolderService, type FolderConfigProvider } from './folderService';
 
 async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-boardcfg-'));
@@ -53,23 +53,23 @@ test('writeBoardConfigFile round-trips and omits empty fields', async () => {
   });
 });
 
-function stubConfig(dir: string, overrides: Partial<Record<string, unknown>> = {}): LiveFolderConfigProvider {
+function stubConfig(dir: string, overrides: Partial<Record<string, unknown>> = {}): FolderConfigProvider {
   return {
     getDefaultPageSize: () => 25,
-    getLiveFolderPath: () => dir,
-    getLiveFolderProjectKey: () => (overrides.projectKey as string) ?? 'CONN',
-    getLiveFolderProjectName: () => (overrides.projectName as string) ?? 'Connection Board',
-    getLiveFolderAllowIssueCreation: () => (overrides.allowIssueCreation as boolean) ?? false,
+    getFolderRoots: () => [dir],
+    getFolderProjectKey: () => (overrides.projectKey as string) ?? 'CONN',
+    getFolderProjectName: () => (overrides.projectName as string) ?? 'Connection Board',
+    getFolderAllowIssueCreation: () => (overrides.allowIssueCreation as boolean) ?? false,
     getAiDefaultModel: () => ''
   };
 }
 
-test('LiveFolderService: board.praxis.json overrides the connection project identity', async () => {
+test('FolderService: board.praxis.json overrides the connection project identity', async () => {
   await withTempDir(async dir => {
     await fs.mkdir(path.join(dir, 'features'));
     await writeBoardConfigFile(dir, { projectKey: 'FOLDER', projectName: 'Folder Board', allowIssueCreation: true });
 
-    const service = new LiveFolderService(stubConfig(dir));
+    const service = new FolderService(stubConfig(dir));
     const projects = await service.getProjects();
     assert.equal(projects[0]?.key, 'FOLDER');
     assert.equal(projects[0]?.name, 'Folder Board');
@@ -82,10 +82,10 @@ test('LiveFolderService: board.praxis.json overrides the connection project iden
   });
 });
 
-test('LiveFolderService: falls back to connection settings when no board.praxis.json', async () => {
+test('FolderService: falls back to connection settings when no board.praxis.json', async () => {
   await withTempDir(async dir => {
     await fs.mkdir(path.join(dir, 'features'));
-    const service = new LiveFolderService(stubConfig(dir));
+    const service = new FolderService(stubConfig(dir));
     const projects = await service.getProjects();
     assert.equal(projects[0]?.key, 'CONN');
     assert.equal(projects[0]?.name, 'Connection Board');
@@ -93,10 +93,10 @@ test('LiveFolderService: falls back to connection settings when no board.praxis.
   });
 });
 
-test('LiveFolderService.syncBoardConfigToFolder writes identity only by default', async () => {
+test('FolderService.syncBoardConfigToFolder writes identity only by default', async () => {
   await withTempDir(async dir => {
     await fs.mkdir(path.join(dir, 'features'));
-    const service = new LiveFolderService(
+    const service = new FolderService(
       stubConfig(dir, { projectKey: 'WEB', projectName: 'Web App', allowIssueCreation: true })
     );
     await service.syncBoardConfigToFolder();
@@ -110,10 +110,10 @@ test('LiveFolderService.syncBoardConfigToFolder writes identity only by default'
   });
 });
 
-test('LiveFolderService.syncBoardConfigToFolder includes allowIssueCreation when asked', async () => {
+test('FolderService.syncBoardConfigToFolder includes allowIssueCreation when asked', async () => {
   await withTempDir(async dir => {
     await fs.mkdir(path.join(dir, 'features'));
-    const service = new LiveFolderService(
+    const service = new FolderService(
       stubConfig(dir, { projectKey: 'WEB', projectName: 'Web App', allowIssueCreation: true })
     );
     await service.syncBoardConfigToFolder({ includeAllowIssueCreation: true });
@@ -126,7 +126,7 @@ test('LiveFolderService.syncBoardConfigToFolder includes allowIssueCreation when
   });
 });
 
-test('LiveFolderService: a secondary root names its board from its own board.praxis.json', async () => {
+test('FolderService: a secondary root names its board from its own board.praxis.json', async () => {
   await withTempDir(async parent => {
     // Two nested plans roots, each an empty features/ dir.
     const rootA = path.join(parent, 'repo-a');
@@ -135,7 +135,7 @@ test('LiveFolderService: a secondary root names its board from its own board.pra
     await fs.mkdir(path.join(rootB, 'features'), { recursive: true });
     await writeBoardConfigFile(rootB, { projectName: 'Repo B Nice Name' });
 
-    const service = new LiveFolderService(stubConfig(parent));
+    const service = new FolderService(stubConfig(parent));
     const boards = await service.getBoards({ projectKeys: [], types: [], searchText: '' });
     // The primary board plus one per discovered secondary root.
     assert.ok(boards.length >= 2, `expected >= 2 boards, got ${boards.length}`);
@@ -147,10 +147,52 @@ test('LiveFolderService: a secondary root names its board from its own board.pra
   });
 });
 
-test('LiveFolderService.syncBoardConfigToFolder rejects (and writes nothing) for an unreadable folder', async () => {
+test('FolderService: a secondary root uses its own projectKey, not the connection default', async () => {
+  await withTempDir(async parent => {
+    const rootA = path.join(parent, 'repo-a');
+    const rootB = path.join(parent, 'repo-b');
+    await fs.mkdir(path.join(rootA, 'features'), { recursive: true });
+    await fs.mkdir(path.join(rootB, 'features'), { recursive: true });
+    await writeBoardConfigFile(rootB, { projectKey: 'BEE', projectName: 'Repo B' });
+
+    const service = new FolderService(stubConfig(parent));
+    const boards = await service.getBoards({ projectKeys: [], types: [], searchText: '' });
+    const repoB = boards.find(board => board.locationName === rootB);
+    assert.ok(repoB, `no board for repo-b: ${boards.map(b => b.locationName).join(', ')}`);
+    assert.equal(repoB.projectKey, 'BEE');
+    // The board id is derived from that root's own key, not the connection's.
+    assert.ok(repoB.id.startsWith('folder-bee-'), `unexpected board id ${repoB.id}`);
+    // Sibling roots without their own config keep the connection default.
+    assert.ok(boards.some(board => board.projectKey === 'CONN'));
+    service.dispose();
+  });
+});
+
+test('FolderService: several configured roots each contribute their boards', async () => {
+  await withTempDir(async parent => {
+    // Two roots that share no parent — what a curated multi-folder connection is.
+    const first = path.join(parent, 'one');
+    const second = path.join(parent, 'two');
+    await fs.mkdir(path.join(first, 'features'), { recursive: true });
+    await fs.mkdir(path.join(second, 'features'), { recursive: true });
+    await writeBoardConfigFile(second, { projectKey: 'TWO', projectName: 'Second' });
+
+    const service = new FolderService({
+      ...stubConfig(first),
+      getFolderRoots: () => [first, second]
+    });
+    const boards = await service.getBoards({ projectKeys: [], types: [], searchText: '' });
+    assert.ok(boards.some(board => board.locationName === first), 'first root missing');
+    assert.ok(boards.some(board => board.locationName === second), 'second root missing');
+    assert.ok(boards.some(board => board.projectKey === 'TWO'), 'second root key missing');
+    service.dispose();
+  });
+});
+
+test('FolderService.syncBoardConfigToFolder rejects (and writes nothing) for an unreadable folder', async () => {
   await withTempDir(async dir => {
     const missing = path.join(dir, 'nope');
-    const service = new LiveFolderService(stubConfig(missing));
+    const service = new FolderService(stubConfig(missing));
     await assert.rejects(() => service.syncBoardConfigToFolder());
     await assert.rejects(() => fs.access(path.join(missing, BOARD_CONFIG_FILENAME)));
     service.dispose();

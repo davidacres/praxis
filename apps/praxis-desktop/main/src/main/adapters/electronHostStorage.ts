@@ -5,7 +5,7 @@ import { JsonKeyValueStore } from './jsonKeyValueStore';
 
 /**
  * Electron's HostStorage. `workspace` is scoped to a Project id (a generated id for
- * connection-based modes like Demo, or a folder path for Live Folder/User Workspace).
+ * connection-based modes like Demo, or a folder path for folder connections).
  * See plan §2 "Workspace-scope semantics in Electron".
  */
 export function createHostStorage(projectId: string): HostStorage {

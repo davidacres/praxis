@@ -3,7 +3,7 @@ import {
   GitLabBoardService,
   JiraMcpConnectionResolver,
   JiraService,
-  LiveFolderService,
+  FolderService,
   StubBackendService,
   UserWorkspaceService,
   ProjectIssueTrackerService
@@ -12,13 +12,13 @@ import { getConnectionStore } from './connectionStoreInstance';
 import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
 import { getUserWorkspaceStore } from './userWorkspaceStoreInstance';
 import { getLogBus } from './logBusInstance';
-import { ElectronLiveFolderConfigProvider } from './adapters/electronLiveFolderConfigProvider';
+import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigProvider';
 import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
 import { DesktopUserWorkspaceConfigProvider } from './adapters/desktopUserWorkspaceConfigProvider';
 import { getProjectStore } from './projectStoreInstance';
 
-const liveFolderServices = new Map<string, LiveFolderService>();
+const folderServices = new Map<string, FolderService>();
 const jiraServices = new Map<string, JiraService>();
 const gitLabServices = new Map<string, GitLabBoardService>();
 const userWorkspaceServices = new Map<string, UserWorkspaceService>();
@@ -230,13 +230,13 @@ export async function getServiceForConnection(
   switch (connection.mode) {
     case 'demo':
       return getDemoService();
-    case 'livefolder': {
-      const cached = liveFolderServices.get(connectionId);
+    case 'folder': {
+      const cached = folderServices.get(connectionId);
       if (cached) {
         return cached;
       }
-      const service = new LiveFolderService(new ElectronLiveFolderConfigProvider(connection));
-      liveFolderServices.set(connectionId, service);
+      const service = new FolderService(new ElectronFolderConfigProvider(connection));
+      folderServices.set(connectionId, service);
       return service;
     }
     case 'jiracloud':
@@ -277,9 +277,9 @@ export function getSupportedConnections() {
  * or has a secret changed.
  */
 export function resetServiceForConnection(connectionId: string): void {
-  const liveFolder = liveFolderServices.get(connectionId);
-  liveFolder?.dispose();
-  liveFolderServices.delete(connectionId);
+  const folder = folderServices.get(connectionId);
+  folder?.dispose();
+  folderServices.delete(connectionId);
 
   const jira = jiraServices.get(connectionId);
   if (jira) {
@@ -301,7 +301,7 @@ export function resetServiceForConnection(connectionId: string): void {
 }
 
 /**
- * Disposes every cached backend service (closing any live-folder/user-workspace
+ * Disposes every cached backend service (closing any folder/user-workspace
  * chokidar watchers in particular) so the app process can exit cleanly.
  *
  * Must run on `before-quit`, not just `window-all-closed` — on macOS closing
@@ -311,10 +311,10 @@ export function resetServiceForConnection(connectionId: string): void {
  * still active).
  */
 export function disposeAllServices(): void {
-  for (const service of liveFolderServices.values()) {
+  for (const service of folderServices.values()) {
     service.dispose();
   }
-  liveFolderServices.clear();
+  folderServices.clear();
 
   for (const service of userWorkspaceServices.values()) {
     service.dispose();

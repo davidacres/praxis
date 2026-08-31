@@ -77,7 +77,7 @@ test('editing a live-folder connection re-syncs board.praxis.json', async () => 
       {
         id: 'e2e-lf',
         name: 'E2E LF',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: { path: folder, projectKey: 'OLD', projectName: 'Old Name', allowIssueCreation: false }
       }
     ]
@@ -90,7 +90,7 @@ test('editing a live-folder connection re-syncs board.praxis.json', async () => 
     await window.praxis.connection.update({
       id: 'e2e-lf',
       name: 'E2E LF',
-      mode: 'livefolder',
+      mode: 'folder',
       settings: { path: folderPath, projectKey: 'NEW', projectName: 'New Name', allowIssueCreation: true }
     });
   }, folder);

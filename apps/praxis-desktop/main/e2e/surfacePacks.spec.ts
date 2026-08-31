@@ -21,7 +21,7 @@ test.afterEach(async () => {
 });
 
 async function openSurface(): Promise<void> {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
   // Surfaces is now its own node under Settings → Appearance.
   await window.locator('[data-testid="settings-nav-appearance-surfaces"]').click();
   await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
@@ -85,7 +85,9 @@ test('the watermark is tinted from the live theme and re-bakes when the palette 
   const praxisInk = await inkOf();
   expect(praxisInk.toLowerCase()).toBe('#c6431f');
 
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-github-dark"]').click();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'github-dark');
   await expect.poll(inkOf).not.toBe(praxisInk);
@@ -233,7 +235,9 @@ test('motif strength is normalised so one value reads the same on every palette'
   expect(praxis).toBeGreaterThan(0.25);
   expect(praxis).toBeLessThanOrEqual(0.32);
 
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
+
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   for (const theme of ['catppuccin-mocha', 'github-light', 'nord-dark']) {
     await window.locator(`[data-testid="theme-card-${theme}"]`).click();
     await expect(window.locator('html')).toHaveAttribute('data-theme', theme);

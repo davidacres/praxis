@@ -2,23 +2,23 @@ import * as path from 'node:path';
 import chokidar from 'chokidar';
 
 /**
- * Watches a live-folder plans root for markdown changes. `LiveFolderService`
+ * Watches a folder plans root for markdown changes. `FolderService`
  * owns the debounce and self-write suppression; this only has to deliver "an
  * `.md` file under `rootPath` changed", by absolute path. Backed by `chokidar`;
  * core tests use the same implementation.
  */
-export interface LiveFolderWatcher {
+export interface FolderWatcher {
   /** Stop watching and release resources. */
   close(): void | Promise<void>;
 }
 
-export type LiveFolderWatch = (
+export type FolderWatch = (
   rootPath: string,
   /** Called with the absolute path of any added, changed, or removed `*.md` file. */
   onChange: (absolutePath: string) => void
-) => LiveFolderWatcher;
+) => FolderWatcher;
 
-const nodeLiveFolderWatch: LiveFolderWatch = (rootPath, onChange) => {
+const nodeFolderWatch: FolderWatch = (rootPath, onChange) => {
   const watcher = chokidar.watch('**/*.md', {
     cwd: rootPath,
     ignoreInitial: true,
@@ -33,7 +33,7 @@ const nodeLiveFolderWatch: LiveFolderWatch = (rootPath, onChange) => {
   };
 };
 
-/** The watch implementation the live-folder module uses. */
-export function liveFolderWatch(): LiveFolderWatch {
-  return nodeLiveFolderWatch;
+/** The watch implementation the folder module uses. */
+export function folderWatch(): FolderWatch {
+  return nodeFolderWatch;
 }

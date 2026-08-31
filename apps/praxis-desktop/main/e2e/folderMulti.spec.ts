@@ -85,7 +85,7 @@ async function launchWithMultiRootFixture(): Promise<void> {
       {
         id: 'e2e-multi-root',
         name: 'e2e-multi-root',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: {
           path: parentDir,
           projectKey: 'E2EM',

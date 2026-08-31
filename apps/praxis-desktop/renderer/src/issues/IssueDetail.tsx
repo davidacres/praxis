@@ -293,7 +293,7 @@ type EditableField = keyof EditDraft;
 
 const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> = {
   demo: new Set(['summary', 'description', 'assignee', 'priority', 'issueType', 'parentKey']),
-  livefolder: new Set([
+  folder: new Set([
     'summary',
     'description',
     'assignee',

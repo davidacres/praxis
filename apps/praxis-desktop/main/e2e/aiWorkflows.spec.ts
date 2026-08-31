@@ -386,7 +386,7 @@ test('feature decomposition creates the sub-task issues and lists them', async (
         {
           id: 'e2e-live-decomp',
           name: 'e2e-livefolder-decomp',
-          mode: 'livefolder',
+          mode: 'folder',
           settings: {
             path: liveFolderDir,
             projectKey: 'LIVE',

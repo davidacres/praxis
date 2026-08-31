@@ -12,7 +12,7 @@ export function resolveBackendModeContextState(
 ): BackendModeContextState {
   switch (storedMode) {
     case 'demo':
-    case 'livefolder':
+    case 'folder':
     case 'userworkspace':
       return { mode: storedMode, configured: true };
     case 'github':

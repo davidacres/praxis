@@ -1,10 +1,10 @@
 import type { IssueTrackerService } from '../backends/issueTrackerService';
-import { identifyPlanFolder } from '../livefolder/markdownPlanParser';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { identifyPlanFolder } from '../folder/markdownPlanParser';
+import { toStoredFolderPath } from '../folder/pathUtils';
 import {
-  LiveFolderService,
-  type LiveFolderConfigProvider
-} from '../livefolder/liveFolderService';
+  FolderService,
+  type FolderConfigProvider
+} from '../folder/folderService';
 import type {
   BackendMode,
   Board,
@@ -57,7 +57,7 @@ function validateProjectKey(value: string): void {
   }
 }
 
-class UserWorkspaceLiveFolderConfigProvider implements LiveFolderConfigProvider {
+class UserWorkspaceFolderConfigProvider implements FolderConfigProvider {
   public constructor(
     private readonly appConfigStore: UserWorkspaceConfigProvider,
     private readonly definition: UserWorkspaceBoardDefinition
@@ -67,20 +67,20 @@ class UserWorkspaceLiveFolderConfigProvider implements LiveFolderConfigProvider 
     return this.appConfigStore.getDefaultPageSize();
   }
 
-  public getLiveFolderPath(): string {
-    return this.definition.liveFolderPath;
+  public getFolderRoots(): string[] {
+    return [this.definition.liveFolderPath];
   }
 
-  public getLiveFolderProjectKey(): string {
+  public getFolderProjectKey(): string {
     return this.definition.projectKey;
   }
 
-  public getLiveFolderProjectName(): string {
+  public getFolderProjectName(): string {
     return this.definition.projectName;
   }
 
-  public getLiveFolderAllowIssueCreation(): boolean {
-    return this.appConfigStore.getLiveFolderAllowIssueCreation();
+  public getFolderAllowIssueCreation(): boolean {
+    return this.appConfigStore.getFolderAllowIssueCreation();
   }
 
   public getAiDefaultModel(): string {
@@ -90,14 +90,14 @@ class UserWorkspaceLiveFolderConfigProvider implements LiveFolderConfigProvider 
 
 export interface UserWorkspaceConfigProvider {
   getDefaultPageSize(): number;
-  getLiveFolderAllowIssueCreation(): boolean;
+  getFolderAllowIssueCreation(): boolean;
   getAiDefaultModel(): string;
 }
 
 export class UserWorkspaceService implements IssueTrackerService {
   public readonly mode: BackendMode = 'userworkspace';
 
-  private readonly boardServices = new Map<string, LiveFolderService>();
+  private readonly boardServices = new Map<string, FolderService>();
 
   public constructor(
     private readonly configStore: UserWorkspaceConfigProvider,
@@ -239,7 +239,7 @@ export class UserWorkspaceService implements IssueTrackerService {
     let boards = await Promise.all(this.userWorkspaceStore.getBoards().map(async definition => {
       const board = createBoardSummary(definition);
       // Check the configured folder directly on every listing. A cached
-      // LiveFolderService may still be loaded from before the folder was
+      // FolderService may still be loaded from before the folder was
       // deleted or moved, but the board list must reflect the current path.
       let availability: Board['availability'] = 'available';
       let availabilityMessage: string | undefined;
@@ -421,8 +421,8 @@ export class UserWorkspaceService implements IssueTrackerService {
     const issueLists = await Promise.all(
       definitions.map(async definition => {
         const service = this.getOrCreateBoardService(definition);
-        // Strip boardId before delegating: the inner LiveFolderService keys its
-        // own root board as `livefolder-<projectKey>`, not the workspace board
+        // Strip boardId before delegating: the inner FolderService keys its
+        // own root board as `folder-<projectKey>`, not the workspace board
         // id, so passing it through would filter everything out.
         const result = await service.getIssues(
           { ...filters, boardId: undefined },
@@ -435,7 +435,7 @@ export class UserWorkspaceService implements IssueTrackerService {
     return issueLists.flat();
   }
 
-  private resolveBoardServiceForCreate(input: CreateIssueInput): LiveFolderService {
+  private resolveBoardServiceForCreate(input: CreateIssueInput): FolderService {
     if (input.boardId) {
       return this.getBoardServiceByBoardId(input.boardId);
     }
@@ -448,7 +448,7 @@ export class UserWorkspaceService implements IssueTrackerService {
     return this.getOrCreateBoardService(definition);
   }
 
-  private getBoardServiceByBoardId(boardId: string): LiveFolderService {
+  private getBoardServiceByBoardId(boardId: string): FolderService {
     const definition = this.userWorkspaceStore.getBoard(boardId);
     if (!definition) {
       throw new Error(`Board ${boardId} was not found in the user workspace.`);
@@ -456,14 +456,14 @@ export class UserWorkspaceService implements IssueTrackerService {
     return this.getOrCreateBoardService(definition);
   }
 
-  private getOrCreateBoardService(definition: UserWorkspaceBoardDefinition): LiveFolderService {
+  private getOrCreateBoardService(definition: UserWorkspaceBoardDefinition): FolderService {
     this.syncServiceCache();
     const existing = this.boardServices.get(definition.id);
     if (existing) {
       return existing;
     }
-    const service = new LiveFolderService(
-      new UserWorkspaceLiveFolderConfigProvider(this.configStore, definition)
+    const service = new FolderService(
+      new UserWorkspaceFolderConfigProvider(this.configStore, definition)
     );
     this.boardServices.set(definition.id, service);
     return service;
@@ -484,7 +484,7 @@ export class UserWorkspaceService implements IssueTrackerService {
     this.boardServices.delete(boardId);
   }
 
-  private async resolveIssueService(issueKey: string): Promise<LiveFolderService> {
+  private async resolveIssueService(issueKey: string): Promise<FolderService> {
     for (const definition of this.userWorkspaceStore.getBoards()) {
       const service = this.getOrCreateBoardService(definition);
       try {

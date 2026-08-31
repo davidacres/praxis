@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { liveFolderFs } from './liveFolderFs';
+import { folderFs } from './folderFs';
 import {
   buildUnreadablePathError,
   normalizeConfiguredFolderPath
@@ -75,7 +75,7 @@ export interface ParsedPlanFolder {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 export async function readUtf8(filePath: string): Promise<string> {
-  return liveFolderFs().readFile(filePath);
+  return folderFs().readFile(filePath);
 }
 
 export function extractMainHeading(content: string): string {
@@ -84,8 +84,9 @@ export function extractMainHeading(content: string): string {
 }
 
 export function extractStatusRaw(content: string): string {
-  const m = content.match(/^\*\*Status:\*\*\s*(.+)$/m);
-  return m?.[1]?.trim() ?? '';
+  return extractFrontMatterValue(content, 'status')
+    || content.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]?.trim()
+    || '';
 }
 
 export function extractBranchRaw(content: string): string | undefined {
@@ -114,8 +115,14 @@ export function extractModelRaw(content: string): string | undefined {
 }
 
 export function extractTypeRaw(content: string): string | undefined {
-  const m = content.match(/^\*\*Type:\*\*\s*(.+)$/m);
-  return m?.[1]?.trim() || undefined;
+  return extractFrontMatterValue(content, 'type')
+    || content.match(/^\*\*Type:\*\*\s*(.+)$/m)?.[1]?.trim()
+    || undefined;
+}
+
+function extractFrontMatterValue(content: string, key: string): string | undefined {
+  const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  return frontmatter?.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?\\s*$`, 'm'))?.[1]?.trim();
 }
 
 export function extractComplexityRaw(content: string): string | undefined {
@@ -428,7 +435,7 @@ export function stableChildKey(
  */
 async function readDirectorySafe(dirPath: string): Promise<[string, FileKind][] | undefined> {
   try {
-    return await liveFolderFs().readDirectory(dirPath);
+    return await folderFs().readDirectory(dirPath);
   } catch {
     return undefined;
   }
@@ -773,6 +780,10 @@ export async function parsePlanFolder(
   const progress = onProgress ?? (() => undefined);
 
   const identified = await identifyPlanFolder(plansRoot, progress);
+  return parsePlanFolderRecursively(identified, progress);
+
+  // Legacy depth-limited implementation retained below until the recursive
+  // parser has fully replaced it and its compatibility coverage is complete.
   const { plansRootPath, featuresRootPath, featureEntries } = identified;
 
   progress('Scanning feature folders…');
@@ -791,7 +802,7 @@ export async function parsePlanFolder(
       continue;
     }
     const dirMatch = name.match(FEATURE_DIR);
-    const featureId = dirMatch ? Number.parseInt(dirMatch[1], 10) : autoFeatureId++;
+    const featureId = dirMatch ? Number.parseInt(dirMatch?.[1] ?? '', 10) : autoFeatureId++;
     progress(`Reading feature: ${name}/feature.md`);
     features.push({
       dirName: name,
@@ -823,7 +834,7 @@ export async function parsePlanFolder(
   // Scan inside each feature directory
   for (const folder of features) {
     const folderPath = path.join(featuresRootPath, folder.dirName);
-    const files = await liveFolderFs().readDirectory(folderPath);
+    const files = await folderFs().readDirectory(folderPath);
     for (const [fname, kind] of files) {
       if (kind !== 'file' || !fname.toLowerCase().endsWith('.md')) {
         continue;
@@ -843,19 +854,19 @@ export async function parsePlanFolder(
       if (parsed) {
         // Strict-format files must match the folder's featureId;
         // loose-format files (featureId undefined) inherit it from the folder.
-        if (parsed.featureId !== undefined && parsed.featureId !== folder.featureId) {
+        if (parsed!.featureId !== undefined && parsed!.featureId !== folder.featureId) {
           continue;
         }
-        issueType = parsed.issueType;
-        resolvedFeatureId = parsed.featureId ?? folder.featureId;
-        sequence = parsed.sequence;
+        issueType = parsed!.issueType;
+        resolvedFeatureId = parsed!.featureId ?? folder.featureId;
+        sequence = parsed!.sequence;
       } else {
         // Fall back to front matter type detection
         const contentType = normalizeChildIssueType(extractTypeRaw(scontent));
         if (!contentType) {
           continue;
         }
-        issueType = contentType;
+        issueType = contentType!;
         resolvedFeatureId = folder.featureId;
         sequence = autoSequence++;
       }
@@ -917,7 +928,7 @@ export async function parsePlanFolder(
   // Scan ALL subdirectories under plansRootPath (not just bugs/tasks/stories)
   const rootEntriesToScan = await readDirectorySafe(plansRootPath);
   if (rootEntriesToScan) {
-    for (const [subName, subType] of rootEntriesToScan) {
+    for (const [subName, subType] of rootEntriesToScan ?? []) {
       if (subType !== 'directory' || SEARCH_SKIP_DIRS.has(subName.toLowerCase())) {
         continue;
       }
@@ -942,7 +953,7 @@ export async function parsePlanFolder(
       if (!entries) {
         continue;
       }
-      dirEntries = entries;
+      dirEntries = entries!;
     }
     for (const [fname, ftype] of dirEntries) {
       if (ftype !== 'file' || !fname.toLowerCase().endsWith('.md')) {
@@ -962,19 +973,19 @@ export async function parsePlanFolder(
 
       if (parsed) {
         // Strict-format must reference a known feature; loose-format (no featureId) is always accepted
-        if (parsed.featureId !== undefined && !featureIdSet.has(parsed.featureId)) {
+        if (parsed!.featureId !== undefined && !featureIdSet.has(parsed!.featureId!)) {
           continue;
         }
-        issueType = parsed.issueType;
-        resolvedFeatureId = parsed.featureId;
-        sequence = parsed.sequence;
+        issueType = parsed!.issueType;
+        resolvedFeatureId = parsed!.featureId;
+        sequence = parsed!.sequence;
       } else {
         // Fall back to front matter type detection
         const contentType = normalizeChildIssueType(extractTypeRaw(scontent));
         if (!contentType) {
           continue;
         }
-        issueType = contentType;
+        issueType = contentType!;
         resolvedFeatureId = undefined;
         sequence = autoSequence++;
       }
@@ -1003,7 +1014,7 @@ export async function parsePlanFolder(
       });
       if (issueType === 'Story' && resolvedFeatureId !== undefined) {
         stories.push({
-          featureId: resolvedFeatureId,
+          featureId: resolvedFeatureId!,
           storySeq: sequence,
           filename: fname,
           title: extractMainHeading(scontent),
@@ -1045,5 +1056,129 @@ export async function parsePlanFolder(
     return a.filename.localeCompare(b.filename);
   });
 
+  return { features, stories, childItems, plansRootPath, featuresRootPath };
+}
+
+interface MarkdownPlanFile {
+  filePath: string;
+  relativePath: string;
+  name: string;
+  content: string;
+}
+
+/** Recursively reads Markdown planning files. Folder names are deliberately not
+ * used as an eligibility rule; metadata and legacy filename conventions decide
+ * what each document represents. */
+async function readMarkdownPlanFiles(rootPath: string, currentPath = rootPath, result: MarkdownPlanFile[] = []): Promise<MarkdownPlanFile[]> {
+  const entries = await readDirectorySafe(currentPath);
+  if (!entries) return result;
+  for (const [name, type] of entries.sort(([left], [right]) => left.localeCompare(right))) {
+    if (SEARCH_SKIP_DIRS.has(name.toLowerCase())) continue;
+    const filePath = path.join(currentPath, name);
+    if (type === 'directory') {
+      await readMarkdownPlanFiles(rootPath, filePath, result);
+    } else if (name.toLowerCase().endsWith('.md')) {
+      try {
+        result.push({ filePath, relativePath: path.relative(rootPath, filePath).replaceAll(path.sep, '/'), name, content: await readUtf8(filePath) });
+      } catch {
+        // Ignore files that disappear or cannot be read during a refresh.
+      }
+    }
+  }
+  return result;
+}
+
+function planningNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const match = /(?:FX-(?:BF|BE)|TASK)-0*(\d+)/i.exec(value) || /(?:^|[\\/-])feature-0*(\d+)(?:-|$)/i.exec(value);
+  return match ? Number.parseInt(match[1], 10) : undefined;
+}
+
+function planningFeatureId(file: MarkdownPlanFile, featureDirectories: Map<string, number>): number | undefined {
+  const explicit = extractFrontMatterValue(file.content, 'feature') || file.content.match(/^\*\*Feature:\*\*\s*(.+)$/im)?.[1];
+  if (explicit) return planningNumber(explicit);
+  let directory = path.dirname(file.filePath);
+  while (directory.length >= path.dirname(directory).length) {
+    const found = featureDirectories.get(directory);
+    if (found !== undefined) return found;
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  return planningNumber(file.name);
+}
+
+async function parsePlanFolderRecursively(identified: IdentifiedPlanFolder, progress: (message: string) => void): Promise<ParsedPlanFolder> {
+  const { plansRootPath, featuresRootPath } = identified;
+  const files = await readMarkdownPlanFiles(plansRootPath);
+  const featureFiles = files.filter(file => file.name.toLowerCase() === 'feature.md' || extractTypeRaw(file.content)?.trim().toLowerCase() === 'feature');
+  const featureDirectories = new Map<string, number>();
+  const usedFeatureIds = new Set<number>();
+  let autoFeatureId = 9000;
+  const features: ParsedFeatureFolder[] = [];
+  for (const file of featureFiles) {
+    let featureId = planningNumber(extractFrontMatterValue(file.content, 'id'))
+      || planningNumber(path.dirname(file.filePath))
+      || autoFeatureId++;
+    while (usedFeatureIds.has(featureId)) featureId = autoFeatureId++;
+    usedFeatureIds.add(featureId);
+    const directory = path.dirname(file.filePath);
+    featureDirectories.set(directory, featureId);
+    progress(`Reading feature: ${file.relativePath}`);
+    features.push({
+      dirName: path.relative(featuresRootPath, directory).replaceAll(path.sep, '/') || path.basename(directory),
+      featureId,
+      title: extractMainHeading(file.content),
+      planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(file.content)),
+      description: buildDescription(file.content),
+      featureMdPath: file.filePath,
+      depTokens: collectDependencyTokens(file.content),
+      planningDates: extractPlanningDates(file.content),
+      priority: extractPriorityRaw(file.content),
+      model: extractModelRaw(file.content),
+      complexity: extractComplexityRaw(file.content)
+    });
+  }
+  features.sort((left, right) => left.featureId - right.featureId || left.dirName.localeCompare(right.dirName));
+
+  const featureIdByDirectory = new Map(featureDirectories);
+  const childFiles = files.filter(file => !featureFiles.includes(file));
+  let autoSequence = 9000;
+  const childItems: ParsedChildFile[] = [];
+  for (const file of childFiles) {
+    const parsedName = parseChildFileName(file.name);
+    const issueType = normalizeChildIssueType(extractTypeRaw(file.content)) || parsedName?.issueType;
+    if (!issueType) continue;
+    const featureId = planningFeatureId(file, featureIdByDirectory);
+    const sequence = planningNumber(extractFrontMatterValue(file.content, 'id')) ?? parsedName?.sequence ?? autoSequence++;
+    progress(`Reading ${issueType.toLowerCase()}: ${file.relativePath}`);
+    childItems.push({
+      featureId,
+      sequence,
+      filename: file.name,
+      issueType,
+      title: extractMainHeading(file.content),
+      planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(file.content)),
+      description: buildDescription(file.content),
+      ideaTranscript: extractSectionBody(file.content, 'Research Transcript'),
+      relativePath: file.relativePath,
+      filePath: file.filePath,
+      depTokens: collectDependencyTokens(file.content),
+      planningDates: extractPlanningDates(file.content),
+      branch: extractBranchRaw(file.content),
+      priority: extractPriorityRaw(file.content),
+      severity: extractSeverityRaw(file.content),
+      reportedBy: extractReportedByRaw(file.content),
+      model: extractModelRaw(file.content),
+      complexity: extractComplexityRaw(file.content)
+    });
+  }
+  childItems.sort((left, right) => (left.featureId ?? 0) - (right.featureId ?? 0) || left.issueType.localeCompare(right.issueType) || left.sequence - right.sequence || left.relativePath.localeCompare(right.relativePath));
+  const stories: ParsedStoryFile[] = childItems.filter(child => child.issueType === 'Story' && child.featureId !== undefined).map(child => ({
+    featureId: child.featureId!, storySeq: child.sequence, filename: child.filename, title: child.title,
+    planStatus: child.planStatus, description: child.description, ideaTranscript: child.ideaTranscript,
+    relativePath: child.relativePath, storyMdPath: child.filePath, depTokens: child.depTokens,
+    planningDates: child.planningDates, branch: child.branch
+  }));
   return { features, stories, childItems, plansRootPath, featuresRootPath };
 }

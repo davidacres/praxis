@@ -49,7 +49,7 @@ async function launchWithLiveFolder(liveFolderDir: string, allowIssueCreation: b
       {
         id: 'e2e-live-create',
         name: 'e2e-livefolder-create',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: {
           path: liveFolderDir,
           projectKey: 'LIVE',
@@ -188,7 +188,7 @@ test('creating a live folder idea writes the research transcript into the markdo
         {
           id: 'e2e-live-idea',
           name: 'e2e-livefolder-idea',
-          mode: 'livefolder',
+          mode: 'folder',
           settings: {
             path: liveFolderDir,
             projectKey: 'LIVE',

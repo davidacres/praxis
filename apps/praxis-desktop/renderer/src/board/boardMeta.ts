@@ -29,9 +29,8 @@ const BOARD_TYPE_LABELS: Record<BoardTypeToken, string> = {
 };
 
 /**
- * Collapses the open `Board.type` string onto the tokens we render. Mirrors
- * `boardTypeToken` in the extension's classic sidebar, extended with the
- * `plan` bucket the Live Folder backend emits.
+ * Collapses the open `Board.type` string onto the tokens we render, including
+ * the `plan` bucket the folder backend emits.
  */
 export function boardTypeToken(board: Pick<Board, 'type' | 'id'>): BoardTypeToken {
   const normalized = board.type?.trim().toLowerCase();
@@ -52,7 +51,7 @@ export function boardTypeToken(board: Pick<Board, 'type' | 'id'>): BoardTypeToke
   if (board.id?.startsWith('jql:') || board.id?.startsWith('jql-custom:')) {
     return 'jql';
   }
-  if (board.id?.startsWith('livefolder-')) {
+  if (board.id?.startsWith('folder-')) {
     return 'plan';
   }
   return 'board';
@@ -78,7 +77,7 @@ export const BACKEND_MODE_META: Record<BackendMode, BackendModeMeta> = {
   demo: { label: 'Demo', icon: 'dot', tone: 'var(--tone-demo)' },
   github: { label: 'GitHub', icon: 'git-branch', tone: 'var(--tone-github)' },
   gitlab: { label: 'GitLab', icon: 'git-branch', tone: 'var(--tone-gitlab)' },
-  livefolder: { label: 'Live Folder', icon: 'folder', tone: 'var(--tone-livefolder)' },
+  folder: { label: 'Folder', icon: 'folder', tone: 'var(--tone-folder)' },
   userworkspace: { label: 'User Workspace', icon: 'folder-open', tone: 'var(--tone-workspace)' }
 };
 

@@ -21,7 +21,7 @@ export class DesktopUserWorkspaceConfigProvider implements UserWorkspaceConfigPr
     return typeof value === 'number' && Number.isFinite(value) ? value : 25;
   }
 
-  public getLiveFolderAllowIssueCreation(): boolean {
+  public getFolderAllowIssueCreation(): boolean {
     const value = this.settings['allowIssueCreation'];
     return typeof value === 'boolean' ? value : true;
   }

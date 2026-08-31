@@ -6,7 +6,7 @@ import { getConnectionStore } from './connectionStoreInstance';
 
 /**
  * Existing folders are already the source of truth for their planning files.
- * Register that source as a read-only Live Folder connection so the imported
+ * Register that source as a read-only folder connection so the imported
  * project immediately has a board backed by the files on disk (rather than an
  * empty Praxis-owned board beside them).
  */
@@ -20,9 +20,9 @@ async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectReco
   const connection: Connection = {
     id: `project-plans-${project.id}`,
     name: `${project.name} plans`,
-    mode: 'livefolder',
+    mode: 'folder',
     settings: {
-      path: folder,
+      roots: [folder],
       projectKey: project.key,
       projectName: project.name,
       // Imported plans stay safe/read-only until the user explicitly enables
@@ -32,7 +32,7 @@ async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectReco
   };
   await connections.addConnection(connection);
   try {
-    const board = { connectionId: connection.id, boardId: `livefolder-${project.key.toLowerCase()}`, displayName: `${project.name} (Live)` };
+    const board = { connectionId: connection.id, boardId: `folder-${project.key.toLowerCase()}`, displayName: project.name };
     await connections.addTrackedBoard(board);
     return await getProjectStore().linkBoard(project.id, {
       connectionId: board.connectionId,

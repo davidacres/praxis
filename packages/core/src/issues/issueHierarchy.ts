@@ -70,13 +70,13 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
     };
   }
 
-  if (mode === 'livefolder' || mode === 'userworkspace') {
+  if (mode === 'folder' || mode === 'userworkspace') {
     return {
       canHaveParent: true,
       requiresParent: true,
       allowedParentTypes: ['Feature'],
       defaultLabel: 'Feature',
-      helperText: `${normalizeIssueTypeLabel(issueType)} items in ${mode === 'userworkspace' ? 'User Workspace' : 'Live Folder'} mode must belong to a Feature.`,
+      helperText: `${normalizeIssueTypeLabel(issueType)} items in ${mode === 'userworkspace' ? 'User Workspace' : 'Folder'} mode must belong to a Feature.`,
       emptyText: 'No feature selected.',
       placeholder: 'Select a feature or type a new name'
     };

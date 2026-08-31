@@ -96,7 +96,7 @@ function renderMark(mode: BackendMode, size: number, uid: string) {
           <path d="M4.2 2.8v8.4l7.3-4.2-7.3-4.2z" fill="currentColor" />
         </svg>
       );
-    case 'livefolder':
+    case 'folder':
     case 'userworkspace':
       return (
         <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
