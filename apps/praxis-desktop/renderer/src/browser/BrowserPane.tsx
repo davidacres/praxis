@@ -10,7 +10,15 @@ import { Icon } from '../ui/Icon';
  * pinned over it. Rendered inside the session console when the user opens it or
  * when the agent first drives the browser.
  */
-export function BrowserPane({ onClose }: { onClose?: () => void }) {
+export function BrowserPane({
+  initialUrl,
+  onNavigate,
+  onClose
+}: {
+  initialUrl?: string;
+  onNavigate?: (url: string) => void;
+  onClose?: () => void;
+}) {
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<BrowserNavigationState | undefined>();
   const [urlDraft, setUrlDraft] = useState('');
@@ -26,9 +34,19 @@ export function BrowserPane({ onClose }: { onClose?: () => void }) {
   useEffect(() => {
     void window.praxis.browser.attach();
     void window.praxis.browser.setVisible(true);
-    void window.praxis.browser.getState().then(s => s && setState(s));
+    void window.praxis.browser.getState().then(async s => {
+      if (s) {
+        setState(s);
+        if (initialUrl && s.url !== initialUrl) {
+          await window.praxis.browser.navigate(initialUrl).catch(() => undefined);
+        }
+      } else if (initialUrl) {
+        await window.praxis.browser.navigate(initialUrl).catch(() => undefined);
+      }
+    });
     const unsubscribe = window.praxis.browser.onDidNavigate(next => {
       setState(next);
+      onNavigate?.(next.url);
       if (!editing) setUrlDraft(next.url);
     });
 
@@ -48,7 +66,7 @@ export function BrowserPane({ onClose }: { onClose?: () => void }) {
       window.clearInterval(poll);
       void window.praxis.browser.setVisible(false);
     };
-  }, [pushBounds, editing]);
+  }, [initialUrl, onNavigate, pushBounds, editing]);
 
   const go = (raw: string) => {
     const trimmed = raw.trim();

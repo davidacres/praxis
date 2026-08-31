@@ -29,6 +29,10 @@ export interface SessionsPageProps {
   onSelect: (issueKey: string) => void;
   onNewSession: () => void;
   onOpenAiSettings: () => void;
+  initialBrowserOpen?: boolean;
+  initialBrowserUrl?: string;
+  onBrowserOpenChange?: (open: boolean) => void;
+  onBrowserUrlChange?: (url: string) => void;
 }
 
 /** Which edge the session list docks to, and whether it's tucked away — a
@@ -164,7 +168,11 @@ export function SessionsPage({
   selectedKey,
   onSelect,
   onNewSession,
-  onOpenAiSettings
+  onOpenAiSettings,
+  initialBrowserOpen,
+  initialBrowserUrl,
+  onBrowserOpenChange,
+  onBrowserUrlChange
 }: SessionsPageProps) {
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
@@ -186,9 +194,15 @@ export function SessionsPage({
   const [listSide, setListSide] = useState<ListSide>(readListSide);
   const [listCollapsed, setListCollapsed] = useState<boolean>(readListCollapsed);
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
-  const [browserOpen, setBrowserOpen] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
+  const browserDismissed = useRef(initialBrowserOpen === false);
   const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setBrowserOpen(initialBrowserOpen ?? false);
+    browserDismissed.current = initialBrowserOpen === false;
+  }, [initialBrowserOpen, selectedKey]);
 
   useEffect(() => {
     writePlainSurfaceOverrides(plainSurfaceOverrides);
@@ -260,8 +274,17 @@ export function SessionsPage({
   // page it is working against.
   const agentUsedBrowser = selected?.events.some(event => event.data?.toolName?.startsWith('browser_')) ?? false;
   useEffect(() => {
-    if (agentUsedBrowser) setBrowserOpen(true);
-  }, [agentUsedBrowser]);
+    if (agentUsedBrowser && !browserDismissed.current) {
+      setBrowserOpen(true);
+      onBrowserOpenChange?.(true);
+    }
+  }, [agentUsedBrowser, onBrowserOpenChange]);
+
+  const setBrowserVisibility = (open: boolean) => {
+    browserDismissed.current = !open;
+    setBrowserOpen(open);
+    onBrowserOpenChange?.(open);
+  };
   const conversationEvents = selected?.events.filter(
     event =>
       (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_start' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
@@ -702,7 +725,7 @@ export function SessionsPage({
                 data-testid="session-browser-toggle"
                 aria-pressed={browserOpen}
                 title={browserOpen ? 'Hide the in-app browser' : 'Show the in-app browser'}
-                onClick={() => setBrowserOpen(open => !open)}
+                onClick={() => setBrowserVisibility(!browserOpen)}
               >
                 <Icon name="globe" size={13} />
               </button>
@@ -990,7 +1013,11 @@ export function SessionsPage({
             </div>
             {browserOpen && (
               <div className="session-browser-dock">
-                <BrowserPane onClose={() => setBrowserOpen(false)} />
+                <BrowserPane
+                  initialUrl={initialBrowserUrl}
+                  onNavigate={onBrowserUrlChange}
+                  onClose={() => setBrowserVisibility(false)}
+                />
               </div>
             )}
           </>

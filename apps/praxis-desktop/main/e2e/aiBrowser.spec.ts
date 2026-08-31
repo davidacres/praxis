@@ -38,6 +38,39 @@ test.beforeAll(async () => {
   pageOrigin = `http://127.0.0.1:${(pages!.address() as AddressInfo).port}`;
 });
 
+test('restores the selected session and browser URL and keeps an explicit close closed', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete', reply: 'ok', models: [{ id: 'mock/model' }] });
+  app = await launchTestApp(
+    { ai: { browserTools: { enabled: true, allowedHosts: [] } } },
+    undefined,
+    { ...NO_GATEWAY_ENV, AI_GATEWAY_API_KEY: 'k', AI_GATEWAY_URL: mock.baseUrl, PRAXIS_BROWSER_ALLOW_LOOPBACK: '1' }
+  );
+  const win = app.window;
+  const session = await win.evaluate(async wd => window.praxis.ai.delegate({
+    provider: 'vercel-gateway', model: 'mock/model', toolMode: 'read-only', workingDirectory: wd,
+    task: { goal: 'persist browser state' }
+  }), app.userDataDir);
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-console-title"]')).toHaveText('persist browser state');
+  await win.locator('[data-testid="session-browser-toggle"]').click();
+  const url = win.locator('[data-testid="browser-url-input"]');
+  await url.fill(`${pageOrigin}/next`);
+  await url.press('Enter');
+  await expect(url).toHaveValue(new RegExp(`${pageOrigin.replace(/[.]/g, '\\.')}/next`), { timeout: 15000 });
+  await win.getByRole('button', { name: 'Close browser' }).click();
+  expect(await win.evaluate(() => JSON.parse(localStorage.getItem('praxis-last-workspace-route') ?? '{}'))).toMatchObject({
+    feature: 'sessions', sessionKey: session.issueKey, browserOpen: false
+  });
+
+  const userDataDir = app.userDataDir;
+  const settingsPath = app.settingsPath;
+  await app.electronApp.close();
+  app = await launchTestApp(undefined, { userDataDir, settingsPath }, undefined, { workspace: false });
+  await expect(app.window.locator('[data-testid="sessions-view"]')).toBeVisible();
+  await expect(app.window.locator('[data-testid="session-console-title"]')).toHaveText('persist browser state');
+  await expect(app.window.locator('[data-testid="browser-pane"]')).toHaveCount(0);
+});
+
 test.afterAll(async () => {
   await new Promise<void>(resolve => pages?.close(() => resolve()));
 });
