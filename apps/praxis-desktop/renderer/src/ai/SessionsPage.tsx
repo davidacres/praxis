@@ -16,6 +16,8 @@ import {
   agentStateLabel,
   isTerminalAgentState
 } from './aiSessionState';
+import { useSettings } from '../settings/useSettings';
+import { BrowserPane } from '../browser/BrowserPane';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
@@ -27,6 +29,50 @@ export interface SessionsPageProps {
   onSelect: (issueKey: string) => void;
   onNewSession: () => void;
   onOpenAiSettings: () => void;
+}
+
+/** Which edge the session list docks to, and whether it's tucked away — a
+ *  per-user layout preference, persisted like `tm-sidebar-mode`. */
+type ListSide = 'left' | 'right';
+const LIST_SIDE_KEY = 'tm-sessions-list-side';
+const LIST_COLLAPSED_KEY = 'tm-sessions-list-collapsed';
+
+function readListSide(): ListSide {
+  try {
+    return localStorage.getItem(LIST_SIDE_KEY) === 'right' ? 'right' : 'left';
+  } catch {
+    return 'left';
+  }
+}
+
+function readListCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LIST_COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Per-session override of the profile-wide "Plain chat background" setting.
+ *  A sparse map keyed by session (issue) key: only sessions the user has
+ *  explicitly toggled appear; the rest inherit the global default. */
+const PLAIN_SURFACE_KEY = 'tm-sessions-plain-surface';
+
+function readPlainSurfaceOverrides(): Record<string, boolean> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PLAIN_SURFACE_KEY) ?? '{}');
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePlainSurfaceOverrides(value: Record<string, boolean>): void {
+  try {
+    localStorage.setItem(PLAIN_SURFACE_KEY, JSON.stringify(value));
+  } catch {
+    // Private mode / storage disabled — the override just won't persist.
+  }
 }
 
 /**
@@ -68,6 +114,23 @@ function formatStarted(iso: string): string {
 
 function sessionTitle(session: AgentSessionRecord): string {
   return session.title?.trim() || session.taskDefinition.goal.split('\n')[0];
+}
+
+/**
+ * A free-form session (New Session composer, no tracker issue) is stored under a
+ * synthesized `SESSION-<hex>` key — a unique internal handle, not something the
+ * user chose. The UI shows the session's title instead; only a real tracker
+ * issue keeps its key (e.g. `PROJ-123`) on screen.
+ */
+function isSynthesizedKey(issueKey: string): boolean {
+  return /^SESSION-[0-9a-f]{6,}$/i.test(issueKey);
+}
+
+/** What to show as the session's name: the title alone for free-form sessions,
+ *  `KEY — title` for tracker-issue sessions. */
+function sessionLabel(session: AgentSessionRecord): string {
+  const title = sessionTitle(session);
+  return isSynthesizedKey(session.issueKey) ? title : `${session.issueKey} — ${title}`;
 }
 
 function sessionMode(session: AgentSessionRecord): 'Chat' | 'Analysis' | 'Review' {
@@ -120,7 +183,32 @@ export function SessionsPage({
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
+  const [listSide, setListSide] = useState<ListSide>(readListSide);
+  const [listCollapsed, setListCollapsed] = useState<boolean>(readListCollapsed);
+  const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    writePlainSurfaceOverrides(plainSurfaceOverrides);
+  }, [plainSurfaceOverrides]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LIST_SIDE_KEY, listSide);
+    } catch {
+      // Private mode / storage disabled — the preference just won't persist.
+    }
+  }, [listSide]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LIST_COLLAPSED_KEY, listCollapsed ? '1' : '0');
+    } catch {
+      // As above.
+    }
+  }, [listCollapsed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -168,6 +256,12 @@ export function SessionsPage({
       !selected?.workingDirectory || session.cwd === selected.workingDirectory
     ));
   const selectedEventCount = selected?.events.length ?? 0;
+  // Surface the browser as soon as the agent drives it, so the user sees the
+  // page it is working against.
+  const agentUsedBrowser = selected?.events.some(event => event.data?.toolName?.startsWith('browser_')) ?? false;
+  useEffect(() => {
+    if (agentUsedBrowser) setBrowserOpen(true);
+  }, [agentUsedBrowser]);
   const conversationEvents = selected?.events.filter(
     event =>
       (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_start' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
@@ -343,11 +437,66 @@ export function SessionsPage({
     }
   };
 
+  const otherSide = listSide === 'left' ? 'right' : 'left';
+
+  // Profile-wide "Plain chat background", overridable per session from the
+  // console header. Undefined settings (still loading) fall back to themed.
+  const globalPlainSurface = settings?.appearance.surface.plainChatSurface ?? false;
+  const plainSurface = selected && selected.issueKey in plainSurfaceOverrides
+    ? plainSurfaceOverrides[selected.issueKey]!
+    : globalPlainSurface;
+  const togglePlainSurface = () => {
+    if (!selected) return;
+    setPlainSurfaceOverrides(current => ({ ...current, [selected.issueKey]: !plainSurface }));
+  };
+
   return (
-    <div className="sessions-layout" data-testid="sessions-view">
+    <div
+      className={`sessions-layout side-${listSide}${listCollapsed ? ' list-collapsed' : ''}${plainSurface ? ' plain-surface' : ''}`}
+      data-testid="sessions-view"
+    >
+      {listCollapsed ? (
+        <div className="sessions-list-rail">
+          <button
+            className="icon-btn"
+            aria-label="Expand session list"
+            title="Expand session list"
+            data-testid="sessions-list-expand"
+            onClick={() => setListCollapsed(false)}
+          >
+            <Icon name={listSide === 'left' ? 'sidebar-left' : 'sidebar-right'} size={15} />
+          </button>
+          <button
+            className="icon-btn"
+            aria-label="New session"
+            title="New session"
+            onClick={onNewSession}
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        </div>
+      ) : (
       <div className="sessions-list">
         <div className="sessions-list-header">
           <span className="sessions-list-title">Sessions</span>
+          <button
+            className="icon-btn icon-btn-sm"
+            aria-label={`Move session list to the ${otherSide}`}
+            title={`Move list to the ${otherSide}`}
+            data-testid="sessions-list-swap-side"
+            onClick={() => setListSide(otherSide)}
+          >
+            <Icon name={listSide === 'left' ? 'arrow-right' : 'arrow-left'} size={14} />
+          </button>
+          <button
+            className="icon-btn icon-btn-sm"
+            aria-label="Collapse session list"
+            title="Collapse session list"
+            data-testid="sessions-list-collapse"
+            onClick={() => setListCollapsed(true)}
+          >
+            <Icon name={listSide === 'left' ? 'sidebar-left' : 'sidebar-right'} size={14} />
+          </button>
           <button className="btn" onClick={onNewSession} data-testid="sessions-new-btn">
             <Icon name="plus" size={13} />
             New session
@@ -395,7 +544,9 @@ export function SessionsPage({
                 }}
               >
                 <span className="session-item-top">
-                  <span className="session-item-key">{session.issueKey}</span>
+                  {!isSynthesizedKey(session.issueKey) && (
+                    <span className="session-item-key">{session.issueKey}</span>
+                  )}
                   <span className="session-mode-badge">{sessionMode(session)}</span>
                   <span className={agentStateBadgeClass(session.state)}>
                     {agentStateLabel(session.state)}
@@ -403,7 +554,7 @@ export function SessionsPage({
                   <span className="session-item-actions">
                     <button
                       className="icon-btn icon-btn-sm"
-                      aria-label={`Rename session ${session.issueKey}`}
+                      aria-label={`Rename session ${sessionTitle(session)}`}
                       title="Rename session"
                       data-testid="session-rename-btn"
                       disabled={mutating}
@@ -416,7 +567,7 @@ export function SessionsPage({
                     </button>
                     <button
                       className="icon-btn icon-btn-sm"
-                      aria-label={`Delete session ${session.issueKey}`}
+                      aria-label={`Delete session ${sessionTitle(session)}`}
                       title="Delete session"
                       data-testid="session-delete-btn"
                       disabled={mutating}
@@ -433,7 +584,7 @@ export function SessionsPage({
                   <input
                     className="session-title-input"
                     data-testid="session-title-input"
-                    aria-label={`Session title for ${session.issueKey}`}
+                    aria-label={`Session title for ${sessionTitle(session)}`}
                     value={sessionTitleDraft}
                     disabled={mutating}
                     autoFocus
@@ -465,8 +616,12 @@ export function SessionsPage({
           })}
         </div>
       </div>
+      )}
 
-      <div className="session-console" data-testid="session-console">
+      <div
+        className={`session-console${browserOpen && selected ? ' browser-open' : ''}`}
+        data-testid="session-console"
+      >
         {!selected && (
           <div className="empty-state" style={{ flex: 1 }}>
             <Icon name="terminal" size={28} />
@@ -482,7 +637,7 @@ export function SessionsPage({
                 data-testid="session-console-title"
                 title={sessionTitle(selected)}
               >
-                {selected.issueKey} — {sessionTitle(selected)}
+                {sessionLabel(selected)}
               </span>
               <span className={agentStateBadgeClass(selected.state)} data-testid="session-state-badge">
                 {agentStateLabel(selected.state)}
@@ -505,37 +660,9 @@ export function SessionsPage({
                 </div>
               )}
               <span className="session-item-meta">{selected.stepCount} steps</span>
-              {(selected.provider || selected.model) && (
-                <span className="session-item-meta" data-testid="session-runtime">
-                  {[selected.provider, selected.model].filter(Boolean).join(' · ')}
-                </span>
-              )}
-              <span className="session-item-meta" data-testid="session-tool-mode">
-                {selected.toolMode === 'project-only'
-                  ? 'Project-board tools only'
-                  : selected.toolMode === 'read-only' ? 'Read-only tools' : 'Full tools'}
-              </span>
-              {selected.workingDirectory && (
-                <span
-                  className="session-item-meta"
-                  data-testid="session-working-directory"
-                  title={selected.workingDirectory}
-                >
-                  <Icon name="folder" size={12} /> {basename(selected.workingDirectory)}
-                </span>
-              )}
-              {selected.worktreeBranch && (
-                <span
-                  className="session-item-meta"
-                  data-testid="session-worktree"
-                  title={selected.worktreePath}
-                >
-                  <Icon name="git-branch" size={12} /> {selected.worktreeBranch}
-                  {selected.worktreeBaseBranch && (
-                    <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
-                  )}
-                </span>
-              )}
+              {/* Provider, model, tool mode, folder and worktree live on the
+                  composer below — the same row a new session shows them in —
+                  since they are fixed for the session's life, not live status. */}
               {isTerminalAgentState(selected.state) && selected.worktreePath && (
                 <button
                   className="btn"
@@ -557,6 +684,28 @@ export function SessionsPage({
                   Abort
                 </button>
               )}
+              <button
+                type="button"
+                className={`icon-btn icon-btn-sm${plainSurface ? ' active' : ''}`}
+                data-testid="session-plain-surface-toggle"
+                aria-pressed={plainSurface}
+                title={plainSurface
+                  ? 'Plain background — click to show the theme surface behind this session'
+                  : 'Theme surface — click for a plain background behind this session'}
+                onClick={togglePlainSurface}
+              >
+                <Icon name="theme" size={13} />
+              </button>
+              <button
+                type="button"
+                className={`icon-btn icon-btn-sm${browserOpen ? ' active' : ''}`}
+                data-testid="session-browser-toggle"
+                aria-pressed={browserOpen}
+                title={browserOpen ? 'Hide the in-app browser' : 'Show the in-app browser'}
+                onClick={() => setBrowserOpen(open => !open)}
+              >
+                <Icon name="globe" size={13} />
+              </button>
             </div>
 
             {selected.taskDefinition.kind === 'analysis' && (
@@ -775,15 +924,48 @@ export function SessionsPage({
                     </button>
                   )}
                   {selected.provider && (
-                    <span className="composer-chip session-runtime-chip" title="This session's AI provider">
+                    <span className="composer-chip session-runtime-chip" data-testid="session-provider" title="This session's AI provider">
                       <Icon name={providerIconName(selected.provider)} size={14} />
                       {PROVIDER_LABELS[selected.provider]}
                     </span>
                   )}
                   {selected.model && (
-                    <span className="composer-chip session-runtime-chip" title="This session's AI model">
+                    <span className="composer-chip session-runtime-chip" data-testid="session-model" title="This session's AI model">
                       <Icon name="sparkles" size={14} />
                       {selected.model}
+                    </span>
+                  )}
+                  <span
+                    className="composer-chip session-runtime-chip"
+                    data-testid="session-tool-mode"
+                    title="Tool access for this session — fixed when it started"
+                  >
+                    <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
+                    {selected.toolMode === 'project-only'
+                      ? 'Project only'
+                      : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
+                  </span>
+                  {selected.workingDirectory && (
+                    <span
+                      className="composer-chip session-runtime-chip"
+                      data-testid="session-working-directory"
+                      title={selected.workingDirectory}
+                    >
+                      <Icon name="folder" size={14} />
+                      {basename(selected.workingDirectory)}
+                    </span>
+                  )}
+                  {selected.worktreeBranch && (
+                    <span
+                      className="composer-chip session-runtime-chip"
+                      data-testid="session-worktree"
+                      title={selected.worktreePath}
+                    >
+                      <Icon name="git-branch" size={14} />
+                      {selected.worktreeBranch}
+                      {selected.worktreeBaseBranch && (
+                        <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
+                      )}
                     </span>
                   )}
                   <span className="spacer" />
@@ -806,6 +988,11 @@ export function SessionsPage({
                 </div>
               </div>
             </div>
+            {browserOpen && (
+              <div className="session-browser-dock">
+                <BrowserPane onClose={() => setBrowserOpen(false)} />
+              </div>
+            )}
           </>
         )}
       </div>

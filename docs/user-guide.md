@@ -92,6 +92,16 @@ Desktop navigation is contextual: Epics and Issues appear when a board is
 selected; Repository tools appear under their owning project; global surfaces
 such as Overview, Connections, and Agents remain available independently.
 
+The desktop right pane is a theme-aware detail surface. Selecting a project
+shows a compact **project-details inspector**: an identity header with an Edit
+(pencil) action, status chips for repository state, tool mode, and linked-board
+count, a **Brief** checklist with a completion meter, a **Workspace** section
+with the folder path and detected stack, and a **Planning sources** list where
+each linked board (including the local plans board) has a trash control to
+remove it from the project. Selecting a work item shows the ticket-details
+pane. Both panes are borderless and inherit the active theme and surface pack
+rather than painting an opaque background.
+
 ## Screenshots and walkthroughs
 
 The repository does not currently include checked-in screenshot assets, but this section defines the intended walkthrough coverage for the main product areas.
@@ -185,7 +195,17 @@ Available capabilities include:
 - clear board filters,
 - configure board settings/columns,
 - create issues from a board,
-- open board-specific issue workflows.
+- open board-specific issue workflows,
+- remove a board from the sidebar list (desktop). The trash control appears on
+  every connection-backed board; the action depends on the backend — a
+  user-workspace board is deleted, a Live Folder board removes its connection
+  (the connection is that one board), and a Jira/GitLab board is untracked
+  without touching the remote. Demo boards have no connection and cannot be
+  removed.
+
+When a Praxis desktop workspace has no boards, the centre pane shows a **No
+boards** state with a **Create board** button that opens the Connections
+screen.
 
 #### Board settings
 
@@ -204,6 +224,12 @@ Other board-level controls include:
 - board-level ticket filters,
 - board list pill color,
 - ticket type colors for issue pills, board accents, and Task Designer ticket colors.
+
+Under **Appearance**, the desktop app adds a per-board **Plain background**
+toggle. When it is on, that board's pane drops the active surface pack's
+material (texture, watermark, tint, glass, accent glow) and sits on a flat
+themed fill instead — useful when a busy material reduces card legibility. The
+colour theme is unchanged, and the setting is remembered per board.
 
 ### Issue workflows
 

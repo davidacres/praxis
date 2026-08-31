@@ -12,6 +12,7 @@ import type {
   BoardColumnPreferences,
   BoardDraftRow,
   BoardFilters,
+  BrowserNavigationState,
   Connection,
   CreateBoardInput,
   CreateIssueInput,
@@ -28,7 +29,7 @@ import type {
   UpdateIssueInput
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
-import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, UpdateProjectInput } from '@praxis/core';
+import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, UpdateProjectInput } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 
 const praxis: PraxisIpc = {
@@ -141,6 +142,22 @@ const praxis: PraxisIpc = {
   },
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+  },
+  browser: {
+    attach: () => ipcRenderer.invoke('browser:attach'),
+    setBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('browser:setBounds', bounds),
+    setVisible: (visible: boolean) => ipcRenderer.invoke('browser:setVisible', visible),
+    navigate: (url: string) => ipcRenderer.invoke('browser:navigate', url),
+    back: () => ipcRenderer.invoke('browser:back'),
+    forward: () => ipcRenderer.invoke('browser:forward'),
+    reload: () => ipcRenderer.invoke('browser:reload'),
+    getState: () => ipcRenderer.invoke('browser:getState'),
+    onDidNavigate: (listener: (state: BrowserNavigationState) => void) => {
+      const handler = (_event: unknown, state: BrowserNavigationState) => listener(state);
+      ipcRenderer.on('browser:didNavigate', handler);
+      return () => ipcRenderer.off('browser:didNavigate', handler);
+    }
   },
   boardPrefs: {
     get: (boardId: string) => ipcRenderer.invoke('boardPrefs:get', boardId),
@@ -260,6 +277,8 @@ const praxis: PraxisIpc = {
     attachFolder: (projectId: string, input: AttachProjectFolderInput) => ipcRenderer.invoke('projects:attachFolder', projectId, input),
     linkBoard: (projectId: string, board: ProjectBoardReference) => ipcRenderer.invoke('projects:linkBoard', projectId, board),
     unlinkBoard: (projectId: string, connectionId: string, boardId: string) => ipcRenderer.invoke('projects:unlinkBoard', projectId, connectionId, boardId)
+    ,listDocuments: (projectId: string) => ipcRenderer.invoke('projects:listDocuments', projectId)
+    ,readDocument: (projectId: string, relativePath: string) => ipcRenderer.invoke('projects:readDocument', projectId, relativePath)
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),

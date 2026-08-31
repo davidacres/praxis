@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectRecord, WorkspaceRecord } from '@praxis/core';
+import { useEffect, useMemo, useState } from 'react';
+import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectDocument, ProjectRecord, WorkspaceRecord } from '@praxis/core';
 import { boardTypeIcon, boardTypeLabel } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -58,6 +58,7 @@ export interface SidebarProps {
   onNewProject: () => void;
   onAddExistingProject: () => void;
   onSelectProject: (project: ProjectRecord) => void;
+  onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
   onDeleteBoard: (board: Board) => void;
   selectedProjectId?: string;
@@ -93,6 +94,7 @@ export function Sidebar({
   onNewProject,
   onAddExistingProject,
   onSelectProject,
+  onOpenProjectDocument,
   onSelectGit,
   onDeleteBoard,
   selectedProjectId,
@@ -126,6 +128,7 @@ export function Sidebar({
   const [boardsCollapsed, setBoardsCollapsed] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [documentsByProjectId, setDocumentsByProjectId] = useState<Record<string, { exists: boolean; documents: ProjectDocument[] }>>({});
 
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
   // The switcher scopes the Projects tree to the active workspace; with no
@@ -133,6 +136,14 @@ export function Sidebar({
   const visibleProjects = activeWorkspace
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : projects;
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all(visibleProjects.map(async project => [project.id, await window.praxis.projects.listDocuments(project.id)] as const))
+      .then(entries => { if (!cancelled) setDocumentsByProjectId(Object.fromEntries(entries)); })
+      .catch(error => console.error('Failed to load project documents:', error));
+    return () => { cancelled = true; };
+  }, [projects, activeWorkspaceId]);
 
   const projectEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -260,7 +271,7 @@ export function Sidebar({
           {newMenuOpen && <div className="new-menu" role="menu">
             {newProjectEnabled && <button role="menuitem" data-testid="new-project" onClick={() => { setNewMenuOpen(false); onNewProject(); }}><Icon name="plus" size={14} /><span><strong>Create New Project</strong><small>Start fresh with a brief and board</small></span></button>}
             {newProjectEnabled && <button role="menuitem" data-testid="add-existing-project" onClick={() => { setNewMenuOpen(false); onAddExistingProject(); }}><Icon name="folder-open" size={14} /><span><strong>Create from existing folder</strong><small>Scan plans and connect them to a project</small></span></button>}
-            <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start AI on an existing ticket</small></span></button>
+            <button role="menuitem" data-testid="new-session" onClick={() => { setNewMenuOpen(false); onNewSession(); }}><Icon name="robot" size={14} /><span><strong>New Session</strong><small>Start an AI session in this workspace</small></span></button>
           </div>}
         </div>
         <button className="icon-btn icon-btn-sm" aria-label="Filter">
@@ -346,6 +357,9 @@ export function Sidebar({
                     const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
                     const projectGitCollapsed = collapsed[`project:${project.id}:git`] ?? false;
+                    const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
+                    const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
+                    const projectDocuments = documentsByProjectId[project.id];
                     return <div className="project-tree" key={project.id} data-testid="project-tree">
                       <div className={`project-tree-parent${selectedProjectId === project.id ? ' active' : ''}`}>
                         <button
@@ -374,16 +388,27 @@ export function Sidebar({
                           <span className="tree-label">{defaultBoard.name}</span>
                           <span className="tree-badge">Default</span>
                         </button>}
-                        {linkedBoards.map(({ link, board }) => <button
-                          key={`${link.connectionId}:${link.boardId}`}
-                          className={`tree-row project-board-row${board.id === selectedBoardId ? ' active' : ''}`}
-                          data-testid="project-linked-board-nav-item"
-                          onClick={() => onSelectBoard(board)}
-                        >
-                          <span className="tree-icon linked-board-icon"><Icon name="link" size={14} /></span>
-                          <span className="tree-label">{link.displayName}</span>
-                          <span className="tree-badge">Linked</span>
-                        </button>)}
+                        {linkedBoards.map(({ link, board }) => {
+                          const removeLabel = board.type === 'plan' ? 'Delete' : 'Remove';
+                          return <div
+                            key={`${link.connectionId}:${link.boardId}`}
+                            className={`tree-row project-board-row board-tree-row${board.id === selectedBoardId ? ' active' : ''}`}
+                            data-testid="project-linked-board-nav-item"
+                          >
+                            <button className="board-tree-main" onClick={() => onSelectBoard(board)}>
+                              <span className="tree-icon linked-board-icon"><Icon name="link" size={14} /></span>
+                              <span className="tree-label">{link.displayName}</span>
+                              <span className="tree-badge">Linked</span>
+                            </button>
+                            {board.connectionId && <button
+                              className="board-tree-delete"
+                              data-testid="board-delete-btn"
+                              aria-label={`${removeLabel} board ${board.name}`}
+                              title={board.type === 'plan' ? 'Delete this board' : 'Remove this board from Praxis'}
+                              onClick={() => onDeleteBoard(board)}
+                            ><Icon name="trash" size={12} /></button>}
+                          </div>;
+                        })}
                         </>}
                         <button className="sidebar-subsection-toggle" aria-expanded={!projectGitCollapsed} onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:git`]: !projectGitCollapsed }))}>
                           <span className={`tree-section-icon${projectGitCollapsed ? '' : ' open'}`}><Icon name="git-branch" size={13} /></span><span>Repository</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
@@ -399,6 +424,26 @@ export function Sidebar({
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className="tree-row project-git-child" data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
+                        {projectDocuments?.exists && <>
+                          <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
+                            <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>
+                          </button>
+                          {!projectDocsCollapsed && <div className="project-docs-tree">
+                            <button className="sidebar-subsection-toggle project-plans-folder" aria-expanded={!projectPlansCollapsed} data-testid="project-plans-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:plans`]: !projectPlansCollapsed }))}>
+                              <span className={`tree-section-icon${projectPlansCollapsed ? '' : ' open'}`}><Icon name={projectPlansCollapsed ? 'folder' : 'folder-open'} size={12} /></span><span>plans</span><span className="tree-meta">{projectDocuments.documents.length}</span>
+                            </button>
+                            {!projectPlansCollapsed && groupDocumentsByType(projectDocuments.documents).map(group => {
+                              const groupKey = `project:${project.id}:doc-type:${group.type}`;
+                              const groupCollapsed = collapsed[groupKey] ?? false;
+                              return <div className="project-document-group" key={group.type}>
+                                <button className="project-document-group-toggle" aria-expanded={!groupCollapsed} data-testid="project-document-type-nav-item" onClick={() => setCollapsed(current => ({ ...current, [groupKey]: !groupCollapsed }))}>
+                                  <span className="tree-section-icon"><Icon name={groupCollapsed ? 'chevron-right' : 'chevron-down'} size={10} /></span><span>{group.type}</span><span className="tree-meta">{group.documents.length}</span>
+                                </button>
+                                {!groupCollapsed && group.documents.map(document => <button className="tree-row project-document-row" key={document.relativePath} data-testid="project-document-nav-item" title={document.relativePath} onClick={() => onOpenProjectDocument(project, document)}><span className="tree-icon"><Icon name="markdown" size={13} /></span><span className="tree-label">{document.name}</span></button>)}
+                              </div>;
+                            })}
+                          </div>}
+                        </>}
                       </div>}
                     </div>;
                   }))}
@@ -410,7 +455,8 @@ export function Sidebar({
             </div>
             {!boardsCollapsed && <div className="external-board-tree">{externalBoards.length === 0 ? <span className="sidebar-empty-hint">No external boards</span> : externalBoards.map(board => {
               const missing = board.availability === 'missing';
-              const canDelete = board.type === 'plan' && Boolean(board.connectionId);
+              const canDelete = Boolean(board.connectionId);
+              const removeLabel = board.type === 'plan' ? 'Delete' : 'Remove';
               return <div key={`${board.connectionId}:${board.id}`} className={`tree-row board-tree-row${board.id === selectedBoardId ? ' active' : ''}${missing ? ' missing' : ''}`} data-testid="board-nav-item" title={missing ? board.availabilityMessage ?? 'This board folder is missing.' : boardTypeLabel(board)}>
                 <button className="board-tree-main" disabled={missing} onClick={() => onSelectBoard(board)}>
                   <span className="tree-icon">{showBrandArtwork ? <BrandModeIcon mode={boardMode(board)} size={14} /> : <Icon name={boardTypeIcon(board)} size={14} />}</span>
@@ -418,7 +464,7 @@ export function Sidebar({
                   {missing && <span className="board-availability-warning" data-testid="board-missing-icon" title="Board folder is missing"><Icon name="warning" size={14} /></span>}
                   {board.connectionId && !missing && <ConnectionStatusDot check={connectionChecks[board.connectionId]} />}
                 </button>
-                {canDelete && <button className="board-tree-delete" data-testid="board-delete-btn" aria-label={`Delete board ${board.name}`} title="Delete this board" onClick={() => onDeleteBoard(board)}><Icon name="trash" size={12} /></button>}
+                {canDelete && <button className="board-tree-delete" data-testid="board-delete-btn" aria-label={`${removeLabel} board ${board.name}`} title={board.type === 'plan' ? 'Delete this board' : 'Remove this board from Praxis'} onClick={() => onDeleteBoard(board)}><Icon name="trash" size={12} /></button>}
               </div>;
             })}</div>}
           </>
@@ -462,4 +508,24 @@ export function Sidebar({
       </div>
     </nav>
   );
+}
+
+function groupDocumentsByType(documents: ProjectDocument[]): Array<{ type: string; documents: ProjectDocument[] }> {
+  const groups = new Map<string, ProjectDocument[]>();
+  for (const document of documents) {
+    const type = formatDocumentType(document.type);
+    const group = groups.get(type) ?? [];
+    group.push(document);
+    groups.set(type, group);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([type, grouped]) => ({ type, documents: grouped }));
+}
+
+function formatDocumentType(type?: string): string {
+  const value = type?.trim();
+  if (!value) return 'Other';
+  if (value.toLowerCase() === 'other') return 'Other';
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase() + (value.toLowerCase().endsWith('s') ? '' : 's');
 }

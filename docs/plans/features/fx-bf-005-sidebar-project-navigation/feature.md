@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-30T01:28:58.134Z
+**Type:** Feature
+**Priority:** Medium
 id: FX-BF-005
 slug: sidebar-project-navigation
 title: Sidebar project, board, and Git navigation
@@ -61,3 +65,25 @@ The visible label should be `Git`, not `Repo`. `Repository` remains the clearer 
 ## Close when
 
 Project selection produces a clear sidebar tree of Projects → Boards and Git, the center pane no longer duplicates those navigation choices, folderless/non-repository states remain actionable, and project navigation plus Git Graph/diff flows pass packaged Electron verification.
+
+## Follow-on
+
+The "intentional project summary" this feature reserves the center pane for is
+realised in **FX-BF-008** as a theme-aware project-details inspector in the
+right pane (identity header with a pencil Edit action, status chips, a brief
+completion checklist, workspace stack tags, and planning-source management).
+FX-BF-008 also adds board removal from the sidebar **Boards** list and a
+"No boards" center state.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

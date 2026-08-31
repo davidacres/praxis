@@ -222,9 +222,8 @@ test('analysis uses the selected runtime and continues implementation in the sam
   await expect(primaryAi).toHaveAttribute('data-ai-mode', 'analysis');
   await primaryAi.click();
   await win.locator('[data-testid="sessions-view"]').waitFor();
-  await expect(win.locator('[data-testid="session-runtime"]')).toContainText(
-    'vercel-gateway · mock/thorough'
-  );
+  await expect(win.locator('[data-testid="session-provider"]')).toContainText('Vercel AI Gateway');
+  await expect(win.locator('[data-testid="session-model"]')).toContainText('mock/thorough');
   await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText(
     'Mock gateway reply',
     { timeout: 15000 }

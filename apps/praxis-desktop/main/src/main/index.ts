@@ -11,6 +11,7 @@ import { registerSettingsIpc } from './settingsIpc';
 import { registerLogIpc } from './logIpc';
 import { getLogBus } from './logBusInstance';
 import { registerShellIpc } from './shellIpc';
+import { registerBrowserIpc } from './browserIpc';
 import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
@@ -154,8 +155,10 @@ function wantsWindowVibrancyAtLaunch(): boolean {
 function createMainWindow(): void {
   const vibrancy = wantsWindowVibrancyAtLaunch();
   const win = new BrowserWindow({
+    // Landscape-first default: 16:9 gives the board and project panes room to
+    // sit side by side on the first launch.
     width: 1664,
-    height: 1092,
+    height: 936,
     minWidth: 720,
     minHeight: 480,
     icon: getDevAppIcon(),
@@ -243,6 +246,7 @@ void app.whenReady().then(async () => {
   registerSettingsIpc();
   registerLogIpc();
   registerShellIpc();
+  registerBrowserIpc();
   registerBoardPrefsIpc();
   registerAiIpc();
   registerAiWorkflowIpc();

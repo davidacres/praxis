@@ -9,7 +9,7 @@ import type {
   IssueSummary,
   TaskDesignerCanvasNode,
   TaskDesignerTicketNode
-  , ProjectRecord, WorkspaceRecord
+  , ProjectRecord, ProjectDocument, WorkspaceRecord
 } from '@praxis/core';
 import { IssueDetail } from '../issues/IssueDetail';
 import { Connections } from '../connections/Connections';
@@ -46,6 +46,7 @@ import {
   type BoardFilterValue
 } from '../board/BoardFilterBar';
 import { GitGraphPage } from '../git/GitGraphPage';
+import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
 
@@ -227,6 +228,7 @@ export function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
+  const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
   const [projectWizardPresentation, setProjectWizardPresentation] = useState<'dialog' | 'onboarding'>('dialog');
   const [startupResolved, setStartupResolved] = useState(false);
@@ -299,6 +301,13 @@ export function App() {
     min: 120,
     max: 560,
     side: 'bottom'
+  });
+  const projectDoc = useResizable({
+    storageKey: 'tm-pane-project-doc',
+    initial: 420,
+    min: 280,
+    max: 860,
+    side: 'left'
   });
 
   const navigate = useCallback((next: Route) => {
@@ -571,6 +580,12 @@ export function App() {
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : [];
   const selectedProject = workspaceProjects.find(project => project.id === route.projectId);
+  // The project a workspace-level "New session" belongs to: the one on screen,
+  // else the workspace's default project, else its only project. When one is
+  // resolved the composer scopes to it (its folder, no board/ticket picker).
+  const composerProject = selectedProject
+    ?? workspaceProjects.find(project => project.id === activeWorkspace?.defaultProjectId)
+    ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
   const workspaceBoards = activeWorkspace
     ? boards.filter(board => {
         const directProjectId = board.connectionId?.startsWith('project:')
@@ -747,7 +762,51 @@ export function App() {
           total: undefined
         };
 
+  const renderNewSession = () => (
+    <NewSession
+      boards={workspaceBoards}
+      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree }) => {
+        const project = board?.connectionId?.startsWith('project:')
+          ? workspaceProjects.find(item => item.id === board.connectionId?.slice('project:'.length))
+          : composerProject;
+        const record = await window.praxis.ai.delegate({
+          ...(issueKey ? { issueKey } : {}),
+          mode,
+          ...(board?.connectionId ? { connectionId: board.connectionId } : {}),
+          task: { goal },
+          provider,
+          model,
+          toolMode: project?.defaultAiToolMode ?? toolMode,
+          workingDirectory: project?.workspaceFolder ?? workingDirectory,
+          ...(runInWorktree ? { runInWorktree: true } : {})
+        });
+        await window.praxis.ai.renameSession(record.issueKey, title);
+        navigate({ feature: 'sessions', sessionKey: record.issueKey });
+      }}
+      defaultWorkingDirectory={composerProject?.workspaceFolder ?? boardProject?.workspaceFolder}
+      {...(composerProject
+        ? { scopeLabel: composerProject.name, defaultToolMode: composerProject.defaultAiToolMode }
+        : {})}
+      connectionCount={connections.length}
+      onOpenConnections={() => {
+        refreshConnections();
+        navigate({ feature: 'connections' });
+      }}
+      projectCount={workspaceProjects.length}
+      onNewProject={newProjectEnabled ? () => requestProjectWizard('create') : undefined}
+      toolModeForBoard={board => board.connectionId?.startsWith('project:')
+        ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))?.defaultAiToolMode
+        : undefined}
+      onSelectedBoardChange={board => setComposerBoardId(current => current === board?.id ? current : board?.id)}
+    />
+  );
+
   const centre = () => {
+    // A workspace-level session ("Sessions → New session"): the composer, not a
+    // board or the project dashboard, even when a project is on the route.
+    if (route.newSession) {
+      return renderNewSession();
+    }
     if (selectedProject && route.feature !== 'git') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;
     }
@@ -771,7 +830,7 @@ export function App() {
           sessions={agentSessions}
           connectionChecks={connectionChecks}
           onNewProject={() => requestProjectWizard('create')}
-          onNewSession={() => navigate({})}
+          onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
           onOpenProjects={() => navigate({})}
           onOpenSessions={() => navigate({ feature: 'sessions' })}
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
@@ -787,7 +846,7 @@ export function App() {
           sessions={agentSessions}
           selectedKey={route.sessionKey}
           onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
-          onNewSession={() => navigate({})}
+          onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
         />
       );
@@ -842,45 +901,30 @@ export function App() {
         />
       );
     }
+    // Nothing to work with yet: no board is selected and the workspace has none.
+    // Point the user straight at where boards get created rather than showing an
+    // AI composer that can't do anything without a board.
+    if (!selectedBoard && workspaceBoards.length === 0) {
+      return (
+        <div className="empty-state board-empty-state" data-testid="no-boards-empty">
+          <Icon name="columns" size={30} />
+          <strong>No boards</strong>
+          <p>Connect a board source or add one from a plans folder to start tracking work.</p>
+          <button
+            className="btn btn-primary"
+            data-testid="no-boards-create-btn"
+            onClick={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
+          >
+            Create board
+          </button>
+        </div>
+      );
+    }
     // Work mode renders the board cards in the sidebar; the centre pane just
     // shows whatever is currently routed (New Session when nothing's picked,
     // BoardView for the selected board).
     if (!selectedBoard) {
-      return (
-        <NewSession
-          boards={workspaceBoards}
-          onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree }) => {
-            const project = board?.connectionId?.startsWith('project:')
-              ? workspaceProjects.find(item => item.id === board.connectionId?.slice('project:'.length))
-              : undefined;
-            const record = await window.praxis.ai.delegate({
-              ...(issueKey ? { issueKey } : {}),
-              mode,
-              ...(board?.connectionId ? { connectionId: board.connectionId } : {}),
-              task: { goal },
-              provider,
-              model,
-              toolMode: project?.defaultAiToolMode ?? toolMode,
-              workingDirectory: project?.workspaceFolder ?? workingDirectory,
-              ...(runInWorktree ? { runInWorktree: true } : {})
-            });
-            await window.praxis.ai.renameSession(record.issueKey, title);
-            navigate({ feature: 'sessions', sessionKey: record.issueKey });
-          }}
-          defaultWorkingDirectory={boardProject?.workspaceFolder}
-          connectionCount={connections.length}
-          onOpenConnections={() => {
-            refreshConnections();
-            navigate({ feature: 'connections' });
-          }}
-          projectCount={workspaceProjects.length}
-          onNewProject={newProjectEnabled ? () => requestProjectWizard('create') : undefined}
-          toolModeForBoard={board => board.connectionId?.startsWith('project:')
-            ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))?.defaultAiToolMode
-            : undefined}
-          onSelectedBoardChange={board => setComposerBoardId(current => current === board?.id ? current : board?.id)}
-        />
-      );
+      return renderNewSession();
     }
     if (route.newIssue) {
       return (
@@ -1071,17 +1115,35 @@ export function App() {
                     navigate(feature === 'git' && selectedProject ? { projectId: selectedProject.id, feature } : { feature });
                   }}
                   featureCounts={featureCounts}
-                  onNewSession={() => navigate({})}
+                  onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
                   onNewProject={() => requestProjectWizard('create')}
                   onAddExistingProject={() => requestProjectWizard('existing')}
                   onSelectProject={project => navigate({ projectId: project.id })}
+                  onOpenProjectDocument={(project, document) => {
+                    void window.praxis.projects.readDocument(project.id, document.relativePath)
+                      .then(setProjectDocument)
+                      .catch(error => console.error('Failed to open project document:', error));
+                  }}
                   selectedProjectId={route.projectId}
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
-                    void window.praxis.userWorkspace.deleteBoard(board.connectionId, board.id).then(() => {
+                    const connectionId = board.connectionId;
+                    // "Delete" means different things per backend: a user-workspace
+                    // connection owns many boards (drop just this one); a live-folder
+                    // connection *is* its single board (drop the connection); a
+                    // Jira/GitLab board is only tracked from a shared remote
+                    // connection (untrack it, delete nothing remote).
+                    const mode = connections.find(item => item.id === connectionId)?.mode;
+                    const removed = mode === 'userworkspace'
+                      ? window.praxis.userWorkspace.deleteBoard(connectionId, board.id)
+                      : mode === 'livefolder'
+                        ? window.praxis.connection.remove(connectionId)
+                        : window.praxis.connection.removeTrackedBoard(connectionId, board.id);
+                    void removed.then(() => {
+                      if (route.boardId === board.id) navigate({});
                       refreshBoards();
                       refreshConnections();
                     });
@@ -1093,6 +1155,21 @@ export function App() {
               className={`splitter${sidebar.dragging ? ' dragging' : ''}`}
               aria-label="Resize sidebar"
               {...sidebar.handleProps}
+            />
+          </>
+        )}
+
+        {projectDocument && (
+          <>
+            <ProjectDocumentPreview
+              document={projectDocument}
+              width={projectDoc.size}
+              onClose={() => setProjectDocument(undefined)}
+            />
+            <div
+              className={`splitter${projectDoc.dragging ? ' dragging' : ''}`}
+              aria-label="Resize document preview"
+              {...projectDoc.handleProps}
             />
           </>
         )}

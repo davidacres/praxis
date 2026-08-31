@@ -135,8 +135,9 @@ test('creates a folderless Product project through the six-step wizard and opens
   expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(3);
   expect(created?.workItems).toHaveLength(5);
 
-  // Project surfaces must inherit the active application theme instead of
-  // painting an opaque default background over the themed panes.
+  // Project surfaces — including the detail panels — must inherit the active
+  // application theme instead of painting an opaque default background over the
+  // themed panes. The panels are borderless and carry no surface of their own.
   await page.locator('[data-testid="titlebar-themes"]').click();
   await page.locator('[data-testid="theme-card-humanist-light"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
@@ -150,13 +151,15 @@ test('creates a folderless Product project through the six-step wizard and opens
       dashboardColor: dashboard ? getComputedStyle(dashboard).color : '',
       dashboardBackground: dashboard ? getComputedStyle(dashboard).backgroundColor : '',
       homeBackground: projectHome ? getComputedStyle(projectHome).backgroundColor : '',
-      panelBackground: panel ? getComputedStyle(panel).backgroundColor : ''
+      panelBackground: panel ? getComputedStyle(panel).backgroundColor : '',
+      panelBorderWidth: panel ? getComputedStyle(panel).borderTopWidth : ''
     };
   });
   expect(projectThemeStyles.dashboardColor).not.toBe('');
   expect(projectThemeStyles.dashboardBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
   expect(projectThemeStyles.homeBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
-  expect(projectThemeStyles.panelBackground).not.toBe(projectThemeStyles.dashboardBackground);
+  expect(projectThemeStyles.panelBackground).toMatch(/rgba?\(0, 0, 0, 0\)/);
+  expect(projectThemeStyles.panelBorderWidth).toBe('0px');
 
   await projectTree.getByTestId('project-default-board-nav-item').click();
   await expect(page.getByTestId('issue-card')).toHaveCount(5);

@@ -114,6 +114,21 @@ export interface AiSettings {
    * providers only.
    */
   providers: Partial<Record<AiProvider, AiProviderConfig>>;
+  /**
+   * The in-app browser the AI can drive (navigate / read / click / type) during
+   * a full-tools session. Off by default: it lets a model fetch arbitrary web
+   * pages, so it is opt-in and every navigation still prompts for permission
+   * unless its host is on `allowedHosts`.
+   */
+  browserTools: {
+    enabled: boolean;
+    /**
+     * Hostnames (exact, or `*.example.com` wildcards) the agent may navigate to
+     * without a per-navigation prompt. Loopback and private-range addresses are
+     * always blocked regardless of this list.
+     */
+    allowedHosts: string[];
+  };
 }
 
 const KNOWN_AI_PROVIDERS: readonly AiProvider[] = [
@@ -189,6 +204,14 @@ export interface AppearanceSettings {
      * overrides it in the renderer regardless.
      */
     animateMotifs: boolean;
+    /**
+     * Drop the surface material (texture, watermark, tint, glow, blur) behind
+     * the AI chat session view — its list panel and console — so long
+     * transcripts stay legible. The colour theme still applies; the panels fall
+     * back to flat themed fills. A profile-wide default; the sessions view also
+     * carries a per-session override on top of it.
+     */
+    plainChatSurface: boolean;
     /**
      * The user's Motif override. The motif (hexagon, grid, weave …) is
      * independent of the material, so it can be worn over any theme *and* any
@@ -383,7 +406,7 @@ function builtInLook(id: string, name: string, surfacePackId: string): Appearanc
     themeId: 'praxis-dark',
     themeMode: 'dark',
     surfacePackId,
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
     priorityColors: { ...DEFAULT_PRIORITY_COLORS },
     showBrandArtwork: true
   };
@@ -407,7 +430,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     analysisPrompt: '',
     analysisGateEnabled: false,
     activeProvider: 'vercel-gateway',
-    providers: {}
+    providers: {},
+    browserTools: { enabled: false, allowedHosts: [] }
   },
   jira: {
     siteUrl: '',
@@ -447,8 +471,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
     customThemes: [],
     surfacePackId: 'parchment',
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true },
-    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir'],
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'binary', 'aurora-glass', 'noir'],
     customSurfacePacks: [],
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
     activeLookId: 'look-parchment',
@@ -487,7 +511,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
  * per-key so a patch touching one priority doesn't reset the others.
  */
 export interface AppSettingsPatch {
-  ai?: Partial<AiSettings>;
+  ai?: Partial<Omit<AiSettings, 'browserTools'>> & {
+    browserTools?: Partial<AiSettings['browserTools']>;
+  };
   jira?: Partial<JiraSettings>;
   performance?: Partial<PerformanceSettings>;
   delivery?: Partial<DeliverySettings>;
@@ -602,6 +628,7 @@ function readSurface(value: unknown, fallback: AppearanceSettings['surface']): A
     texture: readBoolean(value.texture, fallback.texture),
     windowVibrancy: readBoolean(value.windowVibrancy, fallback.windowVibrancy),
     animateMotifs: readBoolean(value.animateMotifs, fallback.animateMotifs),
+    plainChatSurface: readBoolean(value.plainChatSurface, fallback.plainChatSurface),
     ...(motif ? { motif } : {})
   };
 }
@@ -805,6 +832,22 @@ function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiPro
   return out;
 }
 
+function readBrowserTools(value: unknown): AiSettings['browserTools'] {
+  const fallback = DEFAULT_APP_SETTINGS.ai.browserTools;
+  if (!isRecord(value)) {
+    return { enabled: fallback.enabled, allowedHosts: [] };
+  }
+  const allowedHosts = Array.isArray(value.allowedHosts)
+    ? value.allowedHosts
+        .filter((host): host is string => typeof host === 'string' && host.trim().length > 0)
+        .map(host => host.trim().toLowerCase())
+    : [];
+  return {
+    enabled: readBoolean(value.enabled, fallback.enabled),
+    allowedHosts: [...new Set(allowedHosts)]
+  };
+}
+
 function readPriorityColors(value: unknown): Record<string, string> {
   if (!isRecord(value)) {
     return { ...DEFAULT_APP_SETTINGS.appearance.priorityColors };
@@ -839,9 +882,14 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled
         ),
         activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider),
-        providers: readAiProviderConfigs(raw.ai.providers)
+        providers: readAiProviderConfigs(raw.ai.providers),
+        browserTools: readBrowserTools(raw.ai.browserTools)
       }
-    : { ...DEFAULT_APP_SETTINGS.ai, providers: { ...DEFAULT_APP_SETTINGS.ai.providers } };
+    : {
+        ...DEFAULT_APP_SETTINGS.ai,
+        providers: { ...DEFAULT_APP_SETTINGS.ai.providers },
+        browserTools: { ...DEFAULT_APP_SETTINGS.ai.browserTools, allowedHosts: [] }
+      };
 
   const jira: JiraSettings = isRecord(raw) && isRecord(raw.jira)
     ? {
@@ -1064,7 +1112,10 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
           base.ai.providers,
           patch.ai!.providers as Partial<Record<AiProvider, AiProviderConfig>>
         )
-      : base.ai.providers
+      : base.ai.providers,
+    browserTools: isRecord(patch.ai?.browserTools)
+      ? { ...base.ai.browserTools, ...patch.ai!.browserTools }
+      : base.ai.browserTools
   };
 
   const jira: JiraSettings = {

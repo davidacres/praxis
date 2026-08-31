@@ -1,5 +1,6 @@
 # FX-BF-003: Git Integration With Visual Commit Graph
 
+**Type:** Feature
 **Status:** Complete
 **Owner:** Electron desktop app
 **Priority:** P1
@@ -97,3 +98,20 @@ The broader Electron suite was also attempted on 2026-08-27. It is not green in 
 - The graph remains legible at 100, 1,000, and 5,000 commits, with a documented performance fallback.
 - Errors explain what happened and give a safe next action.
 - Settings, commands, docs, and tests are updated together.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Dependencies
+
+
+
+## Comments
+
+

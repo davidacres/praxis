@@ -17,7 +17,7 @@ test('first launch leads directly into workspace setup beneath the title bar', a
   const initialSize = await app.electronApp.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0]?.getSize()
   );
-  expect(initialSize).toEqual([1664, 1092]);
+  expect(initialSize).toEqual([1664, 936]);
 
   await expect(win.getByTestId('getting-started')).toBeVisible();
   await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();

@@ -48,6 +48,8 @@ import type {
   AttachProjectFolderResult,
   CreateProjectInput,
   FolderInspection,
+  ProjectDocument,
+  ProjectDocumentsResult,
   ProjectBoardReference,
   ProjectRecord,
   UpdateProjectInput
@@ -253,6 +255,43 @@ export interface ShellIpc {
   openExternal(url: string): Promise<boolean>;
 }
 
+/** Live state of the in-app AI browser, pushed on `browser:didNavigate`. */
+export interface BrowserNavigationState {
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+}
+
+/** Result of a page-level browser action returned to the renderer toolbar. */
+export interface BrowserPageResult {
+  url: string;
+  title: string;
+  text: string;
+}
+
+/**
+ * The in-app browser surface: a `WebContentsView` the AI drives (via the gateway
+ * browser tools) and the user watches. The renderer owns its on-screen position
+ * — it draws a placeholder and reports the rect through `setBounds`.
+ */
+export interface BrowserIpc {
+  /** Parents the view to this window (idempotent). */
+  attach(): Promise<void>;
+  /** Positions the native view over the renderer's placeholder, in CSS px. */
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  /** Shows or hides the view without detaching it. */
+  setVisible(visible: boolean): Promise<void>;
+  navigate(url: string): Promise<BrowserPageResult>;
+  back(): Promise<void>;
+  forward(): Promise<void>;
+  reload(): Promise<void>;
+  getState(): Promise<BrowserNavigationState | undefined>;
+  /** Subscribes to navigation updates; returns an unsubscribe function. */
+  onDidNavigate(listener: (state: BrowserNavigationState) => void): () => void;
+}
+
 export interface AppIpc {
   getVersion(): Promise<string>;
 }
@@ -269,6 +308,8 @@ export interface ProjectsIpc {
   attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;
   linkBoard(projectId: string, board: ProjectBoardReference): Promise<ProjectRecord>;
   unlinkBoard(projectId: string, connectionId: string, boardId: string): Promise<ProjectRecord>;
+  listDocuments(projectId: string): Promise<ProjectDocumentsResult>;
+  readDocument(projectId: string, relativePath: string): Promise<ProjectDocument>;
 }
 
 /** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
@@ -531,6 +572,7 @@ export interface PraxisIpc {
   log: LogIpc;
   dialog: DialogIpc;
   shell: ShellIpc;
+  browser: BrowserIpc;
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
   agentRuntime: AgentRuntimeIpc;

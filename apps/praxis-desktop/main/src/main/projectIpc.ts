@@ -59,4 +59,6 @@ export function registerProjectIpc(): void {
   ipcMain.handle('projects:attachFolder', (_event, projectId: string, input: AttachProjectFolderInput) => getProjectManager().attachFolder(projectId, input));
   ipcMain.handle('projects:linkBoard', (_event, projectId: string, board: ProjectBoardReference) => getProjectStore().linkBoard(projectId, board));
   ipcMain.handle('projects:unlinkBoard', (_event, projectId: string, connectionId: string, boardId: string) => getProjectStore().unlinkBoard(projectId, connectionId, boardId));
+  ipcMain.handle('projects:listDocuments', (_event, projectId: string) => getProjectManager().listDocuments(projectId));
+  ipcMain.handle('projects:readDocument', (_event, projectId: string, relativePath: string) => getProjectManager().readDocument(projectId, relativePath));
 }

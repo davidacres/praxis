@@ -16,6 +16,8 @@
 
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
+import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 const stream = acp.ndJsonStream(
   Writable.toWeb(process.stdout),
@@ -34,8 +36,13 @@ app.onNotification(acp.AGENT_METHODS.session_cancel, () => {
 
 app.onRequest(acp.AGENT_METHODS.initialize, () => ({
   protocolVersion: acp.PROTOCOL_VERSION,
-  agentCapabilities: {}
+  // Advertise the http MCP transport so the client hands us `mcpServers`
+  // (the in-app browser). Real Claude Code advertises this too.
+  agentCapabilities: { mcpCapabilities: { http: true } }
 }));
+
+// Captured from `session/new` — the in-app browser MCP endpoint the client passes.
+let browserMcp;
 
 // Fake model selector for testing `AcpClientWrapper.getModelOption`/
 // `setConfigOption` and the composer's model picker (aiCliAgentHost.spec.ts's
@@ -54,10 +61,11 @@ const modelConfigOption = () => ({
   ]
 });
 
-app.onRequest(acp.AGENT_METHODS.session_new, () => ({
-  sessionId: 'fake-session-1',
-  configOptions: [modelConfigOption()]
-}));
+app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
+  browserMcp = (ctx.params.mcpServers ?? []).find(server => server.name === 'praxis-browser');
+  process.stderr.write(`FAKE_ACP: session/new mcpServers=${JSON.stringify(ctx.params.mcpServers ?? [])}\n`);
+  return { sessionId: 'fake-session-1', configOptions: [modelConfigOption()] };
+});
 
 app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
   if (ctx.params.configId === 'model' && 'value' in ctx.params) {
@@ -70,6 +78,8 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
   const promptText = ctx.params.prompt
     .map(block => (block.type === 'text' ? block.text : ''))
     .join('');
+
+  process.stderr.write(`FAKE_ACP: session/prompt hasBrowserMcp=${Boolean(browserMcp)} useBrowser=${promptText.includes('USE_BROWSER')} len=${promptText.length}\n`);
 
   await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
     sessionId: ctx.params.sessionId,
@@ -125,6 +135,38 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         status: wasAllowed ? 'completed' : 'failed'
       }
     });
+  }
+
+  if (promptText.includes('USE_BROWSER')) {
+    // Connect to the in-app browser MCP server the client handed us in
+    // `session/new`, drive one navigation, and stream the result back.
+    if (!browserMcp) {
+      await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+        sessionId: ctx.params.sessionId,
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'BROWSER RESULT:\nNO_MCP_SERVER' } }
+      });
+      return { stopReason: 'end_turn' };
+    }
+    let text;
+    try {
+      const headers = Object.fromEntries((browserMcp.headers ?? []).map(h => [h.name, h.value]));
+      const mcp = new McpClient({ name: 'fake-acp-agent', version: '1.0.0' });
+      await mcp.connect(new StreamableHTTPClientTransport(new URL(browserMcp.url), { requestInit: { headers } }));
+      const result = await mcp.callTool({
+        name: 'browser_navigate',
+        arguments: { url: process.env.FAKE_ACP_BROWSER_URL ?? 'https://example.com/' }
+      });
+      text = (result.content ?? []).map(part => (part.type === 'text' ? part.text : '')).join('\n');
+      await mcp.close();
+    } catch (error) {
+      text = `MCP_CALL_FAILED: ${error instanceof Error ? error.message : String(error)}`;
+      process.stderr.write(`FAKE_ACP: ${text}\n`);
+    }
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `BROWSER RESULT:\n${text}` } }
+    });
+    return { stopReason: 'end_turn' };
   }
 
   if (promptText.includes('WITH_DIFF')) {

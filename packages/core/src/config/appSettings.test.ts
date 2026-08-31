@@ -30,7 +30,8 @@ test('sanitize fills surface defaults for a brand-new profile', () => {
     translucency: true,
     texture: true,
     windowVibrancy: false,
-    animateMotifs: true
+    animateMotifs: true,
+    plainChatSurface: false
   });
   assert.deepEqual(settings.appearance.customSurfacePacks, []);
   assert.ok(settings.appearance.installedSurfacePackIds.includes('flat'));

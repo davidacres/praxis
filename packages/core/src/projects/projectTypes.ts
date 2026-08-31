@@ -39,6 +39,18 @@ export interface FolderInspection {
   planFiles?: string[];
 }
 
+export interface ProjectDocument {
+  relativePath: string;
+  name: string;
+  type?: string;
+  content?: string;
+}
+
+export interface ProjectDocumentsResult {
+  exists: boolean;
+  documents: ProjectDocument[];
+}
+
 export interface ProjectRecord {
   id: string;
   name: string;

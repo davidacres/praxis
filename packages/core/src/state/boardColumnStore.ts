@@ -66,7 +66,8 @@ function hasPreferenceData(prefs: BoardColumnPreferences): boolean {
       prefs.viewMode === 'list' ||
       (prefs.listGroupOrder && prefs.listGroupOrder.length > 0) ||
       prefs.maxAgeWeeks !== undefined ||
-      (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0)
+      (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0) ||
+      prefs.plainSurface === true
   );
 }
 
@@ -158,6 +159,9 @@ export class BoardColumnStore implements Disposable {
     }
     if (prefs.issueOrder && Object.keys(prefs.issueOrder).length > 0) {
       next.issueOrder = { ...prefs.issueOrder };
+    }
+    if (prefs.plainSurface) {
+      next.plainSurface = true;
     }
     map[boardId] = next;
     await this.storage.workspace.update(STORAGE_KEY, map);

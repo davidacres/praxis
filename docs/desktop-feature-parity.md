@@ -5,7 +5,7 @@ Legend: **✓** complete · **?** partial / not finished · **✗** missing
 Scope notes: the desktop app (Electron) reuses `packages/core` backends and the
 shared `apps/praxis-desktop/renderer` React UI; the extension uses its own webview panels and
 tree views. Backend *engines* are near-identical — the gaps are almost all in UI
-surface and host integrations. Last audited: 2026-08-23.
+surface and host integrations. Last audited: 2026-08-30.
 
 ## Backends & connections
 
@@ -45,6 +45,10 @@ surface and host integrations. Last audited: 2026-08-23.
 | New project wizard | ✓ | ✗ | |
 | Saved Praxis workspace contexts | ✗ | ✓ | Desktop stores project/connection references and objectives in versioned workspace files |
 | Project-first sidebar hierarchy | ✗ | ✓ | Projects own boards and Repository tools; unlinked boards remain separately discoverable |
+| Project-details inspector (right pane) | ✗ | ✓ | Status chips, brief completion checklist, workspace stack tags, planning-source management (FX-BF-008) |
+| Remove / delete board from the sidebar list | ✓ | ✓ | Desktop routes by backend: user-workspace delete, live-folder connection removal, tracked-board untrack (FX-BF-008) |
+| Per-board plain background (disable surface material) | ✗ | ✓ | Desktop-only: Board settings → Appearance; `BoardColumnPreferences.plainSurface` (FX-BF-008) |
+| No-boards centre state with Create board action | n/a | ✓ | Empty workspace guides to Connections instead of the session composer (FX-BF-008) |
 
 ## Issues
 
@@ -109,6 +113,7 @@ surface and host integrations. Last audited: 2026-08-23.
 | Settings UI (appearance, behaviour) | ✓ | ✓ | VS Code settings vs in-app Settings page |
 | Workspace-first startup and restore | n/a | ✓ | Getting Started validates restore state, shows recent workspaces, and requires a workspace before project creation |
 | Theme switching | ✓ | ✓ | Extension follows VS Code theme; desktop has its own switcher |
+| Theme-aware right-pane surfaces | n/a | ✓ | Project-details and ticket-details panes inherit the active theme / surface pack instead of an opaque fill (FX-BF-008) |
 | Status bar (connection state) | ✓ | ✗ | |
 | Output / log panel | ✓ | ? | Desktop bottom panel has Output/Terminal tabs — shell only |
 | Native window chrome (title bar, min/max/close) | n/a | ✓ | |
