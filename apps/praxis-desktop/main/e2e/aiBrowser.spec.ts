@@ -142,6 +142,8 @@ test('the toolbar navigates the in-app browser by hand', async () => {
 
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-browser-toggle"]').click();
+  // Browser tools are on for this session, so the dock is framed as AI-controlled.
+  await expect(win.locator('.session-browser-dock.ai-controlled')).toBeVisible();
   const url = win.locator('[data-testid="browser-url-input"]');
   await expect(url).toBeVisible();
   await url.fill(`${pageOrigin}/`);
