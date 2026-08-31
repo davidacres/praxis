@@ -314,6 +314,20 @@ export function SessionsPage({
     return selected.reasoningText?.trim() ? 'Thinking…' : 'Working…';
   })();
 
+  // The pending permission the agent is blocked on, if any — surfaced as a
+  // slide-up dock directly above the chat input.
+  const pendingPermission = selected?.state === 'awaiting_approval'
+    ? pendingPermissionEvent(selected.events)
+    : undefined;
+  const respondToPermission = (decision: PermissionDecision) => {
+    if (!selected) return;
+    setRespondingTo(selected.issueKey);
+    void window.praxis.ai
+      .respondToPermission(selected.issueKey, decision)
+      .finally(() => setRespondingTo(undefined));
+  };
+  const permissionBusy = respondingTo === selected?.issueKey;
+
   // Follow the stream: whenever the selected session gains events, pin the
   // console to the latest one (the list replaces the record object on every
   // push, so the count is the reliable change signal).
@@ -779,56 +793,6 @@ export function SessionsPage({
               </div>
             )}
 
-            {selected.state === 'awaiting_approval' &&
-              (() => {
-                const pending = pendingPermissionEvent(selected.events);
-                if (!pending) {
-                  return null;
-                }
-                const respond = (decision: PermissionDecision) => {
-                  setRespondingTo(selected.issueKey);
-                  void window.praxis.ai
-                    .respondToPermission(selected.issueKey, decision)
-                    .finally(() => setRespondingTo(undefined));
-                };
-                const busy = respondingTo === selected.issueKey;
-                return (
-                  <div className="session-permission-card" data-testid="session-permission-card">
-                    <Icon name="shield" size={15} />
-                    <div className="session-permission-body">
-                      <div className="session-permission-summary">{pending.summary}</div>
-                      {pending.detail && <div className="session-permission-detail">{pending.detail}</div>}
-                    </div>
-                    <div className="session-permission-actions">
-                      <button
-                        className="btn"
-                        data-testid="session-permission-deny"
-                        disabled={busy}
-                        onClick={() => respond('deny')}
-                      >
-                        Deny
-                      </button>
-                      <button
-                        className="btn"
-                        data-testid="session-permission-allow-always"
-                        disabled={busy}
-                        onClick={() => respond('allow_always')}
-                      >
-                        Always allow
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        data-testid="session-permission-allow-once"
-                        disabled={busy}
-                        onClick={() => respond('allow_once')}
-                      >
-                        Allow
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-
             <div className="session-chat-scroll" ref={eventsRef} data-testid="session-chat-thread">
               <div className="session-chat-message is-user">
                 <div className="session-chat-author">You</div>
@@ -927,6 +891,46 @@ export function SessionsPage({
                 </div>
               </details>
             </div>
+
+            {pendingPermission && (
+              <div className="session-request-dock" data-testid="session-request-dock">
+                <div className="session-permission-card" data-testid="session-permission-card">
+                  <Icon name="shield" size={15} />
+                  <div className="session-permission-body">
+                    <div className="session-permission-summary">{pendingPermission.summary}</div>
+                    {pendingPermission.detail && (
+                      <div className="session-permission-detail">{pendingPermission.detail}</div>
+                    )}
+                  </div>
+                  <div className="session-permission-actions">
+                    <button
+                      className="btn"
+                      data-testid="session-permission-deny"
+                      disabled={permissionBusy}
+                      onClick={() => respondToPermission('deny')}
+                    >
+                      Deny
+                    </button>
+                    <button
+                      className="btn"
+                      data-testid="session-permission-allow-always"
+                      disabled={permissionBusy}
+                      onClick={() => respondToPermission('allow_always')}
+                    >
+                      Always allow
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      data-testid="session-permission-allow-once"
+                      disabled={permissionBusy}
+                      onClick={() => respondToPermission('allow_once')}
+                    >
+                      Allow
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="session-chat-composer">
               {followUpError && <div className="error-banner" data-testid="session-follow-up-error">{followUpError}</div>}

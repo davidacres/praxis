@@ -4919,7 +4919,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .session-console.browser-open > .session-console-header,
 .session-console.browser-open > .session-analysis-banner,
-.session-console.browser-open > .session-permission-card,
+.session-console.browser-open > .session-request-dock,
 .session-console.browser-open > .session-chat-scroll,
 .session-console.browser-open > .session-chat-composer {
   margin-right: clamp(360px, 44%, 760px);
@@ -5014,6 +5014,18 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   white-space: nowrap;
 }
 
+/* Requests from the agent (permission / input) dock directly above the chat
+   input and slide up into view — they are what the user needs to act on next. */
+.session-request-dock {
+  flex-shrink: 0;
+  padding: 0 var(--space-3);
+  animation: session-request-slide-up 0.18s ease-out;
+}
+@keyframes session-request-slide-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 /* Blocking approval prompt — the agent is paused until Allow/Deny, so it
    gets an accent border rather than the neutral `.composer-notice` look. */
 .session-permission-card {
@@ -5021,9 +5033,11 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3);
-  border-bottom: 1px solid var(--border-strong);
+  border: 1px solid var(--border-strong);
   border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
   background: var(--bg-elevated);
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.35);
 }
 
 .session-permission-body {
