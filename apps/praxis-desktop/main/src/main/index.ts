@@ -4,7 +4,7 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
 import { registerBoardIpc } from './boardIpc';
 import { registerIssueIpc } from './issueIpc';
 import { registerConnectionIpc } from './connectionIpc';
-import { registerUserWorkspaceIpc } from './userWorkspaceIpc';
+import { registerProjectImportIpc } from './projectImportIpc';
 import { registerFolderIpc } from './folderIpc';
 import { registerDialogIpc } from './dialogIpc';
 import { registerSettingsIpc } from './settingsIpc';
@@ -239,7 +239,7 @@ void app.whenReady().then(async () => {
   registerBoardIpc();
   registerIssueIpc();
   registerConnectionIpc();
-  registerUserWorkspaceIpc();
+  registerProjectImportIpc();
   registerFolderIpc();
   registerDialogIpc();
   registerWindowIpc();

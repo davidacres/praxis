@@ -12,8 +12,7 @@ export type BackendMode =
   | 'github'
   | 'gitlab'
   | 'folder'
-  | 'project'
-  | 'userworkspace';
+  | 'project';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
 export type AiProvider = 'vercel-gateway' | 'openai' | 'anthropic' | 'claude-code-cli' | 'codex-cli' | 'copilot-cli';
@@ -255,7 +254,7 @@ export interface CreateIssueInput {
   parentKey?: string;
   boardId?: string;
   /**
-   * folder/userworkspace only: when `parentKey` is absent and this is
+   * folder-backed only: when `parentKey` is absent and this is
    * non-empty, the service creates a Feature with this summary first, then
    * creates the requested item under it. Ignored by other backends.
    */

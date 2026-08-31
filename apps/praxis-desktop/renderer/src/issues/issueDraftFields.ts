@@ -25,7 +25,7 @@ export function getCreatableTypes(mode: BackendMode): string[] {
   if (mode === 'jiracloud') {
     return ['Epic', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
   }
-  if (mode === 'folder' || mode === 'userworkspace') {
+  if (mode === 'folder') {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   // A project stores a free-form `issueType` string and has no subtask model.
@@ -103,7 +103,7 @@ export function getDraftParentRule(
     };
   }
 
-  if (mode === 'folder' || mode === 'userworkspace') {
+  if (mode === 'folder') {
     return {
       canHaveParent: true,
       requiresParent: true,

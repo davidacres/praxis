@@ -5,23 +5,19 @@ import {
   JiraService,
   FolderService,
   StubBackendService,
-  UserWorkspaceService,
   createProjectService
 } from '@praxis/core';
 import { getConnectionStore } from './connectionStoreInstance';
 import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
-import { getUserWorkspaceStore } from './userWorkspaceStoreInstance';
 import { getLogBus } from './logBusInstance';
 import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigProvider';
 import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
-import { DesktopUserWorkspaceConfigProvider } from './adapters/desktopUserWorkspaceConfigProvider';
 import { getProjectStore } from './projectStoreInstance';
 
 const folderServices = new Map<string, FolderService>();
 const jiraServices = new Map<string, JiraService>();
 const gitLabServices = new Map<string, GitLabBoardService>();
-const userWorkspaceServices = new Map<string, UserWorkspaceService>();
 const stubServices = new Map<BackendMode, StubBackendService>();
 const projectServices = new Map<string, IssueTrackerService>();
 
@@ -199,7 +195,7 @@ function createGitLabService(connectionId: string): IssueTrackerService {
  * Resolves the backend for a connectionId. `undefined` (the built-in demo
  * boards) resolves to the demo backend only when explicit demo mode is active.
  * An unknown id never silently becomes demo data. A connection whose
- * mode has no desktop backend yet (github/userworkspace until their
+ * mode has no desktop backend yet (github until its
  * ports land) — or a jiracloud connection whose MCP server can't be resolved —
  * resolves to a stub that reads empty and throws a clear message on mutation,
  * never silently to demo, which used to make a misconfigured connection
@@ -244,20 +240,6 @@ export async function getServiceForConnection(
       return createJiraService(connectionId);
     case 'gitlab':
       return createGitLabService(connectionId);
-    case 'userworkspace': {
-      const cached = userWorkspaceServices.get(connectionId);
-      if (cached) {
-        return cached;
-      }
-      // The board store is app-global (mirrors the extension's globalState);
-      // per-connection services differ only in the config provider.
-      const service = new UserWorkspaceService(
-        new DesktopUserWorkspaceConfigProvider(connection),
-        getUserWorkspaceStore()
-      );
-      userWorkspaceServices.set(connectionId, service);
-      return service;
-    }
     default:
       return getStubService(connection.mode);
   }
@@ -293,17 +275,11 @@ export function resetServiceForConnection(connectionId: string): void {
     gitLabServices.delete(connectionId);
     void gitLab.reset();
   }
-
-  const userWorkspace = userWorkspaceServices.get(connectionId);
-  if (userWorkspace) {
-    userWorkspaceServices.delete(connectionId);
-    userWorkspace.dispose();
-  }
 }
 
 /**
- * Disposes every cached backend service (closing any folder/user-workspace
- * chokidar watchers in particular) so the app process can exit cleanly.
+ * Disposes every cached backend service (closing any folder chokidar
+ * watchers in particular) so the app process can exit cleanly.
  *
  * Must run on `before-quit`, not just `window-all-closed` — on macOS closing
  * the last window doesn't quit the app, and a watcher left open otherwise
@@ -316,11 +292,6 @@ export function disposeAllServices(): void {
     service.dispose();
   }
   folderServices.clear();
-
-  for (const service of userWorkspaceServices.values()) {
-    service.dispose();
-  }
-  userWorkspaceServices.clear();
 
   for (const service of jiraServices.values()) {
     service.dispose();

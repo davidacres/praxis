@@ -582,7 +582,7 @@ export class FolderService implements IssueTrackerService {
       return this.getIssue(stableFeatureKey(this.projectKey, featureId));
     }
 
-    // newParentSummary is specific to folder/userworkspace and is ignored by
+    // newParentSummary is specific to folder-backed boards and is ignored by
     // other backends: when no existing parent was picked, create the Feature first
     // (same primitives as the Feature branch above) and use its key as the parent.
     let resolvedParentKey = input.parentKey?.trim() || undefined;

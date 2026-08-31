@@ -97,7 +97,6 @@ function renderMark(mode: BackendMode, size: number, uid: string) {
         </svg>
       );
     case 'folder':
-    case 'userworkspace':
       return (
         <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
           <path

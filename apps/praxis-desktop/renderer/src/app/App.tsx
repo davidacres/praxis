@@ -18,6 +18,7 @@ import { TitleBar } from './TitleBar';
 import { Sidebar, type FeatureId, type SidebarMode } from './Sidebar';
 import { NewSession } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
+import { ImportProjectsWizard } from '../projects/ImportProjectsWizard';
 import { BoardView } from '../board/BoardView';
 import { AiReviewPage } from '../ai/AiReviewPage';
 import { LocalPeerReviewPage } from '../ai/LocalPeerReviewPage';
@@ -269,6 +270,7 @@ export function App() {
   useEffect(() => writePaneVisible('tm-pane-aux-visible', auxVisible), [auxVisible]);
   useEffect(() => writePaneVisible('tm-pane-panel-visible', panelVisible), [panelVisible]);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [importProjectsOpen, setImportProjectsOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
@@ -827,7 +829,7 @@ export function App() {
   /**
    * Whether the selected board's backend accepts new tickets. Demo always can;
    * folder connections need their `allowIssueCreation` setting; the
-   * not-yet-ported modes (jiracloud/gitlab/github/userworkspace) resolve to a
+   * not-yet-ported modes (gitlab/github) resolve to a
    * stub backend that throws, so the form would only error — the button is
    * disabled up front instead, with the hint saying why.
    */
@@ -835,13 +837,13 @@ export function App() {
     ? true
     : connection.mode === 'demo'
       ? true
-      : connection.mode === 'folder' || connection.mode === 'userworkspace'
+      : connection.mode === 'folder'
         ? connection.settings.allowIssueCreation === true
         : false;
   const createIssueHint =
     !connection || connection.mode === 'demo'
       ? undefined
-      : connection.mode === 'folder' || connection.mode === 'userworkspace'
+      : connection.mode === 'folder'
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
@@ -1043,13 +1045,21 @@ export function App() {
         <div className="empty-state board-empty-state" data-testid="no-boards-empty">
           <Icon name="columns" size={30} />
           <strong>No boards</strong>
-          <p>Connect a board source or add one from a plans folder to start tracking work.</p>
+          <p>Connect a board source, or import folders of markdown plans as projects.</p>
           <button
             className="btn btn-primary"
             data-testid="no-boards-create-btn"
             onClick={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
           >
-            Create board
+            Add connection
+          </button>
+          <button
+            className="btn"
+            data-testid="no-boards-import-btn"
+            disabled={!activeWorkspaceId}
+            onClick={() => setImportProjectsOpen(true)}
+          >
+            Import plans folders
           </button>
         </div>
       );
@@ -1270,17 +1280,14 @@ export function App() {
                     // nothing to untrack, and deleting it would mean deleting
                     // the project. Delete the project itself instead.
                     if (connectionId.startsWith('project:')) return;
-                    // "Delete" means different things per backend: a user-workspace
-                    // connection owns many boards (drop just this one); a folder
-                    // connection *is* its single board (drop the connection); a
-                    // Jira/GitLab board is only tracked from a shared remote
-                    // connection (untrack it, delete nothing remote).
+                    // "Delete" means different things per backend: a folder
+                    // connection *is* its board, so removing the board removes
+                    // the connection; a Jira/GitLab board is only tracked from a
+                    // shared remote connection (untrack it, delete nothing remote).
                     const mode = connections.find(item => item.id === connectionId)?.mode;
-                    const removed = mode === 'userworkspace'
-                      ? window.praxis.userWorkspace.deleteBoard(connectionId, board.id)
-                      : mode === 'folder'
-                        ? window.praxis.connection.remove(connectionId)
-                        : window.praxis.connection.removeTrackedBoard(connectionId, board.id);
+                    const removed = mode === 'folder'
+                      ? window.praxis.connection.remove(connectionId)
+                      : window.praxis.connection.removeTrackedBoard(connectionId, board.id);
                     void removed.then(() => {
                       if (route.boardId === board.id) navigate({});
                       refreshBoards();
@@ -1515,6 +1522,20 @@ export function App() {
               <button className="btn btn-primary" type="button" onClick={() => setSettingsDialogCategory(undefined)}>Done</button>
             </footer>
           </section>
+        </div>
+      )}
+      {importProjectsOpen && activeWorkspaceId && (
+        <div className="modal-overlay" data-testid="import-projects-overlay">
+          <div className="modal-card import-projects-card">
+            <ImportProjectsWizard
+              workspaceId={activeWorkspaceId}
+              onDone={() => {
+                setImportProjectsOpen(false);
+                refreshProjects();
+                refreshBoards();
+              }}
+            />
+          </div>
         </div>
       )}
       {whatsNewOpen && (

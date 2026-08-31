@@ -14,7 +14,6 @@ export const CONNECTION_MODES: readonly BackendMode[] = [
   'folder',
   'jiracloud',
   'gitlab',
-  'userworkspace',
   'github'
 ];
 

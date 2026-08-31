@@ -103,7 +103,7 @@ test('a parent folder with two plans roots lists one board per root', async () =
 
 
   // Exactly two boards belong to the E2E Multi connection: the primary
-  // (legacy identity "E2E Multi (Live)") plus the one extra plans root.
+  // (the primary root) plus the one extra plans root.
   const e2eBoards = window.locator('[data-testid="board-nav-item"]', { hasText: 'E2E Multi' });
   await expect(e2eBoards).toHaveCount(2);
 
@@ -111,7 +111,7 @@ test('a parent folder with two plans roots lists one board per root', async () =
   // root folder's basename via an em dash.
   const primary = window
     .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Multi (Live)', { exact: true });
+    .getByText('E2E Multi', { exact: true });
   await expect(primary).toHaveCount(1);
 
   const extra = window.locator('[data-testid="board-nav-item"]', {
@@ -130,7 +130,7 @@ test('each board shows only its own root’s issues', async () => {
   // whichever is present so this test does not assume readdir order.
   const primary = window
     .locator('[data-testid="board-nav-item"]')
-    .getByText('E2E Multi (Live)', { exact: true });
+    .getByText('E2E Multi', { exact: true });
   const betaExtra = window.locator('[data-testid="board-nav-item"]', {
     hasText: /E2E Multi — proj-beta \(Live\)/
   });
@@ -145,7 +145,7 @@ test('each board shows only its own root’s issues', async () => {
   const otherTitle = extraIsBeta ? 'Alpha task card' : 'Beta task card';
 
   // Click the extra. It must show its own root's cards and not the other's.
-  // (A livefolder board renders the feature AND its tasks as cards.)
+  // (A folder board renders the feature AND its tasks as cards.)
   await extraBoard.click();
   await expect(window.locator('[data-testid="issue-card"]', { hasText: extraOwnTitle })).toBeVisible();
   await expect(window.locator('[data-testid="issue-card"]', { hasText: otherTitle })).toHaveCount(0);
