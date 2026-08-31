@@ -120,3 +120,22 @@ test('read / snapshot / click / type dispatch to the bridge and format output', 
 
   assert.deepEqual(bridge.calls, ['read', 'snapshot', 'click e1', 'type e1 hi true']);
 });
+
+test('navigate/click/type return a brief; only browser_read returns the full body', async () => {
+  const long = 'X'.repeat(5000);
+  const bridge: BrowserBridge = {
+    async navigate() { return page({ text: long }); },
+    async read() { return page({ text: long }); },
+    async snapshot() { return { state: page(), elements: [] }; },
+    async click() { return page({ text: long }); },
+    async type() { return page({ text: long }); }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: ['example.com'] });
+
+  const nav = await ext.execute('browser_navigate', { url: 'https://example.com/' }, async () => 'deny');
+  assert.ok(nav.content.length < 1200, 'navigate result should be a brief, not the 5000-char body');
+  assert.match(nav.content, /call browser_read for the full text/);
+
+  const read = await ext.execute('browser_read', {}, async () => 'deny');
+  assert.ok(read.content.includes(long), 'browser_read returns the full body');
+});

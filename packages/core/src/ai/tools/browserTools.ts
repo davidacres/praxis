@@ -13,7 +13,8 @@ export const BROWSER_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   {
     name: 'browser_navigate',
     description:
-      'Open a URL in the in-app browser. Returns the resolved URL, page title, and a text excerpt. ' +
+      'Open a URL in the in-app browser. Returns the resolved URL, page title, and only a short ' +
+      'excerpt of the text — call browser_read afterwards if you need the full page body. ' +
       'Navigating to a host that is not pre-approved asks the user to allow it first.',
     inputSchema: {
       type: 'object' as const,
@@ -24,8 +25,9 @@ export const BROWSER_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   {
     name: 'browser_read',
     description:
-      'Read the current page as plain text (main content, scripts and chrome stripped). ' +
-      'Use this to understand a page before acting on it.',
+      'Return the CURRENT page as plain text (main content; scripts, nav and chrome stripped). ' +
+      'This is the only tool that returns the full body, so only call it when you actually need to ' +
+      'read the page contents — not routinely after every navigation.',
     inputSchema: { type: 'object' as const, properties: {} }
   },
   {
@@ -45,7 +47,7 @@ export const BROWSER_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
   },
   {
     name: 'browser_click',
-    description: 'Click the element with the given ref (from browser_snapshot), then return the updated page text.',
+    description: 'Click the element with the given ref (from browser_snapshot), then return the updated title, URL, and a short excerpt.',
     inputSchema: {
       type: 'object' as const,
       properties: { ref: { type: 'string' } },
@@ -56,7 +58,7 @@ export const BROWSER_TOOL_DEFINITIONS: GatewayToolDefinition[] = [
     name: 'browser_type',
     description:
       'Type text into the input/textarea with the given ref. Set submit=true to press Enter afterwards ' +
-      '(e.g. to run a search). Returns the updated page text.',
+      '(e.g. to run a search). Returns the updated title, URL, and a short excerpt.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -155,8 +157,27 @@ export function browserHostAllowed(rawUrl: string, allowedHosts: readonly string
   });
 }
 
+/** How many characters of page text a navigation / action result carries
+ *  before the model has to ask for more with `browser_read`. */
+const BRIEF_CHARS = 600;
+
+/** Full page text — only `browser_read` returns this. */
 function renderState(state: BrowserPageState): string {
   return `# ${state.title || '(untitled)'}\n${state.url}\n\n${state.text}`.trim();
+}
+
+/**
+ * A lightweight result for navigation and actions: title, URL, and only the
+ * first ~600 chars of text, so a `browser_navigate` doesn't dump the whole page
+ * into the transcript on every call. The model calls `browser_read` for the
+ * full body or `browser_snapshot` for the interactive elements.
+ */
+function renderBrief(state: BrowserPageState): string {
+  const head = `# ${state.title || '(untitled)'}\n${state.url}`;
+  const body = state.text.trim();
+  if (!body) return head;
+  if (body.length <= BRIEF_CHARS) return `${head}\n\n${body}`;
+  return `${head}\n\n${body.slice(0, BRIEF_CHARS)}…\n\n[${body.length} chars on the page — call browser_read for the full text, browser_snapshot for links/inputs]`;
 }
 
 function renderSnapshot(state: BrowserPageState, elements: BrowserElement[]): string {
@@ -210,7 +231,7 @@ export async function executeBrowserTool(
         }
         if (decision === 'allow_always') ctx.onHostAllowed?.(host);
       }
-      return { ok: true, content: renderState(await ctx.bridge.navigate(url)) };
+      return { ok: true, content: renderBrief(await ctx.bridge.navigate(url)) };
     }
     if (name === 'browser_read') {
       return { ok: true, content: renderState(await ctx.bridge.read()) };
@@ -222,13 +243,13 @@ export async function executeBrowserTool(
     if (name === 'browser_click') {
       const ref = str('ref');
       if (!ref) return { ok: false, content: 'ref is required.' };
-      return { ok: true, content: renderState(await ctx.bridge.click(ref)) };
+      return { ok: true, content: renderBrief(await ctx.bridge.click(ref)) };
     }
     if (name === 'browser_type') {
       const ref = str('ref');
       if (!ref) return { ok: false, content: 'ref is required.' };
       const text = typeof args.text === 'string' ? args.text : '';
-      return { ok: true, content: renderState(await ctx.bridge.type(ref, text, args.submit === true)) };
+      return { ok: true, content: renderBrief(await ctx.bridge.type(ref, text, args.submit === true)) };
     }
     return { ok: false, content: `Unknown browser tool: ${name}` };
   } catch (error) {
