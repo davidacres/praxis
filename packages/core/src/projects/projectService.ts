@@ -216,7 +216,10 @@ class FolderBackedProjectService implements IssueTrackerService {
       getFolderProjectKey: () => project.key,
       getFolderProjectName: () => project.name,
       getFolderAllowIssueCreation: () => true,
-      getAiDefaultModel: () => ''
+      getAiDefaultModel: () => '',
+      // The project record is the identity here — a `board.praxis.json` left in
+      // the folder must not silently override the key chosen in the wizard.
+      prefersConfiguredIdentity: () => true
     };
     const service = new FolderService(config);
     this.cached = { folderPath, key: project.key, name: project.name, service };

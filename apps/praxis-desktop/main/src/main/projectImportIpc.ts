@@ -78,7 +78,7 @@ export function registerProjectImportIpc(): void {
         const id = `project-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const project: ProjectRecord = {
           id,
-          name: row.name.trim(),
+          name: row.projectName.trim(),
           key: row.projectKey.trim().toUpperCase(),
           type: 'software',
           purpose: '',

@@ -90,7 +90,6 @@ test('validateProjectImports rejects malformed and duplicate keys', () => {
     plansFolderPath: path.join(repoA, 'plans'),
     projectKey: 'OK1',
     projectName: 'Repo A',
-    name: 'Repo A',
     alreadyAdded: false
   };
   assert.equal(validateProjectImports([row]), undefined);

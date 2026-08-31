@@ -496,6 +496,23 @@ function listSearchableSubdirectories(entries: [string, FileKind][]): string[] {
     });
 }
 
+/**
+ * Whether a directory listing sits on a git checkout boundary, and of which kind.
+ *
+ * A `.git` **directory** is a clone — a different repository, whose plans are a
+ * different project's. A `.git` **file** (`gitdir: …`) is a worktree — the *same*
+ * repository with another branch checked out, so its plans are the same plans at
+ * a different commit. Unioning those into one board produced the same ticket key
+ * several times over, with edits landing in whichever copy the scan reached first.
+ */
+function checkoutKind(entries: [string, FileKind][]): 'clone' | 'worktree' | undefined {
+  const git = entries.find(([name]) => name.toLowerCase() === '.git');
+  if (!git) {
+    return undefined;
+  }
+  return git[1] === 'directory' ? 'clone' : 'worktree';
+}
+
 function canonicalPlansRootPath(candidateRoot: string, featuresRootPath: string): string {
   if (
     candidateRoot === featuresRootPath &&
@@ -662,6 +679,14 @@ export async function discoverPlanFolders(
     }
     onProgress?.(`Searching for plans in ${current}`);
 
+    // A nested checkout owns its own plans: a worktree holds the same plans on
+    // another branch (the same ticket keys), and a nested clone is a different
+    // project entirely. Neither belongs to the folder enclosing it. Scanning a
+    // checkout directly still works — `selectedRootPath` is never enqueued here.
+    if (checkoutKind(currentEntries)) {
+      continue;
+    }
+
     const identified = await identifyPlanFolderAtRoot(current, currentEntries);
     if (identified) {
       matches.push(identified);
@@ -712,7 +737,12 @@ export async function discoverRepositoryFolders(
     }
     onProgress?.(`Searching for repositories in ${current}`);
 
-    if (entries.some(([name]) => name.toLowerCase() === '.git')) {
+    // Worktrees are deliberately not offered: a worktree is the repository it
+    // was created from, on another branch, so importing one alongside its main
+    // checkout would produce two projects over the same plans. Point a project
+    // straight at a worktree when you want a board for that branch's state.
+    const kind = checkoutKind(entries);
+    if (kind === 'clone') {
       repositories.push(current);
     }
 

@@ -22,7 +22,6 @@ export interface ProjectImportRow {
   plansFolderPath: string;
   projectKey: string;
   projectName: string;
-  name: string;
   alreadyAdded: boolean;
 }
 
@@ -145,7 +144,6 @@ export function planProjectImports(input: PlanProjectImportsInput): ProjectImpor
       plansFolderPath,
       projectKey,
       projectName: displayName,
-      name: displayName,
       alreadyAdded: existingPaths.has(plansFolderPath.toLowerCase())
     };
   });
@@ -169,8 +167,8 @@ export function validateProjectImports(
       return `Project code "${key}" is used more than once. Give each repository a unique code.`;
     }
     keys.add(key);
-    if (!row.projectName.trim() || !row.name.trim()) {
-      return 'Every repository needs a project name and board name.';
+    if (!row.projectName.trim()) {
+      return 'Every folder needs a project name.';
     }
   }
   return undefined;

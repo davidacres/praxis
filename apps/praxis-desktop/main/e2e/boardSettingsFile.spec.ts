@@ -57,7 +57,6 @@ test('importing a plans folder writes board.praxis.json into it', async () => {
         plansFolderPath,
         projectKey: 'WIDG',
         projectName: 'Widgets Project',
-        name: 'Widgets',
         alreadyAdded: false
       }],
       workspaces[0].id
