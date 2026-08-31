@@ -160,6 +160,8 @@ test('an ACP diff tool call renders as a red/green diff in the console', async (
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-203' }).click();
 
+  // Tool rows are collapsed by default — expand to see the diff.
+  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
   const diff = win.locator('[data-testid="session-tool-diff"]');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
@@ -210,6 +212,27 @@ test('ticket-selected Claude Code runs review and analysis without using Vercel'
   );
   await expect(win.locator('[data-testid="session-analysis-confirm"]')).toBeVisible();
   await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Read only');
+});
+
+test('an in-flight turn shows one live status line, not streamed tool blocks', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'claude-code-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-206', 'claude-code-cli', 'HANG_UNTIL_CANCELLED please');
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-206' }).click();
+
+  const status = win.locator('[data-testid="session-activity-status"]');
+  await expect(status).toBeVisible({ timeout: 10000 });
+  await expect(status).toContainText(/Working…|Thinking…|Planning…|Running/);
+
+  await win.evaluate(async issueKey => {
+    const w = window as unknown as { praxis: { ai: { abort: (issueKey: string) => Promise<void> } } };
+    await w.praxis.ai.abort(issueKey);
+  }, 'APP-206');
+  // Once the turn ends the status line is gone.
+  await expect(status).toHaveCount(0, { timeout: 10000 });
 });
 
 test('abort kills the ACP agent subprocess cleanly', async () => {

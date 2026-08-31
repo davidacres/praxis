@@ -272,9 +272,10 @@ test('API session executes a tracker tool and shows the call and result inline',
     timeout: 15000
   });
   await expect.poll(() => mock!.requests.length).toBe(2);
+  // Only the completed run gets a (collapsed) row now; `tool_start` feeds the
+  // live status line instead.
   const toolCards = win.locator('[data-testid="session-chat-tool"]');
-  await expect(toolCards).toHaveCount(2);
-  await expect(toolCards.first()).toContainText('tracker_get_ticket');
+  await expect(toolCards).toHaveCount(1);
   await expect(toolCards.last()).toContainText('Tool completed: tracker_get_ticket');
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
     'I inspected APP-101 through the tracker tool.'
@@ -330,6 +331,8 @@ test('a write_file tool call renders a red/green diff after the write is approve
   await win.locator('[data-testid="session-permission-allow-once"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
+  // Tool rows are collapsed by default — expand to see the diff.
+  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
   const diff = win.locator('[data-testid="session-tool-diff"]');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');

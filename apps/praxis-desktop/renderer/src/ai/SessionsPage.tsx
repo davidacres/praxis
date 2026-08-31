@@ -285,13 +285,34 @@ export function SessionsPage({
     setBrowserOpen(open);
     onBrowserOpenChange?.(open);
   };
+  // `tool_start` feeds the live status line, not the transcript — only the
+  // completed run gets a (collapsed) row, so the chat stays readable.
   const conversationEvents = selected?.events.filter(
     event =>
-      (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_start' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
+      (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
   ) ?? [];
   const latestEventResponse = [...conversationEvents]
     .reverse()
     .find(event => event.type === 'message')?.detail;
+
+  // One line describing what the agent is doing right now — shown only while a
+  // turn is in flight, in place of streaming every tool block.
+  const liveActivity = ((): string | undefined => {
+    if (!selected || isTerminalAgentState(selected.state) || selected.state === 'awaiting_approval' || selected.state === 'awaiting_input') {
+      return undefined;
+    }
+    const events = selected.events;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const event = events[i];
+      if (event.type === 'tool_complete' || event.type === 'message') break;
+      if (event.type === 'tool_start') {
+        const tool = event.data?.toolName ?? event.summary?.replace(/^Running tool:\s*/i, '');
+        return tool ? `Running ${tool}…` : 'Running a tool…';
+      }
+    }
+    if (selected.state === 'planning') return 'Planning…';
+    return selected.reasoningText?.trim() ? 'Thinking…' : 'Working…';
+  })();
 
   // Follow the stream: whenever the selected session gains events, pin the
   // console to the latest one (the list replaces the record object on every
@@ -814,28 +835,29 @@ export function SessionsPage({
                 <div>{selected.taskDefinition.goal}</div>
               </div>
               {conversationEvents.map((event, index) => {
-                if (event.type === 'tool_start' || event.type === 'tool_complete') {
+                if (event.type === 'tool_complete') {
                   const view = resolveToolView(event);
                   const argsLabel = toolArgsLabel(event);
                   const fileChanges = event.data?.fileChanges?.filter(change => change.diff);
                   const singleDiff = event.data?.diff;
                   const shellOutput = event.data?.output ?? event.detail ?? '';
+                  // Collapsed by default: a slim "ran X" row; expand for the
+                  // output / diff. The result never lands inline in the chat.
                   return (
                     <details
-                      className={`session-chat-tool${event.type === 'tool_start' ? ' is-running' : ''}`}
+                      className="session-chat-tool"
                       key={`${event.timestamp}-${index}`}
                       data-testid="session-chat-tool"
-                      open={event.type === 'tool_complete'}
                     >
                       <summary>
-                        <Icon name={event.type === 'tool_start' ? 'tools' : 'check-square'} size={13} />
+                        <Icon name="check-square" size={13} />
                         <span>{event.summary}</span>
                         {argsLabel && <code className="session-tool-args">{argsLabel}</code>}
                         <span className="session-chat-tool-time">{formatTime(event.timestamp)}</span>
                       </summary>
-                      {event.type === 'tool_complete' && view === 'shell' ? (
+                      {view === 'shell' ? (
                         <ToolTerminal text={shellOutput} />
-                      ) : event.type === 'tool_complete' && view === 'write' && (fileChanges?.length || singleDiff) ? (
+                      ) : view === 'write' && (fileChanges?.length || singleDiff) ? (
                         fileChanges?.length ? (
                           fileChanges.map((change, changeIndex) => (
                             <div className="session-tool-file" key={changeIndex}>
@@ -876,8 +898,15 @@ export function SessionsPage({
                   <div>{selected.responseText}</div>
                 </div>
               )}
-              {!selected.responseText && conversationEvents.length === 0 && (
-                <span className="placeholder-text">Waiting for the agent to respond…</span>
+              {liveActivity ? (
+                <div className="session-activity-status" data-testid="session-activity-status">
+                  <span className="session-activity-dot" aria-hidden="true" />
+                  <span>{liveActivity}</span>
+                </div>
+              ) : (
+                !selected.responseText && conversationEvents.length === 0 && (
+                  <span className="placeholder-text">Waiting for the agent to respond…</span>
+                )
               )}
 
               <details className="session-activity">
