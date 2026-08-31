@@ -6,13 +6,18 @@ import { getConnectionStore } from './connectionStoreInstance';
 
 /**
  * Existing folders are already the source of truth for their planning files.
- * Register that source as a read-only folder connection so the imported
- * project immediately has a board backed by the files on disk (rather than an
- * empty Praxis-owned board beside them).
+ * Register that source as a read-only folder connection so the project has a
+ * board backed by the files on disk rather than an empty Praxis-owned board.
+ *
+ * Only for `storage: 'app'` projects. A folder-backed project's *own* board
+ * already reads those files, so adding this connection would produce two boards
+ * over one folder — and the sidebar, seeing a `project-plans-*` link, would
+ * suppress the project's own board as "the empty Praxis board" and show the
+ * duplicate instead. That suppression predates `ProjectRecord.storage`.
  */
 async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectRecord> {
   const folder = project.workspaceFolder;
-  if (!folder || !(project.folderInspection?.planFiles?.length)) {
+  if (project.storage === 'folder' || !folder || !(project.folderInspection?.planFiles?.length)) {
     return project;
   }
 

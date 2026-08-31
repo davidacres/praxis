@@ -218,6 +218,15 @@ export interface FolderConfigProvider {
   getFolderProjectName(): string;
   getFolderAllowIssueCreation(): boolean;
   getAiDefaultModel(): string;
+  /**
+   * Whether the configured key/name outrank a root's `board.praxis.json`.
+   *
+   * A folder *connection* says no (the default): the folder is shared, so its
+   * own file describes it and travels with it. A folder-backed *project* says
+   * yes — the user chose that key in the project wizard, and letting a file in
+   * the folder quietly win would make the field they typed a lie.
+   */
+  prefersConfiguredIdentity?(): boolean;
 }
 
 // ── Service ─────────────────────────────────────────────────────────
@@ -297,9 +306,26 @@ export class FolderService implements IssueTrackerService {
     setTimeout(() => this.recentWrites.delete(configFilePath), 2000);
     await writeBoardConfigFile(this.plansRootPath, next);
     this.boardConfig = await readBoardConfigFile(this.plansRootPath);
-    this.projectKey = this.boardConfig.projectKey ?? (this.configStore.getFolderProjectKey() || 'LIVE');
-    this.projectName =
-      this.boardConfig.projectName ?? (this.configStore.getFolderProjectName() || 'Folder');
+    this.projectKey = this.resolveKey(this.boardConfig);
+    this.projectName = this.resolveName(this.boardConfig);
+  }
+
+  /** The connection's key unless a root's own file may override it. */
+  private resolveKey(config: BoardConfigFile): string {
+    const configured = this.configStore.getFolderProjectKey();
+    if (this.configStore.prefersConfiguredIdentity?.() && configured) {
+      return configured;
+    }
+    return config.projectKey ?? (configured || 'LIVE');
+  }
+
+  /** The connection's name unless a root's own file may override it. */
+  private resolveName(config: BoardConfigFile): string {
+    const configured = this.configStore.getFolderProjectName();
+    if (this.configStore.prefersConfiguredIdentity?.() && configured) {
+      return configured;
+    }
+    return config.projectName ?? (configured || 'Folder');
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────
@@ -999,9 +1025,8 @@ export class FolderService implements IssueTrackerService {
     // project identity so it travels with the folder. Re-read on every load so
     // an external edit to the file is picked up on the next reload.
     this.boardConfig = await readBoardConfigFile(this.plansRootPath);
-    this.projectKey = this.boardConfig.projectKey ?? (this.configStore.getFolderProjectKey() || 'LIVE');
-    this.projectName =
-      this.boardConfig.projectName ?? (this.configStore.getFolderProjectName() || 'Folder');
+    this.projectKey = this.resolveKey(this.boardConfig);
+    this.projectName = this.resolveName(this.boardConfig);
 
     // Multi-board discovery: every other plans root under any configured folder
     // becomes its own board. Extra roots are parsed read-only (no template
@@ -1040,8 +1065,11 @@ export class FolderService implements IssueTrackerService {
 
     this.issuesByRoot.clear();
     this.boardRoots = rootParses.map((rootParsed, index) => {
-      const rootKey = (rootConfigs[index]?.projectKey || this.projectKey).toUpperCase();
-      const rootProjectName = rootConfigs[index]?.projectName || this.projectName;
+      // A project-backed service owns its identity outright, so a secondary
+      // root's own file must not rename or re-key it either.
+      const authoritative = this.configStore.prefersConfiguredIdentity?.() === true;
+      const rootKey = (authoritative ? this.projectKey : rootConfigs[index]?.projectKey || this.projectKey).toUpperCase();
+      const rootProjectName = authoritative ? this.projectName : rootConfigs[index]?.projectName || this.projectName;
       this.issuesByRoot.set(
         rootParsed.plansRootPath,
         this.buildIssueModel(rootParsed, rootKey, rootProjectName)

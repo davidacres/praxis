@@ -102,20 +102,15 @@ test('a parent folder with two plans roots lists one board per root', async () =
   await launchWithMultiRootFixture();
 
 
-  // Exactly two boards belong to the E2E Multi connection: the primary
-  // (the primary root) plus the one extra plans root.
-  const e2eBoards = window.locator('[data-testid="board-nav-item"]', { hasText: 'E2E Multi' });
-  await expect(e2eBoards).toHaveCount(2);
-
-  // The primary keeps the legacy exact name; the extra is suffixed with the
-  // root folder's basename via an em dash.
+  // The primary root takes the connection's own project name; every other
+  // discovered root is named for itself, so the two are distinguishable.
   const primary = window
     .locator('[data-testid="board-nav-item"]')
     .getByText('E2E Multi', { exact: true });
   await expect(primary).toHaveCount(1);
 
   const extra = window.locator('[data-testid="board-nav-item"]', {
-    hasText: /E2E Multi — proj-(alpha|beta) \(Live\)/
+    hasText: /^proj-(alpha|beta)$/
   });
   await expect(extra).toHaveCount(1);
 });
@@ -124,19 +119,14 @@ test('each board shows only its own root’s issues', async () => {
   await launchWithMultiRootFixture();
 
 
-  // Two roots, two boards. The primary has no `—` suffix; exactly one of
-  // the two possible "extra" boards (with the `— proj-{name}` suffix)
-  // exists, depending on which root the legacy resolver promoted. We pick
-  // whichever is present so this test does not assume readdir order.
+  // Two roots, two boards. The primary carries the connection's project name;
+  // the extra is named for its own folder. Which root is promoted to primary
+  // depends on readdir order, so pick whichever extra is present.
   const primary = window
     .locator('[data-testid="board-nav-item"]')
     .getByText('E2E Multi', { exact: true });
-  const betaExtra = window.locator('[data-testid="board-nav-item"]', {
-    hasText: /E2E Multi — proj-beta \(Live\)/
-  });
-  const alphaExtra = window.locator('[data-testid="board-nav-item"]', {
-    hasText: /E2E Multi — proj-alpha \(Live\)/
-  });
+  const betaExtra = window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-beta$/ });
+  const alphaExtra = window.locator('[data-testid="board-nav-item"]', { hasText: /^proj-alpha$/ });
 
   await expect(primary).toHaveCount(1);
   const extraIsBeta = (await betaExtra.count()) === 1;

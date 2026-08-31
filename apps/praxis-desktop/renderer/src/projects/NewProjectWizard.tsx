@@ -163,10 +163,19 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const selectedBriefPrompt = selectedBriefField ? BRIEF_GUIDANCE[type][selectedBriefField.key] : undefined;
   const isBriefEditorOpen = Boolean(briefEditorOpen && selectedBriefField);
   const selectedBrief = Object.fromEntries(briefFields.filter(field => includedBrief[field.key]).map(field => [field.key, brief[field.key] ?? BRIEF_DEFAULTS[type][field.key]]));
+  /**
+   * An existing folder that already holds markdown plans becomes the project's
+   * source of truth (`storage: 'folder'`) rather than being ignored in favour of
+   * an empty app-storage board — which is what used to happen, and produced a
+   * project whose board silently showed nothing.
+   */
+  const folderBacked = startingPoint === 'existing-folder' && (inspection?.planFiles?.length ?? 0) > 0;
+
   const input: CreateProjectInput = useMemo(() => ({
     name, key, type, purpose, brief: selectedBrief, startingPoint, folderPath: folderPath || undefined,
-    folderName: folderName || undefined, workflowStages: stages, starterTickets: tickets, defaultAiToolMode: toolMode
-  }), [name, key, type, purpose, selectedBrief, startingPoint, folderPath, folderName, stages, tickets, toolMode]);
+    folderName: folderName || undefined, workflowStages: stages, starterTickets: tickets, defaultAiToolMode: toolMode,
+    storage: folderBacked ? 'folder' : 'app'
+  }), [name, key, type, purpose, selectedBrief, startingPoint, folderPath, folderName, stages, tickets, toolMode, folderBacked]);
 
   const chooseFolder = async () => {
     const chosen = await window.praxis.dialog.pickFolder(startingPoint === 'new-folder' ? 'Choose where to save the project' : 'Choose existing project folder');
@@ -413,7 +422,7 @@ function previewKicker(type: ProjectType) { return type === 'software' ? 'BUILD'
 function previewDetail(type: ProjectType) { return type === 'software' ? 'Repository · implementation · verification' : type === 'product' ? 'Users · outcomes · roadmap' : type === 'research' ? 'Questions · evidence · synthesis' : 'Hypothesis · method · decision'; }
 
 function Choice({ checked, title, detail, onClick }: { checked: boolean; title: string; detail: string; onClick: () => void }) { return <button className={`start-choice${checked ? ' selected' : ''}`} onClick={onClick}><span className="radio-dot" /><span><strong>{title}</strong><small>{detail}</small></span></button>; }
-function Inspection({ result, existingProject, decision, onUseExisting, onCreateNew }: { result: FolderInspection; existingProject?: ProjectRecord; decision?: 'use' | 'create'; onUseExisting?: () => void; onCreateNew?: () => void }) { return <div className="inspection-card span-2"><strong>Workspace detected</strong><span>{result.hasGit ? 'Git repository' : 'No Git repository'} · {result.readme ?? 'No README'}</span><span>{result.languages.join(', ') || 'No languages detected'}</span><span>{[...result.manifests, ...result.frameworks].join(', ') || 'No manifests or frameworks detected'}</span>{result.planFiles?.length ? <span className="inspection-plans"><Icon name="markdown" size={13} />{result.planFiles.length} planning file{result.planFiles.length === 1 ? '' : 's'} identified</span> : <span className="inspection-plans muted"><Icon name="info" size={13} />No planning files identified yet</span>}{result.projectFileExists && <span>Existing PROJECT.md will be retained.</span>}{existingProject && <div className="existing-project-match"><div><strong>This folder is already a project</strong><small>{existingProject.name} · {existingProject.key}</small></div><div className="footer-actions"><button type="button" className={`btn${decision === 'use' ? ' btn-primary' : ''}`} onClick={onUseExisting}>Use existing project</button><button type="button" className={`btn${decision === 'create' ? ' btn-primary' : ''}`} onClick={onCreateNew}>Create a new project</button></div></div>}</div>; }
+function Inspection({ result, existingProject, decision, onUseExisting, onCreateNew }: { result: FolderInspection; existingProject?: ProjectRecord; decision?: 'use' | 'create'; onUseExisting?: () => void; onCreateNew?: () => void }) { return <div className="inspection-card span-2"><strong>Workspace detected</strong><span>{result.hasGit ? 'Git repository' : 'No Git repository'} · {result.readme ?? 'No README'}</span><span>{result.languages.join(', ') || 'No languages detected'}</span><span>{[...result.manifests, ...result.frameworks].join(', ') || 'No manifests or frameworks detected'}</span>{result.planFiles?.length ? <span className="inspection-plans"><Icon name="markdown" size={13} />{result.planFiles.length} planning file{result.planFiles.length === 1 ? '' : 's'} identified — this project's board will read them</span> : <span className="inspection-plans muted"><Icon name="info" size={13} />No planning files identified yet</span>}{result.projectFileExists && <span>Existing PROJECT.md will be retained.</span>}{existingProject && <div className="existing-project-match"><div><strong>This folder is already a project</strong><small>{existingProject.name} · {existingProject.key}</small></div><div className="footer-actions"><button type="button" className={`btn${decision === 'use' ? ' btn-primary' : ''}`} onClick={onUseExisting}>Use existing project</button><button type="button" className={`btn${decision === 'create' ? ' btn-primary' : ''}`} onClick={onCreateNew}>Create a new project</button></div></div>}</div>; }
 function slugKey(value: string) { return value.replace(/[^A-Za-z0-9]+/g, '').slice(0, 8).toUpperCase(); }
 function slugFolder(value: string) { return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 function typeLabel(type: ProjectType) { return TYPES.find(item => item.id === type)?.title ?? type; }

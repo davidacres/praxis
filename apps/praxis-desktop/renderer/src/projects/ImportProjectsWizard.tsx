@@ -67,7 +67,7 @@ export function ImportProjectsWizard({ workspaceId, onDone }: ImportProjectsWiza
     }
   };
 
-  const updateRow = (index: number, field: 'name' | 'projectKey' | 'projectName', value: string) => {
+  const updateRow = (index: number, field: 'projectKey' | 'projectName', value: string) => {
     setRows(current =>
       current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row))
     );
@@ -199,7 +199,6 @@ export function ImportProjectsWizard({ workspaceId, onDone }: ImportProjectsWiza
               <span>Folder</span>
               <span>Project code</span>
               <span>Project name</span>
-              <span>Board name</span>
             </div>
             <div className="board-draft-list">
               {rows.map((row, index) => (
@@ -240,15 +239,6 @@ export function ImportProjectsWizard({ workspaceId, onDone }: ImportProjectsWiza
                     value={row.projectName}
                     disabled={row.alreadyAdded}
                     onChange={event => updateRow(index, 'projectName', event.target.value)}
-                  />
-                  <input
-                    className="input"
-                    type="text"
-                    aria-label="Board name"
-                    data-testid="import-row-name"
-                    value={row.name}
-                    disabled={row.alreadyAdded}
-                    onChange={event => updateRow(index, 'name', event.target.value)}
                   />
                 </div>
               ))}

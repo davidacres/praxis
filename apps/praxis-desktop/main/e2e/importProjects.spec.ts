@@ -84,7 +84,7 @@ test('importing a plans folder creates a folder-backed project whose board shows
   const projects = await window.evaluate(async row => {
     const workspaces = await window.praxis.workspaces.list();
     return window.praxis.projects.createFromImports(
-      [{ ...row, name: 'E2E Imported', projectName: 'E2E Imported', projectKey: 'IMP1' }],
+      [{ ...row, projectName: 'E2E Imported', projectKey: 'IMP1' }],
       workspaces[0].id
     );
   }, rows[0]);
