@@ -1,19 +1,9 @@
 import * as fs from 'node:fs/promises';
 
 /**
- * The file-access surface the live-folder parser and writers need.
- *
- * Live folder reads and writes the markdown planning files under a project's
- * `docs/plans/` tree. Both UI surfaces use it, but they reach the filesystem
- * differently: the Electron app talks to local disk through `node:fs`, while
- * the VS Code extension must go through `vscode.workspace.fs` so the feature
- * keeps working when the workspace is remote (SSH, dev container, WSL,
- * github.dev). Rather than fork the parsing logic per host — which is what the
- * extension used to do, in a ~2,600-line duplicate — the logic lives here once
- * and the host swaps in its own implementation of this port.
- *
- * All paths are plain strings. The extension's adapter converts to and from
- * `vscode.Uri` at this boundary.
+ * The file-access surface the live-folder parser and writers need — reads and
+ * writes the markdown planning files under a project's plans tree. Backed by
+ * `node:fs`; every core test uses the same implementation.
  */
 export interface LiveFolderFs {
   /** Read a file as UTF-8. Rejects if the file does not exist. */
@@ -31,8 +21,7 @@ export interface LiveFolderFs {
   mkdir(dirPath: string): Promise<void>;
 }
 
-/** The default `node:fs` implementation — what the Electron app and every core test use. */
-export const nodeLiveFolderFs: LiveFolderFs = {
+const nodeLiveFolderFs: LiveFolderFs = {
   readFile(filePath) {
     return fs.readFile(filePath, 'utf-8');
   },
@@ -48,20 +37,7 @@ export const nodeLiveFolderFs: LiveFolderFs = {
   }
 };
 
-let activeFs: LiveFolderFs = nodeLiveFolderFs;
-
-/**
- * Replace the filesystem the live-folder module uses. Call once at host
- * startup; passing `undefined` restores the `node:fs` default. Mirrors the
- * `setMcpOAuthProviderSource` pattern already used elsewhere in core — a single
- * host is active per process, so a module-level swap is sufficient and avoids
- * threading the port through ~40 function signatures.
- */
-export function setLiveFolderFs(next: LiveFolderFs | undefined): void {
-  activeFs = next ?? nodeLiveFolderFs;
-}
-
-/** The filesystem the live-folder module should use for all IO. */
+/** The filesystem the live-folder module uses for all IO. */
 export function liveFolderFs(): LiveFolderFs {
-  return activeFs;
+  return nodeLiveFolderFs;
 }

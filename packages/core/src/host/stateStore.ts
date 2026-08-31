@@ -1,8 +1,7 @@
 /**
- * Replaces vscode.Memento (context.globalState / context.workspaceState).
- * VS Code adapter wraps a vscode.Memento directly; Electron adapter backs
- * this with a JSON file under app.getPath('userData') (global) or
- * userData/projects/<id>/state.json (workspace/project-scoped).
+ * A synchronous key/value store. The Electron adapter backs this with a JSON
+ * file under `app.getPath('userData')` (global) or
+ * `userData/projects/<id>/state.json` (workspace/project-scoped).
  */
 export interface KeyValueStore {
   get<T>(key: string): T | undefined;
