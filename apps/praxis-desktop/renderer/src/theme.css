@@ -4917,6 +4917,14 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   background: var(--bg-elevated);
 }
 
+/* "Let the AI use the browser" is on — frame the pane in a thick, part-opaque
+   amber border so it's obvious the agent can drive what's inside it. */
+.session-browser-dock.ai-controlled {
+  border: 3px solid color-mix(in srgb, var(--tone-amber) 65%, transparent);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-amber) 25%, transparent);
+}
+
 .session-console.browser-open > .session-console-header,
 .session-console.browser-open > .session-analysis-banner,
 .session-console.browser-open > .session-request-dock,

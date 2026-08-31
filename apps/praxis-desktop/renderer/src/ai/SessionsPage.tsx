@@ -1047,7 +1047,10 @@ export function SessionsPage({
               </div>
             </div>
             {browserOpen && (
-              <div className="session-browser-dock">
+              <div
+                className={`session-browser-dock${settings?.ai.browserTools.enabled ? ' ai-controlled' : ''}`}
+                title={settings?.ai.browserTools.enabled ? 'The AI can drive this browser' : undefined}
+              >
                 <BrowserPane
                   initialUrl={initialBrowserUrl}
                   onNavigate={onBrowserUrlChange}
