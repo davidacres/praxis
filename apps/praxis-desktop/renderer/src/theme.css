@@ -4933,6 +4933,20 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   margin-right: clamp(360px, 44%, 760px);
 }
 
+/* Maximised — the browser fills the whole console; the transcript + composer
+   are hidden behind it until Restore. */
+.session-console.browser-maximized > .session-browser-dock {
+  left: 0;
+  width: auto;
+}
+.session-console.browser-maximized > .session-console-header,
+.session-console.browser-maximized > .session-analysis-banner,
+.session-console.browser-maximized > .session-request-dock,
+.session-console.browser-maximized > .session-chat-scroll,
+.session-console.browser-maximized > .session-chat-composer {
+  margin-right: 0;
+}
+
 .browser-pane {
   display: flex;
   flex-direction: column;

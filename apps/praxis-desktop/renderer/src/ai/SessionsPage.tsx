@@ -197,6 +197,7 @@ export function SessionsPage({
   const [listCollapsed, setListCollapsed] = useState<boolean>(readListCollapsed);
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
+  const [browserMaximized, setBrowserMaximized] = useState(false);
   const browserDismissed = useRef(initialBrowserOpen === false);
   const { settings } = useSettings();
   const eventsRef = useRef<HTMLDivElement>(null);
@@ -285,6 +286,7 @@ export function SessionsPage({
   const setBrowserVisibility = (open: boolean) => {
     browserDismissed.current = !open;
     setBrowserOpen(open);
+    if (!open) setBrowserMaximized(false);
     onBrowserOpenChange?.(open);
   };
   // `tool_start` feeds the live status line, not the transcript — only the
@@ -679,7 +681,7 @@ export function SessionsPage({
       )}
 
       <div
-        className={`session-console${browserOpen && selected ? ' browser-open' : ''}`}
+        className={`session-console${browserOpen && selected ? ' browser-open' : ''}${browserOpen && selected && browserMaximized ? ' browser-maximized' : ''}`}
         data-testid="session-console"
       >
         {!selected && (
@@ -1055,6 +1057,8 @@ export function SessionsPage({
                   initialUrl={initialBrowserUrl}
                   onNavigate={onBrowserUrlChange}
                   suspended={browserSuspended}
+                  maximized={browserMaximized}
+                  onToggleMaximize={() => setBrowserMaximized(value => !value)}
                   onClose={() => setBrowserVisibility(false)}
                 />
               </div>
