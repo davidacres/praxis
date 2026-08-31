@@ -29,3 +29,11 @@ Allow users to add tickets to the designer by entering a ticket number, resolvin
 2. Try an invalid key and verify the error handling.
 3. Try adding the same ticket twice and verify duplicate prevention.
 4. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

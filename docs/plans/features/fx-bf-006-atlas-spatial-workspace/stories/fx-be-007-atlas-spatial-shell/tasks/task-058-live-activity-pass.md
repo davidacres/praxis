@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.008Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-058
 title: Live activity pass and the awaiting-approval signal
 status: proposed
@@ -24,3 +28,14 @@ snaps its dependents' tethers.
 - The awaiting-approval signal is visible at the universe tier.
 - The activity pass reads only from the live subscription and never writes
   `AtlasLayout`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

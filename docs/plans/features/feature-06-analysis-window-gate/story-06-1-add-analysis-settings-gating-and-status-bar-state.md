@@ -45,3 +45,11 @@ Add configuration and visibility gates for the analysis capability. Analysis sho
 3. Rationale: Mostly settings/context/status-bar wiring with existing extension patterns and minimal behavioral surface area.
 4. Pass 3 (after verification review): Complexity Low, Risk Low, Confidence High.
 5. Rationale: Deterministic checks and no backend protocol changes keep failure modes narrow.
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -28,3 +28,11 @@ Generate a master plan document from the current designer graph, summarizing sco
 1. Generate the master plan twice and compare output.
 2. Review dependencies and phase structure.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

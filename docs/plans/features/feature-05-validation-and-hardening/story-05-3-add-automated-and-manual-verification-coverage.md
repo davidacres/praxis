@@ -38,3 +38,11 @@ Add targeted automated coverage and a manual verification checklist for the desi
 
 ## Known Validation Gaps / Environment Blockers
 1. `npm test` currently depends on launching the VS Code host and can fail if a local VS Code update lock (`vscode-updating`) is active; rerun after the lock clears.
+
+## Dependencies
+
+
+
+## Comments
+
+

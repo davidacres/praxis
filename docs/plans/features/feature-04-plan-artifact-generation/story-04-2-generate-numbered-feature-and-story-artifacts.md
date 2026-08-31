@@ -28,3 +28,11 @@ Generate numbered feature folders and numbered story files from the execution gr
 1. Generate plan artifacts from a sample graph.
 2. Inspect file names and numbering.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

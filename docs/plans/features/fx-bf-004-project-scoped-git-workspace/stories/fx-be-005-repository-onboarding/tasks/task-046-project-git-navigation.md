@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.001Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-046
 title: Add project-scoped Git navigation and onboarding states
 status: complete
@@ -24,3 +28,14 @@ Move Git access into the active project hierarchy and design clear empty states 
 ## Notes
 
 Keep the user on the project context while choosing a folder or returning from setup.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

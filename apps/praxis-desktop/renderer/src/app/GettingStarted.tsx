@@ -8,7 +8,8 @@ interface GettingStartedProps {
   createdWorkspace?: WorkspaceRecord;
   onOpenWorkspace: (workspaceId: string) => void;
   onOpenWorkspaceFile: () => void;
-  onCreateWorkspace: (name: string, description: string) => Promise<void>;
+  onCreateWorkspace: (name: string, description: string, storageFolder?: string) => Promise<void>;
+  onSkipSetup: () => void;
   onCreateProject: () => void;
   onAddExistingProject: () => void;
   onContinueEmpty: () => void;
@@ -21,6 +22,7 @@ export function GettingStarted({
   onOpenWorkspace,
   onOpenWorkspaceFile,
   onCreateWorkspace,
+  onSkipSetup,
   onCreateProject,
   onAddExistingProject,
   onContinueEmpty
@@ -30,6 +32,7 @@ export function GettingStarted({
   const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [storageFolder, setStorageFolder] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const ordered = useMemo(() => {
@@ -50,7 +53,7 @@ export function GettingStarted({
     setSaving(true);
     setError(undefined);
     try {
-      await onCreateWorkspace(name.trim(), description.trim());
+      await onCreateWorkspace(name.trim(), description.trim(), storageFolder);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
       setSaving(false);
@@ -85,8 +88,12 @@ export function GettingStarted({
             <input id="getting-started-workspace-name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Product delivery" />
             <label htmlFor="getting-started-workspace-description">Description <span>(optional)</span></label>
             <textarea id="getting-started-workspace-description" value={description} onChange={event => setDescription(event.target.value)} rows={3} placeholder="What belongs in this workspace?" />
+            <label htmlFor="getting-started-workspace-location">Storage location</label>
+            <div className="workspace-location-picker" id="getting-started-workspace-location"><span>{storageFolder || 'Praxis user folder'}</span><button className="btn" type="button" onClick={async () => { const folder = await window.praxis.dialog.pickFolder('Choose workspace storage folder'); if (folder) setStorageFolder(folder); }}>{storageFolder ? 'Change folder' : 'Choose folder'}</button></div>
+            <p className="workspace-location-help">A selected folder keeps the workspace file with your repository. Credentials stay on this device.</p>
             {error && <div className="form-error" role="alert">{error}</div>}
             <div className="getting-started-form-actions">
+              <button className="btn" type="button" onClick={onSkipSetup}>Skip for now</button>
               {workspaces.length > 0 && <button className="btn" type="button" onClick={() => setShowSetup(false)}>Back</button>}
               <button className="btn btn-primary" type="submit" disabled={!name.trim() || saving}>{saving ? 'Creating…' : 'Create Workspace'}</button>
             </div>

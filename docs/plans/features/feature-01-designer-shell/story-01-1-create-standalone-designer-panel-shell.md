@@ -28,3 +28,11 @@ Add a new standalone task designer panel, command entry point, synchronous webvi
 1. Launch the command and verify the panel opens without a blank screen.
 2. Verify the toolbar buttons render.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -28,3 +28,11 @@ Allow users to source tickets from the currently selected board and ask AI to po
 1. Select a board and run board-sourced AI recommendation.
 2. Verify the preview contains nodes and edges.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

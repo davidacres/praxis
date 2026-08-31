@@ -3,6 +3,8 @@ import { app } from 'electron';
 import { ConnectionStore } from '@praxis/core';
 import { createSettingsStore } from './adapters/electronSettingsStore';
 import { ElectronSecretsStore } from './adapters/electronSecretsStore';
+import { UnionKeyValueStore, identifyStoredRecord } from './adapters/unionKeyValueStore';
+import { getWorkspaceScopes, getActiveWorkspaceId } from './workspaceLocations';
 
 let instance: ConnectionStore | undefined;
 let secretsInstance: ElectronSecretsStore | undefined;
@@ -22,7 +24,13 @@ export function getSecretsStore(): ElectronSecretsStore {
 /** Shared ConnectionStore singleton — connections/boards in settings.json, secrets safeStorage-encrypted. */
 export function getConnectionStore(): ConnectionStore {
   if (!instance) {
-    instance = new ConnectionStore(createSettingsStore(), getSecretsStore());
+    instance = new ConnectionStore(new UnionKeyValueStore({
+      base: createSettingsStore(),
+      scopes: getWorkspaceScopes,
+      unionedKeys: new Set(['connections', 'boards']),
+      identify: identifyStoredRecord,
+      preferredScope: getActiveWorkspaceId
+    }), getSecretsStore());
   }
   return instance;
 }

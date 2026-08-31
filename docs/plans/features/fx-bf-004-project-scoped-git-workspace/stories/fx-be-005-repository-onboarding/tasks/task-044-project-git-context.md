@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.001Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-044
 title: Define project Git context and typed repository preflight contract
 status: complete
@@ -24,3 +28,14 @@ Define the shared/preload contracts for project Git context, repository status, 
 ## Notes
 
 Do not make renderer code infer repository state from error strings.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

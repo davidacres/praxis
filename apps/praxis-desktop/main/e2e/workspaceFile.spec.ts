@@ -64,3 +64,33 @@ test('save and open filter on the .workspace.praxis extension and round-trip', a
 
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('creates a self-contained workspace in a chosen folder and routes its connections there', async () => {
+  app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-located-ws-'));
+  try {
+    const workspace = await app.window.evaluate(folderPath => window.praxis.workspaces.create({
+      name: 'Repo Workspace', description: 'Portable', projectIds: [], storageFolder: folderPath
+    }), folder);
+    const workspacePath = path.join(folder, 'repo-workspace.workspace.praxis');
+    expect(workspace.storagePath).toBe(workspacePath);
+    expect(fs.existsSync(workspacePath)).toBe(true);
+
+    await app.window.evaluate(async workspaceId => {
+      await window.praxis.workspaces.setActive(workspaceId);
+      await window.praxis.connection.add({ id: 'portable-connection', name: 'Portable', mode: 'folder', settings: { rootPath: '/tmp/repo', apiToken: 'must-not-be-written' } });
+      await window.praxis.workspaces.update(workspaceId, { connectionIds: ['portable-connection'] });
+    }, workspace.id);
+
+    const document = JSON.parse(fs.readFileSync(workspacePath, 'utf8')) as {
+      workspace: { id: string; connectionIds: string[] };
+      connections: { id: string; settings?: Record<string, unknown> }[];
+    };
+    expect(document.workspace.id).toBe(workspace.id);
+    expect(document.workspace.connectionIds).toEqual(['portable-connection']);
+    expect(document.connections.map(connection => connection.id)).toEqual(['portable-connection']);
+    expect(document.connections[0].settings?.apiToken).toBeUndefined();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});

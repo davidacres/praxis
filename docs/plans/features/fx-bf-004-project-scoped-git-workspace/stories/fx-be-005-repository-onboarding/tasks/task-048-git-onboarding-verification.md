@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.002Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-048
 title: Add packaged Electron, accessibility, and responsive verification
 status: complete
@@ -24,3 +28,14 @@ Prove the complete project-to-repository-to-graph flow in the copied Electron re
 ## Notes
 
 Capture screenshots for the onboarding states and retain them only when they represent the intended product contract.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
