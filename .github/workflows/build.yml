@@ -25,17 +25,17 @@ jobs:
       - name: Build core
         run: npm run build:core
 
-      - name: Compile extension
-        run: npm run compile --workspace=praxis
+      - name: Typecheck
+        run: npm run check-types
 
-      - name: Package VSIX
-        working-directory: apps/vscode-extension
-        run: npx @vscode/vsce package --no-dependencies
-        if: github.ref == 'refs/heads/main'
+      - name: Build renderer
+        run: npm run build:renderer
 
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main'
-        with:
-          name: praxis-vsix
-          path: "apps/vscode-extension/*.vsix"
+      - name: Copy renderer into the Electron host
+        run: npm run desktop:copy-renderer
+
+      - name: Compile desktop
+        run: npm run build:desktop
+
+      - name: Core unit tests
+        run: npm run test:core
