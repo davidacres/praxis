@@ -7812,6 +7812,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .workspace-dialog input, .workspace-dialog textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; color: var(--text); background: var(--bg); font: inherit; font-size: 12px; resize: vertical; }
 .workspace-dialog input:focus, .workspace-dialog textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); border-color: var(--accent); }
 .workspace-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.workspace-location-picker { display: flex; align-items: center; gap: 8px; justify-content: space-between; border: 1px solid var(--border); border-radius: 6px; padding: 7px 8px; color: var(--text-secondary); font-size: 11px; }
+.workspace-location-picker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-location-help { margin: 7px 0 0; color: var(--text-tertiary); font-size: 11px; line-height: 1.4; }
+.getting-started-form-actions { flex-wrap: wrap; }
 
 /* ── Workspace-first Getting Started ──────────────────────────────────── */
 .getting-started { position: relative; display: grid; grid-template-columns: minmax(360px, .86fr) minmax(480px, 1.14fr); flex: 1; min-height: 0; overflow: hidden; isolation: isolate; }

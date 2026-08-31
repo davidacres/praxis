@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.000Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-040
 title: WIP and granular change actions
 status: complete
@@ -18,3 +22,14 @@ Make working changes part of the graph story and support file, hunk, and selecte
 
 - WIP, staged, unstaged, untracked, and conflicted files are explicit.
 - Destructive actions require scoped confirmation and untracked files are never silently deleted.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

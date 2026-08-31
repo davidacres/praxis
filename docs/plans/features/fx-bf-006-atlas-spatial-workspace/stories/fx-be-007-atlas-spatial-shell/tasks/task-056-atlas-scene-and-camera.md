@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.005Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-056
 title: Atlas scene, LOD tiers, and semantic-zoom camera
 status: proposed
@@ -24,3 +28,14 @@ action, a snap-to-overview key, and an exit key.
 - The camera respects its polar/azimuth and distance limits.
 - LOD swaps are not visually jarring.
 - Empty, loading, and error states render.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

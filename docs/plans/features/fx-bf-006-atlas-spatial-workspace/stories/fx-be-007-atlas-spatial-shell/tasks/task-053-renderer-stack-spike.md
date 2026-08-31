@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.004Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-053
 title: Renderer stack spike and visual contract gate
 status: proposed
@@ -29,3 +33,14 @@ motion.
 - Reduced motion stops camera drift and idle animation.
 - The feature plan records either "stack confirmed" or a revised approach.
 - No spike code is merged into `AtlasPage`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

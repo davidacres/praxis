@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.003Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-051
 title: Connect Git child actions to Graph, Changes, and Conflict contexts
 status: complete
@@ -19,3 +23,14 @@ Route project Git children into the existing validated repository context withou
 - Graph is the default Git child and opens with the active project's workspace.
 - Changes opens the clean diff workspace and Conflicts appears only when status reports conflicts.
 - All child routes retain project identity and return safely to the project tree.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

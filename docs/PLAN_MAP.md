@@ -42,3 +42,30 @@
 | TASK-057 | Task | Node visual encoding and raycast selection into detail surfaces | Proposed | TASK-056 |
 | TASK-058 | Task | Live activity pass and awaiting-approval signal | Proposed | TASK-056 |
 | TASK-059 | Task | Atlas navigation integration and vertical-slice verification | Proposed | TASK-057, TASK-058 |
+| FX-BF-009 | Feature | Agent Hub catalog and navigation | Proposed | FX-BF-005 |
+| FX-BE-010 | Story | Agent Hub navigation and scope-aware catalog | Proposed | FX-BF-009 |
+| FX-BE-011 | Story | Agent and skill detail, trust, and capabilities | Proposed | FX-BF-009 |
+| TASK-076 | Task | Implement Agent Hub shell and route | Proposed | FX-BE-010 |
+| TASK-077 | Task | Add scope-aware discovery tree | Proposed | FX-BE-010 |
+| TASK-078 | Task | Build agent and skill detail panes | Proposed | FX-BE-011 |
+| TASK-079 | Task | Define trust, capabilities, and settings boundary | Proposed | FX-BE-011 |
+| FX-BF-010 | Feature | Agent and skill creation | Proposed | FX-BF-009 |
+| FX-BE-012 | Story | Create Agent wizard and starter scaffold | Proposed | FX-BF-010 |
+| FX-BE-013 | Story | Create complete Skill package | Proposed | FX-BF-010 |
+| FX-BE-014 | Story | Import and validate runtime items | Proposed | FX-BF-010 |
+| TASK-080 | Task | Implement agent manifest wizard | Proposed | FX-BE-012 |
+| TASK-081 | Task | Generate transport starter scaffold | Proposed | FX-BE-012 |
+| TASK-082 | Task | Implement full skill package wizard | Proposed | FX-BE-013 |
+| TASK-083 | Task | Validate and safely write skill packages | Proposed | FX-BE-013 |
+| TASK-084 | Task | Add agent and skill import flow | Proposed | FX-BE-014 |
+| TASK-085 | Task | Enforce duplicate and path safety | Proposed | FX-BE-014 |
+| FX-BF-011 | Feature | Agent runtime and session integration | Proposed | FX-BF-009, FX-BF-010 |
+| FX-BE-015 | Story | Runtime lifecycle dashboard | Proposed | FX-BF-011 |
+| FX-BE-016 | Story | Skill activation and session handoff | Proposed | FX-BF-011 |
+| FX-BE-017 | Story | Advanced Settings boundary and verification | Proposed | FX-BF-011 |
+| TASK-086 | Task | Extend runtime status contracts | Proposed | FX-BE-015 |
+| TASK-087 | Task | Add start, stop, and restart controls | Proposed | FX-BE-015 |
+| TASK-088 | Task | Implement skill activation flow | Proposed | FX-BE-016 |
+| TASK-089 | Task | Add new-session agent selection | Proposed | FX-BE-016 |
+| TASK-090 | Task | Move runtime management to advanced Settings | Proposed | FX-BE-017 |
+| TASK-091 | Task | Add desktop E2E and accessibility verification | Proposed | FX-BE-017 |

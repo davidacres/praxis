@@ -60,3 +60,11 @@ flowchart TD
 3. Iteration 3: State model narrowed to per-issue transcript/model only (no backend write side effects) -> Risk Medium.
 4. Iteration 4: Diagrammed flow and explicit acceptance/verification tightened -> Confidence High.
 5. Iteration 5 (final): Complexity Medium, Risk Medium, Confidence High.
+
+## Dependencies
+
+
+
+## Comments
+
+

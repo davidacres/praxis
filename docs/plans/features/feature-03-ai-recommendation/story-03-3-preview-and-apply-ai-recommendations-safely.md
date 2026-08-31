@@ -28,3 +28,11 @@ Add a review/apply flow that lets users inspect AI recommendations, accept them,
 1. Run an AI recommendation and reject it.
 2. Run another recommendation and accept it.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

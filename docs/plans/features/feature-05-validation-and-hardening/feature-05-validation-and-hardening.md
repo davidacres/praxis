@@ -35,3 +35,7 @@ Harden the task designer for persistence, mixed backends, reload behavior, and a
 1. Test Jira, GitLab, Live Folder, and mixed scenarios.
 2. Verify panel state survives reloads.
 3. Verify critical user flows remain functional after errors.
+
+## Comments
+
+

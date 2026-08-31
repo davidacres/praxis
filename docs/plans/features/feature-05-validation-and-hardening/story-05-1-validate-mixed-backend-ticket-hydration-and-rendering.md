@@ -27,3 +27,11 @@ Verify that the designer correctly resolves and renders tickets from Jira, GitLa
 1. Add Jira, GitLab, and Live Folder tickets to the designer.
 2. Exercise board-sourced recommendation on mixed contexts.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -13,5 +13,37 @@ export default defineConfig({
    * leave headroom rather than thrash.
    */
   workers: process.env.CI ? 2 : 4,
-  reporter: 'list'
+  reporter: 'list',
+  projects: [
+    {
+      name: 'functional',
+      // Appearance has its own opt-in project below. Keep the default desktop
+      // run focused on product behavior and persistence.
+      testIgnore: [
+        '**/appearanceSettings.spec.ts',
+        '**/brandIcons.spec.ts',
+        '**/overview.spec.ts',
+        '**/surfacePacks.spec.ts',
+        '**/themeLooks.spec.ts'
+      ],
+      grepInvert: /@theme/
+    },
+    {
+      name: 'themes',
+      testMatch: [
+        '**/appearanceSettings.spec.ts',
+        '**/brandIcons.spec.ts',
+        '**/overview.spec.ts',
+        '**/surfacePacks.spec.ts',
+        '**/themeLooks.spec.ts'
+      ]
+    },
+    {
+      name: 'theme-regressions',
+      // Keeps the occasional theme-specific assertion embedded in a broader
+      // flow opt-in without duplicating the whole source test file.
+      testMatch: '**/*.spec.ts',
+      grep: /@theme/
+    }
+  ]
 });

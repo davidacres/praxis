@@ -258,6 +258,11 @@ export class ConnectionStore implements Disposable {
     await this.writeTrackedBoards(remaining);
   }
 
+  /** Removes all tracked board registrations while keeping connection records and secrets. */
+  public async clearTrackedBoards(): Promise<void> {
+    await this.writeTrackedBoards([]);
+  }
+
   public async getSecret(connectionId: string, name: string): Promise<string | undefined> {
     return this.secrets.get(secretKey(connectionId, name));
   }

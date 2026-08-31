@@ -239,6 +239,7 @@ export function App() {
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [workspaces, setWorkspaces] = useState<WorkspaceRecord[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>();
+  useEffect(() => { void window.praxis.workspaces.setActive(activeWorkspaceId); }, [activeWorkspaceId]);
   const [recentWorkspaceIds, setRecentWorkspaceIds] = useState(readRecentWorkspaceIds);
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false);
   // Whether `workspaces.list()` has returned at least once. The seed-on-first-run
@@ -535,8 +536,8 @@ export function App() {
 
   const createWorkspace = useCallback(() => setWorkspaceDialogOpen(true), []);
 
-  const saveNewWorkspace = useCallback((name: string, description: string) => {
-    void window.praxis.workspaces.create({ name, description, projectIds: [] }).then(workspace => {
+  const saveNewWorkspace = useCallback((name: string, description: string, storageFolder?: string) => {
+    void window.praxis.workspaces.create({ name, description, projectIds: [], storageFolder }).then(workspace => {
       setWorkspaces(current => [...current, workspace]);
       setActiveWorkspaceId(workspace.id);
       localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
@@ -546,8 +547,8 @@ export function App() {
     }).catch(error => console.error('Failed to create workspace:', error));
   }, [touchWorkspace]);
 
-  const createWorkspaceFromGettingStarted = useCallback(async (name: string, description: string) => {
-    const workspace = await window.praxis.workspaces.create({ name, description, projectIds: [] });
+  const createWorkspaceFromGettingStarted = useCallback(async (name: string, description: string, storageFolder?: string) => {
+    const workspace = await window.praxis.workspaces.create({ name, description, projectIds: [], storageFolder });
     setWorkspaces(current => [...current, workspace]);
     setActiveWorkspaceId(workspace.id);
     localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
@@ -555,6 +556,12 @@ export function App() {
     setCreatedWorkspaceId(workspace.id);
     setNav({ entries: [{ feature: 'overview' }], index: 0 });
   }, [touchWorkspace]);
+
+  const skipWorkspaceSetup = useCallback(() => {
+    setCreatedWorkspaceId(undefined);
+    setGettingStarted(false);
+    setNav({ entries: [{ feature: 'overview' }], index: 0 });
+  }, []);
 
   const saveWorkspaceToFile = useCallback(() => {
     if (activeWorkspaceId) {
@@ -1214,6 +1221,7 @@ export function App() {
           onOpenWorkspace={openWorkspace}
           onOpenWorkspaceFile={openWorkspaceFromFile}
           onCreateWorkspace={createWorkspaceFromGettingStarted}
+          onSkipSetup={skipWorkspaceSetup}
           onCreateProject={() => requestProjectWizard('create', 'onboarding')}
           onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
           onContinueEmpty={() => {

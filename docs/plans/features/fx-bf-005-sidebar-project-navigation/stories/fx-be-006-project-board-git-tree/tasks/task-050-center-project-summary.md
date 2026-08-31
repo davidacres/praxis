@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.003Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-050
 title: Replace center project navigation cards with focused project summary
 status: complete
@@ -19,3 +23,14 @@ Remove duplicate Boards/Git navigation cards from the center pane while retainin
 - The center pane does not duplicate the sidebar's board/Git tree.
 - The right sidebar remains the project detail editor.
 - The center summary supports a clean selected-project state without competing with board or Git workspaces.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

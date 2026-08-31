@@ -57,6 +57,15 @@ export function getAiAnalysisStore(): JsonKeyValueStore {
   return analysisStore;
 }
 
+/** Drops file-backed AI singletons after their files are cleared by a reset. */
+export function resetAiStores(): void {
+  sessionManager = undefined;
+  analysisStore = undefined;
+  agentService = undefined;
+  acpAgentHost = undefined;
+  copilotAgentHost = undefined;
+}
+
 // Tee into the shared log bus so the Output panel sees agent traffic; the
 // console keeps the same `[ai]`-prefixed lines as before.
 const mainProcessLogger: VercelAgentLogger & AcpAgentLogger & CopilotAgentLogger = getLogBus().tee('ai', {

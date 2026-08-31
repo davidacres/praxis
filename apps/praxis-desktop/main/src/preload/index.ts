@@ -110,6 +110,8 @@ const praxis: PraxisIpc = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch: AppSettingsPatch) => ipcRenderer.invoke('settings:set', patch),
+    clearSessionData: () => ipcRenderer.invoke('settings:clearSessionData'),
+    clearProjectWorkspaceBoardData: () => ipcRenderer.invoke('settings:clearProjectWorkspaceBoardData'),
     onChanged: (listener: (settings: AppSettings) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, settings: AppSettings) =>
         listener(settings);
@@ -276,6 +278,7 @@ const praxis: PraxisIpc = {
     list: () => ipcRenderer.invoke('workspaces:list'),
     get: (workspaceId: string) => ipcRenderer.invoke('workspaces:get', workspaceId),
     create: (input: CreateWorkspaceInput) => ipcRenderer.invoke('workspaces:create', input),
+    setActive: (workspaceId: string | undefined) => ipcRenderer.invoke('workspaces:setActive', workspaceId),
     update: (workspaceId: string, patch: UpdateWorkspaceInput) => ipcRenderer.invoke('workspaces:update', workspaceId, patch),
     remove: (workspaceId: string) => ipcRenderer.invoke('workspaces:remove', workspaceId),
     saveToFile: (workspaceId: string) => ipcRenderer.invoke('workspaces:saveToFile', workspaceId),

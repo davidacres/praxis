@@ -183,6 +183,10 @@ export interface SettingsIpc {
    * merged result so the caller can show the new state without an extra `get`.
    */
   set(patch: AppSettingsPatch): Promise<AppSettings>;
+  /** Deletes persisted AI session and issue-analysis records, but not credentials. */
+  clearSessionData(): Promise<void>;
+  /** Deletes app-owned workspace, project, and board UI data; portable workspace files remain untouched. */
+  clearProjectWorkspaceBoardData(): Promise<void>;
   /**
    * Push channel for live updates. Fires whenever the settings change — both
    * from a local `set` and from an external change (e.g. the VS Code extension
@@ -309,6 +313,7 @@ export interface WorkspacesIpc {
   list(): Promise<WorkspaceRecord[]>;
   get(workspaceId: string): Promise<WorkspaceRecord | undefined>;
   create(input: CreateWorkspaceInput): Promise<WorkspaceRecord>;
+  setActive(workspaceId: string | undefined): Promise<void>;
   update(workspaceId: string, patch: UpdateWorkspaceInput): Promise<WorkspaceRecord>;
   remove(workspaceId: string): Promise<void>;
   saveToFile(workspaceId: string): Promise<string | undefined>;

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.004Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-055
 title: Deterministic orbital layout solver in core
 status: proposed
@@ -24,3 +28,14 @@ and stable when unrelated nodes are added or removed.
   and that adding or removing one project does not move unrelated bodies.
 - Output is immutable and serializable across the IPC boundary.
 - No randomness or wall-clock input in the solver.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

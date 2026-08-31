@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.003Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-052
 title: Verify navigation semantics, accessibility, responsive layout, and migration snapshots
 status: complete
@@ -20,3 +24,14 @@ Prove the new tree is understandable and stable in the packaged renderer.
 - Keyboard focus, aria labels, disabled states, and narrow sidebar behavior are verified.
 - Intentional visual snapshots are updated and unrelated snapshots are preserved.
 - Build, typecheck, copied renderer, focused tests, and `git diff --check` pass.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

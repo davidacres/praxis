@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.005Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-057
 title: Node visual encoding and raycast selection into detail surfaces
 status: proposed
@@ -26,3 +30,14 @@ halo on a ready-to-start task. Wire raycast selection to open the existing
   halo.
 - Selecting a body opens the correct existing detail surface while the scene
   keeps rendering behind it.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

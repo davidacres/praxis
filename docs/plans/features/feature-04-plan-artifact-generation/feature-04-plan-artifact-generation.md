@@ -35,3 +35,7 @@ Generate local planning artifacts from the designer graph so the flow can be rev
 1. Generate a plan from a multi-ticket graph.
 2. Review file names, numbering, dependencies, and content.
 3. Run `npm run check-types` after each implementation story.
+
+## Comments
+
+

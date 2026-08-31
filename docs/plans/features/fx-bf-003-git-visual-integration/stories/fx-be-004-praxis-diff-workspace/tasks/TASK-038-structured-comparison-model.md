@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:31.999Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-038
 title: Structured comparison and patch model
 status: complete
@@ -18,3 +22,14 @@ Replace the opaque patch string with typed files, hunks, lines, status, counts, 
 
 - Working, staged, commit, ref-range, rename, binary, and untracked comparisons parse deterministically.
 - Patch input is path-validated and exercised through real temporary Git repositories.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

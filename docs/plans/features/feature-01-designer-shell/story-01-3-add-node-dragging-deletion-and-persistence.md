@@ -28,3 +28,11 @@ Allow ticket nodes to be dragged around the dotted surface, deleted, and restore
 1. Drag multiple nodes and reopen the panel.
 2. Delete a node and confirm it stays deleted after reopen.
 3. Run `npm run check-types`.
+
+## Dependencies
+
+
+
+## Comments
+
+

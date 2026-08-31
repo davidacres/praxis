@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-08-31T12:27:32.002Z
+**Type:** Task
+**Priority:** Medium
 id: TASK-049
 title: Refactor sidebar hierarchy for project-owned Boards and Git
 status: complete
@@ -20,3 +24,14 @@ Make Projects → Boards and Git the canonical tree, with clear expand/collapse,
 - Git rows use `Git` visibly and explain repository state accessibly.
 - Folderless projects cannot accidentally open Git Graph.
 - Existing external/unlinked board ownership behavior remains intact.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
