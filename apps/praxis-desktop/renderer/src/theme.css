@@ -4271,6 +4271,32 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   padding: var(--space-2);
 }
 
+.connections-list-group {
+  padding: var(--space-3) var(--space-2) var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Read-only key/value list for a project's own connection. */
+.conn-summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.conn-summary dt {
+  color: var(--text-secondary);
+}
+
+.conn-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .connections-detail {
   display: flex;
   flex-direction: column;

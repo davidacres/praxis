@@ -85,16 +85,17 @@ export function backendModeMeta(mode: BackendMode | undefined): BackendModeMeta 
   return mode ? BACKEND_MODE_META[mode] : BACKEND_MODE_META.demo;
 }
 
-/** Connection-id prefix for a project's synthetic connection (`projectConnectionId` in core). */
+/** Connection-id prefix for a project's own connection (`projectConnectionId` in core). */
 export const PROJECT_CONNECTION_PREFIX = 'project:';
 
 /**
  * The backend mode behind a board's `connectionId`.
  *
- * A project's board is reached through the synthetic `project:<id>` id, which
- * has no row in the connection store — looking it up there yields `undefined`
- * and used to fall back to `demo`, so project boards were driven by demo's
- * field rules. Resolve the prefix first.
+ * Projects own a real connection row now, so the plain lookup resolves them.
+ * The prefix check remains as a fallback for the first launch after an upgrade,
+ * before the startup heal has written that row: without it the lookup yields
+ * `undefined` and falls back to `demo`, which used to drive project boards by
+ * demo's field rules.
  */
 export function resolveBackendMode(
   connectionId: string | undefined,

@@ -22,6 +22,8 @@ const TYPES: Array<{ id: ProjectType; title: string; description: string }> = [
 
 type BriefPrompt = { question: string; example: string; hint: string };
 type PlanChoice = 'standard' | 'none' | 'custom';
+/** A board on an already-configured connection, offered as a project's source. */
+type LinkableBoard = { connectionId: string; boardId: string; name: string; connectionName: string };
 
 const BRIEF_DEFAULTS: Record<ProjectType, Record<string, string>> = {
   software: {
@@ -103,8 +105,11 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const [folderName, setFolderName] = useState('');
   const [folderNameEdited, setFolderNameEdited] = useState(false);
   const [inspection, setInspection] = useState<FolderInspection>();
-  /** Where an existing folder's work items live — asked, not inferred, so the decision is visible. */
-  const [storageChoice, setStorageChoice] = useState<'folder' | 'app'>('folder');
+  /** Where this project's work items come from — asked, not inferred, so the decision is visible. */
+  const [sourceChoice, setSourceChoice] = useState<'folder' | 'app' | 'connection'>('folder');
+  /** Boards on connections the user has already set up, offered as a source. */
+  const [linkableBoards, setLinkableBoards] = useState<LinkableBoard[]>([]);
+  const [linkedBoardKey, setLinkedBoardKey] = useState('');
   const [existingProject, setExistingProject] = useState<ProjectRecord>();
   const [existingDecision, setExistingDecision] = useState<'use' | 'create'>();
   const [brief, setBrief] = useState<Record<string, string>>(() => ({ ...BRIEF_DEFAULTS.software }));
@@ -150,6 +155,36 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
     if (!keyEdited) setKey(slugKey(name));
     if (!folderNameEdited) setFolderName(slugFolder(name));
   }, [name, keyEdited, folderNameEdited]);
+  // Boards the user could point this project at. Demo boards are excluded (they
+  // are fixtures, not a place to plan), as are other projects' own boards — a
+  // board belongs to one project, and linking a second would be rejected.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const stored = new Map(
+          (await window.praxis.connection.list())
+            .filter(connection => connection.mode !== 'project' && connection.mode !== 'demo')
+            .map(connection => [connection.id, connection.name] as const)
+        );
+        if (stored.size === 0) {
+          if (!cancelled) setLinkableBoards([]);
+          return;
+        }
+        const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
+        if (cancelled) return;
+        setLinkableBoards(boards.flatMap(board => {
+          const connectionName = board.connectionId ? stored.get(board.connectionId) : undefined;
+          return board.connectionId && connectionName
+            ? [{ connectionId: board.connectionId, boardId: board.id, name: board.name, connectionName }]
+            : [];
+        }));
+      } catch {
+        if (!cancelled) setLinkableBoards([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => { if (startingPoint === 'app-storage') setToolMode('project-only'); else setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only'); }, [startingPoint, type]);
   useEffect(() => {
     if (step !== 3) return;
@@ -172,7 +207,58 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
    * project whose board silently showed nothing.
    */
   const plansDetected = startingPoint === 'existing-folder' && (inspection?.planFiles?.length ?? 0) > 0;
-  const folderBacked = plansDetected && storageChoice === 'folder';
+  // The folder option only exists when there are plans to read, so a lingering
+  // 'folder' choice from an earlier folder reads as the app board.
+  const source = !plansDetected && sourceChoice === 'folder' ? 'app' : sourceChoice;
+  const folderBacked = source === 'folder';
+  const linkedBoard = source === 'connection'
+    ? linkableBoards.find(board => `${board.connectionId}:${board.boardId}` === linkedBoardKey)
+    : undefined;
+  const sourceOptions = plansDetected || linkableBoards.length > 0 ? (
+    <>
+      {plansDetected && (
+        <Choice
+          checked={source === 'folder'}
+          title="Use the plans in this folder"
+          detail={`The board reads the ${inspection?.planFiles?.length ?? 0} markdown planning files directly — they stay the source of truth.`}
+          onClick={() => setSourceChoice('folder')}
+        />
+      )}
+      <Choice
+        checked={source === 'app'}
+        title="Start a fresh Praxis board"
+        detail={plansDetected
+          ? 'Keep work items in the app; the folder’s files are left alone.'
+          : 'Work items live in the app, on this project’s own board.'}
+        onClick={() => setSourceChoice('app')}
+      />
+      {linkableBoards.length > 0 && (
+        <Choice
+          checked={source === 'connection'}
+          title="Use a board from an existing connection"
+          detail="Point this project at a board on a connection you have already set up."
+          onClick={() => setSourceChoice('connection')}
+        />
+      )}
+      {source === 'connection' && (
+        <select
+          className="input"
+          data-testid="source-connection-board"
+          value={linkedBoardKey}
+          onChange={event => setLinkedBoardKey(event.target.value)}
+        >
+          <option value="">Choose a board…</option>
+          {linkableBoards.map(board => (
+            <option key={`${board.connectionId}:${board.boardId}`} value={`${board.connectionId}:${board.boardId}`}>
+              {board.name} — {board.connectionName}
+            </option>
+          ))}
+        </select>
+      )}
+    </>
+  ) : undefined;
+  /** Picking a connection without picking one of its boards leaves nothing to link. */
+  const sourceIncomplete = source === 'connection' && !linkedBoard;
 
   const input: CreateProjectInput = useMemo(() => ({
     name, key, type, purpose, brief: selectedBrief, startingPoint, folderPath: folderPath || undefined,
@@ -234,7 +320,16 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   };
   const create = async () => {
     setCreating(true); setError(undefined);
-    try { onCreated(await window.praxis.projects.create(input, workspaceId)); }
+    try {
+      const project = await window.praxis.projects.create(input, workspaceId);
+      onCreated(linkedBoard
+        ? await window.praxis.projects.linkBoard(project.id, {
+            connectionId: linkedBoard.connectionId,
+            boardId: linkedBoard.boardId,
+            displayName: linkedBoard.name
+          })
+        : project);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); }
   };
   const chooseWorkflow = (choice: PlanChoice) => {
@@ -280,7 +375,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
     <div className="wizard-progress" aria-label={`Step ${step + 1} of 6`}>{Array.from({ length: 6 }, (_, index) => <span key={index} className={index <= step ? 'active' : ''} />)}</div>
     <div className="project-wizard-body">
       <div className="wizard-step-intro"><div><h2>{stepCopy[step].title}</h2><p>{stepCopy[step].detail}</p></div></div>
-      {step === 0 && (mode === 'create' ? <ProjectTypeCards type={type} onChange={setType} /> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{plansDetected && <div className="project-location-options" data-testid="storage-choice-step0"><Choice checked={storageChoice === 'folder'} title="Use the plans in this folder" detail={`The board reads the ${inspection?.planFiles?.length ?? 0} markdown planning files directly \u2014 they stay the source of truth.`} onClick={() => setStorageChoice('folder')} /><Choice checked={storageChoice === 'app'} title="Start a fresh Praxis board" detail={`Keep work items in the app; the folder\u2019s files are left alone.`} onClick={() => setStorageChoice('app')} /></div>}</div>)}
+      {step === 0 && (mode === 'create' ? <ProjectTypeCards type={type} onChange={setType} /> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{sourceOptions && <div className="project-location-options" data-testid="storage-choice-step0">{sourceOptions}</div>}</div>)}
       {step === 1 && <div className="project-form-grid">
         {mode === 'existing' && <div className="span-2"><h3 className="wizard-section-title first">Project type</h3><ProjectTypeCards type={type} onChange={setType} compact /></div>}
         <label className="field span-2"><span>Project name</span><input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus /></label>
@@ -290,7 +385,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         {mode === 'create' && startingPoint !== 'app-storage' && <label className="field span-2"><span>Save project in</span><div className="folder-picker"><input className="input" value={folderPath} placeholder="Choose a location…" readOnly /><button className="btn" onClick={chooseFolder}>Choose…</button></div><small>{folderPath ? <>Praxis will create <strong>{folderName || 'a project folder'}</strong> here.</> : 'Choose the folder that should contain your new project.'}</small></label>}
         <details className="project-advanced-details span-2"><summary>Project identifiers</summary><p>Praxis generates these automatically. Change them only if your team uses a specific convention.</p><div className="project-advanced-grid"><label className="field"><span>Ticket prefix</span><input className="input" value={key} onChange={e => { setKeyEdited(true); setKey(e.target.value.toUpperCase()); }} /><small>Used for ticket IDs such as {key || 'PROJ'}-1.</small></label>{startingPoint === 'new-folder' && <label className="field"><span>Folder name</span><input className="input" value={folderName} onChange={e => { setFolderNameEdited(true); setFolderName(e.target.value); }} /><small>{previewPath || 'Generated automatically.'}</small></label>}</div></details>
         {mode === 'existing' && <label className="field span-2"><span>Purpose <em>Optional</em></span><textarea className="input textarea" value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Why does this project exist?" /></label>}
-        {mode === 'existing' && inspection && <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} />}{plansDetected && <div className="project-location-options span-2" data-testid="storage-choice"><Choice checked={storageChoice === 'folder'} title="Use the plans in this folder" detail={`The board reads the ${inspection?.planFiles?.length ?? 0} markdown planning files directly \u2014 they stay the source of truth.`} onClick={() => setStorageChoice('folder')} /><Choice checked={storageChoice === 'app'} title="Start a fresh Praxis board" detail={`Keep work items in the app; the folder\u2019s files are left alone.`} onClick={() => setStorageChoice('app')} /></div>}
+        {mode === 'existing' && inspection && <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} />}{sourceOptions && <div className="project-location-options span-2" data-testid="storage-choice">{sourceOptions}</div>}
       </div>}
       {step === 2 && <BriefStep
         type={type}
@@ -316,7 +411,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
       {step === 5 && <ReviewStep type={type} name={name} projectKey={key} purpose={purpose} workspaceName={workspaceName} folderless={startingPoint === 'app-storage'} previewPath={previewPath} briefCount={briefFields.filter(field => includedBrief[field.key]).length} stages={stages} ticketCount={tickets.length} toolMode={toolMode} />}
       {error && <div className="form-error" role="alert">{error}</div>}
     </div>
-    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating} onClick={step === 5 ? create : continueStep}>{step === 5 ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
+    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating || (step === 5 && sourceIncomplete)} onClick={step === 5 ? create : continueStep}>{step === 5 ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
   </div>;
 }
 

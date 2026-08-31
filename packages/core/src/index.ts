@@ -50,6 +50,7 @@ export * from './projects/projectImportPlanner';
 export * from './projects/projectTemplates';
 export * from './projects/projectStore';
 export * from './projects/projectService';
+export * from './projects/projectConnection';
 export * from './workspaces/workspaceTypes';
 export * from './workspaces/workspaceStore';
 export * from './mcp/clientFactory';

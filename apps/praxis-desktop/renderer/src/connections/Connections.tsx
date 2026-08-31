@@ -15,8 +15,15 @@ export interface ConnectionsProps {
  * Two-pane connections manager: connection list left, detail right (the same
  * idiom as the settings page). The detail pane is one of:
  *   - the add/edit form for the selected connection,
+ *   - a read-only summary for a project's own connection,
  *   - the board picker (for modes with discoverable remote boards),
  *   - an empty prompt when nothing is selected.
+ *
+ * Project connections are listed but not editable: each one is a projection of
+ * its project record that the main process rewrites whenever the project
+ * changes, so an edit here would be silently reverted. They appear so that a
+ * project's board has a visible connection like every other board — and so the
+ * user can see where its work items actually come from.
  */
 export function Connections({ onChanged }: ConnectionsProps) {
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -77,6 +84,37 @@ export function Connections({ onChanged }: ConnectionsProps) {
       });
   };
 
+  const storedConnections = connections.filter(connection => connection.mode !== 'project');
+  const projectConnections = connections.filter(connection => connection.mode === 'project');
+
+  const renderRow = (connection: Connection, testId: string) => {
+    const meta = backendModeMeta(connection.mode);
+    const select = () => {
+      setCreating(false);
+      setSelectedId(connection.id);
+      setPickingBoardsFor(undefined);
+    };
+    return (
+      <div
+        key={connection.id}
+        data-testid={testId}
+        className={`list-row${!creating && connection.id === selectedId ? ' active' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={select}
+        onKeyDown={event => {
+          if (event.key === 'Enter') select();
+        }}
+      >
+        <span className="conn-mode-dot" style={{ background: meta.tone }} />
+        <div className="conn-row-text">
+          <div className="list-row-title">{connection.name}</div>
+          <div className="list-row-meta">{meta.label}</div>
+        </div>
+      </div>
+    );
+  };
+
   const detail = () => {
     if (pickerConnection) {
       return (
@@ -89,6 +127,9 @@ export function Connections({ onChanged }: ConnectionsProps) {
           }}
         />
       );
+    }
+    if (selected?.mode === 'project') {
+      return <ProjectConnectionSummary connection={selected} />;
     }
     if (creating || selected) {
       return (
@@ -194,45 +235,56 @@ export function Connections({ onChanged }: ConnectionsProps) {
         </div>
         <div className="connections-list-scroll">
           {error && <div className="error-banner">{error}</div>}
-          {connections.length === 0 && !error && (
+          {storedConnections.length === 0 && !error && (
             <p className="placeholder-text" style={{ padding: '0 var(--space-2)' }}>
               No connections yet.
             </p>
           )}
-          {connections.map(connection => {
-            const meta = backendModeMeta(connection.mode);
-            const isActive = !creating && connection.id === selectedId;
-            return (
-              <div
-                key={connection.id}
-                data-testid="connection-row"
-                className={`list-row${isActive ? ' active' : ''}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  setCreating(false);
-                  setSelectedId(connection.id);
-                  setPickingBoardsFor(undefined);
-                }}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') {
-                    setCreating(false);
-                    setSelectedId(connection.id);
-                    setPickingBoardsFor(undefined);
-                  }
-                }}
-              >
-                <span className="conn-mode-dot" style={{ background: meta.tone }} />
-                <div className="conn-row-text">
-                  <div className="list-row-title">{connection.name}</div>
-                  <div className="list-row-meta">{meta.label}</div>
-                </div>
-              </div>
-            );
-          })}
+          {storedConnections.map(connection => renderRow(connection, 'connection-row'))}
+          {projectConnections.length > 0 && (
+            <>
+              <div className="connections-list-group">Project boards</div>
+              {projectConnections.map(connection => renderRow(connection, 'project-connection-row'))}
+            </>
+          )}
         </div>
       </aside>
       <section className="connections-detail">{detail()}</section>
+    </div>
+  );
+}
+
+/**
+ * Read-only detail for a project's own connection. It exists so the project's
+ * board resolves like every other board; the project itself owns the settings,
+ * so this reports them rather than offering to edit them.
+ */
+function ProjectConnectionSummary({ connection }: { connection: Connection }) {
+  const folderBacked = connection.settings.source === 'folder';
+  const roots = Array.isArray(connection.settings.roots)
+    ? (connection.settings.roots as unknown[]).filter((value): value is string => typeof value === 'string')
+    : [];
+  return (
+    <div className="conn-form" data-testid="project-connection-summary">
+      <h3 className="conn-form-title">{connection.name}</h3>
+      <p className="placeholder-text">
+        This connection belongs to a project and is managed with it. Change it from the project
+        instead.
+      </p>
+      <dl className="conn-summary">
+        <dt>Work items</dt>
+        <dd data-testid="project-connection-source">
+          {folderBacked ? 'Markdown plans in the project folder' : 'A Praxis board in the app'}
+        </dd>
+        <dt>Project key</dt>
+        <dd>{String(connection.settings.projectKey ?? '—')}</dd>
+        {folderBacked && (
+          <>
+            <dt>Folder</dt>
+            <dd data-testid="project-connection-folder">{roots[0] ?? '—'}</dd>
+          </>
+        )}
+      </dl>
     </div>
   );
 }
