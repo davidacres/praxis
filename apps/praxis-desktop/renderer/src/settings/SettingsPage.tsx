@@ -525,7 +525,7 @@ function StartupSection({
       <CategoryHeader category={category} />
       <Toggle
         label="Reopen last workspace"
-        description="Restore the last valid workspace and durable view. Turn this off to choose a workspace from Getting Started."
+        description="Restore the last valid workspace, project, board, ticket, AI session, and browser state. Turn this off to choose a workspace from Getting Started."
         checked={settings.startup.reopenLastWorkspace}
         testId="startup-reopen-last-workspace"
         onChange={next => void update({ startup: { reopenLastWorkspace: next } })}

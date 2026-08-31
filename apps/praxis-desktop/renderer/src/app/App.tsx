@@ -68,6 +68,10 @@ interface Route {
   newIssueType?: string;
   /** Selected agent session when `feature === 'sessions'`. */
   sessionKey?: string;
+  /** Whether the in-app browser was visible in the selected AI session. */
+  browserOpen?: boolean;
+  /** Last navigated URL in the in-app browser. */
+  browserUrl?: string;
   /** Centre-pane AI tooling view for `issueKey` (review / peer review / designer). */
   view?: 'review' | 'lpr' | 'designer';
   /** Per-ticket runtime selected before opening an AI tool. */
@@ -90,6 +94,16 @@ const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
 
+function restorableBrowserUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Restores only durable navigation context. Transient forms and AI tool modes
  * deliberately fall away so a relaunch cannot reopen an unfinished action.
@@ -111,6 +125,8 @@ function readLastWorkspaceRoute(): Route {
       ...(typeof stored.boardId === 'string' ? { boardId: stored.boardId } : {}),
       ...(typeof stored.issueKey === 'string' ? { issueKey: stored.issueKey } : {}),
       ...(typeof stored.sessionKey === 'string' ? { sessionKey: stored.sessionKey } : {}),
+      ...(stored.browserOpen === true ? { browserOpen: true } : stored.browserOpen === false ? { browserOpen: false } : {}),
+      ...(restorableBrowserUrl(stored.browserUrl) ? { browserUrl: stored.browserUrl } : {}),
       ...(gitView ? { gitView } : {})
     };
   } catch {
@@ -126,6 +142,8 @@ function writeLastWorkspaceRoute(route: Route): void {
     ...(route.boardId ? { boardId: route.boardId } : {}),
     ...(route.issueKey ? { issueKey: route.issueKey } : {}),
     ...(route.sessionKey ? { sessionKey: route.sessionKey } : {}),
+    ...(route.feature === 'sessions' && route.browserOpen !== undefined ? { browserOpen: route.browserOpen } : {}),
+    ...(route.feature === 'sessions' && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
     ...(route.gitView ? { gitView: route.gitView } : {})
   };
   localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
@@ -175,6 +193,8 @@ function restoredRouteForWorkspace(
       ...(board ? { boardId: board.id } : {}),
       ...(board && stored.issueKey ? { issueKey: stored.issueKey } : {}),
       ...(stored.feature === 'sessions' && stored.sessionKey ? { sessionKey: stored.sessionKey } : {}),
+      ...(stored.feature === 'sessions' && stored.browserOpen !== undefined ? { browserOpen: stored.browserOpen } : {}),
+      ...(stored.feature === 'sessions' && stored.browserUrl ? { browserUrl: stored.browserUrl } : {}),
       ...(stored.feature === 'git' && stored.gitView ? { gitView: stored.gitView } : {})
     };
   }
@@ -211,6 +231,7 @@ export function App() {
   const [connections, setConnections] = useState<Connection[]>([]);
   /** Agent sessions, most recent first — feeds the Sessions view and the sidebar badge. */
   const [agentSessions, setAgentSessions] = useState<AgentSessionRecord[]>([]);
+  const [agentSessionsLoaded, setAgentSessionsLoaded] = useState(false);
   const [boardDetails, setBoardDetails] = useState<BoardDetails | undefined>();
   const [detailsByBoardId, setDetailsByBoardId] = useState<Record<string, BoardDetails | undefined>>({});
   /** Latest health-check per connection id — feeds the sidebar status dots. */
@@ -243,14 +264,22 @@ export function App() {
     boardId: string;
     value: BoardFilterPresentation;
   }>();
+  const validatedTicketRef = useRef<string>();
+  const restoredTicketKeyRef = useRef<string>();
 
   useEffect(() => {
-    if (!settings || startupResolved || !workspacesLoaded || !projectsLoaded || !boardsLoaded) return;
+    if (!settings || startupResolved || !workspacesLoaded || !projectsLoaded || !boardsLoaded || !agentSessionsLoaded) return;
     const savedWorkspaceId = localStorage.getItem(ACTIVE_WORKSPACE_KEY) ?? undefined;
     const savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
     if (settings.startup.reopenLastWorkspace && savedWorkspace) {
       setActiveWorkspaceId(savedWorkspace.id);
-      setNav({ entries: [restoredRouteForWorkspace(readLastWorkspaceRoute(), savedWorkspace, projects, boards)], index: 0 });
+      const storedRoute = readLastWorkspaceRoute();
+      let restored = restoredRouteForWorkspace(storedRoute, savedWorkspace, projects, boards);
+      restoredTicketKeyRef.current = restored.issueKey;
+      if (restored.feature === 'sessions' && restored.sessionKey && !agentSessions.some(session => session.issueKey === restored.sessionKey)) {
+        restored = { ...restored, sessionKey: undefined, browserOpen: undefined, browserUrl: undefined };
+      }
+      setNav({ entries: [restored], index: 0 });
       setGettingStarted(false);
     } else {
       setActiveWorkspaceId(undefined);
@@ -262,11 +291,25 @@ export function App() {
     setRecentWorkspaceIds(cleanedRecentIds);
     localStorage.setItem(RECENT_WORKSPACES_KEY, JSON.stringify(cleanedRecentIds));
     setStartupResolved(true);
-  }, [boards, boardsLoaded, projects, projectsLoaded, recentWorkspaceIds, settings, startupResolved, workspaces, workspacesLoaded]);
+  }, [agentSessions, agentSessionsLoaded, boards, boardsLoaded, projects, projectsLoaded, recentWorkspaceIds, settings, startupResolved, workspaces, workspacesLoaded]);
 
   useEffect(() => {
     if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(route);
   }, [activeWorkspaceId, gettingStarted, route, startupResolved]);
+
+  // The sessions view selects its newest session when no explicit selection was
+  // routed to it. Make that implicit selection durable too, so a restart opens
+  // the same conversation rather than merely the sessions list.
+  useEffect(() => {
+    if (!startupResolved || route.feature !== 'sessions' || route.sessionKey || !agentSessions[0]) return;
+    setNav(current => {
+      const currentRoute = current.entries[current.index];
+      if (currentRoute.feature !== 'sessions' || currentRoute.sessionKey) return current;
+      const entries = [...current.entries];
+      entries[current.index] = { ...currentRoute, sessionKey: agentSessions[0].issueKey };
+      return { ...current, entries };
+    });
+  }, [agentSessions, route.feature, route.sessionKey, startupResolved]);
 
   useEffect(() => {
     if (!settingsDialogCategory) {
@@ -314,6 +357,20 @@ export function App() {
     setNav(current => {
       const entries = [...current.entries.slice(0, current.index + 1), next];
       return { entries, index: entries.length - 1 };
+    });
+  }, []);
+
+  const updateSessionBrowserRoute = useCallback((patch: Pick<Route, 'browserOpen' | 'browserUrl'>) => {
+    setNav(current => {
+      const currentRoute = current.entries[current.index];
+      if (currentRoute.feature !== 'sessions') return current;
+      const entries = [...current.entries];
+      entries[current.index] = {
+        ...currentRoute,
+        ...(patch.browserOpen !== undefined ? { browserOpen: patch.browserOpen } : {}),
+        ...(patch.browserUrl !== undefined ? { browserUrl: patch.browserUrl } : {})
+      };
+      return { ...current, entries };
     });
   }, []);
 
@@ -542,9 +599,13 @@ export function App() {
       .then(sessions => {
         if (!cancelled) {
           setAgentSessions(sessions);
+          setAgentSessionsLoaded(true);
         }
       })
-      .catch(error => console.error('Failed to load AI sessions:', error));
+      .catch(error => {
+        setAgentSessionsLoaded(true);
+        console.error('Failed to load AI sessions:', error);
+      });
     const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
       setAgentSessions(current => {
         const rest = current.filter(session => session.issueKey !== record.issueKey);
@@ -575,6 +636,25 @@ export function App() {
     () => boards.find(board => board.id === route.boardId),
     [boards, route.boardId]
   );
+
+  useEffect(() => {
+    if (!startupResolved || !activeWorkspaceId || !route.issueKey || route.issueKey !== restoredTicketKeyRef.current || !selectedBoard) return;
+    const validationKey = `${selectedBoard.id}:${route.issueKey}`;
+    if (validatedTicketRef.current === validationKey) return;
+    validatedTicketRef.current = validationKey;
+    let cancelled = false;
+    void window.praxis.issue.get(route.issueKey, selectedBoard.connectionId).catch(() => {
+      if (cancelled) return;
+      setNav(current => {
+        const currentRoute = current.entries[current.index];
+        if (currentRoute.issueKey !== route.issueKey) return current;
+        const entries = [...current.entries];
+        entries[current.index] = { ...currentRoute, issueKey: undefined, view: undefined, newIssue: undefined, newIssueType: undefined };
+        return { ...current, entries };
+      });
+    });
+    return () => { cancelled = true; };
+  }, [activeWorkspaceId, route.issueKey, selectedBoard, startupResolved]);
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
   const workspaceProjects = activeWorkspace
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
@@ -848,6 +928,12 @@ export function App() {
           onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
           onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
+          initialBrowserOpen={route.browserOpen}
+          initialBrowserUrl={route.browserUrl}
+          onBrowserOpenChange={browserOpen => updateSessionBrowserRoute({ browserOpen })}
+          onBrowserUrlChange={browserUrl => {
+            if (restorableBrowserUrl(browserUrl)) updateSessionBrowserRoute({ browserUrl });
+          }}
         />
       );
     }
