@@ -13,10 +13,12 @@ import { Icon } from '../ui/Icon';
 export function BrowserPane({
   initialUrl,
   onNavigate,
+  suspended = false,
   onClose
 }: {
   initialUrl?: string;
   onNavigate?: (url: string) => void;
+  suspended?: boolean;
   onClose?: () => void;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -41,7 +43,7 @@ export function BrowserPane({
 
   useEffect(() => {
     void window.praxis.browser.attach();
-    void window.praxis.browser.setVisible(true);
+    void window.praxis.browser.setVisible(!suspended);
     void window.praxis.browser.getState().then(s => {
       if (s) setState(s);
       // Restore a persisted URL exactly once, and only if we're not already there.
@@ -78,6 +80,10 @@ export function BrowserPane({
     // Mount once — callbacks and focus state are read through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    void window.praxis.browser.setVisible(!suspended);
+  }, [suspended]);
 
   const go = (raw: string) => {
     const trimmed = raw.trim();

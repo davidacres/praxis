@@ -946,6 +946,7 @@ export function App() {
           initialBrowserUrl={route.browserUrl}
           onBrowserOpenChange={handleBrowserOpenChange}
           onBrowserUrlChange={handleBrowserUrlChange}
+          browserSuspended={settingsDialogCategory !== undefined}
         />
       );
     }
