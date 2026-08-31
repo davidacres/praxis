@@ -36,7 +36,7 @@
   --tone-demo: #a855f7;
   --tone-github: #8b7bb8;
   --tone-gitlab: #e24329;
-  --tone-livefolder: #f59e0b;
+  --tone-folder: #f59e0b;
   --tone-workspace: #4ec9b0;
   --tone-green: #3fb950;
   --tone-amber: #d29922;
@@ -445,22 +445,6 @@ textarea {
 .praxis-wordmark-dot {
   fill: var(--accent);
   filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--bg) 72%, transparent));
-}
-
-/* The appearance button reads as a colour wheel rather than a line icon. */
-.theme-orb {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 210deg,
-    #f0736a,
-    #e8b84b,
-    #6fc46f,
-    #4aa3e0,
-    #8b6ee8,
-    #f0736a
-  );
 }
 
 /* Square 28px icon buttons used across the title bar and panel headers. */
@@ -4331,6 +4315,18 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   min-width: 0;
 }
 
+/* A folder connection's plans folders — one `.conn-path-row` per root. */
+.conn-roots-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.conn-roots-list > [data-testid="conn-add-root"] {
+  align-self: flex-start;
+}
+
 .conn-boards {
   padding: 0 var(--space-4) var(--space-5);
   max-width: 720px;
@@ -4381,6 +4377,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   opacity: .7;
 }
 
+.board-tree-configure,
 .board-tree-delete {
   flex: 0 0 auto;
   color: var(--muted);
@@ -4388,6 +4385,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   border: 0;
   padding: 4px;
   cursor: pointer;
+}
+
+.board-tree-configure:hover {
+  color: var(--accent);
 }
 
 .board-tree-delete:hover {
@@ -4503,7 +4504,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .board-draft-header {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  grid-template-columns: 42px 1.4fr 1fr 1fr 1fr;
   gap: var(--space-2);
   margin-top: var(--space-2);
   padding: 4px var(--space-2);
@@ -4525,7 +4526,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .board-draft-row {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  grid-template-columns: 42px 1.4fr 1fr 1fr 1fr;
   gap: var(--space-2);
   align-items: center;
   padding: 8px var(--space-2);
@@ -4542,6 +4543,11 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .board-draft-info {
   overflow: hidden;
+}
+
+.board-draft-select {
+  display: flex;
+  justify-content: center;
 }
 
 .board-draft-name {

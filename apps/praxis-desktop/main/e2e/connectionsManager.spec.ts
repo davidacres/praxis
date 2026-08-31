@@ -43,9 +43,9 @@ test('the new-connection form renders the per-mode field sets', async () => {
   // demo is the default mode.
   await expect(window.locator('[data-testid="conn-mode-note"]')).toContainText('sample data');
 
-  await modeSelect.selectOption('livefolder');
-  await expect(window.locator('[data-testid="conn-field-path"]')).toBeVisible();
-  await expect(window.locator('[data-testid="conn-browse-path"]')).toBeVisible();
+  await modeSelect.selectOption('folder');
+  await expect(window.locator('[data-testid="conn-field-root-0"]')).toBeVisible();
+  await expect(window.locator('[data-testid="conn-browse-root-0"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-projectKey"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-projectName"]')).toBeVisible();
   await expect(window.locator('[data-testid="conn-field-allowIssueCreation"]')).toBeVisible();
@@ -98,8 +98,8 @@ test('saving a live folder connection auto-tracks its board', async () => {
     await openNewConnectionForm();
 
     await window.locator('[data-testid="conn-field-name"]').fill('e2e-live-manager');
-    await window.locator('[data-testid="conn-field-mode"]').selectOption('livefolder');
-    await window.locator('[data-testid="conn-field-path"]').fill(liveFolderDir);
+    await window.locator('[data-testid="conn-field-mode"]').selectOption('folder');
+    await window.locator('[data-testid="conn-field-root-0"]').fill(liveFolderDir);
     await window.locator('[data-testid="conn-field-projectKey"]').fill('E2EL');
     await window.locator('[data-testid="conn-field-projectName"]').fill('E2E Live');
     await window.locator('[data-testid="conn-save-btn"]').click();
@@ -107,7 +107,7 @@ test('saving a live folder connection auto-tracks its board', async () => {
     // The synthesized tracked board appears in the detail pane…
     const trackedRow = window.locator('[data-testid="tracked-board-row"]', { hasText: 'E2E Live (Live)' });
     await expect(trackedRow).toBeVisible();
-    await expect(trackedRow).toContainText('livefolder-e2el');
+    await expect(trackedRow).toContainText('folder-e2el');
 
     // …and the board itself is listed in the sidebar.
     await expect(

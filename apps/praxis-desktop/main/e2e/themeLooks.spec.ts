@@ -16,7 +16,7 @@ let app: TestApp;
 let window: Page;
 
 async function openLooks(): Promise<void> {
-  await window.locator('[data-testid="titlebar-themes"]').click();
+  await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-looks"]').click();
   await expect(window.locator('[data-testid="looks-strip"]')).toBeVisible();
 }

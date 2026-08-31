@@ -59,7 +59,7 @@ async function launchWithEditFixture(): Promise<void> {
       {
         id: 'e2e-edit',
         name: 'e2e-edit',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: {
           path: liveFolderDir,
           projectKey: 'EDIT',

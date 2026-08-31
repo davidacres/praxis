@@ -15,7 +15,7 @@ test.beforeEach(async () => {
       {
         id: 'dead-livefolder',
         name: 'dead-livefolder',
-        mode: 'livefolder',
+        mode: 'folder',
         settings: { path: path.join(os.tmpdir(), 'praxis-does-not-exist-9f3a') }
       }
     ]

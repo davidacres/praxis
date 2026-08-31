@@ -53,8 +53,8 @@ async function addLiveFolderConnection(name: string): Promise<void> {
   await window.locator('[data-testid="nav-connections"]').click();
   await window.locator('[data-testid="add-connection-btn"]').click();
   await window.locator('[data-testid="conn-field-name"]').fill(name);
-  await window.locator('[data-testid="conn-field-mode"]').selectOption('livefolder');
-  await window.locator('[data-testid="conn-field-path"]').fill(liveFolderDir);
+  await window.locator('[data-testid="conn-field-mode"]').selectOption('folder');
+  await window.locator('[data-testid="conn-field-root-0"]').fill(liveFolderDir);
   await window.locator('[data-testid="conn-save-btn"]').click();
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).toBeVisible();
 }

@@ -138,7 +138,8 @@ test('creates a folderless Product project through the six-step wizard and opens
   // Project surfaces — including the detail panels — must inherit the active
   // application theme instead of painting an opaque default background over the
   // themed panes. The panels are borderless and carry no surface of their own.
-  await page.locator('[data-testid="titlebar-themes"]').click();
+  await page.locator('[data-testid="titlebar-settings"]').click();
+  await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-humanist-light"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
   await page.keyboard.press('Escape');
@@ -259,6 +260,11 @@ test('imports detected plans as a read-only board for an existing-folder project
     await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans (Live)' })).toHaveCount(0);
     await projectTree.getByTestId('project-linked-board-nav-item').click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
+    const importedPlan = projectTree.getByTestId('project-document-nav-item').filter({ hasText: 'Imported planning work' });
+    await expect(importedPlan.getByTestId('project-document-status')).toHaveClass(/status-dot/);
+    await expect(importedPlan.getByTestId('project-document-status')).toHaveAttribute('title', 'In Progress');
+    await expect(importedPlan.getByTestId('project-document-status')).toHaveAttribute('aria-label', 'Status: In Progress');
+    await expect(importedPlan.getByTestId('project-document-status')).toHaveCSS('background-color', 'rgb(210, 153, 34)');
     await app.window.screenshot({ path: 'output/playwright/project-imported-plans-board.png', fullPage: true });
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
@@ -451,7 +457,7 @@ test('shows a connected board only beneath its owning Praxis project', async () 
 
   await closeTestApp(app);
   app = await launchTestApp({ connections: [{
-    id: 'linked-live-folder', name: 'Linked delivery source', mode: 'livefolder',
+    id: 'linked-live-folder', name: 'Linked delivery source', mode: 'folder',
     settings: { path: folder, projectKey: 'LINKED', projectName: 'Linked Delivery' }
   }] });
 

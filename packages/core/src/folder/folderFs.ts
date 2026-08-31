@@ -1,11 +1,11 @@
 import * as fs from 'node:fs/promises';
 
 /**
- * The file-access surface the live-folder parser and writers need — reads and
+ * The file-access surface the folder parser and writers need — reads and
  * writes the markdown planning files under a project's plans tree. Backed by
  * `node:fs`; every core test uses the same implementation.
  */
-export interface LiveFolderFs {
+export interface FolderFs {
   /** Read a file as UTF-8. Rejects if the file does not exist. */
   readFile(filePath: string): Promise<string>;
   /** Write a file as UTF-8, creating or truncating it. */
@@ -21,7 +21,7 @@ export interface LiveFolderFs {
   mkdir(dirPath: string): Promise<void>;
 }
 
-const nodeLiveFolderFs: LiveFolderFs = {
+const nodeFolderFs: FolderFs = {
   readFile(filePath) {
     return fs.readFile(filePath, 'utf-8');
   },
@@ -37,7 +37,7 @@ const nodeLiveFolderFs: LiveFolderFs = {
   }
 };
 
-/** The filesystem the live-folder module uses for all IO. */
-export function liveFolderFs(): LiveFolderFs {
-  return nodeLiveFolderFs;
+/** The filesystem the folder module uses for all IO. */
+export function folderFs(): FolderFs {
+  return nodeFolderFs;
 }

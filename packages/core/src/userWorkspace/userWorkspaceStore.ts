@@ -1,5 +1,5 @@
 import type { KeyValueStore } from '../host/stateStore';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { toStoredFolderPath } from '../folder/pathUtils';
 
 const USER_WORKSPACE_BOARDS_KEY = 'praxis.userWorkspaceBoards';
 

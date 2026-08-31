@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { toStoredFolderPath } from '../livefolder/pathUtils';
+import { toStoredFolderPath } from '../folder/pathUtils';
 
 /** A Git repository root discovered under the selected parent folder. */
 export interface DiscoveredRepository {

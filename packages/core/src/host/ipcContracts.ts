@@ -20,7 +20,7 @@ import type {
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
 import type { ActivatedSkill, AgentRuntimeSnapshot } from '../ai/agentRuntime';
-import type { IdentifiedPlanFolder } from '../livefolder/markdownPlanParser';
+import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { BoardDraftRow } from '../userWorkspace/boardDraftPlanner';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
 import type {
@@ -95,7 +95,7 @@ export interface IssueIpc {
   /** Tracker-specific label for the authenticated user, used by "Assign to me". */
   getSelfAssigneeLabel(connectionId?: string): Promise<string | undefined>;
   getProjects(connectionId?: string): Promise<Project[]>;
-  /** Candidate parents for the create/edit form (Features for livefolder, Epics for Jira, …). */
+  /** Candidate parents for the create/edit form (Features for folder connections, Epics for Jira, …). */
   getParentItems(
     filters: IssueFilters,
     searchText?: string,
@@ -153,11 +153,11 @@ export interface UserWorkspaceIpc {
 }
 
 /**
- * Live Folder slice. A live-folder connection whose configured folder contains
+ * Folder slice. A folder connection whose configured folder contains
  * several plans roots exposes one board per root; this lets the renderer show
  * the discovery result without loading a board.
  */
-export interface LiveFolderIpc {
+export interface FolderIpc {
   /** All plans roots under the connection's configured folder (multi-board discovery). */
   discoverPlans(connectionId: string): Promise<IdentifiedPlanFolder[]>;
 }
@@ -566,7 +566,7 @@ export interface PraxisIpc {
   issue: IssueIpc;
   connection: ConnectionIpc;
   userWorkspace: UserWorkspaceIpc;
-  liveFolder: LiveFolderIpc;
+  folder: FolderIpc;
   window: WindowIpc;
   settings: SettingsIpc;
   log: LogIpc;

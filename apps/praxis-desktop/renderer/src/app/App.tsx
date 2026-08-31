@@ -272,6 +272,7 @@ export function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
+  const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
   const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
   const [projectWizardPresentation, setProjectWizardPresentation] = useState<'dialog' | 'onboarding'>('dialog');
@@ -825,7 +826,7 @@ export function App() {
 
   /**
    * Whether the selected board's backend accepts new tickets. Demo always can;
-   * live folder connections need their `allowIssueCreation` setting; the
+   * folder connections need their `allowIssueCreation` setting; the
    * not-yet-ported modes (jiracloud/gitlab/github/userworkspace) resolve to a
    * stub backend that throws, so the form would only error — the button is
    * disabled up front instead, with the hint saying why.
@@ -834,13 +835,13 @@ export function App() {
     ? true
     : connection.mode === 'demo'
       ? true
-      : connection.mode === 'livefolder' || connection.mode === 'userworkspace'
+      : connection.mode === 'folder' || connection.mode === 'userworkspace'
         ? connection.settings.allowIssueCreation === true
         : false;
   const createIssueHint =
     !connection || connection.mode === 'demo'
       ? undefined
-      : connection.mode === 'livefolder' || connection.mode === 'userworkspace'
+      : connection.mode === 'folder' || connection.mode === 'userworkspace'
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
@@ -1095,6 +1096,8 @@ export function App() {
         createIssueHint={createIssueHint}
         onIssueMove={onIssueMove}
         onOpenDesigner={() => navigate({ boardId: selectedBoard.id, view: 'designer' })}
+        openSettings={boardSettingsOpenFor === selectedBoard.id}
+        onSettingsOpened={() => setBoardSettingsOpenFor(undefined)}
       />
     );
   };
@@ -1137,7 +1140,6 @@ export function App() {
         onOpenWhatsNew={() => setWhatsNewOpen(true)}
         settingsOpen={settingsDialogCategory !== undefined}
         onOpenSettings={() => setSettingsDialogCategory(current => current ? undefined : 'overview')}
-        onOpenThemes={() => setSettingsDialogCategory('appearance-themes')}
         boardFilter={
           selectedBoard && boardDetails && !route.feature && !route.newIssue && !route.view
             ? {
@@ -1265,14 +1267,14 @@ export function App() {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;
                     // "Delete" means different things per backend: a user-workspace
-                    // connection owns many boards (drop just this one); a live-folder
+                    // connection owns many boards (drop just this one); a folder
                     // connection *is* its single board (drop the connection); a
                     // Jira/GitLab board is only tracked from a shared remote
                     // connection (untrack it, delete nothing remote).
                     const mode = connections.find(item => item.id === connectionId)?.mode;
                     const removed = mode === 'userworkspace'
                       ? window.praxis.userWorkspace.deleteBoard(connectionId, board.id)
-                      : mode === 'livefolder'
+                      : mode === 'folder'
                         ? window.praxis.connection.remove(connectionId)
                         : window.praxis.connection.removeTrackedBoard(connectionId, board.id);
                     void removed.then(() => {
@@ -1280,6 +1282,10 @@ export function App() {
                       refreshBoards();
                       refreshConnections();
                     });
+                  }}
+                  onConfigureBoard={board => {
+                    setBoardSettingsOpenFor(board.id);
+                    navigate({ boardId: board.id });
                   }}
                 />
               )}

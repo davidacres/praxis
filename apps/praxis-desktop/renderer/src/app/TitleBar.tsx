@@ -31,7 +31,6 @@ export interface TitleBarProps {
   onOpenWhatsNew: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
-  onOpenThemes: () => void;
 }
 
 /**
@@ -57,8 +56,7 @@ export function TitleBar({
   boardFilter,
   onOpenWhatsNew,
   settingsOpen,
-  onOpenSettings,
-  onOpenThemes
+  onOpenSettings
 }: TitleBarProps) {
   const [maximized, setMaximized] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -244,17 +242,6 @@ export function TitleBar({
           <Icon name="sidebar-right" />
         </button>
         <button
-          className={`icon-btn${settingsOpen ? ' active' : ''}`}
-          aria-label="Settings"
-          aria-haspopup="dialog"
-          aria-expanded={settingsOpen}
-          data-testid="titlebar-settings"
-          title="Settings"
-          onClick={onOpenSettings}
-        >
-          <Icon name="gear" />
-        </button>
-        <button
           className="icon-btn"
           aria-label="Reload window"
           title="Reload window (⌘R / Ctrl+R)"
@@ -266,18 +253,16 @@ export function TitleBar({
         <button className="icon-btn" aria-label="What's new" title="What's new" onClick={onOpenWhatsNew}>
           <Icon name="sparkles" />
         </button>
-        <button className="icon-btn" aria-label="Remote">
-          <Icon name="radio-tower" />
-        </button>
-
         <button
           className={`icon-btn${settingsOpen ? ' active' : ''}`}
-          aria-label="Themes"
+          aria-label="Settings"
           aria-haspopup="dialog"
-          data-testid="titlebar-themes"
-          onClick={onOpenThemes}
+          aria-expanded={settingsOpen}
+          data-testid="titlebar-settings"
+          title="Settings"
+          onClick={onOpenSettings}
         >
-          <span className="theme-orb" />
+          <Icon name="gear" />
         </button>
       </div>
 

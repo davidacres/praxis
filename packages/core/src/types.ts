@@ -4,7 +4,7 @@ export type BackendMode =
   | 'demo'
   | 'github'
   | 'gitlab'
-  | 'livefolder'
+  | 'folder'
   | 'userworkspace';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
@@ -247,7 +247,7 @@ export interface CreateIssueInput {
   parentKey?: string;
   boardId?: string;
   /**
-   * livefolder/userworkspace only: when `parentKey` is absent and this is
+   * folder/userworkspace only: when `parentKey` is absent and this is
    * non-empty, the service creates a Feature with this summary first, then
    * creates the requested item under it. Ignored by other backends.
    */
@@ -320,7 +320,7 @@ export interface PersistedBoardFilterState {
 
 /**
  * A named backend connection. Each connection is one configured backend
- * instance (e.g. one Jira server, one GitLab host, one Live Folder root).
+ * instance (e.g. one Jira server, one GitLab host, one folder connection).
  * `settings` is mode-specific; see ConnectionStore for the per-mode shape.
  */
 export interface Connection {

@@ -16,7 +16,8 @@ test('renders the workspace overview dashboard', async () => {
   await expect(page.getByText('Delivery worktrees')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Workspace health' })).toBeVisible();
   await page.screenshot({ path: 'output/playwright/overview-dashboard.png', fullPage: true });
-  await page.locator('[data-testid="titlebar-themes"]').click();
+  await page.locator('[data-testid="titlebar-settings"]').click();
+  await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-github-light"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'github-light');
   const themed = await page.evaluate(() => ({

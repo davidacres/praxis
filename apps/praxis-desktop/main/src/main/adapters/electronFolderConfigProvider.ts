@@ -1,4 +1,4 @@
-import type { Connection, LiveFolderConfigProvider } from '@praxis/core';
+import type { Connection, FolderConfigProvider } from '@praxis/core';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -14,27 +14,40 @@ function getBoolean(settings: Record<string, unknown>, key: string): boolean | u
   return typeof value === 'boolean' ? value : undefined;
 }
 
-/** Reads Live Folder settings from a connection's free-form `settings` bag (`path`, `projectKey`, `projectName`, `allowIssueCreation`) — same keys the VS Code extension's connectionScopedConfigStore uses. */
-export class ElectronLiveFolderConfigProvider implements LiveFolderConfigProvider {
+/**
+ * Reads folder-connection settings from a connection's free-form `settings` bag
+ * (`roots`, `projectKey`, `projectName`, `allowIssueCreation`).
+ */
+export class ElectronFolderConfigProvider implements FolderConfigProvider {
   public constructor(private readonly connection: Connection) {}
 
   public getDefaultPageSize(): number {
     return 25;
   }
 
-  public getLiveFolderPath(): string {
-    return getString(this.settings(), 'path') ?? '';
+  /**
+   * `roots` is the current shape. A lone `path` string is still accepted so a
+   * connection written before multi-root keeps resolving to one root.
+   */
+  public getFolderRoots(): string[] {
+    const settings = this.settings();
+    const roots = settings['roots'];
+    if (Array.isArray(roots)) {
+      return roots.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    }
+    const legacyPath = getString(settings, 'path');
+    return legacyPath && legacyPath.trim().length > 0 ? [legacyPath] : [];
   }
 
-  public getLiveFolderProjectKey(): string {
+  public getFolderProjectKey(): string {
     return getString(this.settings(), 'projectKey') ?? '';
   }
 
-  public getLiveFolderProjectName(): string {
+  public getFolderProjectName(): string {
     return getString(this.settings(), 'projectName') ?? '';
   }
 
-  public getLiveFolderAllowIssueCreation(): boolean {
+  public getFolderAllowIssueCreation(): boolean {
     return getBoolean(this.settings(), 'allowIssueCreation') ?? false;
   }
 

@@ -98,9 +98,9 @@ const praxis: PraxisIpc = {
     deleteBoard: (connectionId: string, boardId: string) =>
       ipcRenderer.invoke('userWorkspace:deleteBoard', connectionId, boardId)
   },
-  liveFolder: {
+  folder: {
     discoverPlans: (connectionId: string) =>
-      ipcRenderer.invoke('liveFolder:discoverPlans', connectionId)
+      ipcRenderer.invoke('folder:discoverPlans', connectionId)
   },
   window: {
     reload: () => ipcRenderer.invoke('window:reload'),
