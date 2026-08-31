@@ -3,6 +3,7 @@ import type { AttachProjectFolderInput, Connection, CreateProjectInput, ProjectB
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
+import { toStoredFolderPath } from '@praxis/core';
 
 /**
  * Existing folders are already the source of truth for their planning files.
@@ -22,6 +23,24 @@ async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectReco
   }
 
   const connections = getConnectionStore();
+  // A folder connection may already cover this folder — the user pointed one at
+  // it before creating the project. Adding a second would put two boards over
+  // one folder, so leave the existing connection to serve it.
+  const normalizedFolder = toStoredFolderPath(folder).toLowerCase();
+  const alreadyConnected = connections.getConnections().some(candidate => {
+    if (candidate.mode !== 'folder') {
+      return false;
+    }
+    const roots = candidate.settings['roots'];
+    const configured = Array.isArray(roots)
+      ? roots.filter((value): value is string => typeof value === 'string')
+      : typeof candidate.settings['path'] === 'string' ? [candidate.settings['path'] as string] : [];
+    return configured.some(root => toStoredFolderPath(root).toLowerCase() === normalizedFolder);
+  });
+  if (alreadyConnected) {
+    return project;
+  }
+
   const connection: Connection = {
     id: `project-plans-${project.id}`,
     name: `${project.name} plans`,

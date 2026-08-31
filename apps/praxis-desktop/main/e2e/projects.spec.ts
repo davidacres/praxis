@@ -139,6 +139,8 @@ test('creates a folderless Product project through the six-step wizard and opens
   // application theme instead of painting an opaque default background over the
   // themed panes. The panels are borderless and carry no surface of their own.
   await page.locator('[data-testid="titlebar-settings"]').click();
+  // The Appearance children only render once their group is expanded.
+  await page.locator('[data-testid="settings-nav-appearance-group"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-humanist-light"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
