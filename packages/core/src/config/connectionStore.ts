@@ -8,16 +8,23 @@ const BOARDS_KEY = 'boards';
 const SECRET_PREFIX = 'praxis.connection';
 
 /**
- * Modes a stored connection may declare. `project` is deliberately absent — a
- * project's board is reached through the synthetic `project:<id>` connection id
- * and never has a row in this store.
+ * Modes a stored connection may declare.
+ *
+ * `project` is one of them. A project's board used to be reached through a
+ * synthetic `project:<id>` id with no row here, which made it the one board in
+ * the app that could not be resolved from the connection list — every consumer
+ * that looked one up got `undefined` and needed its own special case
+ * (`resolveBackendMode`'s prefix branch, the sidebar's board suppression, the
+ * ticket-creation gate defaulting to "allowed"). Projects now own a real row,
+ * so a board always has a connection.
  */
 const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'jiracloud',
   'demo',
   'github',
   'gitlab',
-  'folder'
+  'folder',
+  'project'
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

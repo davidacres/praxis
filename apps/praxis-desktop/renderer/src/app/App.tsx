@@ -828,22 +828,28 @@ export function App() {
 
   /**
    * Whether the selected board's backend accepts new tickets. Demo always can;
-   * folder connections need their `allowIssueCreation` setting; the
-   * not-yet-ported modes (gitlab/github) resolve to a
-   * stub backend that throws, so the form would only error — the button is
+   * folder and project connections carry an `allowIssueCreation` setting (a
+   * project's own board always sets it, a folder connection stays read-only
+   * until the user opts in); the not-yet-ported modes (gitlab/github) resolve
+   * to a stub backend that throws, so the form would only error — the button is
    * disabled up front instead, with the hint saying why.
+   *
+   * The `!connection` arm is a fallback for a board whose connection row has
+   * not been written yet (a project from before projects owned one, on the
+   * first launch after the startup heal). It permits rather than blocks, which
+   * is what that board did before it had a row at all.
    */
   const canCreateIssue = !connection
     ? true
     : connection.mode === 'demo'
       ? true
-      : connection.mode === 'folder'
+      : connection.mode === 'folder' || connection.mode === 'project'
         ? connection.settings.allowIssueCreation === true
         : false;
   const createIssueHint =
-    !connection || connection.mode === 'demo'
+    !connection || connection.mode === 'demo' || canCreateIssue
       ? undefined
-      : connection.mode === 'folder'
+      : connection.mode === 'folder' || connection.mode === 'project'
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 

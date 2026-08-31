@@ -75,6 +75,18 @@ test('a project created from a folder of existing plans shows them on its board'
   // Starter tickets are dropped for folder storage — the folder is the source.
   expect(project.workItems).toHaveLength(0);
 
+  // 2b. The project owns a connection, so its board resolves from the
+  //     connection list like every other board rather than being the one
+  //     special case the UI has to sniff a `project:` prefix for.
+  const owned = await window.evaluate(async created => {
+    const list = await window.praxis.connection.list();
+    return list.find(candidate => candidate.id === `project:${created.id}`);
+  }, project);
+  expect(owned, 'the project should own a connection row').toBeTruthy();
+  expect(owned!.mode).toBe('project');
+  expect(owned!.settings.source).toBe('folder');
+  expect(owned!.settings.roots).toEqual([project.workspaceFolder]);
+
   // 3. The project's own board serves the folder's plans, under the project key.
   const details = await window.evaluate(async created => {
     const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
@@ -181,4 +193,22 @@ test('a broken-era project record heals to folder-backed at startup', async () =
     return board ? window.praxis.board.get(board) : undefined;
   });
   expect(details!.issues.map(issue => issue.summary)).toContain('Legacy Feature');
+
+  // The heal also gives the project the connection row it never had, so the
+  // board is resolvable rather than being a dangling `project:` id.
+  const owned = await window.evaluate(async () => {
+    const list = await window.praxis.connection.list();
+    return list.find(candidate => candidate.id === 'project:legacy-1');
+  });
+  expect(owned, 'the healed project should own a connection row').toBeTruthy();
+  expect(owned!.mode).toBe('project');
+  expect(owned!.settings.source).toBe('folder');
+
+  // And exactly one board — the project's own. A project connection must not
+  // also contribute through the connection leg of `board:list`.
+  const boardIds = await window.evaluate(async () => {
+    const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
+    return boards.filter(board => board.connectionId === 'project:legacy-1').map(board => board.id);
+  });
+  expect(boardIds).toEqual(['legacy-1-board']);
 });

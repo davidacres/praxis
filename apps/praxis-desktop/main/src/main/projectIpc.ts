@@ -3,7 +3,24 @@ import type { AttachProjectFolderInput, Connection, CreateProjectInput, ProjectB
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
-import { discoverPlanFolders, toStoredFolderPath } from '@praxis/core';
+import { buildProjectConnection, discoverPlanFolders, toStoredFolderPath } from '@praxis/core';
+
+/**
+ * Writes (or refreshes) the connection row a project owns, so its board can be
+ * resolved from the connection list like every other board. Called on every
+ * path that creates or mutates a project — the row is a projection with a
+ * single writer, so it cannot drift from the record.
+ */
+export async function syncProjectConnection(project: ProjectRecord): Promise<ProjectRecord> {
+  const connections = getConnectionStore();
+  const connection = buildProjectConnection(project);
+  if (connections.getConnection(connection.id)) {
+    await connections.updateConnection(connection);
+  } else {
+    await connections.addConnection(connection);
+  }
+  return project;
+}
 
 /**
  * Existing folders are already the source of truth for their planning files.
@@ -70,42 +87,48 @@ async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectReco
 }
 
 /**
- * One-time heal for projects created before `ProjectRecord.storage` existed.
+ * Startup heal for projects written before this model settled. Two eras:
  *
- * A record with no `storage`, a workspace folder that holds markdown plans, and
- * zero work items is exactly the broken-era artifact: it was meant to read the
- * folder but was built as an empty app-storage board, so its board showed
- * nothing while the plans sat on disk. Flip those to folder-backed. A record
- * with work items keeps app storage — it holds real data — and one whose
- * folder has no plans is stamped `app` so it is never re-scanned.
+ * 1. Before `ProjectRecord.storage` existed, every project was built as app
+ *    storage — so one pointed at a folder of markdown plans showed an empty
+ *    board while the plans sat on disk. A record with no `storage`, a folder
+ *    that holds plans, and zero work items is exactly that artifact; flip it to
+ *    folder-backed. A record with work items keeps app storage (it holds real
+ *    data), and one whose folder has no plans is stamped `app` so it is never
+ *    re-scanned.
+ * 2. Before projects owned a connection row, their boards were the only ones
+ *    that could not be resolved from the connection list. Every project gets
+ *    its row here, whatever its era.
  */
 export async function healLegacyFolderProjects(): Promise<void> {
   const store = getProjectStore();
   for (const project of store.list()) {
-    if (project.storage !== undefined || !project.workspaceFolder || project.workItems.length > 0) {
-      continue;
-    }
-    try {
-      const roots = await discoverPlanFolders(project.workspaceFolder);
-      const storage = roots.length > 0 ? 'folder' as const : 'app' as const;
-      // The broken era also linked a `project-plans-*` companion connection as
-      // the project's board. Now the project's own board reads the plans, that
-      // link would make the sidebar suppress it as "the empty Praxis board" —
-      // so retire the companion along with the flip.
-      const companionId = `project-plans-${project.id}`;
-      const linkedBoards = storage === 'folder'
-        ? project.linkedBoards.filter(link => link.connectionId !== companionId)
-        : project.linkedBoards;
-      await store.replace({ ...project, storage, linkedBoards, updatedAt: new Date().toISOString() });
-      if (storage === 'folder') {
-        if (getConnectionStore().getConnection(companionId)) {
-          await getConnectionStore().removeConnection(companionId).catch(() => undefined);
+    let healed = project;
+    if (project.storage === undefined && project.workspaceFolder && project.workItems.length === 0) {
+      try {
+        const roots = await discoverPlanFolders(project.workspaceFolder);
+        const storage = roots.length > 0 ? 'folder' as const : 'app' as const;
+        // The broken era also linked a `project-plans-*` companion connection as
+        // the project's board. Now the project's own board reads the plans, that
+        // link would make the sidebar suppress it as "the empty Praxis board" —
+        // so retire the companion along with the flip.
+        const companionId = `project-plans-${project.id}`;
+        const linkedBoards = storage === 'folder'
+          ? project.linkedBoards.filter(link => link.connectionId !== companionId)
+          : project.linkedBoards;
+        healed = await store.replace({ ...project, storage, linkedBoards, updatedAt: new Date().toISOString() });
+        if (storage === 'folder') {
+          if (getConnectionStore().getConnection(companionId)) {
+            await getConnectionStore().removeConnection(companionId).catch(() => undefined);
+          }
+          console.log(`projects — healed "${project.name}" to folder-backed (${project.workspaceFolder})`);
         }
-        console.log(`projects — healed "${project.name}" to folder-backed (${project.workspaceFolder})`);
+      } catch {
+        // An unreadable folder (unplugged drive) is left untouched for next launch.
       }
-    } catch {
-      // An unreadable folder (unplugged drive) is left untouched for next launch.
     }
+    await syncProjectConnection(healed).catch(error =>
+      console.error(`projects — could not write the connection for "${healed.name}":`, error));
   }
 }
 
@@ -116,13 +139,21 @@ export function registerProjectIpc(): void {
   ipcMain.handle('projects:get', (_event, projectId: string) => getProjectManager().get(projectId));
   ipcMain.handle('projects:create', async (_event, input: CreateProjectInput, workspaceId: string) => {
     const project = await getProjectManager().createInWorkspace(input, workspaceId, getWorkspaceStore(), app.getVersion());
-    return connectDetectedPlans(project);
+    return syncProjectConnection(await connectDetectedPlans(project));
   });
   ipcMain.handle('projects:useExisting', (_event, projectId: string, workspaceId: string) =>
     getProjectManager().useInWorkspace(projectId, workspaceId, getWorkspaceStore(), app.getVersion()));
-  ipcMain.handle('projects:update', (_event, projectId: string, patch: UpdateProjectInput) => getProjectStore().update(projectId, patch));
+  ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) =>
+    // A rename changes the connection's display name, so reproject after every update.
+    syncProjectConnection(await getProjectStore().update(projectId, patch)));
   ipcMain.handle('projects:inspectFolder', (_event, folderPath: string) => getProjectManager().inspectFolder(folderPath));
-  ipcMain.handle('projects:attachFolder', (_event, projectId: string, input: AttachProjectFolderInput) => getProjectManager().attachFolder(projectId, input));
+  ipcMain.handle('projects:attachFolder', async (_event, projectId: string, input: AttachProjectFolderInput) => {
+    // Attaching a folder can make a project folder-backed, which changes the
+    // connection's source and roots.
+    const result = await getProjectManager().attachFolder(projectId, input);
+    await syncProjectConnection(result.project);
+    return result;
+  });
   ipcMain.handle('projects:linkBoard', (_event, projectId: string, board: ProjectBoardReference) => getProjectStore().linkBoard(projectId, board));
   ipcMain.handle('projects:unlinkBoard', (_event, projectId: string, connectionId: string, boardId: string) => getProjectStore().unlinkBoard(projectId, connectionId, boardId));
   ipcMain.handle('projects:listDocuments', (_event, projectId: string) => getProjectManager().listDocuments(projectId));

@@ -10,6 +10,7 @@ import {
 import type { ProjectImportRow, ProjectRecord } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
+import { syncProjectConnection } from './projectIpc';
 
 /**
  * Importing existing plans folders as projects — the flow that replaced the
@@ -101,7 +102,7 @@ export function registerProjectImportIpc(): void {
           projectFileStatus: 'retained'
         };
         validateProjectRecord(project);
-        created.push(await store.create(project));
+        created.push(await syncProjectConnection(await store.create(project)));
         // Write the project's identity into the folder's `board.praxis.json`
         // so the plans travel self-describing — re-importing the same folder
         // elsewhere then recovers the key and name rather than guessing.

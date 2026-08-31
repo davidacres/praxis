@@ -248,10 +248,15 @@ export async function getServiceForConnection(
 /**
  * Connections that contribute boards to `board:list`. Demo is excluded because
  * the demo boards are always merged in unconditionally — including demo-mode
- * connections here would list the same demo boards once per connection.
+ * connections here would list the same demo boards once per connection. Project
+ * connections are excluded for the same reason: `board:list` already walks the
+ * project store, so counting their rows too would list every project board
+ * twice.
  */
 export function getSupportedConnections() {
-  return getConnectionStore().getConnections().filter(c => c.mode !== 'demo');
+  return getConnectionStore()
+    .getConnections()
+    .filter(c => c.mode !== 'demo' && c.mode !== 'project');
 }
 
 /**
