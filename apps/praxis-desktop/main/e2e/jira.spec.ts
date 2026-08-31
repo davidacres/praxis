@@ -7,16 +7,10 @@
 // mock.
 //
 // The mock implements the community adapter name set declared in
-// `apps/vscode-extension/src/jira/jiraService.ts` (`COMMUNITY_TOOLS`); the
+// `packages/core/src/jira/jiraService.ts` (`COMMUNITY_TOOLS`); the
 // `checkConnection`/`getBoards` flows reach it through the resolver chain
-// described in `apps/vscode-extension/src/jira/jiraMcpConnectionResolver.ts`
+// described in `packages/core/src/jira/jiraMcpConnectionResolver.ts`
 // (legacy stdio → workspace MCP → user MCP).
-//
-// Status: forward-looking. The Electron app's Jira MCP backend is not yet
-// ported (see `apps/praxis-desktop/main/src/main/serviceRegistry.ts` — jiracloud
-// falls through to `StubBackendService` for now), so these tests may fail at
-// runtime while the port lands. They are kept here so the spec, the mock and
-// the seeding shape stay in sync against the resolver contract.
 
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
