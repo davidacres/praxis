@@ -11,6 +11,8 @@
 // The folder under test is this repository itself: it has a real `docs/plans`
 // tree, so the journey runs against genuine content rather than a fixture.
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
@@ -124,4 +126,59 @@ test('a project created from a folder with no plans stays on app storage', async
 
   expect(project.storage).toBe('app');
   expect(project.workItems).toHaveLength(1);
+});
+
+test('a broken-era project record heals to folder-backed at startup', async () => {
+  // Reproduces the reported stale state: a project created before
+  // `ProjectRecord.storage` existed — no storage field, a folder full of
+  // plans, zero work items, and the old `project-plans-*` companion link that
+  // made the sidebar hide the project's own board.
+  await closeTestApp(app!);
+
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-heal-'));
+  const plans = path.join(dataDir, 'fixture-plans');
+  const featureDir = path.join(plans, 'features', 'feature-01-legacy');
+  fs.mkdirSync(featureDir, { recursive: true });
+  fs.writeFileSync(path.join(featureDir, 'feature.md'),
+    '# Legacy Feature\n\n**Type:** Feature\n**Status:** Backlog\n');
+
+  const legacy = {
+    id: 'legacy-1', name: 'Legacy Project', key: 'LEG', type: 'software',
+    purpose: '', brief: {}, workspaceFolder: plans,
+    workflowStages: [{ id: 's1', name: 'Backlog' }, { id: 's2', name: 'Done' }],
+    defaultBoardId: 'legacy-1-board', workItems: [],
+    linkedBoards: [{ connectionId: 'project-plans-legacy-1', boardId: 'folder-leg', displayName: 'Legacy plans' }],
+    defaultAiToolMode: 'full',
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+  };
+  fs.writeFileSync(path.join(dataDir, 'projects.json'),
+    JSON.stringify({ 'praxis.projects.v1': [legacy] }, null, 2));
+
+  const settingsPath = path.join(dataDir, 'test-settings.json');
+  app = await launchTestApp(
+    { connections: [{ id: 'project-plans-legacy-1', name: 'Legacy plans', mode: 'folder', settings: { roots: [plans], projectKey: 'LEG' } }] },
+    { userDataDir: dataDir, settingsPath },
+    undefined,
+    { demoMode: false }
+  );
+  window = app.window;
+
+  // The heal is fire-and-forget at startup, so poll for the flip.
+  await expect.poll(async () =>
+    window.evaluate(async () => (await window.praxis.projects.get('legacy-1'))?.storage)
+  ).toBe('folder');
+
+  const healed = await window.evaluate(() => window.praxis.projects.get('legacy-1'));
+  expect(healed!.linkedBoards).toHaveLength(0);
+  const stillThere = await window.evaluate(() =>
+    window.praxis.connection.list().then(list => list.some(c => c.id === 'project-plans-legacy-1')));
+  expect(stillThere).toBe(false);
+
+  // And the board now actually serves the plans.
+  const details = await window.evaluate(async () => {
+    const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
+    const board = boards.find(candidate => candidate.id === 'legacy-1-board');
+    return board ? window.praxis.board.get(board) : undefined;
+  });
+  expect(details!.issues.map(issue => issue.summary)).toContain('Legacy Feature');
 });
