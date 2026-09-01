@@ -238,11 +238,36 @@ test('the entry node may not have inbound edges', () => {
   assert.ok(paths(validateWorkflow(definition).errors).includes('entryNodeId'));
 });
 
-test('a non-join node with two parents must converge through a join', () => {
+test('a non-join node with two concurrent parents must converge through a join', () => {
   const definition = deliveryWorkflow();
   definition.edges.push({ id: 'extra', from: 'plan', to: 'review', on: 'success', required: true });
   const result = validateWorkflow(definition);
   assert.ok(result.errors.some(issue => issue.message.includes('converge them through a join')));
+});
+
+test('success and failure edges from one node may share a target', () => {
+  // Routing both outcomes of a stage to the same cleanup/notify node is a
+  // normal shape: the edges are mutually exclusive, so only one ever fires.
+  // Counting raw inbound edges rejected this; parents are counted by distinct
+  // source node for exactly that reason.
+  const definition = deliveryWorkflow();
+  definition.nodes.push({
+    type: 'check',
+    id: 'notify',
+    name: 'Notify',
+    x: 1000,
+    y: 0,
+    inputs: [],
+    command: 'echo',
+    successExitCodes: [0],
+    outputs: []
+  });
+  definition.edges.push(
+    { id: 'n-ok', from: 'approve', to: 'notify', on: 'success', required: true },
+    { id: 'n-no', from: 'approve', to: 'notify', on: 'failure', required: false }
+  );
+  const result = validateWorkflow(definition);
+  assert.deepEqual(result.errors, []);
 });
 
 test('an all-required join with no required inbound edge would never release', () => {

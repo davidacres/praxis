@@ -260,12 +260,74 @@ export class WorkflowStore {
   }
 }
 
+export interface EffectiveWorkflowPolicy {
+  /** The composed profile actually enforced. */
+  profile: WorkflowPolicyProfile;
+  /** Profile ids that contributed, global first. */
+  sources: string[];
+  /**
+   * Fields where the global profile made the project's stricter than it
+   * declared. Empty when the project already met or exceeded org policy; the
+   * designer shows these so an override that did not take is never silent.
+   */
+  tightenedByGlobal: string[];
+}
+
+/**
+ * Composes a project profile over the global one, strictest wins.
+ *
+ * Governance has to be monotone: a project may tighten org policy but never
+ * loosen it, or a global "security review required" disappears the moment a
+ * project writes a profile that forgets to mention it. Every field has a
+ * defined direction — gates union, requirements OR, permissions AND, caps
+ * take the minimum — so the result is predictable rather than an arbitrary
+ * merge.
+ *
+ * A genuine exemption is not expressed by weakening policy; it goes through
+ * the attributed bypass recorded at approval time, where it has a name, a
+ * timestamp, and a reason.
+ */
+export function composeWorkflowPolicies(
+  global: WorkflowPolicyProfile,
+  project: WorkflowPolicyProfile
+): EffectiveWorkflowPolicy {
+  const tightenedByGlobal: string[] = [];
+
+  const requiredGates = [...new Set([...global.requiredGates, ...project.requiredGates])].sort();
+  if (requiredGates.length > new Set(project.requiredGates).size) tightenedByGlobal.push('requiredGates');
+
+  const requireHumanApproval = global.requireHumanApproval || project.requireHumanApproval;
+  if (requireHumanApproval !== project.requireHumanApproval) tightenedByGlobal.push('requireHumanApproval');
+
+  // Bypass is a permission, so the strict direction is to withhold it.
+  const allowGateBypass = global.allowGateBypass && project.allowGateBypass;
+  if (allowGateBypass !== project.allowGateBypass) tightenedByGlobal.push('allowGateBypass');
+
+  const requireTrustedAgents = global.requireTrustedAgents || project.requireTrustedAgents;
+  if (requireTrustedAgents !== project.requireTrustedAgents) tightenedByGlobal.push('requireTrustedAgents');
+
+  const maxAttemptsPerNode = Math.min(global.maxAttemptsPerNode, project.maxAttemptsPerNode);
+  if (maxAttemptsPerNode !== project.maxAttemptsPerNode) tightenedByGlobal.push('maxAttemptsPerNode');
+
+  return {
+    profile: {
+      ...project,
+      requiredGates,
+      requireHumanApproval,
+      allowGateBypass,
+      requireTrustedAgents,
+      maxAttemptsPerNode
+    },
+    sources: [global.id, project.id],
+    tightenedByGlobal
+  };
+}
+
 /**
  * Policy profiles, global and per project.
  *
- * A project profile replaces the global one rather than merging with it —
- * merging two sets of "required gates" produces a policy nobody wrote and
- * nobody can predict.
+ * A project profile composes over the global one strictest-wins rather than
+ * replacing it — see `composeWorkflowPolicies`.
  */
 export class WorkflowPolicyStore {
   public constructor(private readonly state: KeyValueStore) {}
@@ -276,16 +338,19 @@ export class WorkflowPolicyStore {
   }
 
   /**
-   * The profile governing a project: its own if it has one, else the global
-   * default. Returns undefined when neither exists — callers then run
+   * The policy governing a project: its own composed with the global default,
+   * strictest wins. Returns undefined when neither exists — callers then run
    * unpoliced, which is a decision the UI must surface rather than assume.
    */
-  public forProject(projectId: string): WorkflowPolicyProfile | undefined {
+  public effectiveForProject(projectId: string): EffectiveWorkflowPolicy | undefined {
     const profiles = this.list();
-    return (
-      profiles.find(profile => profile.scope === 'project' && profile.projectId === projectId) ??
-      profiles.find(profile => profile.scope === 'global')
-    );
+    const global = profiles.find(profile => profile.scope === 'global');
+    const project = profiles.find(profile => profile.scope === 'project' && profile.projectId === projectId);
+
+    if (project && global) return composeWorkflowPolicies(global, project);
+    const only = project ?? global;
+    if (!only) return undefined;
+    return { profile: { ...only }, sources: [only.id], tightenedByGlobal: [] };
   }
 
   public async save(profile: WorkflowPolicyProfile): Promise<WorkflowPolicyProfile> {
