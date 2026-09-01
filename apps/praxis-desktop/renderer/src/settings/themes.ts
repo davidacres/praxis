@@ -37,6 +37,7 @@ const ANTHROPIC_LIGHT_TERMINAL = { black: '#1f1f1f', red: '#b94a48', green: '#46
 const ANTHROPIC_DARK_TERMINAL = { black: '#191919', red: '#e2766d', green: '#7aa88d', yellow: '#d4a27f', blue: '#8fa7d6', magenta: '#c69acb', cyan: '#86bdb4', white: '#f0f0eb', brightBlack: '#85827b', brightRed: '#f28b80', brightGreen: '#9bc8a7', brightYellow: '#e7b58e', brightBlue: '#aabfe9', brightMagenta: '#ddb4df', brightCyan: '#acd9d1', brightWhite: '#fffdf8' };
 const GITHUB_LIGHT_TERMINAL = { black: '#24292f', red: '#cf222e', green: '#1a7f37', yellow: '#9a6700', blue: '#0969da', magenta: '#8250df', cyan: '#1b7c83', white: '#f6f8fa', brightBlack: '#57606a', brightRed: '#a40e26', brightGreen: '#116329', brightYellow: '#7d4e00', brightBlue: '#0550ae', brightMagenta: '#6639ba', brightCyan: '#055d66', brightWhite: '#ffffff' };
 const GITHUB_DARK_TERMINAL = { black: '#010409', red: '#f85149', green: '#3fb950', yellow: '#d29922', blue: '#2f81f7', magenta: '#a371f7', cyan: '#39c5cf', white: '#e6edf3', brightBlack: '#6e7681', brightRed: '#ff7b72', brightGreen: '#56d364', brightYellow: '#e3b341', brightBlue: '#58a6ff', brightMagenta: '#bc8cff', brightCyan: '#56d4dd', brightWhite: '#ffffff' };
+const JIRA_CLOUD_TERMINAL = { black: '#172b4d', red: '#ae2e24', green: '#216e4e', yellow: '#a54800', blue: '#0c66e4', magenta: '#803fa5', cyan: '#206a83', white: '#ffffff', brightBlack: '#44546f', brightRed: '#c9372c', brightGreen: '#1f845a', brightYellow: '#c25100', brightBlue: '#0055cc', brightMagenta: '#943d73', brightCyan: '#227d9b', brightWhite: '#f7f8f9' };
 
 const BUILT_IN_THEMES: ThemeDefinition[] = [
   {
@@ -88,6 +89,11 @@ const BUILT_IN_THEMES: ThemeDefinition[] = [
     id: 'github-dark', name: 'GitHub Dark', family: 'Inspired palettes', section: 'Recent', mode: 'dark',
     description: 'GitHub Primer dark surfaces and semantic colors.', terminal: GITHUB_DARK_TERMINAL,
     preview: { canvas: '#0d1117', panel: '#161b22', raised: '#010409', border: '#30363d', text: '#e6edf3', muted: '#7d8590', accent: '#2f81f7', success: '#3fb950', warning: '#d29922', danger: '#f85149' }
+  },
+  {
+    id: 'jira-cloud', name: 'Jira Cloud', family: 'Inspired palettes', section: 'Staff picks', mode: 'light',
+    description: 'Crisp Atlassian-inspired whites, blue actions, and dense project-work surfaces.', terminal: JIRA_CLOUD_TERMINAL,
+    preview: { canvas: '#f7f8f9', panel: '#ffffff', raised: '#f1f2f4', border: '#dcdfe4', text: '#172b4d', muted: '#44546f', accent: '#0c66e4', success: '#216e4e', warning: '#a54800', danger: '#ae2e24' }
   }
 ];
 

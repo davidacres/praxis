@@ -2,9 +2,9 @@ export type ConnectionType = 'stdio' | 'http';
 /**
  * How a board's issues are stored and reached.
  *
- * `project` is not a configurable connection type — it is the mode a Project's
- * own board reports, reached through the synthetic `project:<id>` connection id
- * rather than anything in the connection store.
+ * `app` is Praxis's own local work-item backend. It is a normal connection
+ * mode, just like folder, GitLab, or Jira. `project` is retained solely so
+ * legacy saved records can be migrated to `app` or `folder` on startup.
  */
 export type BackendMode =
   | 'jiracloud'
@@ -12,6 +12,8 @@ export type BackendMode =
   | 'github'
   | 'gitlab'
   | 'folder'
+  | 'app'
+  /** @deprecated migrated on startup; never create new project-mode connections. */
   | 'project';
 export type AssigneeMode = 'me' | 'all';
 export type GroupingMode = 'project' | 'status' | 'none';
@@ -135,6 +137,10 @@ export interface Board {
   id: string;
   name: string;
   type: string;
+  /** Board creator when the backend exposes it. */
+  createdBy?: string;
+  /** Board creation timestamp when the backend exposes it. */
+  createdAt?: string;
   projectKey?: string;
   projectName?: string;
   locationName?: string;

@@ -263,6 +263,7 @@ const praxis: PraxisIpc = {
     get: (projectId: string) => ipcRenderer.invoke('projects:get', projectId),
     create: (input: CreateProjectInput, workspaceId: string) => ipcRenderer.invoke('projects:create', input, workspaceId),
     useExisting: (projectId: string, workspaceId: string) => ipcRenderer.invoke('projects:useExisting', projectId, workspaceId),
+    remove: (projectId: string) => ipcRenderer.invoke('projects:remove', projectId),
     update: (projectId: string, patch: UpdateProjectInput) => ipcRenderer.invoke('projects:update', projectId, patch),
     inspectFolder: (folderPath: string) => ipcRenderer.invoke('projects:inspectFolder', folderPath),
     attachFolder: (projectId: string, input: AttachProjectFolderInput) => ipcRenderer.invoke('projects:attachFolder', projectId, input),

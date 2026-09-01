@@ -305,6 +305,7 @@ const EDITABLE_FIELDS_BY_MODE: Record<BackendMode, ReadonlySet<EditableField>> =
   ]),
   // App-storage projects: `ProjectIssueTrackerService.updateIssue` only writes
   // these three, so offering more would silently drop the edit.
+  app: new Set(['summary', 'description', 'issueType']),
   project: new Set(['summary', 'description', 'issueType']),
   jiracloud: new Set(['summary', 'description', 'assignee', 'priority', 'issueType', 'parentKey']),
   gitlab: new Set(['summary', 'description', 'assignee']),
@@ -324,14 +325,17 @@ function unsupportedEditHelp(mode: BackendMode, field: EditableField): string | 
 function FieldRow({
   label,
   description,
+  stacked = false,
   children
 }: {
   label: string;
   description?: string;
+  /** Use a full-width control beneath its label for long-form content. */
+  stacked?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="settings-field-row">
+    <div className={`settings-field-row${stacked ? ' settings-field-row-stacked' : ''}`}>
       <div className="settings-field-label">
         <strong>{label}</strong>
         {description && <div className="settings-field-help">{description}</div>}
@@ -1219,6 +1223,7 @@ export function IssueDetail({
 
               <FieldRow
                 label="Description"
+                stacked
                 description={
                   unsupportedEditHelp(connectionMode, 'description') ??
                   (descriptionEditing ? 'Edit Markdown directly.' : 'Click the rendered description to edit Markdown.')

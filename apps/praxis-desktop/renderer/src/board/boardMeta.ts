@@ -78,6 +78,8 @@ export const BACKEND_MODE_META: Record<BackendMode, BackendModeMeta> = {
   github: { label: 'GitHub', icon: 'git-branch', tone: 'var(--tone-github)' },
   gitlab: { label: 'GitLab', icon: 'git-branch', tone: 'var(--tone-gitlab)' },
   folder: { label: 'Folder', icon: 'folder', tone: 'var(--tone-folder)' },
+  app: { label: 'Praxis local', icon: 'target', tone: 'var(--tone-workspace)' },
+  // Legacy-only; startup migration replaces it with app or folder.
   project: { label: 'Project', icon: 'target', tone: 'var(--tone-workspace)' }
 };
 
@@ -85,25 +87,13 @@ export function backendModeMeta(mode: BackendMode | undefined): BackendModeMeta 
   return mode ? BACKEND_MODE_META[mode] : BACKEND_MODE_META.demo;
 }
 
-/** Connection-id prefix for a project's own connection (`projectConnectionId` in core). */
-export const PROJECT_CONNECTION_PREFIX = 'project:';
-
 /**
  * The backend mode behind a board's `connectionId`.
- *
- * Projects own a real connection row now, so the plain lookup resolves them.
- * The prefix check remains as a fallback for the first launch after an upgrade,
- * before the startup heal has written that row: without it the lookup yields
- * `undefined` and falls back to `demo`, which used to drive project boards by
- * demo's field rules.
  */
 export function resolveBackendMode(
   connectionId: string | undefined,
   connections: ReadonlyArray<{ id: string; mode: BackendMode }>
 ): BackendMode {
-  if (connectionId?.startsWith(PROJECT_CONNECTION_PREFIX)) {
-    return 'project';
-  }
   return connections.find(connection => connection.id === connectionId)?.mode ?? 'demo';
 }
 

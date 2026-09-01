@@ -73,7 +73,7 @@ export function getParentRule(issueType: string | undefined, mode: BackendMode):
   // App-storage projects have no parent concept at all: `ProjectWorkItem` has
   // no parent field and `ProjectIssueTrackerService` never reads one, so
   // offering a parent picker would silently discard the choice.
-  if (mode === 'project') {
+  if (mode === 'app' || mode === 'project') {
     return {
       canHaveParent: false,
       requiresParent: false,
@@ -160,4 +160,3 @@ export function buildParentValidationMessage(
   }
   return `${childLabel} items can only belong to ${formatAllowedTypeList(rule.allowedParentTypes)}. "${parentLabel}" is not allowed.`;
 }
-

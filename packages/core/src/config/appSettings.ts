@@ -399,14 +399,17 @@ const DEFAULT_PRIORITY_COLORS: Record<string, string> = {
 };
 
 /** One shipped Look: the default theme/dials, differing only by surface pack. */
-function builtInLook(id: string, name: string, surfacePackId: string): AppearanceLook {
+function builtInLook(id: string, name: string, surfacePackId: string, motif?: AppearanceSettings['surface']['motif']): AppearanceLook {
   return {
     id,
     name,
     themeId: 'praxis-dark',
     themeMode: 'dark',
     surfacePackId,
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
+    surface: {
+      intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false,
+      ...(motif ? { motif } : {})
+    },
     priorityColors: { ...DEFAULT_PRIORITY_COLORS },
     showBrandArtwork: true
   };
@@ -415,7 +418,7 @@ function builtInLook(id: string, name: string, surfacePackId: string): Appearanc
 /** The four Looks the strip is seeded with. `look-parchment` equals today's shipped appearance. */
 export const BUILT_IN_LOOKS: AppearanceLook[] = [
   builtInLook('look-parchment', 'Parchment', 'parchment'),
-  builtInLook('look-blueprint', 'Blueprint', 'blueprint'),
+  builtInLook('look-blueprint', 'Blueprint', 'parchment', { id: 'grid', scale: 104, opacity: 0.3, ink: 'accent' }),
   builtInLook('look-aurora', 'Aurora', 'aurora-glass'),
   builtInLook('look-flat', 'Flat', 'flat')
 ];
@@ -468,11 +471,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     showBrandArtwork: true,
     themeId: 'praxis-dark',
     themeMode: 'dark',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'jira-cloud', 'anthropic-light', 'anthropic-dark'],
     customThemes: [],
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
-    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'binary', 'aurora-glass', 'noir'],
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'aurora-glass', 'noir'],
     customSurfacePacks: [],
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
     activeLookId: 'look-parchment',
@@ -755,16 +758,27 @@ function readLooks(value: unknown, fallback: AppearanceSettings['looks']): Appea
       && typeof item.name === 'string' && item.name.trim().length > 0
       && typeof item.themeId === 'string' && /^[a-z0-9-]+$/.test(item.themeId)
       && typeof item.surfacePackId === 'string' && /^[a-z0-9-]+$/.test(item.surfacePackId))
-    .map(item => ({
-      id: item.id as string,
-      name: (item.name as string).trim().slice(0, 80),
-      themeId: item.themeId as string,
-      themeMode: readThemeMode(item.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode),
-      surfacePackId: item.surfacePackId as string,
-      surface: readSurface(item.surface, DEFAULT_APP_SETTINGS.appearance.surface),
-      priorityColors: readPriorityColors(item.priorityColors),
-      showBrandArtwork: readBoolean(item.showBrandArtwork, DEFAULT_APP_SETTINGS.appearance.showBrandArtwork)
-    }));
+    .map(item => {
+      const legacyMotif = legacySurfaceMotif(item.surfacePackId);
+      const surface = readSurface(item.surface, DEFAULT_APP_SETTINGS.appearance.surface);
+      return {
+        id: item.id as string,
+        name: (item.name as string).trim().slice(0, 80),
+        themeId: item.themeId as string,
+        themeMode: readThemeMode(item.themeMode, DEFAULT_APP_SETTINGS.appearance.themeMode),
+        surfacePackId: legacyMotif ? 'parchment' : item.surfacePackId as string,
+        surface: legacyMotif && !surface.motif ? { ...surface, motif: legacyMotif } : surface,
+        priorityColors: readPriorityColors(item.priorityColors),
+        showBrandArtwork: readBoolean(item.showBrandArtwork, DEFAULT_APP_SETTINGS.appearance.showBrandArtwork)
+      };
+    });
+}
+
+/** Blueprint and Binary were early surface presets; retain their visual intent as motifs. */
+function legacySurfaceMotif(value: unknown): AppearanceSettings['surface']['motif'] | undefined {
+  if (value === 'blueprint') return { id: 'grid', scale: 104, opacity: 0.3, ink: 'accent' };
+  if (value === 'binary') return { id: 'binary', scale: 112, opacity: 0.2, ink: 'accent' };
+  return undefined;
 }
 
 /**
@@ -785,7 +799,9 @@ function migratedSurfacePackId(appearance: Record<string, unknown>): string {
 }
 
 function readSurfacePackId(value: unknown, appearance: Record<string, unknown>): string {
-  if (typeof value === 'string' && /^[a-z0-9-]+$/.test(value)) return value;
+  if (typeof value === 'string' && /^[a-z0-9-]+$/.test(value)) {
+    return legacySurfaceMotif(value) ? 'parchment' : value;
+  }
   return migratedSurfacePackId(appearance);
 }
 
@@ -972,6 +988,15 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     ? readString((raw.appearance as Record<string, unknown>).activeLookId, '')
     : DEFAULT_APP_SETTINGS.appearance.activeLookId;
   const appearanceActiveLookId = appearanceLooks.some(look => look.id === requestedLookId) ? requestedLookId : '';
+  const rawSurfacePackId = hasAppearance ? (raw.appearance as Record<string, unknown>).surfacePackId : undefined;
+  const legacyActiveMotif = legacySurfaceMotif(rawSurfacePackId);
+  const appearanceSurface = readSurface(
+    hasAppearance ? (raw.appearance as Record<string, unknown>).surface : undefined,
+    DEFAULT_APP_SETTINGS.appearance.surface
+  );
+  const migratedAppearanceSurface = legacyActiveMotif && !appearanceSurface.motif
+    ? { ...appearanceSurface, motif: legacyActiveMotif }
+    : appearanceSurface;
 
   const appearance: AppearanceSettings = isRecord(raw) && isRecord(raw.appearance)
     ? {
@@ -985,7 +1010,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         ,installedThemeIds: readThemeIds(raw.appearance.installedThemeIds, DEFAULT_APP_SETTINGS.appearance.installedThemeIds)
         ,customThemes: readCustomThemes(raw.appearance.customThemes)
         ,surfacePackId: readSurfacePackId(raw.appearance.surfacePackId, raw.appearance)
-        ,surface: readSurface(raw.appearance.surface, DEFAULT_APP_SETTINGS.appearance.surface)
+        ,surface: migratedAppearanceSurface
         ,installedSurfacePackIds: readThemeIds(raw.appearance.installedSurfacePackIds, DEFAULT_APP_SETTINGS.appearance.installedSurfacePackIds)
         ,customSurfacePacks: readCustomSurfacePacks(raw.appearance.customSurfacePacks)
         ,looks: appearanceLooks
@@ -1083,6 +1108,12 @@ function mirrorActiveLook(appearance: AppearanceSettings, patch: AppSettingsPatc
   if (patch.appearance.activeLookId !== undefined || patch.appearance.looks !== undefined) return;
   const id = appearance.activeLookId;
   if (!id) return;
+  // Built-in Looks are shipped presets. Editing another appearance control
+  // while one is selected must detach rather than rewrite the preset.
+  if (BUILT_IN_LOOKS.some(look => look.id === id)) {
+    appearance.activeLookId = '';
+    return;
+  }
   const index = appearance.looks.findIndex(look => look.id === id);
   if (index < 0) return;
   appearance.looks = appearance.looks.map((look, i) => i === index

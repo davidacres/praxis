@@ -204,16 +204,6 @@ function createGitLabService(connectionId: string): IssueTrackerService {
 export async function getServiceForConnection(
   connectionId: string | undefined
 ): Promise<IssueTrackerService> {
-  if (connectionId?.startsWith('project:')) {
-    const projectId = connectionId.slice('project:'.length);
-    let service = projectServices.get(projectId);
-    if (!service) {
-      // Picks the app-storage or folder-backed implementation from the record.
-      service = createProjectService(getProjectStore(), projectId);
-      projectServices.set(projectId, service);
-    }
-    return service;
-  }
   if (!connectionId) {
     return isDemoModeEnabled() ? getDemoService() : getStubService('demo');
   }
@@ -225,6 +215,18 @@ export async function getServiceForConnection(
   }
 
   switch (connection.mode) {
+    case 'app': {
+      const projectId = typeof connection.settings.projectId === 'string'
+        ? connection.settings.projectId
+        : undefined;
+      if (!projectId) return getStubService('app');
+      let service = projectServices.get(connectionId);
+      if (!service) {
+        service = createProjectService(getProjectStore(), projectId);
+        projectServices.set(connectionId, service);
+      }
+      return service;
+    }
     case 'demo':
       return getDemoService();
     case 'folder': {
@@ -249,9 +251,7 @@ export async function getServiceForConnection(
  * Connections that contribute boards to `board:list`. Demo is excluded because
  * the demo boards are always merged in unconditionally — including demo-mode
  * connections here would list the same demo boards once per connection. Project
- * connections are excluded for the same reason: `board:list` already walks the
- * project store, so counting their rows too would list every project board
- * twice.
+ * Legacy project-mode connections are excluded while startup migrates them.
  */
 export function getSupportedConnections() {
   return getConnectionStore()
@@ -308,9 +308,6 @@ export function disposeAllServices(): void {
   }
   gitLabServices.clear();
 
-  // A folder-backed project owns a FolderService, and therefore a chokidar
-  // watcher, exactly like a folder connection does — leaving these out held the
-  // process open past window close.
   for (const service of projectServices.values()) {
     service.dispose();
   }

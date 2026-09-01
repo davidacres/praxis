@@ -13,6 +13,7 @@ export function resolveBackendModeContextState(
   switch (storedMode) {
     case 'demo':
     case 'folder':
+    case 'app':
     case 'project':
       return { mode: storedMode, configured: true };
     case 'github':

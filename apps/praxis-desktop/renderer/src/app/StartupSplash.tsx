@@ -224,24 +224,30 @@ export function StartupSplash({ onDone, version }: { onDone: () => void; version
       role="presentation"
       data-testid="startup-splash"
     >
-      <svg viewBox="430 400 1250 470" className="startup-splash-svg">
-        <defs>
-          <radialGradient id="startup-splash-dot" cx="0.35" cy="0.3" r="0.8">
-            <stop offset="0%" className="startup-splash-dot-highlight" />
-            <stop offset="55%" className="startup-splash-dot-core" />
-            <stop offset="100%" className="startup-splash-dot-shadow" />
-          </radialGradient>
-        </defs>
-        {/* Off-canvas — used only for getTotalLength/getPointAtLength queries, never rendered. */}
-        <path ref={helperRef} d="" style={{ display: 'none' }} />
-        <path
-          ref={wordRef}
-          d=""
-          transform={`translate(${WORD_OFFSET.x} ${WORD_OFFSET.y})`}
-          className="startup-splash-trail startup-splash-trail-thin"
-        />
-        <circle ref={headCircleRef} r={20} cx={PATH_START.x} cy={PATH_START.y} fill="url(#startup-splash-dot)" className="startup-splash-head" />
-      </svg>
+      <div className="startup-splash-content">
+        <svg viewBox="430 400 1250 470" className="startup-splash-svg">
+          <defs>
+            <radialGradient id="startup-splash-dot" cx="0.35" cy="0.3" r="0.8">
+              <stop offset="0%" className="startup-splash-dot-highlight" />
+              <stop offset="55%" className="startup-splash-dot-core" />
+              <stop offset="100%" className="startup-splash-dot-shadow" />
+            </radialGradient>
+          </defs>
+          {/* Off-canvas — used only for getTotalLength/getPointAtLength queries, never rendered. */}
+          <path ref={helperRef} d="" style={{ display: 'none' }} />
+          <path
+            ref={wordRef}
+            d=""
+            transform={`translate(${WORD_OFFSET.x} ${WORD_OFFSET.y})`}
+            className="startup-splash-trail startup-splash-trail-thin"
+          />
+          <circle ref={headCircleRef} r={20} cx={PATH_START.x} cy={PATH_START.y} fill="url(#startup-splash-dot)" className="startup-splash-head" />
+        </svg>
+        <div className="startup-splash-loader" role="status" aria-label="Loading Praxis">
+          <span className="startup-splash-loader-ring startup-splash-loader-ring-outer" />
+          <span className="startup-splash-loader-ring startup-splash-loader-ring-inner" />
+        </div>
+      </div>
       {version && <span className="startup-splash-version">v{version}</span>}
     </div>
   );

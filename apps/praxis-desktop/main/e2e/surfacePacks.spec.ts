@@ -89,6 +89,43 @@ test('the pack renders its hexagon watermark on every pane and the tile actually
   }
 });
 
+test('built-in surfaces use their intended default pattern', async () => {
+  await openSurface();
+  const markup = () => window.evaluate(() => {
+    const raw = getComputedStyle(document.documentElement)
+      .getPropertyValue('--surface-watermark-image').trim();
+    return raw === 'none' ? 'none' : decodeURIComponent(raw);
+  });
+
+  await window.locator('[data-testid="surface-card-parchment"]').click();
+  expect(await markup()).toContain('Z'); // hexagon
+
+  await window.locator('[data-testid="surface-card-graphite"]').click();
+  expect(await markup()).toContain('M-'); // diagonal lines cross tile edges
+
+  await window.locator('[data-testid="motif-pattern"]').selectOption('grid');
+  expect(await markup()).toContain('stroke-opacity="0.4"'); // drafting grid motif
+
+  await window.locator('[data-testid="motif-pattern"]').selectOption('binary');
+  expect(await markup()).toContain('<text');
+
+  await window.locator('[data-testid="surface-card-aurora-glass"]').click();
+  expect(await markup()).toBe('none');
+});
+
+test('selecting a surface restores its default motif after a custom override', async () => {
+  await openSurface();
+  await window.locator('[data-testid="motif-pattern"]').selectOption('hexagon');
+  await expect(window.locator('[data-testid="motif-reset"]')).toBeVisible();
+
+  await window.locator('[data-testid="surface-card-graphite"]').click();
+  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveValue('diagonal');
+  await expect(window.locator('[data-testid="motif-reset"]')).not.toBeVisible();
+
+  await window.locator('[data-testid="surface-card-aurora-glass"]').click();
+  await expect(window.locator('[data-testid="motif-pattern"]')).toHaveValue('none');
+});
+
 test('the watermark is tinted from the live theme and re-bakes when the palette changes', async () => {
   // A pattern's colour is baked into its SVG data URI, so it cannot ride a
   // `var()` — `refreshSurfacePattern` must re-render it on `tm-theme-changed`.
@@ -175,7 +212,7 @@ test('the corner picker mirrors the motif into every selected corner', async () 
 
 test('the motif rides over any pack, and Reset hands it back', async () => {
   // The point of splitting motif from material: pick hexagon on a pack whose
-  // own motif is a triangle lattice, recolour it, and the pack keeps its own
+  // own motif is a diagonal pattern, recolour it, and the pack keeps its own
   // grain and bevel underneath.
   await openSurface();
   await window.locator('[data-testid="surface-card-graphite"]').click();
@@ -192,7 +229,7 @@ test('the motif rides over any pack, and Reset hands it back', async () => {
   await openSurface();
   await expect.poll(tile).toContain('#4ec9b0');
 
-  // Reset drops the override; the pack's own triangle motif returns.
+  // Reset drops the override; the pack's own diagonal motif returns.
   await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
   await window.locator('[data-testid="motif-reset"]').click();
   await expect.poll(tile).not.toContain('#4ec9b0');
@@ -430,7 +467,7 @@ test('the motif rides over any pack, and animation rides over any motif', async 
   await openSurface();
   await window.locator('[data-testid="surface-card-graphite"]').click();
   await window.locator('[data-testid="motif-panel"]').scrollIntoViewIfNeeded();
-  // Graphite ships a triangle lattice; a lattice takes the same layer styles.
+  // Graphite ships a diagonal pattern; it takes the same layer styles.
   await window.locator('[data-testid="motif-animation"]').selectOption('glow');
   await expect(window.locator('html')).toHaveAttribute('data-motif-anim', 'glow');
   const filter = await window.evaluate(() =>
@@ -485,7 +522,7 @@ test('contrast guard: flat is inert and every pack keeps a readable panel ground
   // .pane-main fill at >= 0.45 alpha (aurora is the glassiest and still clears
   // it, over a dark shell). Noir is dark-only.
   for (const mode of ['dark', 'light']) {
-    const packs = ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', ...(mode === 'dark' ? ['noir'] : [])];
+    const packs = ['flat', 'parchment', 'graphite', 'aurora-glass', ...(mode === 'dark' ? ['noir'] : [])];
     for (const pack of packs) {
       const probe = await window.locator('.pane-main').evaluate((el, [m, p]) => {
         const root = document.documentElement;
@@ -522,7 +559,7 @@ test('contrast guard: no pack pushes its watermark past a readable ceiling', asy
   // it can carry a higher peak than wall-to-wall tiling.
   const CEILING = 0.4;
   await openSurface();
-  for (const pack of ['flat', 'parchment', 'graphite', 'blueprint', 'aurora-glass', 'noir']) {
+  for (const pack of ['flat', 'parchment', 'graphite', 'aurora-glass', 'noir']) {
     await window.locator(`[data-testid="surface-card-${pack}"]`).click();
     await expect(window.locator('html')).toHaveAttribute('data-surface', pack);
     const layer = await window.evaluate(() => {
@@ -532,7 +569,7 @@ test('contrast guard: no pack pushes its watermark past a readable ceiling', asy
         image: style.getPropertyValue('--surface-watermark-image').trim()
       };
     });
-    if (pack === 'flat' || pack === 'noir') {
+    if (pack === 'flat' || pack === 'aurora-glass' || pack === 'noir') {
       // Neither declares a pattern, so the inline value is cleared and the
       // property falls back to the inert `none` declared on :root.
       expect(['none', ''], `${pack} watermark image`).toContain(layer.image);

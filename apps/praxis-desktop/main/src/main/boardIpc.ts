@@ -2,8 +2,6 @@ import { ipcMain } from 'electron';
 import type { Board, BoardFilters } from '@praxis/core';
 import { getDemoService, isDemoModeEnabled } from './demoServiceInstance';
 import { getServiceForConnection, getSupportedConnections } from './serviceRegistry';
-import { getProjectManager } from './projectStoreInstance';
-import { projectConnectionId } from '@praxis/core';
 
 export function registerBoardIpc(): void {
   ipcMain.handle(
@@ -19,15 +17,6 @@ export function registerBoardIpc(): void {
       const demoBoards = isDemoModeEnabled()
         ? await getDemoService().getBoards(filters)
         : [];
-      const projectBoards = (await Promise.all(
-        getProjectManager().list().map(async project => {
-          const connectionId = projectConnectionId(project.id);
-          return (await getServiceForConnection(connectionId)).getBoards(filters).then(boards =>
-            boards.map(board => ({ ...board, connectionId }))
-          );
-        })
-      )).flat();
-
       // `allSettled`, not `all`: a connection whose backing store is unreachable —
       // a folder on a disconnected drive, a deleted directory — must not take
       // the rest of the board list down with it. One bad connection used to reject
@@ -53,7 +42,7 @@ export function registerBoardIpc(): void {
         }
       }
 
-      return [...projectBoards, ...demoBoards, ...connectionBoards];
+      return [...demoBoards, ...connectionBoards];
     }
   );
 

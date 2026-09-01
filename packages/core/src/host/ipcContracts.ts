@@ -287,6 +287,8 @@ export interface ProjectsIpc {
   /** Creates a project and assigns it to an existing workspace atomically. */
   create(input: CreateProjectInput, workspaceId: string): Promise<ProjectRecord>;
   useExisting(projectId: string, workspaceId: string): Promise<ProjectRecord>;
+  /** Removes a project record; its generated project board is removed with it. */
+  remove(projectId: string): Promise<void>;
   update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord>;
   inspectFolder(folderPath: string): Promise<FolderInspection>;
   attachFolder(projectId: string, input: AttachProjectFolderInput): Promise<AttachProjectFolderResult>;

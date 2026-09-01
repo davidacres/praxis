@@ -24,6 +24,8 @@ const VALID_MODES: ReadonlySet<BackendMode> = new Set<BackendMode>([
   'github',
   'gitlab',
   'folder',
+  'app',
+  // Legacy-only. Project startup migration replaces these with app or folder.
   'project'
 ]);
 
@@ -189,25 +191,27 @@ export class ConnectionStore implements Disposable {
     if (index === -1) {
       throw new Error(`No connection with id "${connection.id}" exists.`);
     }
+    if (existing[index].mode !== connection.mode) {
+      throw new Error('A connection backend type cannot be changed after creation.');
+    }
     const next = [...existing];
     next[index] = connection;
     await this.writeConnections(next);
   }
 
-  /**
-   * Removes the connection, all of its tracked boards, and all of its secrets.
-   */
+  /** Removes a connection once all of its tracked boards have been removed. */
   public async removeConnection(connectionId: string): Promise<void> {
+    const trackedBoards = this.getTrackedBoardsForConnection(connectionId);
+    if (trackedBoards.length > 0) {
+      throw new Error(
+        `Cannot remove connection "${connectionId}" while it has ${trackedBoards.length} tracked board${trackedBoards.length === 1 ? '' : 's'}. Remove the board first.`
+      );
+    }
     const remainingConnections = this.getConnections().filter(c => c.id !== connectionId);
-    const remainingBoards = this.getTrackedBoards().filter(b => b.connectionId !== connectionId);
-    // Both writes target the SAME settings document, so they must not run
-    // concurrently: each is read-modify-write, and in parallel the second
-    // restores the key the first just changed — which let a removed connection
-    // reappear. Secrets live in their own store, so that part is safe to run
-    // alongside.
+    // Secrets live in their own store, so purge can run alongside the settings
+    // update without creating a read-modify-write race.
     const purgeSecrets = this.purgeSecretsForConnection(connectionId);
     await this.writeConnections(remainingConnections);
-    await this.writeTrackedBoards(remainingBoards);
     await purgeSecrets;
   }
 

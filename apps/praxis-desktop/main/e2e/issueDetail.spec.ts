@@ -46,6 +46,15 @@ test('issue detail shows sub-tasks, linked issues, attachments and essential hea
   await description.click();
   const descriptionEditor = window.locator('[data-testid="issue-edit-description"]');
   await expect(descriptionEditor).toBeFocused();
+  const descriptionRow = window.locator('.detail-panel .settings-field-row-stacked');
+  await expect(descriptionRow).toHaveCSS('flex-direction', 'column');
+  const [descriptionRowBox, descriptionEditorBox] = await Promise.all([
+    descriptionRow.boundingBox(),
+    descriptionEditor.boundingBox()
+  ]);
+  expect(descriptionRowBox).not.toBeNull();
+  expect(descriptionEditorBox).not.toBeNull();
+  expect(descriptionEditorBox!.width).toBeGreaterThanOrEqual(descriptionRowBox!.width - 2);
   await descriptionEditor.press('Tab');
   await expect(description).toBeVisible();
 

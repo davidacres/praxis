@@ -20,6 +20,7 @@ import { NewSession } from '../ai/NewSession';
 import { NewIssuePage } from '../issues/NewIssuePage';
 import { ImportProjectsWizard } from '../projects/ImportProjectsWizard';
 import { BoardView } from '../board/BoardView';
+import { BoardDetailsPanel } from '../board/BoardDetailsPanel';
 import { AiReviewPage } from '../ai/AiReviewPage';
 import { LocalPeerReviewPage } from '../ai/LocalPeerReviewPage';
 import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
@@ -47,6 +48,7 @@ import {
   type BoardFilterValue
 } from '../board/BoardFilterBar';
 import { GitGraphPage } from '../git/GitGraphPage';
+import { GitChangesPage } from '../git/GitChangesPage';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
@@ -94,6 +96,13 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
+
+/** Project ownership is carried by the connection record, never inferred from its id. */
+function projectIdForConnection(connectionId: string | undefined, connections: readonly Connection[]): string | undefined {
+  if (!connectionId) return undefined;
+  const projectId = connections.find(connection => connection.id === connectionId)?.settings.projectId;
+  return typeof projectId === 'string' && projectId.length > 0 ? projectId : undefined;
+}
 
 /** Persisted show/hide state for the shell panes — matches the `tm-pane-*`
  *  width keys `useResizable` writes. */
@@ -188,15 +197,14 @@ function restoredRouteForWorkspace(
   stored: Route,
   workspace: WorkspaceRecord,
   projects: ProjectRecord[],
-  boards: Board[]
+  boards: Board[],
+  connections: Connection[]
 ): Route {
   const workspaceProjects = projects.filter(project => workspace.projectIds.includes(project.id));
   const project = stored.projectId && workspaceProjects.find(candidate => candidate.id === stored.projectId);
   const board = stored.boardId && boards.find(candidate => {
     if (candidate.id !== stored.boardId) return false;
-    const directProjectId = candidate.connectionId?.startsWith('project:')
-      ? candidate.connectionId.slice('project:'.length)
-      : undefined;
+    const directProjectId = projectIdForConnection(candidate.connectionId, connections);
     return directProjectId
       ? workspace.projectIds.includes(directProjectId)
       : workspaceProjects.some(candidateProject => candidateProject.linkedBoards.some(link =>
@@ -301,7 +309,7 @@ export function App() {
     if (settings.startup.reopenLastWorkspace && savedWorkspace) {
       setActiveWorkspaceId(savedWorkspace.id);
       const storedRoute = readLastWorkspaceRoute();
-      let restored = restoredRouteForWorkspace(storedRoute, savedWorkspace, projects, boards);
+      let restored = restoredRouteForWorkspace(storedRoute, savedWorkspace, projects, boards, connections);
       restoredTicketKeyRef.current = restored.issueKey;
       if (restored.feature === 'sessions' && restored.sessionKey && !agentSessions.some(session => session.issueKey === restored.sessionKey)) {
         restored = { ...restored, sessionKey: undefined, browserOpen: undefined, browserUrl: undefined };
@@ -386,6 +394,11 @@ export function App() {
       return { entries, index: entries.length - 1 };
     });
   }, []);
+
+  const openBoard = useCallback((boardId: string) => {
+    setAuxVisible(true);
+    navigate({ boardId });
+  }, [navigate]);
 
   const updateSessionBrowserRoute = useCallback((patch: Pick<Route, 'browserOpen' | 'browserUrl'>) => {
     setNav(current => {
@@ -715,9 +728,7 @@ export function App() {
     ?? (workspaceProjects.length === 1 ? workspaceProjects[0] : undefined);
   const workspaceBoards = activeWorkspace
     ? boards.filter(board => {
-        const directProjectId = board.connectionId?.startsWith('project:')
-          ? board.connectionId.slice('project:'.length)
-          : undefined;
+        const directProjectId = projectIdForConnection(board.connectionId, connections);
         return directProjectId ? activeWorkspace.projectIds.includes(directProjectId) : true;
       })
     : [];
@@ -850,13 +861,13 @@ export function App() {
     ? true
     : connection.mode === 'demo'
       ? true
-      : connection.mode === 'folder' || connection.mode === 'project'
+      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project'
         ? connection.settings.allowIssueCreation === true
         : false;
   const createIssueHint =
     !connection || connection.mode === 'demo' || canCreateIssue
       ? undefined
-      : connection.mode === 'folder' || connection.mode === 'project'
+      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project'
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 
@@ -910,8 +921,9 @@ export function App() {
     <NewSession
       boards={workspaceBoards}
       onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree }) => {
-        const project = board?.connectionId?.startsWith('project:')
-          ? workspaceProjects.find(item => item.id === board.connectionId?.slice('project:'.length))
+        const projectId = projectIdForConnection(board?.connectionId, connections);
+        const project = projectId
+          ? workspaceProjects.find(item => item.id === projectId)
           : composerProject;
         const record = await window.praxis.ai.delegate({
           ...(issueKey ? { issueKey } : {}),
@@ -938,8 +950,8 @@ export function App() {
       }}
       projectCount={workspaceProjects.length}
       onNewProject={newProjectEnabled ? () => requestProjectWizard('create') : undefined}
-      toolModeForBoard={board => board.connectionId?.startsWith('project:')
-        ? projects.find(item => item.id === board.connectionId?.slice('project:'.length))?.defaultAiToolMode
+      toolModeForBoard={board => projectIdForConnection(board.connectionId, connections)
+        ? projects.find(item => item.id === projectIdForConnection(board.connectionId, connections))?.defaultAiToolMode
         : undefined}
       onSelectedBoardChange={board => setComposerBoardId(current => current === board?.id ? current : board?.id)}
     />
@@ -978,7 +990,7 @@ export function App() {
           onOpenProjects={() => navigate({})}
           onOpenSessions={() => navigate({ feature: 'sessions' })}
           onOpenConnections={() => { refreshConnections(); navigate({ feature: 'connections' }); }}
-          onOpenBoard={board => navigate({ boardId: board.id })}
+          onOpenBoard={board => openBoard(board.id)}
           onOpenProject={project => navigate({ projectId: project.id })}
         />
       );
@@ -1001,7 +1013,16 @@ export function App() {
       );
     }
     if (route.feature === 'git') {
-      return <GitGraphPage repositoryPath={selectedProject?.workspaceFolder} initialView={route.gitView} />;
+      if (route.gitView === 'changes') {
+        return <GitChangesPage
+          repositoryPath={selectedProject?.workspaceFolder}
+          onOpenGraph={() => navigate({ projectId: selectedProject?.id, feature: 'git', gitView: 'graph' })}
+        />;
+      }
+      return <GitGraphPage
+        repositoryPath={selectedProject?.workspaceFolder}
+        onOpenChanges={() => navigate({ projectId: selectedProject?.id, feature: 'git', gitView: 'changes' })}
+      />;
     }
     if (route.feature) {
       return (
@@ -1140,8 +1161,9 @@ export function App() {
   const terminalBoard = selectedBoard ?? (!route.feature && !route.projectId
     ? boards.find(board => board.id === composerBoardId)
     : undefined);
-  const boardProject = terminalBoard?.connectionId?.startsWith('project:')
-    ? projects.find(project => project.id === terminalBoard.connectionId?.slice('project:'.length))
+  const terminalProjectId = projectIdForConnection(terminalBoard?.connectionId, connections);
+  const boardProject = terminalProjectId
+    ? projects.find(project => project.id === terminalProjectId)
     : undefined;
   const terminalProject = selectedProject ?? boardProject;
   const terminalWorkingDirectory = selectedAgentSession?.workingDirectory
@@ -1262,7 +1284,7 @@ export function App() {
                   connectionChecks={connectionChecks}
                   selectedBoardId={route.boardId}
                   detailsByBoardId={detailsByBoardId}
-                  onSelectBoard={board => navigate({ boardId: board.id })}
+                  onSelectBoard={board => openBoard(board.id)}
                   onSelectIssue={(board, issueKey) => navigate({ boardId: board.id, issueKey })}
                   mode={mode}
                   onModeChange={setMode}
@@ -1294,7 +1316,7 @@ export function App() {
                     // A project's board is intrinsic to the project — there is
                     // nothing to untrack, and deleting it would mean deleting
                     // the project. Delete the project itself instead.
-                    if (connectionId.startsWith('project:')) return;
+                    if (projectIdForConnection(connectionId, connections)) return;
                     // "Delete" means different things per backend: a folder
                     // connection *is* its board, so removing the board removes
                     // the connection; a Jira/GitLab board is only tracked from a
@@ -1311,7 +1333,7 @@ export function App() {
                   }}
                   onConfigureBoard={board => {
                     setBoardSettingsOpenFor(board.id);
-                    navigate({ boardId: board.id });
+                    openBoard(board.id);
                   }}
                 />
               )}
@@ -1372,10 +1394,16 @@ export function App() {
                       </div>
                     )
                   ) : selectedProject && route.issueKey === undefined ? (
-                    <ProjectHome project={selectedProject} boards={boards} onChanged={project => {
+                    <ProjectHome project={selectedProject} boards={boards} connections={connections} onChanged={project => {
                       setProjects(current => current.map(item => item.id === project.id ? project : item));
                       refreshBoards();
-                    }} onOpenBoard={boardId => navigate({ boardId })} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />
+                    }} onOpenBoard={openBoard} onOpenGit={() => navigate({ projectId: selectedProject.id, feature: 'git' })} />
+                  ) : selectedBoard && boardDetails && route.issueKey === undefined ? (
+                    <BoardDetailsPanel
+                      board={selectedBoard}
+                      details={boardDetails}
+                      connection={connection}
+                    />
                   ) : route.issueKey === undefined ? (
                     <div className="empty-state" data-testid="aux-empty">
                       <Icon name="ticket" size={28} />

@@ -117,11 +117,21 @@ test('merge applies a partial surface patch without dropping siblings', () => {
 
 test('merge swaps the active surface pack id', () => {
   const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
-    appearance: { surfacePackId: 'blueprint' }
+    appearance: { surfacePackId: 'graphite' }
   });
-  assert.equal(merged.appearance.surfacePackId, 'blueprint');
+  assert.equal(merged.appearance.surfacePackId, 'graphite');
   // untouched theme fields survive
   assert.equal(merged.appearance.themeId, DEFAULT_APP_SETTINGS.appearance.themeId);
+});
+
+test('legacy Blueprint and Binary surface selections become Parchment with their motif', () => {
+  const blueprint = sanitizeAppSettings({ appearance: { surfacePackId: 'blueprint' } });
+  assert.equal(blueprint.appearance.surfacePackId, 'parchment');
+  assert.equal(blueprint.appearance.surface.motif?.id, 'grid');
+
+  const binary = sanitizeAppSettings({ appearance: { surfacePackId: 'binary' } });
+  assert.equal(binary.appearance.surfacePackId, 'parchment');
+  assert.equal(binary.appearance.surface.motif?.id, 'binary');
 });
 
 test('the phase-2 glass packs are in the default installed list', () => {
@@ -337,18 +347,29 @@ test('readLooks drops a malformed entry and clamps a nested surface dial', () =>
   assert.equal(look.showBrandArtwork, false);
 });
 
-test('editing an appearance field while a Look is active mirrors into that Look', () => {
-  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, {
-    appearance: { surfacePackId: 'graphite' }
+test('editing an appearance field while a custom Look is active mirrors into that Look', () => {
+  const custom = {
+    ...DEFAULT_APP_SETTINGS.appearance.looks[0]!,
+    id: 'look-mine',
+    name: 'My Look'
+  };
+  const base = mergeAppSettings(DEFAULT_APP_SETTINGS, {
+    appearance: { looks: [...DEFAULT_APP_SETTINGS.appearance.looks, custom], activeLookId: 'look-mine' }
   });
+  const merged = mergeAppSettings(base, { appearance: { surfacePackId: 'graphite' } });
   assert.equal(merged.appearance.surfacePackId, 'graphite');
-  const parchment = merged.appearance.looks.find(look => look.id === 'look-parchment')!;
-  assert.equal(parchment.surfacePackId, 'graphite');
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-mine')!.surfacePackId, 'graphite');
   // base is never mutated
   assert.equal(
-    DEFAULT_APP_SETTINGS.appearance.looks.find(look => look.id === 'look-parchment')!.surfacePackId,
+    base.appearance.looks.find(look => look.id === 'look-mine')!.surfacePackId,
     'parchment'
   );
+});
+
+test('editing an appearance field while a built-in Look is active detaches without changing it', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { appearance: { surfacePackId: 'graphite' } });
+  assert.equal(merged.appearance.activeLookId, '');
+  assert.equal(merged.appearance.looks.find(look => look.id === 'look-parchment')!.surfacePackId, 'parchment');
 });
 
 test('switching Look (activeLookId in the patch) does not clobber the target Look', () => {

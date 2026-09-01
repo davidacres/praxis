@@ -1,89 +1,44 @@
 import { app, ipcMain } from 'electron';
-import type { AttachProjectFolderInput, Connection, CreateProjectInput, ProjectBoardReference, ProjectRecord, UpdateProjectInput } from '@praxis/core';
+import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectRecord, UpdateProjectInput } from '@praxis/core';
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
-import { buildProjectConnection, discoverPlanFolders, toStoredFolderPath } from '@praxis/core';
+import { buildProjectConnection, discoverPlanFolders } from '@praxis/core';
 
 /**
- * Writes (or refreshes) the connection row a project owns, so its board can be
- * resolved from the connection list like every other board. Called on every
- * path that creates or mutates a project — the row is a projection with a
- * single writer, so it cannot drift from the record.
+ * Ensures every project has a real connection. Once created, the connection is
+ * the source of truth for its backend settings and can be managed like any
+ * other connection; this only rewrites it for an explicit storage transition
+ * or to migrate the legacy synthetic project backend.
  */
-export async function syncProjectConnection(project: ProjectRecord): Promise<ProjectRecord> {
+export async function syncProjectConnection(project: ProjectRecord, force = false): Promise<ProjectRecord> {
   const connections = getConnectionStore();
   const connection = buildProjectConnection(project);
-  if (connections.getConnection(connection.id)) {
+  const existing = connections.getConnection(connection.id);
+  if (existing?.mode === connection.mode && force) {
     await connections.updateConnection(connection);
+  } else if (existing?.mode === connection.mode) {
+    await connections.addTrackedBoard({
+      connectionId: connection.id,
+      boardId: connection.mode === 'folder' ? `folder-${project.key.toLowerCase()}` : project.defaultBoardId,
+      displayName: project.name
+    });
+    return project;
+  } else if (existing) {
+    for (const board of connections.getTrackedBoardsForConnection(existing.id)) {
+      await connections.removeTrackedBoard({ connectionId: existing.id, boardId: board.boardId });
+    }
+    await connections.removeConnection(existing.id);
+    await connections.addConnection(connection);
   } else {
     await connections.addConnection(connection);
   }
-  return project;
-}
-
-/**
- * Existing folders are already the source of truth for their planning files.
- * Register that source as a read-only folder connection so the project has a
- * board backed by the files on disk rather than an empty Praxis-owned board.
- *
- * Only for `storage: 'app'` projects. A folder-backed project's *own* board
- * already reads those files, so adding this connection would produce two boards
- * over one folder — and the sidebar, seeing a `project-plans-*` link, would
- * suppress the project's own board as "the empty Praxis board" and show the
- * duplicate instead. That suppression predates `ProjectRecord.storage`.
- */
-async function connectDetectedPlans(project: ProjectRecord): Promise<ProjectRecord> {
-  const folder = project.workspaceFolder;
-  if (project.storage === 'folder' || !folder || !(project.folderInspection?.planFiles?.length)) {
-    return project;
-  }
-
-  const connections = getConnectionStore();
-  // A folder connection may already cover this folder — the user pointed one at
-  // it before creating the project. Adding a second would put two boards over
-  // one folder, so leave the existing connection to serve it.
-  const normalizedFolder = toStoredFolderPath(folder).toLowerCase();
-  const alreadyConnected = connections.getConnections().some(candidate => {
-    if (candidate.mode !== 'folder') {
-      return false;
-    }
-    const roots = candidate.settings['roots'];
-    const configured = Array.isArray(roots)
-      ? roots.filter((value): value is string => typeof value === 'string')
-      : typeof candidate.settings['path'] === 'string' ? [candidate.settings['path'] as string] : [];
-    return configured.some(root => toStoredFolderPath(root).toLowerCase() === normalizedFolder);
+  await connections.addTrackedBoard({
+    connectionId: connection.id,
+    boardId: connection.mode === 'folder' ? `folder-${project.key.toLowerCase()}` : project.defaultBoardId,
+    displayName: project.name
   });
-  if (alreadyConnected) {
-    return project;
-  }
-
-  const connection: Connection = {
-    id: `project-plans-${project.id}`,
-    name: `${project.name} plans`,
-    mode: 'folder',
-    settings: {
-      roots: [folder],
-      projectKey: project.key,
-      projectName: project.name,
-      // Imported plans stay safe/read-only until the user explicitly enables
-      // writing in the Connections screen.
-      allowIssueCreation: false
-    }
-  };
-  await connections.addConnection(connection);
-  try {
-    const board = { connectionId: connection.id, boardId: `folder-${project.key.toLowerCase()}`, displayName: project.name };
-    await connections.addTrackedBoard(board);
-    return await getProjectStore().linkBoard(project.id, {
-      connectionId: board.connectionId,
-      boardId: board.boardId,
-      displayName: board.displayName ?? `${project.name} plans (Live)`
-    });
-  } catch (error) {
-    await connections.removeConnection(connection.id).catch(() => undefined);
-    throw error;
-  }
+  return project;
 }
 
 /**
@@ -108,17 +63,19 @@ export async function healLegacyFolderProjects(): Promise<void> {
       try {
         const roots = await discoverPlanFolders(project.workspaceFolder);
         const storage = roots.length > 0 ? 'folder' as const : 'app' as const;
-        // The broken era also linked a `project-plans-*` companion connection as
-        // the project's board. Now the project's own board reads the plans, that
-        // link would make the sidebar suppress it as "the empty Praxis board" —
-        // so retire the companion along with the flip.
+        // Retire the old companion connection, which duplicated this project’s
+        // real folder connection rather than representing a distinct source.
         const companionId = `project-plans-${project.id}`;
         const linkedBoards = storage === 'folder'
           ? project.linkedBoards.filter(link => link.connectionId !== companionId)
           : project.linkedBoards;
         healed = await store.replace({ ...project, storage, linkedBoards, updatedAt: new Date().toISOString() });
         if (storage === 'folder') {
-          if (getConnectionStore().getConnection(companionId)) {
+          const companion = getConnectionStore().getConnection(companionId);
+          if (companion) {
+            for (const board of getConnectionStore().getTrackedBoardsForConnection(companionId)) {
+              await getConnectionStore().removeTrackedBoard({ connectionId: companionId, boardId: board.boardId });
+            }
             await getConnectionStore().removeConnection(companionId).catch(() => undefined);
           }
           console.log(`projects — healed "${project.name}" to folder-backed (${project.workspaceFolder})`);
@@ -137,21 +94,41 @@ export function registerProjectIpc(): void {
     console.error('projects — legacy storage heal failed:', error));
   ipcMain.handle('projects:list', () => getProjectManager().list());
   ipcMain.handle('projects:get', (_event, projectId: string) => getProjectManager().get(projectId));
-  ipcMain.handle('projects:create', async (_event, input: CreateProjectInput, workspaceId: string) => {
-    const project = await getProjectManager().createInWorkspace(input, workspaceId, getWorkspaceStore(), app.getVersion());
-    return syncProjectConnection(await connectDetectedPlans(project));
-  });
+  ipcMain.handle('projects:create', async (_event, input: CreateProjectInput, workspaceId: string) =>
+    syncProjectConnection(await getProjectManager().createInWorkspace(
+      input, workspaceId, getWorkspaceStore(), app.getVersion()
+    )));
   ipcMain.handle('projects:useExisting', (_event, projectId: string, workspaceId: string) =>
     getProjectManager().useInWorkspace(projectId, workspaceId, getWorkspaceStore(), app.getVersion()));
+  ipcMain.handle('projects:remove', async (_event, projectId: string) => {
+    const connections = getConnectionStore();
+    const ownedConnection = connections.getConnections().find(
+      connection => connection.settings.projectId === projectId
+    );
+    if (ownedConnection) {
+      for (const board of connections.getTrackedBoardsForConnection(ownedConnection.id)) {
+        await connections.removeTrackedBoard({ connectionId: ownedConnection.id, boardId: board.boardId });
+      }
+    }
+    await getProjectStore().remove(projectId);
+    if (ownedConnection) await connections.removeConnection(ownedConnection.id);
+    for (const workspace of getWorkspaceStore().list()) {
+      if (workspace.projectIds.includes(projectId)) {
+        await getWorkspaceStore().update(workspace.id, {
+          projectIds: workspace.projectIds.filter(id => id !== projectId),
+          defaultProjectId: workspace.defaultProjectId === projectId ? undefined : workspace.defaultProjectId
+        }, app.getVersion());
+      }
+    }
+  });
   ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) =>
-    // A rename changes the connection's display name, so reproject after every update.
-    syncProjectConnection(await getProjectStore().update(projectId, patch)));
+    getProjectStore().update(projectId, patch));
   ipcMain.handle('projects:inspectFolder', (_event, folderPath: string) => getProjectManager().inspectFolder(folderPath));
   ipcMain.handle('projects:attachFolder', async (_event, projectId: string, input: AttachProjectFolderInput) => {
-    // Attaching a folder can make a project folder-backed, which changes the
-    // connection's source and roots.
+    // An attached folder adds project files and tools; a project's connection
+    // remains app-backed unless it was explicitly created as folder-backed.
     const result = await getProjectManager().attachFolder(projectId, input);
-    await syncProjectConnection(result.project);
+    await syncProjectConnection(result.project, true);
     return result;
   });
   ipcMain.handle('projects:linkBoard', (_event, projectId: string, board: ProjectBoardReference) => getProjectStore().linkBoard(projectId, board));

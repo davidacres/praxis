@@ -110,6 +110,7 @@ function renderMark(mode: BackendMode, size: number, uid: string) {
         </svg>
       );
     case 'project':
+    case 'app':
       return (
         <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
           <circle cx="7" cy="7" r="4.75" fill="none" stroke="currentColor" strokeWidth="1.2" />

@@ -58,17 +58,21 @@ test('ships the four built-in Looks with Parchment active', async () => {
 
 test('selecting a Look swaps theme + surface together and persists', async () => {
   await window.locator('[data-testid="look-card-look-blueprint"] .look-card-apply').click();
-  await expect(window.locator('html')).toHaveAttribute('data-surface', 'blueprint');
+  await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
   await expect(window.locator('[data-testid="look-card-look-blueprint"]')).toHaveClass(/active/);
 
   await window.reload();
-  await expect(window.locator('html')).toHaveAttribute('data-surface', 'blueprint');
+  await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
   await openLooks();
   await expect(window.locator('[data-testid="look-card-look-blueprint"]')).toHaveClass(/active/);
 });
 
 test('editing a dial while a Look is active is folded into that Look', async () => {
+  await window.locator('[data-testid="look-save"]').click();
+  await window.locator('[data-testid="look-name-input"]').fill('Editable Look');
+  await window.locator('[data-testid="look-save-confirm"]').click();
+
   const readIntensity = () =>
     window.locator('html').evaluate(el => getComputedStyle(el).getPropertyValue('--surface-intensity').trim());
 
@@ -80,13 +84,13 @@ test('editing a dial while a Look is active is folded into that Look', async () 
   await window.reload();
   await expect.poll(readIntensity).toBe('0.4');
   await openLooks();
-  await expect(window.locator('[data-testid="look-card-look-parchment"]')).toHaveClass(/active/);
+  await expect(window.locator('.look-card.active')).toContainText('Editable Look');
 
   // Switching away and back proves the value lives in the Look, not just the
   // live appearance fields.
   await window.locator('[data-testid="look-card-look-flat"] .look-card-apply').click();
   await expect.poll(readIntensity).toBe('1');
-  await window.locator('[data-testid="look-card-look-parchment"] .look-card-apply').click();
+  await window.locator('.look-card').filter({ hasText: 'Editable Look' }).locator('.look-card-apply').click();
   await expect.poll(readIntensity).toBe('0.4');
 });
 
@@ -103,13 +107,44 @@ test('Save current as Look adds a card that survives a reload', async () => {
   await expect(window.locator('.look-card').filter({ hasText: 'My Look' })).toHaveCount(1);
 });
 
-test('deleting the active Look detaches without wiping the others', async () => {
-  await window.locator('[data-testid="look-card-look-aurora"] .look-card-apply').click();
-  await expect(window.locator('[data-testid="look-card-look-aurora"]')).toHaveClass(/active/);
+test('built-in Looks cannot be renamed or deleted, while custom Looks can', async () => {
+  await expect(window.locator('[data-testid="look-rename-look-aurora"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="look-delete-look-aurora"]')).toHaveCount(0);
 
-  await window.locator('[data-testid="look-delete-look-aurora"]').click();
-  await expect(window.locator('[data-testid="look-card-look-aurora"]')).toHaveCount(0);
-  await expect(window.locator('[data-testid="look-card-look-parchment"]')).toBeVisible();
-  // Nothing is active now — an edit is not mirrored anywhere.
-  await expect(window.locator('.look-card.active')).toHaveCount(0);
+  await window.locator('[data-testid="look-save"]').click();
+  await window.locator('[data-testid="look-name-input"]').fill('Editable Look');
+  await window.locator('[data-testid="look-save-confirm"]').click();
+  const custom = window.locator('.look-card').filter({ hasText: 'Editable Look' });
+  await expect(custom.locator('[data-testid^="look-rename-"]')).toBeVisible();
+  await custom.locator('[data-testid^="look-rename-"]').click();
+  const renameInput = window.getByRole('textbox', { name: 'Rename Editable Look' });
+  await renameInput.fill('Renamed Look');
+  await renameInput.press('Enter');
+  const renamed = window.locator('.look-card').filter({ hasText: 'Renamed Look' });
+  await expect(renamed).toBeVisible();
+  await renamed.locator('[data-testid^="look-delete-"]').click();
+  await expect(window.locator('.look-card').filter({ hasText: 'Renamed Look' })).toHaveCount(0);
+});
+
+test('factory appearance reset restores the theme, Look, surface, and libraries', async () => {
+  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
+  await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  await openSurfaces();
+  await window.locator('[data-testid="surface-card-graphite"]').click();
+  await window.evaluate(() => window.praxis.settings.set({ appearance: { surface: { motif: { id: 'binary', scale: 80, opacity: 0.4, ink: 'accent' } } } }));
+  await window.locator('[data-testid="settings-nav-overview"]').click();
+  await window.locator('[data-testid="reset-appearance-factory"]').click();
+  await expect(window.getByRole('dialog', { name: 'Reset appearance to factory defaults?' })).toBeVisible();
+  await window.locator('[data-testid="reset-confirmation-overlay"]').getByRole('button', { name: 'Reset appearance' }).click();
+
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
+  await expect(window.locator('html')).toHaveAttribute('data-surface', 'parchment');
+  const appearance = await window.evaluate(() => window.praxis.settings.get().then(settings => settings.appearance));
+  expect(appearance.activeLookId).toBe('look-parchment');
+  expect(appearance.looks).toHaveLength(4);
+  expect(appearance.customThemes).toHaveLength(0);
+  expect(appearance.customSurfacePacks).toHaveLength(0);
+  expect(appearance.surface.motif).toBeUndefined();
+  const stored = await window.evaluate(() => window.praxis.settings.get());
+  expect(stored.appearance.surface.motif).toBeUndefined();
 });
