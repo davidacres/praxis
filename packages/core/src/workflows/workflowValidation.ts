@@ -415,37 +415,41 @@ function validateEdges(
     if (!EDGE_OUTCOMES.has(edge.on)) {
       errors.push({ path: `${at}.on`, message: 'Edge outcome must be success, failure, or always.' });
     }
-
-    // A join is the only node that may legitimately wait on several branches;
-    // approval and agent stages with two parents would race their inputs.
-    const target = nodesById.get(edge.to);
-    if (target && !isJoinNode(target)) {
-      const parents = definition.edges.filter(candidate => candidate.to === edge.to);
-      if (parents.length > 1 && parents[0].id === edge.id) {
-        errors.push({
-          path: `${at}.to`,
-          message: `Node "${edge.to}" has ${parents.length} inbound edges; converge them through a join node.`
-        });
-      }
-    }
   });
 
-  // A join that waits on one branch is a no-op the author almost certainly
-  // did not mean, and `all-required` with nothing required never releases.
-  for (const node of definition.nodes) {
-    if (!isJoinNode(node)) continue;
+  definition.nodes.forEach((node, index) => {
     const inbound = definition.edges.filter(edge => edge.to === node.id);
-    const index = definition.nodes.indexOf(node);
-    if (inbound.length < 2) {
-      errors.push({ path: `nodes[${index}]`, message: `Join "${node.id}" needs at least two inbound edges.` });
+
+    if (isJoinNode(node)) {
+      // A join that waits on one branch is a no-op the author almost certainly
+      // did not mean, and `all-required` with nothing required never releases.
+      if (inbound.length < 2) {
+        errors.push({ path: `nodes[${index}]`, message: `Join "${node.id}" needs at least two inbound edges.` });
+      }
+      if (node.mode === 'all-required' && !inbound.some(edge => edge.required)) {
+        errors.push({
+          path: `nodes[${index}].mode`,
+          message: `Join "${node.id}" is all-required but no inbound edge is required; it would never release.`
+        });
+      }
+      return;
     }
-    if (node.mode === 'all-required' && !inbound.some(edge => edge.required)) {
+
+    // A join is the only node that may wait on several branches: anything else
+    // with two *concurrent* parents would race their artifact inputs.
+    //
+    // Concurrency is what matters, not edge count. Several edges from one
+    // source node are mutually exclusive outcomes — `success` and `failure`
+    // both routing to a cleanup stage is a normal shape, and only ever one of
+    // them fires — so parents are counted by distinct source node.
+    const sources = new Set(inbound.map(edge => edge.from));
+    if (sources.size > 1) {
       errors.push({
-        path: `nodes[${index}].mode`,
-        message: `Join "${node.id}" is all-required but no inbound edge is required; it would never release.`
+        path: `nodes[${index}]`,
+        message: `Node "${node.id}" has ${sources.size} concurrent parents (${[...sources].sort().join(', ')}); converge them through a join node.`
       });
     }
-  }
+  });
 }
 
 function validateEntryAndShape(

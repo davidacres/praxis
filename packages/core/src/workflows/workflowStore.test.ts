@@ -7,6 +7,7 @@ import {
   PROJECT_WORKFLOWS_DIR,
   WorkflowPolicyStore,
   WorkflowStore,
+  composeWorkflowPolicies,
   loadProjectWorkflows,
   resolveWorkflowCatalog
 } from './workflowStore';
@@ -218,19 +219,80 @@ function policy(id: string, overrides: Partial<WorkflowPolicyProfile> = {}): Wor
   };
 }
 
-test('a project policy replaces the global one rather than merging with it', async () => {
+test('a project policy composes over global rather than replacing it', async () => {
+  const store = new WorkflowPolicyStore(memoryStore());
+  await store.save(policy('global-default', { requiredGates: ['review'] }));
+  await store.save(policy('p1', { scope: 'project', projectId: 'p1', requiredGates: ['security'] }));
+
+  const effective = store.effectiveForProject('p1');
+  // The project asked for security only; org policy still requires review.
+  assert.deepEqual(effective?.profile.requiredGates, ['review', 'security']);
+  assert.deepEqual(effective?.sources, ['global-default', 'p1']);
+  assert.deepEqual(effective?.tightenedByGlobal, ['requiredGates']);
+});
+
+test('a project cannot loosen a gate the org requires', () => {
+  const effective = composeWorkflowPolicies(
+    policy('org', { requiredGates: ['review', 'qa', 'security'] }),
+    policy('p1', { scope: 'project', projectId: 'p1', requiredGates: [] })
+  );
+  assert.deepEqual(effective.profile.requiredGates, ['qa', 'review', 'security']);
+});
+
+test('a project cannot grant itself bypass the org forbids', () => {
+  const effective = composeWorkflowPolicies(
+    policy('org', { allowGateBypass: false }),
+    policy('p1', { scope: 'project', projectId: 'p1', allowGateBypass: true })
+  );
+  assert.equal(effective.profile.allowGateBypass, false);
+  assert.ok(effective.tightenedByGlobal.includes('allowGateBypass'));
+});
+
+test('a project cannot drop the human approval the org requires', () => {
+  const effective = composeWorkflowPolicies(
+    policy('org', { requireHumanApproval: true }),
+    policy('p1', { scope: 'project', projectId: 'p1', requireHumanApproval: false })
+  );
+  assert.equal(effective.profile.requireHumanApproval, true);
+  assert.ok(effective.tightenedByGlobal.includes('requireHumanApproval'));
+});
+
+test('a project cannot raise the attempt cap above the org limit', () => {
+  const effective = composeWorkflowPolicies(
+    policy('org', { maxAttemptsPerNode: 2 }),
+    policy('p1', { scope: 'project', projectId: 'p1', maxAttemptsPerNode: 10 })
+  );
+  assert.equal(effective.profile.maxAttemptsPerNode, 2);
+  assert.ok(effective.tightenedByGlobal.includes('maxAttemptsPerNode'));
+});
+
+test('a project stricter than the org keeps its own terms and reports no tightening', () => {
+  const effective = composeWorkflowPolicies(
+    policy('org', { requiredGates: ['review'], allowGateBypass: true, maxAttemptsPerNode: 5 }),
+    policy('p1', {
+      scope: 'project',
+      projectId: 'p1',
+      requiredGates: ['review', 'security'],
+      allowGateBypass: false,
+      maxAttemptsPerNode: 2
+    })
+  );
+  assert.deepEqual(effective.profile.requiredGates, ['review', 'security']);
+  assert.equal(effective.profile.allowGateBypass, false);
+  assert.equal(effective.profile.maxAttemptsPerNode, 2);
+  assert.deepEqual(effective.tightenedByGlobal, []);
+});
+
+test('a project with no profile of its own inherits global unchanged', async () => {
   const store = new WorkflowPolicyStore(memoryStore());
   await store.save(policy('global-default'));
-  await store.save(policy('p1-strict', { scope: 'project', projectId: 'p1', requiredGates: ['security'] }));
-
-  assert.equal(store.forProject('p1')?.id, 'p1-strict');
-  assert.deepEqual(store.forProject('p1')?.requiredGates, ['security']);
-  // A project with no profile of its own still falls back to global.
-  assert.equal(store.forProject('p2')?.id, 'global-default');
+  const effective = store.effectiveForProject('p2');
+  assert.equal(effective?.profile.id, 'global-default');
+  assert.deepEqual(effective?.sources, ['global-default']);
 });
 
 test('a project with no policy anywhere resolves to undefined rather than a guess', () => {
-  assert.equal(new WorkflowPolicyStore(memoryStore()).forProject('p1'), undefined);
+  assert.equal(new WorkflowPolicyStore(memoryStore()).effectiveForProject('p1'), undefined);
 });
 
 test('a project policy without projectId is refused', async () => {
