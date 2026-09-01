@@ -192,6 +192,7 @@ function normalizeNode(value: unknown): WorkflowNode {
           : [0]
       };
       if (Array.isArray(raw.args)) node.args = raw.args.filter((item): item is string => typeof item === 'string');
+      if (raw.mutatesWorktree === true) node.mutatesWorktree = true;
       if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
       if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;

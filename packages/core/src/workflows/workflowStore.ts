@@ -16,6 +16,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { KeyValueStore } from '../host/stateStore';
 import { migrateWorkflow, validateWorkflow, type WorkflowIssue } from './workflowValidation';
+import { normalizeWorkflowRun, type WorkflowRun } from './workflowRun';
 import type { WorkflowDefinition, WorkflowPolicyProfile, WorkflowScope } from './workflowTypes';
 
 export type WorkflowSource = 'built-in' | 'global' | 'project';
@@ -32,6 +33,7 @@ const EXPECTED_SCOPE: Record<WorkflowSource, WorkflowScope> = {
 
 const WORKFLOWS_KEY = 'praxis.workflows.v1';
 const POLICIES_KEY = 'praxis.workflowPolicies.v1';
+const RUNS_KEY = 'praxis.workflowRuns.v1';
 
 /** Project-committed definitions live here, relative to the workspace folder. */
 export const PROJECT_WORKFLOWS_DIR = path.join('.praxis', 'workflows');
@@ -378,6 +380,52 @@ export class WorkflowPolicyStore {
     const next = profiles.filter(candidate => candidate.id !== profileId);
     if (next.length === profiles.length) throw new Error(`Policy profile ${profileId} was not found.`);
     await this.state.update(POLICIES_KEY, next);
+  }
+}
+
+/**
+ * Persisted workflow runs (FX-BE-019 / TASK-095).
+ *
+ * Written after every transition rather than at stage boundaries: a run that
+ * only persists when a stage completes loses exactly the information recovery
+ * needs — which attempt was in flight when the process died.
+ */
+export class WorkflowRunStore {
+  public constructor(private readonly state: KeyValueStore) {}
+
+  public list(): WorkflowRun[] {
+    const value = this.state.get<unknown[]>(RUNS_KEY);
+    if (!Array.isArray(value)) return [];
+    return value
+      .map(entry => normalizeWorkflowRun(entry))
+      .filter((entry): entry is WorkflowRun => !!entry);
+  }
+
+  public forProject(projectId: string): WorkflowRun[] {
+    return this.list()
+      .filter(run => run.projectId === projectId)
+      .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  }
+
+  public get(runId: string): WorkflowRun | undefined {
+    return this.list().find(run => run.runId === runId);
+  }
+
+  /** Inserts or replaces a run. The run itself is the unit of atomicity. */
+  public async save(run: WorkflowRun): Promise<WorkflowRun> {
+    const runs = this.list();
+    const index = runs.findIndex(candidate => candidate.runId === run.runId);
+    if (index >= 0) runs[index] = run;
+    else runs.push(run);
+    await this.state.update(RUNS_KEY, runs);
+    return run;
+  }
+
+  public async remove(runId: string): Promise<void> {
+    const runs = this.list();
+    const next = runs.filter(run => run.runId !== runId);
+    if (next.length === runs.length) throw new Error(`Run ${runId} was not found.`);
+    await this.state.update(RUNS_KEY, next);
   }
 }
 
