@@ -147,6 +147,17 @@ export interface WorkflowCheckNode extends WorkflowNodeBase {
   /** Defaults to `[0]` when absent. */
   successExitCodes?: number[];
   outputs: WorkflowArtifactContract[];
+  /**
+   * Whether the command writes to the worktree. Defaults to **false**: a check
+   * verifies, and verification fanning out in parallel is the point of having
+   * review, QA, and security as separate branches. An author flags a check that
+   * genuinely writes — a build or a formatter — and the scheduler serialises it
+   * with the other mutating stages.
+   *
+   * The opposite default to `WorkflowAgentTaskNode.mutatesWorktree`, because
+   * the usual case is the opposite way round.
+   */
+  mutatesWorktree?: boolean;
   satisfiesGate?: WorkflowGateKind;
   timeoutMs?: number;
   maxAttempts?: number;
@@ -166,9 +177,13 @@ export interface WorkflowApprovalNode extends WorkflowNodeBase {
 }
 
 /**
- * Converges parallel branches. `all` waits for every inbound edge; `all-required`
- * waits only for edges marked required, letting an advisory branch lag without
- * blocking delivery.
+ * Converges parallel branches.
+ *
+ * `all` waits for every inbound edge. `all-required` waits only for edges
+ * marked required and releases without them — so an advisory branch that is
+ * slow or failing cannot block delivery, and equally cannot gate it. A branch
+ * nobody waits for cannot also be a branch anybody depends on; if its result
+ * needs to matter, mark the edge required.
  */
 export interface WorkflowJoinNode extends WorkflowNodeBase {
   type: 'join';
@@ -342,4 +357,15 @@ export function nodeOutputs(node: WorkflowNode): WorkflowArtifactContract[] {
 /** The gate a node stands behind, when it stands behind one. */
 export function nodeGate(node: WorkflowNode): WorkflowGateKind | undefined {
   return isAgentTaskNode(node) || isCheckNode(node) ? node.satisfiesGate : undefined;
+}
+
+/**
+ * Whether a stage writes to the canonical implementation worktree. The
+ * scheduler runs at most one such stage at a time; everything else fans out.
+ * Note the differing defaults — see each node type.
+ */
+export function nodeMutatesWorktree(node: WorkflowNode): boolean {
+  if (isAgentTaskNode(node)) return node.mutatesWorktree;
+  if (isCheckNode(node)) return node.mutatesWorktree === true;
+  return false;
 }

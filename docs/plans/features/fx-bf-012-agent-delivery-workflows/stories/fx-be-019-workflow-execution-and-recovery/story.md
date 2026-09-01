@@ -1,10 +1,10 @@
 ---
 id: FX-BE-019
 title: Workflow execution, persistence, and recovery
-status: proposed
+status: complete
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-019-workflow-execution-and-recovery/issue.md
-updated: 2026-09-01
+updated: 2026-09-02
 tasks: [TASK-095, TASK-096, TASK-097]
 dependencies: [FX-BE-018, FX-BF-011]
 validation: [npm run build:core, npm run test:core, npm run check-types]
