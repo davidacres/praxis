@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type {
   BoardColumn,
   BoardColumnPreferences,
@@ -67,8 +67,23 @@ function initials(name: string | undefined): string {
   return letters.toUpperCase();
 }
 
-/** Matches the demo backend's default page size so paging lines up. */
-const PAGE_SIZE = 25;
+/** Compact card metadata, deliberately labelled as an update rather than a due date. */
+function formatCardDate(value: string | undefined): string | undefined {
+  if (!value || Number.isNaN(Date.parse(value))) {
+    return undefined;
+  }
+  return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(value));
+}
+
+/** A board should give every workflow stage an equally useful first viewport. */
+const COLUMN_PAGE_SIZE = 10;
+const ALL_STATUSES_PAGE_KEY = '__all-statuses__';
+
+interface BoardDropPosition {
+  status: string;
+  beforeKey?: string;
+  afterKey?: string;
+}
 
 /**
  * Groups a flat, already-sorted issue list into board columns. Mirrors core's
@@ -116,6 +131,86 @@ function groupIssuesIntoColumns(
 }
 
 /**
+ * Keeps workflow dividers in a non-scrolling layer above a board canvas. The
+ * lanes themselves own the horizontal scroll position, so the overlay measures
+ * their current on-screen edges whenever the canvas scrolls or resizes.
+ */
+function BoardColumnsCanvas({ children, columnCount }: { children: ReactNode; columnCount: number }) {
+  const cleanupRef = useRef<(() => void) | undefined>();
+  const [dividerOffsets, setDividerOffsets] = useState<number[]>([]);
+
+  const attachFrame = useCallback((frame: HTMLDivElement | null) => {
+    cleanupRef.current?.();
+    cleanupRef.current = undefined;
+    if (!frame) {
+      return;
+    }
+    const canvas = frame.querySelector<HTMLDivElement>('.board-columns');
+    if (!canvas) {
+      return;
+    }
+
+    let frameId: number | undefined;
+    const refreshDividers = () => {
+      const frameLeft = frame.getBoundingClientRect().left;
+      const next = [...canvas.querySelectorAll<HTMLElement>('.board-column')]
+        .slice(1)
+        .map(column => Math.round(column.getBoundingClientRect().left - frameLeft));
+      setDividerOffsets(current =>
+        current.length === next.length && current.every((value, index) => value === next[index])
+          ? current
+          : next
+      );
+    };
+    const scheduleRefresh = () => {
+      if (frameId !== undefined) {
+        cancelAnimationFrame(frameId);
+      }
+      frameId = requestAnimationFrame(() => {
+        frameId = undefined;
+        refreshDividers();
+      });
+    };
+
+    // The ref callback runs after the canvas is in the DOM. Deferred geometry
+    // avoids measuring flex lanes before the browser assigns their widths.
+    scheduleRefresh();
+    canvas.addEventListener('scroll', scheduleRefresh, { passive: true });
+    const observer = new ResizeObserver(scheduleRefresh);
+    observer.observe(frame);
+    observer.observe(canvas);
+    const mutations = new MutationObserver(scheduleRefresh);
+    mutations.observe(canvas, { childList: true, subtree: true });
+    cleanupRef.current = () => {
+      if (frameId !== undefined) {
+        cancelAnimationFrame(frameId);
+      }
+      canvas.removeEventListener('scroll', scheduleRefresh);
+      observer.disconnect();
+      mutations.disconnect();
+    };
+  }, []);
+
+  return (
+    <div ref={attachFrame} className="board-columns-frame" data-column-count={columnCount}>
+      <div className="board-columns">
+        {children}
+      </div>
+      <div className="board-column-divider-layer" aria-hidden="true">
+        {dividerOffsets.map((left, index) => (
+          <span
+            key={`${index}:${left}`}
+            className="board-column-divider"
+            style={{ left }}
+            data-testid="board-column-divider"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Classic mode: one column per board column (or the list-view / swim-lane
  * variants when the board's display preferences ask for them).
  *
@@ -152,9 +247,12 @@ export function BoardView({
   // of truth, but we mirror it in state so we can paint the column under the
   // cursor without re-reading .dataTransfer in every dragover event.
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<BoardDropPosition | null>(null);
 
   const [issues, setIssues] = useState<IssueSummary[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [hasMoreByStatus, setHasMoreByStatus] = useState<Record<string, boolean>>({});
+  const [nextStartAtByStatus, setNextStartAtByStatus] = useState<Record<string, number>>({});
   const [total, setTotal] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -208,6 +306,23 @@ export function BoardView({
     [details.board.projectKey, boardId, filters]
   );
 
+  /**
+   * Fetch each actual workflow stage independently. A global page limit used
+   * to let a busy first stage starve the later stages, which made a board look
+   * incomplete. The fallback keeps boards without workflow metadata usable.
+   */
+  const pagedStatuses = useMemo(() => {
+    const available = details.columnStatusOrder?.length
+      ? details.columnStatusOrder
+      : details.columns.map(column => column.name);
+    const requested = filters.statuses.length > 0 ? filters.statuses : available;
+    return [...new Set(requested.map(status => status.trim()).filter(Boolean))];
+  }, [details.columnStatusOrder, details.columns, filters.statuses]);
+  const pageStatuses = useMemo<(string | undefined)[]>(
+    () => (pagedStatuses.length > 0 ? pagedStatuses : [undefined]),
+    [pagedStatuses]
+  );
+
   // First-page (re)fetch. Also keyed on `details` identity: App refreshes it
   // after transitions/edits, which is exactly when the cards need re-querying.
   useEffect(() => {
@@ -216,15 +331,38 @@ export function BoardView({
     setLoadingMore(false);
     setListError(undefined);
     let cancelled = false;
-    window.praxis.issue
-      .list(scopedFilters, 0, PAGE_SIZE, connectionId)
-      .then(page => {
+    Promise.all(
+      pageStatuses.map(status =>
+        window.praxis.issue.list(
+          { ...scopedFilters, statuses: status ? [status] : scopedFilters.statuses },
+          0,
+          COLUMN_PAGE_SIZE,
+          connectionId
+        )
+      )
+    )
+      .then(pages => {
         if (cancelled || generation !== generationRef.current) {
           return;
         }
-        setIssues(page.issues);
-        setHasMore(page.hasMore);
-        setTotal(page.total);
+        const nextHasMore: Record<string, boolean> = {};
+        const nextStartAt: Record<string, number> = {};
+        pageStatuses.forEach((status, index) => {
+          const key = status ?? ALL_STATUSES_PAGE_KEY;
+          nextHasMore[key] = pages[index].hasMore;
+          nextStartAt[key] = pages[index].issues.length;
+        });
+        setIssues(pages.flatMap(page => page.issues));
+        setHasMoreByStatus(nextHasMore);
+        setNextStartAtByStatus(nextStartAt);
+        setHasMore(pages.some(page => page.hasMore));
+        // Some remote backends cannot report a total. Keep the count unknown
+        // unless every per-status response can contribute to it.
+        setTotal(
+          pages.every(page => typeof page.total === 'number')
+            ? pages.reduce((sum, page) => sum + (page.total ?? 0), 0)
+            : undefined
+        );
         setLoading(false);
       })
       .catch((error: unknown) => {
@@ -234,13 +372,15 @@ export function BoardView({
         setListError(error instanceof Error ? error.message : String(error));
         setIssues([]);
         setHasMore(false);
+        setHasMoreByStatus({});
+        setNextStartAtByStatus({});
         setTotal(undefined);
         setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [scopedFilters, connectionId, details]);
+  }, [scopedFilters, connectionId, details, pageStatuses]);
 
   // Filter-bar option sources. Metadata backends ignore the active status/type
   // selection when reporting options (demo clears them internally), so the
@@ -280,16 +420,37 @@ export function BoardView({
 
   const loadMore = useCallback(() => {
     const generation = generationRef.current;
+    const statusesWithMore = pageStatuses.filter(status => hasMoreByStatus[status ?? ALL_STATUSES_PAGE_KEY]);
+    if (statusesWithMore.length === 0) {
+      return;
+    }
     setLoadingMore(true);
-    window.praxis.issue
-      .list(scopedFilters, issues.length, PAGE_SIZE, connectionId)
-      .then(page => {
+    Promise.all(
+      statusesWithMore.map(status => {
+        const key = status ?? ALL_STATUSES_PAGE_KEY;
+        return window.praxis.issue.list(
+          { ...scopedFilters, statuses: status ? [status] : scopedFilters.statuses },
+          nextStartAtByStatus[key] ?? 0,
+          COLUMN_PAGE_SIZE,
+          connectionId
+        );
+      })
+    )
+      .then(pages => {
         if (generation !== generationRef.current) {
           return; // filters changed mid-flight — the reset effect owns state now
         }
-        setIssues(current => [...current, ...page.issues]);
-        setHasMore(page.hasMore);
-        setTotal(page.total);
+        const nextHasMore = { ...hasMoreByStatus };
+        const nextStartAt = { ...nextStartAtByStatus };
+        statusesWithMore.forEach((status, index) => {
+          const key = status ?? ALL_STATUSES_PAGE_KEY;
+          nextHasMore[key] = pages[index].hasMore;
+          nextStartAt[key] = (nextStartAt[key] ?? 0) + pages[index].issues.length;
+        });
+        setIssues(current => [...current, ...pages.flatMap(page => page.issues)]);
+        setHasMoreByStatus(nextHasMore);
+        setNextStartAtByStatus(nextStartAt);
+        setHasMore(Object.values(nextHasMore).some(Boolean));
         setLoadingMore(false);
       })
       .catch((error: unknown) => {
@@ -299,7 +460,7 @@ export function BoardView({
         setListError(error instanceof Error ? error.message : String(error));
         setLoadingMore(false);
       });
-  }, [scopedFilters, connectionId, issues.length]);
+  }, [scopedFilters, connectionId, pageStatuses, hasMoreByStatus, nextStartAtByStatus]);
 
   // Preference pipeline: fetched issues → max-age → columns in the user's
   // order → hidden columns dropped → manual card order applied.
@@ -357,6 +518,23 @@ export function BoardView({
       // up the cursor and tells the OS this is a move (not a copy).
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', issue.key);
+      // Native HTML dragging otherwise uses a tiny generic cursor badge. Take
+      // a snapshot of the real card so the drag reads as an elevated work item
+      // (rather than an opaque browser/OS artefact) on every platform.
+      const source = event.currentTarget;
+      const preview = source.cloneNode(true) as HTMLElement;
+      const sourceRect = source.getBoundingClientRect();
+      preview.classList.remove('dragging-from');
+      preview.classList.add('issue-card-drag-preview');
+      preview.removeAttribute('data-testid');
+      preview.removeAttribute('data-issue-key');
+      preview.removeAttribute('role');
+      preview.removeAttribute('tabindex');
+      preview.removeAttribute('draggable');
+      preview.style.width = `${Math.round(sourceRect.width)}px`;
+      document.body.append(preview);
+      event.dataTransfer.setDragImage(preview, Math.min(28, sourceRect.width / 2), 28);
+      requestAnimationFrame(() => preview.remove());
       setDraggedKey(issue.key);
       event.currentTarget.classList.add('dragging-from');
     },
@@ -365,11 +543,31 @@ export function BoardView({
       // Drop targets may have been left class-dirty if the dragend fires before
       // dragleave clears them.
       document
-        .querySelectorAll('.board-column-scroll.drag-over, .board-list-group.drag-over')
+        .querySelectorAll('.board-column.drag-over, .board-list-group.drag-over')
         .forEach(node => node.classList.remove('drag-over'));
       setDraggedKey(null);
+      setDropPosition(null);
     }
   });
+
+  const setDropPositionFromPointer = useCallback((column: BoardColumn, target: HTMLElement, clientY: number) => {
+    const cards = [...target.querySelectorAll<HTMLElement>('[data-testid="issue-card"]')]
+      .filter(card => !card.classList.contains('dragging-from'));
+    const next = cards.find(card => clientY < card.getBoundingClientRect().top + card.getBoundingClientRect().height / 2);
+    const last = cards.at(-1);
+    const position: BoardDropPosition = next
+      ? { status: column.name, beforeKey: next.dataset.issueKey }
+      : last
+        ? { status: column.name, afterKey: last.dataset.issueKey }
+        : { status: column.name };
+    setDropPosition(current =>
+      current?.status === position.status &&
+      current.beforeKey === position.beforeKey &&
+      current.afterKey === position.afterKey
+        ? current
+        : position
+    );
+  }, []);
 
   /**
    * Card-level drop: same column → manual reorder (persisted via prefs), and
@@ -382,6 +580,11 @@ export function BoardView({
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = 'move';
+        const rect = event.currentTarget.getBoundingClientRect();
+        setDropPosition({
+          status: column.name,
+          ...(event.clientY < rect.top + rect.height / 2 ? { beforeKey: issue.key } : { afterKey: issue.key })
+        });
       }
     },
     onDrop: (event: React.DragEvent<HTMLElement>) => {
@@ -394,23 +597,17 @@ export function BoardView({
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
         reorderWithinColumn(column, key, issue.key, event.clientY < rect.top + rect.height / 2);
+        setDropPosition(null);
       }
     }
   });
 
   /** Drop-container handlers shared by board columns and list-view groups. */
-  const columnDropProps = (columnName: string) => ({
-    'data-target-status': columnName,
+  const columnDropProps = (column: BoardColumn) => ({
+    'data-target-status': column.name,
     onDragEnter: (event: React.DragEvent<HTMLElement>) => {
-      // Entering the column from outside. Fires for every child too, so guard
-      // against re-entering from a descendant by checking relatedTarget isn't
-      // already inside us.
-      if (
-        draggedKey !== null &&
-        !event.currentTarget.contains(event.relatedTarget as Node | null) &&
-        !event.currentTarget.classList.contains('drag-over')
-      ) {
-        event.currentTarget.classList.add('drag-over');
+      if (draggedKey !== null) {
+        setDropPositionFromPointer(column, event.currentTarget, event.clientY);
       }
     },
     onDragOver: (event: React.DragEvent<HTMLElement>) => {
@@ -419,18 +616,18 @@ export function BoardView({
       if (draggedKey !== null) {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
+        setDropPositionFromPointer(column, event.currentTarget, event.clientY);
       }
     },
     onDragLeave: (event: React.DragEvent<HTMLElement>) => {
       // Firing for every child makes a naive clear cause flicker; only clear
       // when the drag has now exited the column entirely.
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-        event.currentTarget.classList.remove('drag-over');
+        setDropPosition(current => current?.status === column.name ? null : current);
       }
     },
     onDrop: (event: React.DragEvent<HTMLElement>) => {
       const target = event.currentTarget as HTMLElement;
-      target.classList.remove('drag-over');
       const key = event.dataTransfer.getData('text/plain') || draggedKey;
       const targetStatus = target.dataset.targetStatus;
       if (!key || !targetStatus) {
@@ -440,19 +637,26 @@ export function BoardView({
       // let the browser's `dragend` settle so the ghost returns cleanly.
       const sameColumn = effectiveColumns.find(col => col.issues.some(issue => issue.key === key));
       if (sameColumn?.name === targetStatus) {
+        setDropPosition(null);
         return;
       }
       event.preventDefault();
+      setDropPosition(null);
       void onIssueMove(key, targetStatus, connectionId);
     }
   });
 
-  const renderCard = (column: BoardColumn, issue: IssueSummary) => (
+  const renderCard = (column: BoardColumn, issue: IssueSummary) => {
+    const contextAccent = prefs.issueTypeColors?.[issue.issueType] ?? 'var(--accent)';
+    const updated = formatCardDate(issue.updated);
+    const context = issue.parentIssue?.summary ?? issue.parentKey ?? issue.issueType;
+    return (
     <article
       key={issue.key}
       data-testid="issue-card"
+      data-issue-key={issue.key}
       className={`issue-card${issue.key === selectedIssueKey ? ' active' : ''}`}
-      style={{ borderLeftColor: cardAccent(issue) }}
+      style={{ '--issue-card-accent': contextAccent } as CSSProperties}
       {...cardDragProps(issue)}
       {...cardDropProps(column, issue)}
       onClick={() => onOpenIssue(issue.key)}
@@ -465,9 +669,18 @@ export function BoardView({
       }}
     >
       <div className="issue-card-title">{issue.summary}</div>
-      <div className="issue-card-status">{issue.status}</div>
+      <div className="issue-card-meta">
+        <span className="issue-card-context" title={context}>{context}</span>
+        {issue.parentIssue && <span className="issue-card-type">{issue.issueType}</span>}
+      </div>
+      {(updated || issue.priority) && (
+        <div className="issue-card-details">
+          {updated && <span title={`Updated ${updated}`}><Icon name="calendar" size={12} /> Updated {updated}</span>}
+          {issue.priority && <span className="issue-card-priority">{issue.priority}</span>}
+        </div>
+      )}
       <div className="issue-card-foot">
-        <Icon name="ticket" size={13} />
+        <Icon className="issue-card-key-icon" name="check-square" size={13} />
         <span className="issue-card-key">{issue.key}</span>
         <span className="spacer" />
         {issue.assignee && (
@@ -477,10 +690,11 @@ export function BoardView({
         )}
       </div>
     </article>
-  );
+    );
+  };
 
   const renderColumnHeader = (column: BoardColumn) => (
-    <header className="board-column-title">
+    <header className="board-column-title" data-testid="board-column-header">
       <span
         className="board-column-dot"
         data-testid="board-column-dot"
@@ -495,15 +709,29 @@ export function BoardView({
   );
 
   const renderColumn = (column: BoardColumn) => (
-    <section key={column.id} className="board-column">
+    <section
+      key={column.id}
+      className="board-column"
+      data-testid="board-column-lane"
+      {...columnDropProps(column)}
+    >
       {renderColumnHeader(column)}
       <div
         className="board-column-scroll"
         data-testid="board-column"
-        {...columnDropProps(column.name)}
       >
-        {column.issues.map(issue => renderCard(column, issue))}
-        {column.issues.length === 0 && <div className="column-empty">No work items</div>}
+        {column.issues.map(issue => (
+          <span key={issue.key} className="board-card-slot">
+            {dropPosition?.status === column.name && dropPosition.beforeKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+            {renderCard(column, issue)}
+            {dropPosition?.status === column.name && dropPosition.afterKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+          </span>
+        ))}
+        {column.issues.length === 0 && (
+          dropPosition?.status === column.name
+            ? <span className="board-drop-indicator board-drop-indicator-empty" data-testid="board-drop-indicator" aria-hidden="true" />
+            : <div className="column-empty">Drop work here</div>
+        )}
       </div>
     </section>
   );
@@ -513,12 +741,12 @@ export function BoardView({
       {swimLanes.map(lane => (
         <div key={lane.title} className="board-swimlane" data-testid="board-swimlane">
           <div className="board-swimlane-title">{lane.title}</div>
-          <div className="board-columns">{lane.columns.map(renderColumn)}</div>
+          <BoardColumnsCanvas columnCount={lane.columns.length}>{lane.columns.map(renderColumn)}</BoardColumnsCanvas>
         </div>
       ))}
     </div>
   ) : (
-    <div className="board-columns">{effectiveColumns.map(renderColumn)}</div>
+    <BoardColumnsCanvas columnCount={effectiveColumns.length}>{effectiveColumns.map(renderColumn)}</BoardColumnsCanvas>
   );
 
   const listView = (
@@ -528,7 +756,7 @@ export function BoardView({
           key={column.id}
           className="board-list-group"
           data-testid="board-list-group"
-          {...columnDropProps(column.name)}
+          {...columnDropProps(column)}
         >
           {renderColumnHeader(column)}
           {column.issues.map(issue => (

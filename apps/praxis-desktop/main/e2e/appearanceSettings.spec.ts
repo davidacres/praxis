@@ -44,7 +44,7 @@ test('theme gallery previews and persists the selected complete palette', async 
   // The Appearance children only render once their group is expanded.
   await window.locator('[data-testid="settings-nav-appearance-group"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(27);
+  await expect(window.locator('[data-testid^="theme-card-"]')).toHaveCount(28);
   await expect(window.locator('[data-testid="theme-card-praxis-dark"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(window).toHaveScreenshot('theme-gallery.png');
 
@@ -61,6 +61,12 @@ test('theme gallery previews and persists the selected complete palette', async 
   await window.getByRole('searchbox', { name: 'Search themes' }).fill('github');
   await expect(window.locator('[data-testid^="theme-card-github-"]')).toHaveCount(2);
   await expect(window.locator('[data-testid^="theme-card-humanist-"]')).toHaveCount(0);
+
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('jira');
+  const jira = window.locator('[data-testid="theme-card-jira-cloud"]');
+  await expect(jira).toHaveCount(1);
+  await jira.click();
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'jira-cloud');
 });
 
 test('persists the selected theme and mode through app settings', async () => {
@@ -101,6 +107,13 @@ test('startup splash inherits the saved app theme', async () => {
     };
     const trail = splash.querySelector('.startup-splash-trail-thin')!;
     const dot = splash.querySelector('.startup-splash-dot-core')!;
+    const loader = splash.querySelector('.startup-splash-loader')!;
+    const wordmark = splash.querySelector('.startup-splash-svg')!;
+    const outerRing = splash.querySelector('.startup-splash-loader-ring-outer')!;
+    const innerRing = splash.querySelector('.startup-splash-loader-ring-inner')!;
+    const loaderRect = loader.getBoundingClientRect();
+    const wordmarkRect = wordmark.getBoundingClientRect();
+    const innerRingRect = innerRing.getBoundingClientRect();
     return {
       themeBackground: resolveColor(root.getPropertyValue('--bg').trim()),
       themeElevated: resolveColor(root.getPropertyValue('--bg-elevated').trim()),
@@ -108,6 +121,17 @@ test('startup splash inherits the saved app theme', async () => {
       themeAccent: resolveColor(root.getPropertyValue('--accent').trim()),
       splashBackground: getComputedStyle(splash).backgroundImage,
       trail: getComputedStyle(trail).stroke,
+      loaderRingCount: splash.querySelectorAll('.startup-splash-loader-ring').length,
+      loaderWidthRatio: loaderRect.width / wordmarkRect.width,
+      loaderCenterOffsetX: Math.abs(loaderRect.left + loaderRect.width / 2 - (wordmarkRect.left + wordmarkRect.width / 2)),
+      loaderCenterOffsetY: Math.abs(loaderRect.top + loaderRect.height / 2 - (wordmarkRect.top + wordmarkRect.height / 2)),
+      innerRingWidthRatio: innerRingRect.width / loaderRect.width,
+      outerRingAccent: getComputedStyle(outerRing).color,
+      outerRingDirection: getComputedStyle(outerRing).animationDirection,
+      outerRingBackground: getComputedStyle(outerRing).backgroundImage,
+      innerRingAccent: getComputedStyle(innerRing).color,
+      innerRingDirection: getComputedStyle(innerRing).animationDirection,
+      loaderAnimation: getComputedStyle(outerRing).animationName,
       dot: getComputedStyle(dot).stopColor
     };
   });
@@ -115,6 +139,17 @@ test('startup splash inherits the saved app theme', async () => {
   expect(colors.splashBackground).toContain(colors.themeBackground);
   expect(colors.splashBackground).toContain(colors.themeElevated);
   expect(colors.trail).toBe(colors.themeText);
+  expect(colors.loaderRingCount).toBe(2);
+  expect(colors.loaderWidthRatio).toBeCloseTo(0.5, 2);
+  expect(colors.loaderCenterOffsetX).toBeLessThanOrEqual(1);
+  expect(colors.loaderCenterOffsetY).toBeLessThanOrEqual(1);
+  expect(colors.innerRingWidthRatio).toBeGreaterThan(0.9);
+  expect(colors.outerRingAccent).toBe(colors.themeAccent);
+  expect(colors.innerRingAccent).toBe(colors.themeAccent);
+  expect(colors.outerRingBackground).toContain('conic-gradient');
+  expect(colors.outerRingDirection).toBe('normal');
+  expect(colors.innerRingDirection).toBe('reverse');
+  expect(colors.loaderAnimation).toBe('startup-splash-loader-spin');
   expect(colors.dot).toBe(colors.themeAccent);
 });
 

@@ -231,7 +231,7 @@ test('retains an existing PROJECT.md and supports local board transitions and ed
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('imports detected plans as a read-only board for an existing-folder project', async () => {
+test('uses a folder connection for an existing-folder project with plans', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-plans-'));
   const featureFolder = path.join(folder, 'docs', 'plans', 'features', 'feature-01-imported');
   fs.mkdirSync(featureFolder, { recursive: true });
@@ -244,23 +244,25 @@ test('imports detected plans as a read-only board for an existing-folder project
       const workspaceId = (await window.praxis.workspaces.list())[0].id;
       const project = await window.praxis.projects.create({
         name: 'Imported Plans', key: 'IMPORTED', type: 'software', purpose: '', brief: {},
-        startingPoint: 'existing-folder', folderPath, workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+        startingPoint: 'existing-folder', folderPath, storage: 'folder', workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
         starterTickets: [], defaultAiToolMode: 'read-only'
       }, workspaceId);
+      const connection = (await window.praxis.connection.list()).find(
+        item => item.settings.projectId === project.id
+      );
       const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
-      const board = boards.find(item => item.connectionId === project.linkedBoards[0]?.connectionId);
-      return { project, board, details: board ? await window.praxis.board.get(board) : undefined };
+      const board = boards.find(item => item.connectionId === connection?.id);
+      return { project, connection, board, details: board ? await window.praxis.board.get(board) : undefined };
     }, folder);
-    expect(result.project.linkedBoards).toHaveLength(1);
-    expect(result.project.linkedBoards[0].connectionId).toContain('project-plans-');
+    expect(result.connection?.mode).toBe('folder');
     expect(result.board?.name).toBe('Imported Plans');
     expect(result.details?.issues).toHaveLength(1);
     expect(result.details?.issues[0].summary).toBe('Imported planning work');
     await app.window.reload();
     const projectTree = app.window.getByTestId('project-tree').filter({ hasText: 'Imported Plans' });
-    await expect(projectTree.getByTestId('project-linked-board-nav-item')).toContainText('Imported Plans');
+    await expect(projectTree.getByTestId('project-default-board-nav-item')).toContainText('Imported Plans');
     await expect(app.window.locator('.sidebar').getByTestId('board-nav-item').filter({ hasText: 'Imported Plans' })).toHaveCount(0);
-    await projectTree.getByTestId('project-linked-board-nav-item').click();
+    await projectTree.getByTestId('project-default-board-nav-item').click();
     await expect(app.window.getByTestId('issue-card')).toContainText('Imported planning work');
     const importedPlan = projectTree.getByTestId('project-document-nav-item').filter({ hasText: 'Imported planning work' });
     await expect(importedPlan.getByTestId('project-document-status')).toHaveClass(/status-dot/);
@@ -380,6 +382,35 @@ test('ships deterministic workflows and five editable starters for every project
   }
 });
 
+test('a folder-backed project board is served by its folder connection', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-folder-connection-'));
+  const feature = path.join(folder, 'docs', 'plans', 'features', 'feature-01-source');
+  fs.mkdirSync(feature, { recursive: true });
+  fs.writeFileSync(path.join(feature, 'feature.md'), '# Folder source\n\n**Type:** Feature\n**Status:** Backlog\n');
+  try {
+    const result = await app.window.evaluate(async folderPath => {
+      const workspaceId = (await window.praxis.workspaces.list())[0].id;
+      const project = await window.praxis.projects.create({
+        name: 'Folder Source', key: 'FSRC', type: 'software', purpose: '', brief: {},
+        startingPoint: 'existing-folder', folderPath, storage: 'folder',
+        workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+        starterTickets: [], defaultAiToolMode: 'read-only'
+      }, workspaceId);
+      const connection = (await window.praxis.connection.list()).find(item => item.settings.projectId === project.id);
+      const board = (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' }))
+        .find(item => item.connectionId === connection?.id);
+      return { project, connection, board };
+    }, folder);
+
+    expect(result.connection?.mode).toBe('folder');
+    expect(result.connection?.settings.roots).toEqual([folder]);
+    expect(result.board?.connectionId).toBe(result.connection?.id);
+    expect(result.board?.id).toBe('folder-fsrc');
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
 test('attaches a folder later and enforces one-project ownership for linked boards', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-attach-'));
   try {
@@ -393,20 +424,38 @@ test('attaches a folder later and enforces one-project ownership for linked boar
       }, workspaceId);
       const first = await create('First Research', 'FIRST');
       const second = await create('Second Research', 'SECOND');
+      const appConnection = (await window.praxis.connection.list()).find(connection => connection.id === `project:${first.id}`);
+      const appBoard = (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' }))
+        .find(board => board.connectionId === appConnection?.id);
       const attached = await window.praxis.projects.attachFolder(first.id, {
         startingPoint: 'existing-folder', folderPath, createProjectFile: true
       });
+      const attachedConnection = (await window.praxis.connection.list()).find(connection => connection.id === `project:${first.id}`);
+      const attachedBoard = (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' }))
+        .find(board => board.connectionId === attachedConnection?.id);
       const board = { connectionId: 'jira-main', boardId: '42', displayName: 'Delivery' };
       await window.praxis.projects.linkBoard(first.id, board);
       let duplicateError = '';
       try { await window.praxis.projects.linkBoard(second.id, board); }
       catch (error) { duplicateError = error instanceof Error ? error.message : String(error); }
       const unlinked = await window.praxis.projects.unlinkBoard(first.id, board.connectionId, board.boardId);
-      return { attached, duplicateError, linkedCountAfterUnlink: unlinked.linkedBoards.length };
+      return {
+        attached,
+        duplicateError,
+        linkedCountAfterUnlink: unlinked.linkedBoards.length,
+        appConnectionMode: appConnection?.mode,
+        appBoardConnectionId: appBoard?.connectionId,
+        attachedConnectionMode: attachedConnection?.mode,
+        attachedBoardConnectionId: attachedBoard?.connectionId
+      };
     }, folder);
     expect(result.attached.project.workspaceFolder).toBe(folder);
     expect(result.attached.project.defaultAiToolMode).toBe('read-only');
     expect(result.attached.project.folderInspection?.projectFileExists).toBe(true);
+    expect(result.appConnectionMode).toBe('app');
+    expect(result.appBoardConnectionId).toBe(`project:${result.attached.project.id}`);
+    expect(result.attachedConnectionMode).toBe('app');
+    expect(result.attachedBoardConnectionId).toBe(`project:${result.attached.project.id}`);
     expect(result.duplicateError).toContain('already linked');
     expect(result.linkedCountAfterUnlink).toBe(0);
     expect(fs.existsSync(path.join(folder, 'PROJECT.md'))).toBe(true);

@@ -87,7 +87,7 @@ async function openProjectGit(repository: string): Promise<void> {
 
 test.beforeEach(async () => {
   repositories = [];
-  app = await launchTestApp();
+  app = await launchTestApp({ appearance: { themeId: 'jira-cloud', themeMode: 'light' } });
 });
 
 test.afterEach(async () => {
@@ -112,6 +112,35 @@ test('renders the visual Git graph and commit inspector', async () => {
   await firstCommit.focus();
   await firstCommit.press('Enter');
   await expect(window.getByRole('complementary', { name: 'Commit details' })).toContainText('COMMIT DETAILS');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'jira-cloud');
+  const graphSurfaces = await window.evaluate(() => {
+    const resolveColor = (value: string) => {
+      const probe = document.createElement('span');
+      probe.style.color = value;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      return resolved;
+    };
+    const root = getComputedStyle(document.documentElement);
+    const background = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
+    return {
+      page: background('.git-page'),
+      toolbar: background('.git-toolbar'),
+      refs: background('.git-refs'),
+      historyHeader: background('.git-history-header'),
+      inspector: background('.git-inspector'),
+      authorCard: background('.git-author-card'),
+      themeBackground: resolveColor(root.getPropertyValue('--bg').trim()),
+      themeElevated: resolveColor(root.getPropertyValue('--bg-elevated').trim())
+    };
+  });
+  expect(graphSurfaces.page).toBe(graphSurfaces.themeBackground);
+  expect(graphSurfaces.refs).toBe(graphSurfaces.themeBackground);
+  expect(graphSurfaces.inspector).toBe(graphSurfaces.themeBackground);
+  expect(graphSurfaces.toolbar).toBe(graphSurfaces.themeElevated);
+  expect(graphSurfaces.historyHeader).toBe(graphSurfaces.themeElevated);
+  expect(graphSurfaces.authorCard).toBe(graphSurfaces.themeElevated);
   await firstCommit.click({ button: 'right' });
   await expect(window.getByRole('menu', { name: 'Commit actions' })).toBeVisible();
   await window.getByRole('menu', { name: 'Commit actions' }).getByRole('button', { name: '×' }).click();
@@ -120,23 +149,23 @@ test('renders the visual Git graph and commit inspector', async () => {
   await expect(window.getByRole('button', { name: '◇ Merges only' })).toHaveClass(/active/);
   await window.getByRole('button', { name: 'Zoom in' }).click();
   await expect(window.getByRole('region', { name: 'Git Graph' })).toContainText('110%');
-  await window.getByTestId('git-changes').click();
-  await expect(window.getByTestId('git-changes-panel')).toContainText('changed files');
   await window.getByRole('button', { name: 'Git settings' }).click();
   await expect(window.getByRole('region', { name: 'Git Graph' })).toContainText('Git Graph settings');
   await expect(window.getByLabel('Git executable path')).toBeVisible();
   const branchColors = window.getByRole('checkbox', { name: 'Branch colors' });
   await branchColors.click();
   await expect(branchColors).not.toBeChecked();
-  await window.getByRole('button', { name: 'Git settings' }).click();
-  await window.getByRole('button', { name: 'Git settings' }).click();
-  await expect(window.getByRole('checkbox', { name: 'Branch colors' })).not.toBeChecked();
   await window.getByRole('combobox', { name: 'Graph orientation' }).selectOption('horizontal');
   await expect(window.locator('.git-history-horizontal')).toBeVisible();
   await expect(window.getByRole('list', { name: 'Commit history' }).getByRole('listitem').first()).toBeVisible();
   await window.screenshot({ path: 'output/playwright/git-graph-horizontal.png', fullPage: true });
   await window.screenshot({ path: 'output/playwright/git-graph.png', fullPage: true });
 
+  await window.getByTestId('project-git-changes-nav-item').click();
+  await expect(window.getByTestId('git-changes-page')).toBeVisible();
+  await expect(window.getByRole('region', { name: 'Git changes' })).toContainText('Working tree');
+  await expect(window.getByRole('button', { name: 'Review unstaged' })).toBeVisible();
+  await window.screenshot({ path: 'output/playwright/git-changes.png', fullPage: true });
   await window.getByRole('button', { name: 'Review unstaged' }).click();
   await expect(window.getByTestId('git-diff-workspace')).toBeVisible();
   await expect(window.getByRole('complementary', { name: 'Changed files' })).toBeVisible();

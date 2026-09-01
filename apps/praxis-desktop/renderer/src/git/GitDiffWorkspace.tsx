@@ -7,6 +7,8 @@ interface GitDiffWorkspaceProps {
   repositoryPath: string;
   request: GitDiffRequest;
   initialPath?: string;
+  backLabel?: string;
+  sourceLabel?: string;
   onClose: () => void;
   onStatusChanged?: () => void | Promise<void>;
 }
@@ -149,7 +151,7 @@ function buildSelectedLinePatch(hunk: GitDiffHunk, selectedIndexes: number[]): s
   return `${fileHeader}@@ -${hunk.oldStart},${oldLines} +${hunk.newStart},${newLines} @@${suffix}\n${body.join('\n')}\n`;
 }
 
-export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose, onStatusChanged }: GitDiffWorkspaceProps) {
+export function GitDiffWorkspace({ repositoryPath, request, initialPath, backLabel = 'Back to Git graph', sourceLabel = 'Git Graph', onClose, onStatusChanged }: GitDiffWorkspaceProps) {
   const [document, setDocument] = useState<GitDiffDocument>();
   const [selectedFileId, setSelectedFileId] = useState<string>();
   const [viewMode, setViewMode] = useState<GitDiffViewMode>('split');
@@ -271,9 +273,9 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, onClose
 
   return <section className="git-diff-workspace" aria-label="Diff workspace" data-testid="git-diff-workspace">
     <header className="git-diff-commandbar">
-      <button className="git-diff-back" onClick={onClose} aria-label="Back to Git graph">←</button>
+      <button className="git-diff-back" onClick={onClose} aria-label={backLabel}>←</button>
       <div className="git-diff-title">
-        <div><span>Git Graph</span><b>›</b><strong>{document?.title ?? 'Diff'}</strong>{selectedFile && <><b>›</b><span>{fileName(selectedFile.displayPath)}</span></>}</div>
+        <div><span>{sourceLabel}</span><b>›</b><strong>{document?.title ?? 'Diff'}</strong>{selectedFile && <><b>›</b><span>{fileName(selectedFile.displayPath)}</span></>}</div>
         <small>{document?.subtitle ?? 'Preparing comparison…'}</small>
       </div>
       <div className="git-diff-totals" aria-label="Change totals"><span>+{document?.additions ?? 0}</span><b>−{document?.deletions ?? 0}</b></div>

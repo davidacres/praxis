@@ -513,6 +513,8 @@ export class GitLabBoardService implements IssueTrackerService {
         id: `gitlab:${board.project.id}:${board.id}`,
         name: board.name,
         type: 'issue-board',
+        createdBy: board.createdBy,
+        createdAt: board.createdAt,
         projectKey: board.project.pathWithNamespace,
         projectName: board.project.name,
         locationName: this.getConfiguredBaseUrl(),

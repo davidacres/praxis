@@ -102,44 +102,15 @@ const BUILT_IN: SurfacePackDefinition[] = [
   {
     id: 'graphite',
     name: 'Graphite',
-    description: 'Brushed-metal micro-texture, a crisp top bevel, deeper shadows, and a fine triangular lattice. Precision-instrument feel.',
+    description: 'Brushed-metal micro-texture, a crisp top bevel, deeper shadows, and a fine diagonal pattern. Precision-instrument feel.',
     supports: ['light', 'dark'],
     glass: false,
     phase: 1,
     source: 'built-in',
-    pattern: { id: 'triangle', scale: 92, opacity: 0.17, ink: 'text' },
+    pattern: { id: 'diagonal', scale: 92, opacity: 0.17, ink: 'text' },
     swatch: {
       panel: 'linear-gradient(180deg, rgba(255,255,255,.14), transparent 32%), var(--surface-swatch-brushed)',
       blend: 'overlay'
-    }
-  },
-  {
-    id: 'blueprint',
-    name: 'Blueprint',
-    description: 'A drafting grid ruled across every pane, tinted from the accent. Reads as an engineering workspace.',
-    supports: ['light', 'dark'],
-    glass: false,
-    phase: 1,
-    source: 'built-in',
-    pattern: { id: 'grid', scale: 104, opacity: 0.3, ink: 'accent' },
-    // The grid itself comes from the pattern; the swatch only carries the wash.
-    swatch: {
-      canvas: 'linear-gradient(180deg, var(--accent-soft), transparent 60%)'
-    }
-  },
-  {
-    id: 'binary',
-    name: 'Binary',
-    description: 'A quiet field of 0s and 1s with a terminal-like rhythm. Technical, focused, and easy to read over any theme.',
-    supports: ['light', 'dark'],
-    glass: false,
-    phase: 1,
-    source: 'built-in',
-    pattern: { id: 'binary', scale: 112, opacity: 0.2, ink: 'accent' },
-    swatch: {
-      canvas: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%)',
-      panel: 'repeating-linear-gradient(90deg, color-mix(in srgb, var(--text) 5%, transparent) 0 1px, transparent 1px 8px)',
-      blend: 'screen'
     }
   },
   {
@@ -150,7 +121,7 @@ const BUILT_IN: SurfacePackDefinition[] = [
     glass: true,
     phase: 2,
     source: 'built-in',
-    pattern: { id: 'hexagon', scale: 74, opacity: 0.22, ink: 'text' },
+    pattern: { id: 'none', scale: 40, opacity: 0, ink: 'text' },
     swatch: {
       canvas:
         'linear-gradient(120deg, var(--accent-soft), transparent 45%), ' +

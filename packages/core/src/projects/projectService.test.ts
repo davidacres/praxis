@@ -1,11 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
 import type { KeyValueStore } from '../host/stateStore';
 import { ProjectStore, validateProjectRecord } from './projectStore';
 import { createProjectService } from './projectService';
+import { buildProjectConnection } from './projectConnection';
 import type { ProjectRecord, ProjectStorage } from './projectTypes';
 
 const EMPTY_FILTERS = { projectKeys: [], statuses: [], issueTypes: [], searchText: '', assigneeMode: 'all' as const, grouping: 'none' as const };
@@ -40,15 +38,6 @@ function projectRecord(overrides: Partial<ProjectRecord> & { storage?: ProjectSt
   };
 }
 
-async function withPlansFolder(run: (dir: string) => Promise<void>): Promise<void> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-projsvc-'));
-  try {
-    await run(dir);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-}
-
 test('createProjectService: an app-storage project serves its own work items', async () => {
   const store = new ProjectStore(memoryStore());
   await store.create(projectRecord({
@@ -60,52 +49,30 @@ test('createProjectService: an app-storage project serves its own work items', a
   }));
 
   const service = createProjectService(store, 'p1');
-  assert.equal(service.mode, 'project');
+  assert.equal(service.mode, 'app');
   const page = await service.getIssues(EMPTY_FILTERS, 0, 50);
   assert.equal(page.total, 1);
   assert.equal(page.issues[0].summary, 'From app storage');
   service.dispose();
 });
 
-test('createProjectService: a folder-backed project reads the markdown plans tree', async () => {
-  await withPlansFolder(async dir => {
-    const featureDir = path.join(dir, 'features', 'feature-01-first-feature');
-    await fs.mkdir(featureDir, { recursive: true });
-    await fs.writeFile(
-      path.join(featureDir, 'feature-01-first-feature.md'),
-      '**Type:** Feature\n**Status:** Backlog\n\n# First Feature\n',
-      'utf8'
-    );
+test('folder-backed projects use a normal folder connection', () => {
+  const connection = buildProjectConnection(projectRecord({
+    storage: 'folder',
+    workspaceFolder: '/tmp/plans',
+    workItems: []
+  }));
 
-    const store = new ProjectStore(memoryStore());
-    // `workItems` stays empty: a folder-backed project must not read it.
-    await store.create(projectRecord({ storage: 'folder', workspaceFolder: dir, workItems: [] }));
+  assert.equal(connection.mode, 'folder');
+  assert.equal(connection.id, 'project:p1');
+  assert.deepEqual(connection.settings.roots, ['/tmp/plans']);
+  assert.equal(connection.settings.projectKey, 'DEMO');
+});
 
-    const service = createProjectService(store, 'p1');
-    assert.equal(service.mode, 'project');
-
-    const page = await service.getIssues(EMPTY_FILTERS, 0, 50);
-    assert.ok((page.total ?? 0) > 0, 'expected the folder feature to surface as an issue');
-    assert.ok(
-      page.issues.some(issue => issue.summary === 'First Feature'),
-      `feature not found: ${page.issues.map(i => i.summary).join(', ')}`
-    );
-    // Issue keys use the project's key, not the folder default.
-    assert.ok(page.issues.every(issue => issue.projectKey === 'DEMO'));
-
-    // The board keeps the *project's* identity even though the folder service
-    // backs its contents — otherwise navigation would lose the board.
-    const boards = await service.getBoards({ projectKeys: [], types: [], searchText: '' });
-    assert.equal(boards.length, 1);
-    assert.equal(boards[0].id, 'project-board-p1');
-    assert.equal(boards[0].connectionId, 'project:p1');
-    assert.equal(boards[0].type, 'project');
-
-    const details = await service.getBoardDetails(boards[0]);
-    assert.equal(details.board.id, 'project-board-p1');
-    assert.ok(details.issues.length > 0);
-    service.dispose();
-  });
+test('app-owned projects use a normal local connection', () => {
+  const connection = buildProjectConnection(projectRecord({ storage: 'app' }));
+  assert.equal(connection.mode, 'app');
+  assert.equal(connection.settings.projectId, 'p1');
 });
 
 test('a folder-backed project without a workspace folder fails validation', () => {

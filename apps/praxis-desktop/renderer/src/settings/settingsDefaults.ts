@@ -58,14 +58,14 @@ const DEFAULT_PRIORITY_COLORS = {
 } as const;
 
 /** One shipped Look — mirrors core's `builtInLook`; differ only by surface pack. */
-function builtInLook(id: string, name: string, surfacePackId: string) {
+function builtInLook(id: string, name: string, surfacePackId: string, motif?: { id: string; scale: number; opacity: number; ink: 'accent' | 'text' }) {
   return {
     id,
     name,
     themeId: 'praxis-dark',
     themeMode: 'dark' as 'light' | 'dark' | 'system',
     surfacePackId,
-    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
+    surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false, ...(motif ? { motif } : {}) },
     priorityColors: { ...DEFAULT_PRIORITY_COLORS } as Record<string, string>,
     showBrandArtwork: true
   };
@@ -74,7 +74,7 @@ function builtInLook(id: string, name: string, surfacePackId: string) {
 /** The four Looks the strip is seeded with — keep in sync with core's `BUILT_IN_LOOKS`. */
 export const BUILT_IN_LOOKS = [
   builtInLook('look-parchment', 'Parchment', 'parchment'),
-  builtInLook('look-blueprint', 'Blueprint', 'blueprint'),
+  builtInLook('look-blueprint', 'Blueprint', 'parchment', { id: 'grid', scale: 104, opacity: 0.3, ink: 'accent' }),
   builtInLook('look-aurora', 'Aurora', 'aurora-glass'),
   builtInLook('look-flat', 'Flat', 'flat')
 ];
@@ -119,11 +119,11 @@ export const DEFAULT_APP_SETTINGS = {
     showBrandArtwork: true,
     themeId: 'praxis-dark',
     themeMode: 'dark' as 'light' | 'dark' | 'system',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'anthropic-light', 'anthropic-dark'] as string[],
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'jira-cloud', 'anthropic-light', 'anthropic-dark'] as string[],
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },
-    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'blueprint', 'binary', 'aurora-glass', 'noir'] as string[],
+    installedSurfacePackIds: ['flat', 'parchment', 'graphite', 'aurora-glass', 'noir'] as string[],
     customSurfacePacks: [] as Array<{ id: string; name: string; description: string; basePackId?: string; tokens: Record<string, string> }>,
     looks: BUILT_IN_LOOKS.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
     activeLookId: 'look-parchment',

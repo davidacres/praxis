@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AgentToolMode, Board, ProjectRecord, ProjectStartingPoint, ProjectType } from '@praxis/core';
+import type { AgentToolMode, Board, Connection, ProjectRecord, ProjectStartingPoint, ProjectType } from '@praxis/core';
 // Deep import on purpose: `@praxis/core`'s barrel pulls in node-only services
 // (chokidar, node:fs) that cannot be bundled for the browser — importing
 // PROJECT_BRIEF_FIELDS from the package root fails the vite build.
@@ -12,7 +12,7 @@ const TOOL_MODE_LABEL: Record<AgentToolMode, string> = {
   full: 'Full tools'
 };
 
-export function ProjectHome({ project, boards, onChanged }: { project: ProjectRecord; boards: Board[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
+export function ProjectHome({ project, boards, connections, onChanged }: { project: ProjectRecord; boards: Board[]; connections: Connection[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
   const [editing, setEditing] = useState(false);
   const [type, setType] = useState<ProjectType>(project.type);
   const [toolMode, setToolMode] = useState<AgentToolMode>(project.defaultAiToolMode);
@@ -23,7 +23,9 @@ export function ProjectHome({ project, boards, onChanged }: { project: ProjectRe
   const [attachPath, setAttachPath] = useState('');
   const [folderName, setFolderName] = useState('');
 
-  const candidates = boards.filter(board => !board.connectionId?.startsWith('project:') && board.connectionId && !project.linkedBoards.some(link => link.connectionId === board.connectionId && link.boardId === board.id));
+  const candidates = boards.filter(board => board.connectionId
+    && connections.find(connection => connection.id === board.connectionId)?.settings.projectId !== project.id
+    && !project.linkedBoards.some(link => link.connectionId === board.connectionId && link.boardId === board.id));
   const briefFields = PROJECT_BRIEF_FIELDS[editing ? type : project.type];
   const filled = (project.purpose.trim() ? 1 : 0) + briefFields.filter(field => (project.brief[field.key] ?? '').trim()).length;
   const briefTotal = briefFields.length + 1;

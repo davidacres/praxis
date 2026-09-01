@@ -51,6 +51,52 @@ test('board toolbar keeps creation actions left and icon-only tools right', asyn
   expect(designerBox!.x).toBeLessThan(settingsBox!.x);
 });
 
+test('kanban keeps lane headers pinned while one canvas owns board scrolling', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await openApplicationBoard(win);
+
+  const canvas = win.locator('.board-columns').first();
+  const firstColumn = canvas.locator('.board-column').first();
+  const header = firstColumn.getByTestId('board-column-header');
+  const cards = firstColumn.getByTestId('board-column');
+  const frame = win.locator('.board-columns-frame').first();
+  const dividers = frame.getByTestId('board-column-divider');
+
+  await expect(canvas).toHaveCSS('overflow-x', 'auto');
+  await expect(canvas).toHaveCSS('overflow-y', 'auto');
+  await expect(header).toHaveCSS('position', 'sticky');
+  await expect(cards).toHaveCSS('overflow-y', 'visible');
+  await expect(firstColumn).toHaveCSS('min-height', '100%');
+  await expect(dividers).toHaveCount(4);
+
+  const geometry = () => win.evaluate(() => {
+    const frame = document.querySelector('.board-columns-frame')?.getBoundingClientRect();
+    const divider = document.querySelector('[data-testid="board-column-divider"]')?.getBoundingClientRect();
+    return frame && divider
+      ? { frameTop: Math.round(frame.top), frameHeight: Math.round(frame.height), dividerTop: Math.round(divider.top), dividerHeight: Math.round(divider.height) }
+      : undefined;
+  });
+  const initial = await geometry();
+  expect(initial).toBeDefined();
+  expect(initial!.dividerTop).toBe(initial!.frameTop);
+  expect(initial!.dividerHeight).toBe(initial!.frameHeight);
+
+  await canvas.evaluate(element => { element.scrollTop = 160; });
+  await expect.poll(geometry).toEqual(initial);
+
+  await win.setViewportSize({ width: 1200, height: 700 });
+  await expect.poll(geometry).toEqual(expect.objectContaining({
+    dividerTop: initial!.frameTop,
+    dividerHeight: expect.any(Number),
+    frameTop: initial!.frameTop,
+    frameHeight: expect.any(Number)
+  }));
+  const resized = await geometry();
+  expect(resized!.dividerHeight).toBe(resized!.frameHeight);
+  expect(resized!.frameHeight).toBeLessThan(initial!.frameHeight);
+});
+
 test('list view persists across relaunch', async () => {
   app = await launchTestApp();
   await openApplicationBoard(app.window);
@@ -59,9 +105,9 @@ test('list view persists across relaunch', async () => {
   await app.window.locator('[data-testid="board-prefs-view-list"]').click();
   const listView = app.window.locator('[data-testid="board-list-view"]');
   await expect(listView).toBeVisible();
-  // 25 first-page cards across five status groups.
+  // Every demo status fits within the ten-card per-column first page.
   await expect(app.window.locator('[data-testid="board-list-group"]')).toHaveCount(5);
-  await expect(listView.locator('[data-testid="issue-card"]')).toHaveCount(25);
+  await expect(listView.locator('[data-testid="issue-card"]')).toHaveCount(33);
 
   // Relaunch into the same profile — the preference must survive the restart.
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
@@ -114,7 +160,7 @@ test('swim lanes group columns by assignee', async () => {
 test('max-age preference hides stale issues', async () => {
   app = await launchTestApp();
   await openApplicationBoard(app.window);
-  await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(25);
+  await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(33);
 
   await openDisplayMenu(app.window);
   // Every demo issue was last updated in March 2026, well over a week ago.
@@ -125,7 +171,7 @@ test('max-age preference hides stale issues', async () => {
 
   // Back to all time, cards return.
   await app.window.locator('[data-testid="board-prefs-max-age"]').selectOption('0');
-  await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(25);
+  await expect(app.window.locator('[data-testid="issue-card"]')).toHaveCount(33);
 });
 
 test('column visibility and order reshape the board', async () => {

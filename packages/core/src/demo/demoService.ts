@@ -72,6 +72,8 @@ interface DemoBoard {
   id: string;
   name: string;
   type: 'scrum' | 'kanban';
+  createdBy: string;
+  createdAt: string;
   projectKey: string;
   projectName: string;
   locationName: string;
@@ -320,6 +322,8 @@ function createSeedBoards(): DemoBoard[] {
       id: 'board-app',
       name: 'Application Board',
       type: 'scrum',
+      createdBy: 'Alex Agent',
+      createdAt: '2026-03-20T09:00:00.000Z',
       projectKey: 'APP',
       projectName: 'Application Platform',
       locationName: 'Application Platform',
@@ -329,6 +333,8 @@ function createSeedBoards(): DemoBoard[] {
       id: 'board-ops',
       name: 'Operations Board',
       type: 'kanban',
+      createdBy: 'Morgan Operator',
+      createdAt: '2026-03-21T10:30:00.000Z',
       projectKey: 'OPS',
       projectName: 'Operations',
       locationName: 'Operations',
@@ -338,6 +344,8 @@ function createSeedBoards(): DemoBoard[] {
       id: 'board-overview',
       name: 'Platform Overview',
       type: 'scrum',
+      createdBy: 'Alex Agent',
+      createdAt: '2026-03-22T14:15:00.000Z',
       projectKey: 'APP',
       projectName: 'Application Platform',
       locationName: 'Application Platform',
@@ -403,6 +411,8 @@ function toBoard(board: DemoBoard): Board {
     id: board.id,
     name: board.name,
     type: board.type,
+    createdBy: board.createdBy,
+    createdAt: board.createdAt,
     projectKey: board.projectKey,
     projectName: board.projectName,
     locationName: board.locationName,
@@ -578,6 +588,8 @@ export class DemoService implements IssueTrackerService {
       id: `demo-board-${this.boards.length + 1}-${Date.now()}`,
       name,
       type: 'scrum',
+      createdBy: DEMO_CURRENT_USER,
+      createdAt: new Date().toISOString(),
       projectKey: project.key,
       projectName: project.name,
       locationName: project.name,
