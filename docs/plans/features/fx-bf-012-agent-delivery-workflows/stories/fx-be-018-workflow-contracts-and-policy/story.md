@@ -1,10 +1,10 @@
 ---
 id: FX-BE-018
 title: Workflow definition, policy, and validation contracts
-status: proposed
+status: complete
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-018-workflow-contracts-and-policy/issue.md
-updated: 2026-09-01
+updated: 2026-09-02
 tasks: [TASK-092, TASK-093, TASK-094]
 dependencies: [FX-BF-009, FX-BF-010, FX-BF-011]
 validation: [npm run build:core, npm run test:core, npm run check-types]

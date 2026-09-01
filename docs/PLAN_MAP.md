@@ -70,14 +70,14 @@
 | TASK-090 | Task | Move runtime management to advanced Settings | Proposed | FX-BE-017 |
 | TASK-091 | Task | Add desktop E2E and accessibility verification | Proposed | FX-BE-017 |
 | FX-BF-012 | Feature | Governed agent delivery workflows | Proposed | FX-BF-009, FX-BF-010, FX-BF-011 |
-| FX-BE-018 | Story | Workflow definition, policy, and validation contracts | Proposed | FX-BF-012 |
+| FX-BE-018 | Story | Workflow definition, policy, and validation contracts | Complete | FX-BF-012 |
 | FX-BE-019 | Story | Workflow execution, persistence, and recovery | Proposed | FX-BE-012 |
 | FX-BE-020 | Story | Agent session stages, gates, artifacts, and approvals | Proposed | FX-BE-012 |
 | FX-BE-021 | Story | Visual workflow designer and template library | Proposed | FX-BE-012 |
 | FX-BE-022 | Story | Run monitor, delivery template, and end-to-end verification | Proposed | FX-BE-012 |
-| TASK-092 | Task | Add workflow contract types | Proposed | FX-BE-018 |
-| TASK-093 | Task | Implement workflow validation and migration | Proposed | FX-BE-018 |
-| TASK-094 | Task | Add workflow and policy stores | Proposed | FX-BE-018 |
+| TASK-092 | Task | Add workflow contract types | Complete | FX-BE-018 |
+| TASK-093 | Task | Implement workflow validation and migration | Complete | FX-BE-018 |
+| TASK-094 | Task | Add workflow and policy stores | Complete | FX-BE-018 |
 | TASK-095 | Task | Implement WorkflowRun persistence | Proposed | FX-BE-019 |
 | TASK-096 | Task | Implement workflow scheduler and joins | Proposed | FX-BE-019 |
 | TASK-097 | Task | Add workflow retry and recovery controls | Proposed | FX-BE-019 |
