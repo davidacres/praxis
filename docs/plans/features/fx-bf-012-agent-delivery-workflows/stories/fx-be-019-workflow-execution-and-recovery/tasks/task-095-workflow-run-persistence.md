@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.663Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-095
 title: Implement WorkflowRun persistence
-status: proposed
+status: complete
 story: FX-BE-019
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [FX-BE-018]
 validation: [npm run build:core, npm run test:core]
 ---

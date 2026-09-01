@@ -15,7 +15,7 @@
 | FX-BE-016 | Skill activation and session handoff | Proposed | [issue](features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-016-skill-activation-and-session-handoff/issue.md) |
 | FX-BE-017 | Advanced Settings boundary and verification | Proposed | [issue](features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-017-agent-hub-verification-and-settings-migration/issue.md) |
 | FX-BE-018 | Workflow definition, policy, and validation contracts | Complete | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-018-workflow-contracts-and-policy/issue.md) |
-| FX-BE-019 | Workflow execution, persistence, and recovery | Proposed | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-019-workflow-execution-and-recovery/issue.md) |
+| FX-BE-019 | Workflow execution, persistence, and recovery | Complete | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-019-workflow-execution-and-recovery/issue.md) |
 | FX-BE-020 | Agent session stages, gates, artifacts, and approvals | Proposed | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-020-agent-session-gates-and-artifacts/issue.md) |
 | FX-BE-021 | Visual workflow designer and template library | Proposed | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-021-visual-workflow-designer/issue.md) |
 | FX-BE-022 | Run monitor, delivery template, and end-to-end verification | Proposed | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-022-run-monitor-and-delivery-template/issue.md) |

@@ -1,0 +1,135 @@
+/**
+ * Timeout, cancellation, and restart recovery (FX-BE-019 / TASK-097).
+ *
+ * The hard requirement is that a completed stage is never done twice. A run is
+ * persisted after every transition, so what survives a crash is an accurate
+ * record of settled stages plus, at most, one or more attempts that were still
+ * in flight. Recovery closes those attempts — it does not resume them.
+ *
+ * That choice is deliberate. The app cannot know whether an agent session that
+ * died mid-stage left the worktree half-written, so it records what it saw,
+ * marks the attempt interrupted, and surfaces an explicit retry. Silently
+ * re-running would risk duplicating side effects; silently continuing would
+ * risk building on a half-finished change.
+ */
+
+import { isAgentTaskNode, isCheckNode, isTerminalOutcome } from './workflowTypes';
+import {
+  applyWorkflowRunCommand,
+  canRetry,
+  isRunSettled,
+  type WorkflowRun
+} from './workflowRun';
+import { scheduleWorkflowRun } from './workflowScheduler';
+
+export interface WorkflowRecoveryResult {
+  run: WorkflowRun;
+  /** Attempts that were in flight when the app stopped. */
+  interrupted: string[];
+}
+
+/**
+ * Reconciles a run loaded from storage against the fact that the process
+ * restarted. Completed nodes are left exactly as they are.
+ */
+export function recoverWorkflowRun(run: WorkflowRun, at: string): WorkflowRecoveryResult {
+  if (isRunSettled(run)) return { run, interrupted: [] };
+
+  const interrupted = Object.values(run.nodes)
+    .filter(state => state.outcome === 'running')
+    .map(state => state.nodeId)
+    .sort();
+
+  let next = run;
+  for (const nodeId of interrupted) {
+    next = applyWorkflowRunCommand(next, { kind: 'node-interrupted', nodeId, at });
+  }
+
+  return { run: next, interrupted };
+}
+
+/**
+ * Nodes whose in-flight attempt has outrun its timeout.
+ *
+ * Returned rather than applied so the caller decides — the orchestrator kills
+ * the underlying session first, then records the timeout.
+ */
+export function findTimedOutNodes(run: WorkflowRun, now: string): string[] {
+  const nowMs = Date.parse(now);
+  if (Number.isNaN(nowMs)) return [];
+
+  return Object.values(run.nodes)
+    .filter(state => state.outcome === 'running')
+    .filter(state => {
+      const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
+      const timeoutMs = node && (isAgentTaskNode(node) || isCheckNode(node)) ? node.timeoutMs : undefined;
+      if (!timeoutMs) return false;
+      const startedAt = Date.parse(state.attempts[state.attempts.length - 1]?.startedAt ?? '');
+      return !Number.isNaN(startedAt) && nowMs - startedAt > timeoutMs;
+    })
+    .map(state => state.nodeId)
+    .sort();
+}
+
+export type WorkflowNextAction =
+  | { kind: 'start-stage'; nodeId: string; label: string }
+  | { kind: 'retry-stage'; nodeId: string; label: string; attemptsUsed: number; maxAttempts: number }
+  | { kind: 'approve'; nodeId: string; label: string }
+  | { kind: 'cancel-run'; label: string }
+  | { kind: 'none'; label: string };
+
+/**
+ * What a person can actually do with this run right now.
+ *
+ * Every non-terminal state resolves to at least one concrete action, so a
+ * failed, cancelled, or waiting run never presents as a dead end.
+ */
+export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
+  if (isRunSettled(run)) {
+    return [{ kind: 'none', label: `Run ${run.status}${run.endedReason ? `: ${run.endedReason}` : '.'}` }];
+  }
+
+  const schedule = scheduleWorkflowRun(run);
+  const actions: WorkflowNextAction[] = [];
+  const label = (nodeId: string): string =>
+    run.definition.nodes.find(node => node.id === nodeId)?.name ?? nodeId;
+
+  for (const nodeId of schedule.awaitingApproval) {
+    actions.push({ kind: 'approve', nodeId, label: `Approve at ${label(nodeId)}` });
+  }
+  for (const nodeId of schedule.ready) {
+    actions.push({ kind: 'start-stage', nodeId, label: `Start ${label(nodeId)}` });
+  }
+
+  for (const state of Object.values(run.nodes)) {
+    if (state.outcome !== 'failed' || !canRetry(run, state.nodeId)) continue;
+    const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
+    const maxAttempts = (node && (isAgentTaskNode(node) || isCheckNode(node)) ? node.maxAttempts : undefined) ?? 1;
+    actions.push({
+      kind: 'retry-stage',
+      nodeId: state.nodeId,
+      label: `Retry ${label(state.nodeId)}`,
+      attemptsUsed: state.attempts.length,
+      maxAttempts
+    });
+  }
+
+  if (schedule.running.length > 0 || actions.length > 0) {
+    actions.push({ kind: 'cancel-run', label: 'Cancel run' });
+    return actions;
+  }
+
+  // Nothing runnable and nothing settled: say why, and still offer the exit.
+  return [
+    { kind: 'none', label: schedule.blocked ?? 'Waiting.' },
+    { kind: 'cancel-run', label: 'Cancel run' }
+  ];
+}
+
+/** Stages left unfinished, for a monitor summary line. */
+export function outstandingNodes(run: WorkflowRun): string[] {
+  return Object.values(run.nodes)
+    .filter(state => !isTerminalOutcome(state.outcome))
+    .map(state => state.nodeId)
+    .sort();
+}

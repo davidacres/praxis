@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.663Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-097
 title: Add workflow retry and recovery controls
-status: proposed
+status: complete
 story: FX-BE-019
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [TASK-095, TASK-096]
 validation: [npm run build:core, npm run test:core, npm run build:desktop]
 ---
