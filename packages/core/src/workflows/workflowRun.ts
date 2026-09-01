@@ -81,6 +81,12 @@ export interface WorkflowNodeState {
   outcome: WorkflowNodeOutcome;
   attempts: WorkflowNodeAttempt[];
   artifacts: WorkflowArtifactRef[];
+  /**
+   * The immutable implementation ref this stage produced — a commit sha or
+   * worktree ref. Review, QA, and security inspect *this*, not whatever the
+   * worktree happens to hold by the time they run.
+   */
+  snapshotRef?: string;
 }
 
 export interface WorkflowRun {
@@ -111,6 +117,8 @@ export type WorkflowRunCommand =
       at: string;
       artifacts?: Array<Pick<WorkflowArtifactRef, 'contractId' | 'kind'> & { path?: string; artifactId?: string }>;
       exitCode?: number;
+      /** Commit or worktree ref this stage froze, for downstream inspection. */
+      snapshotRef?: string;
     }
   | { kind: 'node-failed'; nodeId: string; at: string; error: string; exitCode?: number }
   | { kind: 'node-timed-out'; nodeId: string; at: string }
@@ -165,7 +173,8 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
     case 'node-succeeded':
       return settleNode(run, command.nodeId, 'succeeded', command.at, {
         exitCode: command.exitCode,
-        artifacts: command.artifacts
+        artifacts: command.artifacts,
+        snapshotRef: command.snapshotRef
       });
     case 'node-failed':
       return settleNode(run, command.nodeId, 'failed', command.at, {
@@ -227,6 +236,7 @@ function settleNode(
     error?: string;
     exitCode?: number;
     timedOut?: boolean;
+    snapshotRef?: string;
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
   }
 ): WorkflowRun {
@@ -261,7 +271,13 @@ function settleNode(
     ...(error ? { error } : {})
   };
 
-  let next = withNode(run, { ...state, outcome: effective, attempts, artifacts });
+  let next = withNode(run, {
+    ...state,
+    outcome: effective,
+    attempts,
+    artifacts,
+    ...(effective === 'succeeded' && detail.snapshotRef ? { snapshotRef: detail.snapshotRef } : {})
+  });
   next = append(next, {
     at,
     kind: detail.timedOut ? 'node-timed-out' : effective === 'succeeded' ? 'node-succeeded' : 'node-failed',
@@ -471,7 +487,8 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       nodeId: node.id,
       outcome: isOutcome(stored?.outcome) ? stored.outcome : 'pending',
       attempts: Array.isArray(stored?.attempts) ? stored.attempts : [],
-      artifacts: Array.isArray(stored?.artifacts) ? stored.artifacts : []
+      artifacts: Array.isArray(stored?.artifacts) ? stored.artifacts : [],
+      ...(typeof stored?.snapshotRef === 'string' ? { snapshotRef: stored.snapshotRef } : {})
     };
   }
 

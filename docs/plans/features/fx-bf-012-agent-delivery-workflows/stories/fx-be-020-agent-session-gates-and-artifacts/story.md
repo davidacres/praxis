@@ -1,10 +1,10 @@
 ---
 id: FX-BE-020
 title: Agent session stages, gates, artifacts, and approvals
-status: proposed
+status: complete
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-020-agent-session-gates-and-artifacts/issue.md
-updated: 2026-09-01
+updated: 2026-09-02
 tasks: [TASK-098, TASK-099, TASK-100]
 dependencies: [FX-BE-018, FX-BE-019, FX-BF-009, FX-BF-011]
 validation: [npm run build:core, npm run build:desktop, npm run test:core, npm run test:desktop]
