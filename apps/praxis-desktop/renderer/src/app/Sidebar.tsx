@@ -52,6 +52,7 @@ export interface SidebarProps {
   mode: SidebarMode;
   onModeChange: (mode: SidebarMode) => void;
   activeFeature: FeatureId | undefined;
+  activeGitView?: 'graph' | 'changes' | 'conflicts';
   onSelectFeature: (feature: FeatureId) => void;
   featureCounts: Partial<Record<FeatureId, number>>;
   onNewSession: () => void;
@@ -91,6 +92,7 @@ export function Sidebar({
   mode,
   onModeChange,
   activeFeature,
+  activeGitView,
   onSelectFeature,
   featureCounts,
   onNewSession,
@@ -122,9 +124,8 @@ export function Sidebar({
   // Brand artwork vs generic board-type glyphs — Appearance setting, applied
   // live through the settings push channel.
   const showBrandArtwork = settings?.appearance.showBrandArtwork ?? true;
-  // A board's mark comes from its backend. Project boards resolve through their
-  // synthetic `project:<id>` id; the built-in boards have no connection at all
-  // and fall back to the demo mark.
+  // A board's mark comes from its real connection; built-in boards have no
+  // connection and fall back to the demo mark.
   const boardMode = (board: Board) => resolveBackendMode(board.connectionId, connections);
   // The "Praxis" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
@@ -153,7 +154,8 @@ export function Sidebar({
   const projectEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return visibleProjects.map(project => {
-      const defaultBoard = boards.find(board => board.id === project.defaultBoardId && board.connectionId === `project:${project.id}`);
+      const projectConnection = connections.find(connection => connection.settings.projectId === project.id);
+      const defaultBoard = boards.find(board => board.connectionId === projectConnection?.id);
       const linkedBoards = project.linkedBoards.flatMap(link => {
         const board = boards.find(candidate => candidate.id === link.boardId && candidate.connectionId === link.connectionId);
         return board ? [{ link, board }] : [];
@@ -170,7 +172,6 @@ export function Sidebar({
           board
         }));
       const allLinkedBoards = [...linkedBoards, ...discoveredLinkedBoards];
-      const importedPlans = allLinkedBoards.some(({ link }) => link.connectionId.startsWith('project-plans-'));
       const matchesProject = !needle || `${project.name} ${project.key} ${project.type}`.toLowerCase().includes(needle);
       const matchesDefault = defaultBoard?.name.toLowerCase().includes(needle);
       const matchingLinkedBoards = needle && !matchesProject
@@ -178,19 +179,13 @@ export function Sidebar({
         : allLinkedBoards;
       return {
         project,
-        // An existing-folder project with detected plans is represented by
-        // its live source board; hiding the empty Praxis board avoids making
-        // users choose between two competing “defaults”.
-        defaultBoard: !importedPlans && (!needle || matchesProject || matchesDefault) ? defaultBoard : undefined,
+        defaultBoard: !needle || matchesProject || matchesDefault ? defaultBoard : undefined,
         linkedBoards: matchingLinkedBoards,
         visible: matchesProject || Boolean(matchesDefault) || matchingLinkedBoards.length > 0
       };
     }).filter(entry => entry.visible);
-  }, [boards, visibleProjects, query]);
-  const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ project, defaultBoard, linkedBoards }) => [
-    // Keep hidden imported-project boards out of the global Boards section;
-    // they are implementation details once the live source is linked.
-    `${`project:${project.id}`}:${project.defaultBoardId}`,
+  }, [boards, connections, visibleProjects, query]);
+  const projectBoardKeys = useMemo(() => new Set(projectEntries.flatMap(({ defaultBoard, linkedBoards }) => [
     ...(defaultBoard ? [`${defaultBoard.connectionId}:${defaultBoard.id}`] : []),
     ...linkedBoards.map(({ board }) => `${board.connectionId}:${board.id}`)
   ])), [projectEntries]);
@@ -427,7 +422,7 @@ export function Sidebar({
                           <span className={`tree-section-icon${projectGitCollapsed ? '' : ' open'}`}><Icon name="git-branch" size={13} /></span><span>Repository</span><span className="tree-meta">{project.workspaceFolder ? '1' : 'Setup'}</span>
                         </button>
                         {!projectGitCollapsed && <button
-                          className={`tree-row project-git-row${activeFeature === 'git' && selectedProjectId === project.id ? ' active' : ''}`}
+                          className={`tree-row project-git-row${activeFeature === 'git' && activeGitView !== 'changes' && selectedProjectId === project.id ? ' active' : ''}`}
                           data-testid="project-git-nav-item"
                           // Reachable without a workspace on purpose: Git Graph
                           // then shows the setup screen, which explains what is
@@ -436,7 +431,7 @@ export function Sidebar({
                           title={!project.workspaceFolder ? 'Set up a Git workspace for this project' : undefined}
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
-                        {!projectGitCollapsed && project.workspaceFolder && <button className="tree-row project-git-child" data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
+                        {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
                         {projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
                             <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>

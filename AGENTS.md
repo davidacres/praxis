@@ -29,6 +29,15 @@ bundle (see the `settingsDefaults.ts` note below).
 
 Plain React in a normal DOM.
 
+All confirmations, alerts, prompts, and destructive-action warnings must use
+themed in-app UI. Never use native OS/browser dialogs such as `window.confirm`,
+`window.alert`, or `window.prompt`; they do not match the Praxis visual system.
+
+Do not put board or entity identity icons inside decorative bordered or filled
+tiles solely to sit beside a title. Render identity icons directly on the themed
+surface; reserve bordered icon containers for interactive controls or meaningful
+status indicators.
+
 `renderer/src` is grouped by feature. Put a new file in the folder that owns its
 screen; only genuinely cross-cutting primitives belong in `ui/`.
 

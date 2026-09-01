@@ -72,10 +72,26 @@ test('normal launch does not include built-in demo data', async () => {
 });
 
 test('selecting a board renders its columns and issue cards', async () => {
+  // Board selection owns the secondary sidebar even when the user previously
+  // hid it: selecting a board is an explicit request for board context.
+  await window.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
   await window.locator('[data-testid="nav-overview"]').click();
   await window.locator('.overview-board-card').first().click();
   const issueCards = window.locator('[data-testid="issue-card"]');
   await expect(issueCards.first()).toBeVisible();
+
+  const details = window.locator('[data-testid="board-details-panel"]');
+  await expect(details).toBeVisible();
+  await expect(details.getByRole('heading', { name: 'Application Board' })).toBeVisible();
+  const boardIdentityIcon = details.locator('.board-details-icon');
+  await expect(boardIdentityIcon).toHaveCSS('border-top-width', '0px');
+  await expect(boardIdentityIcon).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(details.locator('[data-testid="board-detail-connection"]')).toContainText('Demo');
+  await expect(details.locator('[data-testid="board-detail-creator"]')).toHaveText('Alex Agent');
+  await expect(details.getByRole('heading', { name: 'Work item stats' })).toBeVisible();
+  await expect(details.locator('[data-testid="board-stat-total"]')).not.toHaveText('0');
+  await expect(details.locator('[data-testid="board-stat-stories"]')).toBeVisible();
+  await expect(details.locator('[data-testid="board-status-breakdown"]')).toContainText('Done');
 });
 
 test('opening an issue card shows the issue detail panel', async () => {
@@ -126,17 +142,14 @@ test('adding and removing a connection updates the list', async () => {
   const row = window.locator('[data-testid="connection-row"]', { hasText: name });
   await expect(row).toBeVisible();
 
-  // The saved connection stays selected; removal is a two-step confirm. Both
-  // buttons carry `disabled={busy}`, and the row can appear from the list
-  // refresh while the form is still saving — so wait for each to be *enabled*
-  // rather than merely present, otherwise the click lands in the disabled
-  // window and is dropped. This was an intermittent failure under load.
-  const removeButton = window.locator('[data-testid="conn-remove-btn"]');
+  // A connection with a board cannot be deleted until the board is removed.
+  await window.locator('[data-testid="tracked-board-row"]', { hasText: name }).getByRole('button').click();
+  const removeButton = row.getByRole('button', { name: `Remove ${name}` });
   await expect(removeButton).toBeEnabled();
   await removeButton.click();
 
-  const confirmButton = window.locator('[data-testid="conn-remove-confirm-btn"]');
-  await expect(confirmButton).toBeEnabled();
+  const confirmButton = window.getByRole('button', { name: 'Remove', exact: true });
+  await expect(confirmButton).toBeVisible();
   await confirmButton.click();
 
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).not.toBeVisible();

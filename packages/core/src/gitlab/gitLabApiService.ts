@@ -49,6 +49,8 @@ export interface GitLabBoardList {
 export interface GitLabBoard {
   id: number;
   name: string;
+  createdBy?: string;
+  createdAt?: string;
   project: GitLabProject;
   webUrl?: string;
   hideBacklogList: boolean;
@@ -493,6 +495,11 @@ function normalizeBoard(raw: Record<string, unknown>): GitLabBoard {
   const rawMilestone = typeof raw.milestone === 'object' && raw.milestone !== null
     ? raw.milestone as Record<string, unknown>
     : undefined;
+  const rawCreator = typeof raw.creator === 'object' && raw.creator !== null
+    ? raw.creator as Record<string, unknown>
+    : typeof raw.author === 'object' && raw.author !== null
+      ? raw.author as Record<string, unknown>
+      : undefined;
   const rawLabels = Array.isArray(raw.labels)
     ? raw.labels as Array<Record<string, unknown> | string>
     : [];
@@ -503,6 +510,8 @@ function normalizeBoard(raw: Record<string, unknown>): GitLabBoard {
   return {
     id: Number(raw.id ?? 0),
     name: asString(raw.name) ?? '',
+    createdBy: asString(rawCreator?.name) ?? asString(rawCreator?.username),
+    createdAt: asString(raw.created_at),
     project: normalizeProject(rawProject),
     webUrl: asString(raw.web_url) ?? asString(rawProject.web_url),
     hideBacklogList: raw.hide_backlog_list === true,

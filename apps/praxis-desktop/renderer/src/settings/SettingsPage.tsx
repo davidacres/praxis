@@ -65,7 +65,7 @@ const APPEARANCE_GROUP: NavGroupDef = {
   id: 'appearance-group',
   label: 'Appearance',
   icon: 'theme',
-  children: ['appearance-themes', 'appearance-looks', 'appearance-surfaces']
+  children: ['appearance-themes', 'appearance-surfaces', 'appearance-looks']
 };
 
 /** Ordered nav model — flat items with the Appearance group spliced in where "Themes" used to sit. */
@@ -189,7 +189,7 @@ interface SettingsPageProps {
 export function SettingsPage({ connections, onOpenConnections, initialCategory = 'overview' }: SettingsPageProps) {
   const [active, setActive] = useState<SettingsCategory>(initialCategory);
   const [resettingData, setResettingData] = useState(false);
-  const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data'>();
+  const [resetConfirmation, setResetConfirmation] = useState<'defaults' | 'sessions' | 'project-data' | 'appearance'>();
   const { settings, update, error } = useSettings();
 
   const resetToDefaults = async () => {
@@ -207,6 +207,32 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
     }
   };
 
+  const resetAppearanceToFactory = async () => {
+    const appearance = DEFAULT_APP_SETTINGS.appearance;
+    applyThemePreference(appearance.themeId, appearance.themeMode);
+    applySurfacePack(appearance.surfacePackId, appearance.surface);
+    await update({
+      appearance: {
+        showBrandArtwork: appearance.showBrandArtwork,
+        themeId: appearance.themeId,
+        themeMode: appearance.themeMode,
+        installedThemeIds: [...appearance.installedThemeIds],
+        customThemes: [],
+        surfacePackId: appearance.surfacePackId,
+        // `surface` is merged by the settings backend, so explicitly provide
+        // an undefined motif to remove a user override rather than leaving the
+        // previous motif behind.
+        surface: { ...appearance.surface, motif: undefined },
+        installedSurfacePackIds: [...appearance.installedSurfacePackIds],
+        customSurfacePacks: [],
+        looks: appearance.looks.map(look => ({ ...look, surface: { ...look.surface }, priorityColors: { ...look.priorityColors } })),
+        activeLookId: appearance.activeLookId,
+        priorityColors: { ...appearance.priorityColors }
+      }
+    });
+    await window.praxis.window.reload();
+  };
+
   const confirmResetAction = async () => {
     const action = resetConfirmation;
     setResetConfirmation(undefined);
@@ -217,6 +243,8 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
       await window.praxis.window.reload();
     } else if (action === 'project-data') {
       await clearProjectWorkspaceBoardData();
+    } else if (action === 'appearance') {
+      await resetAppearanceToFactory();
     }
   };
 
@@ -250,6 +278,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
           <OverviewSection
             settings={settings}
             onReset={() => setResetConfirmation('defaults')}
+            onResetAppearance={() => setResetConfirmation('appearance')}
             onClearProjectWorkspaceBoardData={() => setResetConfirmation('project-data')}
             clearingProjectWorkspaceBoardData={resettingData}
           />
@@ -287,7 +316,7 @@ function ResetConfirmationDialog({
   onCancel,
   onConfirm
 }: {
-  action: 'defaults' | 'sessions' | 'project-data';
+  action: 'defaults' | 'sessions' | 'project-data' | 'appearance';
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -303,11 +332,17 @@ function ResetConfirmationDialog({
           message: 'This removes saved AI sessions and issue-analysis history from this device. Connections and credentials will be kept.',
           confirm: 'Clear session data'
         }
-      : {
-          title: 'Clear project data?',
-          message: 'This removes app-owned projects, workspaces, tracked boards, board layouts, and task canvases. Portable workspace files and connections will be kept.',
-          confirm: 'Clear project data'
-        };
+      : action === 'project-data'
+        ? {
+            title: 'Clear project data?',
+            message: 'This removes app-owned projects, workspaces, tracked boards, board layouts, and task canvases. Portable workspace files and connections will be kept.',
+            confirm: 'Clear project data'
+          }
+        : {
+          title: 'Reset appearance to factory defaults?',
+          message: 'This restores the factory theme, Looks, surface, motifs, priority colours, and appearance libraries. Other settings and connections will be kept.',
+          confirm: 'Reset appearance'
+          };
 
   return (
     <div className="modal-overlay" data-testid="reset-confirmation-overlay">
@@ -478,14 +513,17 @@ function AgentRuntimeSection() {
   );
 }
 
-function CategoryHeader({ category, children }: { category: CategoryDef; children?: React.ReactNode }) {
+function CategoryHeader({ category, children, actions }: { category: CategoryDef; children?: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div>
-      <h3 className="settings-section-title">{category.label}</h3>
-      <p className="settings-section-description">
-        {category.description}
-        {children}
-      </p>
+    <div className="settings-category-header">
+      <div>
+        <h3 className="settings-section-title">{category.label}</h3>
+        <p className="settings-section-description">
+          {category.description}
+          {children}
+        </p>
+      </div>
+      {actions && <div className="settings-category-actions">{actions}</div>}
     </div>
   );
 }
@@ -548,11 +586,13 @@ function Toggle({
 function OverviewSection({
   settings,
   onReset,
+  onResetAppearance,
   onClearProjectWorkspaceBoardData,
   clearingProjectWorkspaceBoardData
 }: {
   settings: AppSettings;
   onReset: () => void;
+  onResetAppearance: () => void;
   onClearProjectWorkspaceBoardData: () => void;
   clearingProjectWorkspaceBoardData: boolean;
 }) {
@@ -612,6 +652,20 @@ function OverviewSection({
           data-testid="clear-project-workspace-board-data"
         >
           {clearingProjectWorkspaceBoardData ? 'Clearing…' : 'Clear project/workspace/board data'}
+        </button>
+      </div>
+      <div className="section-divider">
+        <strong>Reset appearance</strong>
+        <div className="settings-field-help">
+          Restores the factory theme, built-in Looks, surface, motifs, priority colours, and appearance libraries.
+        </div>
+        <button
+          className="btn"
+          style={{ marginTop: 8 }}
+          onClick={onResetAppearance}
+          data-testid="reset-appearance-factory"
+        >
+          Reset appearance to factory defaults
         </button>
       </div>
     </>
@@ -1394,17 +1448,7 @@ function ThemePreviewCard({
     >
       <span className="theme-card-preview" aria-hidden="true">
         {installed && <span className="theme-card-installed">Installed</span>}
-        <span className="theme-preview-titlebar"><i /><i /><i /><b /></span>
-        <span className="theme-preview-layout">
-          <span className="theme-preview-sidebar"><i className="wide" /><i /><i /><i className="short" /></span>
-          <span className="theme-preview-content">
-            <span className="theme-preview-heading"><i /><b /><b /></span>
-            <i className="line wide" /><i className="line" />
-            <span className="theme-preview-status"><i /><i /><i /></span>
-            <i className="line wide" /><i className="line short" />
-          </span>
-        </span>
-        <span className="theme-preview-spectrum"><i /><i /><i /><i /></span>
+        <PraxisPreviewScene />
       </span>
       <span className="theme-card-meta">
         <span><strong>{theme.name}</strong><small>{theme.mode}</small></span>
@@ -1413,6 +1457,39 @@ function ThemePreviewCard({
       </span>
       <span className="theme-card-description">{theme.description}</span>
     </button>
+  );
+}
+
+function PraxisPreviewScene() {
+  return (
+    <>
+      <span className="praxis-preview-titlebar">
+        <span className="praxis-preview-window-dots"><i /><i /><i /></span>
+        <span className="praxis-preview-brand"><b>P</b><strong>PRAXIS</strong></span>
+        <span className="praxis-preview-titlebar-actions"><i /><i /></span>
+      </span>
+      <span className="praxis-preview-layout">
+        <span className="praxis-preview-sidebar">
+          <span className="praxis-preview-workspace"><b>W</b><strong>Workspace</strong><i /></span>
+          <span className="praxis-preview-nav active"><b>◈</b><span>Overview</span></span>
+          <span className="praxis-preview-nav"><b>▦</b><span>Projects</span></span>
+          <span className="praxis-preview-nav"><b>◌</b><span>Sessions</span></span>
+          <span className="praxis-preview-sidebar-rule" />
+          <span className="praxis-preview-project"><i />Product launch</span>
+        </span>
+        <span className="praxis-preview-main">
+          <span className="praxis-preview-breadcrumb">WORKSPACE <b>/</b> PRODUCT LAUNCH</span>
+          <span className="praxis-preview-heading"><strong>Product board</strong><i>3 active</i></span>
+          <span className="praxis-preview-toolbar"><i>All work</i><i>Assigned to me</i><b>＋</b></span>
+          <span className="praxis-preview-board">
+            <span className="praxis-preview-column"><strong>Todo</strong><i>2</i><b><em /><span>Prepare brief</span><small>PRX-24</small></b><b><em /><span>Map milestones</span><small>PRX-27</small></b></span>
+            <span className="praxis-preview-column"><strong>Doing</strong><i>1</i><b><em /><span>Build workspace</span><small>PRX-22</small></b></span>
+            <span className="praxis-preview-column"><strong>Done</strong><i>3</i><b><em /><span>Research</span><small>PRX-18</small></b></span>
+          </span>
+          <span className="praxis-preview-activity"><b /><span>AI session ready</span><i>●</i></span>
+        </span>
+      </span>
+    </>
   );
 }
 
@@ -1768,7 +1845,7 @@ function MotifPanel({
         </div>
         {overridden && (
           <button type="button" className="surface-motif-reset" data-testid="motif-reset" onClick={() => onChange(undefined)}>
-            Reset to pack
+            Use surface default
           </button>
         )}
       </div>
@@ -2042,17 +2119,7 @@ function LookPreviewCard({
         onClick={onApply}
       >
         <span className="theme-card-preview" aria-hidden="true">
-          <span className="theme-preview-titlebar"><i /><i /><i /><b /></span>
-          <span className="theme-preview-layout">
-            <span className="theme-preview-sidebar"><i className="wide" /><i /><i /><i className="short" /></span>
-            <span className="theme-preview-content">
-              <span className="theme-preview-heading"><i /><b /><b /></span>
-              <i className="line wide" /><i className="line" />
-              <span className="theme-preview-status"><i /><i /><i /></span>
-              <i className="line wide" /><i className="line short" />
-            </span>
-          </span>
-          <span className="theme-preview-spectrum"><i /><i /><i /><i /></span>
+          <PraxisPreviewScene />
           {surface?.image && (
             <span
               className="look-card-surface"
@@ -2091,10 +2158,10 @@ function LookPreviewCard({
         {active && <span className="theme-card-active">Active</span>}
       </div>
       <div className="look-card-actions">
-        <button type="button" title="Rename" aria-label={`Rename ${look.name}`} data-testid={`look-rename-${look.id}`} onClick={onStartRename}>✎</button>
+        {!LOOK_IDS.has(look.id) && <button type="button" title="Rename" aria-label={`Rename ${look.name}`} data-testid={`look-rename-${look.id}`} onClick={onStartRename}>✎</button>}
         <button type="button" title="Duplicate" aria-label={`Duplicate ${look.name}`} onClick={onDuplicate}>⧉</button>
         <button type="button" title="Export" aria-label={`Export ${look.name}`} onClick={onExport}>↧</button>
-        <button type="button" title="Delete" aria-label={`Delete ${look.name}`} className="danger" disabled={!canDelete} data-testid={`look-delete-${look.id}`} onClick={onDelete}>✕</button>
+        {!LOOK_IDS.has(look.id) && <button type="button" title="Delete" aria-label={`Delete ${look.name}`} className="danger" disabled={!canDelete} data-testid={`look-delete-${look.id}`} onClick={onDelete}>✕</button>}
       </div>
     </div>
   );
@@ -2248,15 +2315,15 @@ function LooksStrip({
       look={look}
       active={look.id === activeLookId}
       packName={packNameOf(look)}
-      canDelete={looks.length > 1}
-      renaming={renamingId === look.id ? { value: renameDraft, set: setRenameDraft } : undefined}
+      canDelete={!LOOK_IDS.has(look.id) && looks.length > 1}
+      renaming={!LOOK_IDS.has(look.id) && renamingId === look.id ? { value: renameDraft, set: setRenameDraft } : undefined}
       onApply={() => applyLook(look)}
-      onStartRename={() => { setRenamingId(look.id); setRenameDraft(look.name); }}
+      onStartRename={() => { if (!LOOK_IDS.has(look.id)) { setRenamingId(look.id); setRenameDraft(look.name); } }}
       onCommitRename={() => commitRename(look.id)}
       onCancelRename={() => setRenamingId(undefined)}
       onDuplicate={() => duplicate(look)}
       onExport={() => exportLook(look)}
-      onDelete={() => remove(look.id)}
+      onDelete={() => { if (!LOOK_IDS.has(look.id)) remove(look.id); }}
     />
   );
 
@@ -2399,8 +2466,21 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
 
   return (
     <>
-      <CategoryHeader category={category} />
-      <div className="custom-theme-toolbar"><button type="button" className="btn btn-secondary" onClick={createCustom}>＋ Create custom theme</button><label className="btn btn-secondary">Import theme<input type="file" accept="application/json,.json" hidden onChange={event => void importCustom(event)} /></label><span>Design your own palette with a live preview.</span></div>
+      <CategoryHeader
+        category={category}
+        actions={
+          <>
+            <button type="button" className="icon-btn icon-btn-sm" aria-label="Create custom theme" title="Create custom theme" data-testid="theme-create-custom" onClick={createCustom}>
+              <Icon name="plus" size={14} />
+            </button>
+            <label className="icon-btn icon-btn-sm" aria-label="Import theme" title="Import theme" data-testid="theme-import">
+              <Icon name="folder-open" size={14} />
+              <input type="file" accept="application/json,.json" hidden onChange={event => void importCustom(event)} />
+            </label>
+          </>
+        }
+      />
+      <p className="theme-gallery-helper">Design your own palette with a live preview.</p>
       {editing && <CustomThemeEditor theme={editing} onChange={setEditing} onSave={() => void saveCustom()} onDelete={custom.some(theme => theme.id === editing.id) ? () => void deleteCustom() : undefined} onDuplicate={() => setEditing({ ...editing, id: `custom-${Date.now().toString(36)}`, name: `${editing.name} Copy` })} onExport={exportCustom} onCancel={() => { setEditing(undefined); applyThemePreference(selectedTheme, settings.appearance.themeMode as ThemeModePreference); }} />}
       <div className="theme-mode-toolbar" role="group" aria-label="Theme appearance mode">
         <span>Appearance</span>
@@ -2483,6 +2563,14 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
       animateMotifs: opts.animateMotifs,
       motif: opts.motif
     });
+  const selectSurface = (id: string) => {
+    // Selecting a material starts from that material's own motif. A motif is
+    // still independently customisable afterwards; clearing the override here
+    // is what makes the surface cards behave like complete presets.
+    const nextOpts = { ...surfaceOpts, motif: undefined };
+    applySurface(id, nextOpts);
+    void update({ appearance: { surfacePackId: id, surface: { motif: undefined } } });
+  };
   const currentMode = ((document.documentElement.getAttribute('data-mode') as SurfaceMode | null) ?? 'dark');
   const visibleSurfacePacks = allSurfacePacks().filter(pack => pack.supports.includes(currentMode));
   const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
@@ -2498,9 +2586,12 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
   const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
     registerCustomSurfacePacks(packs);
     if (nextActiveId) {
-      applySurface(nextActiveId, surfaceOpts);
+      applySurface(nextActiveId, { ...surfaceOpts, motif: undefined });
     }
-    return update({ appearance: { customSurfacePacks: packs, ...(nextActiveId ? { surfacePackId: nextActiveId } : {}) } });
+    return update({ appearance: {
+      customSurfacePacks: packs,
+      ...(nextActiveId ? { surfacePackId: nextActiveId, surface: { motif: undefined } } : {})
+    } });
   };
   const newCustomSurface = (): CustomSurfacePack => ({
     id: `custom-${Date.now().toString(36)}`,
@@ -2530,10 +2621,7 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
               <SurfacePackCard
                 pack={pack}
                 active={surfaceId === pack.id}
-                onSelect={() => {
-                  applySurface(pack.id, surfaceOpts);
-                  void update({ appearance: { surfacePackId: pack.id } });
-                }}
+                onSelect={() => selectSurface(pack.id)}
               />
               {pack.source === 'custom' && (
                 <button

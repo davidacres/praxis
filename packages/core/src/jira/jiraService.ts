@@ -118,6 +118,8 @@ interface AgileBoardEntry {
   id: string;
   name: string;
   type?: string;
+  createdBy?: string;
+  createdAt?: string;
   projectKey?: string;
   projectName?: string;
   locationName?: string;
@@ -1250,6 +1252,8 @@ export class JiraService implements IssueTrackerService {
       id: entry.id,
       name: entry.name,
       type: entry.type ?? 'scrum',
+      createdBy: entry.createdBy,
+      createdAt: entry.createdAt,
       projectKey: entry.projectKey,
       projectName: entry.projectName,
       locationName: entry.locationName,
@@ -1317,6 +1321,13 @@ export class JiraService implements IssueTrackerService {
       return undefined;
     }
     const location = isRecord(raw.location) ? raw.location : undefined;
+    const creator = isRecord(raw.creator)
+      ? raw.creator
+      : isRecord(raw.createdBy)
+        ? raw.createdBy
+        : isRecord(raw.owner)
+          ? raw.owner
+          : undefined;
     const projectKey = location ? asString(location.projectKey) : asString(raw.projectKey);
     const projectName = location ? asString(location.projectName) ?? asString(raw.projectName) : asString(raw.projectName);
     const locationName = location ? asString(location.name) : undefined;
@@ -1324,6 +1335,10 @@ export class JiraService implements IssueTrackerService {
       id,
       name,
       type: asString(raw.type),
+      createdBy: creator
+        ? asString(creator.displayName) ?? asString(creator.name) ?? asString(creator.username)
+        : undefined,
+      createdAt: asString(raw.createdAt) ?? asString(raw.created),
       projectKey: projectKey?.trim() || undefined,
       projectName: projectName?.trim() || undefined,
       locationName: locationName?.trim() || undefined,

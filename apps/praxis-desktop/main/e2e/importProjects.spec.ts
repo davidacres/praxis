@@ -95,18 +95,22 @@ test('importing a plans folder creates a folder-backed project whose board shows
   // The folder is the source of truth — no work items are copied into the record.
   expect(projects[0].workItems).toHaveLength(0);
 
-  // The project's board reaches the markdown through FolderService, keyed by
-  // the project's own key rather than the folder's default.
+  // The project board is the folder connection's board, with no project-only
+  // proxy service or synthetic board identity.
   const details = await window.evaluate(async project => {
+    const connection = (await window.praxis.connection.list()).find(
+      candidate => candidate.settings.projectId === project.id
+    );
     const boards = await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' });
-    const board = boards.find(candidate => candidate.id === project.defaultBoardId);
-    return board ? window.praxis.board.get(board) : undefined;
+    const board = boards.find(candidate => candidate.connectionId === connection?.id);
+    return board ? { connection, details: await window.praxis.board.get(board) } : undefined;
   }, projects[0]);
 
   expect(details).toBeTruthy();
-  expect(details!.board.connectionId).toBe(`project:${projects[0].id}`);
-  expect(details!.issues.map(issue => issue.summary)).toContain('Do the thing');
-  expect(details!.issues.every(issue => issue.projectKey === 'IMP1')).toBe(true);
+  expect(details!.connection.mode).toBe('folder');
+  expect(details!.details.board.connectionId).toBe(details!.connection.id);
+  expect(details!.details.issues.map(issue => issue.summary)).toContain('Do the thing');
+  expect(details!.details.issues.every(issue => issue.projectKey === 'IMP1')).toBe(true);
 });
 
 test('a repository with no plans content is skipped, not guessed at', async () => {

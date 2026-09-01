@@ -30,7 +30,7 @@ function branchColor(branch: string): string {
   return '#46c98d';
 }
 
-export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?: string; initialView?: 'graph' | 'changes' | 'conflicts' }) {
+export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath?: string; onOpenChanges: () => void }) {
   const { settings, update } = useSettings();
   const [snapshot, setSnapshot] = useState<GitRepositorySnapshot>();
   const [selectedHash, setSelectedHash] = useState<string>();
@@ -44,8 +44,6 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
   const [diffRequest, setDiffRequest] = useState<GitDiffRequest>();
   const [diffInitialPath, setDiffInitialPath] = useState<string>();
   const [status, setStatus] = useState<GitStatusSnapshot>();
-  const [changesOpen, setChangesOpen] = useState(initialView === 'changes');
-  const [commitMessage, setCommitMessage] = useState('');
   const [busyAction, setBusyAction] = useState<string>();
   const [zoom, setZoom] = useState(1);
   const [fromDate, setFromDate] = useState('');
@@ -106,7 +104,6 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
   };
 
   useEffect(() => { void inspectAndLoad(repositoryPath); }, [repositoryPath]);
-  useEffect(() => { if (initialView === 'changes') setChangesOpen(true); }, [initialView]);
 
   useEffect(() => {
     const defaultBranch = settings?.git.defaultBranch.trim();
@@ -278,7 +275,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
           <button className="git-button" onClick={() => { if (snapshot) void load(snapshot.repositoryPath, { force: true }); }} disabled={loading || !snapshot}>{loading ? 'Loading…' : '↻ Refresh'}</button>
           <button className="git-button git-open-button" data-testid="git-open-repository" onClick={() => void window.praxis.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })} disabled={loading}>Open repository</button>
           <button className={`git-button git-settings-button${settingsOpen ? ' active' : ''}`} aria-label="Git settings" onClick={() => setSettingsOpen(value => !value)}>⚙</button>
-          {snapshot && <button className={`git-button git-changes-button${changesOpen ? ' active' : ''}`} data-testid="git-changes" onClick={() => { setChangesOpen(value => !value); void refreshStatus(); }}>Changes{status?.files.length ? ` ${status.files.length}` : ''}</button>}
+          {snapshot && <button className="git-button git-changes-button" data-testid="git-changes" onClick={onOpenChanges}>Changes{status?.files.length ? ` ${status.files.length}` : ''}</button>}
         </div>
       </header>
 
@@ -336,14 +333,6 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
       {loading && !snapshot && <div className="git-empty"><div className="git-spinner" /><h2>Reading repository history</h2><p>Building the branch map from your installed Git.</p></div>}
       {!loading && !snapshot && !error && <div className="git-empty"><div className="git-empty-icon">⌘</div><h2>No repository selected</h2><p>Open a folder containing a Git repository to explore its history.</p></div>}
 
-      {changesOpen && snapshot && status && <section className="git-changes-panel" aria-label="Working tree changes" data-testid="git-changes-panel">
-        <div className="git-changes-heading"><div><strong>Working tree</strong><span>{status.files.length ? `${status.files.length} changed files` : 'Clean'}</span></div><div className="git-changes-actions">{status.files.some(file => !file.staged) && <button onClick={() => openDiff({ kind: 'working' })}>Review unstaged</button>}{status.files.some(file => file.staged) && <button onClick={() => openDiff({ kind: 'staged' })}>Review staged</button>}{status.files.length > 0 && <button onClick={() => { const message = window.prompt('Optional stash description:', 'Work in progress'); if (message !== null) void runAction('Stashing changes', async () => adoptSnapshot(await window.praxis.git.stash(snapshot.repositoryPath, message))); }}>Stash changes</button>}{status.files.length > 0 && <button onClick={() => void runAction('Staging all files', async () => { const next = await window.praxis.git.stage(snapshot.repositoryPath, status.files.map(file => file.path)); setStatus(next); return next; })}>Stage all</button>}<button onClick={() => void refreshStatus()}>↻</button></div></div>
-        {status.files.length === 0 ? <div className="git-clean-state"><span>✓</span><div><b>Everything is committed</b><small>No local file changes to stage.</small></div></div> : <>
-          <div className="git-change-list">{status.files.map(file => <div className={`git-change-row${file.conflicted ? ' conflicted' : ''}`} key={file.path}>{file.conflicted ? <span className="git-conflict-indicator">!</span> : <input aria-label={`${file.staged ? 'Unstage' : 'Stage'} ${file.path}`} type="checkbox" checked={file.staged} onChange={() => void runAction(file.staged ? 'Unstaging file' : 'Staging file', async () => { const next = file.staged ? await window.praxis.git.unstage(snapshot.repositoryPath, [file.path]) : await window.praxis.git.stage(snapshot.repositoryPath, [file.path]); setStatus(next); return next; })} />}<span className="git-change-status">{file.indexStatus !== ' ' ? file.indexStatus : file.worktreeStatus}</span><button className="git-change-file" onClick={() => file.conflicted ? setConflictPath(file.path) : openDiff({ kind: file.staged ? 'staged' : 'working' }, file.path)}>{file.path}</button><small>{file.conflicted ? 'resolve' : file.staged ? 'staged' : 'unstaged'}</small></div>)}</div>
-          <div className="git-commit-form"><textarea aria-label="Commit message" placeholder="Describe the changes…" value={commitMessage} onChange={event => setCommitMessage(event.target.value)} /><button disabled={!status.files.some(file => file.staged) || !commitMessage.trim() || busyAction !== undefined} onClick={() => void runAction('Committing changes', async () => { const next = await window.praxis.git.commit(snapshot.repositoryPath, commitMessage); setCommitMessage(''); await adoptSnapshot(next); return next; })}>Commit staged</button></div>
-        </>}
-      </section>}
-
       {snapshot && <div className="git-workspace">
         <aside className="git-refs" aria-label="Branches">
           <div className="git-panel-title">Branches <span>{snapshot.branches.length}</span></div>
@@ -357,7 +346,7 @@ export function GitGraphPage({ repositoryPath, initialView }: { repositoryPath?:
 
         <div className={`git-history${visualSettings.orientation === 'horizontal' ? ' git-history-horizontal' : ''}`} style={visualSettings.orientation === 'vertical' ? { '--git-graph-width': `${graphWidth}px` } as CSSProperties : undefined} role="list" aria-label="Commit history">
           <div className="git-history-header"><span className="git-history-title">History</span><span>Message</span><span>Author</span><span>Date</span></div>
-          {status && status.files.length > 0 && <button className="git-wip-row" role="listitem" onClick={() => openDiff({ kind: 'working' })}><span className="git-wip-node">●</span><span><strong>Working changes</strong><small>{status.files.filter(file => !file.staged).length} unstaged · {status.files.filter(file => file.staged).length} staged</small></span><b>Review</b></button>}
+          {status && status.files.length > 0 && <button className="git-wip-row" role="listitem" onClick={onOpenChanges}><span className="git-wip-node">●</span><span><strong>Working changes</strong><small>{status.files.filter(file => !file.staged).length} unstaged · {status.files.filter(file => file.staged).length} staged</small></span><b>Open changes</b></button>}
           {visualSettings.orientation === 'horizontal' ? <div className="git-horizontal-scroll">
             <div className="git-horizontal-canvas">
               <svg className="git-horizontal-lines" width={Math.max(1, commits.length) * 190} height={Math.max(1, laneCount) * 34} aria-hidden="true">

@@ -2,7 +2,7 @@
    Surface packs — the premium material layer.
 
    A fourth theming axis, orthogonal to data-mode / data-accent / data-theme:
-     data-surface="flat|parchment|graphite|blueprint"
+     data-surface="flat|parchment|graphite|aurora-glass|noir"
 
    Packs set ONLY --surface-* custom properties (texture, panel material,
    translucency, glow) — never a colour token — so any pack composes with any
@@ -137,37 +137,6 @@
     inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
     0 10px 26px color-mix(in srgb, #000 45%, transparent);
   --surface-radius-boost: 1px;
-}
-
-/* ── blueprint ──────────────────────────────────────────────────────────
-   Drafting grid on the canvas only; panels stay clean and opaque so text
-   contrast is untouched. Grid is procedural and tints from the accent. */
-:root[data-surface='blueprint'] {
-  /* The drafting grid itself is data — `pattern: { id: 'grid', … }` on the pack.
-     This block only carries what a pattern cannot express: the vellum wash and
-     the accent-tinted edge. */
-  --surface-panel-tint-layer:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 55%);
-  --surface-texture-image: none;
-  --surface-texture-opacity: 0;
-  --surface-panel-border-color: color-mix(in srgb, var(--border) 55%, var(--accent) 26%);
-  --surface-radius-boost: 0px;
-}
-
-/* ── binary ─────────────────────────────────────────────────────────────
-   A low-contrast terminal-like field. The 0/1 glyphs come from the pattern
-   library; this block supplies only the material wash and panel edge. */
-:root[data-surface='binary'] {
-  --surface-app-bg-image:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 58%),
-    linear-gradient(315deg, color-mix(in srgb, var(--text) 4%, transparent), transparent 52%);
-  --surface-panel-tint-layer:
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 48%);
-  --surface-texture-image: none;
-  --surface-texture-opacity: 0;
-  --surface-panel-border-color: color-mix(in srgb, var(--border) 58%, var(--accent) 24%);
-  --surface-accent-glow: inset 0 1px 0 color-mix(in srgb, var(--accent) 16%, transparent);
-  --surface-radius-boost: 0px;
 }
 
 /* ── aurora-glass (phase 2) ─────────────────────────────────────────────

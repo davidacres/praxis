@@ -25,7 +25,6 @@ export interface ConnectionFormProps {
    */
   onPersisted?: () => void;
   onCancel: () => void;
-  onRemoved: (connectionId: string) => void;
 }
 
 type FormValues = Record<string, string | boolean>;
@@ -210,7 +209,7 @@ async function syncSynthesizedTrackedBoard(connection: Connection): Promise<void
  * test of a brand-new connection therefore leaves it saved even if the user
  * cancels afterwards.
  */
-export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRemoved }: ConnectionFormProps) {
+export function ConnectionForm({ existing, onSaved, onPersisted, onCancel }: ConnectionFormProps) {
   const [name, setName] = useState(existing?.name ?? '');
   const [mode, setMode] = useState<BackendMode>(existing?.mode ?? 'demo');
   const [values, setValues] = useState<FormValues>(() => initialValues(existing));
@@ -245,7 +244,6 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
   const [testResult, setTestResult] = useState<ConnectionCheck | undefined>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | undefined>();
-  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   // Which secrets already exist decides the placeholder text ("A key is saved —
   // leave blank to keep it") without the value ever crossing IPC.
@@ -371,32 +369,6 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
     }
   };
 
-  const remove = async () => {
-    // `persistedId` is state — seeded at mount, set on first save — while
-    // `existing` is the prop the parent supplies once the connection reaches
-    // the list. Right after saving a new connection the two can disagree for a
-    // frame, and this used to `return` on that gap: the row stayed, no error
-    // appeared, and the click was simply lost. Fall back to the prop, and if
-    // there genuinely is no id, say so rather than failing silently.
-    const targetId = persistedId ?? existing?.id;
-    if (!targetId) {
-      setSaveError('This connection has not been saved yet, so there is nothing to remove.');
-      setConfirmingRemove(false);
-      return;
-    }
-    setSaving(true);
-    setSaveError(undefined);
-    try {
-      await window.praxis.connection.remove(targetId);
-      onRemoved(targetId);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : String(error));
-      setConfirmingRemove(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const busy = saving || testing;
 
   return (
@@ -482,6 +454,9 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
                 {backendModeMeta(candidate).label}
               </option>
             ))}
+            {existing?.mode === 'app' && (
+              <option value="app">{backendModeMeta('app').label}</option>
+            )}
           </select>
         </FieldRow>
 
@@ -498,45 +473,6 @@ export function ConnectionForm({ existing, onSaved, onPersisted, onCancel, onRem
           setJiraAuthMethod={setJiraAuthMethod}
         />
 
-        {existing && (
-          <div className="conn-danger-zone">
-            {confirmingRemove ? (
-              <>
-                <span className="conn-remove-warning">
-                  Removes this connection, its tracked boards, and its saved secrets.
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  data-testid="conn-remove-confirm-btn"
-                  disabled={busy}
-                  onClick={() => void remove()}
-                >
-                  Confirm remove
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={busy}
-                  onClick={() => setConfirmingRemove(false)}
-                >
-                  Keep
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-danger"
-                data-testid="conn-remove-btn"
-                disabled={busy}
-                onClick={() => setConfirmingRemove(true)}
-              >
-                <Icon name="trash" size={13} />
-                Remove connection
-              </button>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

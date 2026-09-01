@@ -149,6 +149,35 @@ test('saving a demo connection synthesizes its tracked board', async () => {
   await expect(window.locator('[data-testid="tracked-board-row"]', { hasText: name })).toBeVisible();
 });
 
+test('connection rows edit names, lock backend type, and require boards to be removed first', async () => {
+  await openNewConnectionForm();
+
+  const name = `e2e-delete-connection-${Date.now()}`;
+  await window.locator('[data-testid="conn-field-name"]').fill(name);
+  await window.locator('[data-testid="conn-save-btn"]').click();
+
+  const row = window.locator('[data-testid="connection-row"]', { hasText: name });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(window.locator('[data-testid="conn-field-mode"]')).toBeDisabled();
+
+  const renamed = `${name}-renamed`;
+  await window.locator('[data-testid="conn-field-name"]').fill(renamed);
+  await window.locator('[data-testid="conn-save-btn"]').click();
+  await expect(window.locator('[data-testid="connection-row"]', { hasText: renamed })).toBeVisible();
+
+  const renamedRow = window.locator('[data-testid="connection-row"]', { hasText: renamed });
+  const removeButton = renamedRow.getByRole('button', { name: `Remove ${renamed}` });
+  await expect(removeButton).toBeDisabled();
+
+  await window.locator('[data-testid="tracked-board-row"]', { hasText: renamed }).getByRole('button').click();
+  await expect(removeButton).toBeEnabled();
+
+  await removeButton.click();
+  await window.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(window.locator('[data-testid="connection-row"]', { hasText: renamed })).toHaveCount(0);
+});
+
 test('a saved GitLab API key shows as saved when the connection is re-opened', async () => {
   await openNewConnectionForm();
 

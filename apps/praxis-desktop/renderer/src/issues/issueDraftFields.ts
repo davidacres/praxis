@@ -29,7 +29,7 @@ export function getCreatableTypes(mode: BackendMode): string[] {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   // A project stores a free-form `issueType` string and has no subtask model.
-  if (mode === 'project') {
+  if (mode === 'app' || mode === 'project') {
     return ['Feature', 'Idea', 'Story', 'Task', 'Bug'];
   }
   return ['Feature', 'Idea', 'Story', 'Task', 'Subtask', 'Bug'];
@@ -92,7 +92,7 @@ export function getDraftParentRule(
 
   // Mirrors `getParentRule` in core: an app-storage project's work items have
   // no parent field, so never offer the picker.
-  if (mode === 'project') {
+  if (mode === 'app' || mode === 'project') {
     return {
       canHaveParent: false,
       requiresParent: false,
