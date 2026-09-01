@@ -72,7 +72,7 @@
 | FX-BF-012 | Feature | Governed agent delivery workflows | Proposed | FX-BF-009, FX-BF-010, FX-BF-011 |
 | FX-BE-018 | Story | Workflow definition, policy, and validation contracts | Complete | FX-BF-012 |
 | FX-BE-019 | Story | Workflow execution, persistence, and recovery | Complete | FX-BE-012 |
-| FX-BE-020 | Story | Agent session stages, gates, artifacts, and approvals | Proposed | FX-BE-012 |
+| FX-BE-020 | Story | Agent session stages, gates, artifacts, and approvals | Complete | FX-BE-012 |
 | FX-BE-021 | Story | Visual workflow designer and template library | Proposed | FX-BE-012 |
 | FX-BE-022 | Story | Run monitor, delivery template, and end-to-end verification | Proposed | FX-BE-012 |
 | TASK-092 | Task | Add workflow contract types | Complete | FX-BE-018 |
@@ -81,9 +81,9 @@
 | TASK-095 | Task | Implement WorkflowRun persistence | Complete | FX-BE-019 |
 | TASK-096 | Task | Implement workflow scheduler and joins | Complete | FX-BE-019 |
 | TASK-097 | Task | Add workflow retry and recovery controls | Complete | FX-BE-019 |
-| TASK-098 | Task | Add stage agent preflight and binding | Proposed | FX-BE-020 |
-| TASK-099 | Task | Attribute sessions and typed artifacts to workflow stages | Proposed | FX-BE-020 |
-| TASK-100 | Task | Implement policy gates and approvals | Proposed | FX-BE-020 |
+| TASK-098 | Task | Add stage agent preflight and binding | Complete | FX-BE-020 |
+| TASK-099 | Task | Attribute sessions and typed artifacts to workflow stages | Complete | FX-BE-020 |
+| TASK-100 | Task | Implement policy gates and approvals | Complete | FX-BE-020 |
 | TASK-101 | Task | Add workflow template library | Proposed | FX-BE-021 |
 | TASK-102 | Task | Implement workflow canvas and inspector | Proposed | FX-BE-021 |
 | TASK-103 | Task | Add workflow persistence and accessibility verification | Proposed | FX-BE-021 |

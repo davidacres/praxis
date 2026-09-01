@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.664Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-099
 title: Attribute sessions and typed artifacts to workflow stages
-status: proposed
+status: complete
 story: FX-BE-020
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [TASK-095, TASK-098]
 validation: [npm run build:core, npm run build:desktop, npm run test:core]
 ---
