@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.663Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-094
 title: Add workflow and policy stores
-status: proposed
+status: complete
 story: FX-BE-018
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [TASK-092, TASK-093]
 validation: [npm run build:core, npm run test:core]
 ---

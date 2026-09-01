@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.662Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-092
 title: Add workflow contract types
-status: proposed
+status: complete
 story: FX-BE-018
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [FX-BF-009, FX-BF-011]
 validation: [npm run build:core, npm run check-types]
 ---
