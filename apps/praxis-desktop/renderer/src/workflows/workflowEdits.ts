@@ -70,6 +70,14 @@ export function updateNode(
   return touch(definition, nodes, definition.edges);
 }
 
+/** Repositions a node on the canvas; coordinates are rounded. */
+export function moveNode(definition: WorkflowDefinition, nodeId: string, to: { x: number; y: number }): WorkflowDefinition {
+  const nodes = definition.nodes.map(node =>
+    node.id === nodeId ? { ...node, x: Math.round(to.x), y: Math.round(to.y) } : node
+  );
+  return touch(definition, nodes, definition.edges);
+}
+
 export function removeNode(definition: WorkflowDefinition, nodeId: string): WorkflowDefinition {
   const nodes = definition.nodes.filter(node => node.id !== nodeId);
   const edges = definition.edges.filter(edge => edge.from !== nodeId && edge.to !== nodeId);

@@ -1,12 +1,12 @@
 ---
-**Status:** 🚧 In progress
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.656Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-012
 slug: agent-delivery-workflows
 title: Governed agent delivery workflows
-status: in-progress
+status: complete
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-012-agent-delivery-workflows/feature-issues.md
