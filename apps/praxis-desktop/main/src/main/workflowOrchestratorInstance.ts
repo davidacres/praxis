@@ -52,18 +52,50 @@ const dispatcher: StageDispatcher = {
   }
 };
 
+const TIMEOUT_TICK_MS = 15_000;
+let timeoutTimer: NodeJS.Timeout | undefined;
+
+/**
+ * While any run has a stage in flight, poll each for a stage that has outrun
+ * its `timeoutMs` (TASK-118). The orchestrator holds no timers of its own, so
+ * this survives a restart for free — recovery re-enters the loop, which starts
+ * the tick again on the next check.
+ */
+function ensureTimeoutTick(): void {
+  if (timeoutTimer) return;
+  timeoutTimer = setInterval(() => {
+    const runs = new WorkflowRunStore(getWorkflowBackingStore());
+    const live = runs
+      .list()
+      .filter(run => Object.values(run.nodes).some(state => state.outcome === 'running'));
+    if (live.length === 0) {
+      clearInterval(timeoutTimer);
+      timeoutTimer = undefined;
+      return;
+    }
+    for (const run of live) void getWorkflowOrchestrator().enforceTimeouts(run.runId);
+  }, TIMEOUT_TICK_MS);
+  timeoutTimer.unref?.();
+}
+
 export function getWorkflowOrchestrator(): WorkflowOrchestrator {
   if (!orchestrator) {
     orchestrator = new WorkflowOrchestrator({
       runs: new WorkflowRunStore(getWorkflowBackingStore()),
       dispatcher,
       workspace: createWorkflowWorkspaceProvider(),
-      onRunChanged: broadcastRunChanged
+      onRunChanged: run => {
+        broadcastRunChanged(run);
+        // A stage may have just gone `running`; make sure the tick is armed.
+        if (Object.values(run.nodes).some(state => state.outcome === 'running')) ensureTimeoutTick();
+      }
     });
   }
   return orchestrator;
 }
 
 export function resetWorkflowOrchestrator(): void {
+  if (timeoutTimer) clearInterval(timeoutTimer);
+  timeoutTimer = undefined;
   orchestrator = undefined;
 }

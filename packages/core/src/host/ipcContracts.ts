@@ -645,6 +645,11 @@ export interface WorkflowsIpc {
   retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
   /** Cancels a run. */
   cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
+  /**
+   * Fires with a run id after every persisted transition — the orchestrator
+   * advancing a stage in the background included. Returns an unsubscribe.
+   */
+  onRunChanged(listener: (runId: string) => void): () => void;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */

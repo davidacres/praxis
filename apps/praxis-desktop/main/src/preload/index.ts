@@ -287,7 +287,12 @@ const praxis: PraxisIpc = {
     bypassGate: (runId: string, gate: string, actor: string, reason: string) =>
       ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason),
     retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
-    cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason)
+    cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason),
+    onRunChanged: (listener: (runId: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);
+      ipcRenderer.on('workflows:runChanged', handler);
+      return () => ipcRenderer.off('workflows:runChanged', handler);
+    }
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),

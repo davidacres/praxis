@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-119
 title: Add the unattended-run E2E with a stub agent, and update the docs
-status: proposed
+status: complete
 story: FX-BE-026
 updated: 2026-09-02
 dependencies: [TASK-115, TASK-117, TASK-118]

@@ -66,17 +66,41 @@ can add required gates, demand human approval, or lower the attempt cap, but it
 can never drop a gate the org requires. The designer reports any field the
 global policy tightened.
 
+## How a run advances
+
+Starting a run hands it to the orchestrator, which drives it with no further
+input:
+
+- One **git worktree per run** is branched off the project's current branch on
+  the first stage that needs it, shared by every stage, and removed when the
+  run settles. A project with no git folder cannot run agent stages.
+- A **deterministic check** spawns its command in that worktree, is killed at
+  `timeoutMs` if set, and its exit code decides the outcome (`successExitCodes`,
+  default `[0]`). Its stdout/stderr is saved as the node's declared artifact.
+- An **agent stage** runs a real, attributed session: preflight fails closed
+  first (an untrusted, invalid, unavailable, or capability-incompatible agent
+  never opens a session), the session runs in the run worktree under the
+  stage's tool mode, and a mutating stage's worktree is committed on
+  completion — that commit is the immutable snapshot every downstream review,
+  QA, and security stage inspects.
+- **Joins and approvals** settle in the engine: a join with converged branches
+  advances itself; an approval waits for a person.
+
+The run monitor updates live as this happens — you do not need to be looking at
+it. A stage past its `timeoutMs` is failed with a stated reason and offered for
+retry within its attempt budget.
+
+**Mark done / Mark failed** in the monitor remain for stages the orchestrator
+declines: an agent stage in a project with no configured AI provider, or any
+stage in a project with no working folder. A declined stage stays `ready` for
+you to advance by hand.
+
 ## Restart recovery
 
 A run is persisted after every transition. On app start, any stage that was
 *running* when the app last stopped is closed as **interrupted** (the app cannot
 know whether an agent left the worktree half-written) and surfaced for an
-explicit retry. Completed stages are untouched and never re-run — the run
-monitor comes back showing exactly the progress it had.
-
-## Driving stages
-
-Until agent runtime session integration lands (FX-BF-011), the monitor advances
-stages explicitly — **Mark done** / **Mark failed** on a ready stage. This is
-the seam the real orchestrator plugs into: it will create an attributed agent
-session per stage and record the same outcomes.
+explicit retry; the orchestrator then re-enters the loop and picks up anything
+still runnable. Completed stages are untouched and never re-run — the run
+monitor comes back showing exactly the progress it had, and the run re-attaches
+to its existing worktree rather than branching a second one.
