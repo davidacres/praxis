@@ -17,6 +17,10 @@ import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
  * from real agent sessions); that is exactly the seam this test exercises.
  */
 
+// Each test boots a full Electron app; the default 30s is tight under
+// suite-wide parallelism.
+test.slow();
+
 let app: TestApp;
 
 async function seedProject(page: Page): Promise<void> {
