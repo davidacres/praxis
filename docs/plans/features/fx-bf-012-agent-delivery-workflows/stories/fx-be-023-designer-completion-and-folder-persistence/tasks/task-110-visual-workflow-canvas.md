@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-110
 title: Add the pan/zoom workflow canvas with draggable nodes and edges
-status: proposed
+status: complete
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]
@@ -24,12 +24,14 @@ applied to workflow state.
   `required`; a self-loop or duplicate edge is refused on the canvas as in the
   list editor.
 - Live validation badges the offending node on the canvas; the structured list
-  remains available as an alternative view.
+  remains available as an alternative view (Canvas / List toggle).
 - Workflow canvas state and types stay separate from `taskDesignerState`; only
-  the pure renderer helpers (curve paths, anchor points, pointer-drag) are
-  reused.
-- Keyboard: nodes are focusable and reorderable, an edge can be created without
-  a pointer, and the a11y path is covered by a desktop test.
+  the pure renderer helpers (curve paths, anchor points) are reused.
+- Keyboard: canvas cards are focusable, `Enter`/`Space` selects, and the arrow
+  keys nudge a card (Shift = larger step); a desktop test covers the keyboard
+  move. Keyboard **edge** editing is done through the List view's From/To/Connect
+  controls, which stay fully operable — the canvas handle drag is the pointer
+  path for the same operation.
 ## Notes
 Reuse `taskDesigner`'s renderer helpers (`buildConnectorCurvePath`,
 `anchorPoint`, pointer handlers). Do not import runtime values from

@@ -13,6 +13,7 @@ import type {
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { WorkflowRunMonitor } from './WorkflowRunMonitor';
+import { WorkflowCanvas } from './WorkflowCanvas';
 import {
   addNode,
   bucketFeedback,
@@ -59,6 +60,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'design' | 'runs'>('design');
+  const [designMode, setDesignMode] = useState<'canvas' | 'list'>('canvas');
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
 
@@ -196,21 +198,51 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
           onOpenExisting={openExisting}
         />
       ) : (
+        <>
+        {designMode === 'canvas' && (
+          <WorkflowCanvas
+            definition={definition}
+            selectedNodeId={selectedNodeId}
+            issuesByNode={Object.fromEntries(
+              Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
+            )}
+            onChange={mutate}
+            onSelectNode={setSelectedNodeId}
+          />
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 320px) 1fr', gap: 20, alignItems: 'start' }}>
           <section aria-label="Workflow stages" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <strong>{definition.name}</strong>
-              <button
-                type="button"
-                onClick={() => {
-                  setDefinition(undefined);
-                  // Pick up any out-of-band change to the project's files.
-                  reloadLibrary();
-                }}
-                className="ghost-button"
-              >
-                Close
-              </button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-pressed={designMode === 'canvas'}
+                  onClick={() => setDesignMode('canvas')}
+                >
+                  Canvas
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  aria-pressed={designMode === 'list'}
+                  onClick={() => setDesignMode('list')}
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDefinition(undefined);
+                    // Pick up any out-of-band change to the project's files.
+                    reloadLibrary();
+                  }}
+                  className="ghost-button"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div role="group" aria-label="Add stage" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -230,6 +262,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
               ))}
             </div>
 
+            {designMode === 'list' && (
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {definition.nodes.map(node => {
                 const issues = feedback?.byNode[node.id]?.length ?? 0;
@@ -279,6 +312,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
                 );
               })}
             </ul>
+            )}
 
             <ValidationSummary feedback={feedback} />
 
@@ -315,6 +349,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
             <EdgeEditor definition={definition} onChange={mutate} />
           </section>
         </div>
+        </>
       )}
     </div>
   );
