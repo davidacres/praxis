@@ -8318,6 +8318,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
 }
 .wf-rail-row .wf-rail-sub { color: var(--text-tertiary); font-size: 12px; }
+.wf-rail-main { flex: 1; min-width: 0; }
+.wf-rail-name { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-rail-row .wf-rail-mark { margin-left: auto; font-size: 11px; }
 .wf-rail-row .wf-rail-mark.is-gate { color: var(--accent); }
 .wf-rail-row .wf-rail-mark.is-issue { color: var(--danger); }
@@ -8378,6 +8380,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-header h1 { margin: 0; font-size: 20px; }
 .wf-header-sub { color: var(--text-tertiary); font-size: 13px; }
 .wf-viewswitch { margin-left: auto; display: flex; gap: var(--space-1); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); }
+.wf-viewswitch .btn-compact { border: 1px solid transparent; border-radius: calc(var(--radius-md) - 2px); background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.wf-viewswitch .btn-compact:hover { color: var(--text); }
+.wf-viewswitch .btn-compact.active { border-color: var(--accent); background: var(--bg-active); color: var(--text); }
 
 /* Designer — three columns: stage rail, canvas hero, inspector panel. */
 .wf-designer {
@@ -8502,3 +8507,44 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-stage-error { margin: 0; color: var(--danger); font-size: 12px; }
 .wf-stage-artifacts { margin: 0; padding-left: var(--space-4); font-size: 12px; color: var(--text-tertiary); }
 .wf-stage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+
+/* Template library — this-project cards + template list. */
+.wf-library { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); overflow-y: auto; }
+.wf-library h2 { margin: 0 0 var(--space-3); font-size: 15px; }
+.wf-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
+.wf-card { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.wf-card:hover { border-color: var(--accent); }
+.wf-template-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.wf-template { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); }
+.wf-template-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.wf-template-head > div { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wf-template-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-template-desc { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.wf-template-warn { margin: 0; font-size: 12px; color: var(--warning); }
+
+/* Validation summary — quiet when valid, danger-bordered when not. */
+.wf-validation { font-size: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); color: var(--text-tertiary); }
+.wf-validation.is-invalid { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); color: var(--danger); }
+.wf-validation ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); }
+
+/* Inspector cards — node inspector + edge editor share one bordered shell. */
+.wf-inspector-card { display: flex; flex-direction: column; gap: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
+.wf-inspector-card h2 { margin: 0; font-size: 15px; }
+.wf-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wf-inspector-head-actions { display: flex; gap: var(--space-1); }
+.wf-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.wf-field > span { color: var(--text-tertiary); }
+.wf-fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); }
+.wf-fieldset legend { font-size: 12px; color: var(--text-tertiary); }
+.wf-check { display: flex; gap: var(--space-2); align-items: center; font-size: 13px; }
+.wf-check.is-disabled { opacity: .6; }
+.wf-hint { margin: 0; font-size: 12px; color: var(--text-tertiary); }
+.wf-hint.is-warn { color: var(--warning); }
+.wf-hint.is-danger { color: var(--danger); }
+.wf-issues { margin: 0; padding-left: var(--space-4); color: var(--danger); font-size: 12px; }
+.wf-agent-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-tertiary); }
+.wf-agent-meta .is-danger { color: var(--danger); }
+.wf-edge-form { display: flex; gap: var(--space-2); align-items: end; flex-wrap: wrap; }
+.wf-edge-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.wf-edge-row { display: flex; gap: var(--space-2); align-items: center; font-size: 13px; }
+.wf-edge-row > span:first-child { flex: 1; }

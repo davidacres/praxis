@@ -79,10 +79,10 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
     <div className="wf-pipeline">
       <div className="wf-pipeline-bar">
         <span>Pipeline</span>
-        <button type="button" className="btn-compact" onClick={() => setZoom(z => Math.min(1.6, z + 0.2))} aria-label="Zoom in">
+        <button type="button" className="btn btn-compact" onClick={() => setZoom(z => Math.min(1.6, z + 0.2))} aria-label="Zoom in">
           +
         </button>
-        <button type="button" className="btn-compact" onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} aria-label="Zoom out">
+        <button type="button" className="btn btn-compact" onClick={() => setZoom(z => Math.max(0.5, z - 0.2))} aria-label="Zoom out">
           −
         </button>
       </div>
