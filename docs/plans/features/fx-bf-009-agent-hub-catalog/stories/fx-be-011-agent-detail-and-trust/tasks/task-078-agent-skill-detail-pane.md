@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.991Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-078
 title: Build agent and skill detail panes
-status: proposed
+status: complete
 story: FX-BE-011
 updated: 2026-08-31
 dependencies: [TASK-077]

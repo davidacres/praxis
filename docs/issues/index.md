@@ -6,8 +6,8 @@
 | FX-BE-004 | Praxis diff workspace and safe Git workflows | Complete | [issue](features/fx-bf-003-git-visual-integration/stories/fx-be-004-praxis-diff-workspace/issue.md) |
 | FX-BE-005 | Project-scoped Git entry point and repository onboarding | Complete | [issue](features/fx-bf-004-project-scoped-git-workspace/stories/fx-be-005-repository-onboarding/issue.md) |
 | FX-BE-006 | Sidebar-owned project, board, and Git tree | Complete | [issue](features/fx-bf-005-sidebar-project-navigation/stories/fx-be-006-project-board-git-tree/issue.md) |
-| FX-BE-010 | Agent Hub navigation and scope-aware catalog | Proposed | [issue](features/fx-bf-009-agent-hub-catalog/stories/fx-be-010-agent-hub-navigation/issue.md) |
-| FX-BE-011 | Agent and skill detail, trust, and capabilities | Proposed | [issue](features/fx-bf-009-agent-hub-catalog/stories/fx-be-011-agent-detail-and-trust/issue.md) |
+| FX-BE-010 | Agent Hub navigation and scope-aware catalog | Complete | [issue](features/fx-bf-009-agent-hub-catalog/stories/fx-be-010-agent-hub-navigation/issue.md) |
+| FX-BE-011 | Agent and skill detail, trust, and capabilities | Complete | [issue](features/fx-bf-009-agent-hub-catalog/stories/fx-be-011-agent-detail-and-trust/issue.md) |
 | FX-BE-012 | Create Agent wizard and starter scaffold | Proposed | [issue](features/fx-bf-010-agent-skill-creation/stories/fx-be-012-create-agent-scaffold/issue.md) |
 | FX-BE-013 | Create complete Skill package | Proposed | [issue](features/fx-bf-010-agent-skill-creation/stories/fx-be-013-create-skill-package/issue.md) |
 | FX-BE-014 | Import and validate runtime items | Proposed | [issue](features/fx-bf-010-agent-skill-creation/stories/fx-be-014-import-and-validate-runtime-items/issue.md) |

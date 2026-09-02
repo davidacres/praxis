@@ -22,6 +22,7 @@ function agent(id: string): DiscoveredAgent {
     manifest: { schemaVersion: 1, id, name: id, type: 'acp', entry: 'run.js' },
     manifestPath: `/agents/${id}/agent.json`,
     rootPath: `/agents/${id}`,
+    scope: 'global',
     trusted: true,
     errors: []
   };

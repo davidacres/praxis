@@ -15,10 +15,16 @@ export interface AgentManifest {
   activation?: AgentActivation;
 }
 export interface AgentManifestError { path: string; message: string; }
+
+/** Which discovery root an item came from: the user-data catalog or a project's `.praxis`. */
+export type CatalogScope = 'global' | 'project';
+
 export interface DiscoveredAgent {
   manifest: AgentManifest;
   manifestPath: string;
   rootPath: string;
+  /** 'global' = user-data agents folder; 'project' = a project `.praxis/agents`. */
+  scope: CatalogScope;
   trusted: boolean;
   errors: AgentManifestError[];
 }

@@ -18,6 +18,7 @@ function agent(id: string, overrides: Partial<DiscoveredAgent> = {}): Discovered
     manifest: { schemaVersion: 1, id, name: id, type: 'acp', entry: 'run.js' },
     manifestPath: `/agents/${id}/agent.json`,
     rootPath: `/agents/${id}`,
+    scope: 'global',
     trusted: true,
     errors: [],
     ...overrides
@@ -30,6 +31,7 @@ function skill(name: string, overrides: Partial<DiscoveredSkill> = {}): Discover
     skillPath: `/skills/${name}`,
     instructionsPath: `/skills/${name}/SKILL.md`,
     fingerprint: 'abc123',
+    scope: 'global',
     trusted: true,
     ...overrides
   };
