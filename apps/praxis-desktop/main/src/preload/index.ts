@@ -30,6 +30,7 @@ import type {
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
+import type { WorkflowDefinition } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -257,6 +258,20 @@ const praxis: PraxisIpc = {
       connectionId: string | undefined,
       state: TaskDesignerPersistedState
     ) => ipcRenderer.invoke('taskDesigner:generateMasterPlan', boardId, connectionId, state)
+  },
+  workflows: {
+    listTemplates: (projectId: string) => ipcRenderer.invoke('workflows:listTemplates', projectId),
+    templateReadiness: (projectId: string) => ipcRenderer.invoke('workflows:templateReadiness', projectId),
+    catalog: (projectId: string) => ipcRenderer.invoke('workflows:catalog', projectId),
+    get: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:get', projectId, workflowId),
+    instantiate: (projectId: string, templateId: string, name?: string) =>
+      ipcRenderer.invoke('workflows:instantiate', projectId, templateId, name),
+    save: (projectId: string, definition: WorkflowDefinition) =>
+      ipcRenderer.invoke('workflows:save', projectId, definition),
+    remove: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:remove', projectId, workflowId),
+    validate: (projectId: string, definition: WorkflowDefinition) =>
+      ipcRenderer.invoke('workflows:validate', projectId, definition),
+    effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
