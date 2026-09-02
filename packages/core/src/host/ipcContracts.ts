@@ -59,6 +59,7 @@ import type { WorkflowDefinition, WorkflowPolicyProfile } from '../workflows/wor
 import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
+import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -617,6 +618,33 @@ export interface WorkflowsIpc {
   validate(projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult>;
   /** The composed policy governing this project, strictest-wins over global. */
   effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
+
+  // ── Runs (FX-BE-022) ────────────────────────────────────────────────────
+  /** Starts a run of one project workflow against a task; returns the new run's summary. */
+  startRun(projectId: string, workflowId: string, taskTitle: string): Promise<WorkflowRunSummary>;
+  /** Run summaries for a project, newest first. */
+  listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
+  /** One run's summary, or undefined. */
+  getRun(runId: string): Promise<WorkflowRunSummary | undefined>;
+  /**
+   * Records a stage outcome. FX-BF-011 will drive stages from real agent
+   * sessions; until then the run monitor advances them explicitly, which is
+   * also how the E2E suite exercises the engine.
+   */
+  advanceStage(
+    runId: string,
+    nodeId: string,
+    outcome: 'succeeded' | 'failed',
+    detail?: { error?: string; snapshotRef?: string }
+  ): Promise<WorkflowRunSummary>;
+  /** Grants approval at the run's approval stage; refuses while a required gate is unmet. */
+  approveRun(runId: string, actor: string, note?: string): Promise<WorkflowRunSummary>;
+  /** Records an attributed gate bypass, when policy and the stage permit one. */
+  bypassGate(runId: string, gate: string, actor: string, reason: string): Promise<WorkflowRunSummary>;
+  /** Queues a failed stage for another attempt within its budget. */
+  retryStage(runId: string, nodeId: string): Promise<WorkflowRunSummary>;
+  /** Cancels a run. */
+  cancelRun(runId: string, reason?: string): Promise<WorkflowRunSummary>;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */

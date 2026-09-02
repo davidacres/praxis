@@ -10,6 +10,7 @@ import type {
   TemplateReadiness
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { WorkflowRunMonitor } from './WorkflowRunMonitor';
 import {
   addNode,
   bucketFeedback,
@@ -55,6 +56,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
   const [error, setError] = useState<string | undefined>();
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<'design' | 'runs'>('design');
 
   const reloadLibrary = useCallback(() => {
     void window.praxis.workflows.listTemplates(project.id).then(list => {
@@ -140,8 +142,28 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
   return (
     <div className="view-scroll" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Workflow designer</h1>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Workflows</h1>
         <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{project.name}</span>
+        <div role="tablist" aria-label="View" style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'design'}
+            className="ghost-button"
+            onClick={() => setView('design')}
+          >
+            Design
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'runs'}
+            className="ghost-button"
+            onClick={() => setView('runs')}
+          >
+            Runs
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -150,7 +172,12 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
         </p>
       )}
 
-      {!definition ? (
+      {view === 'runs' ? (
+        <WorkflowRunMonitor
+          project={project}
+          runnableWorkflows={projectWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name }))}
+        />
+      ) : !definition ? (
         <TemplateLibrary
           templates={templates}
           readiness={readiness}

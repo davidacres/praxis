@@ -47,7 +47,7 @@ test('instantiates the governed delivery template, edits a stage, and persists i
   const page = app.window;
 
   await page.getByTestId('project-workflows-nav-item').click();
-  await expect(page.getByRole('heading', { name: 'Workflow designer' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
 
   // The built-in template is offered in the library.
   const templateCard = page.getByRole('listitem').filter({ hasText: 'Governed delivery' }).first();
