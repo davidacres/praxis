@@ -1,7 +1,7 @@
 ---
 id: FX-BE-023
 title: Designer completion and folder persistence
-status: proposed
+status: complete
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-023-designer-completion-and-folder-persistence/issue.md
 updated: 2026-09-02

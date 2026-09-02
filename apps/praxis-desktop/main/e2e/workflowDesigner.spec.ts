@@ -105,6 +105,36 @@ test('blocks save while the graph is invalid and announces the errors', async ()
   await expect(page.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
 });
 
+test('the canvas moves a stage with the keyboard and toggles to the list view', async () => {
+  const page = app.window;
+
+  await page.getByTestId('project-workflows-nav-item').click();
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Governed delivery' })
+    .first()
+    .getByRole('button', { name: 'Use template' })
+    .click();
+
+  // The designer opens on the canvas; the QA stage card is focusable.
+  const canvas = page.getByRole('application', { name: 'Workflow canvas' });
+  await expect(canvas).toBeVisible();
+  const qaCard = canvas.getByRole('button', { name: /^QA \(check\)/ });
+  await qaCard.focus();
+
+  const before = await qaCard.evaluate(el => (el as HTMLElement).style.left);
+  await qaCard.press('Shift+ArrowRight');
+  await qaCard.press('Shift+ArrowRight');
+  await expect
+    .poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left))
+    .not.toBe(before);
+
+  // Switching to the list view still shows every stage and hides the canvas.
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  await expect(canvas).toBeHidden();
+  await expect(page.getByRole('button', { name: /^QA \(check\)/ })).toBeVisible();
+});
+
 test('a folder-backed project commits its workflow to .praxis/workflows and reloads it', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-folder-'));
   const page = app.window;
