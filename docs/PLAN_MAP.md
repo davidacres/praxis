@@ -42,13 +42,13 @@
 | TASK-057 | Task | Node visual encoding and raycast selection into detail surfaces | Proposed | TASK-056 |
 | TASK-058 | Task | Live activity pass and awaiting-approval signal | Proposed | TASK-056 |
 | TASK-059 | Task | Atlas navigation integration and vertical-slice verification | Proposed | TASK-057, TASK-058 |
-| FX-BF-009 | Feature | Agent Hub catalog and navigation | Proposed | FX-BF-005 |
-| FX-BE-010 | Story | Agent Hub navigation and scope-aware catalog | Proposed | FX-BF-009 |
-| FX-BE-011 | Story | Agent and skill detail, trust, and capabilities | Proposed | FX-BF-009 |
-| TASK-076 | Task | Implement Agent Hub shell and route | Proposed | FX-BE-010 |
-| TASK-077 | Task | Add scope-aware discovery tree | Proposed | FX-BE-010 |
-| TASK-078 | Task | Build agent and skill detail panes | Proposed | FX-BE-011 |
-| TASK-079 | Task | Define trust, capabilities, and settings boundary | Proposed | FX-BE-011 |
+| FX-BF-009 | Feature | Agent Hub catalog and navigation | Complete | FX-BF-005 |
+| FX-BE-010 | Story | Agent Hub navigation and scope-aware catalog | Complete | FX-BF-009 |
+| FX-BE-011 | Story | Agent and skill detail, trust, and capabilities | Complete | FX-BF-009 |
+| TASK-076 | Task | Implement Agent Hub shell and route | Complete | FX-BE-010 |
+| TASK-077 | Task | Add scope-aware discovery tree | Complete | FX-BE-010 |
+| TASK-078 | Task | Build agent and skill detail panes | Complete | FX-BE-011 |
+| TASK-079 | Task | Define trust, capabilities, and settings boundary | Complete | FX-BE-011 |
 | FX-BF-010 | Feature | Agent and skill creation | Proposed | FX-BF-009 |
 | FX-BE-012 | Story | Create Agent wizard and starter scaffold | Proposed | FX-BF-010 |
 | FX-BE-013 | Story | Create complete Skill package | Proposed | FX-BF-010 |

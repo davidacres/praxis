@@ -437,7 +437,6 @@ function NavGroup({
 function AgentRuntimeSection() {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
   const [error, setError] = useState<string>();
-  const [activated, setActivated] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   const refresh = async () => {
@@ -463,7 +462,9 @@ function AgentRuntimeSection() {
         <div className="settings-field-row">
           <div className="settings-field-label">
             <strong>Registry</strong>
-            <div className="settings-field-help">Discovery is read-only until you explicitly start a trusted host.</div>
+            <div className="settings-field-help">
+              Read-only diagnostics. Start hosts and activate skills from the <strong>Agents</strong> hub in the sidebar.
+            </div>
           </div>
           <div className="settings-field-control">
             <button className="btn" type="button" onClick={() => void refresh()} disabled={busy} data-testid="agent-runtime-refresh">
@@ -480,29 +481,15 @@ function AgentRuntimeSection() {
               <div className="settings-field-row" key={agent.manifest.id} data-testid={`agent-runtime-agent-${agent.manifest.id}`}>
                 <div className="settings-field-label">
                   <strong>{agent.manifest.name}</strong>
-                  <div className="settings-field-help">{agent.manifest.type} · {agent.trusted ? 'trusted' : 'approval required'}{agent.errors.length ? ` · ${agent.errors.map(item => item.message).join('; ')}` : ''}</div>
-                </div>
-                <div className="settings-field-control">
-                  <button className="btn" type="button" disabled={!agent.trusted || agent.errors.length > 0 || busy} onClick={() => void window.praxis.agentRuntime.start(agent.manifest.id).then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))}>
-                    Start
-                  </button>
+                  <div className="settings-field-help">{agent.manifest.type} · {agent.scope} · {agent.trusted ? 'trusted' : 'approval required'}{agent.errors.length ? ` · ${agent.errors.map(item => item.message).join('; ')}` : ''}</div>
                 </div>
               </div>
             ))}
             {snapshot.skills.map(skill => (
               <div className="settings-field-row" key={skill.metadata.name} data-testid={`agent-runtime-skill-${skill.metadata.name}`}>
-                <div className="settings-field-label"><strong>{skill.metadata.name}</strong><div className="settings-field-help">{skill.metadata.description}</div></div>
-                <div className="settings-field-control">
-                  {skill.error ? <span className="settings-field-help">Invalid: {skill.error}</span> : (
-                    <>
-                      <span className="settings-field-help">{activated === skill.metadata.name ? 'Activated' : skill.trusted ? 'Indexed' : 'Approval required'}</span>
-                      {snapshot.agents.find(agent => agent.trusted && agent.errors.length === 0) && <button className="btn" type="button" disabled={!skill.trusted || busy} onClick={() => {
-                        const agent = snapshot.agents.find(candidate => candidate.trusted && candidate.errors.length === 0);
-                        if (!agent) return;
-                        void window.praxis.agentRuntime.activateSkill(agent.manifest.id, skill.metadata.name).then(() => setActivated(skill.metadata.name)).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
-                      }}>Activate</button>}
-                    </>
-                  )}
+                <div className="settings-field-label">
+                  <strong>{skill.metadata.name}</strong>
+                  <div className="settings-field-help">{skill.error ? `Invalid: ${skill.error}` : `${skill.scope} · ${skill.trusted ? 'indexed' : 'approval required'}`}</div>
                 </div>
               </div>
             ))}

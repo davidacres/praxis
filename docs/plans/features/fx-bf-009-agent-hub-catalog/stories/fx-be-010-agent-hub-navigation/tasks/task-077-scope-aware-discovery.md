@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.991Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-077
 title: Add scope-aware discovery tree
-status: proposed
+status: complete
 story: FX-BE-010
 updated: 2026-08-31
 dependencies: [TASK-076]
