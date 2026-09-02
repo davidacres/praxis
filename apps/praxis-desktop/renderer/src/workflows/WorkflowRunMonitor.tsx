@@ -1,45 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
+import { Icon } from '../ui/Icon';
+import { WorkflowPipeline } from './WorkflowPipeline';
 
 /**
- * Workflow run monitor (FX-BE-022 / TASK-105).
+ * Workflow run monitor (FX-BE-022 / FX-BE-029).
  *
- * Renders the `WorkflowRunSummary` view model from core: a stage lane per node,
- * the parallel branches and where they converge, the gate ledger, and a single
- * sentence explaining why the run is active, blocked, failed, or complete.
- * Approve and the per-stage actions stay unavailable until the engine says
- * they are allowed — the buttons mirror `summary.actions`.
+ * Three columns: a live run list, the run board (a one-sentence explanation, a
+ * read-only pipeline diagram, the gate ledger, a collapsible timeline), and the
+ * detail for whichever stage is selected in the diagram.
  *
- * Stages the orchestrator can drive (FX-BF-013) advance on their own; the
- * Mark done / Mark failed controls remain for stages it declines — a project
- * with no working directory, or no configured provider — and are how the E2E
- * suite exercises a run without an agent.
+ * Stages the orchestrator can drive advance on their own and the board updates
+ * live; Mark done / Mark failed remain for stages it declines (no provider, no
+ * folder) and are how the E2E suite exercises a run without an agent.
  */
 
-const LANE_DOT: Record<WorkflowRunSummary['stages'][number]['lane'], string> = {
-  idle: '○',
-  ready: '◔',
-  running: '◑',
-  done: '●',
-  failed: '✕',
-  skipped: '–',
-  awaiting: '◆'
+const STATUS_TONE: Record<WorkflowRunSummary['status'], string> = {
+  running: 'wf-lane--running',
+  'awaiting-approval': 'wf-lane--awaiting',
+  succeeded: 'wf-lane--done',
+  failed: 'wf-lane--failed',
+  cancelled: 'wf-lane--skipped'
+};
+
+const GATE_CHIP: Record<string, string> = {
+  passed: 'chip-success',
+  failed: 'chip-danger',
+  pending: 'chip-warn',
+  bypassed: 'chip-warn',
+  missing: 'chip-danger'
 };
 
 export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
-  /** Start-a-run affordance needs the workflow ids available to the project. */
   runnableWorkflows: Array<{ id: string; name: string }>;
-  /** Opens the agent session behind a stage, when one exists. */
   onOpenSession?: (sessionKey: string) => void;
 }
 
 export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }: WorkflowRunMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
+  const [selectedStageId, setSelectedStageId] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [taskTitle, setTaskTitle] = useState('');
   const [startWorkflowId, setStartWorkflowId] = useState('');
+  const [timelineOpen, setTimelineOpen] = useState(false);
+
+  // Preselect the only workflow, so a project with one goes straight to "Task".
+  useEffect(() => {
+    if (runnableWorkflows.length === 1) setStartWorkflowId(runnableWorkflows[0].id);
+  }, [runnableWorkflows]);
 
   const reload = useCallback(
     async (keepId?: string) => {
@@ -54,9 +64,8 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
     void reload();
   }, [reload]);
 
-  // Live updates: the orchestrator advances stages in the background, so the
-  // monitor must refresh without a user action. A burst of transitions
-  // coalesces into one reload on the next frame.
+  // Live updates: the orchestrator advances stages in the background, coalesced
+  // into one reload per frame; the current selection is kept.
   const pendingReload = useRef<number | undefined>(undefined);
   useEffect(() => {
     const unsubscribe = window.praxis.workflows.onRunChanged(() => {
@@ -73,6 +82,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
   }, [reload]);
 
   const selected = runs.find(run => run.runId === selectedRunId);
+  const stage = selected?.stages.find(row => row.nodeId === selectedStageId);
 
   const act = useCallback(
     async (fn: () => Promise<WorkflowRunSummary>) => {
@@ -87,282 +97,247 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
     [reload]
   );
 
+  const canApprove = selected?.actions.some(a => a.kind === 'approve') ?? false;
+  const canCancel = selected?.actions.some(a => a.kind === 'cancel-run') ?? false;
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 20, alignItems: 'start' }}>
-      <section aria-label="Runs" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="wf-runs">
+      <nav className="wf-rail" aria-label="Runs">
         <form
+          className="wf-runstart"
           onSubmit={event => {
             event.preventDefault();
             if (!startWorkflowId || !taskTitle.trim()) return;
-            void act(() => window.praxis.workflows.startRun(project.id, startWorkflowId, taskTitle.trim())).then(() => {
-              setTaskTitle('');
-            });
+            void act(() => window.praxis.workflows.startRun(project.id, startWorkflowId, taskTitle.trim())).then(() =>
+              setTaskTitle('')
+            );
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}
         >
-          <strong style={{ fontSize: 13 }}>Start a run</strong>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-            <span style={{ color: 'var(--text-dim)' }}>Workflow</span>
-            <select
-              aria-label="Run workflow"
-              value={startWorkflowId}
-              onChange={event => setStartWorkflowId(event.target.value)}
-            >
-              <option value="">—</option>
-              {runnableWorkflows.map(workflow => (
-                <option key={workflow.id} value={workflow.id}>
-                  {workflow.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 12 }}>
-            <span style={{ color: 'var(--text-dim)' }}>Task</span>
+          <strong>Start a run</strong>
+          {runnableWorkflows.length > 1 && (
+            <label>
+              <span>Workflow</span>
+              <select aria-label="Run workflow" value={startWorkflowId} onChange={e => setStartWorkflowId(e.target.value)}>
+                <option value="">—</option>
+                {runnableWorkflows.map(w => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            <span>Task</span>
             <input
               aria-label="Run task"
               value={taskTitle}
-              onChange={event => setTaskTitle(event.target.value)}
+              onChange={e => setTaskTitle(e.target.value)}
               placeholder="What is this run for?"
             />
           </label>
-          <button type="submit" className="primary-button" disabled={!startWorkflowId || !taskTitle.trim()}>
+          <button type="submit" className="btn btn-primary" disabled={!startWorkflowId || !taskTitle.trim()}>
             Start
           </button>
         </form>
 
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <ul className="wf-rail-list">
           {runs.map(run => (
             <li key={run.runId}>
               <button
                 type="button"
+                className="wf-rail-row"
                 aria-pressed={run.runId === selectedRunId}
                 aria-label={`${run.workflowName}, ${run.status}`}
-                onClick={() => setSelectedRunId(run.runId)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)',
-                  background: run.runId === selectedRunId ? 'var(--surface-active, var(--bg-elevated))' : 'var(--bg)',
-                  color: 'var(--text)',
-                  cursor: 'pointer'
+                onClick={() => {
+                  setSelectedRunId(run.runId);
+                  setSelectedStageId(undefined);
                 }}
               >
-                <span style={{ fontWeight: 600, display: 'block' }}>{run.workflowName}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{run.status}</span>
+                <span className={`wf-lane ${STATUS_TONE[run.status]}`} aria-hidden>
+                  ●
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontWeight: 600, display: 'block' }}>{run.workflowName}</span>
+                  <span className="wf-rail-sub">{run.status}</span>
+                </span>
               </button>
             </li>
           ))}
-          {runs.length === 0 && <li style={{ color: 'var(--text-dim)', fontSize: 13 }}>No runs yet.</li>}
+          {runs.length === 0 && <li className="wf-rail-empty">No runs yet.</li>}
         </ul>
-      </section>
+      </nav>
 
-      <section aria-label="Run detail" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <section className="wf-board" aria-label="Run detail">
         {error && (
-          <p role="alert" style={{ color: 'var(--danger)', margin: 0 }}>
+          <p role="alert" className="error-banner">
             {error}
           </p>
         )}
 
         {!selected ? (
-          <p style={{ color: 'var(--text-dim)' }}>Select a run.</p>
+          <div className="empty-state">
+            <Icon name="play" size={26} />
+            <span>Select a run, or start one.</span>
+          </div>
         ) : (
           <>
-            <div
-              role="status"
-              aria-live="polite"
-              style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}
-            >
-              <strong>{selected.status}</strong>
-              <p style={{ margin: '4px 0 0', fontSize: 13 }}>{selected.explanation}</p>
+            <div className="wf-board-status" role="status" aria-live="polite">
+              <span className={`wf-lane ${STATUS_TONE[selected.status]}`}>●</span>
+              <div>
+                <strong>{selected.status}</strong>
+                <p>{selected.explanation}</p>
+              </div>
+              <div className="wf-board-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!canApprove}
+                  title={canApprove ? undefined : 'Every required gate must pass first'}
+                  onClick={() => void act(() => window.praxis.workflows.approveRun(selected.runId, 'desktop-user'))}
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!canCancel}
+                  onClick={() => void act(() => window.praxis.workflows.cancelRun(selected.runId, 'cancelled from the monitor'))}
+                >
+                  Cancel run
+                </button>
+              </div>
             </div>
 
-            <RunActions summary={selected} onAct={act} />
-
-            <StageTable summary={selected} onAct={act} onOpenSession={onOpenSession} />
-
-            {selected.branchGroups.map(group => (
-              <div
-                key={group.joinNodeId}
-                style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, fontSize: 13 }}
-              >
-                <strong>{group.joinName}</strong>{' '}
-                <span style={{ color: group.converged ? 'var(--accent)' : 'var(--text-dim)' }}>
-                  {group.converged ? 'converged' : 'waiting to converge'}
-                </span>
-                <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
-                  {group.branches.map(branch => (
-                    <li key={branch.headNodeId}>
-                      {branch.headName} — {branch.outcome}
-                      {!branch.required && <span style={{ color: 'var(--text-dim)' }}> (advisory)</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            <WorkflowPipeline
+              summary={selected}
+              selectedNodeId={selectedStageId}
+              onSelectNode={setSelectedStageId}
+            />
 
             {selected.gates.length > 0 && (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, fontSize: 13 }}>
-                <strong>Gates</strong>
-                <ul style={{ margin: '6px 0 0', paddingLeft: 16 }}>
+              <table className="wf-gates">
+                <caption>Gates</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Gate</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {selected.gates.map(gate => (
-                    <li key={gate.gate}>
-                      {gate.gate}: <strong>{gate.state}</strong>
-                      {gate.deterministic && <span style={{ color: 'var(--text-dim)' }}> (deterministic check)</span>} — {gate.detail}
-                    </li>
+                    <tr key={gate.gate}>
+                      <th scope="row">{gate.gate}</th>
+                      <td>
+                        <span className={`chip ${GATE_CHIP[gate.state] ?? 'chip-muted'}`}>{gate.state}</span>
+                        {gate.deterministic && <span className="wf-gates-tag"> deterministic check</span>}
+                      </td>
+                      <td>{gate.detail}</td>
+                    </tr>
                   ))}
-                </ul>
-              </div>
+                </tbody>
+              </table>
             )}
+
+            <details className="wf-timeline" open={timelineOpen} onToggle={e => setTimelineOpen((e.target as HTMLDetailsElement).open)}>
+              <summary>Timeline ({selected.events.length})</summary>
+              <ol>
+                {selected.events.map(event => (
+                  <li key={event.id}>
+                    <span className="wf-rail-sub">{new Date(event.at).toLocaleTimeString()}</span> {event.message}
+                  </li>
+                ))}
+              </ol>
+            </details>
           </>
         )}
       </section>
-    </div>
-  );
-}
 
-function RunActions({
-  summary,
-  onAct
-}: {
-  summary: WorkflowRunSummary;
-  onAct: (fn: () => Promise<WorkflowRunSummary>) => Promise<void>;
-}) {
-  const canApprove = summary.actions.some(action => action.kind === 'approve');
-  const canCancel = summary.actions.some(action => action.kind === 'cancel-run');
+      <aside className="wf-inspector" aria-label="Stage detail">
+        {!stage || !selected ? (
+          <div className="empty-state">
+            <Icon name="cursor" size={24} />
+            <span>Select a stage to see its evidence.</span>
+          </div>
+        ) : (
+          <div className="wf-stagecard">
+            <h2>{stage.name}</h2>
+            <p className="wf-rail-sub">
+              {stage.type}
+              {stage.gate ? ` · ${stage.gate} gate` : ''} · {stage.outcome}
+              {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
+            </p>
 
-  return (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      <button
-        type="button"
-        className="primary-button"
-        disabled={!canApprove}
-        onClick={() => void onAct(() => window.praxis.workflows.approveRun(summary.runId, 'desktop-user'))}
-      >
-        Approve
-      </button>
-      <button
-        type="button"
-        className="ghost-button"
-        disabled={!canCancel}
-        onClick={() => void onAct(() => window.praxis.workflows.cancelRun(summary.runId, 'cancelled from the monitor'))}
-      >
-        Cancel run
-      </button>
-    </div>
-  );
-}
+            {stage.lastError && <p className="wf-stage-error">{stage.lastError}</p>}
 
-function StageTable({
-  summary,
-  onAct,
-  onOpenSession
-}: {
-  summary: WorkflowRunSummary;
-  onAct: (fn: () => Promise<WorkflowRunSummary>) => Promise<void>;
-  onOpenSession?: (sessionKey: string) => void;
-}) {
-  return (
-    <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
-      <thead>
-        <tr style={{ textAlign: 'left', color: 'var(--text-dim)' }}>
-          <th style={{ padding: '4px 8px' }}>Stage</th>
-          <th style={{ padding: '4px 8px' }}>State</th>
-          <th style={{ padding: '4px 8px' }}>Evidence</th>
-          <th style={{ padding: '4px 8px' }}>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {summary.stages.map(stage => {
-          const canRetry = summary.actions.some(
-            action => action.kind === 'retry-stage' && action.nodeId === stage.nodeId
-          );
-          return (
-            <tr key={stage.nodeId} style={{ borderTop: '1px solid var(--border)' }}>
-              <td style={{ padding: '6px 8px' }}>
-                <span aria-hidden style={{ marginRight: 6 }}>
-                  {LANE_DOT[stage.lane]}
-                </span>
-                {stage.name}
-                <span style={{ color: 'var(--text-dim)' }}> · {stage.type}</span>
-                {stage.gate && <span style={{ color: 'var(--accent)' }}> · {stage.gate} gate</span>}
-              </td>
-              <td style={{ padding: '6px 8px' }}>
-                {stage.outcome}
-                {stage.maxAttempts && stage.attempts > 0 && (
-                  <span style={{ color: 'var(--text-dim)' }}>
-                    {' '}
-                    ({stage.attempts}/{stage.maxAttempts})
-                  </span>
-                )}
-                {stage.lastError && (
-                  <div style={{ color: 'var(--danger)', fontSize: 12 }}>{stage.lastError}</div>
-                )}
-              </td>
-              <td style={{ padding: '6px 8px' }}>
-                {stage.sessionKey && onOpenSession && (
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    style={{ fontSize: 12, padding: '1px 6px' }}
-                    onClick={() => onOpenSession(stage.sessionKey as string)}
-                  >
-                    Open session
-                  </button>
-                )}
-                {stage.snapshotRef && <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{stage.snapshotRef}</div>}
+            {stage.snapshotRef && (
+              <p>
+                <span className="wf-rail-sub">snapshot</span>{' '}
+                <code>{stage.snapshotRef}</code>
+              </p>
+            )}
+
+            {stage.artifacts.length > 0 && (
+              <ul className="wf-stage-artifacts">
                 {stage.artifacts.map(artifact => (
-                  <div key={artifact.contractId} style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                  <li key={artifact.contractId}>
                     {artifact.kind}: {artifact.contractId}
-                  </div>
+                  </li>
                 ))}
-              </td>
-              <td style={{ padding: '6px 8px', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {stage.lane === 'ready' && stage.type !== 'approval' && (
-                  <>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() =>
-                        void onAct(() =>
-                          window.praxis.workflows.advanceStage(summary.runId, stage.nodeId, 'succeeded', {
-                            snapshotRef: stage.type === 'agent-task' ? `snapshot-${stage.nodeId}` : undefined
-                          })
-                        )
-                      }
-                    >
-                      Mark done
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() =>
-                        void onAct(() =>
-                          window.praxis.workflows.advanceStage(summary.runId, stage.nodeId, 'failed', {
-                            error: 'Marked failed from the monitor.'
-                          })
-                        )
-                      }
-                    >
-                      Mark failed
-                    </button>
-                  </>
-                )}
-                {canRetry && (
+              </ul>
+            )}
+
+            <div className="wf-stage-actions">
+              {stage.sessionKey && onOpenSession && (
+                <button type="button" className="btn-compact" onClick={() => onOpenSession(stage.sessionKey as string)}>
+                  Open session
+                </button>
+              )}
+              {selected?.actions.some(a => a.kind === 'retry-stage' && a.nodeId === stage.nodeId) && (
+                <button
+                  type="button"
+                  className="btn-compact"
+                  onClick={() => void act(() => window.praxis.workflows.retryStage(selected.runId, stage.nodeId))}
+                >
+                  Retry
+                </button>
+              )}
+              {stage.lane === 'ready' && stage.type !== 'approval' && (
+                <>
                   <button
                     type="button"
-                    className="ghost-button"
-                    onClick={() => void onAct(() => window.praxis.workflows.retryStage(summary.runId, stage.nodeId))}
+                    className="btn-compact"
+                    onClick={() =>
+                      void act(() =>
+                        window.praxis.workflows.advanceStage(selected.runId, stage.nodeId, 'succeeded', {
+                          snapshotRef: stage.type === 'agent-task' ? `snapshot-${stage.nodeId}` : undefined
+                        })
+                      )
+                    }
                   >
-                    Retry
+                    Mark done
                   </button>
-                )}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                  <button
+                    type="button"
+                    className="btn-compact"
+                    onClick={() =>
+                      void act(() =>
+                        window.praxis.workflows.advanceStage(selected.runId, stage.nodeId, 'failed', {
+                          error: 'Marked failed from the monitor.'
+                        })
+                      )
+                    }
+                  >
+                    Mark failed
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </aside>
+    </div>
   );
 }
+

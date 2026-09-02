@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-127
 title: Build the run board: sentence, read-only pipeline diagram, gate ledger table, timeline.
-status: proposed
+status: complete
 story: FX-BE-029
 updated: 2026-09-02
 dependencies: [FX-BE-027]

@@ -55,10 +55,22 @@ async function openRunsTab(page: Page): Promise<void> {
   await page.getByRole('tab', { name: 'Runs' }).click();
 }
 
-/** Marks a ready stage done from the monitor's stage table. */
+/** Selects a stage in the pipeline diagram, then marks it done from its detail. */
 async function markDone(page: Page, stageName: string): Promise<void> {
-  const row = page.getByRole('row').filter({ hasText: stageName });
-  await row.getByRole('button', { name: 'Mark done' }).click();
+  await page
+    .getByRole('region', { name: 'Run detail' })
+    .getByRole('button', { name: new RegExp(`^${stageName} `) })
+    .click();
+  await page.getByRole('complementary', { name: 'Stage detail' }).getByRole('button', { name: 'Mark done' }).click();
+}
+
+/** The detail text for a stage, selected via the pipeline. */
+async function stageDetail(page: Page, stageName: string) {
+  await page
+    .getByRole('region', { name: 'Run detail' })
+    .getByRole('button', { name: new RegExp(`^${stageName} `) })
+    .click();
+  return page.getByRole('complementary', { name: 'Stage detail' });
 }
 
 test.afterEach(async () => {
@@ -72,11 +84,12 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   await openRunsTab(page);
 
   // Start a run of the project's Governed delivery workflow.
-  await page.getByLabel('Run workflow').selectOption({ label: 'Governed delivery' });
   await page.getByLabel('Run task').fill('Ship the widget');
   await page.getByRole('button', { name: 'Start' }).click();
 
   const runDetail = page.getByRole('region', { name: 'Run detail' });
+  const approve = page.getByRole('button', { name: 'Approve', exact: true });
+  const gatesNode = runDetail.getByRole('button', { name: /^Gates / });
   await expect(runDetail.getByRole('status')).toContainText(/waiting for the next stage|Stage in progress|Plan/i);
 
   // Plan → Implement are serial (Implement writes the worktree).
@@ -87,20 +100,19 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   await markDone(page, 'Review');
   await markDone(page, 'QA');
 
-  // Approval is still blocked — the security gate has not resolved.
-  await expect(page.getByRole('button', { name: 'Approve' })).toBeDisabled();
-  await expect(runDetail).toContainText('Security scan');
-  await expect(runDetail).toContainText('waiting to converge');
+  // Approval is still blocked — the security branch has not reached the join.
+  await expect(approve).toBeDisabled();
+  await expect(runDetail.getByRole('button', { name: /^Security scan / })).toBeVisible();
+  await expect(gatesNode).not.toHaveAttribute('aria-label', /done/);
 
   await expect(page.getByRole('region', { name: 'Run detail' })).toHaveScreenshot('workflow-run-monitor.png');
 
   await markDone(page, 'Security scan');
 
-  // The branch group has converged and every gate passed.
-  await expect(runDetail).toContainText('converged');
+  // The join has converged and the run is waiting on a human.
+  await expect(gatesNode).toHaveAttribute('aria-label', /done/);
   await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval');
 
-  const approve = page.getByRole('button', { name: 'Approve' });
   await expect(approve).toBeEnabled();
   await approve.click();
 
@@ -113,12 +125,11 @@ test('a run can be cancelled from the monitor', async () => {
   await seedProject(page);
   await openRunsTab(page);
 
-  await page.getByLabel('Run workflow').selectOption({ label: 'Governed delivery' });
   await page.getByLabel('Run task').fill('Abandon this one');
   await page.getByRole('button', { name: 'Start' }).click();
 
   await markDone(page, 'Plan');
-  await page.getByRole('button', { name: 'Cancel run' }).click();
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
 
   await expect(page.getByRole('region', { name: 'Run detail' }).getByRole('status')).toContainText('cancelled');
 });
@@ -129,14 +140,12 @@ test('completed stages are not re-run after an app restart', async () => {
   await seedProject(page);
   await openRunsTab(page);
 
-  await page.getByLabel('Run workflow').selectOption({ label: 'Governed delivery' });
   await page.getByLabel('Run task').fill('Survive a restart');
   await page.getByRole('button', { name: 'Start' }).click();
   await markDone(page, 'Plan');
   await markDone(page, 'Implement');
 
-  const implementRow = page.getByRole('row').filter({ hasText: 'Implement' });
-  await expect(implementRow).toContainText('succeeded');
+  await expect(await stageDetail(page, 'Implement')).toContainText('succeeded');
 
   // Relaunch into the same profile. The seeded workspace clears the durable
   // route on launch, so navigate back to Workflows through the sidebar.
@@ -149,7 +158,7 @@ test('completed stages are not re-run after an app restart', async () => {
   await page.getByRole('button', { name: /Governed delivery/ }).first().click();
 
   // The two completed stages are still done, each with a single attempt.
-  const restoredImplement = page.getByRole('row').filter({ hasText: 'Implement' });
+  const restoredImplement = await stageDetail(page, 'Implement');
   await expect(restoredImplement).toContainText('succeeded');
   await expect(restoredImplement).toContainText('(1/2)');
 });
@@ -326,17 +335,16 @@ test('the run monitor reflects an unattended run as the orchestrator drives it',
   await page.reload();
   await openRunsTab(page);
 
-  await page.getByLabel('Run workflow').selectOption({ label: 'Auto checks' });
   await page.getByLabel('Run task').fill('Hands off');
   await page.getByRole('button', { name: 'Start' }).click();
 
   const runDetail = page.getByRole('region', { name: 'Run detail' });
   // No Mark done anywhere: the check runs and the status region updates itself.
   await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
-  await expect(page.getByRole('row').filter({ hasText: 'Verify' })).toContainText('succeeded');
-  await expect(page.getByRole('button', { name: 'Approve' })).toBeEnabled();
+  await expect(await stageDetail(page, 'Verify')).toContainText('succeeded');
+  await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeEnabled();
 
-  await page.getByRole('button', { name: 'Approve' }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(runDetail.getByRole('status')).toContainText('completed');
   expect(seeded.workflowId).toContain('auto-');
 
@@ -353,13 +361,15 @@ test('a check that outruns its timeout is failed with a stated reason', async ()
   await page.reload();
   await openRunsTab(page);
 
-  await page.getByLabel('Run workflow').selectOption({ label: 'Auto checks' });
   await page.getByLabel('Run task').fill('Too slow');
   await page.getByRole('button', { name: 'Start' }).click();
 
-  const verifyRow = page.getByRole('row').filter({ hasText: 'Verify' });
-  await expect(verifyRow).toContainText('failed', { timeout: 20000 });
-  await expect(verifyRow).toContainText(/timed out/i);
+  const verifyNode = page
+    .getByRole('region', { name: 'Run detail' })
+    .getByRole('button', { name: /^Verify / });
+  await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
+  await verifyNode.click();
+  await expect(page.getByRole('complementary', { name: 'Stage detail' })).toContainText(/timed out/i);
   await expect(page.getByRole('region', { name: 'Run detail' })).toContainText(/failed|retried/);
 
   fs.rmSync(repo, { recursive: true, force: true });
