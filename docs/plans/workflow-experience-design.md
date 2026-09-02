@@ -389,13 +389,55 @@ present.
 
 ---
 
-## 10. Open questions for the team
+## 10. Decisions
 
-1. **Segmented control vs. two sidebar entries.** `Design ⇄ Runs` in the header
-   is fewer clicks; separate `Workflows` / `Workflow runs` sidebar rows are more
-   discoverable. Leaning header control.
-2. **Run rail placement.** Left (matches Sessions) or right (keeps the board
-   flush-left for reading)? Leaning left for consistency.
-3. **Start-a-run affordance.** A footer button in the Designer *and* the bottom
-   of the run rail, or only the rail? Leaning both, since a freshly-saved
-   workflow invites an immediate run.
+### 10.1 One sidebar entry, a header segmented control, a count badge
+
+**`Workflows` stays a single sidebar row.** `Design ⇄ Runs` is a segmented
+control in the page header (`.btn-compact` pair, `role="tablist"`), not a second
+sidebar entry.
+
+Rationale: the two modes are tightly coupled — you save a workflow and
+immediately want to run it; while a run is going you flip back to check the
+graph. A header control makes that flip one click and keeps the project tree
+(already dense with Boards / Repository / Workflows / docs) calm. The Git split
+(`Graph` / `Changes` as sibling rows) is the counter-precedent, but Git's two
+views are less coupled than design-then-run.
+
+Discoverability is bought back cheaply: **the `Workflows` sidebar row carries a
+count badge of non-terminal runs** (`running` + `awaiting-approval`), using the
+existing `featureCounts` mechanism. "Workflows · 2" tells a browsing user that
+runs exist and something is live, without a second row.
+
+The route records the active view — `route.workflowView: 'design' | 'runs'` (and
+`route.workflowId`, `route.runId`) — so back/forward, and a restart, land the
+user where they were. Recovery of a running orchestrated run should restore into
+`runs` with that run selected.
+
+### 10.2 Both docked list columns go on the left
+
+The Designer's **stage list** and the Monitor's **run list** dock on the
+**left** of `pane-main`. The right side is reserved for the shell's `pane-aux`
+(the stage/edge inspector, the run-stage evidence panel).
+
+This isn't only "consistency with Sessions" — it's forced. `pane-aux` is already
+a right-docked panel. Putting a list column on the right too would mean two
+panels competing for the right edge, and the run board (which reads
+left-to-right: sentence → pipeline diagram → ledger) would start behind
+whichever won. Left-docked list, right `pane-aux`, board flush against the list.
+
+### 10.3 Start a run from three places, one form
+
+1. **Designer footer — `Run ▸`.** A small popover: *"Run «workflow» against a
+   task"* with one text field and `Start`. Disabled while the workflow is
+   invalid or unsaved (and, for a folder-backed project, uncommitted); the
+   tooltip says why. On `Start` it navigates to `runs` with the new run
+   selected. This serves the highest-intent moment — just finished editing.
+2. **Run rail — `Start a run`.** The same popover, plus a workflow picker when
+   the project has more than one. Serves "come back and run an existing
+   workflow against a new task".
+3. **Monitor stage/run detail — `Re-run`.** On a settled run, re-runs the same
+   workflow version against a new task title (prefilled from the original).
+
+All three call `workflows.startRun` and open the same small form component; only
+the trigger and the pre-filled fields differ.
