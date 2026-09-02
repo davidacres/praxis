@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-131
 title: Add the screens to the theme-gallery e2e and verify responsiveness.
-status: proposed
+status: complete
 story: FX-BE-030
 updated: 2026-09-02
 dependencies: [FX-BE-028, FX-BE-029]

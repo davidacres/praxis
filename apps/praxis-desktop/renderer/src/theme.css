@@ -8511,6 +8511,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Template library — this-project cards + template list. */
 .wf-library { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); overflow-y: auto; }
 .wf-library h2 { margin: 0 0 var(--space-3); font-size: 15px; }
+.wf-library-lede { margin: 0 0 var(--space-3); font-size: 13px; color: var(--text-secondary); max-width: 60ch; }
+.wf-skeleton { min-height: 78px; border-color: transparent; background: linear-gradient(90deg, var(--bg-elevated) 0%, var(--bg-hover) 50%, var(--bg-elevated) 100%); background-size: 200% 100%; animation: wf-skeleton 1.4s ease-in-out infinite; }
+@keyframes wf-skeleton { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .wf-skeleton { animation: none; } }
 .wf-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
 .wf-card { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); text-align: left; font: inherit; color: var(--text); cursor: pointer; }
 .wf-card:hover { border-color: var(--accent); }

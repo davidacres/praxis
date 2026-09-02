@@ -114,6 +114,14 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
           }}
         >
           <strong>Start a run</strong>
+          {!project.workspaceFolder && (
+            <p className="wf-hint is-warn">
+              No folder is attached — agent and check stages will need to be advanced by hand.
+            </p>
+          )}
+          {runnableWorkflows.length === 0 && (
+            <p className="wf-hint">Save a workflow in the designer first.</p>
+          )}
           {runnableWorkflows.length > 1 && (
             <label>
               <span>Workflow</span>

@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-129
 title: Implement the states matrix for all three screens.
-status: proposed
+status: complete
 story: FX-BE-030
 updated: 2026-09-02
 dependencies: [FX-BE-028, FX-BE-029]

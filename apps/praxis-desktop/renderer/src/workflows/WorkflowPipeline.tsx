@@ -86,6 +86,14 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
           −
         </button>
       </div>
+      <ol className="sr-only">
+        {summary.stages.map(row => (
+          <li key={row.nodeId}>
+            {row.name} ({row.type}): {row.lane}
+            {row.gate ? `, ${row.gate} gate` : ''}
+          </li>
+        ))}
+      </ol>
       <div className="designer-canvas wf-pipeline-surface">
         <div
           className="wf-pipeline-world"
