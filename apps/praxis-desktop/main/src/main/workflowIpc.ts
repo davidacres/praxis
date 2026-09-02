@@ -14,6 +14,7 @@ import {
   loadProjectWorkflows,
   migrateWorkflow,
   normalizeWorkflow,
+  isRunSettled,
   recoverWorkflowRun,
   resolveWorkflowCatalog,
   summarizeWorkflowRun,
@@ -34,6 +35,7 @@ import {
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
+import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -72,6 +74,9 @@ export async function recoverWorkflowRunsOnStartup(): Promise<void> {
   for (const run of store.list()) {
     const recovered = recoverWorkflowRun(run, now);
     if (recovered.interrupted.length > 0) await store.save(recovered.run);
+    // Re-enter the loop so anything still runnable is picked back up. The
+    // orchestrator holds no state of its own, so this is all recovery needs.
+    if (!isRunSettled(recovered.run)) void getWorkflowOrchestrator().step(run.runId);
   }
 }
 
@@ -261,6 +266,8 @@ export function registerWorkflowIpc(): void {
         at: new Date().toISOString()
       });
       await runStore().save(run);
+      // Hand it straight to the orchestrator; deterministic stages start now.
+      void getWorkflowOrchestrator().step(run.runId);
       return summarize(run);
     }
   );
@@ -307,6 +314,9 @@ export function registerWorkflowIpc(): void {
             : { error: detail?.error ?? 'Stage failed.' })
         } as never);
         return advanceJoins(next, at);
+      }).then(async summary => {
+        await getWorkflowOrchestrator().step(runId);
+        return runStore().get(runId) ? summarize(runStore().get(runId) as WorkflowRun) : summary;
       });
     }
   );
@@ -354,9 +364,12 @@ export function registerWorkflowIpc(): void {
   );
 
   ipcMain.handle('workflows:retryStage', async (_event, runId: string, nodeId: string): Promise<WorkflowRunSummary> => {
-    return withRun(runId, run =>
+    const summary = await withRun(runId, run =>
       applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId, at: new Date().toISOString() })
     );
+    await getWorkflowOrchestrator().step(runId);
+    const run = runStore().get(runId);
+    return run ? summarize(run) : summary;
   });
 
   ipcMain.handle('workflows:cancelRun', async (_event, runId: string, reason?: string): Promise<WorkflowRunSummary> => {

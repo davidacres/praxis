@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -144,4 +148,107 @@ test('completed stages are not re-run after an app restart', async () => {
   const restoredImplement = page.getByRole('row').filter({ hasText: 'Implement' });
   await expect(restoredImplement).toContainText('succeeded');
   await expect(restoredImplement).toContainText('(1/2)');
+});
+
+/** A throwaway git repository the run can branch a worktree from. */
+function createRepository(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-repo-'));
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: root, stdio: 'ignore' });
+  };
+  git('init', '--initial-branch=main');
+  git('config', 'user.email', 'e2e@example.com');
+  git('config', 'user.name', 'E2E');
+  fs.writeFileSync(path.join(root, 'README.md'), '# fixture\n');
+  git('add', '.');
+  git('commit', '-m', 'initial');
+  return root;
+}
+
+test('a deterministic check runs on its own in the run worktree and unblocks approval', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const started = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Checked Delivery',
+        key: 'CHKD',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+
+    // A check-only workflow: `git --version` always exits 0 and needs nothing
+    // installed, so this asserts the orchestrator, not the toolchain.
+    const now = new Date().toISOString();
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: `checks-${project.id}`,
+      name: 'Checks only',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'verify',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+          command: 'git', args: ['--version'], successExitCodes: [0],
+          outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+          satisfiesGate: 'qa'
+        },
+        {
+          type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],
+          prompt: 'Ship?', requiredGates: ['qa'], allowBypass: false
+        }
+      ],
+      edges: [{ id: 'e1', from: 'verify', to: 'approve', on: 'success', required: true }]
+    } as never);
+
+    const summary = await window.praxis.workflows.startRun(project.id, `checks-${project.id}`, 'Automated');
+    return { runId: summary.runId, projectId: project.id };
+  }, repo);
+
+  // No manual advancement: poll until the orchestrator has driven the check.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(async runId => (await window.praxis.workflows.getRun(runId))?.status, started.runId),
+      { timeout: 20000 }
+    )
+    .toBe('awaiting-approval');
+
+  const detail = await page.evaluate(
+    async runId => {
+      const summary = await window.praxis.workflows.getRun(runId);
+      const stage = summary?.stages.find(row => row.nodeId === 'verify');
+      return {
+        outcome: stage?.outcome,
+        artifacts: stage?.artifacts.map(artifact => artifact.contractId),
+        gate: summary?.gates.find(gate => gate.gate === 'qa')?.state
+      };
+    },
+    started.runId
+  );
+
+  expect(detail.outcome).toBe('succeeded');
+  expect(detail.artifacts).toEqual(['verify-log']);
+  expect(detail.gate).toBe('passed');
+
+  // The run branched a worktree off the fixture repository.
+  const worktrees = execFileSync('git', ['worktree', 'list'], { cwd: repo, encoding: 'utf8' });
+  expect(worktrees.split('\n').length).toBeGreaterThan(1);
+
+  fs.rmSync(repo, { recursive: true, force: true });
 });
