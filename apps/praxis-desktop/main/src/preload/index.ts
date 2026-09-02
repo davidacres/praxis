@@ -356,7 +356,13 @@ const praxis: PraxisIpc = {
     list: () => ipcRenderer.invoke('agentRuntime:list'),
     refresh: () => ipcRenderer.invoke('agentRuntime:refresh'),
     start: (agentId: string) => ipcRenderer.invoke('agentRuntime:start', agentId),
-    activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName)
+    activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName),
+    createAgent: (input: unknown) => ipcRenderer.invoke('agentRuntime:createAgent', input),
+    createSkill: (input: unknown) => ipcRenderer.invoke('agentRuntime:createSkill', input),
+    previewImport: (kind: string, sourceDir: string, scope: string) =>
+      ipcRenderer.invoke('agentRuntime:previewImport', kind, sourceDir, scope),
+    importItem: (kind: string, sourceDir: string, scope: string, onDuplicate: string) =>
+      ipcRenderer.invoke('agentRuntime:importItem', kind, sourceDir, scope, onDuplicate)
   },
   git: {
     preflight: (repositoryPath?: string) => ipcRenderer.invoke('git:preflight', repositoryPath),

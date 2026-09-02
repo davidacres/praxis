@@ -1,7 +1,7 @@
 ---
 id: FX-BE-013
 title: Create complete Skill package
-status: proposed
+status: complete
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-013-create-skill-package/issue.md
 updated: 2026-08-31

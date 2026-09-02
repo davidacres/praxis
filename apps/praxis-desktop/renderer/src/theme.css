@@ -8619,7 +8619,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 /* ── Agent Hub (FX-BF-009) ───────────────────────────────────────────────── */
 .agent-hub .wf-header { align-items: center; }
-.agent-hub-refresh { margin-left: auto; }
+.agent-hub-actions { margin-left: auto; display: flex; gap: var(--space-1); flex-wrap: wrap; }
 .agent-hub-body {
   flex: 1;
   min-height: 0;
@@ -8664,3 +8664,38 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   border-top: 1px solid var(--border);
 }
 .agent-detail-caps p { margin: 0; font-size: 13px; }
+
+/* Create / import dialogs — reuse .modal-* and the wf- field vocabulary. */
+.agent-hub-dialog-head h3 { margin-right: auto; }
+.agent-hub-dialog { gap: var(--space-3); padding: var(--space-3); }
+.agent-hub-field { display: flex; flex-direction: column; gap: 2px; }
+.agent-hub-field .wf-field-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.agent-hub-field .wf-field-label > span { color: var(--text-tertiary); }
+.agent-hub-dialog .wf-fieldset { width: 100%; box-sizing: border-box; }
+.agent-hub-dialog :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.agent-hub-dialog textarea { height: auto; padding: var(--space-2); resize: vertical; }
+.agent-hub-dialog :where(input, select, textarea):focus { outline: none; border-color: var(--accent); }
+.agent-import-source { display: flex; align-items: center; gap: var(--space-2); }
+.agent-import-source > span { flex: 1; min-width: 0; font-size: 12px; color: var(--text-tertiary); }
+.agent-import-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  font-size: 13px;
+}
+.agent-import-preview.is-invalid { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }

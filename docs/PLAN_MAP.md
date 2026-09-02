@@ -49,16 +49,16 @@
 | TASK-077 | Task | Add scope-aware discovery tree | Complete | FX-BE-010 |
 | TASK-078 | Task | Build agent and skill detail panes | Complete | FX-BE-011 |
 | TASK-079 | Task | Define trust, capabilities, and settings boundary | Complete | FX-BE-011 |
-| FX-BF-010 | Feature | Agent and skill creation | Proposed | FX-BF-009 |
-| FX-BE-012 | Story | Create Agent wizard and starter scaffold | Proposed | FX-BF-010 |
-| FX-BE-013 | Story | Create complete Skill package | Proposed | FX-BF-010 |
-| FX-BE-014 | Story | Import and validate runtime items | Proposed | FX-BF-010 |
-| TASK-080 | Task | Implement agent manifest wizard | Proposed | FX-BE-012 |
-| TASK-081 | Task | Generate transport starter scaffold | Proposed | FX-BE-012 |
-| TASK-082 | Task | Implement full skill package wizard | Proposed | FX-BE-013 |
-| TASK-083 | Task | Validate and safely write skill packages | Proposed | FX-BE-013 |
-| TASK-084 | Task | Add agent and skill import flow | Proposed | FX-BE-014 |
-| TASK-085 | Task | Enforce duplicate and path safety | Proposed | FX-BE-014 |
+| FX-BF-010 | Feature | Agent and skill creation | Complete | FX-BF-009 |
+| FX-BE-012 | Story | Create Agent wizard and starter scaffold | Complete | FX-BF-010 |
+| FX-BE-013 | Story | Create complete Skill package | Complete | FX-BF-010 |
+| FX-BE-014 | Story | Import and validate runtime items | Complete | FX-BF-010 |
+| TASK-080 | Task | Implement agent manifest wizard | Complete | FX-BE-012 |
+| TASK-081 | Task | Generate transport starter scaffold | Complete | FX-BE-012 |
+| TASK-082 | Task | Implement full skill package wizard | Complete | FX-BE-013 |
+| TASK-083 | Task | Validate and safely write skill packages | Complete | FX-BE-013 |
+| TASK-084 | Task | Add agent and skill import flow | Complete | FX-BE-014 |
+| TASK-085 | Task | Enforce duplicate and path safety | Complete | FX-BE-014 |
 | FX-BF-011 | Feature | Agent runtime and session integration | Proposed | FX-BF-009, FX-BF-010 |
 | FX-BE-015 | Story | Runtime lifecycle dashboard | Proposed | FX-BF-011 |
 | FX-BE-016 | Story | Skill activation and session handoff | Proposed | FX-BF-011 |
