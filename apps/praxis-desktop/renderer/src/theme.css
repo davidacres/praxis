@@ -41,6 +41,27 @@
   --tone-green: #3fb950;
   --tone-amber: #d29922;
   --tone-red: #f85149;
+
+  /* Semantic status aliases. These were referenced across theme.css (status
+     dots, health indicators, "ready" chips) but never defined, so those fills
+     rendered colourless. Kept constant across themes like the other tones. */
+  --success: var(--tone-green);
+  --warning: var(--tone-amber);
+
+  /* Workflow experience (FX-BF-014) — one accent per stage kind, derived from
+     already-themed tokens so they follow the active theme without per-theme
+     overrides. A component sets --wf-node-accent from these per node type. */
+  --wf-agent: var(--accent);
+  --wf-check: var(--tone-workspace);
+  --wf-approval: var(--warning);
+  --wf-join: var(--text-tertiary);
+  --wf-lane-idle: var(--border-strong);
+  --wf-lane-ready: var(--accent);
+  --wf-lane-running: var(--accent);
+  --wf-lane-done: var(--success);
+  --wf-lane-failed: var(--danger);
+  --wf-lane-skipped: var(--text-tertiary);
+  --wf-lane-awaiting: var(--warning);
 }
 
 :root[data-mode='light'] {
@@ -8249,3 +8270,105 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 @media (max-width: 900px) { .project-dashboard { padding: 26px 24px 38px; }.project-dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }.project-dashboard-grid { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .project-dashboard { padding: 20px 16px 30px; }.project-dashboard-header { display: block; }.project-dashboard-updated { width: fit-content; margin-top: 16px; text-align: left; }.project-dashboard-metrics { grid-template-columns: 1fr 1fr; gap: 8px; }.project-dashboard-metrics article { padding: 11px; }.project-dashboard-metric-icon { width: 26px; height: 26px; }.project-dashboard-metrics strong { font-size: 18px; }.project-dashboard-card { padding: 15px; }.project-dashboard-brief-list > div { grid-template-columns: 18px minmax(62px, .4fr) minmax(0, 1fr); } }
+
+/* ─── Workflow experience (FX-BF-014) ─────────────────────────────────────
+   Token-driven surfaces for the workflow designer and run monitor. Every
+   colour, radius, and gap references a token; components pass only geometry
+   (a node's left/top, the pan transform) inline. See
+   docs/plans/workflow-experience-design.md. */
+
+/* The docked stage/run list column — a first-class themed panel, matching
+   .sessions-list: the theme's --bg folded through --surface-panel-opacity, the
+   pack's tint wash, accent glow, blur, and its own grain layer. */
+.wf-rail {
+  position: relative;
+  isolation: isolate;
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-right: 1px solid var(--surface-panel-border-color, var(--border));
+  background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity, 1) * 100%), transparent);
+  background-image: var(--surface-panel-tint-layer);
+  box-shadow: var(--surface-accent-glow);
+  backdrop-filter: var(--surface-backdrop);
+  overflow-y: auto;
+}
+
+.wf-rail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wf-rail-row:hover { background: var(--bg-hover); }
+.wf-rail-row[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+}
+.wf-rail-row .wf-rail-sub { color: var(--text-tertiary); font-size: 12px; }
+.wf-rail-row .wf-rail-mark { margin-left: auto; font-size: 11px; }
+.wf-rail-row .wf-rail-mark.is-gate { color: var(--accent); }
+.wf-rail-row .wf-rail-mark.is-issue { color: var(--danger); }
+.wf-rail-row .wf-rail-mark.is-entry { color: var(--text-tertiary); }
+
+/* Canvas node — extends the Task Designer's .designer-node with a per-kind
+   left accent. The kind class sets --wf-node-accent; nothing else changes. */
+.wf-node { border-left: 3px solid var(--wf-node-accent, var(--accent)); }
+.wf-node--agent { --wf-node-accent: var(--wf-agent); }
+.wf-node--check { --wf-node-accent: var(--wf-check); }
+.wf-node--approval { --wf-node-accent: var(--wf-approval); }
+.wf-node--join { --wf-node-accent: var(--wf-join); }
+.wf-node-issue { color: var(--danger); font-size: 11px; }
+.wf-node-entry { color: var(--accent); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Monitor lane dot — colour always paired with the glyph the component renders. */
+.wf-lane { --wf-lane-color: var(--wf-lane-idle); color: var(--wf-lane-color); }
+.wf-lane--idle { --wf-lane-color: var(--wf-lane-idle); }
+.wf-lane--ready { --wf-lane-color: var(--wf-lane-ready); }
+.wf-lane--running { --wf-lane-color: var(--wf-lane-running); }
+.wf-lane--done { --wf-lane-color: var(--wf-lane-done); }
+.wf-lane--failed { --wf-lane-color: var(--wf-lane-failed); }
+.wf-lane--skipped { --wf-lane-color: var(--wf-lane-skipped); }
+.wf-lane--awaiting { --wf-lane-color: var(--wf-lane-awaiting); }
+.wf-lane--running::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  animation: wf-pulse 1.6s ease-in-out infinite;
+}
+@keyframes wf-pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .wf-lane--running::after { animation: none; opacity: .8; } }
+
+/* Status / gate chips — reuse .chip and add the danger/warn/muted variants the
+   workflow ledger needs, matching the existing .chip.chip-success. */
+.chip.chip-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.chip.chip-warn { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.chip.chip-muted { color: var(--text-tertiary); }
+
+/* Sticky designer footer inside pane-main. */
+.wf-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: var(--surface-backdrop);
+}
