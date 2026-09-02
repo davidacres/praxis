@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.981Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-009
 slug: agent-hub-catalog
 title: Agent Hub catalog and navigation
-status: proposed
+status: complete
 owner: Electron desktop app
 updated: 2026-08-31
 issues: docs/issues/features/fx-bf-009-agent-hub-catalog/feature-issues.md
@@ -42,6 +42,28 @@ Selecting Agents opens the catalog, scopes are clear, unsafe items are visibly b
 
 ## Description
 
+## As built (2026-09-02)
+
+- **Core (TASK-077):** `DiscoveredAgent` and `DiscoveredSkill` gained a `scope: 'global' | 'project'`
+  field, tagged in `discoverAgents` / `discoverSkills` by which root the item came from (the
+  user-data catalog vs a project `.praxis`). Project items are never auto-trusted. New
+  `agentCatalog.ts` holds the pure view-model: `groupCatalog`, `agentStartBlockedReason`,
+  `skillActivateBlockedReason`, `eligibleAgentsForSkill`, `describeCapabilities`,
+  `agentHostStarted` — with `discovery.test.ts` + `agentCatalog.test.ts` (core now 296 tests).
+- **Renderer:** `agents/AgentsPage.tsx` renders the `agents` route (was a "not wired up"
+  placeholder). Two columns the feature owns (`showAux` excludes `agents`): a `.wf-rail`
+  catalog grouped Global / *project name*, and a detail pane. `agents/agentCatalog.ts` mirrors
+  the core helpers (renderer imports only types from `@praxis/core`).
+- **Detail (TASK-078):** agent — id, transport, scope, activation, entry, config, declared
+  skills, truncating source path, manifest errors, capability summary (or "host not started");
+  skill — description, version, scope, trigger chips, fingerprint, source, error.
+- **Fail-closed (TASK-079):** Start host / Activate are disabled with the blocking reason from
+  the core helpers (invalid manifest, approval-required project agent, no eligible agent). The
+  Settings `agent-runtime` section is now read-only diagnostics — Start/Activate moved to the
+  hub; it keeps Refresh, the registry list (with scope), and paths.
+- **Verification:** `agentHub.spec.ts` seeds a valid agent, an invalid agent, and a skill into
+  the throwaway profile, drives the route, and asserts the fail-closed detail + a themed
+  snapshot.
 
 ## Items
 

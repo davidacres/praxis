@@ -50,6 +50,7 @@ import {
 import { GitGraphPage } from '../git/GitGraphPage';
 import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
+import { AgentsPage } from '../agents/AgentsPage';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
@@ -979,6 +980,14 @@ export function App() {
         />
       );
     }
+    if (route.feature === 'agents') {
+      return (
+        <AgentsPage
+          project={selectedProject ?? undefined}
+          onOpenSettings={() => setSettingsDialogCategory('agent-runtime')}
+        />
+      );
+    }
     if (selectedProject && route.feature !== 'git') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;
     }
@@ -1171,7 +1180,8 @@ export function App() {
   const showAux = auxVisible
     && route.feature !== 'overview'
     && route.feature !== 'git'
-    && route.feature !== 'workflows';
+    && route.feature !== 'workflows'
+    && route.feature !== 'agents';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]

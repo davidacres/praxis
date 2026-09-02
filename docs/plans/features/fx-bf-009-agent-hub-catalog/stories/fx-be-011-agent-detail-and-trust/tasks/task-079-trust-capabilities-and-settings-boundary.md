@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.992Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-079
 title: Define trust, capabilities, and settings boundary
-status: proposed
+status: complete
 story: FX-BE-011
 updated: 2026-08-31
 dependencies: [TASK-078]

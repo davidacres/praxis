@@ -1,7 +1,7 @@
 ---
 id: FX-BE-010
 title: Agent Hub navigation and scope-aware catalog
-status: proposed
+status: complete
 feature: FX-BF-009
 issue: docs/issues/features/fx-bf-009-agent-hub-catalog/stories/fx-be-010-agent-hub-navigation/issue.md
 updated: 2026-08-31
