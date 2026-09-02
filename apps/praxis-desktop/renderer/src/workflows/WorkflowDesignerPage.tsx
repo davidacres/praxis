@@ -71,6 +71,13 @@ export function WorkflowDesignerPage({
   const [projectWorkflows, setProjectWorkflows] = useState<WorkflowDefinition[]>([]);
   const [definition, setDefinition] = useState<WorkflowDefinition | undefined>();
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
+  // The inspector column is a single panel at a time — a stage's fields or the
+  // connection list — so neither overflows the 340px column.
+  const [inspectorTab, setInspectorTab] = useState<'stage' | 'connections'>('stage');
+  const selectStage = useCallback((nodeId: string | undefined) => {
+    setSelectedNodeId(nodeId);
+    if (nodeId) setInspectorTab('stage');
+  }, []);
   const [error, setError] = useState<string | undefined>();
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -246,7 +253,7 @@ export function WorkflowDesignerPage({
                   onClick={() => {
                     const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
                     mutate(addNode(definition, node));
-                    setSelectedNodeId(node.id);
+                    selectStage(node.id);
                   }}
                 >
                   <Icon name={kind.icon as never} size={13} /> {kind.label}
@@ -267,7 +274,7 @@ export function WorkflowDesignerPage({
                       aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
                         issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
                       }`}
-                      onClick={() => setSelectedNodeId(node.id)}
+                      onClick={() => selectStage(node.id)}
                     >
                       <span className="wf-rail-main">
                         <span className="wf-rail-name">{node.name}</span>
@@ -312,29 +319,54 @@ export function WorkflowDesignerPage({
                 Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
               )}
               onChange={mutate}
-              onSelectNode={setSelectedNodeId}
+              onSelectNode={selectStage}
             />
           </div>
 
-          <section className="wf-inspector" aria-label="Stage inspector">
-            {selectedNode ? (
-              <NodeInspector
-                definition={definition}
-                node={selectedNode}
-                issues={feedback?.byNode[selectedNode.id] ?? []}
-                catalog={catalog}
-                policy={policy}
-                onChange={mutate}
-                onSelectNode={setSelectedNodeId}
-              />
-            ) : (
-              <div className="empty-state">
-                <Icon name="cursor" size={26} />
-                <span>Select a stage to edit it.</span>
-              </div>
-            )}
+          <section className="wf-inspector wf-inspector--tabbed" aria-label="Stage inspector">
+            <div role="tablist" aria-label="Inspector" className="wf-inspector-tabs">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={inspectorTab === 'stage'}
+                className={inspectorTab === 'stage' ? 'active' : ''}
+                onClick={() => setInspectorTab('stage')}
+              >
+                Stage
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={inspectorTab === 'connections'}
+                className={inspectorTab === 'connections' ? 'active' : ''}
+                onClick={() => setInspectorTab('connections')}
+              >
+                Connections{definition.edges.length > 0 ? ` (${definition.edges.length})` : ''}
+              </button>
+            </div>
 
-            <EdgeEditor definition={definition} onChange={mutate} />
+            <div className="wf-inspector-body">
+              {inspectorTab === 'stage' ? (
+                selectedNode ? (
+                  <NodeInspector
+                    definition={definition}
+                    node={selectedNode}
+                    issues={feedback?.byNode[selectedNode.id] ?? []}
+                    catalog={catalog}
+                    policy={policy}
+                    onChange={mutate}
+                    onSelectNode={selectStage}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <Icon name="cursor" size={26} />
+                    <span>Select a stage to edit it.</span>
+                  </div>
+                )
+              ) : (
+                <EdgeEditor definition={definition} onChange={mutate} />
+              )}
+            </div>
           </section>
         </div>
       )}
@@ -622,6 +654,21 @@ function AgentStageFields({
       ? chosen.errors.length > 0 || (requireTrust && !chosen.trusted)
       : false;
 
+  // One warning at a time, shown as a glyph on the Agent field with the full
+  // text in its tooltip — the picker itself carries the "(untrusted)" hints.
+  const agentWarning =
+    agents.length === 0
+      ? 'No agents were discovered. Install one under the trusted agents folder, or advance this stage by hand from the run monitor.'
+      : node.agent.agentId && !chosen
+        ? `"${node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.`
+        : unusable
+          ? `This agent would fail preflight ${
+              chosen && chosen.errors.length > 0
+                ? '(fix its manifest)'
+                : '(move it under the trusted agents folder, or relax the policy)'
+            }.`
+          : undefined;
+
   const setAgent = (patch: Partial<typeof node.agent>) => set({ agent: { ...node.agent, ...patch } });
 
   const toggleSkill = (name: string, fingerprint: string, on: boolean) => {
@@ -636,7 +683,7 @@ function AgentStageFields({
 
   return (
     <>
-      <Field label="Agent">
+      <Field label="Agent" warning={agentWarning}>
         {agents.length > 0 ? (
           <select
             value={node.agent.agentId}
@@ -663,17 +710,6 @@ function AgentStageFields({
         )}
       </Field>
 
-      {agents.length === 0 && (
-        <p role="status" className="wf-hint is-warn">
-          No agents were discovered — install one under the trusted agents folder, or advance this
-          stage manually from the run monitor.
-        </p>
-      )}
-      {node.agent.agentId && !chosen && agents.length > 0 && (
-        <p role="status" className="wf-hint is-warn">
-          "{node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.
-        </p>
-      )}
       {chosen && (
         <div className="wf-agent-meta">
           <span>Trust: {chosen.trusted ? 'trusted' : 'untrusted'}</span>
@@ -692,12 +728,6 @@ function AgentStageFields({
             </span>
           )}
         </div>
-      )}
-      {unusable && (
-        <p role="status" className="wf-hint is-danger">
-          This agent would fail preflight
-          {chosen && chosen.errors.length > 0 ? ' (fix its manifest)' : ' (move it under the trusted agents folder or relax the policy)'}.
-        </p>
       )}
 
       <Field label="Tool mode">
@@ -821,38 +851,47 @@ function EdgeEditor({
 
       <ul className="wf-edge-list">
         {definition.edges.map(edge => {
-          const fromNode = definition.nodes.find(node => node.id === edge.from);
-          const toNode = definition.nodes.find(node => node.id === edge.to);
+          const fromName = definition.nodes.find(node => node.id === edge.from)?.name ?? edge.from;
+          const toName = definition.nodes.find(node => node.id === edge.to)?.name ?? edge.to;
           return (
             <li key={edge.id} className="wf-edge-row">
-              <span>
-                {fromNode?.name ?? edge.from} → {toNode?.name ?? edge.to}
+              <span className="wf-edge-label" title={`${fromName} → ${toName}`}>
+                {fromName} <span aria-hidden>→</span> {toName}
               </span>
-              <select
-                aria-label={`Outcome for ${fromNode?.name ?? edge.from} to ${toNode?.name ?? edge.to}`}
-                value={edge.on}
-                onChange={event => onChange(updateEdge(definition, edge.id, { on: event.target.value as WorkflowEdgeOutcome }))}
-              >
-                {OUTCOMES.map(outcome => (
-                  <option key={outcome} value={outcome}>
-                    {outcome}
-                  </option>
-                ))}
-              </select>
-              <label className="wf-check">
-                <input
-                  type="checkbox"
-                  checked={edge.required}
-                  onChange={event => onChange(updateEdge(definition, edge.id, { required: event.target.checked }))}
-                />
-                required
-              </label>
-              <button type="button" className="btn btn-compact" onClick={() => onChange(disconnect(definition, edge.id))}>
-                Remove
-              </button>
+              <div className="wf-edge-controls">
+                <select
+                  aria-label={`Outcome for ${fromName} to ${toName}`}
+                  value={edge.on}
+                  onChange={event => onChange(updateEdge(definition, edge.id, { on: event.target.value as WorkflowEdgeOutcome }))}
+                >
+                  {OUTCOMES.map(outcome => (
+                    <option key={outcome} value={outcome}>
+                      {outcome}
+                    </option>
+                  ))}
+                </select>
+                <label className="wf-check">
+                  <input
+                    type="checkbox"
+                    checked={edge.required}
+                    onChange={event => onChange(updateEdge(definition, edge.id, { required: event.target.checked }))}
+                  />
+                  required
+                </label>
+                <button
+                  type="button"
+                  className="btn-icon wf-edge-remove"
+                  aria-label={`Remove connection ${fromName} to ${toName}`}
+                  title="Remove"
+                  onClick={() => onChange(disconnect(definition, edge.id))}
+                >
+                  <Icon name="window-close" size={12} />
+                </button>
+              </div>
             </li>
           );
         })}
+        {definition.edges.length === 0 && <li className="wf-rail-empty">No connections yet.</li>}
       </ul>
     </div>
   );
@@ -860,11 +899,27 @@ function EdgeEditor({
 
 // ── Small field wrapper ──────────────────────────────────────────────────
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  warning,
+  children
+}: {
+  label: string;
+  /** Renders a warning glyph on the field; the full text is its tooltip. */
+  warning?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="wf-field">
-      <span>{label}</span>
-      {children}
-    </label>
+    <div className={`wf-field${warning ? ' has-warn' : ''}`}>
+      <label className="wf-field-label">
+        <span>{label}</span>
+        {children}
+      </label>
+      {warning && (
+        <span className="wf-field-warn" role="img" aria-label={`Warning: ${warning}`} title={warning}>
+          <Icon name="warning" size={12} />
+        </span>
+      )}
+    </div>
   );
 }
