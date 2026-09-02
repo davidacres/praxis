@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-013
 slug: workflow-orchestration-runtime
 title: Workflow orchestration runtime
-status: proposed
+status: in-progress
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/feature-issues.md
