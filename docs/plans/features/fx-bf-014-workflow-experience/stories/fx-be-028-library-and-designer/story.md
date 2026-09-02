@@ -1,7 +1,7 @@
 ---
 id: FX-BE-028
 title: Workflow Library and Designer
-status: proposed
+status: complete
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-028-library-and-designer/issue.md
 updated: 2026-09-02
@@ -39,3 +39,20 @@ Choosing a starting point is one click, and shaping a workflow is a calm canvas 
 ## Close when
 
 A workflow is authored on the canvas against real agents and saved, with the inspector in the shell's right pane.
+
+## As built (2026-09-02)
+
+- The inspector lives in a **third column the Workflows feature owns** (`.wf-designer` is a
+  `248px | 1fr | 340px` grid), not the global `pane-aux` — the Git Graph precedent, and
+  `App.showAux` excludes `feature === 'workflows'`. Same visual result, no contention with
+  the shell's resizable aux pane.
+- The footer `Run ▸` popover was replaced by a header `Design / Runs` segmented control
+  (`.wf-viewswitch`) plus the start form in the Runs monitor; `route.workflowView` persists
+  the half. Save is still gated on `valid && !unsaved`.
+- Library uses `.wf-card` / `.wf-template` (self-contained bordered surfaces — there is no
+  global `.card` class) with a `chip chip-muted` source tag and an amber `.wf-template-warn`
+  readiness line.
+- All workflow styling is token-driven under the `wf-` prefix in `theme.css`; the only
+  remaining inline `style` is dynamic canvas geometry (transforms, node x/y).
+- The non-terminal run-count badge (TASK-122) is a live `.tree-badge` on the Sidebar
+  Workflows row, refreshed on `workflows:runChanged`.

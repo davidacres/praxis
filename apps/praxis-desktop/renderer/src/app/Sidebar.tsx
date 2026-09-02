@@ -154,6 +154,28 @@ export function Sidebar({
     return () => { cancelled = true; };
   }, [projects, activeWorkspaceId]);
 
+  // Live count of runs still in flight per project, so the Workflows row can
+  // show a badge without opening the monitor. Refreshed whenever the
+  // orchestrator advances any run.
+  const [activeRunsByProjectId, setActiveRunsByProjectId] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void Promise.all(
+        visibleProjects.map(async project => {
+          const runs = await window.praxis.workflows.listRuns(project.id).catch(() => []);
+          const active = runs.filter(run => run.status === 'running' || run.status === 'awaiting-approval').length;
+          return [project.id, active] as const;
+        })
+      )
+        .then(entries => { if (!cancelled) setActiveRunsByProjectId(Object.fromEntries(entries)); })
+        .catch(error => console.error('Failed to load workflow runs:', error));
+    };
+    load();
+    const unsubscribe = window.praxis.workflows.onRunChanged(() => load());
+    return () => { cancelled = true; unsubscribe(); };
+  }, [projects, activeWorkspaceId]);
+
   const projectEntries = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return visibleProjects.map(project => {
@@ -439,7 +461,7 @@ export function Sidebar({
                           className={`tree-row project-workflows-row${activeFeature === 'workflows' && selectedProjectId === project.id ? ' active' : ''}`}
                           data-testid="project-workflows-nav-item"
                           onClick={() => onSelectWorkflows(project)}
-                        ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">Workflows</span></button>
+                        ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">Workflows</span>{(activeRunsByProjectId[project.id] ?? 0) > 0 && <span className="tree-badge" title={`${activeRunsByProjectId[project.id]} run${activeRunsByProjectId[project.id] === 1 ? '' : 's'} in flight`}>{activeRunsByProjectId[project.id]}</span>}</button>
                         {projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
                             <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>
