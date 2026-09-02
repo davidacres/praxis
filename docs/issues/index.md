@@ -21,5 +21,5 @@
 | FX-BE-022 | Run monitor, delivery template, and end-to-end verification | Complete | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-022-run-monitor-and-delivery-template/issue.md) |
 | FX-BE-023 | Designer completion and folder persistence | Complete | [issue](features/fx-bf-012-agent-delivery-workflows/stories/fx-be-023-designer-completion-and-folder-persistence/issue.md) |
 | FX-BE-024 | Orchestrator loop, check execution, and run worktrees | Complete | [issue](features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-024-orchestrator-loop-checks-worktrees/issue.md) |
-| FX-BE-025 | Agent stage sessions and completion | Proposed | [issue](features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-025-agent-stage-sessions/issue.md) |
+| FX-BE-025 | Agent stage sessions and completion | Complete | [issue](features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-025-agent-stage-sessions/issue.md) |
 | FX-BE-026 | Live updates, timeouts, and end-to-end verification | Proposed | [issue](features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-026-live-updates-timeouts-e2e/issue.md) |

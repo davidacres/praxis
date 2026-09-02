@@ -131,14 +131,26 @@ function isSynthesizedKey(issueKey: string): boolean {
   return /^SESSION-[0-9a-f]{6,}$/i.test(issueKey);
 }
 
+/**
+ * A governed workflow stage (FX-BF-013) is stored under a synthesized
+ * `WF-<run>-<node>` key too, but unlike a composer session it belongs to a run
+ * the user can navigate to — so it is labelled by its stage and badged as a
+ * workflow session rather than showing a key nobody chose.
+ */
+function isWorkflowStageSession(session: AgentSessionRecord): boolean {
+  return !!session.workflowRunId && !!session.workflowNodeId;
+}
+
 /** What to show as the session's name: the title alone for free-form sessions,
  *  `KEY — title` for tracker-issue sessions. */
 function sessionLabel(session: AgentSessionRecord): string {
   const title = sessionTitle(session);
+  if (isWorkflowStageSession(session)) return title;
   return isSynthesizedKey(session.issueKey) ? title : `${session.issueKey} — ${title}`;
 }
 
-function sessionMode(session: AgentSessionRecord): 'Chat' | 'Analysis' | 'Review' {
+function sessionMode(session: AgentSessionRecord): 'Chat' | 'Analysis' | 'Review' | 'Workflow' {
+  if (isWorkflowStageSession(session)) return 'Workflow';
   if (session.mode === 'analysis' || session.taskDefinition.kind === 'analysis') return 'Analysis';
   if (session.mode === 'review' || session.taskDefinition.kind === 'review') return 'Review';
   return 'Chat';

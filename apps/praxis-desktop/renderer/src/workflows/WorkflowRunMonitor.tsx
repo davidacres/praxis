@@ -10,8 +10,10 @@ import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
  * Approve and the per-stage actions stay unavailable until the engine says
  * they are allowed — the buttons mirror `summary.actions`.
  *
- * Stages are advanced explicitly here. FX-BF-011 will drive them from real
- * agent sessions; until then this is also how the E2E suite exercises a run.
+ * Stages the orchestrator can drive (FX-BF-013) advance on their own; the
+ * Mark done / Mark failed controls remain for stages it declines — a project
+ * with no working directory, or no configured provider — and are how the E2E
+ * suite exercises a run without an agent.
  */
 
 const LANE_DOT: Record<WorkflowRunSummary['stages'][number]['lane'], string> = {
@@ -28,9 +30,11 @@ export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
   /** Start-a-run affordance needs the workflow ids available to the project. */
   runnableWorkflows: Array<{ id: string; name: string }>;
+  /** Opens the agent session behind a stage, when one exists. */
+  onOpenSession?: (sessionKey: string) => void;
 }
 
-export function WorkflowRunMonitor({ project, runnableWorkflows }: WorkflowRunMonitorProps) {
+export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }: WorkflowRunMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -158,7 +162,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows }: WorkflowRunMo
 
             <RunActions summary={selected} onAct={act} />
 
-            <StageTable summary={selected} onAct={act} />
+            <StageTable summary={selected} onAct={act} onOpenSession={onOpenSession} />
 
             {selected.branchGroups.map(group => (
               <div
@@ -234,10 +238,12 @@ function RunActions({
 
 function StageTable({
   summary,
-  onAct
+  onAct,
+  onOpenSession
 }: {
   summary: WorkflowRunSummary;
   onAct: (fn: () => Promise<WorkflowRunSummary>) => Promise<void>;
+  onOpenSession?: (sessionKey: string) => void;
 }) {
   return (
     <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
@@ -277,6 +283,16 @@ function StageTable({
                 )}
               </td>
               <td style={{ padding: '6px 8px' }}>
+                {stage.sessionKey && onOpenSession && (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    style={{ fontSize: 12, padding: '1px 6px' }}
+                    onClick={() => onOpenSession(stage.sessionKey as string)}
+                  >
+                    Open session
+                  </button>
+                )}
                 {stage.snapshotRef && <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{stage.snapshotRef}</div>}
                 {stage.artifacts.map(artifact => (
                   <div key={artifact.contractId} style={{ fontSize: 12, color: 'var(--text-dim)' }}>
