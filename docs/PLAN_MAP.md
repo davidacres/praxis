@@ -95,13 +95,13 @@
 | TASK-108 | Task | Persist project workflows to .praxis/workflows with path safety and reload | Complete | FX-BE-023 |
 | TASK-109 | Task | Add the Agent Hub picker and effective-policy display to the inspector | Complete | FX-BE-023 |
 | TASK-110 | Task | Add the pan/zoom workflow canvas with draggable nodes and edges | Complete | FX-BE-023 |
-| FX-BF-013 | Feature | Workflow orchestration runtime | Proposed | FX-BF-012, FX-BE-023 |
-| FX-BE-024 | Story | Orchestrator loop, check execution, and run worktrees | Proposed | FX-BF-013 |
+| FX-BF-013 | Feature | Workflow orchestration runtime | In progress | FX-BF-012, FX-BE-023 |
+| FX-BE-024 | Story | Orchestrator loop, check execution, and run worktrees | Complete | FX-BF-013 |
 | FX-BE-025 | Story | Agent stage sessions and completion | Proposed | FX-BF-013 |
 | FX-BE-026 | Story | Live updates, timeouts, and end-to-end verification | Proposed | FX-BF-013 |
-| TASK-111 | Task | Add the WorkflowOrchestrator service and scheduler-driven dispatch | Proposed | FX-BE-024 |
-| TASK-112 | Task | Implement deterministic check execution and artifact capture | Proposed | FX-BE-024 |
-| TASK-113 | Task | Add the per-run git worktree lifecycle and frozen snapshots | Proposed | FX-BE-024 |
+| TASK-111 | Task | Add the WorkflowOrchestrator service and scheduler-driven dispatch | Complete | FX-BE-024 |
+| TASK-112 | Task | Implement deterministic check execution and artifact capture | Complete | FX-BE-024 |
+| TASK-113 | Task | Add the per-run git worktree lifecycle and frozen snapshots | Complete | FX-BE-024 |
 | TASK-114 | Task | Implement WorkflowSessionPort over the agent hosts | Proposed | FX-BE-025 |
 | TASK-115 | Task | Wire stage completion, artifact extraction, and the snapshot commit | Proposed | FX-BE-025 |
 | TASK-116 | Task | Attribute stage sessions to their workflow run and node | Proposed | FX-BE-025 |

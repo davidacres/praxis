@@ -105,6 +105,12 @@ export interface WorkflowRun {
   endedAt?: string;
   /** Set when the run ended for a stated reason (cancellation, blocked gate). */
   endedReason?: string;
+  /**
+   * The git worktree this run's stages execute in, once acquired. Recorded on
+   * the run so a restart re-attaches to the same tree instead of branching a
+   * second one beside it.
+   */
+  worktreePath?: string;
 }
 
 // ── Commands ─────────────────────────────────────────────────────────────
@@ -505,7 +511,8 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     gateDecisions: Array.isArray(raw.gateDecisions) ? (raw.gateDecisions as WorkflowGateDecision[]) : [],
     startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
     ...(typeof raw.endedAt === 'string' ? { endedAt: raw.endedAt } : {}),
-    ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {})
+    ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {}),
+    ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {})
   };
 }
 

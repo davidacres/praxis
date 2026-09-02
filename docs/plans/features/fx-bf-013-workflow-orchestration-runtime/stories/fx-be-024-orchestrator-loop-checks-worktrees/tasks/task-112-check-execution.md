@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-112
 title: Implement deterministic check execution and artifact capture
-status: proposed
+status: complete
 story: FX-BE-024
 updated: 2026-09-02
 dependencies: [TASK-111, TASK-113]
