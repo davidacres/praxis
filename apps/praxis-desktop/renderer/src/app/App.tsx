@@ -82,6 +82,8 @@ interface Route {
   aiProvider?: AiProvider;
   aiModel?: string;
   gitView?: 'graph' | 'changes' | 'conflicts';
+  /** Which half of the Workflows feature is open (`feature === 'workflows'`). */
+  workflowView?: 'design' | 'runs';
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -158,7 +160,8 @@ function readLastWorkspaceRoute(): Route {
       ...(typeof stored.sessionKey === 'string' ? { sessionKey: stored.sessionKey } : {}),
       ...(stored.browserOpen === true ? { browserOpen: true } : stored.browserOpen === false ? { browserOpen: false } : {}),
       ...(restorableBrowserUrl(stored.browserUrl) ? { browserUrl: stored.browserUrl } : {}),
-      ...(gitView ? { gitView } : {})
+      ...(gitView ? { gitView } : {}),
+      ...(stored.workflowView === 'runs' || stored.workflowView === 'design' ? { workflowView: stored.workflowView } : {})
     };
   } catch {
     return {};
@@ -175,7 +178,8 @@ function writeLastWorkspaceRoute(route: Route): void {
     ...(route.sessionKey ? { sessionKey: route.sessionKey } : {}),
     ...(route.feature === 'sessions' && route.browserOpen !== undefined ? { browserOpen: route.browserOpen } : {}),
     ...(route.feature === 'sessions' && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
-    ...(route.gitView ? { gitView: route.gitView } : {})
+    ...(route.gitView ? { gitView: route.gitView } : {}),
+    ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {})
   };
   localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
 }
@@ -969,6 +973,8 @@ export function App() {
       return (
         <WorkflowDesignerPage
           project={selectedProject}
+          view={route.workflowView ?? 'design'}
+          onViewChange={workflowView => navigate({ ...route, workflowView })}
           onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
         />
       );
@@ -1160,10 +1166,12 @@ export function App() {
   // bottom panel — selecting an issue fills it, it does not summon it.
   // Project workspaces use the secondary pane for editable project details.
   // Git Graph owns its own inspector column, so the global issue pane remains
-  // hidden there to preserve topology and diff width.
+  // hidden there to preserve topology and diff width. Workflows does the same
+  // (stage/edge inspector, run-stage evidence) — see FX-BF-014.
   const showAux = auxVisible
     && route.feature !== 'overview'
-    && route.feature !== 'git';
+    && route.feature !== 'git'
+    && route.feature !== 'workflows';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]

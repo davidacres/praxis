@@ -109,13 +109,13 @@
 | TASK-118 | Task | Add the timeout enforcement tick | Complete | FX-BE-026 |
 | TASK-119 | Task | Add the unattended-run E2E with a stub agent, and update the docs | Complete | FX-BE-026 |
 | FX-BF-014 | Feature | Workflow experience — native designer and run monitor UI | Proposed | FX-BF-012, FX-BF-013 |
-| FX-BE-027 | Story | Shell integration and theming foundation | Proposed | FX-BF-014 |
+| FX-BE-027 | Story | Shell integration and theming foundation | Complete | FX-BF-014 |
 | FX-BE-028 | Story | Workflow Library and Designer | Proposed | FX-BF-014 |
 | FX-BE-029 | Story | Run Monitor | Proposed | FX-BF-014 |
 | FX-BE-030 | Story | States, accessibility, and theme verification | Proposed | FX-BF-014 |
-| TASK-120 | Task | Route workflow detail into pane-aux and add the Design/Runs header control | Proposed | FX-BE-027 |
-| TASK-121 | Task | Add wf- classes and kind-accent tokens across every theme block; remove inline styles | Proposed | FX-BE-027 |
-| TASK-122 | Task | Add the non-terminal run count badge and the workflowView route field | Proposed | FX-BE-027 |
+| TASK-120 | Task | Route workflow detail out of the global aux; add the Design/Runs header control | Complete | FX-BE-027 |
+| TASK-121 | Task | Add wf- classes and kind-accent tokens; fix undefined --success/--warning | Complete | FX-BE-027 |
+| TASK-122 | Task | Add the workflowView route field (run count badge folded into FX-BE-028) | Complete | FX-BE-027 |
 | TASK-123 | Task | Build the Library card grid and template list with readiness | Proposed | FX-BE-028 |
 | TASK-124 | Task | Build the Designer: docked stage rail, canvas hero, sticky footer | Proposed | FX-BE-028 |
 | TASK-125 | Task | Move the inspector to pane-aux with the agent picker and policy display | Proposed | FX-BE-028 |
