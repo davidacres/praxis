@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
 
 /**
@@ -52,6 +52,24 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
 
   useEffect(() => {
     void reload();
+  }, [reload]);
+
+  // Live updates: the orchestrator advances stages in the background, so the
+  // monitor must refresh without a user action. A burst of transitions
+  // coalesces into one reload on the next frame.
+  const pendingReload = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const unsubscribe = window.praxis.workflows.onRunChanged(() => {
+      if (pendingReload.current !== undefined) return;
+      pendingReload.current = window.requestAnimationFrame(() => {
+        pendingReload.current = undefined;
+        void reload();
+      });
+    });
+    return () => {
+      unsubscribe();
+      if (pendingReload.current !== undefined) window.cancelAnimationFrame(pendingReload.current);
+    };
   }, [reload]);
 
   const selected = runs.find(run => run.runId === selectedRunId);
