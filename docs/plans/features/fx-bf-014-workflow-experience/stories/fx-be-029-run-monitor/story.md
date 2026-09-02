@@ -1,7 +1,7 @@
 ---
 id: FX-BE-029
 title: Run Monitor
-status: proposed
+status: complete
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-029-run-monitor/issue.md
 updated: 2026-09-02
