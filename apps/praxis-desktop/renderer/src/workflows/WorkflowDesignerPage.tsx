@@ -85,11 +85,16 @@ export function WorkflowDesignerPage({
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
   }, [project.id]);
 
+  const [libraryLoading, setLibraryLoading] = useState(true);
   const reloadLibrary = useCallback(() => {
-    void window.praxis.workflows.listTemplates(project.id).then(list => {
-      setTemplates(list);
-      setProjectWorkflows(list.filter(entry => entry.source === 'project').map(entry => entry.definition));
-    });
+    setLibraryLoading(true);
+    void window.praxis.workflows
+      .listTemplates(project.id)
+      .then(list => {
+        setTemplates(list);
+        setProjectWorkflows(list.filter(entry => entry.source === 'project').map(entry => entry.definition));
+      })
+      .finally(() => setLibraryLoading(false));
     void window.praxis.workflows
       .templateReadiness(project.id)
       .then(rows => setReadiness(Object.fromEntries(rows.map(row => [row.templateId, row]))));
@@ -211,6 +216,7 @@ export function WorkflowDesignerPage({
           readiness={readiness}
           projectWorkflows={projectWorkflows}
           busy={busy}
+          loading={libraryLoading}
           onUseTemplate={openTemplate}
           onOpenExisting={openExisting}
         />
@@ -284,6 +290,9 @@ export function WorkflowDesignerPage({
 
             <div className="wf-rail-foot">
               <ValidationSummary feedback={feedback} />
+              {!project.workspaceFolder && (
+                <p className="wf-hint is-warn">Attach a folder to this project to run this workflow.</p>
+              )}
               <button
                 type="button"
                 onClick={save}
@@ -340,6 +349,7 @@ function TemplateLibrary({
   readiness,
   projectWorkflows,
   busy,
+  loading,
   onUseTemplate,
   onOpenExisting
 }: {
@@ -347,9 +357,25 @@ function TemplateLibrary({
   readiness: Record<string, TemplateReadiness>;
   projectWorkflows: WorkflowDefinition[];
   busy: boolean;
+  loading: boolean;
   onUseTemplate: (templateId: string) => void;
   onOpenExisting: (workflow: WorkflowDefinition) => void;
 }) {
+  if (loading && templates.length === 0) {
+    return (
+      <div className="wf-library" aria-busy="true">
+        <section aria-label="Loading workflows">
+          <h2>Start from a template</h2>
+          <ul className="wf-template-list">
+            {[0, 1, 2].map(i => (
+              <li key={i} className="wf-template wf-skeleton" aria-hidden />
+            ))}
+          </ul>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="wf-library">
       {projectWorkflows.length > 0 && (
@@ -368,6 +394,10 @@ function TemplateLibrary({
 
       <section aria-label="Workflow templates">
         <h2>Start from a template</h2>
+        <p className="wf-library-lede">
+          Pick a starting point and edit it on the canvas — a governed pipeline with review, QA,
+          and security gates, or a quick single-stage change.
+        </p>
         <ul className="wf-template-list">
           {templates.map(template => {
             const ready = readiness[template.definition.id];
@@ -633,7 +663,13 @@ function AgentStageFields({
         )}
       </Field>
 
-      {node.agent.agentId && !chosen && (
+      {agents.length === 0 && (
+        <p role="status" className="wf-hint is-warn">
+          No agents were discovered — install one under the trusted agents folder, or advance this
+          stage manually from the run monitor.
+        </p>
+      )}
+      {node.agent.agentId && !chosen && agents.length > 0 && (
         <p role="status" className="wf-hint is-warn">
           "{node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.
         </p>
