@@ -1,10 +1,10 @@
 ---
 id: FX-BE-021
 title: Visual workflow designer and template library
-status: proposed
+status: complete
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-021-visual-workflow-designer/issue.md
-updated: 2026-09-01
+updated: 2026-09-02
 tasks: [TASK-101, TASK-102, TASK-103]
 dependencies: [FX-BE-018, FX-BF-009, FX-BF-005]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]

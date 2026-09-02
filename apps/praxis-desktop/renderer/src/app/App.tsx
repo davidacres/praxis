@@ -49,6 +49,7 @@ import {
 } from '../board/BoardFilterBar';
 import { GitGraphPage } from '../git/GitGraphPage';
 import { GitChangesPage } from '../git/GitChangesPage';
+import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
@@ -90,6 +91,7 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   issues: 'Issues',
   connections: 'Connections',
   agents: 'Agents',
+  workflows: 'Workflows',
   git: 'Git Graph'
 };
 
@@ -963,6 +965,9 @@ export function App() {
     if (route.newSession) {
       return renderNewSession();
     }
+    if (selectedProject && route.feature === 'workflows') {
+      return <WorkflowDesignerPage project={selectedProject} />;
+    }
     if (selectedProject && route.feature !== 'git') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;
     }
@@ -1310,6 +1315,7 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
+                  onSelectWorkflows={project => navigate({ projectId: project.id, feature: 'workflows' })}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;
