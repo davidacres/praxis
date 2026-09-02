@@ -5,3 +5,4 @@
 - [FX-BE-020: Agent session stages, gates, artifacts, and approvals](stories/fx-be-020-agent-session-gates-and-artifacts/issue.md)
 - [FX-BE-021: Visual workflow designer and template library](stories/fx-be-021-visual-workflow-designer/issue.md)
 - [FX-BE-022: Run monitor, delivery template, and end-to-end verification](stories/fx-be-022-run-monitor-and-delivery-template/issue.md)
+- [FX-BE-023: Designer completion and folder persistence](stories/fx-be-023-designer-completion-and-folder-persistence/issue.md)

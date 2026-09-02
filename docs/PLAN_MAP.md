@@ -69,7 +69,7 @@
 | TASK-089 | Task | Add new-session agent selection | Proposed | FX-BE-016 |
 | TASK-090 | Task | Move runtime management to advanced Settings | Proposed | FX-BE-017 |
 | TASK-091 | Task | Add desktop E2E and accessibility verification | Proposed | FX-BE-017 |
-| FX-BF-012 | Feature | Governed agent delivery workflows | Complete | FX-BF-009, FX-BF-010, FX-BF-011 |
+| FX-BF-012 | Feature | Governed agent delivery workflows | In progress | FX-BF-009, FX-BF-010, FX-BF-011 |
 | FX-BE-018 | Story | Workflow definition, policy, and validation contracts | Complete | FX-BF-012 |
 | FX-BE-019 | Story | Workflow execution, persistence, and recovery | Complete | FX-BE-012 |
 | FX-BE-020 | Story | Agent session stages, gates, artifacts, and approvals | Complete | FX-BE-012 |
@@ -90,3 +90,21 @@
 | TASK-104 | Task | Define the built-in governed delivery template | Complete | FX-BE-022 |
 | TASK-105 | Task | Implement workflow run monitor and controls | Complete | FX-BE-022 |
 | TASK-106 | Task | Add workflow E2E and delivery documentation | Complete | FX-BE-022 |
+| FX-BE-023 | Story | Designer completion and folder persistence | Proposed | FX-BE-021 |
+| TASK-107 | Task | Run the full desktop suite and add designer/monitor visual snapshots | Proposed | FX-BE-023 |
+| TASK-108 | Task | Persist project workflows to .praxis/workflows with path safety and reload | Proposed | FX-BE-023 |
+| TASK-109 | Task | Add the Agent Hub picker and effective-policy display to the inspector | Proposed | FX-BE-023 |
+| TASK-110 | Task | Add the pan/zoom workflow canvas with draggable nodes and edges | Proposed | FX-BE-023 |
+| FX-BF-013 | Feature | Workflow orchestration runtime | Proposed | FX-BF-012, FX-BE-023 |
+| FX-BE-024 | Story | Orchestrator loop, check execution, and run worktrees | Proposed | FX-BF-013 |
+| FX-BE-025 | Story | Agent stage sessions and completion | Proposed | FX-BF-013 |
+| FX-BE-026 | Story | Live updates, timeouts, and end-to-end verification | Proposed | FX-BF-013 |
+| TASK-111 | Task | Add the WorkflowOrchestrator service and scheduler-driven dispatch | Proposed | FX-BE-024 |
+| TASK-112 | Task | Implement deterministic check execution and artifact capture | Proposed | FX-BE-024 |
+| TASK-113 | Task | Add the per-run git worktree lifecycle and frozen snapshots | Proposed | FX-BE-024 |
+| TASK-114 | Task | Implement WorkflowSessionPort over the agent hosts | Proposed | FX-BE-025 |
+| TASK-115 | Task | Wire stage completion, artifact extraction, and the snapshot commit | Proposed | FX-BE-025 |
+| TASK-116 | Task | Attribute stage sessions to their workflow run and node | Proposed | FX-BE-025 |
+| TASK-117 | Task | Add the workflows:runChanged push channel and monitor subscription | Proposed | FX-BE-026 |
+| TASK-118 | Task | Add the timeout enforcement tick | Proposed | FX-BE-026 |
+| TASK-119 | Task | Add the unattended-run E2E with a stub agent, and update the docs | Proposed | FX-BE-026 |
