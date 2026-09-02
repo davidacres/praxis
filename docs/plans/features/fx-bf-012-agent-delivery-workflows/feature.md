@@ -1,18 +1,26 @@
 ---
-**Status:** ✅ Complete
+**Status:** 🚧 In progress
 **Created:** 2026-09-01T19:20:12.656Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-012
 slug: agent-delivery-workflows
 title: Governed agent delivery workflows
-status: complete
+status: in-progress
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-012-agent-delivery-workflows/feature-issues.md
-stories: [FX-BE-018, FX-BE-019, FX-BE-020, FX-BE-021, FX-BE-022]
+stories: [FX-BE-018, FX-BE-019, FX-BE-020, FX-BE-021, FX-BE-022, FX-BE-023]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run test:core, npm run test:desktop]
 ---
+
+<!--
+FX-BE-018..022 are complete: contracts, run engine, gates, designer, and run
+monitor. FX-BE-023 finishes the designer (folder persistence, agent picker,
+drag canvas). Impure run execution — the orchestrator that actually drives an
+unattended run — is FX-BF-013.
+-->
+
 
 # FX-BF-012: Governed agent delivery workflows
 
@@ -34,6 +42,7 @@ Users can compose and run repeatable software-delivery workflows that assign tru
 - `FX-BE-020` — Agent session stages, gates, artifacts, and approvals.
 - `FX-BE-021` — Visual workflow designer and template library.
 - `FX-BE-022` — Run monitor, delivery template, and end-to-end verification.
+- `FX-BE-023` — Designer completion and folder persistence.
 
 ## Dependencies
 
