@@ -70,6 +70,12 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   await expect(canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ })).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-designer-dark.png');
 
+  // The Connections tab of the inspector — the panel that used to overflow the column.
+  await page.getByRole('tab', { name: /^Connections/ }).click();
+  await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible();
+  await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-connections-dark.png');
+  await page.getByRole('tab', { name: 'Stage' }).click();
+
   // An edit flips the footer to "Save workflow"; save so the monitor has a
   // runnable workflow, then cross to it.
   await canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();

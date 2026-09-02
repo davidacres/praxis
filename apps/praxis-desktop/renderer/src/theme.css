@@ -8432,6 +8432,42 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 .wf-inspector .empty-state { padding: var(--space-5) var(--space-3); }
 
+/* Tabbed variant (designer): a fixed tab strip over one scrolling panel, so a
+   tall stage form or a long connection list never overflows the column. */
+.wf-inspector--tabbed { gap: var(--space-2); overflow: hidden; padding-right: 0; }
+.wf-inspector-tabs {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+}
+.wf-inspector-tabs button {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wf-inspector-tabs button:hover { color: var(--text); }
+.wf-inspector-tabs button.active { border-color: var(--accent); background: var(--bg-active); color: var(--text); }
+.wf-inspector-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-right: var(--space-1);
+}
+.wf-inspector-body > .empty-state { padding: var(--space-5) var(--space-3); }
+
 /* Canvas — reuses .designer-canvas for the dot-grid surface. */
 .wf-canvas { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; flex: 1; }
 .wf-canvas-bar { display: flex; align-items: center; gap: var(--space-3); font-size: 12px; color: var(--text-tertiary); }
@@ -8553,10 +8589,13 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Inspector cards — node inspector + edge editor share one bordered shell. */
 .wf-inspector-card { display: flex; flex-direction: column; gap: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); }
 .wf-inspector-card h2 { margin: 0; font-size: 15px; }
-.wf-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.wf-inspector-head-actions { display: flex; gap: var(--space-1); }
-.wf-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.wf-field > span { color: var(--text-tertiary); }
+.wf-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.wf-inspector-head-actions { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.wf-field { position: relative; display: flex; font-size: 13px; }
+.wf-field-label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wf-field-label > span { color: var(--text-tertiary); }
+.wf-field.has-warn .wf-field-label > span { padding-right: 18px; }
+.wf-field-warn { position: absolute; top: 0; right: 0; display: inline-flex; color: var(--warning); cursor: help; }
 .wf-fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); }
 .wf-fieldset legend { font-size: 12px; color: var(--text-tertiary); }
 .wf-check { display: flex; gap: var(--space-2); align-items: center; font-size: 13px; }
@@ -8567,7 +8606,13 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-issues { margin: 0; padding-left: var(--space-4); color: var(--danger); font-size: 12px; }
 .wf-agent-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-tertiary); }
 .wf-agent-meta .is-danger { color: var(--danger); }
-.wf-edge-form { display: flex; gap: var(--space-2); align-items: end; flex-wrap: wrap; }
-.wf-edge-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.wf-edge-row { display: flex; gap: var(--space-2); align-items: center; font-size: 13px; }
-.wf-edge-row > span:first-child { flex: 1; }
+.wf-edge-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items: end; }
+.wf-edge-form .btn { grid-column: 1 / -1; justify-content: center; }
+.wf-edge-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wf-edge-row { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0; border-top: 1px solid var(--border); font-size: 13px; }
+.wf-edge-row:first-child { border-top: 0; }
+.wf-edge-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.wf-edge-controls { display: flex; align-items: center; gap: var(--space-2); }
+.wf-edge-controls select { flex: 1; min-width: 0; }
+.wf-edge-controls .wf-check { flex-shrink: 0; font-size: 12px; }
+.wf-edge-remove { flex-shrink: 0; padding: 3px; }
