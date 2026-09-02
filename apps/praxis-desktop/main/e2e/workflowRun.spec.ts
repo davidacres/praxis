@@ -252,3 +252,111 @@ test('a deterministic check runs on its own in the run worktree and unblocks app
 
   fs.rmSync(repo, { recursive: true, force: true });
 });
+
+/** Seeds a folder-backed project with a saved check-only workflow. */
+async function seedCheckWorkflow(
+  page: Page,
+  repoPath: string,
+  check: { command: string; args: string[]; successExitCodes?: number[]; timeoutMs?: number }
+): Promise<{ projectId: string; workflowId: string }> {
+  return page.evaluate(
+    async ({ repo, checkSpec }) => {
+      const workspace = (await window.praxis.workspaces.list())[0];
+      const project = await window.praxis.projects.create(
+        {
+          name: 'Auto Delivery',
+          key: 'AUTO',
+          type: 'software',
+          purpose: '',
+          brief: {},
+          startingPoint: 'existing-folder',
+          folderPath: repo,
+          workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+          starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+          defaultAiToolMode: 'read-only'
+        },
+        workspace.id
+      );
+      const workflowId = `auto-${project.id}`;
+      const now = new Date().toISOString();
+      await window.praxis.workflows.save(project.id, {
+        schemaVersion: 1,
+        id: workflowId,
+        name: 'Auto checks',
+        scope: 'project',
+        projectId: project.id,
+        version: 1,
+        entryNodeId: 'verify',
+        createdAt: now,
+        updatedAt: now,
+        nodes: [
+          {
+            type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+            command: checkSpec.command,
+            args: checkSpec.args,
+            successExitCodes: checkSpec.successExitCodes ?? [0],
+            ...(checkSpec.timeoutMs ? { timeoutMs: checkSpec.timeoutMs } : {}),
+            outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+            satisfiesGate: 'qa'
+          },
+          {
+            type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],
+            prompt: 'Ship?', requiredGates: ['qa'], allowBypass: false
+          }
+        ],
+        edges: [{ id: 'e1', from: 'verify', to: 'approve', on: 'success', required: true }]
+      } as never);
+      localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
+      return { projectId: project.id, workflowId };
+    },
+    { repo: repoPath, checkSpec: check }
+  );
+}
+
+test('the run monitor reflects an unattended run as the orchestrator drives it', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const seeded = await seedCheckWorkflow(page, repo, { command: 'git', args: ['--version'] });
+  await page.reload();
+  await openRunsTab(page);
+
+  await page.getByLabel('Run workflow').selectOption({ label: 'Auto checks' });
+  await page.getByLabel('Run task').fill('Hands off');
+  await page.getByRole('button', { name: 'Start' }).click();
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  // No Mark done anywhere: the check runs and the status region updates itself.
+  await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
+  await expect(page.getByRole('row').filter({ hasText: 'Verify' })).toContainText('succeeded');
+  await expect(page.getByRole('button', { name: 'Approve' })).toBeEnabled();
+
+  await page.getByRole('button', { name: 'Approve' }).click();
+  await expect(runDetail.getByRole('status')).toContainText('completed');
+  expect(seeded.workflowId).toContain('auto-');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('a check that outruns its timeout is failed with a stated reason', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  // `sleep 30` will be killed by the 1s timeout long before it exits.
+  await seedCheckWorkflow(page, repo, { command: 'sleep', args: ['30'], timeoutMs: 1000 });
+  await page.reload();
+  await openRunsTab(page);
+
+  await page.getByLabel('Run workflow').selectOption({ label: 'Auto checks' });
+  await page.getByLabel('Run task').fill('Too slow');
+  await page.getByRole('button', { name: 'Start' }).click();
+
+  const verifyRow = page.getByRole('row').filter({ hasText: 'Verify' });
+  await expect(verifyRow).toContainText('failed', { timeout: 20000 });
+  await expect(verifyRow).toContainText(/timed out/i);
+  await expect(page.getByRole('region', { name: 'Run detail' })).toContainText(/failed|retried/);
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});

@@ -1,7 +1,7 @@
 ---
 id: FX-BE-026
 title: Live updates, timeouts, and end-to-end verification
-status: proposed
+status: complete
 feature: FX-BF-013
 issue: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-026-live-updates-timeouts-e2e/issue.md
 updated: 2026-09-02

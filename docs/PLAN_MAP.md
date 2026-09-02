@@ -95,16 +95,16 @@
 | TASK-108 | Task | Persist project workflows to .praxis/workflows with path safety and reload | Complete | FX-BE-023 |
 | TASK-109 | Task | Add the Agent Hub picker and effective-policy display to the inspector | Complete | FX-BE-023 |
 | TASK-110 | Task | Add the pan/zoom workflow canvas with draggable nodes and edges | Complete | FX-BE-023 |
-| FX-BF-013 | Feature | Workflow orchestration runtime | In progress | FX-BF-012, FX-BE-023 |
+| FX-BF-013 | Feature | Workflow orchestration runtime | Complete | FX-BF-012, FX-BE-023 |
 | FX-BE-024 | Story | Orchestrator loop, check execution, and run worktrees | Complete | FX-BF-013 |
 | FX-BE-025 | Story | Agent stage sessions and completion | Complete | FX-BF-013 |
-| FX-BE-026 | Story | Live updates, timeouts, and end-to-end verification | Proposed | FX-BF-013 |
+| FX-BE-026 | Story | Live updates, timeouts, and end-to-end verification | Complete | FX-BF-013 |
 | TASK-111 | Task | Add the WorkflowOrchestrator service and scheduler-driven dispatch | Complete | FX-BE-024 |
 | TASK-112 | Task | Implement deterministic check execution and artifact capture | Complete | FX-BE-024 |
 | TASK-113 | Task | Add the per-run git worktree lifecycle and frozen snapshots | Complete | FX-BE-024 |
 | TASK-114 | Task | Implement WorkflowSessionPort over the agent hosts | Complete | FX-BE-025 |
 | TASK-115 | Task | Wire stage completion, artifact extraction, and the snapshot commit | Complete | FX-BE-025 |
 | TASK-116 | Task | Attribute stage sessions to their workflow run and node | Complete | FX-BE-025 |
-| TASK-117 | Task | Add the workflows:runChanged push channel and monitor subscription | Proposed | FX-BE-026 |
-| TASK-118 | Task | Add the timeout enforcement tick | Proposed | FX-BE-026 |
-| TASK-119 | Task | Add the unattended-run E2E with a stub agent, and update the docs | Proposed | FX-BE-026 |
+| TASK-117 | Task | Add the workflows:runChanged push channel and monitor subscription | Complete | FX-BE-026 |
+| TASK-118 | Task | Add the timeout enforcement tick | Complete | FX-BE-026 |
+| TASK-119 | Task | Add the unattended-run E2E with a stub agent, and update the docs | Complete | FX-BE-026 |
