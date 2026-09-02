@@ -63,6 +63,7 @@ export * from './workflows/workflowStageSession';
 export * from './workflows/workflowGates';
 export * from './workflows/workflowTemplates';
 export * from './workflows/workflowDesignerState';
+export * from './workflows/workflowRunSummary';
 export * from './workflows/workflowStore';
 export * from './mcp/clientFactory';
 export * from './gitlab/gitLabApiService';
