@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-107
 title: Run the full desktop suite and add designer/monitor visual snapshots
-status: proposed
+status: complete
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-022]
@@ -23,3 +23,14 @@ surfaces with their own visual snapshots.
   have a `toHaveScreenshot` assertion.
 ## Notes
 The workflow specs already pass in isolation; this is the full-suite guard.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

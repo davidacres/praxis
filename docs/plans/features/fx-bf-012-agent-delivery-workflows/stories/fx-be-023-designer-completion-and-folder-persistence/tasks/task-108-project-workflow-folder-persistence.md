@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-108
 title: Persist project workflows to .praxis/workflows with path safety and reload
-status: proposed
+status: complete
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]
@@ -30,3 +30,14 @@ and shareable, instead of only living in the app-local draft store.
 `resolveManifestPath` in `ai/agentRuntime/manifest.ts` already models the
 path-escape guard. Do not require git — writing the file is a filesystem
 operation; staging it is the user's choice.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

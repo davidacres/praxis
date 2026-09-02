@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-109
 title: Add the Agent Hub picker and effective-policy display to the inspector
-status: proposed
+status: complete
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]
@@ -30,3 +30,14 @@ an approval stage requires.
 `agentRuntime.list()` already exists over IPC. This closes the TASK-102
 acceptance text ("trust, skills, capabilities, permissions, and gate policy")
 without waiting on the FX-BF-009 catalog UI.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

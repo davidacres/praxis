@@ -91,9 +91,9 @@
 | TASK-105 | Task | Implement workflow run monitor and controls | Complete | FX-BE-022 |
 | TASK-106 | Task | Add workflow E2E and delivery documentation | Complete | FX-BE-022 |
 | FX-BE-023 | Story | Designer completion and folder persistence | Proposed | FX-BE-021 |
-| TASK-107 | Task | Run the full desktop suite and add designer/monitor visual snapshots | Proposed | FX-BE-023 |
-| TASK-108 | Task | Persist project workflows to .praxis/workflows with path safety and reload | Proposed | FX-BE-023 |
-| TASK-109 | Task | Add the Agent Hub picker and effective-policy display to the inspector | Proposed | FX-BE-023 |
+| TASK-107 | Task | Run the full desktop suite and add designer/monitor visual snapshots | Complete | FX-BE-023 |
+| TASK-108 | Task | Persist project workflows to .praxis/workflows with path safety and reload | Complete | FX-BE-023 |
+| TASK-109 | Task | Add the Agent Hub picker and effective-policy display to the inspector | Complete | FX-BE-023 |
 | TASK-110 | Task | Add the pan/zoom workflow canvas with draggable nodes and edges | Proposed | FX-BE-023 |
 | FX-BF-013 | Feature | Workflow orchestration runtime | Proposed | FX-BF-012, FX-BE-023 |
 | FX-BE-024 | Story | Orchestrator loop, check execution, and run worktrees | Proposed | FX-BF-013 |
