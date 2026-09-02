@@ -46,6 +46,11 @@ const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string }>
 const GATES: WorkflowGateKind[] = ['review', 'qa', 'security'];
 const OUTCOMES: WorkflowEdgeOutcome[] = ['success', 'failure', 'always'];
 
+/** The gate a stage satisfies, without importing a core runtime helper. */
+function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
+  return node.type === 'agent-task' || node.type === 'check' ? node.satisfiesGate : undefined;
+}
+
 export interface WorkflowDesignerPageProps {
   project: ProjectRecord;
   /** Which half of the feature is open — controlled by the route. */
@@ -72,7 +77,6 @@ export function WorkflowDesignerPage({
   const [uncontrolledView, setUncontrolledView] = useState<'design' | 'runs'>('design');
   const view = viewProp ?? uncontrolledView;
   const setView = onViewChange ?? setUncontrolledView;
-  const [designMode, setDesignMode] = useState<'canvas' | 'list'>('canvas');
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
 
@@ -211,72 +215,40 @@ export function WorkflowDesignerPage({
           onOpenExisting={openExisting}
         />
       ) : (
-        <>
-        {designMode === 'canvas' && (
-          <WorkflowCanvas
-            definition={definition}
-            selectedNodeId={selectedNodeId}
-            issuesByNode={Object.fromEntries(
-              Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
-            )}
-            onChange={mutate}
-            onSelectNode={setSelectedNodeId}
-          />
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 320px) 1fr', gap: 20, alignItems: 'start' }}>
-          <section aria-label="Workflow stages" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div className="wf-designer">
+          <nav className="wf-rail" aria-label="Workflow stages">
+            <div className="wf-rail-head">
               <strong>{definition.name}</strong>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-pressed={designMode === 'canvas'}
-                  onClick={() => setDesignMode('canvas')}
-                >
-                  Canvas
-                </button>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  aria-pressed={designMode === 'list'}
-                  onClick={() => setDesignMode('list')}
-                >
-                  List
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDefinition(undefined);
-                    // Pick up any out-of-band change to the project's files.
-                    reloadLibrary();
-                  }}
-                  className="ghost-button"
-                >
-                  Close
-                </button>
-              </div>
+              <button
+                type="button"
+                className="btn-compact"
+                onClick={() => {
+                  setDefinition(undefined);
+                  reloadLibrary();
+                }}
+              >
+                Close
+              </button>
             </div>
 
-            <div role="group" aria-label="Add stage" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div role="group" aria-label="Add stage" className="wf-rail-add">
               {NODE_KINDS.map(kind => (
                 <button
                   key={kind.type}
                   type="button"
-                  className="ghost-button"
+                  className="chip"
                   onClick={() => {
-                    const node = newNode(kind.type, { x: 80, y: 80 + definition.nodes.length * 40 });
+                    const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
                     mutate(addNode(definition, node));
                     setSelectedNodeId(node.id);
                   }}
                 >
-                  <Icon name={kind.icon as never} /> {kind.label}
+                  <Icon name={kind.icon as never} size={13} /> {kind.label}
                 </button>
               ))}
             </div>
 
-            {designMode === 'list' && (
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <ul className="wf-rail-list">
               {definition.nodes.map(node => {
                 const issues = feedback?.byNode[node.id]?.length ?? 0;
                 const isEntry = node.id === definition.entryNodeId;
@@ -284,67 +256,58 @@ export function WorkflowDesignerPage({
                   <li key={node.id}>
                     <button
                       type="button"
+                      className="wf-rail-row"
                       aria-pressed={node.id === selectedNodeId}
                       aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
                         issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
                       }`}
                       onClick={() => setSelectedNodeId(node.id)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '8px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        background: node.id === selectedNodeId ? 'var(--surface-active, var(--bg-elevated))' : 'var(--bg)',
-                        color: 'var(--text)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8
-                      }}
                     >
                       <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: 600 }}>{node.name}</span>
-                        <span style={{ color: 'var(--text-dim)', fontSize: 12, marginLeft: 6 }}>{node.type}</span>
+                        <span style={{ fontWeight: 600 }}>{node.name}</span>{' '}
+                        <span className="wf-rail-sub">{node.type}</span>
                       </span>
-                      {isEntry && (
-                        <span title="Entry stage" style={{ fontSize: 11, color: 'var(--accent)' }}>
-                          entry
-                        </span>
-                      )}
-                      {issues > 0 && (
-                        <span
-                          title={`${issues} validation issue${issues === 1 ? '' : 's'}`}
-                          style={{ fontSize: 11, color: 'var(--danger)' }}
-                        >
+                      {issues > 0 ? (
+                        <span className="wf-rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
                           ⚠ {issues}
                         </span>
-                      )}
+                      ) : isEntry ? (
+                        <span className="wf-rail-mark is-entry">entry</span>
+                      ) : railGate(node) ? (
+                        <span className="wf-rail-mark is-gate">{railGate(node)}</span>
+                      ) : null}
                     </button>
                   </li>
                 );
               })}
             </ul>
-            )}
 
-            <ValidationSummary feedback={feedback} />
+            <div className="wf-rail-foot">
+              <ValidationSummary feedback={feedback} />
+              <button
+                type="button"
+                onClick={save}
+                disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
+                className="btn btn-primary"
+              >
+                {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
+              </button>
+            </div>
+          </nav>
 
-            <button
-              type="button"
-              onClick={save}
-              disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
-              className="primary-button"
-            >
-              {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
-            </button>
-            {!feedback?.valid && (
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
-                Resolve the {feedback?.errors.length} error{feedback?.errors.length === 1 ? '' : 's'} before saving.
-              </p>
-            )}
-          </section>
+          <div className="wf-canvas-slot">
+            <WorkflowCanvas
+              definition={definition}
+              selectedNodeId={selectedNodeId}
+              issuesByNode={Object.fromEntries(
+                Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
+              )}
+              onChange={mutate}
+              onSelectNode={setSelectedNodeId}
+            />
+          </div>
 
-          <section aria-label="Stage inspector" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <section className="wf-inspector" aria-label="Stage inspector">
             {selectedNode ? (
               <NodeInspector
                 definition={definition}
@@ -356,13 +319,15 @@ export function WorkflowDesignerPage({
                 onSelectNode={setSelectedNodeId}
               />
             ) : (
-              <p style={{ color: 'var(--text-dim)' }}>Select a stage to edit it.</p>
+              <div className="empty-state">
+                <Icon name="cursor" size={26} />
+                <span>Select a stage to edit it.</span>
+              </div>
             )}
 
             <EdgeEditor definition={definition} onChange={mutate} />
           </section>
         </div>
-        </>
       )}
     </div>
   );

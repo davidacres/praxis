@@ -22,12 +22,6 @@ import { connectNodes, moveNode } from './workflowEdits';
 const NODE_W = 160;
 const NODE_H = 64;
 
-const laneColor: Record<WorkflowNode['type'], string> = {
-  'agent-task': 'var(--accent)',
-  check: 'var(--info, var(--accent))',
-  approval: 'var(--warning, var(--accent))',
-  join: 'var(--text-dim)'
-};
 
 export interface WorkflowCanvasProps {
   definition: WorkflowDefinition;
@@ -148,41 +142,28 @@ export function WorkflowCanvas({
       : undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--text-dim)' }}>
-        <span>Drag a card to move it, drag from its ▸ handle onto another card to connect. Scroll to zoom.</span>
-        <button type="button" className="ghost-button" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
+    <div className="wf-canvas">
+      <div className="wf-canvas-bar">
+        <span>Drag a card to move it, drag from its ▸ handle onto another to connect. Scroll to zoom.</span>
+        <button type="button" className="btn-compact" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
           Reset view
         </button>
-        <span>{Math.round(view.zoom * 100)}%</span>
+        <span className="wf-canvas-zoom">{Math.round(view.zoom * 100)}%</span>
       </div>
 
       <div
         ref={surfaceRef}
         role="application"
         aria-label="Workflow canvas"
+        className={`designer-canvas wf-canvas-surface${drag?.kind === 'pan' ? ' is-panning' : ''}`}
         onPointerDown={onSurfacePointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onWheel={onWheel}
-        style={{
-          position: 'relative',
-          height: 520,
-          overflow: 'hidden',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          background: 'var(--bg)',
-          cursor: drag?.kind === 'pan' ? 'grabbing' : 'default',
-          touchAction: 'none'
-        }}
       >
         <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
-            transformOrigin: '0 0'
-          }}
+          className="wf-canvas-world"
+          style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}
         >
           <svg
             width={4000}
@@ -215,6 +196,7 @@ export function WorkflowCanvas({
                 role="button"
                 tabIndex={0}
                 aria-pressed={selected}
+                className={`wf-node wf-node--${node.type}${selected ? ' is-selected' : ''}`}
                 aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
                   issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
                 }`}
@@ -241,53 +223,22 @@ export function WorkflowCanvas({
                     onChange(moveNode(definition, node.id, { x: node.x + nudge[event.key][0], y: node.y + nudge[event.key][1] }));
                   }
                 }}
-                style={{
-                  position: 'absolute',
-                  left: node.x,
-                  top: node.y,
-                  width: NODE_W,
-                  minHeight: NODE_H,
-                  boxSizing: 'border-box',
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-                  borderLeft: `3px solid ${laneColor[node.type]}`,
-                  background: 'var(--bg-elevated, var(--bg))',
-                  color: 'var(--text)',
-                  cursor: 'grab',
-                  userSelect: 'none'
-                }}
+                style={{ left: node.x, top: node.y, width: NODE_W, minHeight: NODE_H }}
               >
-                <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {node.name}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {node.type}
-                  {isEntry && <span style={{ color: 'var(--accent)' }}>entry</span>}
-                  {issues > 0 && <span style={{ color: 'var(--danger)' }}>⚠ {issues}</span>}
+                <div className="wf-node-name">{node.name}</div>
+                <div className="wf-node-meta">
+                  <span>{node.type}</span>
+                  {isEntry && <span className="wf-node-entry">entry</span>}
+                  {issues > 0 && <span className="wf-node-issue">⚠ {issues}</span>}
                 </div>
                 <button
                   type="button"
+                  className="wf-node-handle"
                   aria-label={`Connect from ${node.name}`}
                   onPointerDown={event => {
                     event.stopPropagation();
                     const point = toCanvas(event.clientX, event.clientY);
                     setDrag({ kind: 'link', from: node.id, x: point.x, y: point.y });
-                  }}
-                  style={{
-                    position: 'absolute',
-                    right: -10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    border: '1px solid var(--border)',
-                    background: 'var(--bg)',
-                    color: 'var(--text-dim)',
-                    fontSize: 10,
-                    lineHeight: 1,
-                    cursor: 'crosshair'
                   }}
                 >
                   ▸

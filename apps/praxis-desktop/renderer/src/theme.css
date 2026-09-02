@@ -8378,3 +8378,75 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-header h1 { margin: 0; font-size: 20px; }
 .wf-header-sub { color: var(--text-tertiary); font-size: 13px; }
 .wf-viewswitch { margin-left: auto; display: flex; gap: var(--space-1); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); }
+
+/* Designer — three columns: stage rail, canvas hero, inspector panel. */
+.wf-designer {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 340px;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+@media (max-width: 1200px) { .wf-designer { grid-template-columns: 220px minmax(0, 1fr) 300px; } }
+.wf-designer .wf-rail { width: auto; }
+.wf-rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wf-rail-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-rail-add { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wf-rail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); flex: 1; min-height: 0; overflow-y: auto; }
+.wf-rail-foot { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+.wf-rail-foot .btn { width: 100%; }
+.wf-canvas-slot { display: flex; min-height: 0; min-width: 0; }
+.wf-canvas-slot > * { flex: 1; }
+.wf-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-1);
+}
+.wf-inspector .empty-state { padding: var(--space-5) var(--space-3); }
+
+/* Canvas — reuses .designer-canvas for the dot-grid surface. */
+.wf-canvas { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; flex: 1; }
+.wf-canvas-bar { display: flex; align-items: center; gap: var(--space-3); font-size: 12px; color: var(--text-tertiary); }
+.wf-canvas-bar > span:first-child { flex: 1; }
+.wf-canvas-zoom { font-variant-numeric: tabular-nums; }
+.wf-canvas-surface { flex: 1; min-height: 360px; cursor: default; touch-action: none; }
+.wf-canvas-surface.is-panning { cursor: grabbing; }
+.wf-canvas-world { position: absolute; inset: 0; transform-origin: 0 0; }
+.wf-canvas-world > svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+
+.wf-node {
+  position: absolute;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--wf-node-accent, var(--accent));
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: grab;
+  user-select: none;
+}
+.wf-node.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.wf-node-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-node-meta { display: flex; align-items: center; gap: var(--space-2); margin-top: 2px; font-size: 11px; color: var(--text-tertiary); }
+.wf-node-handle {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1;
+  cursor: crosshair;
+}
