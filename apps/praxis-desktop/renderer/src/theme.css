@@ -8375,6 +8375,25 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   backdrop-filter: var(--surface-backdrop);
 }
 
+/* The designer and monitor use bare form controls; give them the same themed
+   surface the rest of the app gets from `.input` / `.select` / `.textarea`,
+   so their text stays legible on every palette. Checkboxes keep their native look. */
+.wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])),
+.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])) {
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.wf-designer :where(textarea),
+.wf-runs :where(textarea) { height: auto; padding: var(--space-2); resize: vertical; }
+.wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
+.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { outline: none; border-color: var(--accent); }
+
 .wf-page { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5); }
 .wf-header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .wf-header h1 { margin: 0; font-size: 20px; }
