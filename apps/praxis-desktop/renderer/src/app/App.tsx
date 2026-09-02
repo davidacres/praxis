@@ -966,7 +966,12 @@ export function App() {
       return renderNewSession();
     }
     if (selectedProject && route.feature === 'workflows') {
-      return <WorkflowDesignerPage project={selectedProject} />;
+      return (
+        <WorkflowDesignerPage
+          project={selectedProject}
+          onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+        />
+      );
     }
     if (selectedProject && route.feature !== 'git') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;

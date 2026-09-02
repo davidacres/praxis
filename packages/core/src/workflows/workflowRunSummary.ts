@@ -24,6 +24,7 @@ import {
 import { deriveRunStatus, scheduleWorkflowRun } from './workflowScheduler';
 import { nextActions, outstandingNodes, type WorkflowNextAction } from './workflowRecovery';
 import { evaluateGates, type GateStatus } from './workflowGates';
+import { stageSessionKey } from './workflowStageTask';
 import type { WorkflowPolicyProfile } from './workflowTypes';
 
 export interface StageRow {
@@ -36,6 +37,8 @@ export interface StageRow {
   attempts: number;
   maxAttempts?: number;
   sessionId?: string;
+  /** The session store key for this stage, so the monitor can link to it. */
+  sessionKey?: string;
   snapshotRef?: string;
   gate?: WorkflowGateKind;
   artifacts: Array<{ contractId: string; kind: string; path?: string }>;
@@ -104,7 +107,9 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
       lane: laneFor(run, node.id, ready, awaiting),
       attempts: state?.attempts.length ?? 0,
       ...(attemptBudget(node) !== undefined ? { maxAttempts: attemptBudget(node) } : {}),
-      ...(lastAttempt?.sessionId ? { sessionId: lastAttempt.sessionId } : {}),
+      ...(lastAttempt?.sessionId
+        ? { sessionId: lastAttempt.sessionId, sessionKey: stageSessionKey(run.runId, node.id) }
+        : {}),
       ...(state?.snapshotRef ? { snapshotRef: state.snapshotRef } : {}),
       ...(nodeGate(node) ? { gate: nodeGate(node) } : {}),
       artifacts: (state?.artifacts ?? []).map(artifact => ({

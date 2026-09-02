@@ -261,6 +261,14 @@ export interface AgentSessionRecord {
   runtimeSessionId?: string;
   /** Tracker connection bound when this issue session was created. */
   connectionId?: string;
+  /**
+   * Set when this session is a governed workflow stage (FX-BF-013). Together
+   * these make a session traceable back to the run and node that started it —
+   * what lets the Sessions view label it and the run monitor link to it.
+   * Absent for ordinary ticket and composer sessions.
+   */
+  workflowRunId?: string;
+  workflowNodeId?: string;
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;

@@ -1,0 +1,130 @@
+/**
+ * Stage → agent task, and finished session → stage outcome
+ * (FX-BE-025 / TASK-114, TASK-115).
+ *
+ * The two ends of an agent stage's life, kept pure so the contract between a
+ * workflow node and an agent session can be tested without a host. The impure
+ * middle — picking a provider, starting the host, watching the session — lives
+ * in the desktop app.
+ *
+ * The brief handed to an agent is deliberately closed: the stage's own
+ * instructions, the artifacts it was given, and the artifacts it must produce.
+ * It never receives an upstream transcript, because a reviewer reading the
+ * implementer's chat is reviewing an argument rather than the change.
+ */
+
+import type { AgentTaskDefinition } from '../ai/agentTypes';
+import { nodeOutputs, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
+import type { StageOutcome } from './workflowOrchestrator';
+import type { WorkflowStageContext } from './workflowStageSession';
+
+/** A deterministic session key per run and node, so a replay re-attaches. */
+export function stageSessionKey(runId: string, nodeId: string): string {
+  return `WF-${runId.slice(0, 8).toUpperCase()}-${nodeId}`;
+}
+
+/**
+ * Builds the task contract for a stage.
+ *
+ * `definitionOfDone` names the artifacts the engine will actually check for, so
+ * the agent is told the same rule that will be applied to it — a stage that
+ * reports success without producing them is recorded as failed either way.
+ */
+export function buildStageTaskDefinition(context: WorkflowStageContext): AgentTaskDefinition {
+  const inputs = context.inputs.length
+    ? context.inputs.map(input => `- ${input.kind} "${input.contractId}"${input.path ? ` at ${input.path}` : ''}`).join('\n')
+    : '- none';
+
+  const outputs = context.expectedOutputs.length
+    ? context.expectedOutputs
+        .map(output => `- ${output.kind} "${output.id}"${output.required ? ' (required)' : ' (optional)'}`)
+        .join('\n')
+    : '- none';
+
+  const scope = [
+    `You are running the "${context.stageName}" stage of a governed delivery workflow.`,
+    context.snapshot
+      ? `Inspect the frozen implementation snapshot ${context.snapshot.ref} (produced by "${context.snapshot.producedByNodeId}"), not the live branch.`
+      : undefined,
+    `Inputs available to you:\n${inputs}`
+  ]
+    .filter((line): line is string => !!line)
+    .join('\n\n');
+
+  return {
+    goal: context.instructions.trim() || `Complete the ${context.stageName} stage.`,
+    scope,
+    definitionOfDone: `Produce every required artifact before finishing:\n${outputs}`,
+    nonGoals: [
+      'Do not advance, approve, or skip any other stage of this workflow.',
+      'Do not modify the workflow definition itself.'
+    ]
+  };
+}
+
+/** What the desktop app reports about a session that has stopped. */
+export interface FinishedStageSession {
+  /** Terminal agent state. */
+  state: 'completed' | 'failed' | 'aborted';
+  /** The session's final response, used as the report body for a report stage. */
+  responseText?: string;
+  /** Commit the worktree was frozen at, for a mutating stage. */
+  snapshotRef?: string;
+  /** Files the host wrote that map onto declared artifacts, by contract id. */
+  artifactPaths?: Record<string, string>;
+}
+
+/**
+ * Turns a finished session into the outcome the orchestrator applies.
+ *
+ * An artifact is claimed only when the stage actually has something behind it:
+ * a produced file, a commit for a `diff`, or a non-empty response for a
+ * narrative kind. Claiming one otherwise would let a stage that said nothing
+ * satisfy a gate, which is the failure this whole feature exists to prevent.
+ */
+export function stageOutcomeFromSession(
+  node: WorkflowAgentTaskNode,
+  session: FinishedStageSession
+): StageOutcome {
+  if (session.state !== 'completed') {
+    return {
+      status: 'failed',
+      error:
+        session.state === 'aborted'
+          ? 'The stage session was aborted.'
+          : `The stage session failed${session.responseText ? `: ${firstLine(session.responseText)}` : '.'}`
+    };
+  }
+
+  const artifacts: NonNullable<StageOutcome['artifacts']> = [];
+  for (const contract of nodeOutputs(node)) {
+    const filePath = session.artifactPaths?.[contract.id];
+    if (filePath) {
+      artifacts.push({ contractId: contract.id, kind: contract.kind, path: filePath });
+      continue;
+    }
+    if (contract.kind === 'diff' && session.snapshotRef) {
+      artifacts.push({ contractId: contract.id, kind: contract.kind, path: session.snapshotRef });
+      continue;
+    }
+    if (isNarrative(contract.kind) && session.responseText?.trim()) {
+      artifacts.push({ contractId: contract.id, kind: contract.kind });
+    }
+  }
+
+  return {
+    status: 'succeeded',
+    artifacts,
+    ...(session.snapshotRef ? { snapshotRef: session.snapshotRef } : {})
+  };
+}
+
+/** Kinds a session's own prose can stand behind. */
+function isNarrative(kind: WorkflowArtifactKind): boolean {
+  return kind === 'plan' || kind === 'report' || kind === 'note' || kind === 'log';
+}
+
+function firstLine(text: string): string {
+  const line = text.trim().split('\n')[0] ?? '';
+  return line.length > 200 ? `${line.slice(0, 200)}…` : line;
+}
