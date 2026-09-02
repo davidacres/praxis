@@ -29,3 +29,14 @@ verification stages inspect a fixed snapshot rather than a moving tree.
 ## Notes
 `GitWorktreeManager.prepareDeliveryWorktree` / `removeDeliveryWorktree` already
 exist and are used by the legacy delivery flow.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

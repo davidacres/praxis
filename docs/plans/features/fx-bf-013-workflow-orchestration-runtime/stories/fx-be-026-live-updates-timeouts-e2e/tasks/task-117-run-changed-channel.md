@@ -25,3 +25,14 @@ without the user clicking anything.
 ## Notes
 Renderer stays type-only against `@praxis/core`. Keep the payload minimal (id
 only) and let the renderer pull the summary.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -30,3 +30,14 @@ apply the outcome, re-schedule.
 ## Notes
 Pure scheduling stays in `packages/core`; this service is main-process only.
 Model it on `aiReviewRuntime` / the `ai:delegate` handler for host access.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

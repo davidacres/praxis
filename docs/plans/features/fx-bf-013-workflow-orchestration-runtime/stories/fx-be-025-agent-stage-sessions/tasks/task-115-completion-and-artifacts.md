@@ -29,3 +29,14 @@ Close the loop between a finished agent session and the run.
 `updateAgentOutput` / `updateAgentDelivery` on `AiSessionManager` already capture
 the result payload. The engine's `settleNode` enforces the required-artifact
 check — this task just supplies real artifacts.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

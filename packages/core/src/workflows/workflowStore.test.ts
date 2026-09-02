@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import {
@@ -8,8 +8,11 @@ import {
   WorkflowPolicyStore,
   WorkflowStore,
   composeWorkflowPolicies,
+  deleteProjectWorkflow,
   loadProjectWorkflows,
-  resolveWorkflowCatalog
+  resolveWorkflowCatalog,
+  workflowFileName,
+  writeProjectWorkflow
 } from './workflowStore';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition, type WorkflowPolicyProfile } from './workflowTypes';
 import type { KeyValueStore } from '../host/stateStore';
@@ -154,6 +157,61 @@ test('a malformed committed workflow is reported so the project sees it is ignor
   assert.deepEqual(result.workflows, []);
   assert.equal(result.invalid.length, 1);
   assert.ok(result.invalid[0].path?.endsWith('broken.json'));
+});
+
+// ── Folder persistence (FX-BE-023 / TASK-108) ────────────────────────────
+
+test('workflowFileName accepts a conservative id and appends .json', () => {
+  assert.equal(workflowFileName('governed-delivery-p1'), 'governed-delivery-p1.json');
+  assert.equal(workflowFileName('QA_check.v2'), 'QA_check.v2.json');
+});
+
+test('workflowFileName rejects traversal, separators, and dotfiles', () => {
+  for (const bad of ['../evil', 'a/b', 'a\\b', '..', '.', '.hidden', 'has space', 'unïcode', '']) {
+    assert.throws(() => workflowFileName(bad), /Unsafe|may (only|not)|is required/, `expected "${bad}" to be rejected`);
+  }
+});
+
+function projectDef(id: string): WorkflowDefinition {
+  return { ...minimal(id, { scope: 'project', projectId: 'p1' }) };
+}
+
+test('a project definition round-trips through a committed file', async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), 'praxis-wf-'));
+  const written = await writeProjectWorkflow(folder, projectDef('delivery'));
+  assert.ok(written.endsWith(path.join(PROJECT_WORKFLOWS_DIR, 'delivery.json')));
+
+  // Pretty-printed and newline-terminated.
+  const raw = await readFile(written, 'utf8');
+  assert.ok(raw.startsWith('{\n'));
+  assert.ok(raw.endsWith('}\n'));
+
+  const loaded = await loadProjectWorkflows(folder);
+  assert.equal(loaded.workflows.length, 1);
+  assert.equal(loaded.workflows[0].definition.id, 'delivery');
+  assert.deepEqual(loaded.invalid, []);
+});
+
+test('writeProjectWorkflow refuses a global-scoped definition', async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), 'praxis-wf-'));
+  await assert.rejects(() => writeProjectWorkflow(folder, minimal('delivery')), /project-scoped/);
+});
+
+test('deleteProjectWorkflow removes the file and tolerates a missing one', async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), 'praxis-wf-'));
+  await writeProjectWorkflow(folder, projectDef('delivery'));
+  await deleteProjectWorkflow(folder, 'delivery');
+  assert.deepEqual((await loadProjectWorkflows(folder)).workflows, []);
+  // Second delete is a no-op, not a throw.
+  await deleteProjectWorkflow(folder, 'delivery');
+});
+
+test('an edit to a committed file is picked up on the next load', async () => {
+  const folder = await mkdtemp(path.join(tmpdir(), 'praxis-wf-'));
+  await writeProjectWorkflow(folder, projectDef('delivery'));
+  const renamed = { ...projectDef('delivery'), name: 'Renamed delivery' };
+  await writeProjectWorkflow(folder, renamed);
+  assert.equal((await loadProjectWorkflows(folder)).workflows[0].definition.name, 'Renamed delivery');
 });
 
 test('a workflow from a newer schema is reported, not loaded', async () => {

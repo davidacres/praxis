@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
+  AgentRuntimeSnapshot,
   ProjectRecord,
   WorkflowDefinition,
   WorkflowEdgeOutcome,
   WorkflowGateKind,
   WorkflowNode,
   WorkflowNodeType,
+  WorkflowPolicyProfile,
   WorkflowTemplate,
   TemplateReadiness
 } from '@praxis/core';
@@ -57,6 +59,13 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<'design' | 'runs'>('design');
+  const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
+  const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
+
+  useEffect(() => {
+    void window.praxis.agentRuntime.list().then(setCatalog);
+    void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
+  }, [project.id]);
 
   const reloadLibrary = useCallback(() => {
     void window.praxis.workflows.listTemplates(project.id).then(list => {
@@ -191,7 +200,15 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
           <section aria-label="Workflow stages" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <strong>{definition.name}</strong>
-              <button type="button" onClick={() => setDefinition(undefined)} className="ghost-button">
+              <button
+                type="button"
+                onClick={() => {
+                  setDefinition(undefined);
+                  // Pick up any out-of-band change to the project's files.
+                  reloadLibrary();
+                }}
+                className="ghost-button"
+              >
                 Close
               </button>
             </div>
@@ -286,6 +303,8 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
                 definition={definition}
                 node={selectedNode}
                 issues={feedback?.byNode[selectedNode.id] ?? []}
+                catalog={catalog}
+                policy={policy}
                 onChange={mutate}
                 onSelectNode={setSelectedNodeId}
               />
@@ -427,12 +446,16 @@ function NodeInspector({
   definition,
   node,
   issues,
+  catalog,
+  policy,
   onChange,
   onSelectNode
 }: {
   definition: WorkflowDefinition;
   node: WorkflowNode;
   issues: Array<{ path: string; message: string }>;
+  catalog: AgentRuntimeSnapshot | undefined;
+  policy: WorkflowPolicyProfile | undefined;
   onChange: (next: WorkflowDefinition) => void;
   onSelectNode: (nodeId: string | undefined) => void;
 }) {
@@ -469,37 +492,7 @@ function NodeInspector({
       </Field>
 
       {node.type === 'agent-task' && (
-        <>
-          <Field label="Agent Hub id">
-            <input
-              value={node.agent.agentId}
-              placeholder="e.g. praxis-reviewer"
-              onChange={event => set({ agent: { ...node.agent, agentId: event.target.value } })}
-            />
-          </Field>
-          <Field label="Tool mode">
-            <select
-              value={node.agent.toolMode}
-              onChange={event => set({ agent: { ...node.agent, toolMode: event.target.value as never } })}
-            >
-              <option value="read-only">read-only</option>
-              <option value="project-only">project-only</option>
-              <option value="full">full</option>
-            </select>
-          </Field>
-          <Field label="Instructions">
-            <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
-          </Field>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={node.mutatesWorktree}
-              onChange={event => set({ mutatesWorktree: event.target.checked })}
-            />
-            Writes to the implementation worktree
-          </label>
-          <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
-        </>
+        <AgentStageFields node={node} catalog={catalog} policy={policy} set={set} />
       )}
 
       {node.type === 'check' && (
@@ -524,27 +517,47 @@ function NodeInspector({
           </Field>
           <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
             <legend style={{ fontSize: 12, color: 'var(--text-dim)' }}>Required gates</legend>
-            {GATES.map(gate => (
-              <label key={gate} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={node.requiredGates.includes(gate)}
-                  onChange={event =>
-                    set({
-                      requiredGates: event.target.checked
-                        ? [...node.requiredGates, gate]
-                        : node.requiredGates.filter(g => g !== gate)
-                    })
-                  }
-                />
-                {gate}
-              </label>
-            ))}
+            {GATES.map(gate => {
+              const policyRequires = policy?.requiredGates.includes(gate) ?? false;
+              return (
+                <label key={gate} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={node.requiredGates.includes(gate) || policyRequires}
+                    disabled={policyRequires}
+                    onChange={event =>
+                      set({
+                        requiredGates: event.target.checked
+                          ? [...node.requiredGates, gate]
+                          : node.requiredGates.filter(g => g !== gate)
+                      })
+                    }
+                  />
+                  {gate}
+                  {policyRequires && <span style={{ color: 'var(--text-dim)' }}> — required by project policy</span>}
+                </label>
+              );
+            })}
           </fieldset>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-            <input type="checkbox" checked={node.allowBypass} onChange={event => set({ allowBypass: event.target.checked })} />
+          <label
+            style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, opacity: policy?.allowGateBypass === false ? 0.6 : 1 }}
+          >
+            <input
+              type="checkbox"
+              checked={node.allowBypass && policy?.allowGateBypass !== false}
+              disabled={policy?.allowGateBypass === false}
+              onChange={event => set({ allowBypass: event.target.checked })}
+            />
             Allow an attributed gate bypass
+            {policy?.allowGateBypass === false && (
+              <span style={{ color: 'var(--text-dim)' }}> — forbidden by project policy</span>
+            )}
           </label>
+          {policy?.requireHumanApproval && (
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
+              Project policy requires a human approval stage.
+            </p>
+          )}
         </>
       )}
 
@@ -565,6 +578,156 @@ function NodeInspector({
         </ul>
       )}
     </div>
+  );
+}
+
+// ── Agent stage fields ───────────────────────────────────────────────────
+
+/**
+ * Configures an agent stage against the live Agent Hub catalog: a picker of
+ * discovered agents with their trust and capability state, skill checkboxes
+ * that capture fingerprints for drift detection, and a warning when the chosen
+ * agent would fail preflight (untrusted under a trust-requiring policy, or a
+ * malformed manifest).
+ */
+function AgentStageFields({
+  node,
+  catalog,
+  policy,
+  set
+}: {
+  node: Extract<WorkflowNode, { type: 'agent-task' }>;
+  catalog: AgentRuntimeSnapshot | undefined;
+  policy: WorkflowPolicyProfile | undefined;
+  set: (patch: Partial<WorkflowNode>) => void;
+}) {
+  const agents = catalog?.agents ?? [];
+  const skills = catalog?.skills ?? [];
+  const requireTrust = policy?.requireTrustedAgents ?? true;
+
+  const chosen = agents.find(candidate => candidate.manifest.id === node.agent.agentId);
+  const caps = catalog?.capabilities[node.agent.agentId];
+  const unusable =
+    node.agent.agentId && chosen
+      ? chosen.errors.length > 0 || (requireTrust && !chosen.trusted)
+      : false;
+
+  const setAgent = (patch: Partial<typeof node.agent>) => set({ agent: { ...node.agent, ...patch } });
+
+  const toggleSkill = (name: string, fingerprint: string, on: boolean) => {
+    const skillNames = on
+      ? [...(node.agent.skillNames ?? []), name]
+      : (node.agent.skillNames ?? []).filter(candidate => candidate !== name);
+    const fingerprints = { ...(node.agent.skillFingerprints ?? {}) };
+    if (on) fingerprints[name] = fingerprint;
+    else delete fingerprints[name];
+    setAgent({ skillNames, skillFingerprints: fingerprints });
+  };
+
+  return (
+    <>
+      <Field label="Agent">
+        {agents.length > 0 ? (
+          <select
+            value={node.agent.agentId}
+            onChange={event => setAgent({ agentId: event.target.value })}
+          >
+            <option value="">— choose an agent —</option>
+            {agents.map(agent => (
+              <option key={agent.manifest.id} value={agent.manifest.id}>
+                {agent.manifest.name}
+                {agent.trusted ? '' : ' (untrusted)'}
+                {agent.errors.length > 0 ? ' (invalid manifest)' : ''}
+              </option>
+            ))}
+            {node.agent.agentId && !chosen && (
+              <option value={node.agent.agentId}>{node.agent.agentId} (not discovered)</option>
+            )}
+          </select>
+        ) : (
+          <input
+            value={node.agent.agentId}
+            placeholder="e.g. praxis-reviewer"
+            onChange={event => setAgent({ agentId: event.target.value })}
+          />
+        )}
+      </Field>
+
+      {node.agent.agentId && !chosen && (
+        <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--warning, var(--danger))' }}>
+          "{node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.
+        </p>
+      )}
+      {chosen && (
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span>Trust: {chosen.trusted ? 'trusted' : 'untrusted'}</span>
+          <span>
+            Capabilities:{' '}
+            {caps
+              ? Object.entries(caps)
+                  .filter(([, value]) => value === true)
+                  .map(([key]) => key.replace(/^supports/, '').toLowerCase())
+                  .join(', ') || 'none reported'
+              : 'host not running'}
+          </span>
+          {chosen.errors.length > 0 && (
+            <span style={{ color: 'var(--danger)' }}>
+              Manifest: {chosen.errors.map(error => error.message).join('; ')}
+            </span>
+          )}
+        </div>
+      )}
+      {unusable && (
+        <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--danger)' }}>
+          This agent would fail preflight
+          {chosen && chosen.errors.length > 0 ? ' (fix its manifest)' : ' (move it under the trusted agents folder or relax the policy)'}.
+        </p>
+      )}
+
+      <Field label="Tool mode">
+        <select value={node.agent.toolMode} onChange={event => setAgent({ toolMode: event.target.value as never })}>
+          <option value="read-only">read-only</option>
+          <option value="project-only">project-only</option>
+          <option value="full">full</option>
+        </select>
+      </Field>
+
+      {skills.length > 0 && (
+        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
+          <legend style={{ fontSize: 12, color: 'var(--text-dim)' }}>Skills to activate</legend>
+          {skills.map(skill => {
+            const on = (node.agent.skillNames ?? []).includes(skill.metadata.name);
+            const drifted = on && node.agent.skillFingerprints?.[skill.metadata.name] !== skill.fingerprint;
+            return (
+              <label key={skill.metadata.name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={event => toggleSkill(skill.metadata.name, skill.fingerprint, event.target.checked)}
+                />
+                {skill.metadata.name}
+                {skill.error && <span style={{ color: 'var(--danger)' }}> (invalid)</span>}
+                {!skill.trusted && <span style={{ color: 'var(--text-dim)' }}> (untrusted)</span>}
+                {drifted && <span style={{ color: 'var(--warning, var(--danger))' }}> (changed since pinned)</span>}
+              </label>
+            );
+          })}
+        </fieldset>
+      )}
+
+      <Field label="Instructions">
+        <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
+      </Field>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+        <input
+          type="checkbox"
+          checked={node.mutatesWorktree}
+          onChange={event => set({ mutatesWorktree: event.target.checked })}
+        />
+        Writes to the implementation worktree
+      </label>
+      <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
+    </>
   );
 }
 

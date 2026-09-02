@@ -26,3 +26,14 @@ A stage that hangs must not hang the run.
   a desktop test drives a stage with a tiny `timeoutMs` to a timed-out state.
 ## Notes
 `findTimedOutNodes` exists in `workflowRecovery.ts`; nothing calls it yet.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -27,3 +27,14 @@ the mechanism that keeps a QA or security gate off an agent's word.
 ## Notes
 Plain `child_process`; no agent runtime involved. This is the story's
 no-dependency core.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,3 +1,6 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
@@ -52,11 +55,13 @@ test('instantiates the governed delivery template, edits a stage, and persists i
   // The built-in template is offered in the library.
   const templateCard = page.getByRole('listitem').filter({ hasText: 'Governed delivery' }).first();
   await expect(templateCard).toBeVisible();
+  await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-library.png');
   await templateCard.getByRole('button', { name: 'Use template' }).click();
 
   // The graph loads with its stages as labelled buttons.
   await expect(page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Approve \(approval\)/ })).toBeVisible();
+  await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-open.png');
 
   // Edit the Plan stage name through the inspector.
   await page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
@@ -87,9 +92,10 @@ test('blocks save while the graph is invalid and announces the errors', async ()
     .getByRole('button', { name: 'Use template' })
     .click();
 
-  // Blank the implement stage's agent id — that is a node-level error.
+  // Blank the implement stage's agent id — that is a node-level error. With no
+  // agents discovered in the test profile the picker falls back to a text field.
   await page.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
-  await page.getByLabel('Agent Hub id').fill('');
+  await page.getByLabel('Agent', { exact: true }).fill('');
 
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
@@ -97,4 +103,65 @@ test('blocks save while the graph is invalid and announces the errors', async ()
 
   // The offending stage carries a visible issue badge.
   await expect(page.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
+});
+
+test('a folder-backed project commits its workflow to .praxis/workflows and reloads it', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-wf-folder-'));
+  const page = app.window;
+
+  const created = await page.evaluate(async projectFolder => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Folder Delivery',
+        key: 'FDLV',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        startingPoint: 'existing-folder',
+        folderPath: projectFolder,
+        workflowStages: [
+          { id: 'backlog', name: 'Backlog' },
+          { id: 'done', name: 'Done' }
+        ],
+        starterTickets: [{ summary: 'First', description: '', issueType: 'Task', status: 'Backlog' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
+    return { id: project.id, workspaceFolder: project.workspaceFolder };
+  }, folder);
+  const projectId = created.id;
+  const projectFolder = created.workspaceFolder as string;
+  expect(projectFolder.endsWith(path.basename(folder))).toBe(true);
+  await page.reload();
+
+  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Governed delivery' })
+    .first()
+    .getByRole('button', { name: 'Use template' })
+    .click();
+
+  // Instantiating only drafts it; an explicit Save writes the file.
+  await page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
+  await page.getByLabel('Name').fill('Plan the delivery');
+  await page.getByRole('button', { name: 'Save workflow' }).click();
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
+
+  // The definition is now a real file in the project's repo.
+  const committed = path.join(projectFolder, '.praxis', 'workflows', `governed-delivery-${projectId}.json`);
+  expect(fs.existsSync(committed)).toBe(true);
+  const onDisk = JSON.parse(fs.readFileSync(committed, 'utf8'));
+  expect(onDisk.scope).toBe('project');
+  expect(onDisk.projectId).toBe(projectId);
+
+  // An out-of-band edit to the file is picked up on reload.
+  fs.writeFileSync(committed, JSON.stringify({ ...onDisk, name: 'Edited on disk' }, null, 2));
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('button', { name: /Edited on disk/ })).toBeVisible();
+
+  fs.rmSync(folder, { recursive: true, force: true });
 });
