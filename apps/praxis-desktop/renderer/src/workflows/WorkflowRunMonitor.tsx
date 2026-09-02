@@ -157,8 +157,8 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
                 <span className={`wf-lane ${STATUS_TONE[run.status]}`} aria-hidden>
                   ●
                 </span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontWeight: 600, display: 'block' }}>{run.workflowName}</span>
+                <span className="wf-rail-main">
+                  <span className="wf-rail-name">{run.workflowName}</span>
                   <span className="wf-rail-sub">{run.status}</span>
                 </span>
               </button>
@@ -290,14 +290,14 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
 
             <div className="wf-stage-actions">
               {stage.sessionKey && onOpenSession && (
-                <button type="button" className="btn-compact" onClick={() => onOpenSession(stage.sessionKey as string)}>
+                <button type="button" className="btn btn-compact" onClick={() => onOpenSession(stage.sessionKey as string)}>
                   Open session
                 </button>
               )}
               {selected?.actions.some(a => a.kind === 'retry-stage' && a.nodeId === stage.nodeId) && (
                 <button
                   type="button"
-                  className="btn-compact"
+                  className="btn btn-compact"
                   onClick={() => void act(() => window.praxis.workflows.retryStage(selected.runId, stage.nodeId))}
                 >
                   Retry
@@ -307,7 +307,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
                 <>
                   <button
                     type="button"
-                    className="btn-compact"
+                    className="btn btn-compact"
                     onClick={() =>
                       void act(() =>
                         window.praxis.workflows.advanceStage(selected.runId, stage.nodeId, 'succeeded', {
@@ -320,7 +320,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
                   </button>
                   <button
                     type="button"
-                    className="btn-compact"
+                    className="btn btn-compact"
                     onClick={() =>
                       void act(() =>
                         window.praxis.workflows.advanceStage(selected.runId, stage.nodeId, 'failed', {

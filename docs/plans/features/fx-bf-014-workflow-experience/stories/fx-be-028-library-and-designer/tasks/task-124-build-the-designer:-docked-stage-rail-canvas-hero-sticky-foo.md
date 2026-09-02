@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-124
 title: Build the Designer: docked stage rail, canvas hero, sticky footer.
-status: proposed
+status: complete
 story: FX-BE-028
 updated: 2026-09-02
 dependencies: [FX-BE-027]

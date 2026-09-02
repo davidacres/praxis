@@ -221,7 +221,7 @@ export function WorkflowDesignerPage({
               <strong>{definition.name}</strong>
               <button
                 type="button"
-                className="btn-compact"
+                className="btn btn-compact"
                 onClick={() => {
                   setDefinition(undefined);
                   reloadLibrary();
@@ -263,8 +263,8 @@ export function WorkflowDesignerPage({
                       }`}
                       onClick={() => setSelectedNodeId(node.id)}
                     >
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: 600 }}>{node.name}</span>{' '}
+                      <span className="wf-rail-main">
+                        <span className="wf-rail-name">{node.name}</span>
                         <span className="wf-rail-sub">{node.type}</span>
                       </span>
                       {issues > 0 ? (
@@ -351,60 +351,41 @@ function TemplateLibrary({
   onOpenExisting: (workflow: WorkflowDefinition) => void;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="wf-library">
       {projectWorkflows.length > 0 && (
         <section aria-label="This project's workflows">
-          <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>This project</h2>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <h2>This project</h2>
+          <div className="wf-card-grid">
             {projectWorkflows.map(workflow => (
-              <li key={workflow.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenExisting(workflow)}
-                  className="ghost-button"
-                  style={{ width: '100%', textAlign: 'left' }}
-                >
-                  <strong>{workflow.name}</strong>{' '}
-                  <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>v{workflow.version}</span>
-                </button>
-              </li>
+              <button key={workflow.id} type="button" className="wf-card" onClick={() => onOpenExisting(workflow)}>
+                <strong>{workflow.name}</strong>
+                <span className="wf-rail-sub">v{workflow.version}</span>
+              </button>
             ))}
-          </ul>
+          </div>
         </section>
       )}
 
       <section aria-label="Workflow templates">
-        <h2 style={{ fontSize: 15, margin: '0 0 8px' }}>Start from a template</h2>
-        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <h2>Start from a template</h2>
+        <ul className="wf-template-list">
           {templates.map(template => {
             const ready = readiness[template.definition.id];
             const blocking = ready ? Object.entries(ready.blockingByNode) : [];
             return (
-              <li
-                key={`${template.source}:${template.definition.id}`}
-                style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+              <li key={`${template.source}:${template.definition.id}`} className="wf-template">
+                <div className="wf-template-head">
                   <div>
                     <strong>{template.definition.name}</strong>
-                    <span style={{ color: 'var(--text-dim)', fontSize: 12, marginLeft: 8 }}>{template.source}</span>
+                    <span className="chip chip-muted">{template.source}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="primary-button"
-                    disabled={busy}
-                    onClick={() => onUseTemplate(template.definition.id)}
-                  >
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onUseTemplate(template.definition.id)}>
                     Use template
                   </button>
                 </div>
-                {template.definition.description && (
-                  <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-dim)' }}>
-                    {template.definition.description}
-                  </p>
-                )}
+                {template.definition.description && <p className="wf-template-desc">{template.definition.description}</p>}
                 {ready && !ready.agentsOk && (
-                  <p role="status" style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--warning, var(--danger))' }}>
+                  <p role="status" className="wf-template-warn">
                     Needs agents that are not installed:{' '}
                     {blocking.map(([nodeId, message]) => `${nodeId} — ${message}`).join('; ')}
                   </p>
@@ -424,24 +405,14 @@ function ValidationSummary({ feedback }: { feedback: BucketedFeedback | undefine
   if (!feedback) return null;
   const graphIssues = feedback.byNode[''] ?? [];
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      style={{
-        fontSize: 12,
-        border: '1px solid var(--border)',
-        borderRadius: 6,
-        padding: '8px 10px',
-        color: feedback.valid ? 'var(--text-dim)' : 'var(--danger)'
-      }}
-    >
+    <div role="status" aria-live="polite" className={`wf-validation${feedback.valid ? '' : ' is-invalid'}`}>
       {feedback.valid ? (
         <>Valid — {feedback.warnings.length} warning{feedback.warnings.length === 1 ? '' : 's'}.</>
       ) : (
         <>
           {feedback.errors.length} error{feedback.errors.length === 1 ? '' : 's'}.
           {graphIssues.length > 0 && (
-            <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
+            <ul>
               {graphIssues.map((issue, index) => (
                 <li key={index}>{issue.message}</li>
               ))}
@@ -475,21 +446,21 @@ function NodeInspector({
   const set = (patch: Partial<WorkflowNode>) => onChange(updateNode(definition, node.id, patch as never));
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: 15 }}>{node.type}</h2>
-        <div style={{ display: 'flex', gap: 6 }}>
+    <div className="wf-inspector-card">
+      <div className="wf-inspector-head">
+        <h2>{node.type}</h2>
+        <div className="wf-inspector-head-actions">
           {node.id !== definition.entryNodeId && (
-            <button type="button" className="ghost-button" onClick={() => onChange(setEntryNode(definition, node.id))}>
+            <button type="button" className="btn btn-compact" onClick={() => onChange(setEntryNode(definition, node.id))}>
               Make entry
             </button>
           )}
-          <button type="button" className="ghost-button" onClick={() => onChange(duplicateNode(definition, node.id))}>
+          <button type="button" className="btn btn-compact" onClick={() => onChange(duplicateNode(definition, node.id))}>
             Duplicate
           </button>
           <button
             type="button"
-            className="ghost-button"
+            className="btn btn-compact"
             onClick={() => {
               onChange(removeNode(definition, node.id));
               onSelectNode(undefined);
@@ -528,12 +499,12 @@ function NodeInspector({
           <Field label="Prompt">
             <textarea rows={2} value={node.prompt} onChange={event => set({ prompt: event.target.value })} />
           </Field>
-          <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
-            <legend style={{ fontSize: 12, color: 'var(--text-dim)' }}>Required gates</legend>
+          <fieldset className="wf-fieldset">
+            <legend>Required gates</legend>
             {GATES.map(gate => {
               const policyRequires = policy?.requiredGates.includes(gate) ?? false;
               return (
-                <label key={gate} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+                <label key={gate} className="wf-check">
                   <input
                     type="checkbox"
                     checked={node.requiredGates.includes(gate) || policyRequires}
@@ -547,14 +518,12 @@ function NodeInspector({
                     }
                   />
                   {gate}
-                  {policyRequires && <span style={{ color: 'var(--text-dim)' }}> — required by project policy</span>}
+                  {policyRequires && <span className="wf-hint"> — required by project policy</span>}
                 </label>
               );
             })}
           </fieldset>
-          <label
-            style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, opacity: policy?.allowGateBypass === false ? 0.6 : 1 }}
-          >
+          <label className={`wf-check${policy?.allowGateBypass === false ? ' is-disabled' : ''}`}>
             <input
               type="checkbox"
               checked={node.allowBypass && policy?.allowGateBypass !== false}
@@ -563,13 +532,11 @@ function NodeInspector({
             />
             Allow an attributed gate bypass
             {policy?.allowGateBypass === false && (
-              <span style={{ color: 'var(--text-dim)' }}> — forbidden by project policy</span>
+              <span className="wf-hint"> — forbidden by project policy</span>
             )}
           </label>
           {policy?.requireHumanApproval && (
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
-              Project policy requires a human approval stage.
-            </p>
+            <p className="wf-hint">Project policy requires a human approval stage.</p>
           )}
         </>
       )}
@@ -584,7 +551,7 @@ function NodeInspector({
       )}
 
       {issues.length > 0 && (
-        <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--danger)', fontSize: 12 }}>
+        <ul className="wf-issues">
           {issues.map((issue, index) => (
             <li key={index}>{issue.message}</li>
           ))}
@@ -667,12 +634,12 @@ function AgentStageFields({
       </Field>
 
       {node.agent.agentId && !chosen && (
-        <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--warning, var(--danger))' }}>
+        <p role="status" className="wf-hint is-warn">
           "{node.agent.agentId}" is not in the discovered catalog — the stage will fail preflight until it is installed.
         </p>
       )}
       {chosen && (
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div className="wf-agent-meta">
           <span>Trust: {chosen.trusted ? 'trusted' : 'untrusted'}</span>
           <span>
             Capabilities:{' '}
@@ -684,14 +651,14 @@ function AgentStageFields({
               : 'host not running'}
           </span>
           {chosen.errors.length > 0 && (
-            <span style={{ color: 'var(--danger)' }}>
+            <span className="is-danger">
               Manifest: {chosen.errors.map(error => error.message).join('; ')}
             </span>
           )}
         </div>
       )}
       {unusable && (
-        <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--danger)' }}>
+        <p role="status" className="wf-hint is-danger">
           This agent would fail preflight
           {chosen && chosen.errors.length > 0 ? ' (fix its manifest)' : ' (move it under the trusted agents folder or relax the policy)'}.
         </p>
@@ -706,22 +673,22 @@ function AgentStageFields({
       </Field>
 
       {skills.length > 0 && (
-        <fieldset style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
-          <legend style={{ fontSize: 12, color: 'var(--text-dim)' }}>Skills to activate</legend>
+        <fieldset className="wf-fieldset">
+          <legend>Skills to activate</legend>
           {skills.map(skill => {
             const on = (node.agent.skillNames ?? []).includes(skill.metadata.name);
             const drifted = on && node.agent.skillFingerprints?.[skill.metadata.name] !== skill.fingerprint;
             return (
-              <label key={skill.metadata.name} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+              <label key={skill.metadata.name} className="wf-check">
                 <input
                   type="checkbox"
                   checked={on}
                   onChange={event => toggleSkill(skill.metadata.name, skill.fingerprint, event.target.checked)}
                 />
                 {skill.metadata.name}
-                {skill.error && <span style={{ color: 'var(--danger)' }}> (invalid)</span>}
-                {!skill.trusted && <span style={{ color: 'var(--text-dim)' }}> (untrusted)</span>}
-                {drifted && <span style={{ color: 'var(--warning, var(--danger))' }}> (changed since pinned)</span>}
+                {skill.error && <span className="wf-hint is-danger"> (invalid)</span>}
+                {!skill.trusted && <span className="wf-hint"> (untrusted)</span>}
+                {drifted && <span className="wf-hint is-warn"> (changed since pinned)</span>}
               </label>
             );
           })}
@@ -731,7 +698,7 @@ function AgentStageFields({
       <Field label="Instructions">
         <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
       </Field>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
+      <label className="wf-check">
         <input
           type="checkbox"
           checked={node.mutatesWorktree}
@@ -778,10 +745,10 @@ function EdgeEditor({
   const [to, setTo] = useState('');
 
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <h2 style={{ margin: 0, fontSize: 15 }}>Connections</h2>
+    <div className="wf-inspector-card">
+      <h2>Connections</h2>
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+      <div className="wf-edge-form">
         <Field label="From">
           <select value={from} onChange={event => setFrom(event.target.value)}>
             <option value="">—</option>
@@ -804,7 +771,7 @@ function EdgeEditor({
         </Field>
         <button
           type="button"
-          className="ghost-button"
+          className="btn btn-compact"
           disabled={!from || !to || from === to}
           onClick={() => {
             onChange(connectNodes(definition, { from, to }));
@@ -816,13 +783,13 @@ function EdgeEditor({
         </button>
       </div>
 
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <ul className="wf-edge-list">
         {definition.edges.map(edge => {
           const fromNode = definition.nodes.find(node => node.id === edge.from);
           const toNode = definition.nodes.find(node => node.id === edge.to);
           return (
-            <li key={edge.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}>
-              <span style={{ flex: 1 }}>
+            <li key={edge.id} className="wf-edge-row">
+              <span>
                 {fromNode?.name ?? edge.from} → {toNode?.name ?? edge.to}
               </span>
               <select
@@ -836,7 +803,7 @@ function EdgeEditor({
                   </option>
                 ))}
               </select>
-              <label style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <label className="wf-check">
                 <input
                   type="checkbox"
                   checked={edge.required}
@@ -844,7 +811,7 @@ function EdgeEditor({
                 />
                 required
               </label>
-              <button type="button" className="ghost-button" onClick={() => onChange(disconnect(definition, edge.id))}>
+              <button type="button" className="btn btn-compact" onClick={() => onChange(disconnect(definition, edge.id))}>
                 Remove
               </button>
             </li>
@@ -859,8 +826,8 @@ function EdgeEditor({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-      <span style={{ color: 'var(--text-dim)' }}>{label}</span>
+    <label className="wf-field">
+      <span>{label}</span>
       {children}
     </label>
   );

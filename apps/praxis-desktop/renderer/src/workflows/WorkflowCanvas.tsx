@@ -145,7 +145,7 @@ export function WorkflowCanvas({
     <div className="wf-canvas">
       <div className="wf-canvas-bar">
         <span>Drag a card to move it, drag from its ▸ handle onto another to connect. Scroll to zoom.</span>
-        <button type="button" className="btn-compact" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
+        <button type="button" className="btn btn-compact" onClick={() => setView({ x: 40, y: 40, zoom: 1 })}>
           Reset view
         </button>
         <span className="wf-canvas-zoom">{Math.round(view.zoom * 100)}%</span>
@@ -165,11 +165,7 @@ export function WorkflowCanvas({
           className="wf-canvas-world"
           style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}
         >
-          <svg
-            width={4000}
-            height={4000}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible' }}
-          >
+          <svg width={4000} height={4000}>
             {edgePaths.filter(Boolean).map(edge => (
               <path
                 key={edge!.id}
