@@ -108,3 +108,20 @@
 | TASK-117 | Task | Add the workflows:runChanged push channel and monitor subscription | Complete | FX-BE-026 |
 | TASK-118 | Task | Add the timeout enforcement tick | Complete | FX-BE-026 |
 | TASK-119 | Task | Add the unattended-run E2E with a stub agent, and update the docs | Complete | FX-BE-026 |
+| FX-BF-014 | Feature | Workflow experience — native designer and run monitor UI | Proposed | FX-BF-012, FX-BF-013 |
+| FX-BE-027 | Story | Shell integration and theming foundation | Proposed | FX-BF-014 |
+| FX-BE-028 | Story | Workflow Library and Designer | Proposed | FX-BF-014 |
+| FX-BE-029 | Story | Run Monitor | Proposed | FX-BF-014 |
+| FX-BE-030 | Story | States, accessibility, and theme verification | Proposed | FX-BF-014 |
+| TASK-120 | Task | Route workflow detail into pane-aux and add the Design/Runs header control | Proposed | FX-BE-027 |
+| TASK-121 | Task | Add wf- classes and kind-accent tokens across every theme block; remove inline styles | Proposed | FX-BE-027 |
+| TASK-122 | Task | Add the non-terminal run count badge and the workflowView route field | Proposed | FX-BE-027 |
+| TASK-123 | Task | Build the Library card grid and template list with readiness | Proposed | FX-BE-028 |
+| TASK-124 | Task | Build the Designer: docked stage rail, canvas hero, sticky footer | Proposed | FX-BE-028 |
+| TASK-125 | Task | Move the inspector to pane-aux with the agent picker and policy display | Proposed | FX-BE-028 |
+| TASK-126 | Task | Build the run rail with live status dots and the start form | Proposed | FX-BE-029 |
+| TASK-127 | Task | Build the run board: sentence, pipeline diagram, gate ledger, timeline | Proposed | FX-BE-029 |
+| TASK-128 | Task | Build the stage detail panel in pane-aux with evidence and session link | Proposed | FX-BE-029 |
+| TASK-129 | Task | Implement the states matrix for all three screens | Proposed | FX-BE-030 |
+| TASK-130 | Task | Accessibility and focus-order pass | Proposed | FX-BE-030 |
+| TASK-131 | Task | Add the screens to the theme-gallery e2e and verify responsiveness | Proposed | FX-BE-030 |
