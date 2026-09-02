@@ -13,6 +13,10 @@ import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
  * labelled stage buttons and a live validation status region.
  */
 
+// Each test boots a full Electron app; the default 30s is tight under
+// suite-wide parallelism.
+test.slow();
+
 let app: TestApp;
 
 test.beforeEach(async () => {
