@@ -46,6 +46,14 @@ A workflow is authored on the canvas against real agents and saved, with the ins
   `248px | 1fr | 340px` grid), not the global `pane-aux` — the Git Graph precedent, and
   `App.showAux` excludes `feature === 'workflows'`. Same visual result, no contention with
   the shell's resizable aux pane.
+- That column is a **tabbed panel** (`Stage` / `Connections`) over one scrolling body, so
+  neither a tall agent-stage form nor a long edge list overflows 340px. Selecting a node
+  (rail or canvas) switches to the `Stage` tab. Edge rows are two lines — `from → to`, then
+  the outcome select + `required` + an `×` icon button — and the add-form is a 2-col grid.
+- Agent-stage warnings (no catalog / not discovered / would-fail-preflight) collapsed from
+  stacked `role="status"` paragraphs to a single `⚠` glyph on the Agent field
+  (`.wf-field-warn`, outside the `<label>` so the field's accessible name is unchanged) with
+  the full text in its tooltip / `aria-label`.
 - The footer `Run ▸` popover was replaced by a header `Design / Runs` segmented control
   (`.wf-viewswitch`) plus the start form in the Runs monitor; `route.workflowView` persists
   the half. Save is still gated on `valid && !unsaved`.
