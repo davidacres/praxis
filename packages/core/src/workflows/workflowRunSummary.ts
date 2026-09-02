@@ -12,6 +12,7 @@ import {
   isApprovalNode,
   isJoinNode,
   nodeGate,
+  type WorkflowEdge,
   type WorkflowGateKind,
   type WorkflowNode
 } from './workflowTypes';
@@ -60,6 +61,8 @@ export interface WorkflowRunSummary {
   /** One sentence: why this run is where it is. */
   explanation: string;
   stages: StageRow[];
+  /** Graph shape for the monitor's read-only pipeline diagram. */
+  graph: { nodes: Array<Pick<WorkflowNode, 'id' | 'x' | 'y' | 'type'>>; edges: WorkflowEdge[]; entryNodeId: string };
   gates: GateStatus[];
   branchGroups: BranchGroup[];
   actions: WorkflowNextAction[];
@@ -134,6 +137,11 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     status,
     explanation: explainRun(run, status, schedule.blocked),
     stages,
+    graph: {
+      nodes: run.definition.nodes.map(node => ({ id: node.id, x: node.x, y: node.y, type: node.type })),
+      edges: run.definition.edges,
+      entryNodeId: run.definition.entryNodeId
+    },
     gates,
     branchGroups: branchGroups(run),
     actions: nextActions(run),

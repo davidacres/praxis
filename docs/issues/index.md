@@ -25,5 +25,5 @@
 | FX-BE-026 | Live updates, timeouts, and end-to-end verification | Complete | [issue](features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-026-live-updates-timeouts-e2e/issue.md) |
 | FX-BE-027 | Shell integration and theming foundation | Complete | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-027-shell-and-theming/issue.md) |
 | FX-BE-028 | Workflow Library and Designer | Proposed | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-028-library-and-designer/issue.md) |
-| FX-BE-029 | Run Monitor | Proposed | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-029-run-monitor/issue.md) |
+| FX-BE-029 | Run Monitor | Complete | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-029-run-monitor/issue.md) |
 | FX-BE-030 | States, accessibility, and theme verification | Proposed | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-030-polish-and-verification/issue.md) |
