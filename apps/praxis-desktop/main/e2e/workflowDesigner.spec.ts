@@ -62,13 +62,14 @@ test('instantiates the governed delivery template, edits a stage, and persists i
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-library.png');
   await templateCard.getByRole('button', { name: 'Use template' }).click();
 
-  // The graph loads with its stages as labelled buttons.
-  await expect(page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Approve \(approval\)/ })).toBeVisible();
+  // The graph loads with its stages on the canvas and in the rail.
+  const canvas = page.getByRole('application', { name: 'Workflow canvas' });
+  await expect(canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ })).toBeVisible();
+  await expect(canvas.getByRole('button', { name: /^Approve \(approval\)/ })).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-designer-open.png');
 
   // Edit the Plan stage name through the inspector.
-  await page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
+  await canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
   const nameField = page.getByLabel('Name');
   await expect(nameField).toHaveValue('Plan');
   await nameField.fill('Plan the work');
@@ -82,7 +83,10 @@ test('instantiates the governed delivery template, edits a stage, and persists i
   // Close back to the library, reopen, and confirm the rename stuck.
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Governed delivery.*v1/ }).click();
-  await expect(page.getByRole('button', { name: /^Plan the work \(agent-task\), entry stage/ })).toBeVisible();
+  await expect(
+    page.getByRole('application', { name: 'Workflow canvas' })
+      .getByRole('button', { name: /^Plan the work \(agent-task\), entry stage/ })
+  ).toBeVisible();
 });
 
 test('blocks save while the graph is invalid and announces the errors', async () => {
@@ -98,18 +102,19 @@ test('blocks save while the graph is invalid and announces the errors', async ()
 
   // Blank the implement stage's agent id — that is a node-level error. With no
   // agents discovered in the test profile the picker falls back to a text field.
-  await page.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
+  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
+  await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
   await page.getByLabel('Agent', { exact: true }).fill('');
 
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
 
-  // The offending stage carries a visible issue badge.
-  await expect(page.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
+  // The offending stage carries a visible issue badge in the rail.
+  await expect(rail.getByRole('button', { name: /^Implement \(agent-task\).*issue/ })).toBeVisible();
 });
 
-test('the canvas moves a stage with the keyboard and toggles to the list view', async () => {
+test('the canvas moves a stage with the keyboard and stays in sync with the rail', async () => {
   const page = app.window;
 
   await page.getByTestId('project-workflows-nav-item').click();
@@ -120,12 +125,15 @@ test('the canvas moves a stage with the keyboard and toggles to the list view', 
     .getByRole('button', { name: 'Use template' })
     .click();
 
-  // The designer opens on the canvas; the QA stage card is focusable.
+  // The designer shows the stage rail and the canvas side by side.
+  const rail = page.getByRole('navigation', { name: 'Workflow stages' });
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
+  await expect(rail).toBeVisible();
   await expect(canvas).toBeVisible();
+
+  // Keyboard-nudge the QA card on the canvas; its stored position changes.
   const qaCard = canvas.getByRole('button', { name: /^QA \(check\)/ });
   await qaCard.focus();
-
   const before = await qaCard.evaluate(el => (el as HTMLElement).style.left);
   await qaCard.press('Shift+ArrowRight');
   await qaCard.press('Shift+ArrowRight');
@@ -133,10 +141,9 @@ test('the canvas moves a stage with the keyboard and toggles to the list view', 
     .poll(async () => qaCard.evaluate(el => (el as HTMLElement).style.left))
     .not.toBe(before);
 
-  // Switching to the list view still shows every stage and hides the canvas.
-  await page.getByRole('button', { name: 'List', exact: true }).click();
-  await expect(canvas).toBeHidden();
-  await expect(page.getByRole('button', { name: /^QA \(check\)/ })).toBeVisible();
+  // Selecting a rail row selects the matching canvas node.
+  await rail.getByRole('button', { name: /^Review \(agent-task\)/ }).click();
+  await expect(canvas.getByRole('button', { name: /^Review \(agent-task\)/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a folder-backed project commits its workflow to .praxis/workflows and reloads it', async () => {
@@ -180,7 +187,7 @@ test('a folder-backed project commits its workflow to .praxis/workflows and relo
     .click();
 
   // Instantiating only drafts it; an explicit Save writes the file.
-  await page.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
+  await page.getByRole('application', { name: 'Workflow canvas' }).getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
   await page.getByLabel('Name').fill('Plan the delivery');
   await page.getByRole('button', { name: 'Save workflow' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
@@ -196,6 +203,7 @@ test('a folder-backed project commits its workflow to .praxis/workflows and relo
   fs.writeFileSync(committed, JSON.stringify({ ...onDisk, name: 'Edited on disk' }, null, 2));
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('button', { name: /Edited on disk/ })).toBeVisible();
+
 
   fs.rmSync(folder, { recursive: true, force: true });
 });
