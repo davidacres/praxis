@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.656Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-012
 slug: agent-delivery-workflows
 title: Governed agent delivery workflows
-status: proposed
+status: complete
 owner: Electron desktop app
-updated: 2026-09-01
+updated: 2026-09-02
 issues: docs/issues/features/fx-bf-012-agent-delivery-workflows/feature-issues.md
 stories: [FX-BE-018, FX-BE-019, FX-BE-020, FX-BE-021, FX-BE-022]
 validation: [npm run check-types, npm run build:core, npm run build:renderer, npm run test:core, npm run test:desktop]

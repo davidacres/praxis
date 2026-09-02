@@ -271,7 +271,23 @@ const praxis: PraxisIpc = {
     remove: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:remove', projectId, workflowId),
     validate: (projectId: string, definition: WorkflowDefinition) =>
       ipcRenderer.invoke('workflows:validate', projectId, definition),
-    effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId)
+    effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId),
+    startRun: (projectId: string, workflowId: string, taskTitle: string) =>
+      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle),
+    listRuns: (projectId: string) => ipcRenderer.invoke('workflows:listRuns', projectId),
+    getRun: (runId: string) => ipcRenderer.invoke('workflows:getRun', runId),
+    advanceStage: (
+      runId: string,
+      nodeId: string,
+      outcome: 'succeeded' | 'failed',
+      detail?: { error?: string; snapshotRef?: string }
+    ) => ipcRenderer.invoke('workflows:advanceStage', runId, nodeId, outcome, detail),
+    approveRun: (runId: string, actor: string, note?: string) =>
+      ipcRenderer.invoke('workflows:approveRun', runId, actor, note),
+    bypassGate: (runId: string, gate: string, actor: string, reason: string) =>
+      ipcRenderer.invoke('workflows:bypassGate', runId, gate, actor, reason),
+    retryStage: (runId: string, nodeId: string) => ipcRenderer.invoke('workflows:retryStage', runId, nodeId),
+    cancelRun: (runId: string, reason?: string) => ipcRenderer.invoke('workflows:cancelRun', runId, reason)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),

@@ -69,12 +69,12 @@
 | TASK-089 | Task | Add new-session agent selection | Proposed | FX-BE-016 |
 | TASK-090 | Task | Move runtime management to advanced Settings | Proposed | FX-BE-017 |
 | TASK-091 | Task | Add desktop E2E and accessibility verification | Proposed | FX-BE-017 |
-| FX-BF-012 | Feature | Governed agent delivery workflows | Proposed | FX-BF-009, FX-BF-010, FX-BF-011 |
+| FX-BF-012 | Feature | Governed agent delivery workflows | Complete | FX-BF-009, FX-BF-010, FX-BF-011 |
 | FX-BE-018 | Story | Workflow definition, policy, and validation contracts | Complete | FX-BF-012 |
 | FX-BE-019 | Story | Workflow execution, persistence, and recovery | Complete | FX-BE-012 |
 | FX-BE-020 | Story | Agent session stages, gates, artifacts, and approvals | Complete | FX-BE-012 |
 | FX-BE-021 | Story | Visual workflow designer and template library | Complete | FX-BE-012 |
-| FX-BE-022 | Story | Run monitor, delivery template, and end-to-end verification | Proposed | FX-BE-012 |
+| FX-BE-022 | Story | Run monitor, delivery template, and end-to-end verification | Complete | FX-BE-012 |
 | TASK-092 | Task | Add workflow contract types | Complete | FX-BE-018 |
 | TASK-093 | Task | Implement workflow validation and migration | Complete | FX-BE-018 |
 | TASK-094 | Task | Add workflow and policy stores | Complete | FX-BE-018 |
@@ -87,6 +87,6 @@
 | TASK-101 | Task | Add workflow template library | Complete | FX-BE-021 |
 | TASK-102 | Task | Implement workflow canvas and inspector | Complete | FX-BE-021 |
 | TASK-103 | Task | Add workflow persistence and accessibility verification | Complete | FX-BE-021 |
-| TASK-104 | Task | Define the built-in governed delivery template | Proposed | FX-BE-022 |
-| TASK-105 | Task | Implement workflow run monitor and controls | Proposed | FX-BE-022 |
-| TASK-106 | Task | Add workflow E2E and delivery documentation | Proposed | FX-BE-022 |
+| TASK-104 | Task | Define the built-in governed delivery template | Complete | FX-BE-022 |
+| TASK-105 | Task | Implement workflow run monitor and controls | Complete | FX-BE-022 |
+| TASK-106 | Task | Add workflow E2E and delivery documentation | Complete | FX-BE-022 |
