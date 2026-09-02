@@ -17,6 +17,7 @@ export type FeatureId =
   | 'issues'
   | 'connections'
   | 'agents'
+  | 'workflows'
   | 'git';
 
 interface FeatureDef {
@@ -63,6 +64,7 @@ export interface SidebarProps {
   onSelectProject: (project: ProjectRecord) => void;
   onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
+  onSelectWorkflows: (project: ProjectRecord) => void;
   onDeleteBoard: (board: Board) => void;
   onConfigureBoard: (board: Board) => void;
   selectedProjectId?: string;
@@ -102,6 +104,7 @@ export function Sidebar({
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
+  onSelectWorkflows,
   onDeleteBoard,
   onConfigureBoard,
   selectedProjectId,
@@ -432,6 +435,11 @@ export function Sidebar({
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
+                        <button
+                          className={`tree-row project-workflows-row${activeFeature === 'workflows' && selectedProjectId === project.id ? ' active' : ''}`}
+                          data-testid="project-workflows-nav-item"
+                          onClick={() => onSelectWorkflows(project)}
+                        ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">Workflows</span></button>
                         {projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
                             <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>

@@ -1,13 +1,13 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-01T19:20:12.664Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-101
 title: Add workflow template library
-status: proposed
+status: complete
 story: FX-BE-021
-updated: 2026-09-01
+updated: 2026-09-02
 dependencies: [FX-BF-009, TASK-094]
 validation: [npm run build:renderer, npm run build:desktop]
 ---

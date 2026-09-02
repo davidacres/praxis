@@ -55,6 +55,10 @@ import type {
   UpdateProjectInput
 } from '../projects/projectTypes';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, WorkspaceRecord } from '../workspaces/workspaceTypes';
+import type { WorkflowDefinition, WorkflowPolicyProfile } from '../workflows/workflowTypes';
+import type { WorkflowValidationResult } from '../workflows/workflowValidation';
+import type { WorkflowCatalog } from '../workflows/workflowStore';
+import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -575,10 +579,44 @@ export interface PraxisIpc {
   ai: AiIpc;
   agentRuntime: AgentRuntimeIpc;
   taskDesigner: TaskDesignerIpc;
+  workflows: WorkflowsIpc;
   projects: ProjectsIpc;
   workspaces: WorkspacesIpc;
   terminal: TerminalIpc;
   git: GitIpc;
+}
+
+/**
+ * Governed delivery workflows (FX-BF-012). Definitions and policy live in app
+ * storage (global) or a project's `.praxis/workflows` folder (project); the
+ * designer edits project-scoped definitions and reads the template library and
+ * live validation from here.
+ */
+export interface WorkflowsIpc {
+  /**
+   * The template library offered to a project: built-in, then the user's
+   * globals, then the project's committed definitions. Not collapsed by id.
+   */
+  listTemplates(projectId: string): Promise<WorkflowTemplate[]>;
+  /** Per-template readiness against the live Agent Hub catalog. */
+  templateReadiness(projectId: string): Promise<TemplateReadiness[]>;
+  /** The resolved run catalog for a project, with shadowing and invalid entries. */
+  catalog(projectId: string): Promise<WorkflowCatalog>;
+  /** One project-scoped definition by id, or undefined. */
+  get(projectId: string, workflowId: string): Promise<WorkflowDefinition | undefined>;
+  /**
+   * Copies a template into the project as a new project-scoped definition and
+   * saves it. Returns the saved copy.
+   */
+  instantiate(projectId: string, templateId: string, name?: string): Promise<WorkflowDefinition>;
+  /** Saves a project-scoped definition; rejects an invalid one with its errors. */
+  save(projectId: string, definition: WorkflowDefinition): Promise<WorkflowDefinition>;
+  /** Removes a project-scoped definition. */
+  remove(projectId: string, workflowId: string): Promise<void>;
+  /** Live validation for the designer — no persistence. */
+  validate(projectId: string, definition: WorkflowDefinition): Promise<WorkflowValidationResult>;
+  /** The composed policy governing this project, strictest-wins over global. */
+  effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */

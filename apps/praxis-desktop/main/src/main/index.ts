@@ -16,6 +16,7 @@ import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
+import { registerWorkflowIpc } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
 import { attachWindowStateEvents, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
@@ -251,6 +252,7 @@ void app.whenReady().then(async () => {
   registerAiIpc();
   registerAiWorkflowIpc();
   registerTaskDesignerIpc();
+  registerWorkflowIpc();
   registerProjectIpc();
   registerWorkspaceIpc();
   registerTerminalIpc();
