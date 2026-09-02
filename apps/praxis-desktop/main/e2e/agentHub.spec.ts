@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
@@ -91,4 +92,56 @@ test('lists discovered agents and skills by scope with fail-closed detail', asyn
   await expect(detail.getByRole('heading', { name: 'code-audit' })).toBeVisible();
   await expect(detail.getByText('Audits a diff for risky changes.')).toBeVisible();
   await expect(detail.getByRole('button', { name: /Activate with Praxis Reviewer/ })).toBeEnabled();
+});
+
+test('the Create agent wizard writes a validated, discoverable manifest', async () => {
+  const page = app.window;
+  await page.getByTestId('nav-agents').click();
+
+  await page.getByRole('button', { name: 'Agent', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'New agent' });
+  await dialog.getByLabel('Display name').fill('Scaffolded Agent');
+  await dialog.getByLabel('ID', { exact: true }).fill('Bad Id');
+  await expect(dialog.getByText(/lowercase letters, digits/)).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Create agent' })).toBeDisabled();
+
+  await dialog.getByLabel('ID', { exact: true }).fill('scaffolded-agent');
+  await dialog.getByLabel('Command').fill('node');
+  await dialog.getByLabel('Arguments (space-separated)').fill('index.js');
+  await expect(dialog).toHaveScreenshot('agent-hub-create-dialog.png');
+  await dialog.getByRole('button', { name: 'Create agent' }).click();
+
+  await expect(dialog).toBeHidden();
+  const catalog = page.getByRole('navigation', { name: 'Agent catalog' });
+  await expect(catalog.getByRole('button', { name: /Scaffolded Agent/ })).toBeVisible();
+
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(app.userDataDir, 'agents', 'scaffolded-agent', 'agent.json'), 'utf8')
+  );
+  expect(manifest).toMatchObject({ schemaVersion: 1, id: 'scaffolded-agent', type: 'acp', entry: { command: 'node', args: ['index.js'] } });
+  expect(fs.existsSync(path.join(app.userDataDir, 'agents', 'scaffolded-agent', 'index.js'))).toBe(true);
+});
+
+test('import validates a folder without executing it and rejects a bad manifest', async () => {
+  const page = app.window;
+  await page.getByTestId('nav-agents').click();
+
+  const good = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-import-good-'));
+  fs.writeFileSync(
+    path.join(good, 'agent.json'),
+    JSON.stringify({ schemaVersion: 1, id: 'imported-agent', name: 'Imported Agent', type: 'acp', entry: 'run.js' })
+  );
+  const bad = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-import-bad-'));
+  fs.writeFileSync(path.join(bad, 'agent.json'), JSON.stringify({ schemaVersion: 1, id: 'x', name: 'X', type: 'telepathy', entry: 'run.js' }));
+
+  const badPreview = await page.evaluate(dir => window.praxis.agentRuntime.previewImport('agent', dir, 'global'), bad);
+  expect(badPreview.errors.length).toBeGreaterThan(0);
+  await expect(
+    page.evaluate(dir => window.praxis.agentRuntime.importItem('agent', dir, 'global', 'block'), bad)
+  ).rejects.toThrow();
+
+  await page.evaluate(dir => window.praxis.agentRuntime.importItem('agent', dir, 'global', 'block'), good);
+  await page.getByRole('button', { name: /Refresh/ }).click();
+  await expect(page.getByRole('navigation', { name: 'Agent catalog' }).getByRole('button', { name: /Imported Agent/ })).toBeVisible();
+  expect(fs.existsSync(path.join(app.userDataDir, 'agents', 'imported-agent', 'agent.json'))).toBe(true);
 });

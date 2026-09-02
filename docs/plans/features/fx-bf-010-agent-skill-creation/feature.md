@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.981Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-010
 slug: agent-skill-creation
 title: Agent and skill creation
-status: proposed
+status: complete
 owner: Electron desktop app
 updated: 2026-08-31
 issues: docs/issues/features/fx-bf-010-agent-skill-creation/feature-issues.md
@@ -43,6 +43,31 @@ Generated and imported items are safe, discoverable, correctly scoped, and cover
 
 ## Description
 
+## As built (2026-09-02)
+
+- **Core `agentAuthoring.ts`:** pure, fail-closed builders — `planNewAgent` /
+  `planNewSkill` return a folder name + file list (empty on any error),
+  `buildAgentManifest` runs core's real `validateAgentManifest`, `buildSkillDoc`
+  emits closable front matter. Import: `validateAgentImport` / `validateSkillImport`
+  → an `ImportPreview` (name, `duplicate`, `errors`), `resolveImportFolder` derives
+  `-2`, `-3`… for a rename. `safeSegment` (dash-case, 2–64 chars) and `safeJoin`
+  (throws on traversal / absolute) gate every path. `agentAuthoring.test.ts` — core
+  is now 306 tests.
+- **IPC:** `AgentRuntimeIpc` gains `createAgent`, `createSkill`, `previewImport`,
+  `importItem`. The main-process `agentRuntimeAuthoring.ts` resolves the scope root
+  (`userData/agents` vs `<workingDir>/.praxis/agents`, and the skills equivalents),
+  re-runs the core planner with the authoritative existing names, and writes with
+  `flag: 'wx'` (never overwrites). Import does a `.`-skipping recursive `copyTree`
+  through `safeJoin`; nothing is executed.
+- **Renderer:** `AgentHubDialogs.tsx` — `CreateAgentDialog`, `CreateSkillDialog`,
+  `ImportDialog`, opened from `+ Agent` / `+ Skill` / `Import` in the hub header.
+  `agentAuthoring.ts` (renderer) does light inline validation; the server is
+  authoritative. Import uses the existing `dialog.pickFolder`, then shows the
+  preview verdict (valid / errors / duplicate → cancel or rename) before writing.
+- **Verification:** `agentHub.spec.ts` — the Create wizard writes a validated
+  `agent.json` + scaffold and it appears in the catalog; import validates a folder
+  without running it and rejects a bad manifest; snapshots for the hub header and
+  the create dialog.
 
 ## Items
 

@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.992Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-081
 title: Generate transport starter scaffold
-status: proposed
+status: complete
 story: FX-BE-012
 updated: 2026-08-31
 dependencies: [TASK-080]

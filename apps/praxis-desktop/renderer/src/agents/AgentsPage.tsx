@@ -10,6 +10,7 @@ import {
   skillActivateBlockedReason,
   transportLabel
 } from './agentCatalog';
+import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from './AgentHubDialogs';
 
 /**
  * Agent Hub (FX-BF-009).
@@ -34,6 +35,7 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<Selection>();
+  const [dialog, setDialog] = useState<'agent' | 'skill' | 'import'>();
 
   const load = useCallback(async (refresh: boolean) => {
     setBusy(true);
@@ -73,6 +75,11 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
     []
   );
 
+  const afterAuthoring = useCallback((snap: AgentRuntimeSnapshot) => {
+    setSnapshot(snap);
+    setDialog(undefined);
+  }, []);
+
   return (
     <div className="view-scroll wf-page agent-hub">
       <header className="wf-header">
@@ -84,14 +91,20 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
               }`
             : 'Loading…'}
         </span>
-        <button
-          type="button"
-          className="btn btn-compact agent-hub-refresh"
-          onClick={() => void load(true)}
-          disabled={busy}
-        >
-          <Icon name="refresh" size={13} /> {busy ? 'Refreshing…' : 'Refresh'}
-        </button>
+        <div className="agent-hub-actions">
+          <button type="button" className="btn btn-compact" onClick={() => setDialog('agent')} disabled={busy}>
+            <Icon name="plus" size={13} /> Agent
+          </button>
+          <button type="button" className="btn btn-compact" onClick={() => setDialog('skill')} disabled={busy}>
+            <Icon name="plus" size={13} /> Skill
+          </button>
+          <button type="button" className="btn btn-compact" onClick={() => setDialog('import')} disabled={busy}>
+            <Icon name="folder-open" size={13} /> Import
+          </button>
+          <button type="button" className="btn btn-compact" onClick={() => void load(true)} disabled={busy}>
+            <Icon name="refresh" size={13} /> {busy ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -186,6 +199,26 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
           )}
         </section>
       </div>
+
+      {dialog === 'agent' && (
+        <CreateAgentDialog
+          defaultScope="global"
+          existingIds={(snapshot?.agents ?? []).map(agent => agent.manifest.id)}
+          onClose={() => setDialog(undefined)}
+          onCreated={afterAuthoring}
+        />
+      )}
+      {dialog === 'skill' && (
+        <CreateSkillDialog
+          defaultScope="global"
+          existingNames={(snapshot?.skills ?? []).map(skill => skill.metadata.name)}
+          onClose={() => setDialog(undefined)}
+          onCreated={afterAuthoring}
+        />
+      )}
+      {dialog === 'import' && (
+        <ImportDialog defaultScope="global" onClose={() => setDialog(undefined)} onImported={afterAuthoring} />
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 ---
 id: FX-BE-012
 title: Create Agent wizard and starter scaffold
-status: proposed
+status: complete
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-012-create-agent-scaffold/issue.md
 updated: 2026-08-31
