@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.993Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-083
 title: Validate and safely write skill packages
-status: proposed
+status: complete
 story: FX-BE-013
 updated: 2026-08-31
 dependencies: [TASK-082]

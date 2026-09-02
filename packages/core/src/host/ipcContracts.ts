@@ -19,7 +19,14 @@ import type {
   UpdateIssueInput
 } from '../types';
 import type { ModelOptions } from '../ai/providers/modelCatalog';
-import type { ActivatedSkill, AgentRuntimeSnapshot } from '../ai/agentRuntime';
+import type {
+  ActivatedSkill,
+  AgentRuntimeSnapshot,
+  CatalogScope,
+  ImportPreview,
+  NewAgentInput,
+  NewSkillInput
+} from '../ai/agentRuntime';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
@@ -658,6 +665,19 @@ export interface AgentRuntimeIpc {
   refresh(): Promise<AgentRuntimeSnapshot>;
   start(agentId: string): Promise<AgentRuntimeSnapshot>;
   activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
+  /** Writes a new agent folder in the chosen scope; rejects on validation failure. */
+  createAgent(input: NewAgentInput): Promise<AgentRuntimeSnapshot>;
+  /** Writes a new skill package in the chosen scope; rejects on validation failure. */
+  createSkill(input: NewSkillInput): Promise<AgentRuntimeSnapshot>;
+  /** Reads and validates an on-disk agent/skill folder for a target scope, without copying or running it. */
+  previewImport(kind: 'agent' | 'skill', sourceDir: string, scope: CatalogScope): Promise<ImportPreview>;
+  /** Copies a validated agent/skill folder into the scope; rejects on validation failure or an unresolved duplicate. */
+  importItem(
+    kind: 'agent' | 'skill',
+    sourceDir: string,
+    scope: CatalogScope,
+    onDuplicate: 'block' | 'rename'
+  ): Promise<AgentRuntimeSnapshot>;
 }
 
 // ── Integrated terminal ─────────────────────────────────────────────────────

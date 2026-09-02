@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.994Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-085
 title: Enforce duplicate and path safety
-status: proposed
+status: complete
 story: FX-BE-014
 updated: 2026-08-31
 dependencies: [TASK-084]
