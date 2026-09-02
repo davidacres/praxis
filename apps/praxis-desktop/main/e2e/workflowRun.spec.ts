@@ -84,6 +84,8 @@ test('runs the governed pipeline: parallel branches converge, then approval unlo
   await expect(runDetail).toContainText('Security scan');
   await expect(runDetail).toContainText('waiting to converge');
 
+  await expect(page.getByRole('region', { name: 'Run detail' })).toHaveScreenshot('workflow-run-monitor.png');
+
   await markDone(page, 'Security scan');
 
   // The branch group has converged and every gate passed.

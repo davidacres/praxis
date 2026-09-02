@@ -30,3 +30,14 @@ using the same host machinery `ai:delegate` already drives.
 Reuse `resolveAcpStartOptions` / `resolveCopilotStartOptions` /
 `resolveConnectionOptions` and the worktree/skill wiring from the `ai:delegate`
 handler.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

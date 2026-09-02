@@ -9,6 +9,7 @@ import {
   bypassGate as bypassWorkflowGate,
   advanceJoins,
   createWorkflowRun,
+  deleteProjectWorkflow,
   instantiateTemplateForProject,
   loadProjectWorkflows,
   migrateWorkflow,
@@ -17,6 +18,8 @@ import {
   resolveWorkflowCatalog,
   summarizeWorkflowRun,
   validateWorkflow,
+  workflowFileName,
+  writeProjectWorkflow,
   WorkflowRunStore,
   type AgentCatalogSnapshot,
   type TemplateReadiness,
@@ -118,6 +121,28 @@ async function saveDraft(projectId: string, definition: WorkflowDefinition): Pro
   await getWorkflowBackingStore().update(projectWorkflowsKey(projectId), [...existing, definition]);
 }
 
+async function dropDraft(projectId: string, workflowId: string): Promise<void> {
+  const remaining = draftDefinitions(projectId).filter(candidate => candidate.id !== workflowId);
+  await getWorkflowBackingStore().update(projectWorkflowsKey(projectId), remaining);
+}
+
+/**
+ * Persists a project definition to its canonical home. A folder-backed project
+ * gets a real `.praxis/workflows/<id>.json` file (version-controllable,
+ * shareable); a folderless project falls back to the app-local draft store.
+ */
+async function persistProjectWorkflow(projectId: string, definition: WorkflowDefinition): Promise<string | undefined> {
+  const folder = await projectFolder(projectId);
+  if (!folder) {
+    await saveDraft(projectId, definition);
+    return undefined;
+  }
+  const filePath = await writeProjectWorkflow(folder, definition);
+  // The committed file is now authoritative; a leftover draft only confuses.
+  await dropDraft(projectId, definition.id);
+  return filePath;
+}
+
 export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> => {
     const project = await projectDefinitions(projectId);
@@ -185,15 +210,21 @@ export function registerWorkflowIpc(): void {
       if (!result.valid) {
         throw new Error(`Workflow is invalid: ${result.errors.map(issue => `${issue.path}: ${issue.message}`).join('; ')}`);
       }
+      // Reject an id that could not be committed as a file, even for a
+      // folderless project — so a project that later gains a folder can always
+      // commit what it already authored.
+      workflowFileName(normalized.id);
+
       const next: WorkflowDefinition = { ...normalized, updatedAt: new Date().toISOString() };
-      await saveDraft(projectId, next);
+      await persistProjectWorkflow(projectId, next);
       return next;
     }
   );
 
   ipcMain.handle('workflows:remove', async (_event, projectId: string, workflowId: string): Promise<void> => {
-    const remaining = draftDefinitions(projectId).filter(definition => definition.id !== workflowId);
-    await getWorkflowBackingStore().update(projectWorkflowsKey(projectId), remaining);
+    await dropDraft(projectId, workflowId);
+    const folder = await projectFolder(projectId);
+    if (folder) await deleteProjectWorkflow(folder, workflowId);
   });
 
   ipcMain.handle(

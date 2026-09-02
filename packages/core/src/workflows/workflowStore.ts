@@ -12,7 +12,7 @@
  * returns what was hidden alongside what won, and the designer surfaces it.
  */
 
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { KeyValueStore } from '../host/stateStore';
 import { migrateWorkflow, validateWorkflow, type WorkflowIssue } from './workflowValidation';
@@ -207,6 +207,55 @@ export async function loadProjectWorkflows(
   }
 
   return { workflows, invalid };
+}
+
+/**
+ * A workflow id must be usable as a single, safe filename segment before it can
+ * be committed to `.praxis/workflows`. Rejects traversal, separators, dotfiles,
+ * and anything outside a conservative id alphabet.
+ */
+export function workflowFileName(id: string): string {
+  const trimmed = id.trim();
+  if (!trimmed) throw new Error('A workflow id is required.');
+  if (trimmed === '.' || trimmed === '..') throw new Error(`Unsafe workflow id: ${id}`);
+  if (trimmed.startsWith('.')) throw new Error(`A workflow id may not start with a dot: ${id}`);
+  if (/[/\\]/.test(trimmed) || trimmed.includes('\0')) throw new Error(`Unsafe workflow id: ${id}`);
+  if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
+    throw new Error(`A workflow id may only contain letters, digits, dot, underscore, and hyphen: ${id}`);
+  }
+  if (trimmed.length > 128) throw new Error(`Workflow id is too long: ${id}`);
+  return `${trimmed}.json`;
+}
+
+/**
+ * Writes a project-scoped definition to `<projectFolder>/.praxis/workflows/<id>.json`,
+ * pretty-printed. Returns the absolute path. Refuses a non-project definition
+ * and an unsafe id.
+ */
+export async function writeProjectWorkflow(
+  projectFolder: string,
+  definition: WorkflowDefinition
+): Promise<string> {
+  if (definition.scope !== 'project') {
+    throw new Error('Only a project-scoped workflow can be committed to a project folder.');
+  }
+  const root = path.resolve(projectFolder, PROJECT_WORKFLOWS_DIR);
+  const filePath = path.join(root, workflowFileName(definition.id));
+  // Defence in depth: the name is already validated, but never write outside root.
+  if (path.relative(root, filePath).startsWith('..')) {
+    throw new Error(`Resolved path escapes the project workflows folder: ${filePath}`);
+  }
+  await mkdir(root, { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(definition, null, 2)}\n`, 'utf8');
+  return filePath;
+}
+
+/** Removes a committed project workflow file. A missing file is not an error. */
+export async function deleteProjectWorkflow(projectFolder: string, workflowId: string): Promise<void> {
+  const root = path.resolve(projectFolder, PROJECT_WORKFLOWS_DIR);
+  const filePath = path.join(root, workflowFileName(workflowId));
+  if (path.relative(root, filePath).startsWith('..')) return;
+  await rm(filePath, { force: true });
 }
 
 /**

@@ -26,3 +26,14 @@ it belongs to.
 ## Notes
 This completes the TASK-099 intent — the contract existed, this is the wiring
 into `AiSessionManager` and the UI.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -35,3 +35,14 @@ Reuse `taskDesigner`'s renderer helpers (`buildConnectorCurvePath`,
 `anchorPoint`, pointer handlers). Do not import runtime values from
 `@praxis/core` — extend `renderer/src/workflows/workflowEdits.ts` for any new
 pure mutation.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
