@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-014
 slug: workflow-experience
 title: Workflow experience — native UI for the designer and run monitor
-status: proposed
+status: complete
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-014-workflow-experience/feature-issues.md

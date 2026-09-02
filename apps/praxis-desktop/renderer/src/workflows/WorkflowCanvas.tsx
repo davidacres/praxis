@@ -151,10 +151,17 @@ export function WorkflowCanvas({
         <span className="wf-canvas-zoom">{Math.round(view.zoom * 100)}%</span>
       </div>
 
+      <p id="wf-canvas-help" className="sr-only">
+        Each stage is a button. Press Tab to move between stages, Enter or Space to select one
+        and open its inspector, and the arrow keys to nudge the selected stage (hold Shift for a
+        larger step). Connections are made with a pointer from a stage's handle, or in the
+        Connections panel.
+      </p>
       <div
         ref={surfaceRef}
         role="application"
         aria-label="Workflow canvas"
+        aria-describedby="wf-canvas-help"
         className={`designer-canvas wf-canvas-surface${drag?.kind === 'pan' ? ' is-panning' : ''}`}
         onPointerDown={onSurfacePointerDown}
         onPointerMove={onPointerMove}

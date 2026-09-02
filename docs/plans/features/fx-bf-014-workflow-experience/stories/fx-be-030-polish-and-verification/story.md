@@ -1,7 +1,7 @@
 ---
 id: FX-BE-030
 title: States, accessibility, and theme verification
-status: proposed
+status: complete
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-030-polish-and-verification/issue.md
 updated: 2026-09-02
@@ -37,3 +37,28 @@ Every edge case has a calm, themed answer, and the surface holds up under a keyb
 ## Close when
 
 The workflow experience passes a keyboard-only pass and a full theme-gallery pass with no unstyled or broken state.
+
+## As built (2026-09-02)
+
+**States (TASK-129).** Error is `.error-banner` on all three screens (already present). Added:
+Library — a shimmer skeleton (`.wf-skeleton`, reduced-motion safe) while templates load, and
+a lede above the template list. Designer — a footer note "Attach a folder to this project to
+run this workflow" when the project has no folder, and "No agents were discovered …" in the
+agent picker when the runtime catalog is empty. Monitor — a "No folder is attached …" note and
+a "Save a workflow in the designer first" note on the start form. The graph loads synchronously
+from an already-fetched template and the monitor reload is a single fast IPC call, so neither
+got a dedicated spinner — the matrix's "canvas spinner / board spinner" rows were not needed.
+
+**Accessibility (TASK-130).** Nav landmarks (`nav aria-label="Workflow stages" / "Runs"`),
+one live region per screen (`role=status` on the run sentence / validation summary), the gate
+`<table>` with a caption, and per-node `aria-label`s were already in place from FX-BE-027/029.
+Added: an `sr-only` description of the canvas keyboard model wired via `aria-describedby` on the
+`role=application` canvas, and an `sr-only` ordered stage list beside the pipeline diagram as
+its non-visual equivalent. Focus order is DOM order: rail → canvas/board → footer/actions →
+inspector.
+
+**Themes & responsiveness (TASK-131).** `workflowThemes.spec.ts` boots the app on `one-dark`
+and snapshots the library, designer, and run monitor — a hardcoded colour or missing token now
+breaks a snapshot. (One representative dark palette rather than the whole gallery; there is no
+per-screen multi-theme harness and building one was out of proportion.) The `.wf-designer` and
+`.wf-runs` grids already carry a `@media (max-width: 1200px)` breakpoint from FX-BE-027.
