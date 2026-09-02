@@ -9,6 +9,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 
 /**
@@ -34,14 +35,20 @@ function broadcastRunChanged(run: WorkflowRun): void {
 
 const dispatcher: StageDispatcher = {
   canDispatch(node, run) {
-    // Only checks, and only where there is somewhere to run them.
-    return isCheckNode(node) && !!projectFolderFor(run);
+    // Everything needs somewhere to run; agent stages additionally need a
+    // configured provider. A stage this declines stays `ready` for the monitor
+    // rather than being claimed and failed.
+    if (!projectFolderFor(run)) return false;
+    return isCheckNode(node) || canDispatchAgentStage();
   },
   runCheck(node, context) {
     return runWorkflowCheck(node, context, projectFolderFor(context.run));
   },
-  async runAgentStage() {
-    throw new Error('Agent stages are not yet driven automatically (FX-BE-025).');
+  runAgentStage(node, context, onSession) {
+    return runWorkflowAgentStage(node, context, onSession);
+  },
+  async cancelStage(nodeId, context) {
+    await cancelWorkflowAgentStage(context.run.runId, nodeId);
   }
 };
 

@@ -48,9 +48,11 @@ const OUTCOMES: WorkflowEdgeOutcome[] = ['success', 'failure', 'always'];
 
 export interface WorkflowDesignerPageProps {
   project: ProjectRecord;
+  /** Opens the agent session behind a run stage. */
+  onOpenSession?: (sessionKey: string) => void;
 }
 
-export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
+export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesignerPageProps) {
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [readiness, setReadiness] = useState<Record<string, TemplateReadiness>>({});
   const [projectWorkflows, setProjectWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -187,6 +189,7 @@ export function WorkflowDesignerPage({ project }: WorkflowDesignerPageProps) {
         <WorkflowRunMonitor
           project={project}
           runnableWorkflows={projectWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name }))}
+          {...(onOpenSession ? { onOpenSession } : {})}
         />
       ) : !definition ? (
         <TemplateLibrary

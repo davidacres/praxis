@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-116
 title: Attribute stage sessions to their workflow run and node
-status: proposed
+status: complete
 story: FX-BE-025
 updated: 2026-09-02
 dependencies: [TASK-114]

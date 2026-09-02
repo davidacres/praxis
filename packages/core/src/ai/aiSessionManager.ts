@@ -161,6 +161,8 @@ export class AiSessionManager {
         | 'worktreeBranch'
         | 'worktreeBaseBranch'
         | 'worktreeName'
+        | 'workflowRunId'
+        | 'workflowNodeId'
       >
     >
   ): void {
@@ -178,6 +180,8 @@ export class AiSessionManager {
       record.worktreeBaseBranch = runtime.worktreeBaseBranch.trim() || undefined;
     }
     if (runtime.worktreeName !== undefined) record.worktreeName = runtime.worktreeName.trim() || undefined;
+    if (runtime.workflowRunId !== undefined) record.workflowRunId = runtime.workflowRunId.trim() || undefined;
+    if (runtime.workflowNodeId !== undefined) record.workflowNodeId = runtime.workflowNodeId.trim() || undefined;
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
   }
