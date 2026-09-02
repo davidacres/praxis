@@ -1,7 +1,7 @@
 ---
 id: FX-BE-027
 title: Shell integration and theming foundation
-status: proposed
+status: complete
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-027-shell-and-theming/issue.md
 updated: 2026-09-02

@@ -48,11 +48,19 @@ const OUTCOMES: WorkflowEdgeOutcome[] = ['success', 'failure', 'always'];
 
 export interface WorkflowDesignerPageProps {
   project: ProjectRecord;
+  /** Which half of the feature is open — controlled by the route. */
+  view?: 'design' | 'runs';
+  onViewChange?: (view: 'design' | 'runs') => void;
   /** Opens the agent session behind a run stage. */
   onOpenSession?: (sessionKey: string) => void;
 }
 
-export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesignerPageProps) {
+export function WorkflowDesignerPage({
+  project,
+  view: viewProp,
+  onViewChange,
+  onOpenSession
+}: WorkflowDesignerPageProps) {
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [readiness, setReadiness] = useState<Record<string, TemplateReadiness>>({});
   const [projectWorkflows, setProjectWorkflows] = useState<WorkflowDefinition[]>([]);
@@ -61,7 +69,9 @@ export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesigne
   const [error, setError] = useState<string | undefined>();
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const [view, setView] = useState<'design' | 'runs'>('design');
+  const [uncontrolledView, setUncontrolledView] = useState<'design' | 'runs'>('design');
+  const view = viewProp ?? uncontrolledView;
+  const setView = onViewChange ?? setUncontrolledView;
   const [designMode, setDesignMode] = useState<'canvas' | 'list'>('canvas');
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
@@ -153,16 +163,16 @@ export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesigne
   const selectedNode = definition?.nodes.find(node => node.id === selectedNodeId);
 
   return (
-    <div className="view-scroll" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Workflows</h1>
-        <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>{project.name}</span>
-        <div role="tablist" aria-label="View" style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+    <div className="view-scroll wf-page">
+      <header className="wf-header">
+        <h1>Workflows</h1>
+        <span className="wf-header-sub">{project.name}</span>
+        <div role="tablist" aria-label="Workflow view" className="wf-viewswitch">
           <button
             type="button"
             role="tab"
             aria-selected={view === 'design'}
-            className="ghost-button"
+            className={`btn-compact${view === 'design' ? ' active' : ''}`}
             onClick={() => setView('design')}
           >
             Design
@@ -171,7 +181,7 @@ export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesigne
             type="button"
             role="tab"
             aria-selected={view === 'runs'}
-            className="ghost-button"
+            className={`btn-compact${view === 'runs' ? ' active' : ''}`}
             onClick={() => setView('runs')}
           >
             Runs
@@ -180,7 +190,7 @@ export function WorkflowDesignerPage({ project, onOpenSession }: WorkflowDesigne
       </header>
 
       {error && (
-        <p role="alert" style={{ color: 'var(--danger)', margin: 0 }}>
+        <p role="alert" className="error-banner">
           {error}
         </p>
       )}

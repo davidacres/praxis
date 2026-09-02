@@ -8372,3 +8372,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: var(--surface-backdrop);
 }
+
+.wf-page { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5); }
+.wf-header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.wf-header h1 { margin: 0; font-size: 20px; }
+.wf-header-sub { color: var(--text-tertiary); font-size: 13px; }
+.wf-viewswitch { margin-left: auto; display: flex; gap: var(--space-1); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-sunken); }

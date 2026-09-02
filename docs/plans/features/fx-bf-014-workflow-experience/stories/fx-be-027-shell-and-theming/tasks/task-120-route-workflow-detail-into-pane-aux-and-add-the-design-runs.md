@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-02T00:00:00.000Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-120
 title: Route workflow detail into pane-aux and add the Design/Runs header control.
-status: proposed
+status: complete
 story: FX-BE-027
 updated: 2026-09-02
 dependencies: [FX-BF-013]
