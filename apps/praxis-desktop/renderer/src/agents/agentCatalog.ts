@@ -83,6 +83,17 @@ export function agentHostStarted(snapshot: Pick<AgentRuntimeSnapshot, 'capabilit
   return Object.prototype.hasOwnProperty.call(snapshot.capabilities, agentId);
 }
 
+export function hostRuntimeState(
+  snapshot: Pick<AgentRuntimeSnapshot, 'hosts'>,
+  agentId: string
+): 'running' | 'failed' | 'stopped' {
+  return snapshot.hosts[agentId]?.state ?? 'stopped';
+}
+
+export function runningHostCount(snapshot: Pick<AgentRuntimeSnapshot, 'hosts'>): number {
+  return Object.values(snapshot.hosts).filter(status => status.state === 'running').length;
+}
+
 /** Transport → short human label. */
 export function transportLabel(type: DiscoveredAgent['manifest']['type']): string {
   const labels: Record<DiscoveredAgent['manifest']['type'], string> = {

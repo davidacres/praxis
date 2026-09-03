@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.995Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-086
 title: Extend runtime status contracts
-status: proposed
+status: complete
 story: FX-BE-015
 updated: 2026-08-31
 dependencies: [TASK-079]
