@@ -202,8 +202,8 @@ export function WorkflowDesignerPage({
   }
 
   const inspector = (
-    <section className="wf-inspector wf-inspector--tabbed wf-aux" aria-label="Stage inspector">
-      <div role="tablist" aria-label="Inspector" className="wf-inspector-tabs">
+    <section className="inspector inspector--tabbed wf-aux" aria-label="Stage inspector">
+      <div role="tablist" aria-label="Inspector" className="inspector-tabs">
         <button
           type="button"
           role="tab"
@@ -223,7 +223,7 @@ export function WorkflowDesignerPage({
           Connections{definition.edges.length > 0 ? ` (${definition.edges.length})` : ''}
         </button>
       </div>
-      <div className="wf-inspector-body">
+      <div className="inspector-body">
         {inspectorTab === 'stage' ? (
           selectedNode ? (
             <NodeInspector
@@ -265,12 +265,12 @@ export function WorkflowDesignerPage({
       )}
 
       <div className="wf-designer wf-designer--two">
-        <nav className="wf-rail" aria-label="Workflow stages">
-          <div className="wf-rail-head">
+        <nav className="rail" aria-label="Workflow stages">
+          <div className="rail-head">
             <strong>{definition.name}</strong>
           </div>
 
-          <div role="group" aria-label="Add stage" className="wf-rail-add">
+          <div role="group" aria-label="Add stage" className="rail-add">
             {NODE_KINDS.map(kind => (
               <button
                 key={kind.type}
@@ -287,7 +287,7 @@ export function WorkflowDesignerPage({
             ))}
           </div>
 
-          <ul className="wf-rail-list">
+          <ul className="rail-list">
             {definition.nodes.map(node => {
               const issues = feedback?.byNode[node.id]?.length ?? 0;
               const isEntry = node.id === definition.entryNodeId;
@@ -295,25 +295,25 @@ export function WorkflowDesignerPage({
                 <li key={node.id}>
                   <button
                     type="button"
-                    className="wf-rail-row"
+                    className="rail-row"
                     aria-pressed={node.id === selectedNodeId}
                     aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
                       issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
                     }`}
                     onClick={() => selectStage(node.id)}
                   >
-                    <span className="wf-rail-main">
-                      <span className="wf-rail-name">{node.name}</span>
-                      <span className="wf-rail-sub">{node.type}</span>
+                    <span className="rail-main">
+                      <span className="rail-name">{node.name}</span>
+                      <span className="rail-sub">{node.type}</span>
                     </span>
                     {issues > 0 ? (
-                      <span className="wf-rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
+                      <span className="rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
                         ⚠ {issues}
                       </span>
                     ) : isEntry ? (
-                      <span className="wf-rail-mark is-entry">entry</span>
+                      <span className="rail-mark is-entry">entry</span>
                     ) : railGate(node) ? (
-                      <span className="wf-rail-mark is-gate">{railGate(node)}</span>
+                      <span className="rail-mark is-gate">{railGate(node)}</span>
                     ) : null}
                   </button>
                 </li>
@@ -321,10 +321,10 @@ export function WorkflowDesignerPage({
             })}
           </ul>
 
-          <div className="wf-rail-foot">
+          <div className="rail-foot">
             <ValidationSummary feedback={feedback} />
             {!project.workspaceFolder && (
-              <p className="wf-hint is-warn">Attach a folder to this project to run this workflow.</p>
+              <p className="hint is-warn">Attach a folder to this project to run this workflow.</p>
             )}
             <button
               type="button"
@@ -402,10 +402,10 @@ function NodeInspector({
   const set = (patch: Partial<WorkflowNode>) => onChange(updateNode(definition, node.id, patch as never));
 
   return (
-    <div className="wf-inspector-card">
-      <div className="wf-inspector-head">
+    <div className="inspector-card">
+      <div className="inspector-head">
         <h2>{node.type}</h2>
-        <div className="wf-inspector-head-actions">
+        <div className="inspector-head-actions">
           {node.id !== definition.entryNodeId && (
             <button type="button" className="btn btn-compact" onClick={() => onChange(setEntryNode(definition, node.id))}>
               Make entry
@@ -455,12 +455,12 @@ function NodeInspector({
           <Field label="Prompt">
             <textarea rows={2} value={node.prompt} onChange={event => set({ prompt: event.target.value })} />
           </Field>
-          <fieldset className="wf-fieldset">
+          <fieldset className="form-fieldset">
             <legend>Required gates</legend>
             {GATES.map(gate => {
               const policyRequires = policy?.requiredGates.includes(gate) ?? false;
               return (
-                <label key={gate} className="wf-check">
+                <label key={gate} className="form-check">
                   <input
                     type="checkbox"
                     checked={node.requiredGates.includes(gate) || policyRequires}
@@ -474,12 +474,12 @@ function NodeInspector({
                     }
                   />
                   {gate}
-                  {policyRequires && <span className="wf-hint"> — required by project policy</span>}
+                  {policyRequires && <span className="hint"> — required by project policy</span>}
                 </label>
               );
             })}
           </fieldset>
-          <label className={`wf-check${policy?.allowGateBypass === false ? ' is-disabled' : ''}`}>
+          <label className={`form-check${policy?.allowGateBypass === false ? ' is-disabled' : ''}`}>
             <input
               type="checkbox"
               checked={node.allowBypass && policy?.allowGateBypass !== false}
@@ -488,11 +488,11 @@ function NodeInspector({
             />
             Allow an attributed gate bypass
             {policy?.allowGateBypass === false && (
-              <span className="wf-hint"> — forbidden by project policy</span>
+              <span className="hint"> — forbidden by project policy</span>
             )}
           </label>
           {policy?.requireHumanApproval && (
-            <p className="wf-hint">Project policy requires a human approval stage.</p>
+            <p className="hint">Project policy requires a human approval stage.</p>
           )}
         </>
       )}
@@ -507,7 +507,7 @@ function NodeInspector({
       )}
 
       {issues.length > 0 && (
-        <ul className="wf-issues">
+        <ul className="issues">
           {issues.map((issue, index) => (
             <li key={index}>{issue.message}</li>
           ))}
@@ -633,22 +633,22 @@ function AgentStageFields({
       </Field>
 
       {skills.length > 0 && (
-        <fieldset className="wf-fieldset">
+        <fieldset className="form-fieldset">
           <legend>Skills to activate</legend>
           {skills.map(skill => {
             const on = (node.agent.skillNames ?? []).includes(skill.metadata.name);
             const drifted = on && node.agent.skillFingerprints?.[skill.metadata.name] !== skill.fingerprint;
             return (
-              <label key={skill.metadata.name} className="wf-check">
+              <label key={skill.metadata.name} className="form-check">
                 <input
                   type="checkbox"
                   checked={on}
                   onChange={event => toggleSkill(skill.metadata.name, skill.fingerprint, event.target.checked)}
                 />
                 {skill.metadata.name}
-                {skill.error && <span className="wf-hint is-danger"> (invalid)</span>}
-                {!skill.trusted && <span className="wf-hint"> (untrusted)</span>}
-                {drifted && <span className="wf-hint is-warn"> (changed since pinned)</span>}
+                {skill.error && <span className="hint is-danger"> (invalid)</span>}
+                {!skill.trusted && <span className="hint"> (untrusted)</span>}
+                {drifted && <span className="hint is-warn"> (changed since pinned)</span>}
               </label>
             );
           })}
@@ -658,7 +658,7 @@ function AgentStageFields({
       <Field label="Instructions">
         <textarea rows={3} value={node.instructions} onChange={event => set({ instructions: event.target.value })} />
       </Field>
-      <label className="wf-check">
+      <label className="form-check">
         <input
           type="checkbox"
           checked={node.mutatesWorktree}
@@ -705,7 +705,7 @@ function EdgeEditor({
   const [to, setTo] = useState('');
 
   return (
-    <div className="wf-inspector-card">
+    <div className="inspector-card">
       <h2>Connections</h2>
 
       <div className="wf-edge-form">
@@ -764,7 +764,7 @@ function EdgeEditor({
                     </option>
                   ))}
                 </select>
-                <label className="wf-check">
+                <label className="form-check">
                   <input
                     type="checkbox"
                     checked={edge.required}
@@ -785,7 +785,7 @@ function EdgeEditor({
             </li>
           );
         })}
-        {definition.edges.length === 0 && <li className="wf-rail-empty">No connections yet.</li>}
+        {definition.edges.length === 0 && <li className="rail-empty">No connections yet.</li>}
       </ul>
     </div>
   );
@@ -804,13 +804,13 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`wf-field${warning ? ' has-warn' : ''}`}>
-      <label className="wf-field-label">
+    <div className={`form-field${warning ? ' has-warn' : ''}`}>
+      <label className="form-field-label">
         <span>{label}</span>
         {children}
       </label>
       {warning && (
-        <span className="wf-field-warn" role="img" aria-label={`Warning: ${warning}`} title={warning}>
+        <span className="form-field-warn" role="img" aria-label={`Warning: ${warning}`} title={warning}>
           <Icon name="warning" size={12} />
         </span>
       )}

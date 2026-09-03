@@ -125,11 +125,11 @@ export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSessi
       )}
 
       <div className="agent-hub-body">
-        <nav className="wf-rail" aria-label="Agent catalog">
+        <nav className="rail" aria-label="Agent catalog">
           {!snapshot ? (
-            <ul className="wf-rail-list" aria-busy="true">
+            <ul className="rail-list" aria-busy="true">
               {[0, 1, 2].map(i => (
-                <li key={i} className="wf-rail-row wf-skeleton" aria-hidden />
+                <li key={i} className="rail-row skeleton" aria-hidden />
               ))}
             </ul>
           ) : groups.length === 0 ? (
@@ -146,26 +146,26 @@ export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSessi
             groups.map(group => (
               <section key={group.scope} className="agent-hub-group" aria-label={`${group.label} catalog`}>
                 <h2>{group.scope === 'project' && project ? project.name : group.label}</h2>
-                <ul className="wf-rail-list">
+                <ul className="rail-list">
                   {group.agents.map(agent => (
                     <li key={`a:${agent.manifest.id}`}>
                       <button
                         type="button"
-                        className="wf-rail-row"
+                        className="rail-row"
                         aria-pressed={selected?.kind === 'agent' && selected.id === agent.manifest.id}
                         onClick={() => setSelected({ kind: 'agent', id: agent.manifest.id })}
                       >
                         <Icon name="robot" size={14} />
-                        <span className="wf-rail-main">
-                          <span className="wf-rail-name">{agent.manifest.name}</span>
-                          <span className="wf-rail-sub">
+                        <span className="rail-main">
+                          <span className="rail-name">{agent.manifest.name}</span>
+                          <span className="rail-sub">
                             {transportLabel(agent.manifest.type)}
                             {hostRuntimeState(snapshot!, agent.manifest.id) === 'running' && ' · running'}
                             {hostRuntimeState(snapshot!, agent.manifest.id) === 'failed' && ' · failed'}
                           </span>
                         </span>
                         {hostRuntimeState(snapshot!, agent.manifest.id) === 'running' ? (
-                          <span className="wf-lane wf-lane--running" aria-label="Host running">●</span>
+                          <span className="lane lane--running" aria-label="Host running">●</span>
                         ) : (
                           <TrustMark trusted={agent.trusted} invalid={agent.errors.length > 0} />
                         )}
@@ -176,14 +176,14 @@ export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSessi
                     <li key={`s:${skill.metadata.name}`}>
                       <button
                         type="button"
-                        className="wf-rail-row"
+                        className="rail-row"
                         aria-pressed={selected?.kind === 'skill' && selected.name === skill.metadata.name}
                         onClick={() => setSelected({ kind: 'skill', name: skill.metadata.name })}
                       >
                         <Icon name="sparkles" size={14} />
-                        <span className="wf-rail-main">
-                          <span className="wf-rail-name">{skill.metadata.name}</span>
-                          <span className="wf-rail-sub">skill</span>
+                        <span className="rail-main">
+                          <span className="rail-name">{skill.metadata.name}</span>
+                          <span className="rail-sub">skill</span>
                         </span>
                         <TrustMark trusted={skill.trusted} invalid={!!skill.error} />
                       </button>
@@ -195,7 +195,7 @@ export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSessi
           )}
         </nav>
 
-        <section className="wf-inspector" aria-label="Details">
+        <section className="inspector" aria-label="Details">
           {selectedAgent && snapshot ? (
             <AgentDetail
               agent={selectedAgent}
@@ -267,9 +267,9 @@ export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSessi
 }
 
 function TrustMark({ trusted, invalid }: { trusted: boolean; invalid: boolean }) {
-  if (invalid) return <span className="wf-rail-mark is-issue" title="Invalid — see detail">⚠</span>;
-  if (trusted) return <span className="wf-rail-mark is-gate" title="Trusted">✓</span>;
-  return <span className="wf-rail-mark is-entry" title="Approval required">approval</span>;
+  if (invalid) return <span className="rail-mark is-issue" title="Invalid — see detail">⚠</span>;
+  if (trusted) return <span className="rail-mark is-gate" title="Trusted">✓</span>;
+  return <span className="rail-mark is-entry" title="Approval required">approval</span>;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -310,14 +310,14 @@ function AgentDetail({
   const entry = agent.manifest.entry;
 
   return (
-    <div className="wf-inspector-card agent-detail">
-      <div className="wf-inspector-head">
+    <div className="inspector-card agent-detail">
+      <div className="inspector-head">
         <h2>{agent.manifest.name}</h2>
         <TrustMark trusted={agent.trusted} invalid={agent.errors.length > 0} />
       </div>
 
       <Row label="Host">
-        <span className={`wf-lane wf-lane--${state === 'running' ? 'running' : state === 'failed' ? 'failed' : 'idle'}`}>●</span>{' '}
+        <span className={`lane lane--${state === 'running' ? 'running' : state === 'failed' ? 'failed' : 'idle'}`}>●</span>{' '}
         {state === 'running'
           ? `running${runtime?.pid ? ` · pid ${runtime.pid}` : ''}`
           : state === 'failed'
@@ -355,7 +355,7 @@ function AgentDetail({
       </Row>
 
       {agent.errors.length > 0 && (
-        <ul className="wf-issues">
+        <ul className="issues">
           {agent.errors.map((issue, index) => (
             <li key={index}>
               {issue.path}: {issue.message}
@@ -363,25 +363,25 @@ function AgentDetail({
           ))}
         </ul>
       )}
-      {runtime?.error && <p className="wf-hint is-danger">{runtime.error}</p>}
+      {runtime?.error && <p className="hint is-danger">{runtime.error}</p>}
 
       <div className="agent-detail-caps">
-        <span className="wf-rail-sub">Capabilities</span>
+        <span className="rail-sub">Capabilities</span>
         {caps ? (
           <>
             <p>{caps.features.length > 0 ? caps.features.join(', ') : 'none reported'}</p>
             {(caps.model || caps.version) && (
-              <p className="wf-rail-sub">
+              <p className="rail-sub">
                 {[caps.model, caps.version && `v${caps.version}`].filter(Boolean).join(' · ')}
               </p>
             )}
           </>
         ) : (
-          <p className="wf-rail-sub">Not reported — the host has not been started.</p>
+          <p className="rail-sub">Not reported — the host has not been started.</p>
         )}
       </div>
 
-      <div className="wf-stage-actions">
+      <div className="inspector-actions">
         {state === 'running' ? (
           <>
             <button type="button" className="btn btn-primary" disabled={busy || !!blocked} title={blocked} onClick={() => onLifecycle(id, 'restart')}>
@@ -401,12 +401,12 @@ function AgentDetail({
             <Icon name="chats" size={13} /> Open a session
           </button>
         )}
-        {blocked && <p className="wf-hint is-warn">{blocked}</p>}
+        {blocked && <p className="hint is-warn">{blocked}</p>}
       </div>
 
       {sessions.length > 0 && (
         <div className="agent-detail-caps">
-          <span className="wf-rail-sub">Sessions</span>
+          <span className="rail-sub">Sessions</span>
           <ul className="agent-detail-sessions">
             {sessions.map(session => (
               <li key={session.issueKey}>
@@ -444,8 +444,8 @@ function SkillDetail({
     .filter((row): row is { id: string; entry: { skill: string; mode: string } } => !!row.entry);
 
   return (
-    <div className="wf-inspector-card agent-detail">
-      <div className="wf-inspector-head">
+    <div className="inspector-card agent-detail">
+      <div className="inspector-head">
         <h2>{skill.metadata.name}</h2>
         <TrustMark trusted={skill.trusted} invalid={!!skill.error} />
       </div>
@@ -476,15 +476,15 @@ function SkillDetail({
         </code>
       </Row>
 
-      {skill.error && <p className="wf-hint is-danger">{skill.error}</p>}
+      {skill.error && <p className="hint is-danger">{skill.error}</p>}
 
       {activeOn.length > 0 && (
         <Row label="Active on">{activeOn.map(row => `${row.id} · ${row.entry.mode} mode`).join(', ')}</Row>
       )}
 
-      <div className="wf-stage-actions">
+      <div className="inspector-actions">
         {eligible.length > 1 && (
-          <label className="wf-field">
+          <label className="form-field">
             <span>Activate with</span>
             <select value={target} onChange={event => setAgentId(event.target.value)}>
               {eligible.map(agent => (
@@ -504,7 +504,7 @@ function SkillDetail({
         >
           {eligible.length === 1 ? `Activate with ${eligible[0].manifest.name}` : 'Activate'}
         </button>
-        {blocked && <p className="wf-hint is-warn">{blocked}</p>}
+        {blocked && <p className="hint is-warn">{blocked}</p>}
       </div>
     </div>
   );

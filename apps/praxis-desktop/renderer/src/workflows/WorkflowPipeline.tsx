@@ -124,7 +124,7 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
                 type="button"
                 aria-pressed={node.id === selectedNodeId}
                 aria-label={`${stage?.name ?? node.id} (${node.type}), ${lane}`}
-                className={`wf-node wf-node--${node.type} wf-pipeline-node wf-lane--${lane}${
+                className={`wf-node wf-node--${node.type} wf-pipeline-node lane--${lane}${
                   node.id === selectedNodeId ? ' is-selected' : ''
                 }`}
                 style={{
