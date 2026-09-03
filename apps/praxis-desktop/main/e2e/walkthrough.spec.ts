@@ -104,6 +104,7 @@ test('the ring is visibly not a control, and not the focus ring', async () => {
 
   const style = await page.evaluate(() => {
     const ring = getComputedStyle(document.querySelector('.walkthrough-ring')!);
+    const callout = getComputedStyle(document.querySelector('.walkthrough-callout')!);
     const root = getComputedStyle(document.documentElement);
     const resolve = (value: string) => {
       const probe = document.createElement('span');
@@ -116,6 +117,9 @@ test('the ring is visibly not a control, and not the focus ring', async () => {
     return {
       borderStyle: ring.borderTopStyle,
       borderColor: ring.borderTopColor,
+      calloutTop: callout.borderTopColor,
+      calloutSide: callout.borderLeftColor,
+      tour: resolve(root.getPropertyValue('--tone-tour').trim()),
       accent: resolve(root.getPropertyValue('--accent').trim()),
       focusRing: resolve(root.getPropertyValue('--focus-ring').trim())
     };
@@ -127,6 +131,12 @@ test('the ring is visibly not a control, and not the focus ring', async () => {
   // meaning for the accent and indistinguishable from the keyboard focus ring.
   expect(style.borderColor).not.toBe(style.accent);
   expect(style.borderColor).not.toBe(style.focusRing);
+  // The callout carries the same hue on its top edge and nowhere else, so the
+  // ring and its label read as one annotation. This caught a real cascade bug:
+  // `border-top` sat above the `border` shorthand, which reset all four sides
+  // and left the callout unbranded.
+  expect(style.calloutTop).toBe(style.tour);
+  expect(style.calloutSide).not.toBe(style.tour);
 });
 
 test('the ring never blocks the control it highlights', async () => {
