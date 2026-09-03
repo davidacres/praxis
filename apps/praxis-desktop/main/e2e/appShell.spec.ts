@@ -68,7 +68,8 @@ test('the Agent Hub and Workflow designer sit inside the normal app shell', asyn
   await tree.getByTestId('agent-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
   await expect(page.getByRole('main').getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Agent runtime' })).toBeVisible();
-  await expect(page).toHaveScreenshot('app-shell-agents.png');
+  // The catalog source path is a per-run temp directory, so it is masked out.
+  await expect(page).toHaveScreenshot('app-shell-agents.png', { mask: [page.locator('.agent-path')] });
 
   // Workflow designer — created from the project's Workflows tree section, with
   // the stage inspector filling the shell's right pane.

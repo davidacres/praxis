@@ -219,6 +219,10 @@ test('keeps the graph usable in a narrow reduced-motion window', async () => {
   await window.emulateMedia({ reducedMotion: 'reduce' });
   await openProjectGit(createFixtureRepository());
   await expect(window.getByTestId('git-graph-page')).toBeVisible();
+  // The commit inspector lives in the shell's right pane now, so a narrow window
+  // is worked the way the shell intends: collapse it and give the graph the width.
+  await window.getByRole('button', { name: 'Toggle secondary sidebar' }).click();
+  await expect(window.getByRole('complementary', { name: 'Commit details' })).toBeHidden();
   await expect(window.getByRole('list', { name: 'Commit history' })).toBeVisible();
   await expect(window.getByText('History', { exact: true })).toBeVisible();
   await expect(window.getByRole('button', { name: '↻ Refresh' })).toBeVisible();
