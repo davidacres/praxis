@@ -10,7 +10,7 @@ test.afterEach(async () => {
   }
 });
 
-test('first launch leads directly into workspace setup beneath the title bar', async () => {
+test('first launch leads directly into creating the first project', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
@@ -20,17 +20,22 @@ test('first launch leads directly into workspace setup beneath the title bar', a
   expect(initialSize).toEqual([1664, 936]);
 
   await expect(win.getByTestId('getting-started')).toBeVisible();
-  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
   await expect(win.getByTestId('main-content-pane')).toHaveCount(0);
-  await expect(win.getByRole('textbox', { name: 'Workspace name' })).toBeEditable();
+  await expect(win.getByRole('button', { name: /New project/ })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/getting-started-dark.png', fullPage: true });
+
+  // Naming a workspace up front is still available.
+  await win.getByRole('button', { name: 'Name a workspace first' }).click();
+  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
+  await expect(win.getByRole('textbox', { name: 'Workspace name' })).toBeEditable();
 });
 
 test('workspace setup can be skipped to the empty Praxis shell', async () => {
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
-  await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
+  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
   await win.getByRole('button', { name: 'Skip for now' }).click();
   await expect(win.getByTestId('getting-started')).toHaveCount(0);
   await expect(win.getByTestId('main-content-pane')).toBeVisible();
@@ -41,6 +46,7 @@ test('workspace setup offers project handoff and cancelling the wizard opens the
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
+  await win.getByRole('button', { name: 'Name a workspace first' }).click();
   await win.getByRole('textbox', { name: 'Workspace name' }).fill('Client Delivery');
   await win.getByRole('textbox', { name: /Description/ }).fill('Release planning');
   await win.getByRole('button', { name: 'Create Workspace' }).click();
@@ -68,6 +74,8 @@ test('walks through every workspace and project onboarding screen to a created p
   app = await launchTestApp(undefined, undefined, undefined, { workspace: false });
   const win = app.window;
 
+  await expect(win.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
+  await win.getByRole('button', { name: 'Name a workspace first' }).click();
   await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/full-onboarding-01-workspace.png', fullPage: true });
   await win.getByRole('textbox', { name: 'Workspace name' }).fill('Product Studio');

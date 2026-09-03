@@ -9,6 +9,7 @@ interface GettingStartedProps {
   onOpenWorkspace: (workspaceId: string) => void;
   onOpenWorkspaceFile: () => void;
   onCreateWorkspace: (name: string, description: string, storageFolder?: string) => Promise<void>;
+  onStartFirstProject: (wizardMode: 'create' | 'existing') => Promise<void>;
   onSkipSetup: () => void;
   onCreateProject: () => void;
   onAddExistingProject: () => void;
@@ -22,13 +23,16 @@ export function GettingStarted({
   onOpenWorkspace,
   onOpenWorkspaceFile,
   onCreateWorkspace,
+  onStartFirstProject,
   onSkipSetup,
   onCreateProject,
   onAddExistingProject,
   onContinueEmpty
 }: GettingStartedProps) {
-  const [showSetup, setShowSetup] = useState(workspaces.length === 0);
+  const [showSetup, setShowSetup] = useState(false);
   const [setupChosen, setSetupChosen] = useState(false);
+  const [nameWorkspaceFirst, setNameWorkspaceFirst] = useState(false);
+  const firstRun = workspaces.length === 0;
   const [showAll, setShowAll] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -46,6 +50,8 @@ export function GettingStarted({
   useEffect(() => {
     if (workspaces.length > 0 && !setupChosen) setShowSetup(false);
   }, [setupChosen, workspaces.length]);
+  const showFirstProject = firstRun && !nameWorkspaceFirst && !setupChosen && !createdWorkspace;
+  const showWorkspaceForm = showSetup || (firstRun && nameWorkspaceFirst) || (firstRun && !showFirstProject && !createdWorkspace);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -79,7 +85,26 @@ export function GettingStarted({
             </div>
             <button className="getting-started-text-action" type="button" onClick={onContinueEmpty}>Continue with Empty Workspace</button>
           </div>
-        ) : showSetup ? (
+        ) : showFirstProject ? (
+          <div className="getting-started-complete" data-testid="first-project-actions">
+            <span className="getting-started-eyebrow">Welcome to Praxis</span>
+            <h1 id="getting-started-title">Create your first project</h1>
+            <p>A project holds a brief, a board, and focused starter work. Praxis groups projects into a workspace — one is set up for you now, and you can rename it any time.</p>
+            <div className="getting-started-primary-actions">
+              <button className="getting-started-action primary" type="button" onClick={() => void onStartFirstProject('create')}>
+                <span><Icon name="plus" size={18} /></span><strong>New project</strong><small>Start with a brief, board, and focused starter work.</small><Icon name="chevron-right" size={16} />
+              </button>
+              <button className="getting-started-action" type="button" onClick={() => void onStartFirstProject('existing')}>
+                <span><Icon name="folder-open" size={18} /></span><strong>Create from an existing folder</strong><small>Scan its plans and connect the work to a project.</small><Icon name="chevron-right" size={16} />
+              </button>
+            </div>
+            <div className="getting-started-secondary-actions">
+              <button className="getting-started-text-action" type="button" onClick={() => setNameWorkspaceFirst(true)}>Name a workspace first</button>
+              <button className="getting-started-text-action" type="button" onClick={onOpenWorkspaceFile}>Open a workspace file</button>
+              <button className="getting-started-text-action" type="button" onClick={onSkipSetup}>Skip for now</button>
+            </div>
+          </div>
+        ) : showWorkspaceForm ? (
           <form className="getting-started-form" onSubmit={submit}>
             <span className="getting-started-eyebrow">Create your workspace</span>
             <h1 id="getting-started-title">Give your work a home</h1>
@@ -94,7 +119,7 @@ export function GettingStarted({
             {error && <div className="form-error" role="alert">{error}</div>}
             <div className="getting-started-form-actions">
               <button className="btn" type="button" onClick={onSkipSetup}>Skip for now</button>
-              {workspaces.length > 0 && <button className="btn" type="button" onClick={() => setShowSetup(false)}>Back</button>}
+              {(workspaces.length > 0 || nameWorkspaceFirst) && <button className="btn" type="button" onClick={() => { setShowSetup(false); setNameWorkspaceFirst(false); }}>Back</button>}
               <button className="btn btn-primary" type="submit" disabled={!name.trim() || saving}>{saving ? 'Creating…' : 'Create Workspace'}</button>
             </div>
           </form>
