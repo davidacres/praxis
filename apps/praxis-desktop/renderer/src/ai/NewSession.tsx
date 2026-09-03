@@ -53,7 +53,12 @@ export interface NewSessionProps {
     mode: SessionMode;
     workingDirectory?: string;
     runInWorktree?: boolean;
+    /** Discovered runtime agent + skills to attribute this session to (FX-BF-011). */
+    agentId?: string;
+    skillNames?: string[];
   }) => Promise<void>;
+  /** Pre-attributes the composer to a discovered agent (from the Agent Hub). */
+  agentContext?: { agentId: string; skillNames: string[] };
   /** Working folder pre-selected by the caller (e.g. the chosen project board's folder). */
   defaultWorkingDirectory?: string;
   /**
@@ -95,6 +100,7 @@ export function NewSession({
   onNewProject
   , toolModeForBoard,
   onSelectedBoardChange,
+  agentContext,
   defaultWorkingDirectory,
   scopeLabel,
   defaultToolMode
@@ -424,7 +430,10 @@ export function NewSession({
         toolMode,
         mode,
         ...(workingDirectory ? { workingDirectory } : {}),
-        ...(runInWorktree ? { runInWorktree: true } : {})
+        ...(runInWorktree ? { runInWorktree: true } : {}),
+        ...(agentContext
+          ? { agentId: agentContext.agentId, ...(agentContext.skillNames.length ? { skillNames: agentContext.skillNames } : {}) }
+          : {})
       });
       setGoal('');
     } catch (err) {
@@ -442,6 +451,15 @@ export function NewSession({
   return (
     <div className="session-view" data-testid="new-session-view">
       <div className="session-inner">
+        {agentContext && (
+          <div className="session-agent-context" role="note" data-testid="new-session-agent-context">
+            <Icon name="robot" size={14} />
+            <span>
+              Attributed to agent <strong>{agentContext.agentId}</strong>
+              {agentContext.skillNames.length > 0 && <> · skills: {agentContext.skillNames.join(', ')}</>}
+            </span>
+          </div>
+        )}
         {onNewProject && (
           <div className="project-empty-callout" data-testid="project-empty-state">
             <div><strong>{projectCount === 0 ? 'Create your first project' : 'Create a new project'}</strong><span>Start with a durable brief, local board, and editable starter tickets.</span></div>

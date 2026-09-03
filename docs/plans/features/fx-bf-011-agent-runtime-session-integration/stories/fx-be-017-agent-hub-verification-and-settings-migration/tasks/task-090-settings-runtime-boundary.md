@@ -1,11 +1,11 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.996Z
 **Type:** Task
 **Priority:** Medium
 id: TASK-090
 title: Move runtime management to advanced Settings
-status: proposed
+status: complete
 story: FX-BE-017
 updated: 2026-08-31
 dependencies: [TASK-089]

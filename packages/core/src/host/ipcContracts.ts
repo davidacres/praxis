@@ -668,6 +668,8 @@ export interface AgentRuntimeIpc {
   stop(agentId: string): Promise<AgentRuntimeSnapshot>;
   /** Disposes then recreates the agent's host. */
   restart(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** The discovery roots for each scope — shown read-only in advanced Settings. */
+  roots(): Promise<{ agents: Record<CatalogScope, string>; skills: Record<CatalogScope, string> }>;
   activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
   /** Writes a new agent folder in the chosen scope; rejects on validation failure. */
   createAgent(input: NewAgentInput): Promise<AgentRuntimeSnapshot>;

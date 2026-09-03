@@ -436,6 +436,7 @@ function NavGroup({
 
 function AgentRuntimeSection() {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
+  const [roots, setRoots] = useState<{ agents: Record<string, string>; skills: Record<string, string> }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -453,6 +454,7 @@ function AgentRuntimeSection() {
 
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setSnapshot).catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+    void window.praxis.agentRuntime.roots().then(setRoots).catch(() => {});
   }, []);
 
   return (
@@ -472,11 +474,23 @@ function AgentRuntimeSection() {
             </button>
           </div>
         </div>
+        {roots && (
+          <div className="settings-field-row" data-testid="agent-runtime-paths">
+            <div className="settings-field-label">
+              <strong>Discovery paths</strong>
+              <div className="settings-field-help">
+                Global: <code>{roots.agents.global}</code> · <code>{roots.skills.global}</code>
+                <br />
+                Project: <code>{roots.agents.project}</code> · <code>{roots.skills.project}</code>
+              </div>
+            </div>
+          </div>
+        )}
         {error && <div className="error-banner">{error}</div>}
         {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
         {snapshot && (
           <>
-            <div className="settings-section-description">Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.agents.length} agents · {snapshot.skills.length} skills</div>
+            <div className="settings-section-description">Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.agents.length} agents · {snapshot.skills.length} skills · {Object.values(snapshot.hosts).filter(h => h.state === 'running').length} running</div>
             {snapshot.agents.map(agent => (
               <div className="settings-field-row" key={agent.manifest.id} data-testid={`agent-runtime-agent-${agent.manifest.id}`}>
                 <div className="settings-field-label">

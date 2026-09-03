@@ -358,6 +358,7 @@ const praxis: PraxisIpc = {
     start: (agentId: string) => ipcRenderer.invoke('agentRuntime:start', agentId),
     stop: (agentId: string) => ipcRenderer.invoke('agentRuntime:stop', agentId),
     restart: (agentId: string) => ipcRenderer.invoke('agentRuntime:restart', agentId),
+    roots: () => ipcRenderer.invoke('agentRuntime:roots'),
     activateSkill: (agentId: string, skillName: string) => ipcRenderer.invoke('agentRuntime:activateSkill', agentId, skillName),
     createAgent: (input: unknown) => ipcRenderer.invoke('agentRuntime:createAgent', input),
     createSkill: (input: unknown) => ipcRenderer.invoke('agentRuntime:createSkill', input),

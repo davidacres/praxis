@@ -75,6 +75,10 @@ interface Route {
   newIssueType?: string;
   /** Selected agent session when `feature === 'sessions'`. */
   sessionKey?: string;
+  /** Agent Hub → New Session handoff (FX-BF-011): the discovered agent and its
+   *  active skills to attribute the new session to. Transient, not persisted. */
+  newSessionAgent?: string;
+  newSessionSkills?: string[];
   /** Whether the in-app browser was visible in the selected AI session. */
   browserOpen?: boolean;
   /** Last navigated URL in the in-app browser. */
@@ -961,7 +965,7 @@ export function App() {
   const renderNewSession = () => (
     <NewSession
       boards={workspaceBoards}
-      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree }) => {
+      onSubmit={async ({ board, issueKey, title, goal, provider, model, toolMode, mode, workingDirectory, runInWorktree, agentId, skillNames }) => {
         const projectId = projectIdForConnection(board?.connectionId, connections);
         const project = projectId
           ? workspaceProjects.find(item => item.id === projectId)
@@ -975,11 +979,16 @@ export function App() {
           model,
           toolMode: project?.defaultAiToolMode ?? toolMode,
           workingDirectory: project?.workspaceFolder ?? workingDirectory,
-          ...(runInWorktree ? { runInWorktree: true } : {})
+          ...(runInWorktree ? { runInWorktree: true } : {}),
+          ...(agentId ? { agentId } : {}),
+          ...(skillNames?.length ? { skillNames } : {})
         });
         await window.praxis.ai.renameSession(record.issueKey, title);
         navigate({ feature: 'sessions', sessionKey: record.issueKey });
       }}
+      {...(route.newSessionAgent
+        ? { agentContext: { agentId: route.newSessionAgent, skillNames: route.newSessionSkills ?? [] } }
+        : {})}
       defaultWorkingDirectory={composerProject?.workspaceFolder ?? boardProject?.workspaceFolder}
       {...(composerProject
         ? { scopeLabel: composerProject.name, defaultToolMode: composerProject.defaultAiToolMode }
@@ -1052,6 +1061,20 @@ export function App() {
         <AgentsPage
           project={selectedProject ?? undefined}
           onOpenSettings={() => setSettingsDialogCategory('agent-runtime')}
+          sessions={agentSessions.map(session => ({
+            issueKey: session.issueKey,
+            title: session.title ?? session.taskDefinition.goal.slice(0, 60),
+            agentId: session.agentId
+          }))}
+          onOpenSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+          onStartSession={(agentId, skillNames) =>
+            navigate({
+              newSession: true,
+              newSessionAgent: agentId,
+              ...(skillNames.length ? { newSessionSkills: skillNames } : {}),
+              ...(composerProject ? { projectId: composerProject.id } : {})
+            })
+          }
         />
       );
     }

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import type { CatalogScope, NewAgentInput, NewSkillInput } from '@praxis/core';
-import { getAgentRuntimeManager } from './agentRuntimeInstance';
+import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { createAgent, createSkill, importItem, previewImport } from './agentRuntimeAuthoring';
 
 export function registerAgentRuntimeIpc(): void {
@@ -9,6 +9,7 @@ export function registerAgentRuntimeIpc(): void {
   ipcMain.handle('agentRuntime:start', (_event, agentId: string) => getAgentRuntimeManager().start(agentId));
   ipcMain.handle('agentRuntime:stop', (_event, agentId: string) => getAgentRuntimeManager().stop(agentId));
   ipcMain.handle('agentRuntime:restart', (_event, agentId: string) => getAgentRuntimeManager().restart(agentId));
+  ipcMain.handle('agentRuntime:roots', () => getAgentRuntimeRoots());
   ipcMain.handle('agentRuntime:activateSkill', (_event, agentId: string, skillName: string) =>
     getAgentRuntimeManager().activateSkill(agentId, skillName)
   );
