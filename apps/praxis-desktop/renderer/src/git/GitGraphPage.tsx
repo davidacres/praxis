@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import type { GitCommitDetails, GitDiffRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '@praxis/core';
 import { useSettings } from '../settings/useSettings';
 import { GitDiffWorkspace } from './GitDiffWorkspace';
@@ -30,10 +31,26 @@ function branchColor(branch: string): string {
   return '#46c98d';
 }
 
-export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath?: string; onOpenChanges: () => void }) {
+export function GitGraphPage({
+  repositoryPath,
+  onOpenChanges,
+  auxSlot,
+  onRequireAux
+}: {
+  repositoryPath?: string;
+  onOpenChanges: () => void;
+  /** The shell's right-pane element the commit inspector portals into. */
+  auxSlot: HTMLElement | null;
+  /** Ask the shell to reveal the right pane (a commit was selected). */
+  onRequireAux?: () => void;
+}) {
   const { settings, update } = useSettings();
   const [snapshot, setSnapshot] = useState<GitRepositorySnapshot>();
   const [selectedHash, setSelectedHash] = useState<string>();
+  const selectCommit = (hash: string) => {
+    setSelectedHash(hash);
+    onRequireAux?.();
+  };
   const [details, setDetails] = useState<GitCommitDetails>();
   const [branchFilter, setBranchFilter] = useState<string>();
   const [mergesOnly, setMergesOnly] = useState(false);
@@ -263,6 +280,24 @@ export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath
     </section>;
   }
 
+  const inspector = (
+    <aside className="git-inspector aux-panel" aria-label="Commit details">
+          {!details ? <div className="git-inspector-empty">Select a commit to inspect its story.</div> : <>
+            <div className="git-inspector-kicker">COMMIT DETAILS</div>
+            <h2>{details.message}</h2>
+            <div className="git-sha">{details.shortHash} · {formatDate(details.date)}</div>
+            <div className="git-author-card"><span className="git-avatar">{details.author.slice(0, 1).toUpperCase()}</span><span><b>{details.author}</b><small>committed this change</small></span></div>
+            <div className="git-topology-card"><div><span>Parents</span><b>{details.parents.length || 'None'}</b></div><div><span>Children</span><b>{details.children.length || 'None'}</b></div><div><span>Changed files</span><b>{details.changedFiles.length}</b></div></div>
+            <div className="git-commit-compare-actions">
+              <button className={compareBaseHash === details.hash ? 'selected' : ''} onClick={() => setCompareBaseHash(details.hash)}>{compareBaseHash === details.hash ? 'Comparison starts here' : 'Set as comparison start'}</button>
+              {compareBaseHash && compareBaseHash !== details.hash && <button className="primary" onClick={() => openDiff({ kind: 'compare', left: compareBaseHash, right: details.hash })}>Compare with {compareBaseHash.slice(0, 8)}</button>}
+            </div>
+            <div className="git-inspector-section"><div className="git-inspector-section-title">Changed files <span>{details.changedFiles.length}</span></div>{details.changedFiles.slice(0, 8).map(file => <button className="git-file-row" key={file.path} onClick={() => openDiff({ kind: 'commit', left: details.hash }, file.path)}><span>◇ {file.path}</span><small><i>+{file.additions}</i> <b>-{file.deletions}</b></small></button>)}{details.changedFiles.length === 0 && <p className="git-muted">No file changes in this commit.</p>}</div>
+            <button className="git-diff-button" onClick={() => openDiff({ kind: 'commit', left: details.hash })}>Open clear diff ↗</button>
+          </>}
+    </aside>
+  );
+
   return (
     <section className="git-page" aria-label="Git Graph" data-testid="git-graph-page">
       <header className="git-header">
@@ -363,7 +398,7 @@ export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath
                 {commits.map((commit, index) => { const x = index * 190 + 32; const y = 17 + commit.lane * 34; return <g key={commit.hash}>{commit.isMerge && <circle className="git-merge-ring" cx={x} cy={y} r="10" />}<circle className={`git-node${selectedHash === commit.hash ? ' selected' : ''}`} cx={x} cy={y} r={commit.isMerge ? 7 : 6} fill={resolveLaneColor(commit.lane)} />{visualSettings.mergeMarkersEnabled && commit.isDivergence && <path className="git-split-marker" d={`M ${x - 9} ${y - 12} l 9 -7 l 9 7`} />}</g>; })}
               </svg>
               <div className="git-horizontal-commits">
-                {commits.map(commit => <button key={commit.hash} className={`git-horizontal-commit${selectedHash === commit.hash ? ' selected' : ''}`} onClick={() => setSelectedHash(commit.hash)} onContextMenu={event => openCommitMenu(event, commit.hash)} role="listitem" title={`${commit.shortHash} · ${commit.message}`}><span className="git-horizontal-commit-message"><strong>{commit.message}</strong><small>{commit.refs.slice(0, 2).map(ref => <em key={ref} style={{ color: resolveRefColor(ref) }}>{ref}</em>)}{visualSettings.mergeMarkersEnabled && commit.isDivergence && <em className="topology split">Split</em>}{visualSettings.mergeMarkersEnabled && commit.isMerge && <em className="topology merge">Merge</em>}</small></span><span>{commit.author}</span><time>{formatDate(commit.date)}</time></button>)}
+                {commits.map(commit => <button key={commit.hash} className={`git-horizontal-commit${selectedHash === commit.hash ? ' selected' : ''}`} onClick={() => selectCommit(commit.hash)} onContextMenu={event => openCommitMenu(event, commit.hash)} role="listitem" title={`${commit.shortHash} · ${commit.message}`}><span className="git-horizontal-commit-message"><strong>{commit.message}</strong><small>{commit.refs.slice(0, 2).map(ref => <em key={ref} style={{ color: resolveRefColor(ref) }}>{ref}</em>)}{visualSettings.mergeMarkersEnabled && commit.isDivergence && <em className="topology split">Split</em>}{visualSettings.mergeMarkersEnabled && commit.isMerge && <em className="topology merge">Merge</em>}</small></span><span>{commit.author}</span><time>{formatDate(commit.date)}</time></button>)}
               </div>
             </div>
           </div> : <div className="git-rows">
@@ -382,27 +417,12 @@ export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath
               {commits.map((commit, index) => { const x = GRAPH_INSET + commit.lane * LANE_GAP; const y = index * rowHeight + rowHeight / 2; return <g key={commit.hash}>{commit.isMerge && <circle className="git-merge-ring" cx={x} cy={y} r="9" stroke={resolveLaneColor(commit.lane)} /> }<circle className={`git-node${selectedHash === commit.hash ? ' selected' : ''}`} cx={x} cy={y} r={commit.isMerge ? 6 : 5} fill={resolveLaneColor(commit.lane)} />{visualSettings.mergeMarkersEnabled && commit.isDivergence && <circle className="git-split-marker" cx={x} cy={y} r="8" />}</g>; })}
             </svg>
             <div className="git-commit-list">
-              {commits.map(commit => <button key={commit.hash} title={`${commit.shortHash} · ${commit.message}`} style={{ height: rowHeight }} className={`git-commit-row${selectedHash === commit.hash ? ' selected' : ''}`} onClick={() => setSelectedHash(commit.hash)} onContextMenu={event => openCommitMenu(event, commit.hash)} role="listitem"><span className="git-graph-spacer" /><span className="git-commit-message"><strong>{commit.message}</strong><small>{commit.refs.slice(0, 2).map(ref => <em key={ref} style={{ color: resolveRefColor(ref) }}>{ref}</em>)}{visualSettings.mergeMarkersEnabled && commit.isDivergence && <em className="topology split">Split</em>}{visualSettings.mergeMarkersEnabled && commit.isMerge && <em className="topology merge">Merge</em>}</small></span><span className="git-commit-author">{commit.author}</span><span className="git-commit-date">{formatDate(commit.date)}</span></button>)}
+              {commits.map(commit => <button key={commit.hash} title={`${commit.shortHash} · ${commit.message}`} style={{ height: rowHeight }} className={`git-commit-row${selectedHash === commit.hash ? ' selected' : ''}`} onClick={() => selectCommit(commit.hash)} onContextMenu={event => openCommitMenu(event, commit.hash)} role="listitem"><span className="git-graph-spacer" /><span className="git-commit-message"><strong>{commit.message}</strong><small>{commit.refs.slice(0, 2).map(ref => <em key={ref} style={{ color: resolveRefColor(ref) }}>{ref}</em>)}{visualSettings.mergeMarkersEnabled && commit.isDivergence && <em className="topology split">Split</em>}{visualSettings.mergeMarkersEnabled && commit.isMerge && <em className="topology merge">Merge</em>}</small></span><span className="git-commit-author">{commit.author}</span><span className="git-commit-date">{formatDate(commit.date)}</span></button>)}
             </div>
           </div>}
           {commits.length === 0 && <div className="git-no-results">No commits match these filters.</div>}
         </div>
 
-        <aside className="git-inspector" aria-label="Commit details">
-          {!details ? <div className="git-inspector-empty">Select a commit to inspect its story.</div> : <>
-            <div className="git-inspector-kicker">COMMIT DETAILS</div>
-            <h2>{details.message}</h2>
-            <div className="git-sha">{details.shortHash} · {formatDate(details.date)}</div>
-            <div className="git-author-card"><span className="git-avatar">{details.author.slice(0, 1).toUpperCase()}</span><span><b>{details.author}</b><small>committed this change</small></span></div>
-            <div className="git-topology-card"><div><span>Parents</span><b>{details.parents.length || 'None'}</b></div><div><span>Children</span><b>{details.children.length || 'None'}</b></div><div><span>Changed files</span><b>{details.changedFiles.length}</b></div></div>
-            <div className="git-commit-compare-actions">
-              <button className={compareBaseHash === details.hash ? 'selected' : ''} onClick={() => setCompareBaseHash(details.hash)}>{compareBaseHash === details.hash ? 'Comparison starts here' : 'Set as comparison start'}</button>
-              {compareBaseHash && compareBaseHash !== details.hash && <button className="primary" onClick={() => openDiff({ kind: 'compare', left: compareBaseHash, right: details.hash })}>Compare with {compareBaseHash.slice(0, 8)}</button>}
-            </div>
-            <div className="git-inspector-section"><div className="git-inspector-section-title">Changed files <span>{details.changedFiles.length}</span></div>{details.changedFiles.slice(0, 8).map(file => <button className="git-file-row" key={file.path} onClick={() => openDiff({ kind: 'commit', left: details.hash }, file.path)}><span>◇ {file.path}</span><small><i>+{file.additions}</i> <b>-{file.deletions}</b></small></button>)}{details.changedFiles.length === 0 && <p className="git-muted">No file changes in this commit.</p>}</div>
-            <button className="git-diff-button" onClick={() => openDiff({ kind: 'commit', left: details.hash })}>Open clear diff ↗</button>
-          </>}
-        </aside>
       </div>}
       {commitMenu && snapshot && <div className="git-context-menu" style={{ left: commitMenu.x, top: commitMenu.y }} role="menu" aria-label="Commit actions">
         <div><strong>{commitMenu.hash.slice(0, 8)}</strong><button onClick={() => setCommitMenu(undefined)}>×</button></div>
@@ -412,6 +432,7 @@ export function GitGraphPage({ repositoryPath, onOpenChanges }: { repositoryPath
         <button role="menuitem" onClick={() => { if (window.confirm(`Cherry-pick ${commitMenu.hash.slice(0, 8)} onto ${snapshot.currentBranch ?? 'the current branch'}?`)) void runAction('Cherry-picking commit', async () => adoptSnapshot(await window.praxis.git.cherryPick(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Cherry-pick commit</button>
         <button className="danger" role="menuitem" onClick={() => { if (window.confirm(`Create a new commit that reverses ${commitMenu.hash.slice(0, 8)}? Published history will be preserved.`)) void runAction('Reverting commit', async () => adoptSnapshot(await window.praxis.git.revert(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Revert with new commit</button>
       </div>}
+      {auxSlot ? createPortal(inspector, auxSlot) : null}
     </section>
   );
 }

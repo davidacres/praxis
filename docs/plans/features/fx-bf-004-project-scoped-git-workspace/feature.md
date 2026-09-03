@@ -8,7 +8,7 @@ slug: project-scoped-git-workspace
 title: Project-scoped Git workspace and repository onboarding
 status: complete
 owner: Electron desktop app
-updated: 2026-08-27
+updated: 2026-09-03
 issues: [docs/issues/features/fx-bf-004-project-scoped-git-workspace/feature-issues.md]
 stories: [FX-BE-005]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
@@ -46,6 +46,28 @@ Make Git Graph feel native to Praxis projects: Git tools appear in the context o
 ## Close when
 
 No Git Graph route invokes `git:open` without a validated project repository context; each empty/error state offers a safe next action; initialization is explicit and verified; and the packaged Electron project-to-graph flow passes at narrow and wide layouts.
+
+## As built — shell revision (2026-09-03)
+
+The graph view built its own third column for the commit inspector, so the app's
+right pane sat empty on the `git` route while the inspector was squeezed into a
+fixed 220–260px strip — and hidden outright below 1120px.
+
+- The inspector now `createPortal`s into the shell's right pane, the same
+  pattern the Workflow designer uses: `GitGraphPage` takes `auxSlot` and
+  `onRequireAux`, and selecting a commit reveals the pane. It is resizable and
+  collapsible like every other right pane, so the breakpoints that used to hide
+  it are gone.
+- Scoped to the **graph** view. `gitView === 'changes'` keeps the full centre
+  width (`App.showAux` excludes it) — the diff workspace has its own file list
+  and genuinely wants the room.
+- The centre pane is ~380px narrower as a result, so the header, the toolbar,
+  and the settings/compare panels reflow instead of overflowing: the header
+  wraps and truncates the repository name, the toolbar caps at 38% height and
+  scrolls, and the settings grid is `auto-fit`. The history column shrinks and
+  scrolls horizontally rather than forcing the grid past its pane.
+- `gitGraph.spec.ts`'s narrow-window test now collapses the right pane first,
+  which is the affordance a real narrow window has.
 
 ## Description
 

@@ -202,7 +202,7 @@ export function WorkflowDesignerPage({
   }
 
   const inspector = (
-    <section className="inspector inspector--tabbed wf-aux" aria-label="Stage inspector">
+    <section className="inspector inspector--tabbed aux-panel" aria-label="Stage inspector">
       <div role="tablist" aria-label="Inspector" className="inspector-tabs">
         <button
           type="button"

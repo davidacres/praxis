@@ -306,8 +306,8 @@ export function App() {
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
   const [detailExpanded, setDetailExpanded] = useState(false);
-  /** The right-pane element the Workflows feature portals its inspector into. */
-  const [wfAuxSlot, setWfAuxSlot] = useState<HTMLElement | null>(null);
+  /** The right-pane element a feature portals its inspector into (Workflows, Git Graph). */
+  const [auxSlotEl, setAuxSlotEl] = useState<HTMLElement | null>(null);
   const requireAux = useCallback(() => setAuxVisible(true), []);
   /** Saved workflows per project, for the sidebar tree. */
   const [workflowsByProject, setWorkflowsByProject] = useState<Record<string, Array<{ id: string; name: string }>>>({});
@@ -1105,7 +1105,7 @@ export function App() {
             <WorkflowRunMonitor
               project={selectedProject}
               runnableWorkflows={workflowsByProject[selectedProject.id] ?? []}
-              auxSlot={wfAuxSlot}
+              auxSlot={auxSlotEl}
               onRequireAux={requireAux}
               onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
             />
@@ -1118,7 +1118,7 @@ export function App() {
             key={route.workflowId}
             project={selectedProject}
             workflowId={route.workflowId}
-            auxSlot={wfAuxSlot}
+            auxSlot={auxSlotEl}
             onRequireAux={requireAux}
             onSaved={bumpWorkflows}
             onDeleted={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
@@ -1208,6 +1208,8 @@ export function App() {
       return <GitGraphPage
         repositoryPath={selectedProject?.workspaceFolder}
         onOpenChanges={() => navigate({ projectId: selectedProject?.id, feature: 'git', gitView: 'changes' })}
+        auxSlot={auxSlotEl}
+        onRequireAux={requireAux}
       />;
     }
     if (route.feature) {
@@ -1340,7 +1342,9 @@ export function App() {
   // (stage/edge inspector, run-stage evidence) — see FX-BF-014.
   const showAux = auxVisible
     && route.feature !== 'overview'
-    && route.feature !== 'git';
+    // Git Graph portals its commit inspector into the aux pane; the diff
+    // workspace keeps the full centre width and has its own file list.
+    && !(route.feature === 'git' && route.gitView === 'changes');
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]
@@ -1580,7 +1584,9 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.feature === 'agents' ? (
+                  {route.feature === 'git' ? (
+                    <div ref={setAuxSlotEl} className="aux-slot" data-testid="git-aux-slot" />
+                  ) : route.feature === 'agents' ? (
                     <AgentRuntimePanel
                       snapshot={agentSnapshot}
                       selection={agentSelection}
@@ -1606,7 +1612,7 @@ export function App() {
                   ) : route.feature === 'workflows' ? (
                     // The Workflows feature portals its stage/connection inspector
                     // (or run-stage detail) into this element from the centre pane.
-                    <div ref={setWfAuxSlot} className="wf-aux-slot" data-testid="workflow-aux-slot" />
+                    <div ref={setAuxSlotEl} className="aux-slot" data-testid="workflow-aux-slot" />
                   ) : route.view === 'designer' ? (
                     selectedDesignerNode ? (
                       <TaskDesignerItemDetail
