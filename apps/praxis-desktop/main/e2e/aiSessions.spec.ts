@@ -94,6 +94,7 @@ test('composer selects a board and open ticket, names the session, and streams t
     timeout: 15000
   });
   await expect(win.locator('[data-testid="session-tool-mode"]')).toContainText('Read only');
+  await win.screenshot({ path: 'output/playwright/sessions-shell.png', fullPage: true });
   const firstRequest = JSON.parse(mock.requests[0].body) as {
     tools: Array<{ function: { name: string } }>;
   };

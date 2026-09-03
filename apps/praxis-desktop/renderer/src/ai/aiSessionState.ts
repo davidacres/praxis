@@ -49,6 +49,20 @@ export function agentStateBadgeClass(state: AgentTaskState): string {
   return 'badge badge-progress';
 }
 
+/**
+ * The sidebar tree's compact state mark — a lane dot, the same vocabulary the
+ * Agents tree uses for host state. A full text badge does not fit a tree row.
+ */
+export function agentStateLaneClass(state: AgentTaskState): string {
+  if (state === 'failed' || state === 'aborted') {
+    return 'lane lane--failed';
+  }
+  if (isTerminalAgentState(state) || state === 'not_started' || state === 'paused') {
+    return 'lane lane--idle';
+  }
+  return 'lane lane--running';
+}
+
 export function agentEventIcon(type: AgentEventType): IconName {
   switch (type) {
     case 'session_start':

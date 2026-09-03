@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
   AgentRuntimeSnapshot,
+  AgentSessionRecord,
   Board,
   BoardDetails,
   Connection,
@@ -9,6 +10,8 @@ import type {
   ProjectRecord,
   WorkspaceRecord
 } from '@praxis/core';
+import { agentStateLabel, agentStateLaneClass } from '../ai/aiSessionState';
+import { isSynthesizedKey, sessionTitle } from '../ai/sessionNav';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -73,6 +76,12 @@ export interface SidebarProps {
   onSelectProject: (project: ProjectRecord) => void;
   onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
+  /** Agent sessions, rendered as children of the Sessions row. */
+  sessions: AgentSessionRecord[];
+  activeSessionKey?: string;
+  onSelectSession: (issueKey: string) => void;
+  onRenameSession: (issueKey: string, title: string) => Promise<void>;
+  onDeleteSession: (issueKey: string) => Promise<void>;
   /** The discovered agent/skill catalog, rendered as children of the Agents row. */
   agentCatalog?: AgentRuntimeSnapshot;
   activeAgentId?: string;
@@ -118,6 +127,11 @@ export function Sidebar({
   activeFeature,
   activeGitView,
   onSelectFeature,
+  sessions,
+  activeSessionKey,
+  onSelectSession,
+  onRenameSession,
+  onDeleteSession,
   featureCounts,
   onNewSession,
   onNewProject,
@@ -594,7 +608,26 @@ export function Sidebar({
             // Agents is the one destination that carries a catalog, so it
             // expands into it rather than opening a second navigator in the
             // centre pane (the Workflows idiom).
-            feature.id === 'agents' ? (
+            feature.id === 'sessions' ? (
+              <SessionsNav
+                key={feature.id}
+                icon={feature.icon}
+                label={feature.label}
+                active={activeFeature === 'sessions'}
+                collapsed={collapsed['feature:sessions'] ?? false}
+                onToggleCollapsed={() =>
+                  setCollapsed(current => ({ ...current, 'feature:sessions': !(current['feature:sessions'] ?? false) }))
+                }
+                sessions={sessions}
+                activeSessionKey={activeSessionKey}
+                runningCount={featureCounts.sessions ?? 0}
+                onSelectFeature={() => onSelectFeature('sessions')}
+                onSelectSession={onSelectSession}
+                onNewSession={onNewSession}
+                onRenameSession={onRenameSession}
+                onDeleteSession={onDeleteSession}
+              />
+            ) : feature.id === 'agents' ? (
               <AgentsNav
                 key={feature.id}
                 icon={feature.icon}
@@ -633,6 +666,218 @@ export function Sidebar({
           )}
       </div>
     </nav>
+  );
+}
+
+/**
+ * The Sessions destination plus its sessions, newest first. Rows carry the same
+ * mode and state vocabulary as the console header, so the tree reads as a status
+ * board — and rename / delete live on the row, where the list used to keep them.
+ */
+function SessionsNav({
+  icon,
+  label,
+  active,
+  collapsed,
+  onToggleCollapsed,
+  sessions,
+  activeSessionKey,
+  runningCount,
+  onSelectFeature,
+  onSelectSession,
+  onNewSession,
+  onRenameSession,
+  onDeleteSession
+}: {
+  icon: IconName;
+  label: string;
+  active: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  sessions: AgentSessionRecord[];
+  activeSessionKey?: string;
+  runningCount: number;
+  onSelectFeature: () => void;
+  onSelectSession: (issueKey: string) => void;
+  onNewSession: () => void;
+  onRenameSession: (issueKey: string, title: string) => Promise<void>;
+  onDeleteSession: (issueKey: string) => Promise<void>;
+}) {
+  const [editingKey, setEditingKey] = useState<string>();
+  const [draft, setDraft] = useState('');
+  const [mutatingKey, setMutatingKey] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const beginRename = (session: AgentSessionRecord) => {
+    setEditingKey(session.issueKey);
+    setDraft(sessionTitle(session));
+  };
+
+  const commitRename = async (session: AgentSessionRecord) => {
+    const next = draft.trim();
+    setEditingKey(undefined);
+    if (!next || next === sessionTitle(session)) return;
+    setMutatingKey(session.issueKey);
+    setError(undefined);
+    try {
+      await onRenameSession(session.issueKey, next);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutatingKey(undefined);
+    }
+  };
+
+  const remove = async (session: AgentSessionRecord) => {
+    setMutatingKey(session.issueKey);
+    setError(undefined);
+    try {
+      await onDeleteSession(session.issueKey);
+      setEditingKey(undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setMutatingKey(undefined);
+    }
+  };
+
+  return (
+    <>
+      <div className="feature-row-heading">
+        <button
+          data-testid="nav-sessions"
+          className={`feature-row${active ? ' active' : ''}`}
+          onClick={() => {
+            onSelectFeature();
+            if (collapsed) onToggleCollapsed();
+          }}
+        >
+          <span className="tree-icon">
+            <Icon name={icon} size={15} />
+          </span>
+          <span className="feature-label">{label}</span>
+          {runningCount > 0 && <span className="feature-count">{runningCount}</span>}
+        </button>
+        <button
+          className="feature-row-expand"
+          aria-label={collapsed ? 'Expand session list' : 'Collapse session list'}
+          aria-expanded={!collapsed}
+          data-testid="nav-sessions-toggle"
+          onClick={onToggleCollapsed}
+        >
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+        </button>
+        <button
+          className="sidebar-section-add"
+          aria-label="New session"
+          data-testid="sessions-new-btn"
+          onClick={onNewSession}
+        >
+          <Icon name="plus" size={13} />
+        </button>
+      </div>
+      {!collapsed && error && (
+        <div className="error-banner session-list-error" data-testid="session-list-error">{error}</div>
+      )}
+      {!collapsed && sessions.length === 0 && (
+        <span className="sidebar-empty-hint" data-testid="sessions-nav-empty">No AI sessions yet</span>
+      )}
+      {!collapsed &&
+        sessions.map(session => {
+          const editing = editingKey === session.issueKey;
+          const mutating = mutatingKey === session.issueKey;
+          const title = sessionTitle(session);
+          return (
+            <div
+              key={session.issueKey}
+              className={`tree-row session-nav-row${active && activeSessionKey === session.issueKey ? ' active' : ''}`}
+              data-testid="session-list-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => !editing && onSelectSession(session.issueKey)}
+              onKeyDown={event => {
+                if (!editing && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onSelectSession(session.issueKey);
+                }
+              }}
+            >
+              <span className="tree-icon">
+                <Icon name="robot" size={14} />
+              </span>
+              {!editing && !isSynthesizedKey(session.issueKey) && (
+                <span className="session-item-key">{session.issueKey}</span>
+              )}
+              {editing ? (
+                <input
+                  className="session-title-input"
+                  data-testid="session-title-input"
+                  aria-label={`Session title for ${title}`}
+                  value={draft}
+                  disabled={mutating}
+                  autoFocus
+                  onClick={event => event.stopPropagation()}
+                  onChange={event => setDraft(event.target.value)}
+                  onBlur={() => void commitRename(session)}
+                  onKeyDown={event => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    } else if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setEditingKey(undefined);
+                    }
+                  }}
+                />
+              ) : (
+                <span className="tree-label" title={title} data-testid="session-title">
+                  {title}
+                </span>
+              )}
+              {!editing && (
+                <>
+                  <span
+                    className={agentStateLaneClass(session.state)}
+                    title={agentStateLabel(session.state)}
+                    data-testid="session-nav-state"
+                  >
+                    ●
+                  </span>
+                  <span className="session-nav-actions">
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      aria-label={`Rename session ${title}`}
+                      title="Rename session"
+                      data-testid="session-rename-btn"
+                      disabled={mutating}
+                      onClick={event => {
+                        event.stopPropagation();
+                        beginRename(session);
+                      }}
+                    >
+                      <Icon name="pencil" size={12} />
+                    </button>
+                    <button
+                      className="icon-btn icon-btn-sm"
+                      aria-label={`Delete session ${title}`}
+                      title="Delete session"
+                      data-testid="session-delete-btn"
+                      disabled={mutating}
+                      onClick={event => {
+                        event.stopPropagation();
+                        void remove(session);
+                      }}
+                    >
+                      <Icon name="trash" size={12} />
+                    </button>
+                  </span>
+                </>
+              )}
+            </div>
+          );
+        })}
+    </>
   );
 }
 
