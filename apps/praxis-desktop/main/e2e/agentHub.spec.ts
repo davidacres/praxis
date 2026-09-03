@@ -90,7 +90,8 @@ test('the sidebar tree lists the catalog and the centre shows the selected recor
   await expect(record(page).getByText('praxis-reviewer', { exact: true })).toBeVisible();
   await expect(record(page).getByText('node review.js')).toBeVisible();
   await expect(runtime(page).getByRole('button', { name: 'Start host' })).toBeEnabled();
-  await expect(page).toHaveScreenshot('agent-hub-record.png');
+  // The catalog source path is a per-run temp directory, so it is masked out.
+  await expect(page).toHaveScreenshot('agent-hub-record.png', { mask: [page.locator('.agent-path')] });
 
   // An invalid manifest fails closed, with the reason in the record.
   await tree.getByTestId('agent-nav-item').filter({ hasText: 'Broken Agent' }).click();

@@ -272,7 +272,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
 
       {auxSlot &&
         createPortal(
-          <aside className="inspector wf-aux" aria-label="Stage detail">
+          <aside className="inspector aux-panel" aria-label="Stage detail">
             {!stage || !selected ? (
           <div className="empty-state">
             <Icon name="cursor" size={24} />
