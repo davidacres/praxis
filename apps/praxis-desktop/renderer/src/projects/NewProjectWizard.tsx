@@ -42,6 +42,13 @@ const BRIEF_DEFAULTS: Record<ProjectType, Record<string, string>> = {
 
 const BRIEF_UNSURE = 'Not decided yet — confirm during the first planning pass.';
 
+/** The recommended brief for a type: every section included, using its default
+ *  text. A first-time user gets a real brief to react to, not six empty slots
+ *  to opt into. Any section can still be deselected or rewritten. */
+function recommendedIncluded(type: ProjectType): Record<string, boolean> {
+  return Object.fromEntries(PROJECT_BRIEF_FIELDS[type].map(field => [field.key, true]));
+}
+
 const BRIEF_GUIDANCE: Record<ProjectType, Record<string, BriefPrompt>> = {
   software: {
     problem: { question: 'What problem should this software solve?', example: 'Teams lose time copying release status between three separate tools.', hint: 'Describe the pain or limitation, not the proposed feature.' },
@@ -113,7 +120,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const [existingProject, setExistingProject] = useState<ProjectRecord>();
   const [existingDecision, setExistingDecision] = useState<'use' | 'create'>();
   const [brief, setBrief] = useState<Record<string, string>>(() => ({ ...BRIEF_DEFAULTS.software }));
-  const [includedBrief, setIncludedBrief] = useState<Record<string, boolean>>({});
+  const [includedBrief, setIncludedBrief] = useState<Record<string, boolean>>(() => recommendedIncluded('software'));
   const [selectedBriefKey, setSelectedBriefKey] = useState<string>();
   const [briefDraft, setBriefDraft] = useState('');
   const [briefDraftSkipped, setBriefDraftSkipped] = useState(false);
@@ -147,7 +154,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
 
   useEffect(() => {
     if (startingPoint === 'app-storage' && type !== 'product' && type !== 'research') setStartingPoint('new-folder');
-    setStages(defaultProjectWorkflow(type)); setTickets(mode === 'existing' ? [] : defaultProjectTickets(type)); setBrief({ ...BRIEF_DEFAULTS[type] }); setIncludedBrief({});
+    setStages(defaultProjectWorkflow(type)); setTickets(mode === 'existing' ? [] : defaultProjectTickets(type)); setBrief({ ...BRIEF_DEFAULTS[type] }); setIncludedBrief(recommendedIncluded(type));
     setSelectedBriefKey(undefined); setBriefDraft(''); setBriefDraftSkipped(false); setBriefEditorOpen(false); setWorkflowChoice('standard'); setTicketChoice('standard');
     setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only');
   }, [type]);
@@ -496,7 +503,7 @@ function ReviewStep({ type, name, projectKey, purpose, workspaceName, folderless
   return <div className="review-summary">
     <header className="review-summary-heading"><span>Ready to create</span><div><h2>{name}</h2><code>{projectKey}</code></div>{purpose && <p>{purpose}</p>}<p>Praxis will add this project to <strong>{workspaceName ?? 'the current workspace'}</strong> and open its default board.</p></header>
     <dl className="review-summary-list">
-      <div><dt>Project type</dt><dd><strong>{typeLabel(type)}</strong><small>{briefCount} brief sections prepared</small></dd></div>
+      <div><dt>Project type</dt><dd><strong>{typeLabel(type)}</strong><small>{briefCount === 0 ? 'Brief skipped — fill it from the project home' : `${briefCount} brief section${briefCount === 1 ? '' : 's'} drafted`}</small></dd></div>
       <div><dt>Project files</dt><dd><strong>{folderless ? 'Praxis only — no local folder' : previewPath}</strong><small>{folderless ? 'A folder can be connected later.' : 'Praxis creates PROJECT.md without replacing an existing file.'}</small></dd></div>
       <div><dt>Default board</dt><dd><strong>{ticketCount ? `${ticketCount} starter tickets` : 'Empty board'}</strong><small>{stages.map(stage => stage.name).join(' → ')}</small></dd></div>
       <div><dt>Session access</dt><dd><strong>{toolModeLabel(toolMode)}</strong><small>No AI session starts during project creation.</small></dd></div>

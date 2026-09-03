@@ -24,59 +24,34 @@ test('creates a folderless Product project through the six-step wizard and opens
   await page.getByLabel('Project name').fill('Customer Portal');
   await page.getByRole('button', { name: /Keep in Praxis only/ }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'A useful brief is ready' })).toHaveCount(0);
+  // The recommended brief for the type is included by default — a first-time
+  // user gets a real brief to react to, not six empty slots to opt into.
   await expect(page.getByText('Start with the primary users closest to the problem and refine the audience with evidence.')).toBeVisible();
-  await expect(page.locator('.brief-section-option.included')).toHaveCount(0);
-  await expect(page.locator('.brief-section-number')).toHaveCount(0);
+  await expect(page.locator('.brief-section-option.included')).toHaveCount(6);
+  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
+
+  // A card can be deselected and reselected.
+  await page.getByRole('button', { name: 'Deselect Target users' }).click();
   await expect(page.getByRole('button', { name: 'Select Target users' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.brief-section-option.included')).toHaveCount(5);
+  await page.getByRole('button', { name: 'Select Target users' }).click();
+  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
+
+  // The customize editor opens, a starter fills the field, Done applies it.
   const customizeTargetUsers = page.getByRole('button', { name: 'Customize Target users' });
   await customizeTargetUsers.hover();
   await expect(customizeTargetUsers).toHaveCSS('width', '78px');
   await page.screenshot({ path: 'output/playwright/project-wizard-customize-hover.png', fullPage: true });
-  await page.getByRole('button', { name: 'Select Target users' }).click();
-  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Deselect Target users' }).click();
-  await expect(page.getByRole('button', { name: 'Select Target users' })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'Customize Target users' }).click();
-  await page.getByRole('button', { name: 'Use example' }).click();
-  await expect(page.getByText('Customize the text here, then select its card to include it.')).toBeVisible();
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Select Target users' })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'Select Target users' }).click();
-  await expect(page.locator('.brief-editor-reveal')).toHaveCSS('opacity', '0');
-  await page.getByRole('button', { name: 'Customize Target users' }).click();
+  await customizeTargetUsers.click();
   await expect(page.locator('.brief-section-layout')).toHaveClass(/editor-open/);
   expect(await page.locator('.brief-editor-reveal').evaluate(element => getComputedStyle(element).transitionDuration)).not.toBe('0s');
   await page.getByRole('button', { name: 'Use example' }).click();
   await expect(page.getByRole('textbox', { name: 'Target users', exact: true })).toHaveValue('Support leads at growing SaaS companies who manage 5–20 agents.');
-  await page.locator('.brief-editor-panel').getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Customize Target users' }).click();
-  await page.getByRole('button', { name: 'Use example' }).click();
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.brief-section-option.included')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Select Problem' }).click();
-  await page.getByRole('button', { name: 'Customize Problem' }).click();
-  await expect(page.getByRole('textbox', { name: 'Problem', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: 'Skip this section' }).click();
-  await expect(page.getByText('Customize the text here, then select its card to include it.')).toBeVisible();
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Select Problem' })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: 'Select Problem' }).click();
-  await page.getByRole('button', { name: 'Customize Problem' }).click();
-  await expect(page.getByRole('textbox', { name: 'Problem', exact: true })).toBeFocused();
-  await page.getByRole('button', { name: 'I’m not sure' }).click();
-  await expect(page.getByRole('textbox', { name: 'Problem', exact: true })).toHaveValue('Not decided yet — confirm during the first planning pass.');
-  await expect(page.locator('.brief-editor-reveal')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: 'output/playwright/project-wizard-brief-editor-open.png', fullPage: true });
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(page.locator('.brief-section-layout')).not.toHaveClass(/editor-open/);
-  await expect(page.locator('.brief-editor-reveal')).toHaveCSS('opacity', '0');
-  await expect(page.getByRole('button', { name: 'Select Problem' })).toBeFocused();
-  await page.getByRole('button', { name: 'Select MVP' }).click();
-  await expect(page.getByRole('button', { name: 'Deselect MVP' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.brief-section-option.included .brief-section-selected')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Deselect Target users' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.brief-section-option.included .brief-section-selected')).toHaveCount(6);
   await page.screenshot({ path: 'output/playwright/project-wizard-guided-brief.png', fullPage: true });
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.locator('.plan-illustration')).toHaveCount(0);
@@ -129,10 +104,11 @@ test('creates a folderless Product project through the six-step wizard and opens
   const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.key === 'CUSTOMER');
   expect(created?.defaultAiToolMode).toBe('project-only');
+  // The recommended brief ships whole; Target users was rewritten from the example.
   expect(created?.brief.users).toBe('Support leads at growing SaaS companies who manage 5–20 agents.');
-  expect(created?.brief.problem).toBe('Not decided yet — confirm during the first planning pass.');
+  expect(created?.brief.problem).toBe('Validate the users’ current difficulty before choosing a solution.');
   expect(created?.brief.mvp).toBe('Deliver the smallest coherent release that can test the core value.');
-  expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(3);
+  expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
   expect(created?.workItems).toHaveLength(5);
 
   // Project surfaces — including the detail panels — must inherit the active
