@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  AgentRuntimeSnapshot,
   AgentSessionRecord,
   AiProvider,
   Board,
@@ -52,7 +53,10 @@ import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
 import { WorkflowRunMonitor } from '../workflows/WorkflowRunMonitor';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
-import { AgentsPage } from '../agents/AgentsPage';
+import { AgentDetailPage } from '../agents/AgentDetailPage';
+import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
+import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
+import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
@@ -79,6 +83,9 @@ interface Route {
    *  active skills to attribute the new session to. Transient, not persisted. */
   newSessionAgent?: string;
   newSessionSkills?: string[];
+  /** The catalog item selected in the Agents tree (`feature === 'agents'`). */
+  agentId?: string;
+  skillName?: string;
   /** Whether the in-app browser was visible in the selected AI session. */
   browserOpen?: boolean;
   /** Last navigated URL in the in-app browser. */
@@ -171,7 +178,9 @@ function readLastWorkspaceRoute(): Route {
       ...(restorableBrowserUrl(stored.browserUrl) ? { browserUrl: stored.browserUrl } : {}),
       ...(gitView ? { gitView } : {}),
       ...(typeof stored.workflowId === 'string' ? { workflowId: stored.workflowId } : {}),
-      ...(stored.workflowView === 'runs' ? { workflowView: 'runs' } : {})
+      ...(stored.workflowView === 'runs' ? { workflowView: 'runs' } : {}),
+      ...(typeof stored.agentId === 'string' ? { agentId: stored.agentId } : {}),
+      ...(typeof stored.skillName === 'string' ? { skillName: stored.skillName } : {})
     };
   } catch {
     return {};
@@ -190,7 +199,9 @@ function writeLastWorkspaceRoute(route: Route): void {
     ...(route.feature === 'sessions' && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
     ...(route.gitView ? { gitView: route.gitView } : {}),
     ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
-    ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {})
+    ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {}),
+    ...(route.feature === 'agents' && route.agentId ? { agentId: route.agentId } : {}),
+    ...(route.feature === 'agents' && route.skillName ? { skillName: route.skillName } : {})
   };
   localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
 }
@@ -242,7 +253,9 @@ function restoredRouteForWorkspace(
       ...(stored.feature === 'sessions' && stored.browserUrl ? { browserUrl: stored.browserUrl } : {}),
       ...(stored.feature === 'git' && stored.gitView ? { gitView: stored.gitView } : {}),
       ...(stored.feature === 'workflows' && stored.workflowId ? { workflowId: stored.workflowId } : {}),
-      ...(stored.feature === 'workflows' && stored.workflowView === 'runs' ? { workflowView: 'runs' as const } : {})
+      ...(stored.feature === 'workflows' && stored.workflowView === 'runs' ? { workflowView: 'runs' as const } : {}),
+      ...(stored.feature === 'agents' && stored.agentId ? { agentId: stored.agentId } : {}),
+      ...(stored.feature === 'agents' && stored.skillName ? { skillName: stored.skillName } : {})
     };
   }
   return routeForOpenedWorkspace(workspace, projects);
@@ -301,6 +314,40 @@ export function App() {
   const [workflowsNonce, setWorkflowsNonce] = useState(0);
   const bumpWorkflows = useCallback(() => setWorkflowsNonce(n => n + 1), []);
   const [newWorkflowForProject, setNewWorkflowForProject] = useState<string>();
+  /** The Agent Hub catalog. App owns it so the sidebar tree, the centre record,
+   *  and the right-pane runtime all read one snapshot. */
+  const [agentSnapshot, setAgentSnapshot] = useState<AgentRuntimeSnapshot>();
+  const [agentsBusy, setAgentsBusy] = useState(false);
+  const [agentError, setAgentError] = useState<string>();
+  const [activations, setActivations] = useState<ActivationMap>({});
+  const [agentDialog, setAgentDialog] = useState<'agent' | 'skill' | 'import'>();
+
+  const loadAgents = useCallback(async (hard: boolean) => {
+    setAgentsBusy(true);
+    setAgentError(undefined);
+    try {
+      setAgentSnapshot(hard ? await window.praxis.agentRuntime.refresh() : await window.praxis.agentRuntime.list());
+    } catch (cause) {
+      setAgentError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAgentsBusy(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadAgents(false);
+  }, [loadAgents]);
+
+  const runAgentAction = useCallback(async (run: () => Promise<AgentRuntimeSnapshot>) => {
+    setAgentsBusy(true);
+    setAgentError(undefined);
+    try {
+      setAgentSnapshot(await run());
+    } catch (cause) {
+      setAgentError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAgentsBusy(false);
+    }
+  }, []);
 
   useEffect(() => writePaneVisible('tm-pane-sidebar-visible', sidebarVisible), [sidebarVisible]);
   useEffect(() => writePaneVisible('tm-pane-aux-visible', auxVisible), [auxVisible]);
@@ -748,6 +795,40 @@ export function App() {
     : [];
   const selectedProject = workspaceProjects.find(project => project.id === route.projectId);
 
+  const agentSelection: CatalogSelection | undefined =
+    route.feature !== 'agents'
+      ? undefined
+      : route.agentId
+        ? { kind: 'agent', id: route.agentId }
+        : route.skillName
+          ? { kind: 'skill', name: route.skillName }
+          : undefined;
+
+  const activateSkill = useCallback(
+    (agentId: string, skillName: string) =>
+      void runAgentAction(async () => {
+        const result = await window.praxis.agentRuntime.activateSkill(agentId, skillName);
+        setActivations(current => ({
+          ...current,
+          [agentId]: [...(current[agentId] ?? []).filter(a => a.skill !== skillName), { skill: skillName, mode: result.mode }]
+        }));
+        return window.praxis.agentRuntime.list();
+      }),
+    [runAgentAction]
+  );
+
+  const agentLifecycle = useCallback(
+    (agentId: string, action: LifecycleAction) =>
+      void runAgentAction(() =>
+        action === 'stop'
+          ? window.praxis.agentRuntime.stop(agentId)
+          : action === 'restart'
+            ? window.praxis.agentRuntime.restart(agentId)
+            : window.praxis.agentRuntime.start(agentId)
+      ),
+    [runAgentAction]
+  );
+
   // The saved workflows shown as child nodes under each project's Workflows row.
   const workspaceProjectIds = workspaceProjects.map(project => project.id).join(',');
   useEffect(() => {
@@ -1058,23 +1139,13 @@ export function App() {
     }
     if (route.feature === 'agents') {
       return (
-        <AgentsPage
+        <AgentDetailPage
+          snapshot={agentSnapshot}
+          selection={agentSelection}
           project={selectedProject ?? undefined}
+          error={agentError}
+          onNew={setAgentDialog}
           onOpenSettings={() => setSettingsDialogCategory('agent-runtime')}
-          sessions={agentSessions.map(session => ({
-            issueKey: session.issueKey,
-            title: session.title ?? session.taskDefinition.goal.slice(0, 60),
-            agentId: session.agentId
-          }))}
-          onOpenSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
-          onStartSession={(agentId, skillNames) =>
-            navigate({
-              newSession: true,
-              newSessionAgent: agentId,
-              ...(skillNames.length ? { newSessionSkills: skillNames } : {}),
-              ...(composerProject ? { projectId: composerProject.id } : {})
-            })
-          }
         />
       );
     }
@@ -1269,8 +1340,7 @@ export function App() {
   // (stage/edge inspector, run-stage evidence) — see FX-BF-014.
   const showAux = auxVisible
     && route.feature !== 'overview'
-    && route.feature !== 'git'
-    && route.feature !== 'agents';
+    && route.feature !== 'git';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
     ? agentSessions.find(session => session.issueKey === route.sessionKey) ?? agentSessions[0]
@@ -1427,6 +1497,12 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
+                  agentCatalog={agentSnapshot}
+                  activeAgentId={route.feature === 'agents' ? route.agentId : undefined}
+                  activeSkillName={route.feature === 'agents' ? route.skillName : undefined}
+                  onSelectAgent={agentId => navigate({ ...route, feature: 'agents', agentId, skillName: undefined })}
+                  onSelectSkill={skillName => navigate({ ...route, feature: 'agents', skillName, agentId: undefined })}
+                  onNewAgentItem={kind => (kind === 'rescan' ? void loadAgents(true) : setAgentDialog(kind))}
                   projectWorkflows={workflowsByProject}
                   activeWorkflowId={route.feature === 'workflows' && route.workflowView !== 'runs' ? route.workflowId : undefined}
                   activeWorkflowRuns={route.feature === 'workflows' && route.workflowView === 'runs'}
@@ -1504,7 +1580,30 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.feature === 'workflows' ? (
+                  {route.feature === 'agents' ? (
+                    <AgentRuntimePanel
+                      snapshot={agentSnapshot}
+                      selection={agentSelection}
+                      busy={agentsBusy}
+                      activations={activations}
+                      sessions={agentSessions.map(session => ({
+                        issueKey: session.issueKey,
+                        title: session.title ?? session.taskDefinition.goal.slice(0, 60),
+                        agentId: session.agentId
+                      }))}
+                      onLifecycle={agentLifecycle}
+                      onActivate={activateSkill}
+                      onOpenSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+                      onStartSession={(agentId, skillNames) =>
+                        navigate({
+                          newSession: true,
+                          newSessionAgent: agentId,
+                          ...(skillNames.length ? { newSessionSkills: skillNames } : {}),
+                          ...(composerProject ? { projectId: composerProject.id } : {})
+                        })
+                      }
+                    />
+                  ) : route.feature === 'workflows' ? (
                     // The Workflows feature portals its stage/connection inspector
                     // (or run-stage detail) into this element from the centre pane.
                     <div ref={setWfAuxSlot} className="wf-aux-slot" data-testid="workflow-aux-slot" />
@@ -1734,6 +1833,29 @@ export function App() {
             bumpWorkflows();
             navigate({ projectId, feature: 'workflows', workflowId: definition.id });
           }}
+        />
+      )}
+      {agentDialog === 'agent' && (
+        <CreateAgentDialog
+          defaultScope="global"
+          existingIds={(agentSnapshot?.agents ?? []).map(agent => agent.manifest.id)}
+          onClose={() => setAgentDialog(undefined)}
+          onCreated={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
+        />
+      )}
+      {agentDialog === 'skill' && (
+        <CreateSkillDialog
+          defaultScope="global"
+          existingNames={(agentSnapshot?.skills ?? []).map(skill => skill.metadata.name)}
+          onClose={() => setAgentDialog(undefined)}
+          onCreated={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
+        />
+      )}
+      {agentDialog === 'import' && (
+        <ImportDialog
+          defaultScope="global"
+          onClose={() => setAgentDialog(undefined)}
+          onImported={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
