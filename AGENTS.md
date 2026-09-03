@@ -105,6 +105,17 @@ they compute correctly but silently never paint — a failure that looks like a 
 and is genuinely hard to trace. An e2e test decodes a live tile through `Image()` to catch
 a regression loudly.
 
+## Keyboard focus
+
+`theme.css` ends with a single global `:focus-visible` ring, last in the file so it wins on
+source order against component `:focus` rules that only tint a border. **Do not add a bare
+`outline: none`.** A component may add emphasis on focus, but anything that removes the ring
+has to paint something equally visible in its place — otherwise the control simply cannot be
+seen when focused, which is invisible in a screenshot and only hurts the people driving the
+app from the keyboard. This eroded once already (26 outline resets against 15 `:focus-visible`
+rules, while `:hover` was styled 91 times); `e2e/keyboardFocus.spec.ts` now tabs through the
+shell and fails loudly if any control paints nothing.
+
 ## Settings
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and

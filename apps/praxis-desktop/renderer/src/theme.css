@@ -62,6 +62,9 @@
   --lane-failed: var(--danger);
   --lane-skipped: var(--text-tertiary);
   --lane-awaiting: var(--warning);
+  /* Keyboard focus. Resolved lazily against whichever --accent the active
+     theme sets, so every theme gets a ring that belongs to it. */
+  --focus-ring: var(--accent);
 }
 
 :root[data-mode='light'] {
@@ -2078,7 +2081,6 @@ textarea {
   color: var(--text);
   font: inherit;
   font-size: 12px;
-  outline: none;
 }
 
 .banner {
@@ -2186,7 +2188,6 @@ textarea {
      reference, where "What's the goal?" measures 119px wide. */
   font-size: 16px;
   resize: none;
-  outline: none;
 }
 
 .composer-input::placeholder {
@@ -4022,7 +4023,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .theme-gallery-search:focus-within { border-color: var(--accent); }
-.theme-gallery-search input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); background: transparent; }
+.theme-gallery-search input { flex: 1; min-width: 0; border: 0; color: var(--text); background: transparent; }
 .theme-gallery-section h4 { margin: var(--space-2) 0; color: var(--text-secondary); font-size: 12px; font-weight: 550; }
 .theme-gallery-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 
@@ -5051,7 +5052,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text);
   font: inherit;
   font-size: 12px;
-  outline: none;
 }
 
 /* Sessions in the sidebar tree. The row is the tree idiom; the state dot is the
@@ -6794,7 +6794,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  outline: none;
   padding: 0;
 }
 
@@ -6915,7 +6914,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   padding: 10px 11px;
   font: inherit;
   line-height: 1.45;
-  outline: none;
   box-sizing: border-box;
 }
 
@@ -6981,7 +6979,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text);
   padding: 8px 10px;
   font: inherit;
-  outline: none;
 }
 
 .designer-website-url-input:focus {
@@ -7136,7 +7133,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-repo-name { min-width: 0; margin-left: 10px; overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; font-size: 13px; font-weight: 450; }
 .git-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .git-search { display: flex; align-items: center; gap: 6px; width: 210px; min-width: 120px; flex: 0 1 210px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; color: var(--text-tertiary); background: var(--bg-input); }
-.git-search input { width: 100%; border: 0; outline: 0; color: var(--text); background: transparent; }
+.git-search input { width: 100%; border: 0; color: var(--text); background: transparent; }
 .git-search input::placeholder { color: var(--text-tertiary); }
 .git-button, .git-filter, .git-diff-button { padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: 7px; color: var(--text); background: var(--bg-elevated); cursor: pointer; }
 .git-button:hover, .git-filter:hover, .git-diff-button:hover { border-color: var(--accent-border); background: var(--bg-hover); }
@@ -7225,19 +7222,19 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-file-row:hover { background: var(--bg-hover); }
 .git-error { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid color-mix(in srgb, var(--tone-red) 45%, var(--border)); color: var(--tone-red); background: color-mix(in srgb, var(--tone-red) 11%, var(--bg)); font-size: 11px; }.git-error strong { color: var(--tone-red); }.git-error span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.git-error button { border: 0; color: var(--tone-red); background: transparent; text-decoration: underline; cursor: pointer; }
 .git-progress { display: flex; align-items: center; gap: 8px; padding: 7px 18px; border-bottom: 1px solid var(--accent-border); color: var(--accent); background: var(--accent-soft); font-size: 11px; }.git-progress-dot { width: 7px; height: 7px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: git-spin .8s linear infinite; }
-.git-settings-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); align-items: end; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-elevated); }.git-settings-heading { display: grid; gap: 3px; align-self: center; }.git-settings-heading strong { color: var(--text); font-size: 12px; }.git-settings-heading span { color: var(--text-tertiary); font-size: 10px; }.git-settings-panel label:not(.git-setting-check) { display: grid; gap: 5px; color: var(--text-tertiary); font-size: 10px; }.git-settings-panel input:not([type='checkbox']), .git-settings-panel select { width: 100%; min-width: 0; padding: 6px 7px; border: 1px solid var(--border); border-radius: 5px; outline: none; color: var(--text); background: var(--bg-input); font-size: 10px; }.git-settings-panel input:focus, .git-settings-panel select:focus { border-color: var(--accent-border); }.git-setting-check { display: flex; align-items: center; gap: 5px; height: 28px; white-space: nowrap; color: var(--text-secondary); font-size: 10px; }.git-setting-check input { accent-color: var(--accent); }
+.git-settings-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); align-items: end; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-elevated); }.git-settings-heading { display: grid; gap: 3px; align-self: center; }.git-settings-heading strong { color: var(--text); font-size: 12px; }.git-settings-heading span { color: var(--text-tertiary); font-size: 10px; }.git-settings-panel label:not(.git-setting-check) { display: grid; gap: 5px; color: var(--text-tertiary); font-size: 10px; }.git-settings-panel input:not([type='checkbox']), .git-settings-panel select { width: 100%; min-width: 0; padding: 6px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--text); background: var(--bg-input); font-size: 10px; }.git-settings-panel input:focus, .git-settings-panel select:focus { border-color: var(--accent-border); }.git-setting-check { display: flex; align-items: center; gap: 5px; height: 28px; white-space: nowrap; color: var(--text-secondary); font-size: 10px; }.git-setting-check input { accent-color: var(--accent); }
 .git-compare-panel { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-elevated); font-size: 9px; }
 .git-compare-panel > div { min-width: 230px; align-self: center; }
 .git-compare-panel > div strong, .git-compare-panel > div span { display: block; }
 .git-compare-panel > div strong { color: var(--text); font-size: 11px; }
 .git-compare-panel > div span { margin-top: 3px; color: var(--text-tertiary); }
 .git-compare-panel label { display: flex; min-width: 140px; flex: 1 1 140px; flex-direction: column; gap: 4px; }
-.git-compare-panel select { height: 29px; border: 1px solid var(--border); border-radius: 5px; outline: 0; color: var(--text); background: var(--bg-input); font-size: 10px; }
+.git-compare-panel select { height: 29px; border: 1px solid var(--border); border-radius: 5px; color: var(--text); background: var(--bg-input); font-size: 10px; }
 .git-compare-panel button { height: 29px; padding: 0 12px; border: 1px solid var(--accent-border); border-radius: 5px; color: var(--accent-contrast); background: var(--accent); cursor: pointer; font-size: 9px; }
 .git-compare-panel button:disabled { opacity: .4; cursor: not-allowed; }
 .git-compare-arrow { align-self: center; color: var(--text-tertiary); }
 .git-history-horizontal { overflow: hidden; }.git-history-horizontal .git-history-header { min-width: 0; grid-template-columns: 1fr; padding-left: 16px; }.git-history-horizontal .git-history-header span:not(.git-history-title) { display: none; }.git-horizontal-scroll { height: calc(100% - 31px); overflow: auto; }.git-horizontal-canvas { position: relative; min-width: max-content; min-height: 100%; padding: 22px 24px 18px; }.git-horizontal-lines { position: absolute; top: 22px; left: 24px; pointer-events: none; }.git-horizontal-lines path { fill: none; stroke-width: 2; opacity: .7; }.git-horizontal-commits { position: relative; z-index: 1; display: flex; gap: 0; padding-top: 74px; }.git-horizontal-commit { display: grid; grid-template-rows: minmax(42px, auto) auto auto; gap: 5px; width: 190px; min-height: 108px; padding: 9px 14px; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: left; color: var(--text-secondary); background: transparent; cursor: pointer; }.git-horizontal-commit:hover { background: var(--bg-hover); }.git-horizontal-commit.selected { background: linear-gradient(180deg, var(--accent-soft), color-mix(in srgb, var(--accent-soft) 45%, transparent)); box-shadow: inset 0 2px var(--accent); }.git-horizontal-commit-message { min-width: 0; }.git-horizontal-commit-message strong { display: block; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }.git-horizontal-commit-message small { display: flex; gap: 4px; margin-top: 5px; overflow: hidden; white-space: nowrap; }.git-horizontal-commit-message em { padding: 1px 4px; border: 1px solid currentColor; border-radius: 4px; font-size: 8px; font-style: normal; }.git-horizontal-commit > span:not(.git-horizontal-commit-message), .git-horizontal-commit time { overflow: hidden; color: var(--text-tertiary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.git-changes-panel { margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }.git-changes-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }.git-changes-heading div { display: flex; align-items: baseline; gap: 8px; }.git-changes-heading strong { color: var(--text); font-size: 12px; }.git-changes-heading span { color: var(--text-tertiary); font-size: 10px; }.git-changes-heading button { border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; }.git-changes-actions { display: flex; align-items: center; gap: 6px; }.git-changes-actions button:first-child { padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--tone-green) 45%, var(--border)); border-radius: 5px; color: var(--tone-green); background: color-mix(in srgb, var(--tone-green) 12%, var(--bg)); font-size: 10px; }.git-change-list { display: grid; max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }.git-change-row { display: grid; grid-template-columns: 22px 18px minmax(0, 1fr) 60px; align-items: center; gap: 6px; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font: 10px var(--font-mono); }.git-change-row:last-child { border-bottom: 0; }.git-change-row input { accent-color: var(--accent); }.git-change-row > span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.git-change-status { color: var(--tone-amber); font-weight: 700; }.git-change-row small { color: var(--text-tertiary); text-align: right; }.git-commit-form { display: flex; gap: 8px; margin-top: 9px; }.git-commit-form textarea { min-height: 36px; flex: 1; resize: vertical; padding: 8px; border: 1px solid var(--border); border-radius: 6px; outline: none; color: var(--text); background: var(--bg-input); font-size: 11px; }.git-commit-form textarea:focus { border-color: var(--accent-border); }.git-commit-form button { padding: 7px 12px; border: 0; border-radius: 6px; color: var(--accent-contrast); background: var(--accent); cursor: pointer; }.git-commit-form button:disabled { opacity: .45; cursor: not-allowed; }.git-clean-state { display: flex; align-items: center; gap: 9px; padding: 8px 3px; color: var(--tone-green); }.git-clean-state > span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--tone-green) 18%, var(--bg)); }.git-clean-state b, .git-clean-state small { display: block; }.git-clean-state b { color: var(--text); font-size: 11px; }.git-clean-state small { color: var(--text-tertiary); }
+.git-changes-panel { margin: 0; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }.git-changes-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }.git-changes-heading div { display: flex; align-items: baseline; gap: 8px; }.git-changes-heading strong { color: var(--text); font-size: 12px; }.git-changes-heading span { color: var(--text-tertiary); font-size: 10px; }.git-changes-heading button { border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; }.git-changes-actions { display: flex; align-items: center; gap: 6px; }.git-changes-actions button:first-child { padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--tone-green) 45%, var(--border)); border-radius: 5px; color: var(--tone-green); background: color-mix(in srgb, var(--tone-green) 12%, var(--bg)); font-size: 10px; }.git-change-list { display: grid; max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }.git-change-row { display: grid; grid-template-columns: 22px 18px minmax(0, 1fr) 60px; align-items: center; gap: 6px; padding: 7px 9px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font: 10px var(--font-mono); }.git-change-row:last-child { border-bottom: 0; }.git-change-row input { accent-color: var(--accent); }.git-change-row > span:nth-child(3) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.git-change-status { color: var(--tone-amber); font-weight: 700; }.git-change-row small { color: var(--text-tertiary); text-align: right; }.git-commit-form { display: flex; gap: 8px; margin-top: 9px; }.git-commit-form textarea { min-height: 36px; flex: 1; resize: vertical; padding: 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text); background: var(--bg-input); font-size: 11px; }.git-commit-form textarea:focus { border-color: var(--accent-border); }.git-commit-form button { padding: 7px 12px; border: 0; border-radius: 6px; color: var(--accent-contrast); background: var(--accent); cursor: pointer; }.git-commit-form button:disabled { opacity: .45; cursor: not-allowed; }.git-clean-state { display: flex; align-items: center; gap: 9px; padding: 8px 3px; color: var(--tone-green); }.git-clean-state > span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: color-mix(in srgb, var(--tone-green) 18%, var(--bg)); }.git-clean-state b, .git-clean-state small { display: block; }.git-clean-state b { color: var(--text); font-size: 11px; }.git-clean-state small { color: var(--text-tertiary); }
 .git-change-file { min-width: 0; overflow: hidden; border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; font: inherit; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .git-change-file:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 .git-change-row.conflicted { background: color-mix(in srgb, var(--tone-red) 10%, transparent); }
@@ -7268,7 +7265,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-changes-page .git-changes-actions { flex-wrap: wrap; justify-content: flex-end; }.git-changes-page .git-change-list { max-height: none; flex: 1; overflow: auto; border: 0; border-radius: 0; }.git-changes-page .git-change-row { min-height: 40px; padding: 8px var(--space-4); }
 .git-stash-composer { display: flex; align-items: end; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); background: var(--accent-soft); }.git-stash-composer label { display: grid; min-width: 0; flex: 1; gap: 5px; color: var(--text-secondary); font-size: 10px; }.git-stash-composer input { min-width: 0; padding: 7px 8px; border: 1px solid var(--accent-border); border-radius: var(--radius-sm); color: var(--text); background: var(--bg-input); }.git-stash-composer > div { display: flex; gap: 6px; }
 .git-commit-pane { display: flex; flex-direction: column; padding: var(--space-4); }.git-commit-pane > p { margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); font-size: 12px; line-height: 1.45; }.git-stage-summary { display: grid; max-height: 180px; gap: 6px; overflow: auto; margin-bottom: var(--space-4); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); background: var(--bg-sunken); font: 10px var(--font-mono); }.git-stage-summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.git-stage-summary span:not(:only-child) { color: var(--tone-green); }
-.git-commit-message-field { display: grid; flex: 1; gap: 7px; color: var(--text-secondary); font-size: 11px; font-weight: 600; }.git-commit-message-field textarea { min-height: 132px; height: 100%; resize: vertical; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-md); outline: 0; color: var(--text); background: var(--bg-input); font: 12px/1.5 var(--font-sans); }.git-commit-message-field textarea:focus { border-color: var(--accent-border); box-shadow: 0 0 0 2px var(--accent-soft); }.git-commit-primary { width: 100%; margin-top: var(--space-3); }
+.git-commit-message-field { display: grid; flex: 1; gap: 7px; color: var(--text-secondary); font-size: 11px; font-weight: 600; }.git-commit-message-field textarea { min-height: 132px; height: 100%; resize: vertical; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-md); color: var(--text); background: var(--bg-input); font: 12px/1.5 var(--font-sans); }.git-commit-message-field textarea:focus { border-color: var(--accent-border); box-shadow: 0 0 0 2px var(--accent-soft); }.git-commit-primary { width: 100%; margin-top: var(--space-3); }
 
 /* Praxis Diff Workspace */
 .git-page-diff { overflow: hidden; }
@@ -7306,7 +7303,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-diff-files > header span { display: grid; min-width: 20px; height: 18px; place-items: center; border-radius: 9px; color: var(--text-tertiary); background: var(--bg-elevated); font-size: 9px; }
 .git-diff-file-search { display: flex; height: 31px; align-items: center; gap: 6px; margin: 0 9px 8px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-tertiary); background: var(--bg); }
 .git-diff-file-search:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 2px var(--accent-soft); }
-.git-diff-file-search input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--text); background: transparent; font-size: 10px; }
+.git-diff-file-search input { min-width: 0; flex: 1; border: 0; color: var(--text); background: transparent; font-size: 10px; }
 .git-diff-file-list { height: calc(100% - 79px); overflow: auto; }
 .git-diff-file-list > button { display: grid; width: 100%; min-height: 45px; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 6px 10px; border: 0; border-left: 2px solid transparent; color: var(--text-secondary); background: transparent; cursor: pointer; text-align: left; }
 .git-diff-file-list > button:hover { background: var(--bg-hover); }
@@ -7437,7 +7434,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-conflict-result > header > div:last-child { display: flex; gap: 6px; }
 .git-conflict-result > header button, .git-conflict-binary button { padding: 6px 9px; border: 1px solid #3a4658; border-radius: 5px; color: #aeb8c8; background: #222933; cursor: pointer; font-size: 8px; }
 .git-conflict-result > header button.primary { border-color: rgba(79, 190, 134, .48); color: #d8f3e4; background: #286848; }
-.git-conflict-result textarea { min-width: 0; min-height: 0; flex: 1; resize: none; padding: 12px 14px; border: 0; outline: 0; color: #c5cdd9; background: #10141a; font: 10px/1.55 var(--font-mono); tab-size: 2; white-space: pre; }
+.git-conflict-result textarea { min-width: 0; min-height: 0; flex: 1; resize: none; padding: 12px 14px; border: 0; color: #c5cdd9; background: #10141a; font: 10px/1.55 var(--font-mono); tab-size: 2; white-space: pre; }
 .git-conflict-binary { display: grid; min-height: 300px; place-content: center; justify-items: center; color: var(--text-secondary); text-align: center; }
 .git-conflict-binary strong { color: var(--text); font-size: 15px; }
 .git-conflict-binary p { max-width: 420px; font-size: 10px; }
@@ -8223,7 +8220,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-runs :where(textarea) { height: auto; padding: var(--space-2); resize: vertical; }
 .wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
 .inspector :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
-.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { outline: none; border-color: var(--accent); }
+.wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { border-color: var(--accent); }
 
 .wf-page { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5); }
 .wf-header { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
@@ -8583,7 +8580,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: 13px;
 }
 .agent-hub-dialog textarea { height: auto; padding: var(--space-2); resize: vertical; }
-.agent-hub-dialog :where(input, select, textarea):focus { outline: none; border-color: var(--accent); }
+.agent-hub-dialog :where(input, select, textarea):focus { border-color: var(--accent); }
 .agent-import-source { display: flex; align-items: center; gap: var(--space-2); }
 .agent-import-source > span { flex: 1; min-width: 0; font-size: 12px; color: var(--text-tertiary); }
 .agent-import-preview {
@@ -8597,3 +8594,23 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: 13px;
 }
 .agent-import-preview.is-invalid { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+
+
+/* ── Keyboard focus ───────────────────────────────────────────────────────
+   One visible focus treatment for the whole app, last in the file so it wins
+   on source order against the component `:focus` rules that tint a border
+   instead. `:focus-visible`, not `:focus`, so pointer clicks stay quiet and
+   only keyboard (and other non-pointer) focus draws the ring.
+
+   Components may *add* emphasis on focus — a border colour, a lift, a
+   background — but must not set `outline: none` without painting something
+   equally visible in its place. A control that cannot be seen when focused
+   cannot be operated from the keyboard, and this app is built for people who
+   work that way. The few rules that legitimately opt out (the terminal canvas,
+   and the rows that expand or recolour under `:hover, :focus-visible`) carry
+   higher specificity and are left to do so on purpose. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
