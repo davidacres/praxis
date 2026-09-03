@@ -116,7 +116,13 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   git: 'Git Graph'
 };
 
+/** Legacy single-slot key. Still read once per workspace as a fallback so an
+ *  upgrade does not lose the place the user left off in. */
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
+/** Routes are stored per workspace: switching between two workspaces has to
+ *  return to where you were in each, and a route from one workspace names
+ *  project and board ids that do not exist in the other. */
+const lastRouteKey = (workspaceId: string) => `${LAST_WORKSPACE_ROUTE_KEY}:${workspaceId}`;
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const RECENT_WORKSPACES_KEY = 'praxis-recent-workspaces';
 
@@ -160,9 +166,17 @@ function restorableBrowserUrl(value: unknown): value is string {
  * Restores only durable navigation context. Transient forms and AI tool modes
  * deliberately fall away so a relaunch cannot reopen an unfinished action.
  */
-function readLastWorkspaceRoute(): Route {
+function readLastWorkspaceRoute(workspaceId: string): Route {
   try {
-    const stored = JSON.parse(localStorage.getItem(LAST_WORKSPACE_ROUTE_KEY) ?? '{}') as Record<string, unknown>;
+    // Fall back to the legacy single-slot key so the first launch after an
+    // upgrade still lands where the user left off — but only for the workspace
+    // that value was written against, or one workspace would inherit another's
+    // place the first time it is opened.
+    const legacy = localStorage.getItem(ACTIVE_WORKSPACE_KEY) === workspaceId
+      ? localStorage.getItem(LAST_WORKSPACE_ROUTE_KEY)
+      : null;
+    const raw = localStorage.getItem(lastRouteKey(workspaceId)) ?? legacy;
+    const stored = JSON.parse(raw ?? '{}') as Record<string, unknown>;
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
     const feature = typeof stored.feature === 'string' && stored.feature in FEATURE_TITLES
       ? stored.feature as FeatureId
@@ -190,7 +204,7 @@ function readLastWorkspaceRoute(): Route {
   }
 }
 
-function writeLastWorkspaceRoute(route: Route): void {
+function writeLastWorkspaceRoute(workspaceId: string, route: Route): void {
   const durableRoute: Route = {
     ...(!route.projectId && !route.feature && !route.boardId ? { newSession: true } : {}),
     ...(route.projectId ? { projectId: route.projectId } : {}),
@@ -206,7 +220,11 @@ function writeLastWorkspaceRoute(route: Route): void {
     ...(route.feature === 'agents' && route.agentId ? { agentId: route.agentId } : {}),
     ...(route.feature === 'agents' && route.skillName ? { skillName: route.skillName } : {})
   };
-  localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
+  try {
+    localStorage.setItem(lastRouteKey(workspaceId), JSON.stringify(durableRoute));
+  } catch {
+    // Private mode / storage disabled — the place just won't be restored.
+  }
 }
 
 function readRecentWorkspaceIds(): string[] {
@@ -392,7 +410,7 @@ export function App() {
     const savedWorkspace = workspaces.find(workspace => workspace.id === savedWorkspaceId);
     if (settings.startup.reopenLastWorkspace && savedWorkspace) {
       setActiveWorkspaceId(savedWorkspace.id);
-      const storedRoute = readLastWorkspaceRoute();
+      const storedRoute = readLastWorkspaceRoute(savedWorkspace.id);
       let restored = restoredRouteForWorkspace(storedRoute, savedWorkspace, projects, boards, connections);
       restoredTicketKeyRef.current = restored.issueKey;
       if (restored.feature === 'sessions' && restored.sessionKey && !agentSessions.some(session => session.issueKey === restored.sessionKey)) {
@@ -413,7 +431,7 @@ export function App() {
   }, [agentSessions, agentSessionsLoaded, boards, boardsLoaded, projects, projectsLoaded, recentWorkspaceIds, settings, startupResolved, workspaces, workspacesLoaded]);
 
   useEffect(() => {
-    if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(route);
+    if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(activeWorkspaceId, route);
   }, [activeWorkspaceId, gettingStarted, route, startupResolved]);
 
   useEffect(() => {
@@ -604,8 +622,21 @@ export function App() {
     touchWorkspace(workspaceId);
     setCreatedWorkspaceId(undefined);
     setGettingStarted(false);
-    setNav({ entries: [routeForOpenedWorkspace(workspace, projects)], index: 0 });
-  }, [projects, touchWorkspace, workspaces]);
+    // Opening a workspace by hand resumes where you were in *that* workspace.
+    // A bare `newSession` route is what gets stored when nothing was open, and
+    // it names no place — choosing a workspace from a list is a request to go
+    // into it, so its own landing route (the default project) wins there. At
+    // launch the stored route is honoured as-is: that is "carry on exactly
+    // where I left off", which is a different question.
+    const stored = readLastWorkspaceRoute(workspaceId);
+    const locates = Boolean(stored.projectId || stored.boardId || stored.feature);
+    setNav({
+      entries: [locates
+        ? restoredRouteForWorkspace(stored, workspace, projects, boards, connections)
+        : routeForOpenedWorkspace(workspace, projects)],
+      index: 0
+    });
+  }, [boards, connections, projects, touchWorkspace, workspaces]);
 
   const closeWorkspace = useCallback(() => {
     setActiveWorkspaceId(undefined);
@@ -674,11 +705,28 @@ export function App() {
     setProjectWizardMode(wizardMode);
   }, [activeWorkspaceId, workspaces, touchWorkspace]);
 
-  const skipWorkspaceSetup = useCallback(() => {
+  // "Skip for now" means "get out of my way", not "leave me stranded". Without
+  // an active workspace the shell cannot create or import a project at all —
+  // requestProjectWizard bounces straight back here and the New menu's import
+  // entry is disabled — so skipping still lands on a usable workspace: the most
+  // recent one if any exist, otherwise the same implicit one a first project
+  // would have created.
+  const skipWorkspaceSetup = useCallback(async () => {
     setCreatedWorkspaceId(undefined);
+    if (activeWorkspaceId && workspaces.some(workspace => workspace.id === activeWorkspaceId)) {
+      setGettingStarted(false);
+      setNav({ entries: [{ feature: 'overview' }], index: 0 });
+      return;
+    }
+    const existing = workspaces.find(workspace => workspace.id === recentWorkspaceIds[0]) ?? workspaces[0];
+    const workspace = existing ?? await window.praxis.workspaces.create({ name: 'My workspace', projectIds: [] });
+    if (!existing) setWorkspaces(current => [...current, workspace]);
+    setActiveWorkspaceId(workspace.id);
+    try { localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id); } catch { /* private mode */ }
+    touchWorkspace(workspace.id);
     setGettingStarted(false);
     setNav({ entries: [{ feature: 'overview' }], index: 0 });
-  }, []);
+  }, [activeWorkspaceId, recentWorkspaceIds, touchWorkspace, workspaces]);
 
   const saveWorkspaceToFile = useCallback(() => {
     if (activeWorkspaceId) {
@@ -1018,6 +1066,7 @@ export function App() {
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
     entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
+    entries.push({ id: 'action:add-existing-project', label: 'Add project from folder', group: 'Go to', icon: 'folder-open', keywords: 'existing repository import scan', run: () => requestProjectWizard('existing') });
     workspaceProjects.forEach(project => {
       entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
@@ -1526,7 +1575,7 @@ export function App() {
             presentation="onboarding"
             mode={projectWizardMode}
             onCancel={() => setProjectWizardMode(undefined)}
-            onCreated={project => {
+            onCreated={(project, options) => {
               setProjectWizardMode(undefined);
               setProjects(current => [...current.filter(item => item.id !== project.id), project]);
               setWorkspaces(current => current.map(workspace => workspace.id === activeWorkspaceId
@@ -1540,7 +1589,10 @@ export function App() {
               refreshConnections();
               navigate({ projectId: project.id });
               try {
-                if (localStorage.getItem(WALKTHROUGH_KEY) !== '1') {
+                // Ticking "Advanced setup" is someone saying they already know
+                // the model. Offering them a tour reads as not listening — the
+                // project home still carries "Take a tour" if they want it.
+                if (localStorage.getItem(WALKTHROUGH_KEY) !== '1' && !options?.advanced) {
                   // After the shell has painted the new project's dashboard.
                   window.setTimeout(() => setWalkthroughOpen(true), 400);
                 }
@@ -1557,7 +1609,7 @@ export function App() {
           onOpenWorkspaceFile={openWorkspaceFromFile}
           onCreateWorkspace={createWorkspaceFromGettingStarted}
           onStartFirstProject={startFirstProject}
-          onSkipSetup={skipWorkspaceSetup}
+          onSkipSetup={() => void skipWorkspaceSetup()}
           onCreateProject={() => requestProjectWizard('create', 'onboarding')}
           onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
           onContinueEmpty={() => {

@@ -39,7 +39,16 @@ test('workspace setup can be skipped to the empty Praxis shell', async () => {
   await win.getByRole('button', { name: 'Skip for now' }).click();
   await expect(win.getByTestId('getting-started')).toHaveCount(0);
   await expect(win.getByTestId('main-content-pane')).toBeVisible();
-  await expect(win.getByRole('button', { name: 'Select workspace' })).toBeVisible();
+
+  // Skipping means "get out of my way", not "leave me stranded". Without an
+  // active workspace the shell cannot create a project at all: the wizard
+  // bounces straight back to Getting Started and the New menu's import entry is
+  // disabled. So a skip still lands on a usable workspace.
+  expect(await win.evaluate(() => window.praxis.workspaces.list().then(list => list.length))).toBe(1);
+  await win.getByTestId('new-menu').click();
+  await win.getByTestId('new-project').click();
+  await expect(win.getByTestId('new-project-wizard')).toBeVisible();
+  await expect(win.getByTestId('getting-started')).toHaveCount(0);
 });
 
 test('workspace setup offers project handoff and cancelling the wizard opens the empty shell', async () => {

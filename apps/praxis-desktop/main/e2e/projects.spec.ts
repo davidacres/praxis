@@ -564,3 +564,69 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     fs.rmSync(folder, { recursive: true, force: true });
   }
 });
+
+test('an existing folder is three steps too, and confirms the detected identity', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-fastpath-'));
+  fs.writeFileSync(path.join(folder, 'README.md'), '# Ledger Service\n');
+  try {
+    const page = app.window;
+    // The picker has to be stubbed in the main process: `window.praxis` is a
+    // contextBridge object, so assigning over it from the page is a no-op.
+    await app.electronApp.evaluate(({ dialog }, chosen) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+    }, folder);
+
+    await page.getByTestId('new-menu').click();
+    await page.getByTestId('add-existing-project').click();
+    // The advanced toggle is offered here as well — someone pointing Praxis at
+    // a repo they already have is the least likely person to want six screens.
+    await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
+    await page.getByRole('button', { name: 'Choose folder…' }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    // Step 2 confirms what the folder supplied. It used to be skipped outright,
+    // which left the project type — the thing that picks the brief, workflow and
+    // starter tickets — never seen and silently defaulted.
+    await expect(page.locator('.step-count')).toHaveText('Step 2 of 3');
+    await expect(page.getByRole('heading', { name: 'Describe the project' })).toBeVisible();
+    await expect(page.getByLabel('Project name')).toHaveValue(/.+/);
+    await page.getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.locator('.step-count')).toHaveText('Step 3 of 3');
+    await page.locator('.project-wizard-footer').getByRole('button', { name: 'Add project' }).click();
+    await expect(page.getByTestId('project-dashboard')).toBeVisible();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('ticking advanced setup restores all six steps in existing-folder mode', async () => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-advanced-'));
+  fs.writeFileSync(path.join(folder, 'README.md'), '# Deep Setup\n');
+  try {
+    const page = app.window;
+    await app.electronApp.evaluate(({ dialog }, chosen) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [chosen] });
+    }, folder);
+    await page.getByTestId('new-menu').click();
+    await page.getByTestId('add-existing-project').click();
+
+    await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
+    await page.getByTestId('wizard-advanced-toggle').check();
+    await expect(page.locator('.step-count')).toHaveText('Step 1 of 6');
+    await page.getByRole('button', { name: 'Choose folder…' }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: 'Shape the brief' })).toBeVisible();
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test('the command palette can add a project from an existing folder', async () => {
+  const page = app.window;
+  await page.keyboard.press('ControlOrMeta+k');
+  await page.getByRole('textbox', { name: 'Go to' }).fill('from folder');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: 'Create from existing folder' })).toBeVisible();
+});

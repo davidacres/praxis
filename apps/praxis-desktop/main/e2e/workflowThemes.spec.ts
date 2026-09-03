@@ -39,7 +39,7 @@ test.beforeEach(async () => {
       },
       workspace.id
     );
-    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
+    localStorage.setItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`, JSON.stringify({ projectId: project.id, feature: 'workflows' }));
   });
   await app.window.reload();
 });

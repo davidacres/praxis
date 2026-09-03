@@ -58,7 +58,7 @@ test('restores the selected session and browser URL and keeps an explicit close 
   await url.press('Enter');
   await expect(url).toHaveValue(new RegExp(`${pageOrigin.replace(/[.]/g, '\\.')}/next`), { timeout: 15000 });
   await win.getByRole('button', { name: 'Close browser' }).click();
-  expect(await win.evaluate(() => JSON.parse(localStorage.getItem('praxis-last-workspace-route') ?? '{}'))).toMatchObject({
+  expect(await win.evaluate(() => JSON.parse(localStorage.getItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`) ?? '{}'))).toMatchObject({
     feature: 'sessions', sessionKey: session.issueKey, browserOpen: false
   });
 
