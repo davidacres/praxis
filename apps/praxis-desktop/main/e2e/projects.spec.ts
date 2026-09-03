@@ -100,7 +100,16 @@ test('creates a folderless Product project through the six-step wizard and opens
   expect(themedColors.projectIcon).toBe('rgb(198, 67, 31)');
   expect(themedColors.accent).toBe('#c6431f');
   expect(themedColors.boardIcon).toBe('rgb(205, 191, 174)');
+  // A freshly-created project lands with a Get Started strip: one lit action
+  // and a small checklist, not four zero cards.
+  const getStarted = page.getByTestId('project-getstarted');
+  await expect(getStarted).toBeVisible();
+  await expect(getStarted).toContainText('Project created');
+  await expect(getStarted).toContainText('6/6 sections');
+  await expect(getStarted.getByTestId('project-getstarted-start')).toBeVisible();
   await expect(page).toHaveScreenshot('project-home.png');
+  await getStarted.getByRole('button', { name: 'Dismiss' }).click();
+  await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
   const stored = await page.evaluate(() => window.praxis.projects.list());
   const created = stored.find(project => project.key === 'CUSTOMER');
   expect(created?.defaultAiToolMode).toBe('project-only');
