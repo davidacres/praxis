@@ -60,11 +60,11 @@
 | TASK-084 | Task | Add agent and skill import flow | Complete | FX-BE-014 |
 | TASK-085 | Task | Enforce duplicate and path safety | Complete | FX-BE-014 |
 | FX-BF-011 | Feature | Agent runtime and session integration | Proposed | FX-BF-009, FX-BF-010 |
-| FX-BE-015 | Story | Runtime lifecycle dashboard | Proposed | FX-BF-011 |
+| FX-BE-015 | Story | Runtime lifecycle dashboard | Complete | FX-BF-011 |
 | FX-BE-016 | Story | Skill activation and session handoff | Proposed | FX-BF-011 |
 | FX-BE-017 | Story | Advanced Settings boundary and verification | Proposed | FX-BF-011 |
-| TASK-086 | Task | Extend runtime status contracts | Proposed | FX-BE-015 |
-| TASK-087 | Task | Add start, stop, and restart controls | Proposed | FX-BE-015 |
+| TASK-086 | Task | Extend runtime status contracts | Complete | FX-BE-015 |
+| TASK-087 | Task | Add start, stop, and restart controls | Complete | FX-BE-015 |
 | TASK-088 | Task | Implement skill activation flow | Proposed | FX-BE-016 |
 | TASK-089 | Task | Add new-session agent selection | Proposed | FX-BE-016 |
 | TASK-090 | Task | Move runtime management to advanced Settings | Proposed | FX-BE-017 |

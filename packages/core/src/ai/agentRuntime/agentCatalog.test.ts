@@ -5,6 +5,8 @@ import {
   describeCapabilities,
   eligibleAgentsForSkill,
   groupCatalog,
+  hostRuntimeState,
+  runningHostCount,
   skillActivateBlockedReason,
   agentHostStarted
 } from './agentCatalog';
@@ -101,4 +103,18 @@ test('agentHostStarted reflects whether capabilities were reported', () => {
     ),
     true
   );
+});
+
+test('hostRuntimeState and runningHostCount read the hosts map', () => {
+  const snapshot = {
+    hosts: {
+      a: { state: 'running' as const, startedAt: 't', pid: 42 },
+      b: { state: 'failed' as const, startedAt: 't', error: 'boom' }
+    }
+  };
+  assert.equal(hostRuntimeState(snapshot, 'a'), 'running');
+  assert.equal(hostRuntimeState(snapshot, 'b'), 'failed');
+  assert.equal(hostRuntimeState(snapshot, 'c'), 'stopped');
+  assert.equal(runningHostCount(snapshot), 1);
+  assert.equal(runningHostCount({ hosts: {} }), 0);
 });

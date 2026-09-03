@@ -45,6 +45,14 @@ test.beforeEach(async () => {
     type: 'telepathy',
     entry: 'run.js'
   });
+  // A trusted agent whose host actually starts, for the lifecycle test.
+  seedAgent(app.userDataDir, 'live-agent', {
+    schemaVersion: 1,
+    id: 'live-agent',
+    name: 'Live Agent',
+    type: 'acp',
+    entry: { command: '/usr/bin/true', args: [] }
+  });
   seedSkill(
     app.userDataDir,
     'code-audit',
@@ -91,7 +99,30 @@ test('lists discovered agents and skills by scope with fail-closed detail', asyn
   await catalog.getByRole('button', { name: /code-audit/ }).click();
   await expect(detail.getByRole('heading', { name: 'code-audit' })).toBeVisible();
   await expect(detail.getByText('Audits a diff for risky changes.')).toBeVisible();
-  await expect(detail.getByRole('button', { name: /Activate with Praxis Reviewer/ })).toBeEnabled();
+  await expect(detail.getByRole('button', { name: /^Activate/ })).toBeEnabled();
+});
+
+test('starting, restarting, and stopping an agent host moves its lifecycle state', async () => {
+  const page = app.window;
+  await page.getByTestId('nav-agents').click();
+  await page.getByRole('button', { name: /Refresh/ }).click();
+
+  const catalog = page.getByRole('navigation', { name: 'Agent catalog' });
+  const detail = page.getByRole('region', { name: 'Details' });
+  await catalog.getByRole('button', { name: /Live Agent/ }).click();
+  await expect(detail.getByText('stopped')).toBeVisible();
+
+  await detail.getByRole('button', { name: 'Start host' }).click();
+  await expect(detail.getByText(/running/)).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Restart host' })).toBeVisible();
+  await expect(page.getByText(/1 running/)).toBeVisible();
+
+  await detail.getByRole('button', { name: 'Restart host' }).click();
+  await expect(detail.getByText(/running/)).toBeVisible();
+
+  await detail.getByRole('button', { name: 'Stop host' }).click();
+  await expect(detail.getByText('stopped')).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Start host' })).toBeVisible();
 });
 
 test('the Create agent wizard writes a validated, discoverable manifest', async () => {
