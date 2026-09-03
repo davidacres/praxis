@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
 import { PROJECT_BRIEF_FIELDS } from '@praxis/core/out/projects/projectTemplates';
 import { Icon } from '../ui/Icon';
@@ -19,7 +20,11 @@ function isComplete(status: string): boolean {
   return value.includes('done') || value.includes('complete');
 }
 
-export function ProjectWorkspace({ project, sessions }: { project: ProjectRecord; sessions: AgentSessionRecord[] }) {
+const dismissedKey = (id: string) => `praxis-project-getstarted-dismissed:${id}`;
+
+export function ProjectWorkspace({ project, sessions, onStartSession }: { project: ProjectRecord; sessions: AgentSessionRecord[]; onStartSession: () => void }) {
+  const [getStartedDismissed, setGetStartedDismissed] = useState(() => { try { return localStorage.getItem(dismissedKey(project.id)) === '1'; } catch { return false; } });
+  const dismissGetStarted = () => { setGetStartedDismissed(true); try { localStorage.setItem(dismissedKey(project.id), '1'); } catch { /* private mode */ } };
   const projectKeys = new Set(project.workItems.map(item => item.key));
   const projectSessions = sessions.filter(session => projectKeys.has(session.issueKey) || Boolean(project.workspaceFolder && session.workingDirectory === project.workspaceFolder));
   const activeSessions = projectSessions.filter(session => !isTerminalAgentState(session.state));
@@ -50,6 +55,24 @@ export function ProjectWorkspace({ project, sessions }: { project: ProjectRecord
       <div><span className="project-type-badge">{project.type}</span><h1>{project.name}</h1><p>{project.key} · {project.purpose || 'A focused project space for planning, delivery, and learning.'}</p></div>
       <div className="project-dashboard-updated"><span>LAST ACTIVITY</span><strong>{relativeDate(lastActivity)}</strong></div>
     </header>
+
+    {projectSessions.length === 0 && !getStartedDismissed && (
+      <section className="project-getstarted" aria-label="Get started" data-testid="project-getstarted">
+        <div className="project-getstarted-copy">
+          <span className="git-eyebrow">GET STARTED</span>
+          <h2>Turn this project into progress</h2>
+          <ol className="project-getstarted-steps">
+            <li className="is-done"><Icon name="check" size={13} /> Project created</li>
+            <li className={completedBrief > 0 ? 'is-done' : undefined}><Icon name={completedBrief > 0 ? 'check' : 'dot'} size={13} /> Brief drafted <em>{completedBrief}/{briefFields.length} sections</em></li>
+            <li><Icon name="dot" size={13} /> Start your first session</li>
+          </ol>
+        </div>
+        <div className="project-getstarted-actions">
+          <button type="button" className="btn btn-primary" data-testid="project-getstarted-start" onClick={onStartSession}><Icon name="chats" size={14} /> Start a session</button>
+          <button type="button" className="btn-quiet" onClick={dismissGetStarted}>Dismiss</button>
+        </div>
+      </section>
+    )}
 
     <section className="project-dashboard-metrics" aria-label="Project health">
       <article><span className="project-dashboard-metric-icon"><Icon name="ticket" size={16} /></span><div><small>WORK ITEMS</small><strong>{project.workItems.length}</strong><em>{completedItems} complete</em></div></article>
