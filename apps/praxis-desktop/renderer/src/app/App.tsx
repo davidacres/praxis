@@ -50,6 +50,8 @@ import {
 import { GitGraphPage } from '../git/GitGraphPage';
 import { GitChangesPage } from '../git/GitChangesPage';
 import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
+import { WorkflowRunMonitor } from '../workflows/WorkflowRunMonitor';
+import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
 import { AgentsPage } from '../agents/AgentsPage';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
 
@@ -83,8 +85,10 @@ interface Route {
   aiProvider?: AiProvider;
   aiModel?: string;
   gitView?: 'graph' | 'changes' | 'conflicts';
-  /** Which half of the Workflows feature is open (`feature === 'workflows'`). */
-  workflowView?: 'design' | 'runs';
+  /** The saved workflow open in the designer (`feature === 'workflows'`). */
+  workflowId?: string;
+  /** The Workflows feature is showing the run monitor rather than a designer. */
+  workflowView?: 'runs';
 }
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
@@ -162,7 +166,8 @@ function readLastWorkspaceRoute(): Route {
       ...(stored.browserOpen === true ? { browserOpen: true } : stored.browserOpen === false ? { browserOpen: false } : {}),
       ...(restorableBrowserUrl(stored.browserUrl) ? { browserUrl: stored.browserUrl } : {}),
       ...(gitView ? { gitView } : {}),
-      ...(stored.workflowView === 'runs' || stored.workflowView === 'design' ? { workflowView: stored.workflowView } : {})
+      ...(typeof stored.workflowId === 'string' ? { workflowId: stored.workflowId } : {}),
+      ...(stored.workflowView === 'runs' ? { workflowView: 'runs' } : {})
     };
   } catch {
     return {};
@@ -180,7 +185,8 @@ function writeLastWorkspaceRoute(route: Route): void {
     ...(route.feature === 'sessions' && route.browserOpen !== undefined ? { browserOpen: route.browserOpen } : {}),
     ...(route.feature === 'sessions' && route.browserUrl && restorableBrowserUrl(route.browserUrl) ? { browserUrl: route.browserUrl } : {}),
     ...(route.gitView ? { gitView: route.gitView } : {}),
-    ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {})
+    ...(route.feature === 'workflows' && route.workflowView ? { workflowView: route.workflowView } : {}),
+    ...(route.feature === 'workflows' && route.workflowId ? { workflowId: route.workflowId } : {})
   };
   localStorage.setItem(LAST_WORKSPACE_ROUTE_KEY, JSON.stringify(durableRoute));
 }
@@ -230,7 +236,9 @@ function restoredRouteForWorkspace(
       ...(stored.feature === 'sessions' && stored.sessionKey ? { sessionKey: stored.sessionKey } : {}),
       ...(stored.feature === 'sessions' && stored.browserOpen !== undefined ? { browserOpen: stored.browserOpen } : {}),
       ...(stored.feature === 'sessions' && stored.browserUrl ? { browserUrl: stored.browserUrl } : {}),
-      ...(stored.feature === 'git' && stored.gitView ? { gitView: stored.gitView } : {})
+      ...(stored.feature === 'git' && stored.gitView ? { gitView: stored.gitView } : {}),
+      ...(stored.feature === 'workflows' && stored.workflowId ? { workflowId: stored.workflowId } : {}),
+      ...(stored.feature === 'workflows' && stored.workflowView === 'runs' ? { workflowView: 'runs' as const } : {})
     };
   }
   return routeForOpenedWorkspace(workspace, projects);
@@ -281,6 +289,14 @@ export function App() {
   const [auxVisible, setAuxVisible] = useState(() => readPaneVisible('tm-pane-aux-visible', true));
   const [panelVisible, setPanelVisible] = useState(() => readPaneVisible('tm-pane-panel-visible', false));
   const [detailExpanded, setDetailExpanded] = useState(false);
+  /** The right-pane element the Workflows feature portals its inspector into. */
+  const [wfAuxSlot, setWfAuxSlot] = useState<HTMLElement | null>(null);
+  const requireAux = useCallback(() => setAuxVisible(true), []);
+  /** Saved workflows per project, for the sidebar tree. */
+  const [workflowsByProject, setWorkflowsByProject] = useState<Record<string, Array<{ id: string; name: string }>>>({});
+  const [workflowsNonce, setWorkflowsNonce] = useState(0);
+  const bumpWorkflows = useCallback(() => setWorkflowsNonce(n => n + 1), []);
+  const [newWorkflowForProject, setNewWorkflowForProject] = useState<string>();
 
   useEffect(() => writePaneVisible('tm-pane-sidebar-visible', sidebarVisible), [sidebarVisible]);
   useEffect(() => writePaneVisible('tm-pane-aux-visible', auxVisible), [auxVisible]);
@@ -727,6 +743,24 @@ export function App() {
     ? projects.filter(project => activeWorkspace.projectIds.includes(project.id))
     : [];
   const selectedProject = workspaceProjects.find(project => project.id === route.projectId);
+
+  // The saved workflows shown as child nodes under each project's Workflows row.
+  const workspaceProjectIds = workspaceProjects.map(project => project.id).join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = workspaceProjectIds ? workspaceProjectIds.split(',') : [];
+    void Promise.all(
+      ids.map(async id => {
+        const templates = await window.praxis.workflows.listTemplates(id).catch(() => []);
+        return [id, templates.filter(t => t.source === 'project').map(t => ({ id: t.definition.id, name: t.definition.name }))] as const;
+      })
+    ).then(entries => {
+      if (!cancelled) setWorkflowsByProject(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceProjectIds, workflowsNonce]);
   // The project a workspace-level "New session" belongs to: the one on screen,
   // else the workspace's default project, else its only project. When one is
   // resolved the composer scopes to it (its folder, no board/ticket picker).
@@ -971,13 +1005,46 @@ export function App() {
       return renderNewSession();
     }
     if (selectedProject && route.feature === 'workflows') {
+      if (route.workflowView === 'runs') {
+        return (
+          <div className="view-scroll wf-page">
+            <header className="wf-header">
+              <h1>Runs</h1>
+              <span className="wf-header-sub">{selectedProject.name}</span>
+            </header>
+            <WorkflowRunMonitor
+              project={selectedProject}
+              runnableWorkflows={workflowsByProject[selectedProject.id] ?? []}
+              auxSlot={wfAuxSlot}
+              onRequireAux={requireAux}
+              onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
+            />
+          </div>
+        );
+      }
+      if (route.workflowId) {
+        return (
+          <WorkflowDesignerPage
+            key={route.workflowId}
+            project={selectedProject}
+            workflowId={route.workflowId}
+            auxSlot={wfAuxSlot}
+            onRequireAux={requireAux}
+            onSaved={bumpWorkflows}
+            onDeleted={() => navigate({ projectId: selectedProject.id, feature: 'workflows' })}
+          />
+        );
+      }
       return (
-        <WorkflowDesignerPage
-          project={selectedProject}
-          view={route.workflowView ?? 'design'}
-          onViewChange={workflowView => navigate({ ...route, workflowView })}
-          onOpenSession={sessionKey => navigate({ feature: 'sessions', sessionKey })}
-        />
+        <div className="view-scroll wf-page">
+          <div className="empty-state">
+            <Icon name="split-horizontal" size={28} />
+            <span>Pick a workflow from the sidebar, or start a new one.</span>
+            <button type="button" className="btn btn-primary" onClick={() => setNewWorkflowForProject(selectedProject.id)}>
+              New workflow
+            </button>
+          </div>
+        </div>
       );
     }
     if (route.feature === 'agents') {
@@ -1180,7 +1247,6 @@ export function App() {
   const showAux = auxVisible
     && route.feature !== 'overview'
     && route.feature !== 'git'
-    && route.feature !== 'workflows'
     && route.feature !== 'agents';
   const detailIsExpanded = detailExpanded && showAux && route.issueKey !== undefined;
   const selectedAgentSession = route.feature === 'sessions'
@@ -1338,7 +1404,12 @@ export function App() {
                   selectedIssueKey={route.issueKey}
                   selectedIssueConnectionId={selectedBoard?.connectionId}
                   onSelectGit={(project, view) => navigate({ projectId: project.id, feature: 'git', gitView: view })}
-                  onSelectWorkflows={project => navigate({ projectId: project.id, feature: 'workflows' })}
+                  projectWorkflows={workflowsByProject}
+                  activeWorkflowId={route.feature === 'workflows' && route.workflowView !== 'runs' ? route.workflowId : undefined}
+                  activeWorkflowRuns={route.feature === 'workflows' && route.workflowView === 'runs'}
+                  onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
+                  onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs' })}
+                  onNewWorkflow={project => setNewWorkflowForProject(project.id)}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
                     const connectionId = board.connectionId;
@@ -1410,7 +1481,11 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.view === 'designer' ? (
+                  {route.feature === 'workflows' ? (
+                    // The Workflows feature portals its stage/connection inspector
+                    // (or run-stage detail) into this element from the centre pane.
+                    <div ref={setWfAuxSlot} className="wf-aux-slot" data-testid="workflow-aux-slot" />
+                  ) : route.view === 'designer' ? (
                     selectedDesignerNode ? (
                       <TaskDesignerItemDetail
                         node={selectedDesignerNode}
@@ -1625,6 +1700,18 @@ export function App() {
       )}
       {workspaceDialogOpen && (
         <WorkspaceDialog onCancel={() => setWorkspaceDialogOpen(false)} onCreate={saveNewWorkspace} />
+      )}
+      {newWorkflowForProject && (
+        <NewWorkflowDialog
+          projectId={newWorkflowForProject}
+          onClose={() => setNewWorkflowForProject(undefined)}
+          onCreated={definition => {
+            const projectId = newWorkflowForProject;
+            setNewWorkflowForProject(undefined);
+            bumpWorkflows();
+            navigate({ projectId, feature: 'workflows', workflowId: definition.id });
+          }}
+        />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
     </div>

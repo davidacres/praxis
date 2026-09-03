@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { WorkflowPipeline } from './WorkflowPipeline';
@@ -34,10 +35,14 @@ const GATE_CHIP: Record<string, string> = {
 export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
   runnableWorkflows: Array<{ id: string; name: string }>;
+  /** The shell's right-pane element the stage detail portals into. */
+  auxSlot: HTMLElement | null;
+  /** Ask the shell to reveal the right pane (a stage was selected). */
+  onRequireAux?: () => void;
   onOpenSession?: (sessionKey: string) => void;
 }
 
-export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }: WorkflowRunMonitorProps) {
+export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequireAux, onOpenSession }: WorkflowRunMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
   const [selectedStageId, setSelectedStageId] = useState<string | undefined>();
@@ -220,7 +225,10 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
             <WorkflowPipeline
               summary={selected}
               selectedNodeId={selectedStageId}
-              onSelectNode={setSelectedStageId}
+              onSelectNode={nodeId => {
+                setSelectedStageId(nodeId);
+                onRequireAux?.();
+              }}
             />
 
             {selected.gates.length > 0 && (
@@ -262,8 +270,10 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
         )}
       </section>
 
-      <aside className="wf-inspector" aria-label="Stage detail">
-        {!stage || !selected ? (
+      {auxSlot &&
+        createPortal(
+          <aside className="wf-inspector wf-aux" aria-label="Stage detail">
+            {!stage || !selected ? (
           <div className="empty-state">
             <Icon name="cursor" size={24} />
             <span>Select a stage to see its evidence.</span>
@@ -342,9 +352,11 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, onOpenSession }
                 </>
               )}
             </div>
-          </div>
+              </div>
+            )}
+          </aside>,
+          auxSlot
         )}
-      </aside>
     </div>
   );
 }

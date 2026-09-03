@@ -59,6 +59,23 @@ theme switch and a keyboard-only pass.
 
 ## Description
 
+## As built — navigation revision (2026-09-03)
+
+The feature shipped centre-heavy; a follow-up moved it into the shell:
+
+- **Workflows is a left-sidebar tree section.** The row expands to the project's saved
+  workflows plus a **Runs** child; `+` opens `NewWorkflowDialog`. The Library screen and
+  the in-header `Design / Runs` switch are gone. Routes: `route.workflowId` (designer for
+  one workflow, loaded by `workflows.get`) and `route.workflowView: 'runs'` (monitor) —
+  both persisted in the durable route.
+- **The Stage / Connections inspector (and the run-stage detail) render in the shell's
+  right pane** via `createPortal` into a `wf-aux-slot` that `App` puts in `pane-aux` for
+  the Workflows feature. The designer grid is two columns (rail + canvas); selecting a
+  node calls `onRequireAux` so the pane reveals itself. `App.showAux` no longer excludes
+  workflows. This returns to FX-BE-028's original "inspector in pane-aux" intent.
+- e2e for `workflowDesigner`, `workflowRun`, `workflowThemes`, and `appShell` were
+  reworked to the sidebar flow; snapshots regenerated for the wider two-column centre and
+  the right-pane inspector.
 
 ## Items
 
