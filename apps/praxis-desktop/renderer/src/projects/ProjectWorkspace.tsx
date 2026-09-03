@@ -22,7 +22,7 @@ function isComplete(status: string): boolean {
 
 const dismissedKey = (id: string) => `praxis-project-getstarted-dismissed:${id}`;
 
-export function ProjectWorkspace({ project, sessions, onStartSession }: { project: ProjectRecord; sessions: AgentSessionRecord[]; onStartSession: () => void }) {
+export function ProjectWorkspace({ project, sessions, onStartSession, onStartTour }: { project: ProjectRecord; sessions: AgentSessionRecord[]; onStartSession: () => void; onStartTour: () => void }) {
   const [getStartedDismissed, setGetStartedDismissed] = useState(() => { try { return localStorage.getItem(dismissedKey(project.id)) === '1'; } catch { return false; } });
   const dismissGetStarted = () => { setGetStartedDismissed(true); try { localStorage.setItem(dismissedKey(project.id), '1'); } catch { /* private mode */ } };
   const projectKeys = new Set(project.workItems.map(item => item.key));
@@ -69,6 +69,7 @@ export function ProjectWorkspace({ project, sessions, onStartSession }: { projec
         </div>
         <div className="project-getstarted-actions">
           <button type="button" className="btn btn-primary" data-testid="project-getstarted-start" onClick={onStartSession}><Icon name="chats" size={14} /> Start a session</button>
+          <button type="button" className="btn-quiet" data-testid="project-getstarted-tour" onClick={onStartTour}>Take a tour</button>
           <button type="button" className="btn-quiet" onClick={dismissGetStarted}>Dismiss</button>
         </div>
       </section>
