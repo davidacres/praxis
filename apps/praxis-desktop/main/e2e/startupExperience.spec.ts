@@ -91,6 +91,8 @@ test('walks through every workspace and project onboarding screen to a created p
   await expect(win.locator('.project-choice').last()).toHaveCSS('opacity', '1');
   await win.screenshot({ path: 'output/playwright/full-onboarding-03-project-type.png', fullPage: true });
   await win.getByRole('button', { name: /Product Development/ }).click();
+  // Advanced setup walks the brief, plan, and tool-access screens this test covers.
+  await win.getByTestId('wizard-advanced-toggle').check();
   await win.getByRole('button', { name: 'Continue' }).click();
 
   await expect(win.getByRole('heading', { name: 'Name and locate your project' })).toBeVisible();

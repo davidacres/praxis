@@ -102,6 +102,10 @@ const EXISTING_STEP_COPY = [
 
 export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'dialog', mode = 'create', onCancel, onCreated }: { workspaceId: string; workspaceName?: string; presentation?: 'dialog' | 'onboarding'; mode?: 'create' | 'existing'; onCancel: () => void; onCreated: (project: ProjectRecord) => void }) {
   const [step, setStep] = useState(0);
+  // A first project needs three decisions: type, name, and a look at what will
+  // be created. Brief, plan and tool access take their recommended defaults and
+  // move to the project home — unless the user opts into the full six steps.
+  const [advanced, setAdvanced] = useState(false);
   const [type, setType] = useState<ProjectType>('software');
   const [startingPoint, setStartingPoint] = useState<ProjectStartingPoint>(mode === 'existing' ? 'existing-folder' : 'new-folder');
   const [name, setName] = useState('');
@@ -136,6 +140,9 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const ticketEditorRef = useRef<HTMLDivElement>(null);
   const briefSectionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const stepCopy = mode === 'existing' ? EXISTING_STEP_COPY : CREATE_STEP_COPY;
+  const panels = mode === 'existing' || advanced ? [0, 1, 2, 3, 4, 5] : [0, 1, 5];
+  const panel = panels[step];
+  const isReview = step === panels.length - 1;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -153,7 +160,8 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   }, [briefEditorOpen, creating, onCancel, selectedBriefKey]);
 
   useEffect(() => {
-    if (startingPoint === 'app-storage' && type !== 'product' && type !== 'research') setStartingPoint('new-folder');
+    if (mode === 'create' && (type === 'product' || type === 'research')) setStartingPoint('app-storage');
+    else if (startingPoint === 'app-storage' && type !== 'product' && type !== 'research') setStartingPoint('new-folder');
     setStages(defaultProjectWorkflow(type)); setTickets(mode === 'existing' ? [] : defaultProjectTickets(type)); setBrief({ ...BRIEF_DEFAULTS[type] }); setIncludedBrief(recommendedIncluded(type));
     setSelectedBriefKey(undefined); setBriefDraft(''); setBriefDraftSkipped(false); setBriefEditorOpen(false); setWorkflowChoice('standard'); setTicketChoice('standard');
     setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only');
@@ -194,12 +202,12 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   }, []);
   useEffect(() => { if (startingPoint === 'app-storage') setToolMode('project-only'); else setToolMode(type === 'software' || type === 'experiment' ? 'full' : 'read-only'); }, [startingPoint, type]);
   useEffect(() => {
-    if (step !== 3) return;
+    if (panel !== 3) return;
     const editor = workflowChoice === 'custom' ? workflowEditorRef.current : ticketChoice === 'custom' ? ticketEditorRef.current : undefined;
     if (!editor) return;
     const frame = window.requestAnimationFrame(() => editor.scrollIntoView({ block: 'nearest' }));
     return () => window.cancelAnimationFrame(frame);
-  }, [step, workflowChoice, ticketChoice]);
+  }, [panel, workflowChoice, ticketChoice]);
 
   const previewPath = startingPoint === 'new-folder' && folderPath ? `${folderPath.replace(/[\\/]$/, '')}/${folderName}` : folderPath;
   const briefFields = PROJECT_BRIEF_FIELDS[type];
@@ -294,7 +302,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const continueStep = async () => {
     setError(undefined);
     try {
-      if (step === 0 && mode === 'existing') {
+      if (panel === 0 && mode === 'existing') {
         if (!folderPath) throw new Error('Choose the existing project folder.');
         const result = inspection ?? await window.praxis.projects.inspectFolder(folderPath);
         if (!result.exists || !result.isDirectory) throw new Error('Choose an existing folder.');
@@ -311,7 +319,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         setStep(2);
         return;
       }
-      if (step === 1) {
+      if (panel === 1) {
         if (!name.trim()) throw new Error('Enter a project name.');
         if (!/^[A-Za-z][A-Za-z0-9_]{0,14}$/.test(key)) throw new Error('Use a 1-15 character key starting with a letter.');
         if (startingPoint !== 'app-storage' && !folderPath) throw new Error(mode === 'existing' ? 'Choose the existing folder.' : 'Choose where to save the project.');
@@ -321,8 +329,8 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
           if (result.exists) throw new Error('That folder already exists. Select Existing Folder instead.');
         }
       }
-      if (step === 3 && (stages.length < 2 || ((startingPoint !== 'existing-folder') && (tickets.length < 1 || tickets.some(ticket => !ticket.summary.trim()))))) throw new Error('Keep at least two stages and one starter ticket with a title.');
-      setStep(value => Math.min(5, value + 1));
+      if (panel === 3 && (stages.length < 2 || ((startingPoint !== 'existing-folder') && (tickets.length < 1 || tickets.some(ticket => !ticket.summary.trim()))))) throw new Error('Keep at least two stages and one starter ticket with a title.');
+      setStep(value => Math.min(panels.length - 1, value + 1));
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   };
   const create = async () => {
@@ -377,13 +385,13 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   return <div className={`project-wizard project-wizard-${presentation}`} data-testid="new-project-wizard">
     <header className="project-wizard-header">
       <div className="project-dialog-heading"><span className="project-dialog-brand">PRAXIS<i /></span><div><h1 id="new-project-dialog-title">{mode === 'existing' ? 'Create from existing folder' : 'Create new project'}</h1><p>{workspaceName ? `${workspaceName} workspace` : mode === 'existing' ? 'Scan plans and connect this folder to a project without changing its source files.' : 'A durable brief, local board, and focused starter work.'}</p></div></div>
-      <div className="project-dialog-header-actions"><div className="step-count">Step {step + 1} of 6</div><button className="project-dialog-close" aria-label="Close new project dialog" onClick={onCancel}>×</button></div>
+      <div className="project-dialog-header-actions"><div className="step-count">Step {step + 1} of {panels.length}</div><button className="project-dialog-close" aria-label="Close new project dialog" onClick={onCancel}>×</button></div>
     </header>
-    <div className="wizard-progress" aria-label={`Step ${step + 1} of 6`}>{Array.from({ length: 6 }, (_, index) => <span key={index} className={index <= step ? 'active' : ''} />)}</div>
+    <div className="wizard-progress" aria-label={`Step ${step + 1} of ${panels.length}`}>{Array.from({ length: panels.length }, (_, index) => <span key={index} className={index <= step ? 'active' : ''} />)}</div>
     <div className="project-wizard-body">
-      <div className="wizard-step-intro"><div><h2>{stepCopy[step].title}</h2><p>{stepCopy[step].detail}</p></div></div>
-      {step === 0 && (mode === 'create' ? <ProjectTypeCards type={type} onChange={setType} /> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{sourceOptions && <div className="project-location-options" data-testid="storage-choice-step0">{sourceOptions}</div>}</div>)}
-      {step === 1 && <div className="project-form-grid">
+      <div className="wizard-step-intro"><div><h2>{stepCopy[panel].title}</h2><p>{stepCopy[panel].detail}</p></div></div>
+      {panel === 0 && (mode === 'create' ? <><ProjectTypeCards type={type} onChange={setType} /><label className="wizard-advanced-toggle"><input type="checkbox" data-testid="wizard-advanced-toggle" checked={advanced} onChange={event => { setAdvanced(event.target.checked); if (!event.target.checked) setStep(current => Math.min(current, 1)); }} /><span><strong>Advanced setup</strong><small>Shape the brief, plan, and tool access step by step. Otherwise they take the recommended defaults and you adjust them from the project home.</small></span></label></> : <div className="existing-folder-step"><div className="existing-folder-picker"><div className="existing-folder-visual">↳</div><div><strong>Select the project folder</strong><p>We look for Git, README files, manifests, languages, and frameworks.</p></div><button className="btn btn-primary" onClick={chooseFolder}>Choose folder…</button></div>{inspection ? <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} /> : <div className="inspection-placeholder"><span>Workspace detection will appear here</span><small>No files are created or modified during inspection.</small></div>}{sourceOptions && <div className="project-location-options" data-testid="storage-choice-step0">{sourceOptions}</div>}</div>)}
+      {panel === 1 && <div className="project-form-grid">
         {mode === 'existing' && <div className="span-2"><h3 className="wizard-section-title first">Project type</h3><ProjectTypeCards type={type} onChange={setType} compact /></div>}
         <label className="field span-2"><span>Project name</span><input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus /></label>
         {mode === 'create' && (type === 'product' || type === 'research') && <section className="project-location-section span-2" aria-labelledby="project-location-title"><div className="project-location-heading"><h3 id="project-location-title">Where should this project live?</h3><p>A folder is useful when the project has documents or source files. Praxis-only projects keep the plan and board in the app.</p></div><div className="project-location-options"><Choice checked={startingPoint === 'new-folder'} title="Create a project folder" detail="Keep project files on this computer and connect sessions to them." onClick={() => setStartingPoint('new-folder')} /><Choice checked={startingPoint === 'app-storage'} title="Keep in Praxis only" detail="Create the plan and board without local files. You can connect a folder later." onClick={() => setStartingPoint('app-storage')} /></div></section>}
@@ -394,7 +402,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         {mode === 'existing' && <label className="field span-2"><span>Purpose <em>Optional</em></span><textarea className="input textarea" value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Why does this project exist?" /></label>}
         {mode === 'existing' && inspection && <Inspection result={inspection} existingProject={existingProject} decision={existingDecision} onUseExisting={async () => { if (!existingProject) return; setCreating(true); try { onCreated(await window.praxis.projects.useExisting(existingProject.id, workspaceId)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setCreating(false); } }} onCreateNew={() => { setExistingDecision('create'); setError(undefined); }} />}{sourceOptions && <div className="project-location-options span-2" data-testid="storage-choice">{sourceOptions}</div>}
       </div>}
-      {step === 2 && <BriefStep
+      {panel === 2 && <BriefStep
         type={type}
         fields={briefFields}
         brief={brief}
@@ -413,12 +421,12 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
         onCancel={closeBriefEditor}
         onDone={commitBriefDraft}
       />}
-      {step === 3 && <InitialPlanStep type={type} stages={stages} tickets={tickets} workflowChoice={workflowChoice} ticketChoice={ticketChoice} allowEmptyTickets={startingPoint === 'existing-folder'} workflowEditorRef={workflowEditorRef} ticketEditorRef={ticketEditorRef} onChooseWorkflow={chooseWorkflow} onChooseTickets={chooseTickets} onStagesChange={setStages} onTicketsChange={setTickets} />}
-      {step === 4 && <ToolAccessStep mode={toolMode} folderless={startingPoint === 'app-storage'} onChange={setToolMode} />}
-      {step === 5 && <ReviewStep type={type} name={name} projectKey={key} purpose={purpose} workspaceName={workspaceName} folderless={startingPoint === 'app-storage'} previewPath={previewPath} briefCount={briefFields.filter(field => includedBrief[field.key]).length} stages={stages} ticketCount={tickets.length} toolMode={toolMode} />}
+      {panel === 3 && <InitialPlanStep type={type} stages={stages} tickets={tickets} workflowChoice={workflowChoice} ticketChoice={ticketChoice} allowEmptyTickets={startingPoint === 'existing-folder'} workflowEditorRef={workflowEditorRef} ticketEditorRef={ticketEditorRef} onChooseWorkflow={chooseWorkflow} onChooseTickets={chooseTickets} onStagesChange={setStages} onTicketsChange={setTickets} />}
+      {panel === 4 && <ToolAccessStep mode={toolMode} folderless={startingPoint === 'app-storage'} onChange={setToolMode} />}
+      {panel === 5 && <ReviewStep type={type} name={name} projectKey={key} purpose={purpose} workspaceName={workspaceName} folderless={startingPoint === 'app-storage'} previewPath={previewPath} briefCount={briefFields.filter(field => includedBrief[field.key]).length} stages={stages} ticketCount={tickets.length} toolMode={toolMode} />}
       {error && <div className="form-error" role="alert">{error}</div>}
     </div>
-    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating || (step === 5 && sourceIncomplete)} onClick={step === 5 ? create : continueStep}>{step === 5 ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
+    <footer className="project-wizard-footer"><button className="btn" onClick={onCancel}>Cancel</button><div className="footer-actions">{step > 0 && <button className="btn" onClick={goBack}>Back</button>}<button className="btn btn-primary" disabled={creating || (isReview && sourceIncomplete)} onClick={isReview ? create : continueStep}>{isReview ? creating ? (mode === 'existing' ? 'Adding…' : 'Creating…') : mode === 'existing' ? 'Add project' : 'Create project' : 'Continue'}</button></div></footer>
   </div>;
 }
 
