@@ -53,7 +53,10 @@ test.beforeEach(async () => {
       },
       workspace.id
     );
-    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id }));
+    // Routes are stored per workspace, so this has to name the workspace it
+    // belongs to — a bare 'praxis-last-workspace-route' is the legacy key and
+    // is only honoured for the workspace recorded as active.
+    localStorage.setItem(`praxis-last-workspace-route:${workspace.id}`, JSON.stringify({ projectId: project.id }));
   });
   await app.window.reload();
 });
