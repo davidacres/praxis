@@ -11,15 +11,20 @@ let app: TestApp;
 test.beforeEach(async () => { app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false }); });
 test.afterEach(async () => { await closeTestApp(app); });
 
-test('creates a folderless Product project through the six-step wizard and opens its board', async () => {
+test('creates a folderless Product project through the full wizard and opens its board', async () => {
   const page = app.window;
   await expect(page.getByTestId('overview-page')).toBeVisible();
   await page.getByTestId('new-menu').click();
   await page.getByTestId('new-project').click();
   await expect(page.getByTestId('new-project-wizard')).toBeVisible();
-  await expect(page).toHaveScreenshot('project-wizard-type.png');
 
+  // A first project is three steps by default; Advanced setup restores all six,
+  // which this test walks for full coverage.
+  await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
+  await expect(page).toHaveScreenshot('project-wizard-type.png');
   await page.getByRole('button', { name: /Product Development/ }).click();
+  await page.getByTestId('wizard-advanced-toggle').check();
+  await expect(page.locator('.step-count')).toHaveText('Step 1 of 6');
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Project name').fill('Customer Portal');
   await page.getByRole('button', { name: /Keep in Praxis only/ }).click();
@@ -183,6 +188,35 @@ test('opens a focused Create from existing folder flow from the New menu', async
   await expect(page).toHaveScreenshot('add-existing-project.png');
   await page.getByRole('button', { name: 'Close new project dialog' }).click();
   await expect(page.getByTestId('new-project-wizard')).not.toBeVisible();
+});
+
+test('a first project is three steps: type, name, review', async () => {
+  const page = app.window;
+  await expect(page.getByTestId('overview-page')).toBeVisible();
+  await page.getByTestId('new-menu').click();
+  await page.getByTestId('new-project').click();
+
+  await expect(page.locator('.step-count')).toHaveText('Step 1 of 3');
+  await page.getByRole('button', { name: /Product Development/ }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  await expect(page.locator('.step-count')).toHaveText('Step 2 of 3');
+  await page.getByLabel('Project name').fill('Quick Start');
+  await page.getByRole('button', { name: 'Continue' }).click();
+
+  // Straight to review — the brief, plan and tool-access steps took defaults.
+  await expect(page.locator('.step-count')).toHaveText('Step 3 of 3');
+  await expect(page.getByRole('heading', { name: 'Review and create' })).toBeVisible();
+  await expect(page.getByText('6 brief sections drafted')).toBeVisible();
+  await expect(page.getByText('Praxis only — no local folder')).toBeVisible();
+  await page.locator('.project-wizard-footer').getByRole('button', { name: 'Create project' }).click();
+
+  await expect(page.getByTestId('project-dashboard')).toContainText('Quick Start');
+  const stored = await page.evaluate(() => window.praxis.projects.list());
+  const created = stored.find(project => project.name === 'Quick Start');
+  expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
+  expect(created?.workItems).toHaveLength(5);
+  expect(created?.defaultAiToolMode).toBe('project-only');
 });
 
 test('retains an existing PROJECT.md and supports local board transitions and edits', async () => {

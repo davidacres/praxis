@@ -7639,6 +7639,11 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wizard-section-title { margin: 24px 0 10px; color: var(--text-secondary); font-size: var(--text-sm); font-weight: 650; text-transform: uppercase; letter-spacing: .055em; }
 .project-wizard-body > h2, .project-panel h2, .section-heading h2 { margin: 0 0 14px; font-size: var(--text-lg); }
 .project-wizard-body > h2:not(:first-child) { margin-top: 28px; }
+.wizard-advanced-toggle { display: flex; align-items: flex-start; gap: 10px; max-width: 620px; margin: 22px auto 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-elevated); cursor: pointer; }
+.wizard-advanced-toggle input { margin-top: 3px; accent-color: var(--accent); }
+.wizard-advanced-toggle strong { display: block; font-size: var(--text-sm); }
+.wizard-advanced-toggle small { display: block; margin-top: 3px; color: var(--text-tertiary); font-size: var(--text-xs); line-height: 1.5; }
+
 .project-card-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 12px; }
 .project-choice { position: relative; display: grid; grid-template-columns: minmax(138px, 36%) minmax(0, 1fr); align-items: stretch; min-height: 148px; gap: 18px; padding: 11px; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; color: var(--text); background: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent); backdrop-filter: var(--surface-backdrop); text-align: left; cursor: pointer; transition: border-color 120ms ease, background 120ms ease, transform 120ms ease, box-shadow 120ms ease; }
 .project-choice { opacity: 0; animation: project-choice-enter 360ms cubic-bezier(.16, .8, .25, 1) forwards; }
