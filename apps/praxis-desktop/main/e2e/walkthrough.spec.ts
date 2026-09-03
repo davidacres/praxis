@@ -92,6 +92,39 @@ test('walks the shell, rings each control, and remembers it was seen', async () 
   expect(await page.evaluate(() => localStorage.getItem('praxis-walkthrough-seen'))).toBe('1');
 });
 
+test('the ring is visibly not a control, and not the focus ring', async () => {
+  const page = app.window;
+  await expect(page.getByTestId('project-dashboard')).toBeVisible();
+  await page.getByTestId('project-getstarted-tour').click();
+  await expect(page.getByTestId('walkthrough-callout')).toBeVisible();
+
+  const style = await page.evaluate(() => {
+    const ring = getComputedStyle(document.querySelector('.walkthrough-ring')!);
+    const root = getComputedStyle(document.documentElement);
+    const resolve = (value: string) => {
+      const probe = document.createElement('span');
+      probe.style.color = value;
+      document.body.appendChild(probe);
+      const out = getComputedStyle(probe).color;
+      probe.remove();
+      return out;
+    };
+    return {
+      borderStyle: ring.borderTopStyle,
+      borderColor: ring.borderTopColor,
+      accent: resolve(root.getPropertyValue('--accent').trim()),
+      focusRing: resolve(root.getPropertyValue('--focus-ring').trim())
+    };
+  });
+  // Dashed, so it reads as an annotation drawn over the app rather than a
+  // border on a control.
+  expect(style.borderStyle).toBe('dashed');
+  // And in a hue the chrome never uses — a solid accent ring was both a fourth
+  // meaning for the accent and indistinguishable from the keyboard focus ring.
+  expect(style.borderColor).not.toBe(style.accent);
+  expect(style.borderColor).not.toBe(style.focusRing);
+});
+
 test('the ring never blocks the control it highlights', async () => {
   const page = app.window;
   await expect(page.getByTestId('project-dashboard')).toBeVisible();
