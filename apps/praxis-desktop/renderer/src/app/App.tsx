@@ -38,6 +38,7 @@ import { isTerminalAgentState } from '../ai/aiSessionState';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
 import { CommandPalette, type CommandEntry } from './CommandPalette';
+import { Walkthrough, type WalkthroughStop } from './Walkthrough';
 import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
@@ -357,6 +358,7 @@ export function App() {
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [importProjectsOpen, setImportProjectsOpen] = useState(false);
   const ONBOARDED_KEY = 'praxis-onboarded';
+  const WALKTHROUGH_KEY = 'praxis-walkthrough-seen';
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   // A returning user — past Getting Started at least once — gets the short
@@ -364,6 +366,7 @@ export function App() {
   const [splashBrief] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; } });
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
   const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
@@ -1046,6 +1049,40 @@ export function App() {
     return entries;
   }, [workspaceProjects, workspaceBoards, workflowsByProject, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard]);
 
+  /** Four stops over controls the shell already renders — see Walkthrough. */
+  const walkthroughStops = useMemo<WalkthroughStop[]>(() => [
+    {
+      id: 'project',
+      selector: '[data-testid="project-nav-item"]',
+      title: 'Your project lives here',
+      body: 'Its board, repository, workflows and documents all hang off this row in the sidebar.'
+    },
+    {
+      id: 'board',
+      selector: '[data-testid="board-nav-item"]',
+      title: 'Work sits on the board',
+      body: 'Your starter tickets are here. Open one to see its detail, comments, and AI actions.'
+    },
+    {
+      id: 'session',
+      selector: '[data-testid="project-getstarted-start"]',
+      title: 'Hand a ticket to an agent',
+      body: 'A session turns a ticket into visible progress: the agent plans, asks before it uses a tool, and reports what it changed.'
+    },
+    {
+      id: 'connections',
+      selector: '[data-testid="nav-connections"]',
+      title: 'Bring in your real tickets',
+      body: 'Connect Jira, GitLab, GitHub, or a folder of markdown plans, and its boards appear alongside this project.'
+    }
+  ], []);
+
+  const startWalkthrough = useCallback(() => setWalkthroughOpen(true), []);
+  const finishWalkthrough = useCallback(() => {
+    setWalkthroughOpen(false);
+    try { localStorage.setItem(WALKTHROUGH_KEY, '1'); } catch { /* private mode */ }
+  }, []);
+
   const connection = connections.find(candidate => candidate.id === selectedBoard?.connectionId);
 
   /**
@@ -1228,7 +1265,7 @@ export function App() {
       );
     }
     if (selectedProject && route.feature !== 'git') {
-      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} />;
+      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough} />;
     }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
@@ -1502,6 +1539,12 @@ export function App() {
               refreshBoards();
               refreshConnections();
               navigate({ projectId: project.id });
+              try {
+                if (localStorage.getItem(WALKTHROUGH_KEY) !== '1') {
+                  // After the shell has painted the new project's dashboard.
+                  window.setTimeout(() => setWalkthroughOpen(true), 400);
+                }
+              } catch { /* private mode — just skip the offer */ }
             }}
           />
         </div>
@@ -1962,6 +2005,7 @@ export function App() {
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
       {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
+      {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}
     </div>
   );
 }

@@ -7861,6 +7861,37 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .project-git-card { max-width: 620px; margin-top: 14px; }
 .project-workspace-empty { padding: 20px; border: 1px dashed var(--border); border-radius: 9px; color: var(--text-tertiary); }
 .project-dashboard { height: 100%; overflow: auto; padding: 34px 38px 48px; color: var(--text); background: transparent; }
+/* Walkthrough: a ring around the control being described plus a fixed callout.
+   The ring never takes pointer events, so the highlighted control stays
+   clickable — the tour annotates the shell, it does not trap the user. */
+.walkthrough-ring {
+  position: fixed;
+  z-index: 220;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 0 9999px rgba(0, 0, 0, .28);
+  /* Deliberately not transitioned. Animating top/left/width/height across the
+     shell made the ring lag visibly behind its callout — a tour that points at
+     the wrong control for 160ms is worse than one that snaps. */
+}
+.walkthrough-callout {
+  position: fixed;
+  z-index: 221;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px 17px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+}
+.walkthrough-step { color: var(--accent); font-size: var(--text-xs); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.walkthrough-callout strong { font-size: var(--text-md); }
+.walkthrough-callout p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
+.walkthrough-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
 /* First-run activation strip: shown on a project with no sessions yet, so the
    dashboard's first screen carries one lit next step instead of four zero
    cards. Dismissible per project. */
