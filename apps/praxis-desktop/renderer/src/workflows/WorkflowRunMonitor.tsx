@@ -17,11 +17,11 @@ import { WorkflowPipeline } from './WorkflowPipeline';
  */
 
 const STATUS_TONE: Record<WorkflowRunSummary['status'], string> = {
-  running: 'wf-lane--running',
-  'awaiting-approval': 'wf-lane--awaiting',
-  succeeded: 'wf-lane--done',
-  failed: 'wf-lane--failed',
-  cancelled: 'wf-lane--skipped'
+  running: 'lane--running',
+  'awaiting-approval': 'lane--awaiting',
+  succeeded: 'lane--done',
+  failed: 'lane--failed',
+  cancelled: 'lane--skipped'
 };
 
 const GATE_CHIP: Record<string, string> = {
@@ -107,7 +107,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
 
   return (
     <div className="wf-runs">
-      <nav className="wf-rail" aria-label="Runs">
+      <nav className="rail" aria-label="Runs">
         <form
           className="wf-runstart"
           onSubmit={event => {
@@ -120,12 +120,12 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
         >
           <strong>Start a run</strong>
           {!project.workspaceFolder && (
-            <p className="wf-hint is-warn">
+            <p className="hint is-warn">
               No folder is attached — agent and check stages will need to be advanced by hand.
             </p>
           )}
           {runnableWorkflows.length === 0 && (
-            <p className="wf-hint">Save a workflow in the designer first.</p>
+            <p className="hint">Save a workflow in the designer first.</p>
           )}
           {runnableWorkflows.length > 1 && (
             <label>
@@ -154,12 +154,12 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
           </button>
         </form>
 
-        <ul className="wf-rail-list">
+        <ul className="rail-list">
           {runs.map(run => (
             <li key={run.runId}>
               <button
                 type="button"
-                className="wf-rail-row"
+                className="rail-row"
                 aria-pressed={run.runId === selectedRunId}
                 aria-label={`${run.workflowName}, ${run.status}`}
                 onClick={() => {
@@ -167,17 +167,17 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
                   setSelectedStageId(undefined);
                 }}
               >
-                <span className={`wf-lane ${STATUS_TONE[run.status]}`} aria-hidden>
+                <span className={`lane ${STATUS_TONE[run.status]}`} aria-hidden>
                   ●
                 </span>
-                <span className="wf-rail-main">
-                  <span className="wf-rail-name">{run.workflowName}</span>
-                  <span className="wf-rail-sub">{run.status}</span>
+                <span className="rail-main">
+                  <span className="rail-name">{run.workflowName}</span>
+                  <span className="rail-sub">{run.status}</span>
                 </span>
               </button>
             </li>
           ))}
-          {runs.length === 0 && <li className="wf-rail-empty">No runs yet.</li>}
+          {runs.length === 0 && <li className="rail-empty">No runs yet.</li>}
         </ul>
       </nav>
 
@@ -196,7 +196,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
         ) : (
           <>
             <div className="wf-board-status" role="status" aria-live="polite">
-              <span className={`wf-lane ${STATUS_TONE[selected.status]}`}>●</span>
+              <span className={`lane ${STATUS_TONE[selected.status]}`}>●</span>
               <div>
                 <strong>{selected.status}</strong>
                 <p>{selected.explanation}</p>
@@ -261,7 +261,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
               <ol>
                 {selected.events.map(event => (
                   <li key={event.id}>
-                    <span className="wf-rail-sub">{new Date(event.at).toLocaleTimeString()}</span> {event.message}
+                    <span className="rail-sub">{new Date(event.at).toLocaleTimeString()}</span> {event.message}
                   </li>
                 ))}
               </ol>
@@ -272,7 +272,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
 
       {auxSlot &&
         createPortal(
-          <aside className="wf-inspector wf-aux" aria-label="Stage detail">
+          <aside className="inspector wf-aux" aria-label="Stage detail">
             {!stage || !selected ? (
           <div className="empty-state">
             <Icon name="cursor" size={24} />
@@ -281,7 +281,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
         ) : (
           <div className="wf-stagecard">
             <h2>{stage.name}</h2>
-            <p className="wf-rail-sub">
+            <p className="rail-sub">
               {stage.type}
               {stage.gate ? ` · ${stage.gate} gate` : ''} · {stage.outcome}
               {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
@@ -291,7 +291,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
 
             {stage.snapshotRef && (
               <p>
-                <span className="wf-rail-sub">snapshot</span>{' '}
+                <span className="rail-sub">snapshot</span>{' '}
                 <code>{stage.snapshotRef}</code>
               </p>
             )}
@@ -306,7 +306,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
               </ul>
             )}
 
-            <div className="wf-stage-actions">
+            <div className="inspector-actions">
               {stage.sessionKey && onOpenSession && (
                 <button type="button" className="btn btn-compact" onClick={() => onOpenSession(stage.sessionKey as string)}>
                   Open session

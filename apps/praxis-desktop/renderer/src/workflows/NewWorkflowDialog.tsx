@@ -65,7 +65,7 @@ export function NewWorkflowDialog({
             </p>
           )}
           {!templates ? (
-            <p className="wf-hint">Loading templates…</p>
+            <p className="hint">Loading templates…</p>
           ) : (
             <ul className="wf-template-list">
               {list.map(template => {
