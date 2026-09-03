@@ -1228,7 +1228,7 @@ export function App() {
       );
     }
     if (selectedProject && route.feature !== 'git') {
-      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} />;
+      return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} />;
     }
     if (route.feature === 'connections') {
       // No view-scroll wrapper: the manager's two panes own their own scrolling.
