@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDialogs } from '../ui/dialogs';
 import type {
   AgentSessionRecord,
   AgentTaskDefinition,
@@ -490,6 +491,7 @@ export function IssueDetail({
   onOpenAiView,
   onOpenAiSettings
 }: IssueDetailProps) {
+  const { confirm } = useDialogs();
   const [issue, setIssue] = useState<IssueDetails | undefined>();
   const [commentBody, setCommentBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -819,7 +821,7 @@ export function IssueDetail({
   };
 
   const refreshDetails = async () => {
-    if (isDirty && !window.confirm('Discard unsaved ticket changes and refresh?')) {
+    if (isDirty && !(await confirm({ title: 'Discard unsaved ticket changes?', message: 'The ticket will be reloaded from the tracker.', confirmLabel: 'Discard and refresh', danger: true }))) {
       return;
     }
     setBusy(true);
@@ -835,14 +837,14 @@ export function IssueDetail({
     }
   };
 
-  const closeDetails = () => {
-    if (!isDirty || window.confirm('Discard unsaved ticket changes?')) {
+  const closeDetails = async () => {
+    if (!isDirty || (await confirm({ title: 'Discard unsaved ticket changes?', confirmLabel: 'Discard', danger: true }))) {
       onClose();
     }
   };
 
-  const openRelatedIssue = (key: string) => {
-    if (!isDirty || window.confirm('Discard unsaved ticket changes and open another ticket?')) {
+  const openRelatedIssue = async (key: string) => {
+    if (!isDirty || (await confirm({ title: 'Discard unsaved ticket changes?', message: 'Another ticket will open in its place.', confirmLabel: 'Discard and open', danger: true }))) {
       onOpenIssue?.(key);
     }
   };
@@ -1042,7 +1044,7 @@ export function IssueDetail({
         >
           <Icon name="refresh" size={13} />
         </button>
-        <button className="icon-btn icon-btn-sm" aria-label="Close" onClick={closeDetails}>
+        <button className="icon-btn icon-btn-sm" aria-label="Close" onClick={() => void closeDetails()}>
           <Icon name="close" size={13} />
         </button>
       </div>
@@ -1207,7 +1209,7 @@ export function IssueDetail({
                       className="chip"
                       data-testid="issue-parent-link"
                       title={issue.parentIssue?.summary ?? issue.parentKey}
-                      onClick={() => openRelatedIssue(issue.parentIssue?.key ?? issue.parentKey ?? '')}
+                      onClick={() => void openRelatedIssue(issue.parentIssue?.key ?? issue.parentKey ?? '')}
                     >
                       Open {issue.parentIssue?.key ?? issue.parentKey}
                     </button>
@@ -1324,7 +1326,7 @@ export function IssueDetail({
                         <button
                           className="detail-list-key"
                           title={subTask.summary}
-                          onClick={() => openRelatedIssue(subTask.key)}
+                          onClick={() => void openRelatedIssue(subTask.key)}
                         >
                           {subTask.key}
                         </button>
@@ -1388,7 +1390,7 @@ export function IssueDetail({
                         <button
                           className="detail-list-key"
                           title={link.summary ?? link.key}
-                          onClick={() => openRelatedIssue(link.key)}
+                          onClick={() => void openRelatedIssue(link.key)}
                         >
                           {link.key}
                         </button>

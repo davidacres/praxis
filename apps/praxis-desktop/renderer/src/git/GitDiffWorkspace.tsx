@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useDialogs } from '../ui/dialogs';
 import type { GitBlameLine, GitDiffDocument, GitDiffFile, GitDiffHunk, GitDiffLine, GitDiffRequest, GitFileHistoryEntry, GitHunkAction } from '@praxis/core';
 
 export type GitDiffViewMode = 'inline' | 'split' | 'hunks';
@@ -152,6 +153,7 @@ function buildSelectedLinePatch(hunk: GitDiffHunk, selectedIndexes: number[]): s
 }
 
 export function GitDiffWorkspace({ repositoryPath, request, initialPath, backLabel = 'Back to Git graph', sourceLabel = 'Git Graph', onClose, onStatusChanged }: GitDiffWorkspaceProps) {
+  const { confirm } = useDialogs();
   const [document, setDocument] = useState<GitDiffDocument>();
   const [selectedFileId, setSelectedFileId] = useState<string>();
   const [viewMode, setViewMode] = useState<GitDiffViewMode>('split');
@@ -208,7 +210,7 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, backLab
     if (action === 'stage' && request.kind !== 'working') return;
     if (action === 'unstage' && request.kind !== 'staged') return;
     if (action === 'discard' && request.kind !== 'working') return;
-    if (action === 'discard' && !window.confirm(`Discard this change from ${selectedFile.displayPath}? This cannot be undone by Praxis.`)) return;
+    if (action === 'discard' && !(await confirm({ title: 'Discard this change?', message: `${selectedFile.displayPath}\n\nThis cannot be undone by Praxis.`, confirmLabel: 'Discard', danger: true }))) return;
     setBusy(`${action}:${hunk.id}`);
     setError(undefined);
     try {
@@ -240,7 +242,7 @@ export function GitDiffWorkspace({ repositoryPath, request, initialPath, backLab
 
   const discardFile = async () => {
     if (!selectedFile || request.kind !== 'working') return;
-    if (!window.confirm(`Discard every unstaged change in ${selectedFile.displayPath}? This cannot be undone by Praxis.`)) return;
+    if (!(await confirm({ title: 'Discard every unstaged change in this file?', message: `${selectedFile.displayPath}\n\nThis cannot be undone by Praxis.`, confirmLabel: 'Discard file', danger: true }))) return;
     setBusy(`discard-file:${selectedFile.id}`);
     setError(undefined);
     try {

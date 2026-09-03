@@ -276,7 +276,7 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
             {!stage || !selected ? (
           <div className="empty-state">
             <Icon name="cursor" size={24} />
-            <span>Select a stage to see its evidence.</span>
+            <span>A stage&rsquo;s checks and evidence appear here.</span>
           </div>
         ) : (
           <div className="wf-stagecard">

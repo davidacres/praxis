@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useDialogs } from '../ui/dialogs';
 import { createPortal } from 'react-dom';
 import type {
   AgentRuntimeSnapshot,
@@ -72,6 +73,7 @@ export function WorkflowDesignerPage({
   onSaved,
   onDeleted
 }: WorkflowDesignerPageProps) {
+  const { confirm } = useDialogs();
   const [definition, setDefinition] = useState<WorkflowDefinition | undefined>();
   const [notFound, setNotFound] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
@@ -165,7 +167,7 @@ export function WorkflowDesignerPage({
   }, [definition, project.id, onSaved]);
 
   const remove = useCallback(async () => {
-    if (!window.confirm('Delete this workflow? Runs already started are kept.')) return;
+    if (!(await confirm({ title: 'Delete this workflow?', message: 'Runs already started are kept.', confirmLabel: 'Delete workflow', danger: true }))) return;
     setBusy(true);
     try {
       await window.praxis.workflows.remove(project.id, workflowId);
@@ -175,7 +177,7 @@ export function WorkflowDesignerPage({
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
-  }, [project.id, workflowId, onSaved, onDeleted]);
+  }, [project.id, workflowId, onSaved, onDeleted, confirm]);
 
   const selectedNode = definition?.nodes.find(node => node.id === selectedNodeId);
 
@@ -238,7 +240,7 @@ export function WorkflowDesignerPage({
           ) : (
             <div className="empty-state">
               <Icon name="cursor" size={26} />
-              <span>Select a stage to edit it.</span>
+              <span>Stage settings appear here. Pick a stage on the canvas.</span>
             </div>
           )
         ) : (

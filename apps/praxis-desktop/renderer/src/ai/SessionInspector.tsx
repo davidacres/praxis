@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AgentSessionRecord, SessionMode } from '@praxis/core';
 import { Icon } from '../ui/Icon';
+import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, formatStarted, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
@@ -42,6 +43,7 @@ function Line({ label, children }: { label: string; children: React.ReactNode })
 }
 
 export function SessionInspector({ session }: SessionInspectorProps) {
+  const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -49,7 +51,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
     return (
       <div className="empty-state" data-testid="session-inspector-empty">
         <Icon name="robot" size={26} />
-        <span>Select a session to see its context.</span>
+        <span>A session&rsquo;s provider, tools, and worktree appear here.</span>
       </div>
     );
   }
@@ -76,11 +78,15 @@ export function SessionInspector({ session }: SessionInspectorProps) {
     });
   };
 
-  const removeWorktree = () => {
+  const removeWorktree = async () => {
     if (!session.worktreePath) return;
-    if (!window.confirm(`Remove the git worktree for this session?\n\n${session.worktreePath}\n\nThe branch ${session.worktreeBranch ?? ''} and its checkout are deleted.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Remove the git worktree?',
+      message: `${session.worktreePath}\n\nThe branch ${session.worktreeBranch ?? ''} and its checkout are deleted.`,
+      confirmLabel: 'Remove worktree',
+      danger: true
+    });
+    if (!ok) return;
     void run(() => window.praxis.ai.removeWorktree(session.issueKey));
   };
 
@@ -172,7 +178,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
             className="btn"
             data-testid="session-remove-worktree"
             disabled={busy}
-            onClick={removeWorktree}
+            onClick={() => void removeWorktree()}
           >
             <Icon name="git-branch" size={13} /> {busy ? 'Removing…' : 'Remove worktree'}
           </button>

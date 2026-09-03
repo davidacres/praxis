@@ -257,7 +257,7 @@ export function Connections({ onChanged }: ConnectionsProps) {
     return (
       <div className="empty-state" data-testid="conn-empty">
         <Icon name="plug" size={28} />
-        <span>Select a connection, or add a new one.</span>
+        <span>A connection&rsquo;s settings appear here. Select one, or add a new one.</span>
       </div>
     );
   };

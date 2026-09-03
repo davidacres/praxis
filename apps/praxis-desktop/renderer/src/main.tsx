@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
+import { DialogHost } from './ui/dialogs';
 import {
   applySurfacePack,
   applyThemePreference,
@@ -55,6 +56,8 @@ void window.praxis.settings.get().then(settings => {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <DialogHost>
+      <App />
+    </DialogHost>
   </StrictMode>
 );
