@@ -150,6 +150,12 @@ whose target is absent is skipped, not shown empty. Two invariants, both covered
 stays clickable), and **the ring must enclose the control the callout describes** — do not
 add a CSS transition to the ring's geometry, which left it lagging a stop behind.
 
+The ring is `3px dashed var(--tone-tour)`, a magenta used nowhere else in the chrome. Do not
+put it back on the accent: that was a fourth meaning for a token already carrying brand and
+primary action, it was indistinguishable from the `2px solid var(--focus-ring)` keyboard
+ring, and it vanished when it landed on an accent button. An annotation must not look like a
+control — the dashed style and the off-palette hue are both asserted.
+
 ## Settings
 ## Settings
 
