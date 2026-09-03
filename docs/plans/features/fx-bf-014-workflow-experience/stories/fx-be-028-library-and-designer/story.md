@@ -64,3 +64,20 @@ A workflow is authored on the canvas against real agents and saved, with the ins
   remaining inline `style` is dynamic canvas geometry (transforms, node x/y).
 - The non-terminal run-count badge (TASK-122) is a live `.tree-badge` on the Sidebar
   Workflows row, refreshed on `workflows:runChanged`.
+
+## As built — navigation revision (2026-09-03)
+
+Reworked so the shell does the heavy lifting:
+
+- **Workflows is a sidebar tree section**, not a centre screen. The row expands to the
+  project's saved workflows plus a **Runs** child; a `+` opens `NewWorkflowDialog`
+  (template picker → `workflows.instantiate` → open its designer). The centre-pane Library
+  screen and the `Design / Runs` header switch are gone; `route.workflowId` /
+  `route.workflowView: 'runs'` drive the centre.
+- **The inspector moved to the shell's right pane.** `App` renders a `wf-aux-slot` in
+  `pane-aux` for `feature === 'workflows'`; `WorkflowDesignerPage` and `WorkflowRunMonitor`
+  `createPortal` their Stage/Connections tabs (and the run-stage detail) into it. The
+  designer grid is now two columns (rail + canvas); selecting a node calls `onRequireAux`
+  so the pane reveals itself. `App.showAux` no longer excludes workflows.
+- `WorkflowDesignerPage` now loads exactly one workflow by id (`workflows.get`) and carries
+  a Delete action; it no longer owns template/library state.

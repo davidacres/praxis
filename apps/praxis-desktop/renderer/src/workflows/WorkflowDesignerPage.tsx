@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   AgentRuntimeSnapshot,
   ProjectRecord,
@@ -7,12 +8,9 @@ import type {
   WorkflowGateKind,
   WorkflowNode,
   WorkflowNodeType,
-  WorkflowPolicyProfile,
-  WorkflowTemplate,
-  TemplateReadiness
+  WorkflowPolicyProfile
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { WorkflowRunMonitor } from './WorkflowRunMonitor';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import {
   addNode,
@@ -29,11 +27,12 @@ import {
 } from './workflowEdits';
 
 /**
- * Visual workflow designer (FX-BE-021). A structured editor rather than a
- * free-drag canvas: nodes are a keyboard-navigable list, edges are explicit
- * from/to rows, and every mutation runs through the pure `workflowDesignerState`
- * helpers so undo is a value stack. Live validation from core over IPC
- * badges the offending node and blocks Save.
+ * Visual workflow designer (FX-BE-021 / FX-BF-014).
+ *
+ * Opened for one saved workflow, picked from the sidebar tree. A docked stage
+ * rail and a pan/zoom canvas fill the centre; the stage/connection inspector
+ * renders into the shell's right pane (`auxSlot`) so the canvas keeps the whole
+ * centre column.
  */
 
 const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string }> = [
@@ -53,37 +52,43 @@ function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
 
 export interface WorkflowDesignerPageProps {
   project: ProjectRecord;
-  /** Which half of the feature is open — controlled by the route. */
-  view?: 'design' | 'runs';
-  onViewChange?: (view: 'design' | 'runs') => void;
-  /** Opens the agent session behind a run stage. */
-  onOpenSession?: (sessionKey: string) => void;
+  /** The saved project workflow to edit. */
+  workflowId: string;
+  /** The shell's right-pane element the inspector portals into. */
+  auxSlot: HTMLElement | null;
+  /** Ask the shell to reveal the right pane (a stage was selected). */
+  onRequireAux?: () => void;
+  /** Persisted a change — the sidebar list may need to re-read (name changes). */
+  onSaved?: () => void;
+  /** The workflow was deleted — navigate away. */
+  onDeleted?: () => void;
 }
 
 export function WorkflowDesignerPage({
   project,
-  view: viewProp,
-  onViewChange,
-  onOpenSession
+  workflowId,
+  auxSlot,
+  onRequireAux,
+  onSaved,
+  onDeleted
 }: WorkflowDesignerPageProps) {
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
-  const [readiness, setReadiness] = useState<Record<string, TemplateReadiness>>({});
-  const [projectWorkflows, setProjectWorkflows] = useState<WorkflowDefinition[]>([]);
   const [definition, setDefinition] = useState<WorkflowDefinition | undefined>();
+  const [notFound, setNotFound] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
-  // The inspector column is a single panel at a time — a stage's fields or the
-  // connection list — so neither overflows the 340px column.
   const [inspectorTab, setInspectorTab] = useState<'stage' | 'connections'>('stage');
-  const selectStage = useCallback((nodeId: string | undefined) => {
-    setSelectedNodeId(nodeId);
-    if (nodeId) setInspectorTab('stage');
-  }, []);
+  const selectStage = useCallback(
+    (nodeId: string | undefined) => {
+      setSelectedNodeId(nodeId);
+      if (nodeId) {
+        setInspectorTab('stage');
+        onRequireAux?.();
+      }
+    },
+    [onRequireAux]
+  );
   const [error, setError] = useState<string | undefined>();
   const [savedAt, setSavedAt] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const [uncontrolledView, setUncontrolledView] = useState<'design' | 'runs'>('design');
-  const view = viewProp ?? uncontrolledView;
-  const setView = onViewChange ?? setUncontrolledView;
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
 
@@ -92,25 +97,34 @@ export function WorkflowDesignerPage({
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
   }, [project.id]);
 
-  const [libraryLoading, setLibraryLoading] = useState(true);
-  const reloadLibrary = useCallback(() => {
-    setLibraryLoading(true);
+  // Load the chosen workflow; re-runs when the sidebar picks a different one.
+  useEffect(() => {
+    let cancelled = false;
+    setDefinition(undefined);
+    setNotFound(false);
+    setSelectedNodeId(undefined);
     void window.praxis.workflows
-      .listTemplates(project.id)
-      .then(list => {
-        setTemplates(list);
-        setProjectWorkflows(list.filter(entry => entry.source === 'project').map(entry => entry.definition));
+      .get(project.id, workflowId)
+      .then(found => {
+        if (cancelled) return;
+        if (!found) {
+          setNotFound(true);
+          return;
+        }
+        setDefinition(found);
+        setSelectedNodeId(found.nodes[0]?.id);
+        setSavedAt(found.updatedAt);
+        onRequireAux?.();
       })
-      .finally(() => setLibraryLoading(false));
-    void window.praxis.workflows
-      .templateReadiness(project.id)
-      .then(rows => setReadiness(Object.fromEntries(rows.map(row => [row.templateId, row]))));
-  }, [project.id]);
+      .catch(err => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, workflowId, onRequireAux]);
 
-  useEffect(reloadLibrary, [reloadLibrary]);
-
-  // Validation runs in core over IPC, debounced, so the renderer bundle stays
-  // free of the validator (and the chokidar-laden core barrel).
+  // Validation runs in core over IPC, debounced.
   const [feedback, setFeedback] = useState<BucketedFeedback | undefined>();
   useEffect(() => {
     if (!definition) {
@@ -134,32 +148,6 @@ export function WorkflowDesignerPage({
     setSavedAt(undefined);
   }, []);
 
-  const openTemplate = useCallback(
-    async (templateId: string) => {
-      setError(undefined);
-      setBusy(true);
-      try {
-        const copy = await window.praxis.workflows.instantiate(project.id, templateId);
-        setDefinition(copy);
-        setSelectedNodeId(copy.nodes[0]?.id);
-        setSavedAt(copy.updatedAt);
-        reloadLibrary();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [project.id, reloadLibrary]
-  );
-
-  const openExisting = useCallback((workflow: WorkflowDefinition) => {
-    setDefinition(workflow);
-    setSelectedNodeId(workflow.nodes[0]?.id);
-    setSavedAt(workflow.updatedAt);
-    setError(undefined);
-  }, []);
-
   const save = useCallback(async () => {
     if (!definition) return;
     setError(undefined);
@@ -168,41 +156,106 @@ export function WorkflowDesignerPage({
       const saved = await window.praxis.workflows.save(project.id, definition);
       setDefinition(saved);
       setSavedAt(saved.updatedAt);
-      reloadLibrary();
+      onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [definition, project.id, reloadLibrary]);
+  }, [definition, project.id, onSaved]);
+
+  const remove = useCallback(async () => {
+    if (!window.confirm('Delete this workflow? Runs already started are kept.')) return;
+    setBusy(true);
+    try {
+      await window.praxis.workflows.remove(project.id, workflowId);
+      onSaved?.();
+      onDeleted?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }, [project.id, workflowId, onSaved, onDeleted]);
 
   const selectedNode = definition?.nodes.find(node => node.id === selectedNodeId);
+
+  if (notFound) {
+    return (
+      <div className="view-scroll wf-page">
+        <div className="empty-state">
+          <Icon name="split-horizontal" size={28} />
+          <span>That workflow no longer exists.</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!definition) {
+    return (
+      <div className="view-scroll wf-page">
+        <div className="empty-state" aria-busy="true">
+          <Icon name="split-horizontal" size={28} />
+          <span>Loading workflow…</span>
+        </div>
+      </div>
+    );
+  }
+
+  const inspector = (
+    <section className="wf-inspector wf-inspector--tabbed wf-aux" aria-label="Stage inspector">
+      <div role="tablist" aria-label="Inspector" className="wf-inspector-tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={inspectorTab === 'stage'}
+          className={inspectorTab === 'stage' ? 'active' : ''}
+          onClick={() => setInspectorTab('stage')}
+        >
+          Stage
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={inspectorTab === 'connections'}
+          className={inspectorTab === 'connections' ? 'active' : ''}
+          onClick={() => setInspectorTab('connections')}
+        >
+          Connections{definition.edges.length > 0 ? ` (${definition.edges.length})` : ''}
+        </button>
+      </div>
+      <div className="wf-inspector-body">
+        {inspectorTab === 'stage' ? (
+          selectedNode ? (
+            <NodeInspector
+              definition={definition}
+              node={selectedNode}
+              issues={feedback?.byNode[selectedNode.id] ?? []}
+              catalog={catalog}
+              policy={policy}
+              onChange={mutate}
+              onSelectNode={selectStage}
+            />
+          ) : (
+            <div className="empty-state">
+              <Icon name="cursor" size={26} />
+              <span>Select a stage to edit it.</span>
+            </div>
+          )
+        ) : (
+          <EdgeEditor definition={definition} onChange={mutate} />
+        )}
+      </div>
+    </section>
+  );
 
   return (
     <div className="view-scroll wf-page">
       <header className="wf-header">
-        <h1>Workflows</h1>
+        <h1>{definition.name}</h1>
         <span className="wf-header-sub">{project.name}</span>
-        <div role="tablist" aria-label="Workflow view" className="wf-viewswitch">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'design'}
-            className={`btn-compact${view === 'design' ? ' active' : ''}`}
-            onClick={() => setView('design')}
-          >
-            Design
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'runs'}
-            className={`btn-compact${view === 'runs' ? ' active' : ''}`}
-            onClick={() => setView('runs')}
-          >
-            Runs
-          </button>
-        </div>
+        <button type="button" className="btn btn-compact wf-header-del" onClick={() => void remove()} disabled={busy}>
+          <Icon name="trash" size={13} /> Delete
+        </button>
       </header>
 
       {error && (
@@ -211,252 +264,93 @@ export function WorkflowDesignerPage({
         </p>
       )}
 
-      {view === 'runs' ? (
-        <WorkflowRunMonitor
-          project={project}
-          runnableWorkflows={projectWorkflows.map(workflow => ({ id: workflow.id, name: workflow.name }))}
-          {...(onOpenSession ? { onOpenSession } : {})}
-        />
-      ) : !definition ? (
-        <TemplateLibrary
-          templates={templates}
-          readiness={readiness}
-          projectWorkflows={projectWorkflows}
-          busy={busy}
-          loading={libraryLoading}
-          onUseTemplate={openTemplate}
-          onOpenExisting={openExisting}
-        />
-      ) : (
-        <div className="wf-designer">
-          <nav className="wf-rail" aria-label="Workflow stages">
-            <div className="wf-rail-head">
-              <strong>{definition.name}</strong>
+      <div className="wf-designer wf-designer--two">
+        <nav className="wf-rail" aria-label="Workflow stages">
+          <div className="wf-rail-head">
+            <strong>{definition.name}</strong>
+          </div>
+
+          <div role="group" aria-label="Add stage" className="wf-rail-add">
+            {NODE_KINDS.map(kind => (
               <button
+                key={kind.type}
                 type="button"
-                className="btn btn-compact"
+                className="chip"
                 onClick={() => {
-                  setDefinition(undefined);
-                  reloadLibrary();
+                  const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
+                  mutate(addNode(definition, node));
+                  selectStage(node.id);
                 }}
               >
-                Close
+                <Icon name={kind.icon as never} size={13} /> {kind.label}
               </button>
-            </div>
+            ))}
+          </div>
 
-            <div role="group" aria-label="Add stage" className="wf-rail-add">
-              {NODE_KINDS.map(kind => (
-                <button
-                  key={kind.type}
-                  type="button"
-                  className="chip"
-                  onClick={() => {
-                    const node = newNode(kind.type, { x: 120, y: 120 + definition.nodes.length * 40 });
-                    mutate(addNode(definition, node));
-                    selectStage(node.id);
-                  }}
-                >
-                  <Icon name={kind.icon as never} size={13} /> {kind.label}
-                </button>
-              ))}
-            </div>
-
-            <ul className="wf-rail-list">
-              {definition.nodes.map(node => {
-                const issues = feedback?.byNode[node.id]?.length ?? 0;
-                const isEntry = node.id === definition.entryNodeId;
-                return (
-                  <li key={node.id}>
-                    <button
-                      type="button"
-                      className="wf-rail-row"
-                      aria-pressed={node.id === selectedNodeId}
-                      aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
-                        issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
-                      }`}
-                      onClick={() => selectStage(node.id)}
-                    >
-                      <span className="wf-rail-main">
-                        <span className="wf-rail-name">{node.name}</span>
-                        <span className="wf-rail-sub">{node.type}</span>
+          <ul className="wf-rail-list">
+            {definition.nodes.map(node => {
+              const issues = feedback?.byNode[node.id]?.length ?? 0;
+              const isEntry = node.id === definition.entryNodeId;
+              return (
+                <li key={node.id}>
+                  <button
+                    type="button"
+                    className="wf-rail-row"
+                    aria-pressed={node.id === selectedNodeId}
+                    aria-label={`${node.name} (${node.type})${isEntry ? ', entry stage' : ''}${
+                      issues > 0 ? `, ${issues} issue${issues === 1 ? '' : 's'}` : ''
+                    }`}
+                    onClick={() => selectStage(node.id)}
+                  >
+                    <span className="wf-rail-main">
+                      <span className="wf-rail-name">{node.name}</span>
+                      <span className="wf-rail-sub">{node.type}</span>
+                    </span>
+                    {issues > 0 ? (
+                      <span className="wf-rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
+                        ⚠ {issues}
                       </span>
-                      {issues > 0 ? (
-                        <span className="wf-rail-mark is-issue" title={`${issues} validation issue${issues === 1 ? '' : 's'}`}>
-                          ⚠ {issues}
-                        </span>
-                      ) : isEntry ? (
-                        <span className="wf-rail-mark is-entry">entry</span>
-                      ) : railGate(node) ? (
-                        <span className="wf-rail-mark is-gate">{railGate(node)}</span>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="wf-rail-foot">
-              <ValidationSummary feedback={feedback} />
-              {!project.workspaceFolder && (
-                <p className="wf-hint is-warn">Attach a folder to this project to run this workflow.</p>
-              )}
-              <button
-                type="button"
-                onClick={save}
-                disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
-                className="btn btn-primary"
-              >
-                {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
-              </button>
-            </div>
-          </nav>
-
-          <div className="wf-canvas-slot">
-            <WorkflowCanvas
-              definition={definition}
-              selectedNodeId={selectedNodeId}
-              issuesByNode={Object.fromEntries(
-                Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
-              )}
-              onChange={mutate}
-              onSelectNode={selectStage}
-            />
-          </div>
-
-          <section className="wf-inspector wf-inspector--tabbed" aria-label="Stage inspector">
-            <div role="tablist" aria-label="Inspector" className="wf-inspector-tabs">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={inspectorTab === 'stage'}
-                className={inspectorTab === 'stage' ? 'active' : ''}
-                onClick={() => setInspectorTab('stage')}
-              >
-                Stage
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={inspectorTab === 'connections'}
-                className={inspectorTab === 'connections' ? 'active' : ''}
-                onClick={() => setInspectorTab('connections')}
-              >
-                Connections{definition.edges.length > 0 ? ` (${definition.edges.length})` : ''}
-              </button>
-            </div>
-
-            <div className="wf-inspector-body">
-              {inspectorTab === 'stage' ? (
-                selectedNode ? (
-                  <NodeInspector
-                    definition={definition}
-                    node={selectedNode}
-                    issues={feedback?.byNode[selectedNode.id] ?? []}
-                    catalog={catalog}
-                    policy={policy}
-                    onChange={mutate}
-                    onSelectNode={selectStage}
-                  />
-                ) : (
-                  <div className="empty-state">
-                    <Icon name="cursor" size={26} />
-                    <span>Select a stage to edit it.</span>
-                  </div>
-                )
-              ) : (
-                <EdgeEditor definition={definition} onChange={mutate} />
-              )}
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Template library ─────────────────────────────────────────────────────
-
-function TemplateLibrary({
-  templates,
-  readiness,
-  projectWorkflows,
-  busy,
-  loading,
-  onUseTemplate,
-  onOpenExisting
-}: {
-  templates: WorkflowTemplate[];
-  readiness: Record<string, TemplateReadiness>;
-  projectWorkflows: WorkflowDefinition[];
-  busy: boolean;
-  loading: boolean;
-  onUseTemplate: (templateId: string) => void;
-  onOpenExisting: (workflow: WorkflowDefinition) => void;
-}) {
-  if (loading && templates.length === 0) {
-    return (
-      <div className="wf-library" aria-busy="true">
-        <section aria-label="Loading workflows">
-          <h2>Start from a template</h2>
-          <ul className="wf-template-list">
-            {[0, 1, 2].map(i => (
-              <li key={i} className="wf-template wf-skeleton" aria-hidden />
-            ))}
-          </ul>
-        </section>
-      </div>
-    );
-  }
-
-  return (
-    <div className="wf-library">
-      {projectWorkflows.length > 0 && (
-        <section aria-label="This project's workflows">
-          <h2>This project</h2>
-          <div className="wf-card-grid">
-            {projectWorkflows.map(workflow => (
-              <button key={workflow.id} type="button" className="wf-card" onClick={() => onOpenExisting(workflow)}>
-                <strong>{workflow.name}</strong>
-                <span className="wf-rail-sub">v{workflow.version}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section aria-label="Workflow templates">
-        <h2>Start from a template</h2>
-        <p className="wf-library-lede">
-          Pick a starting point and edit it on the canvas — a governed pipeline with review, QA,
-          and security gates, or a quick single-stage change.
-        </p>
-        <ul className="wf-template-list">
-          {templates.map(template => {
-            const ready = readiness[template.definition.id];
-            const blocking = ready ? Object.entries(ready.blockingByNode) : [];
-            return (
-              <li key={`${template.source}:${template.definition.id}`} className="wf-template">
-                <div className="wf-template-head">
-                  <div>
-                    <strong>{template.definition.name}</strong>
-                    <span className="chip chip-muted">{template.source}</span>
-                  </div>
-                  <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onUseTemplate(template.definition.id)}>
-                    Use template
+                    ) : isEntry ? (
+                      <span className="wf-rail-mark is-entry">entry</span>
+                    ) : railGate(node) ? (
+                      <span className="wf-rail-mark is-gate">{railGate(node)}</span>
+                    ) : null}
                   </button>
-                </div>
-                {template.definition.description && <p className="wf-template-desc">{template.definition.description}</p>}
-                {ready && !ready.agentsOk && (
-                  <p role="status" className="wf-template-warn">
-                    Needs agents that are not installed:{' '}
-                    {blocking.map(([nodeId, message]) => `${nodeId} — ${message}`).join('; ')}
-                  </p>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="wf-rail-foot">
+            <ValidationSummary feedback={feedback} />
+            {!project.workspaceFolder && (
+              <p className="wf-hint is-warn">Attach a folder to this project to run this workflow.</p>
+            )}
+            <button
+              type="button"
+              onClick={save}
+              disabled={busy || !feedback?.valid || savedAt === definition.updatedAt}
+              className="btn btn-primary"
+            >
+              {savedAt === definition.updatedAt ? 'Saved' : 'Save workflow'}
+            </button>
+          </div>
+        </nav>
+
+        <div className="wf-canvas-slot">
+          <WorkflowCanvas
+            definition={definition}
+            selectedNodeId={selectedNodeId}
+            issuesByNode={Object.fromEntries(
+              Object.entries(feedback?.byNode ?? {}).map(([id, list]) => [id, list.length])
+            )}
+            onChange={mutate}
+            onSelectNode={selectStage}
+          />
+        </div>
+      </div>
+
+      {auxSlot ? createPortal(inspector, auxSlot) : null}
     </div>
   );
 }

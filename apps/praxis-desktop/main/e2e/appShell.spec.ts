@@ -66,16 +66,15 @@ test('the Agent Hub and Workflow designer sit inside the normal app shell', asyn
   await expect(page.getByRole('navigation', { name: 'Agent catalog' }).getByRole('button', { name: /Praxis Reviewer/ })).toBeVisible();
   await expect(page).toHaveScreenshot('app-shell-agents.png');
 
-  // Workflow designer — reached from the project's Workflows row.
-  await page.getByTestId('project-workflows-nav-item').click();
-  await page
-    .getByRole('listitem')
-    .filter({ hasText: 'Governed delivery' })
-    .first()
-    .getByRole('button', { name: 'Use template' })
-    .click();
+  // Workflow designer — created from the project's Workflows tree section, with
+  // the stage inspector filling the shell's right pane.
+  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New workflow' });
+  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).getByRole('button', { name: 'Use' }).click();
+  await expect(dialog).toBeHidden();
   await expect(
     page.getByRole('application', { name: 'Workflow canvas' }).getByRole('button', { name: /^Plan \(agent-task\)/ })
   ).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Stage inspector' })).toBeVisible();
   await expect(page).toHaveScreenshot('app-shell-workflows.png');
 });

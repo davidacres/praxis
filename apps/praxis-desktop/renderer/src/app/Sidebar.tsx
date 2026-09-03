@@ -64,7 +64,13 @@ export interface SidebarProps {
   onSelectProject: (project: ProjectRecord) => void;
   onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
-  onSelectWorkflows: (project: ProjectRecord) => void;
+  /** Saved workflows per project id, for the Workflows tree section. */
+  projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
+  activeWorkflowId?: string;
+  activeWorkflowRuns?: boolean;
+  onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
+  onSelectWorkflowRuns: (project: ProjectRecord) => void;
+  onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteBoard: (board: Board) => void;
   onConfigureBoard: (board: Board) => void;
   selectedProjectId?: string;
@@ -104,7 +110,12 @@ export function Sidebar({
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
-  onSelectWorkflows,
+  projectWorkflows,
+  activeWorkflowId,
+  activeWorkflowRuns,
+  onSelectWorkflow,
+  onSelectWorkflowRuns,
+  onNewWorkflow,
   onDeleteBoard,
   onConfigureBoard,
   selectedProjectId,
@@ -383,6 +394,9 @@ export function Sidebar({
                     const childCount = (defaultBoard ? 1 : 0) + linkedBoards.length;
                     const projectBoardsCollapsed = collapsed[`project:${project.id}:boards`] ?? false;
                     const projectGitCollapsed = collapsed[`project:${project.id}:git`] ?? false;
+                    const projectWorkflowsCollapsed = collapsed[`project:${project.id}:workflows`] ?? false;
+                    const projectWorkflowList = projectWorkflows[project.id] ?? [];
+                    const projectRunCount = activeRunsByProjectId[project.id] ?? 0;
                     const projectDocsCollapsed = collapsed[`project:${project.id}:docs`] ?? false;
                     const projectPlansCollapsed = collapsed[`project:${project.id}:plans`] ?? false;
                     const projectDocuments = documentsByProjectId[project.id];
@@ -457,11 +471,37 @@ export function Sidebar({
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
-                        <button
-                          className={`tree-row project-workflows-row${activeFeature === 'workflows' && selectedProjectId === project.id ? ' active' : ''}`}
-                          data-testid="project-workflows-nav-item"
-                          onClick={() => onSelectWorkflows(project)}
-                        ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">Workflows</span>{(activeRunsByProjectId[project.id] ?? 0) > 0 && <span className="tree-badge" title={`${activeRunsByProjectId[project.id]} run${activeRunsByProjectId[project.id] === 1 ? '' : 's'} in flight`}>{activeRunsByProjectId[project.id]}</span>}</button>
+                        <div className="tree-subsection-heading">
+                          <button
+                            className="sidebar-subsection-toggle"
+                            aria-expanded={!projectWorkflowsCollapsed}
+                            data-testid="project-workflows-nav-item"
+                            onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:workflows`]: !projectWorkflowsCollapsed }))}
+                          >
+                            <span className={`tree-section-icon${projectWorkflowsCollapsed ? '' : ' open'}`}><Icon name="split-horizontal" size={13} /></span><span>Workflows</span><span className="tree-meta">{projectWorkflowList.length}</span>
+                          </button>
+                          <button className="sidebar-section-add" aria-label={`New workflow in ${project.name}`} data-testid="project-workflow-new" onClick={() => onNewWorkflow(project)}><Icon name="plus" size={13} /></button>
+                        </div>
+                        {!projectWorkflowsCollapsed && <>
+                          {projectWorkflowList.map(workflow => (
+                            <button
+                              key={workflow.id}
+                              className={`tree-row project-workflow-row${activeFeature === 'workflows' && !activeWorkflowRuns && activeWorkflowId === workflow.id && selectedProjectId === project.id ? ' active' : ''}`}
+                              data-testid="project-workflow-nav-item"
+                              onClick={() => onSelectWorkflow(project, workflow.id)}
+                            ><span className="tree-icon"><Icon name="split-horizontal" size={14} /></span><span className="tree-label">{workflow.name}</span></button>
+                          ))}
+                          {projectWorkflowList.length === 0 && (
+                            <button className="tree-row project-workflow-empty" data-testid="project-workflow-empty" onClick={() => onNewWorkflow(project)}>
+                              <span className="tree-icon"><Icon name="plus" size={13} /></span><span className="tree-label">New workflow…</span>
+                            </button>
+                          )}
+                          <button
+                            className={`tree-row project-workflow-child${activeFeature === 'workflows' && activeWorkflowRuns && selectedProjectId === project.id ? ' active' : ''}`}
+                            data-testid="project-workflow-runs-nav-item"
+                            onClick={() => onSelectWorkflowRuns(project)}
+                          ><span className="tree-icon"><Icon name="play" size={14} /></span><span className="tree-label">Runs</span>{projectRunCount > 0 && <span className="tree-badge" title={`${projectRunCount} run${projectRunCount === 1 ? '' : 's'} in flight`}>{projectRunCount}</span>}</button>
+                        </>}
                         {projectDocuments?.exists && <>
                           <button className="sidebar-subsection-toggle" aria-expanded={!projectDocsCollapsed} data-testid="project-docs-nav-item" onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}:docs`]: !projectDocsCollapsed }))}>
                             <span className={`tree-section-icon${projectDocsCollapsed ? '' : ' open'}`}><Icon name="folder-open" size={13} /></span><span>docs</span>
