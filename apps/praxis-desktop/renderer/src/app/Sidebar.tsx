@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Board, BoardDetails, Connection, ConnectionCheck, ProjectDocument, ProjectRecord, WorkspaceRecord } from '@praxis/core';
+import type {
+  AgentRuntimeSnapshot,
+  Board,
+  BoardDetails,
+  Connection,
+  ConnectionCheck,
+  ProjectDocument,
+  ProjectRecord,
+  WorkspaceRecord
+} from '@praxis/core';
 import { boardTypeIcon, boardTypeLabel, resolveBackendMode, statusTone } from '../board/boardMeta';
 import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
@@ -64,6 +73,13 @@ export interface SidebarProps {
   onSelectProject: (project: ProjectRecord) => void;
   onOpenProjectDocument: (project: ProjectRecord, document: ProjectDocument) => void;
   onSelectGit: (project: ProjectRecord, view: 'graph' | 'changes' | 'conflicts') => void;
+  /** The discovered agent/skill catalog, rendered as children of the Agents row. */
+  agentCatalog?: AgentRuntimeSnapshot;
+  activeAgentId?: string;
+  activeSkillName?: string;
+  onSelectAgent: (agentId: string) => void;
+  onSelectSkill: (skillName: string) => void;
+  onNewAgentItem: (kind: 'agent' | 'skill' | 'import' | 'rescan') => void;
   /** Saved workflows per project id, for the Workflows tree section. */
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
@@ -110,6 +126,12 @@ export function Sidebar({
   onSelectProject,
   onOpenProjectDocument,
   onSelectGit,
+  agentCatalog,
+  activeAgentId,
+  activeSkillName,
+  onSelectAgent,
+  onSelectSkill,
+  onNewAgentItem,
   projectWorkflows,
   activeWorkflowId,
   activeWorkflowRuns,
@@ -151,6 +173,7 @@ export function Sidebar({
   const [documentsByProjectId, setDocumentsByProjectId] = useState<Record<string, { exists: boolean; documents: ProjectDocument[] }>>({});
 
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId);
+  const projectNameForScope = projects.find(project => project.id === selectedProjectId)?.name;
   // The switcher scopes the Projects tree to the active workspace; with no
   // workspace selected every project shows.
   const visibleProjects = activeWorkspace
@@ -567,25 +590,201 @@ export function Sidebar({
           <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}><Icon name="tools" size={14} /></span>
         </button>
         {!featuresCollapsed &&
-          FEATURES.map(feature => (
-            <button
-              key={feature.id}
-              data-testid={`nav-${feature.id}`}
-              className={`feature-row${activeFeature === feature.id ? ' active' : ''}`}
-              onClick={() => onSelectFeature(feature.id)}
-            >
-              <span className="tree-icon">
-                <Icon name={feature.icon} size={15} />
-              </span>
-              <span className="feature-label">{feature.label}</span>
-              {/* The reference shows a count only where there is something to count. */}
-              {!!featureCounts[feature.id] && (
-                <span className="feature-count">{featureCounts[feature.id]}</span>
-              )}
-            </button>
-          ))}
+          FEATURES.map(feature =>
+            // Agents is the one destination that carries a catalog, so it
+            // expands into it rather than opening a second navigator in the
+            // centre pane (the Workflows idiom).
+            feature.id === 'agents' ? (
+              <AgentsNav
+                key={feature.id}
+                icon={feature.icon}
+                label={feature.label}
+                active={activeFeature === 'agents'}
+                collapsed={collapsed['feature:agents'] ?? false}
+                onToggleCollapsed={() =>
+                  setCollapsed(current => ({ ...current, 'feature:agents': !(current['feature:agents'] ?? false) }))
+                }
+                catalog={agentCatalog}
+                activeAgentId={activeAgentId}
+                activeSkillName={activeSkillName}
+                projectName={projectNameForScope}
+                onSelectFeature={() => onSelectFeature('agents')}
+                onSelectAgent={onSelectAgent}
+                onSelectSkill={onSelectSkill}
+                onNewAgentItem={onNewAgentItem}
+              />
+            ) : (
+              <button
+                key={feature.id}
+                data-testid={`nav-${feature.id}`}
+                className={`feature-row${activeFeature === feature.id ? ' active' : ''}`}
+                onClick={() => onSelectFeature(feature.id)}
+              >
+                <span className="tree-icon">
+                  <Icon name={feature.icon} size={15} />
+                </span>
+                <span className="feature-label">{feature.label}</span>
+                {/* The reference shows a count only where there is something to count. */}
+                {!!featureCounts[feature.id] && (
+                  <span className="feature-count">{featureCounts[feature.id]}</span>
+                )}
+              </button>
+            )
+          )}
       </div>
     </nav>
+  );
+}
+
+/**
+ * The Agents destination plus its catalog, grouped by scope. Rows carry the
+ * same trust / running vocabulary as the runtime panel so the tree reads as a
+ * status board, not just a list.
+ */
+function AgentsNav({
+  icon,
+  label,
+  active,
+  collapsed,
+  onToggleCollapsed,
+  catalog,
+  activeAgentId,
+  activeSkillName,
+  projectName,
+  onSelectFeature,
+  onSelectAgent,
+  onSelectSkill,
+  onNewAgentItem
+}: {
+  icon: IconName;
+  label: string;
+  active: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  catalog?: AgentRuntimeSnapshot;
+  activeAgentId?: string;
+  activeSkillName?: string;
+  projectName?: string;
+  onSelectFeature: () => void;
+  onSelectAgent: (agentId: string) => void;
+  onSelectSkill: (skillName: string) => void;
+  onNewAgentItem: (kind: 'agent' | 'skill' | 'import' | 'rescan') => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const scopes: Array<'global' | 'project'> = ['global', 'project'];
+  const groups = scopes
+    .map(scope => ({
+      scope,
+      label: scope === 'global' ? 'Global' : projectName ?? 'This project',
+      agents: (catalog?.agents ?? []).filter(agent => agent.scope === scope),
+      skills: (catalog?.skills ?? []).filter(skill => skill.scope === scope)
+    }))
+    .filter(group => group.agents.length > 0 || group.skills.length > 0);
+  const total = (catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
+
+  return (
+    <>
+      <div className="feature-row-heading">
+        <button
+          data-testid="nav-agents"
+          className={`feature-row${active ? ' active' : ''}`}
+          onClick={() => {
+            onSelectFeature();
+            if (collapsed) onToggleCollapsed();
+          }}
+        >
+          <span className="tree-icon">
+            <Icon name={icon} size={15} />
+          </span>
+          <span className="feature-label">{label}</span>
+          {total > 0 && <span className="feature-count">{total}</span>}
+        </button>
+        <button
+          className="feature-row-expand"
+          aria-label={collapsed ? 'Expand agent catalog' : 'Collapse agent catalog'}
+          aria-expanded={!collapsed}
+          data-testid="nav-agents-toggle"
+          onClick={onToggleCollapsed}
+        >
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+        </button>
+        <div className="new-menu-anchor">
+          <button
+            className="sidebar-section-add"
+            aria-label="New agent or skill"
+            aria-expanded={menuOpen}
+            data-testid="nav-agents-new"
+            onClick={() => setMenuOpen(open => !open)}
+          >
+            <Icon name="plus" size={13} />
+          </button>
+          {menuOpen && (
+            <div className="new-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
+              <button role="menuitem" data-testid="new-agent" onClick={() => { setMenuOpen(false); onNewAgentItem('agent'); }}>
+                <Icon name="robot" size={14} /><span><strong>New agent</strong><small>Manifest plus a starter implementation</small></span>
+              </button>
+              <button role="menuitem" data-testid="new-skill" onClick={() => { setMenuOpen(false); onNewAgentItem('skill'); }}>
+                <Icon name="sparkles" size={14} /><span><strong>New skill</strong><small>A SKILL.md package</small></span>
+              </button>
+              <button role="menuitem" data-testid="import-agent-item" onClick={() => { setMenuOpen(false); onNewAgentItem('import'); }}>
+                <Icon name="folder-open" size={14} /><span><strong>Import…</strong><small>Validate and copy an existing folder</small></span>
+              </button>
+              <button role="menuitem" data-testid="rescan-agents" onClick={() => { setMenuOpen(false); onNewAgentItem('rescan'); }}>
+                <Icon name="refresh" size={14} /><span><strong>Rescan catalog</strong><small>Re-read the discovery paths</small></span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {!collapsed && groups.length === 0 && catalog && (
+        <span className="sidebar-empty-hint">No agents or skills yet</span>
+      )}
+      {!collapsed &&
+        groups.map(group => (
+          <div key={group.scope} className="agent-nav-group">
+            <div className="agent-nav-scope">{group.label}</div>
+            {group.agents.map(agent => {
+              const state = catalog?.hosts[agent.manifest.id]?.state;
+              return (
+                <button
+                  key={`a:${agent.manifest.id}`}
+                  className={`tree-row agent-nav-row${active && activeAgentId === agent.manifest.id ? ' active' : ''}`}
+                  data-testid="agent-nav-item"
+                  onClick={() => onSelectAgent(agent.manifest.id)}
+                >
+                  <span className="tree-icon"><Icon name="robot" size={14} /></span>
+                  <span className="tree-label">{agent.manifest.name}</span>
+                  {state === 'running' ? (
+                    <span className="lane lane--running" title="Host running">●</span>
+                  ) : state === 'failed' ? (
+                    <span className="lane lane--failed" title="Failed to start">●</span>
+                  ) : agent.errors.length > 0 ? (
+                    <span className="tree-badge" title="Invalid manifest">⚠</span>
+                  ) : !agent.trusted ? (
+                    <span className="tree-badge">approval</span>
+                  ) : null}
+                </button>
+              );
+            })}
+            {group.skills.map(skill => (
+              <button
+                key={`s:${skill.metadata.name}`}
+                className={`tree-row agent-nav-row${active && activeSkillName === skill.metadata.name ? ' active' : ''}`}
+                data-testid="skill-nav-item"
+                onClick={() => onSelectSkill(skill.metadata.name)}
+              >
+                <span className="tree-icon"><Icon name="sparkles" size={14} /></span>
+                <span className="tree-label">{skill.metadata.name}</span>
+                {skill.error ? (
+                  <span className="tree-badge" title="Invalid skill">⚠</span>
+                ) : !skill.trusted ? (
+                  <span className="tree-badge">approval</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ))}
+    </>
   );
 }
 
