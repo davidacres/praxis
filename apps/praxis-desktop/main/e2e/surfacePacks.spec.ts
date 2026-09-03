@@ -29,13 +29,11 @@ test.afterEach(async () => {
  * the DOM while it is expanded, hence the separate expand step.
  */
 async function openSurface(): Promise<void> {
-  const group = window.locator('[data-testid="settings-nav-appearance-group"]');
   const surfaces = window.locator('[data-testid="settings-nav-appearance-surfaces"]');
-  if (!(await group.isVisible())) {
-    await window.locator('[data-testid="titlebar-settings"]').click();
-  }
+  // The settings dialog toggles from the titlebar; the Appearance group is
+  // expanded by default, so its children just need the dialog open.
   if (!(await surfaces.isVisible())) {
-    await group.click();
+    await window.locator('[data-testid="titlebar-settings"]').click();
   }
   await surfaces.click();
   await window.locator('[data-testid="surface-section"]').scrollIntoViewIfNeeded();
@@ -137,8 +135,6 @@ test('the watermark is tinted from the live theme and re-bakes when the palette 
   expect(praxisInk.toLowerCase()).toBe('#c6431f');
 
   await window.locator('[data-testid="titlebar-settings"]').click();
-  // The Appearance children only render once their group is expanded.
-  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-github-dark"]').click();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'github-dark');
@@ -288,8 +284,6 @@ test('motif strength is normalised so one value reads the same on every palette'
   expect(praxis).toBeLessThanOrEqual(0.32);
 
   await window.locator('[data-testid="titlebar-settings"]').click();
-  // The Appearance children only render once their group is expanded.
-  await window.locator('[data-testid="settings-nav-appearance-group"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   for (const theme of ['catppuccin-mocha', 'github-light', 'nord-dark']) {
     await window.locator(`[data-testid="theme-card-${theme}"]`).click();

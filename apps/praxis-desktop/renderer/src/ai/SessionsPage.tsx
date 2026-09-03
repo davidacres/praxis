@@ -368,7 +368,7 @@ export function SessionsPage({
           ) : (
             <div className="empty-state" style={{ flex: 1 }}>
               <Icon name="terminal" size={28} />
-              <span>Select a session in the sidebar to see its console.</span>
+              <span>Open a session from the sidebar to see its conversation.</span>
             </div>
           )
         )}

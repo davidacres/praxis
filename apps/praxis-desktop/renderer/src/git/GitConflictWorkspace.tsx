@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDialogs } from '../ui/dialogs';
 import type { GitConflictFile } from '@praxis/core';
 
 interface GitConflictWorkspaceProps {
@@ -19,6 +20,7 @@ function ConflictSource({ title, subtitle, content, onUseAll, onUseLine }: { tit
 }
 
 export function GitConflictWorkspace({ repositoryPath, path, onClose, onResolved, onAbort, canAbort }: GitConflictWorkspaceProps) {
+  const { confirm } = useDialogs();
   const [conflict, setConflict] = useState<GitConflictFile>();
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ export function GitConflictWorkspace({ repositoryPath, path, onClose, onResolved
   };
 
   const abort = async () => {
-    if (!window.confirm('Abort the in-progress Git operation? Praxis will restore the repository to its pre-operation state when Git provides a safe abort action.')) return;
+    if (!(await confirm({ title: 'Abort the in-progress Git operation?', message: 'Praxis will restore the repository to its pre-operation state when Git provides a safe abort action.', confirmLabel: 'Abort operation', danger: true }))) return;
     setBusy(true);
     try { await onAbort(); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } finally { setBusy(false); }
   };

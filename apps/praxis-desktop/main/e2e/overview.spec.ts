@@ -17,8 +17,6 @@ test('renders the workspace overview dashboard', async () => {
   await expect(page.getByRole('heading', { name: 'Workspace health' })).toBeVisible();
   await page.screenshot({ path: 'output/playwright/overview-dashboard.png', fullPage: true });
   await page.locator('[data-testid="titlebar-settings"]').click();
-  // The Appearance children only render once their group is expanded.
-  await page.locator('[data-testid="settings-nav-appearance-group"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await page.locator('[data-testid="theme-card-github-light"]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'github-light');

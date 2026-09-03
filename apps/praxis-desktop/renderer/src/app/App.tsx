@@ -37,6 +37,7 @@ import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
 import { WhatsNewDialog } from './WhatsNewDialog';
 import { StartupSplash } from './StartupSplash';
+import { CommandPalette, type CommandEntry } from './CommandPalette';
 import { NewProjectWizard } from '../projects/NewProjectWizard';
 import { ProjectHome } from '../projects/ProjectHome';
 import { ProjectWorkspace } from '../projects/ProjectWorkspace';
@@ -358,6 +359,7 @@ export function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
   const [projectDocument, setProjectDocument] = useState<ProjectDocument>();
   const [projectWizardMode, setProjectWizardMode] = useState<'create' | 'existing'>();
@@ -954,6 +956,10 @@ export function App() {
         event.preventDefault();
         navigate({});
       }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen(open => !open);
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -968,6 +974,53 @@ export function App() {
     }),
     [boards, boardDetails, connections, agentSessions]
   );
+
+  /** One flat index for ⌘K — see CommandPalette. Rebuilt when the underlying
+   *  collections change; the run callbacks reuse the same navigation the
+   *  sidebar and dialogs already use. */
+  const paletteEntries = useMemo<CommandEntry[]>(() => {
+    const entries: CommandEntry[] = [];
+    (Object.keys(FEATURE_TITLES) as FeatureId[]).forEach(feature => {
+      entries.push({
+        id: `feature:${feature}`,
+        label: FEATURE_TITLES[feature],
+        group: 'Go to',
+        icon: feature === 'git' ? 'git-branch' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : 'home',
+        run: () => navigate(feature === 'git' && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
+      });
+    });
+    entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
+    entries.push({ id: 'action:new-project', label: 'New project', group: 'Go to', icon: 'plus', run: () => requestProjectWizard('create') });
+    workspaceProjects.forEach(project => {
+      entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
+      entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
+      (workflowsByProject[project.id] ?? []).forEach(workflow => {
+        entries.push({ id: `workflow:${workflow.id}`, label: workflow.name, hint: `${project.name} · workflow`, group: 'Workflows', icon: 'graph', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowId: workflow.id }) });
+      });
+    });
+    workspaceBoards.forEach(board => {
+      entries.push({ id: `board:${board.connectionId ?? 'demo'}:${board.id}`, label: board.name, hint: 'Board', group: 'Boards', icon: 'columns', run: () => openBoard(board.id) });
+    });
+    agentSessions.forEach(session => {
+      entries.push({ id: `session:${session.issueKey}`, label: session.title || session.issueKey, hint: session.issueKey, group: 'Sessions', icon: 'robot', run: () => navigate({ feature: 'sessions', sessionKey: session.issueKey }) });
+    });
+    (agentSnapshot?.agents ?? []).forEach(agent => {
+      entries.push({ id: `agent:${agent.manifest.id}`, label: agent.manifest.name, hint: 'Agent', group: 'Agents', icon: 'robot', run: () => navigate({ feature: 'agents', agentId: agent.manifest.id }) });
+    });
+    (agentSnapshot?.skills ?? []).forEach(skill => {
+      entries.push({ id: `skill:${skill.metadata.name}`, label: skill.metadata.name, hint: 'Skill', group: 'Agents', icon: 'sparkles', run: () => navigate({ feature: 'agents', skillName: skill.metadata.name }) });
+    });
+    const settingsPages: Array<[SettingsCategory, string]> = [
+      ['overview', 'Settings'], ['startup', 'Startup'], ['appearance', 'Board settings'],
+      ['appearance-themes', 'Themes'], ['appearance-surfaces', 'Surfaces'], ['appearance-looks', 'Looks'],
+      ['ai', 'AI Provider'], ['agent-runtime', 'Agent Runtime'], ['mcp', 'MCP Server'], ['delivery', 'Delivery'],
+      ['connections', 'Connections'], ['jira', 'Jira'], ['terminal', 'Terminal'], ['performance', 'Performance'], ['preview', 'Preview']
+    ];
+    settingsPages.forEach(([id, label]) => {
+      entries.push({ id: `settings:${id}`, label, hint: 'Settings', group: 'Settings', icon: 'gear', run: () => setSettingsDialogCategory(id) });
+    });
+    return entries;
+  }, [workspaceProjects, workspaceBoards, workflowsByProject, agentSessions, agentSnapshot, selectedProject, composerProject, navigate, openBoard, requestProjectWizard]);
 
   const connection = connections.find(candidate => candidate.id === selectedBoard?.connectionId);
 
@@ -1214,9 +1267,11 @@ export function App() {
     }
     if (route.feature) {
       return (
-        <div className="empty-state">
+        <div className="empty-state" data-testid="feature-not-ready">
           <Icon name="tools" size={28} />
-          <span>{FEATURE_TITLES[route.feature]} is not wired up yet.</span>
+          <span>{FEATURE_TITLES[route.feature]} isn&rsquo;t available yet.</span>
+          <p>Feature- and ticket-level work lives on your boards for now.</p>
+          <button className="btn" type="button" onClick={() => navigate({})}>Go to Overview</button>
         </div>
       );
     }
@@ -1638,7 +1693,7 @@ export function App() {
                     ) : (
                       <div className="empty-state" data-testid="designer-item-empty">
                         <Icon name="cursor" size={28} />
-                        <span>Select a designer item to see its details.</span>
+                        <span>Pick an item on the canvas to edit it here.</span>
                       </div>
                     )
                   ) : selectedProject && route.issueKey === undefined ? (
@@ -1655,7 +1710,7 @@ export function App() {
                   ) : route.issueKey === undefined ? (
                     <div className="empty-state" data-testid="aux-empty">
                       <Icon name="ticket" size={28} />
-                      <span>Select a work item to see its details.</span>
+                      <span>Ticket details appear here when you open one.</span>
                     </div>
                   ) : (
                     <IssueDetail
@@ -1881,6 +1936,7 @@ export function App() {
         />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
+      {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
     </div>
   );
 }

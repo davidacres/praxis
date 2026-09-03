@@ -237,10 +237,15 @@ test('designer sidebar shows board tickets, supports drag to canvas, and restore
 
   // APP-101 has related tickets in the demo data; declining the optional
   // expansion still adds the dragged ticket itself.
-  win.once('dialog', dialog => dialog.dismiss());
   await ticket.dragTo(win.locator('[data-testid="designer-canvas"]'), {
     targetPosition: { x: 520, y: 320 }
   });
+  // If the ticket has related tickets, the app asks whether to pull them in too;
+  // decline so only the dragged ticket lands. Not every ticket triggers it.
+  const relatedPrompt = win.getByRole('dialog', { name: /related ticket/ });
+  if (await relatedPrompt.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await relatedPrompt.getByRole('button', { name: 'Cancel' }).click();
+  }
   await win.locator('.designer-node[data-node-id="ticket-APP-101-1"]').waitFor();
 
   await win.getByRole('button', { name: 'Exit Designer' }).click();
