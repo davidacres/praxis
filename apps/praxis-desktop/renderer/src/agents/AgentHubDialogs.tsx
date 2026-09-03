@@ -12,13 +12,13 @@ import {
 
 function ScopeField({ value, onChange }: { value: CatalogScope; onChange: (scope: CatalogScope) => void }) {
   return (
-    <fieldset className="wf-fieldset">
+    <fieldset className="form-fieldset">
       <legend>Scope</legend>
-      <label className="wf-check">
+      <label className="form-check">
         <input type="radio" name="scope" checked={value === 'global'} onChange={() => onChange('global')} />
         Global — available to every project
       </label>
-      <label className="wf-check">
+      <label className="form-check">
         <input type="radio" name="scope" checked={value === 'project'} onChange={() => onChange('project')} />
         This project — <code>.praxis/</code>, approval-required
       </label>
@@ -29,11 +29,11 @@ function ScopeField({ value, onChange }: { value: CatalogScope; onChange: (scope
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="agent-hub-field">
-      <label className="wf-field-label">
+      <label className="form-field-label">
         <span>{label}</span>
         {children}
       </label>
-      {error && <span className="wf-hint is-warn">{error}</span>}
+      {error && <span className="hint is-warn">{error}</span>}
     </div>
   );
 }
@@ -187,7 +187,7 @@ export function CreateAgentDialog({
           <option value="startup">startup</option>
         </select>
       </Field>
-      <label className="wf-check">
+      <label className="form-check">
         <input type="checkbox" checked={draft.scaffold} onChange={event => set({ scaffold: event.target.checked })} />
         Also write a labelled starter implementation
       </label>
@@ -278,13 +278,13 @@ export function CreateSkillDialog({
           placeholder="Markdown body for SKILL.md"
         />
       </Field>
-      <fieldset className="wf-fieldset">
+      <fieldset className="form-fieldset">
         <legend>Package folders</legend>
-        <label className="wf-check">
+        <label className="form-check">
           <input type="checkbox" checked={draft.includeScripts} onChange={event => set({ includeScripts: event.target.checked })} />
           scripts/
         </label>
-        <label className="wf-check">
+        <label className="form-check">
           <input
             type="checkbox"
             checked={draft.includeReferences}
@@ -292,7 +292,7 @@ export function CreateSkillDialog({
           />
           references/
         </label>
-        <label className="wf-check">
+        <label className="form-check">
           <input type="checkbox" checked={draft.includeExamples} onChange={event => set({ includeExamples: event.target.checked })} />
           examples/
         </label>
@@ -368,13 +368,13 @@ export function ImportDialog({
       submitLabel="Import"
       onSubmit={submit}
     >
-      <fieldset className="wf-fieldset">
+      <fieldset className="form-fieldset">
         <legend>Kind</legend>
-        <label className="wf-check">
+        <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'agent'} onChange={() => rePreview('agent', scope)} />
           Agent folder (contains <code>agent.json</code>)
         </label>
-        <label className="wf-check">
+        <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'skill'} onChange={() => rePreview('skill', scope)} />
           Skill folder (contains <code>SKILL.md</code>)
         </label>
@@ -393,25 +393,25 @@ export function ImportDialog({
         <div className={`agent-import-preview${preview.errors.length > 0 ? ' is-invalid' : ''}`} role="status">
           <strong>{preview.name || '(unnamed)'}</strong>
           {preview.errors.length > 0 ? (
-            <ul className="wf-issues">
+            <ul className="issues">
               {preview.errors.map((issue, index) => (
                 <li key={index}>{issue}</li>
               ))}
             </ul>
           ) : preview.duplicate ? (
             <>
-              <p className="wf-hint is-warn">A {kind} named "{preview.name}" already exists in this scope.</p>
-              <label className="wf-check">
+              <p className="hint is-warn">A {kind} named "{preview.name}" already exists in this scope.</p>
+              <label className="form-check">
                 <input type="radio" name="dup" checked={onDuplicate === 'block'} onChange={() => setOnDuplicate('block')} />
                 Cancel — don't import
               </label>
-              <label className="wf-check">
+              <label className="form-check">
                 <input type="radio" name="dup" checked={onDuplicate === 'rename'} onChange={() => setOnDuplicate('rename')} />
                 Import under a new name
               </label>
             </>
           ) : (
-            <p className="wf-hint">Valid — nothing runs during import.</p>
+            <p className="hint">Valid — nothing runs during import.</p>
           )}
         </div>
       )}
