@@ -8045,6 +8045,13 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    project tree — without this it inherits .tree-row's flush-left padding. */
 .project-git-row { padding-left: 32px; }
 .project-git-child { padding-left: 34px; }
+/* Workflows subsection — a toggle with an inline "+ new" like the Projects heading. */
+.tree-subsection-heading { display: flex; align-items: center; }
+.tree-subsection-heading .sidebar-subsection-toggle { flex: 1; min-width: 0; }
+.tree-subsection-heading .sidebar-section-add { flex-shrink: 0; margin-right: 8px; }
+.project-workflow-row { padding-left: 32px; }
+.project-workflow-child { padding-left: 34px; }
+.project-workflow-empty { padding-left: 32px; color: var(--text-tertiary); }
 .project-docs-tree { position: relative; padding-bottom: 8px; }
 .project-plans-folder { padding-left: 30px; }
 .project-document-group-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 10px 4px 42px; border: 0; color: var(--text-tertiary); background: transparent; font-size: 10px; font-weight: 650; text-align: left; text-transform: uppercase; cursor: pointer; }
@@ -8379,6 +8386,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    surface the rest of the app gets from `.input` / `.select` / `.textarea`,
    so their text stays legible on every palette. Checkboxes keep their native look. */
 .wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])),
+.wf-inspector :where(select, textarea, input:not([type='checkbox']):not([type='radio'])),
 .wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])) {
   min-height: 28px;
   padding: 0 var(--space-2);
@@ -8390,8 +8398,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: 13px;
 }
 .wf-designer :where(textarea),
+.wf-inspector :where(textarea),
 .wf-runs :where(textarea) { height: auto; padding: var(--space-2); resize: vertical; }
 .wf-designer :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
+.wf-inspector :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus,
 .wf-runs :where(select, textarea, input:not([type='checkbox']):not([type='radio'])):focus { outline: none; border-color: var(--accent); }
 
 .wf-page { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5); }
@@ -8413,7 +8423,17 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   align-items: stretch;
 }
 @media (max-width: 1200px) { .wf-designer { grid-template-columns: 220px minmax(0, 1fr) 300px; } }
+/* FX-BF-014 rev: inspector lives in the shell's right pane, so the designer is
+   two columns — rail + canvas — and the canvas gets the rest. */
+.wf-designer--two { grid-template-columns: 248px minmax(0, 1fr); }
+@media (max-width: 1200px) { .wf-designer--two { grid-template-columns: 220px minmax(0, 1fr); } }
 .wf-designer .wf-rail { width: auto; }
+.wf-header-del { margin-left: auto; }
+
+/* The right-pane portal target and the inspector that fills it. */
+.wf-aux-slot { display: flex; height: 100%; min-height: 0; }
+.wf-aux-slot > * { flex: 1; min-height: 0; }
+.wf-aux { height: 100%; box-sizing: border-box; padding: var(--space-3); }
 .wf-rail-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .wf-rail-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-rail-add { display: flex; flex-wrap: wrap; gap: var(--space-1); }
@@ -8511,16 +8531,16 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   cursor: crosshair;
 }
 
-/* Run monitor — run rail, board, stage detail. */
+/* Run monitor — run rail + board. Stage detail lives in the shell's right pane. */
 .wf-runs {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: var(--space-4);
   align-items: stretch;
 }
-@media (max-width: 1200px) { .wf-runs { grid-template-columns: 210px minmax(0, 1fr) 280px; } }
+@media (max-width: 1200px) { .wf-runs { grid-template-columns: 210px minmax(0, 1fr); } }
 .wf-runs .wf-rail { width: auto; }
 .wf-runstart { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
 .wf-runstart strong { font-size: 13px; }

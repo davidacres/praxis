@@ -51,8 +51,8 @@ async function seedProject(page: Page): Promise<void> {
 }
 
 async function openRunsTab(page: Page): Promise<void> {
-  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Runs' }).click();
+  await page.getByTestId('project-workflow-runs-nav-item').click();
+  await expect(page.getByRole('region', { name: 'Run detail' })).toBeVisible();
 }
 
 /** Selects a stage in the pipeline diagram, then marks it done from its detail. */
@@ -147,15 +147,13 @@ test('completed stages are not re-run after an app restart', async () => {
 
   await expect(await stageDetail(page, 'Implement')).toContainText('succeeded');
 
-  // Relaunch into the same profile. The seeded workspace clears the durable
-  // route on launch, so navigate back to Workflows through the sidebar.
+  // Relaunch into the same profile and return to the run monitor via the sidebar.
   const profile = { userDataDir: app.userDataDir, settingsPath: app.settingsPath };
   await app.electronApp.close();
   app = await launchTestApp(undefined, profile, undefined, { openNewSession: false });
   page = app.window;
-  await page.getByTestId('project-workflows-nav-item').click();
   await openRunsTab(page);
-  await page.getByRole('button', { name: /Governed delivery/ }).first().click();
+  await page.getByRole('navigation', { name: 'Runs' }).getByRole('button', { name: /Governed delivery/ }).first().click();
 
   // The two completed stages are still done, each with a single attempt.
   const restoredImplement = await stageDetail(page, 'Implement');

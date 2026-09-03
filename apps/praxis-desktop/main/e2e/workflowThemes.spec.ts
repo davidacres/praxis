@@ -3,12 +3,10 @@ import { DEFAULT_APP_SETTINGS } from '@praxis/core';
 import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
 
 /**
- * FX-BE-030 / TASK-131 — the workflow screens under a non-default palette.
+ * FX-BE-030 / FX-BF-014 — the workflow screens under a non-default palette.
  *
- * The designer and run monitor own a large `wf-`-prefixed stylesheet; this
- * boots the app on a dark theme (`one-dark`) so a hardcoded colour or a
- * missing token shows up as a broken snapshot rather than shipping silently.
- * The default-theme layout is covered by workflowDesigner / workflowRun.
+ * Boots on `one-dark` so a hardcoded colour or a missing token breaks a
+ * snapshot. Default-theme layout is covered by workflowDesigner / workflowRun.
  */
 
 test.slow();
@@ -41,7 +39,7 @@ test.beforeEach(async () => {
       },
       workspace.id
     );
-    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id }));
+    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
   });
   await app.window.reload();
 });
@@ -54,35 +52,30 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   const page = app.window;
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'one-dark');
 
-  await page.getByTestId('project-workflows-nav-item').click();
-  await expect(page.getByRole('heading', { name: 'Workflows' })).toBeVisible();
-
-  // Library, then the instantiated graph.
-  await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-library-dark.png');
-  await page
-    .getByRole('listitem')
-    .filter({ hasText: 'Governed delivery' })
-    .first()
-    .getByRole('button', { name: 'Use template' })
-    .click();
+  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New workflow' });
+  await expect(page).toHaveScreenshot('workflow-themes-new-dialog-dark.png');
+  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).getByRole('button', { name: 'Use' }).click();
+  await expect(dialog).toBeHidden();
 
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });
   await expect(canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ })).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-designer-dark.png');
 
-  // The Connections tab of the inspector — the panel that used to overflow the column.
-  await page.getByRole('tab', { name: /^Connections/ }).click();
-  await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible();
-  await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-connections-dark.png');
-  await page.getByRole('tab', { name: 'Stage' }).click();
+  // The stage/connection inspector lives in the shell's right pane.
+  const inspector = page.getByRole('region', { name: 'Stage inspector' });
+  await expect(inspector).toHaveScreenshot('workflow-themes-inspector-dark.png');
+  await inspector.getByRole('tab', { name: /^Connections/ }).click();
+  await expect(inspector.getByRole('heading', { name: 'Connections' })).toBeVisible();
+  await expect(inspector).toHaveScreenshot('workflow-themes-connections-dark.png');
+  await inspector.getByRole('tab', { name: 'Stage' }).click();
 
-  // An edit flips the footer to "Save workflow"; save so the monitor has a
-  // runnable workflow, then cross to it.
+  // Save, then cross to the run monitor via the sidebar Runs node.
   await canvas.getByRole('button', { name: /^Plan \(agent-task\), entry stage/ }).click();
   await page.getByLabel('Name').fill('Plan the work');
   await page.getByRole('button', { name: 'Save workflow' }).click();
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Runs' }).click();
+  await page.getByTestId('project-workflow-runs-nav-item').click();
   await expect(page.getByRole('region', { name: 'Run detail' })).toBeVisible();
   await expect(page.getByRole('main')).toHaveScreenshot('workflow-themes-monitor-dark.png');
 });
