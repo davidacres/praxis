@@ -79,3 +79,45 @@ test('Create New Workspace uses the Open Workspace screen while blank creation s
   await win.getByRole('button', { name: 'Create Workspace' }).click();
   await expect(win.getByRole('heading', { name: 'Give your work a home' })).toBeVisible();
 });
+
+test('each workspace resumes at its own last route, not the other one\'s', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+
+  const ids = await win.evaluate(async () => {
+    const base = {
+      type: 'product' as const, purpose: '', brief: {}, startingPoint: 'app-storage' as const,
+      workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+      starterTickets: [{ summary: 'Slice', description: '', issueType: 'Task', status: 'Backlog' }],
+      defaultAiToolMode: 'project-only' as const
+    };
+    const first = (await window.praxis.workspaces.list())[0];
+    const second = await window.praxis.workspaces.create({ name: 'Second Workspace', projectIds: [] });
+    await window.praxis.projects.create({ ...base, name: 'Alpha', key: 'ALPHA' }, first.id);
+    await window.praxis.projects.create({ ...base, name: 'Beta', key: 'BETA' }, second.id);
+    return { first: first.id };
+  });
+  await win.reload();
+
+  const switchTo = async (name: string) => {
+    await win.getByRole('button', { name: 'Select workspace' }).click();
+    await win.getByRole('menuitem', { name: new RegExp(name) }).click();
+  };
+
+  await switchTo('Second Workspace');
+  await expect(win.getByTestId('project-dashboard')).toContainText('Beta');
+
+  // Seed workspace one's route while it is *not* active, so the live route
+  // writer cannot overwrite it. Connections is a place its landing route would
+  // never pick on its own, which is what makes the restore observable.
+  await win.evaluate(first => {
+    localStorage.setItem(`praxis-last-workspace-route:${first}`, JSON.stringify({ feature: 'connections' }));
+  }, ids.first);
+
+  await switchTo('Test Workspace');
+  await expect(win.getByTestId('connections-page')).toBeVisible();
+
+  // And back again: workspace one's route must not have leaked into two.
+  await switchTo('Second Workspace');
+  await expect(win.getByTestId('project-dashboard')).toContainText('Beta');
+});

@@ -53,6 +53,11 @@ export interface LaunchOptions {
 const ACTIVE_WORKSPACE_KEY = 'praxis-active-workspace';
 const LAST_WORKSPACE_ROUTE_KEY = 'praxis-last-workspace-route';
 
+// The app stores a durable route per workspace under
+// `praxis-last-workspace-route:<workspaceId>`. The bare key is the legacy
+// single slot and is only consulted when a workspace has no route of its own,
+// so a spec seeding a route must name the workspace it belongs to.
+
 export async function launchTestApp(
   seedSettings?: Record<string, unknown>,
   reuse?: { userDataDir: string; settingsPath: string },
@@ -120,10 +125,13 @@ async function seedWorkspace(window: Page, openNewSession: boolean): Promise<voi
       const existing = await window.praxis.workspaces.list();
       const workspace = existing[0] ?? (await window.praxis.workspaces.create({ name: 'Test Workspace', projectIds: [] }));
       localStorage.setItem(activeKey, workspace.id);
+      // Routes are stored per workspace. Clear the legacy slot too, or its
+      // fallback would resurrect a route this seeding just cleared.
+      localStorage.removeItem(routeKey);
       if (openNewSession) {
-        localStorage.setItem(routeKey, JSON.stringify({ newSession: true }));
+        localStorage.setItem(`${routeKey}:${workspace.id}`, JSON.stringify({ newSession: true }));
       } else {
-        localStorage.removeItem(routeKey);
+        localStorage.removeItem(`${routeKey}:${workspace.id}`);
       }
     },
     { activeKey: ACTIVE_WORKSPACE_KEY, routeKey: LAST_WORKSPACE_ROUTE_KEY, openNewSession }

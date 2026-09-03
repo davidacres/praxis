@@ -45,7 +45,7 @@ async function seedProject(page: Page): Promise<void> {
     );
     // Instantiate the built-in template as this project's workflow up front.
     await window.praxis.workflows.instantiate(project.id, 'governed-delivery');
-    localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
+    localStorage.setItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`, JSON.stringify({ projectId: project.id, feature: 'workflows' }));
   });
   await page.reload();
 }
@@ -317,7 +317,7 @@ async function seedCheckWorkflow(
         ],
         edges: [{ id: 'e1', from: 'verify', to: 'approve', on: 'success', required: true }]
       } as never);
-      localStorage.setItem('praxis-last-workspace-route', JSON.stringify({ projectId: project.id, feature: 'workflows' }));
+      localStorage.setItem(`praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`, JSON.stringify({ projectId: project.id, feature: 'workflows' }));
       return { projectId: project.id, workflowId };
     },
     { repo: repoPath, checkSpec: check }
