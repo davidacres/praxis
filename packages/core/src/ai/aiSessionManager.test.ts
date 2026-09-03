@@ -41,3 +41,14 @@ test('a terminal or idle session loads unchanged', () => {
     assert.equal(mgr.getAgentSession('SESSION-abc')?.events.length, 1, `${state}: no extra event`);
   }
 });
+
+test('updateAgentRuntime persists Agent Hub attribution', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('not_started') }));
+  mgr.updateAgentRuntime('SESSION-abc', { agentId: 'praxis-reviewer', activeSkills: ['code-audit'] });
+  const record = mgr.getAgentSession('SESSION-abc');
+  assert.equal(record?.agentId, 'praxis-reviewer');
+  assert.deepEqual(record?.activeSkills, ['code-audit']);
+
+  mgr.updateAgentRuntime('SESSION-abc', { activeSkills: [] });
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.activeSkills, undefined);
+});

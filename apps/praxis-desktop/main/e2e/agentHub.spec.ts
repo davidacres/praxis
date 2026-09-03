@@ -125,6 +125,29 @@ test('starting, restarting, and stopping an agent host moves its lifecycle state
   await expect(detail.getByRole('button', { name: 'Start host' })).toBeVisible();
 });
 
+test('activating a skill and opening a session carries the agent context', async () => {
+  const page = app.window;
+  await page.getByTestId('nav-agents').click();
+  await page.getByRole('button', { name: /Refresh/ }).click();
+
+  const catalog = page.getByRole('navigation', { name: 'Agent catalog' });
+  const detail = page.getByRole('region', { name: 'Details' });
+
+  // Activate the skill against Live Agent; the negotiated mode is shown.
+  await catalog.getByRole('button', { name: /code-audit/ }).click();
+  await detail.getByLabel('Activate with').selectOption({ label: 'Live Agent' });
+  await detail.getByRole('button', { name: 'Activate' }).click();
+  await expect(detail.getByText(/live-agent · \w+ mode/)).toBeVisible();
+
+  // The agent detail lists the active skill and can open an attributed session.
+  await catalog.getByRole('button', { name: /Live Agent/ }).click();
+  await expect(detail.getByText(/code-audit \(\w+\)/)).toBeVisible();
+  await detail.getByRole('button', { name: 'Open a session' }).click();
+  const context = page.getByTestId('new-session-agent-context');
+  await expect(context).toContainText('live-agent');
+  await expect(context).toContainText('code-audit');
+});
+
 test('the Create agent wizard writes a validated, discoverable manifest', async () => {
   const page = app.window;
   await page.getByTestId('nav-agents').click();

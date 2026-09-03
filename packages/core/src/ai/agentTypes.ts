@@ -269,6 +269,14 @@ export interface AgentSessionRecord {
    */
   workflowRunId?: string;
   workflowNodeId?: string;
+  /**
+   * Set when this session was launched from the Agent Hub (FX-BF-011): the
+   * discovered runtime agent it is attributed to, and the skills that were
+   * active at launch. Attribution only — the conversation still runs on the
+   * session's AI provider.
+   */
+  agentId?: string;
+  activeSkills?: string[];
   state: AgentTaskState;
   taskDefinition: AgentTaskDefinition;
   delivery?: DeliverySessionMetadata;

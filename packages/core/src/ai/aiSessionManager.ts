@@ -163,6 +163,8 @@ export class AiSessionManager {
         | 'worktreeName'
         | 'workflowRunId'
         | 'workflowNodeId'
+        | 'agentId'
+        | 'activeSkills'
       >
     >
   ): void {
@@ -182,6 +184,10 @@ export class AiSessionManager {
     if (runtime.worktreeName !== undefined) record.worktreeName = runtime.worktreeName.trim() || undefined;
     if (runtime.workflowRunId !== undefined) record.workflowRunId = runtime.workflowRunId.trim() || undefined;
     if (runtime.workflowNodeId !== undefined) record.workflowNodeId = runtime.workflowNodeId.trim() || undefined;
+    if (runtime.agentId !== undefined) record.agentId = runtime.agentId.trim() || undefined;
+    if (runtime.activeSkills !== undefined) {
+      record.activeSkills = runtime.activeSkills.length > 0 ? runtime.activeSkills : undefined;
+    }
     void this.persistAgentSessions();
     this._onDidChangeAgentSession.fire(record);
   }

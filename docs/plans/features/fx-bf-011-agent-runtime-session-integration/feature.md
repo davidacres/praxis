@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-08-31T12:27:31.982Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-011
 slug: agent-runtime-session-integration
 title: Agent runtime and session integration
-status: proposed
+status: complete
 owner: Electron desktop app
 updated: 2026-08-31
 issues: docs/issues/features/fx-bf-011-agent-runtime-session-integration/feature-issues.md
@@ -43,6 +43,29 @@ Users can operate trusted hosts, activate skills, open linked sessions, and diag
 
 ## Description
 
+## As built (2026-09-03)
+
+- **FX-BE-015 — Lifecycle.** `AgentRuntimeSnapshot.hosts` carries per-agent
+  `HostRuntimeStatus` (running / failed, startedAt, pid, error); the manager
+  records it on `start` and adds `stop` / `restart`. Discovery never populates
+  it. `agentRuntime.stop` / `.restart` over IPC; the hub detail shows a Host row
+  and Start ⇄ Restart + Stop, a running dot on rows, and "N running" in the
+  header. `manager.test.ts` covers it with a real subprocess.
+- **FX-BE-016 — Activation & handoff.** The hub captures the `ActivatedSkill`
+  mode and shows "Active skills: name (mode)" on the agent and "Active on
+  <agent> · <mode> mode" on the skill. "Open a session" navigates to the New
+  Session composer with `route.newSessionAgent` / `newSessionSkills`; the
+  composer shows an attribution note and passes `agentId` / `skillNames` into
+  `ai.delegate`, which already activates the skills and injects their
+  instructions. `AgentSessionRecord` gains `agentId` / `activeSkills`
+  (persisted via `updateAgentRuntime`); the agent detail lists its sessions and
+  links to them.
+- **FX-BE-017 — Settings boundary.** The Settings `agent-runtime` section is
+  read-only diagnostics: registry list, running count, `Refresh`, and (new)
+  the discovery paths from `agentRuntime.roots()`. Everyday start / stop /
+  activate live only in the hub. `agentHub.spec.ts` covers catalog, lifecycle,
+  activation + handoff, creation, and import; landmarks + `aria-pressed` rows +
+  disabled-with-reason buttons carry the accessibility surface.
 
 ## Items
 

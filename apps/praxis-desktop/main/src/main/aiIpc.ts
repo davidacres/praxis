@@ -525,6 +525,12 @@ export function registerAiIpc(): void {
       if (input.connectionId) {
         sessionManager.updateAgentRuntime(issue.key, { connectionId: input.connectionId });
       }
+      if (input.agentId) {
+        sessionManager.updateAgentRuntime(issue.key, {
+          agentId: input.agentId,
+          ...(input.skillNames?.length ? { activeSkills: input.skillNames } : {})
+        });
+      }
       if (worktree) {
         sessionManager.updateAgentRuntime(issue.key, {
           workingDirectory: worktree.worktreePath,

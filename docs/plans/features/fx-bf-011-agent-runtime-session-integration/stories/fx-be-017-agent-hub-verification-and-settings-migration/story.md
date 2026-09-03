@@ -1,7 +1,7 @@
 ---
 id: FX-BE-017
 title: Advanced Settings boundary and verification
-status: proposed
+status: complete
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-017-agent-hub-verification-and-settings-migration/issue.md
 updated: 2026-08-31
