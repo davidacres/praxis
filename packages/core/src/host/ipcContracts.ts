@@ -664,6 +664,10 @@ export interface AgentRuntimeIpc {
   list(): Promise<AgentRuntimeSnapshot>;
   refresh(): Promise<AgentRuntimeSnapshot>;
   start(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** Disposes the agent's host and clears its lifecycle state. */
+  stop(agentId: string): Promise<AgentRuntimeSnapshot>;
+  /** Disposes then recreates the agent's host. */
+  restart(agentId: string): Promise<AgentRuntimeSnapshot>;
   activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
   /** Writes a new agent folder in the chosen scope; rejects on validation failure. */
   createAgent(input: NewAgentInput): Promise<AgentRuntimeSnapshot>;

@@ -88,3 +88,16 @@ export function describeCapabilities(caps: AgentCapabilities | undefined): { fea
 export function agentHostStarted(snapshot: Pick<AgentRuntimeSnapshot, 'capabilities'>, agentId: string): boolean {
   return Object.prototype.hasOwnProperty.call(snapshot.capabilities, agentId);
 }
+
+/** 'running' | 'failed' | 'stopped' — the lifecycle state of an agent's host. */
+export function hostRuntimeState(
+  snapshot: Pick<AgentRuntimeSnapshot, 'hosts'>,
+  agentId: string
+): 'running' | 'failed' | 'stopped' {
+  return snapshot.hosts[agentId]?.state ?? 'stopped';
+}
+
+/** How many hosts are currently running. */
+export function runningHostCount(snapshot: Pick<AgentRuntimeSnapshot, 'hosts'>): number {
+  return Object.values(snapshot.hosts).filter(status => status.state === 'running').length;
+}

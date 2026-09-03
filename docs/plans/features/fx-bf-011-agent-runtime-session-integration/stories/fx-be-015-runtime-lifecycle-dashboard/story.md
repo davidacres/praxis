@@ -1,7 +1,7 @@
 ---
 id: FX-BE-015
 title: Runtime lifecycle dashboard
-status: proposed
+status: complete
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-015-runtime-lifecycle-dashboard/issue.md
 updated: 2026-08-31

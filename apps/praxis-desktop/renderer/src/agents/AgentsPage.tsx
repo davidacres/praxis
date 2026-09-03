@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AgentRuntimeSnapshot, DiscoveredAgent, DiscoveredSkill, ProjectRecord } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import {
-  agentHostStarted,
   agentStartBlockedReason,
   describeCapabilities,
   eligibleAgentsForSkill,
   groupCatalog,
+  hostRuntimeState,
+  runningHostCount,
   skillActivateBlockedReason,
   transportLabel
 } from './agentCatalog';
@@ -88,7 +89,7 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
           {snapshot
             ? `${snapshot.agents.length} agent${snapshot.agents.length === 1 ? '' : 's'} · ${snapshot.skills.length} skill${
                 snapshot.skills.length === 1 ? '' : 's'
-              }`
+              }${runningHostCount(snapshot) > 0 ? ` · ${runningHostCount(snapshot)} running` : ''}`
             : 'Loading…'}
         </span>
         <div className="agent-hub-actions">
@@ -147,9 +148,17 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
                         <Icon name="robot" size={14} />
                         <span className="wf-rail-main">
                           <span className="wf-rail-name">{agent.manifest.name}</span>
-                          <span className="wf-rail-sub">{transportLabel(agent.manifest.type)}</span>
+                          <span className="wf-rail-sub">
+                            {transportLabel(agent.manifest.type)}
+                            {hostRuntimeState(snapshot!, agent.manifest.id) === 'running' && ' · running'}
+                            {hostRuntimeState(snapshot!, agent.manifest.id) === 'failed' && ' · failed'}
+                          </span>
                         </span>
-                        <TrustMark trusted={agent.trusted} invalid={agent.errors.length > 0} />
+                        {hostRuntimeState(snapshot!, agent.manifest.id) === 'running' ? (
+                          <span className="wf-lane wf-lane--running" aria-label="Host running">●</span>
+                        ) : (
+                          <TrustMark trusted={agent.trusted} invalid={agent.errors.length > 0} />
+                        )}
                       </button>
                     </li>
                   ))}
@@ -178,7 +187,20 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
 
         <section className="wf-inspector" aria-label="Details">
           {selectedAgent && snapshot ? (
-            <AgentDetail agent={selectedAgent} snapshot={snapshot} busy={busy} onStart={id => act(() => window.praxis.agentRuntime.start(id))} />
+            <AgentDetail
+              agent={selectedAgent}
+              snapshot={snapshot}
+              busy={busy}
+              onLifecycle={(id, action) =>
+                void act(() =>
+                  action === 'stop'
+                    ? window.praxis.agentRuntime.stop(id)
+                    : action === 'restart'
+                      ? window.praxis.agentRuntime.restart(id)
+                      : window.praxis.agentRuntime.start(id)
+                )
+              }
+            />
           ) : selectedSkill && snapshot ? (
             <SkillDetail
               skill={selectedSkill}
@@ -238,20 +260,24 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+type LifecycleAction = 'start' | 'stop' | 'restart';
+
 function AgentDetail({
   agent,
   snapshot,
   busy,
-  onStart
+  onLifecycle
 }: {
   agent: DiscoveredAgent;
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
-  onStart: (id: string) => void;
+  onLifecycle: (id: string, action: LifecycleAction) => void;
 }) {
+  const id = agent.manifest.id;
   const blocked = agentStartBlockedReason(agent);
-  const started = agentHostStarted(snapshot, agent.manifest.id);
-  const caps = describeCapabilities(snapshot.capabilities[agent.manifest.id]);
+  const runtime = snapshot.hosts[id];
+  const state = hostRuntimeState(snapshot, id);
+  const caps = describeCapabilities(snapshot.capabilities[id]);
   const entry = agent.manifest.entry;
 
   return (
@@ -261,8 +287,16 @@ function AgentDetail({
         <TrustMark trusted={agent.trusted} invalid={agent.errors.length > 0} />
       </div>
 
+      <Row label="Host">
+        <span className={`wf-lane wf-lane--${state === 'running' ? 'running' : state === 'failed' ? 'failed' : 'idle'}`}>●</span>{' '}
+        {state === 'running'
+          ? `running${runtime?.pid ? ` · pid ${runtime.pid}` : ''}`
+          : state === 'failed'
+            ? 'failed to start'
+            : 'stopped'}
+      </Row>
       <Row label="ID">
-        <code>{agent.manifest.id}</code>
+        <code>{id}</code>
       </Row>
       <Row label="Transport">{transportLabel(agent.manifest.type)}</Row>
       <Row label="Scope">{agent.scope === 'global' ? 'Global (user data)' : 'This project'}</Row>
@@ -297,6 +331,7 @@ function AgentDetail({
           ))}
         </ul>
       )}
+      {runtime?.error && <p className="wf-hint is-danger">{runtime.error}</p>}
 
       <div className="agent-detail-caps">
         <span className="wf-rail-sub">Capabilities</span>
@@ -315,15 +350,20 @@ function AgentDetail({
       </div>
 
       <div className="wf-stage-actions">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy || !!blocked}
-          title={blocked}
-          onClick={() => onStart(agent.manifest.id)}
-        >
-          {started ? 'Restart host' : 'Start host'}
-        </button>
+        {state === 'running' ? (
+          <>
+            <button type="button" className="btn btn-primary" disabled={busy || !!blocked} title={blocked} onClick={() => onLifecycle(id, 'restart')}>
+              Restart host
+            </button>
+            <button type="button" className="btn" disabled={busy} onClick={() => onLifecycle(id, 'stop')}>
+              Stop host
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={busy || !!blocked} title={blocked} onClick={() => onLifecycle(id, 'start')}>
+            {state === 'failed' ? 'Retry start' : 'Start host'}
+          </button>
+        )}
         {blocked && <p className="wf-hint is-warn">{blocked}</p>}
       </div>
     </div>
