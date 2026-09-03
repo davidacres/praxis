@@ -42,6 +42,9 @@
   --tone-amber: #d29922;
   --tone-red: #f85149;
   --tone-progress: #4c9ee8;
+  /* Walkthrough annotation only — deliberately outside the accent and the
+     semantic tones, so a ring drawn over the app never reads as UI. */
+  --tone-tour: #e0499f;
 
   /* Semantic status aliases. These were referenced across theme.css (status
      dots, health indicators, "ready" chips) but never defined, so those fills
@@ -7868,9 +7871,13 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   position: fixed;
   z-index: 220;
   pointer-events: none;
-  border: 2px solid var(--accent);
-  border-radius: 10px;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 0 9999px rgba(0, 0, 0, .28);
+  /* Dashed, and in a hue used nowhere else: the keyboard focus ring is 2px
+     solid --focus-ring (the accent), and a solid accent ring here was
+     indistinguishable from it — and invisible when it landed on an accent
+     button. An annotation must not look like a control. */
+  border: 3px dashed var(--tone-tour);
+  border-radius: 11px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone-tour) 26%, transparent), 0 0 0 9999px rgba(0, 0, 0, .34);
   /* Deliberately not transitioned. Animating top/left/width/height across the
      shell made the ring lag visibly behind its callout — a tour that points at
      the wrong control for 160ms is worse than one that snaps. */
@@ -7878,6 +7885,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .walkthrough-callout {
   position: fixed;
   z-index: 221;
+  border-top: 3px solid var(--tone-tour);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -7887,7 +7895,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   background: var(--bg-elevated);
   box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
 }
-.walkthrough-step { color: var(--accent); font-size: var(--text-xs); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.walkthrough-step { color: var(--tone-tour); font-size: var(--text-xs); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 .walkthrough-callout strong { font-size: var(--text-md); }
 .walkthrough-callout p { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.5; }
 .walkthrough-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 4px; }
