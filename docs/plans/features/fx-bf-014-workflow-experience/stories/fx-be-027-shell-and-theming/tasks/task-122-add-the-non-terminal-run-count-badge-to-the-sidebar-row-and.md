@@ -19,3 +19,14 @@ See docs/plans/workflow-experience-design.md for the full spec.
   restored on relaunch.
 - The non-terminal run count badge on the sidebar row is folded into FX-BE-028,
   which already rebuilds the sidebar-adjacent surfaces.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
