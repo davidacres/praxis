@@ -92,6 +92,10 @@ test('walks the shell, rings each control, and remembers it was seen', async () 
   expect(await page.evaluate(() => localStorage.getItem('praxis-walkthrough-seen'))).toBe('1');
 });
 
+/**
+ * Proven non-vacuous by restoring the old `2px solid var(--focus-ring)` ring and
+ * watching this fail (`Expected: "dashed" / Received: "solid"`).
+ */
 test('the ring is visibly not a control, and not the focus ring', async () => {
   const page = app.window;
   await expect(page.getByTestId('project-dashboard')).toBeVisible();

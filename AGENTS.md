@@ -157,7 +157,6 @@ ring, and it vanished when it landed on an accent button. An annotation must not
 control — the dashed style and the off-palette hue are both asserted.
 
 ## Settings
-## Settings
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and
   merged with `mergeAppSettings`. IPC: `settings.get` / `settings.set` / `settings.onChanged`.
@@ -210,5 +209,47 @@ npm run test:desktop:git      # gitService unit tests
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run
 `copy-renderer`.
 
-Visual changes will move Playwright snapshots. Regenerate with `--update-snapshots`, then
-**look at the regenerated PNGs** before accepting them.
+## Verifying a UI change
+
+**A green suite does not mean it looks right.** Three real regressions in one session passed
+every test and were only found by opening a capture:
+
+- a workflow node's stage kind wrapping to `agent-` / `task` once the type scale lifted it
+  to 11px;
+- an empty state collapsing into a crushed column, because its new paragraph became a
+  fourth flex child of a row built for three;
+- the walkthrough ring lagging a whole stop behind its callout, and separately vanishing
+  into the accent button it was meant to point at.
+
+None of those break an assertion. So after any change to layout, the type scale, spacing or
+colour: **run the specs that capture the surface and look at the PNG.** Files under
+`apps/praxis-desktop/main/output/playwright/` come from plain `page.screenshot` — they are
+written for looking at and never fail a test, so they can also go stale; only
+`toHaveScreenshot` files under `*.spec.ts-snapshots/` actually guard anything. Do not read a
+plain screenshot as evidence without re-running the spec that writes it.
+
+**Regenerating a snapshot is not verification.** A visual change moves the `toHaveScreenshot`
+baselines and `--update-snapshots` will bless a regression as happily as a fix. Open the
+`-actual.png` or the diff for each one you regenerate, and only then accept it.
+
+**Prove every regression guard fails.** A guard that cannot fail is worse than none, because
+it reads as coverage. Twice here a new assertion passed against the broken code — the first
+keyboard-focus test passed with the ring disabled, because the browser's default outline
+took over once the `outline: none` resets were gone. The habit: write the guard, break the
+fix, watch it fail with the message you expect, restore. `e2e/keyboardFocus.spec.ts` and
+`e2e/walkthrough.spec.ts` both carry comments recording what they were proven against.
+
+**Changing a default cascades into the specs.** They encode current defaults heavily, and
+the failure is always in a spec that looks unrelated. Defaulting the project brief to
+"included" broke two wizard walk-tests; moving `window.confirm` in-app broke the two specs
+that accepted a native dialog with `page.on('dialog')`; expanding the Appearance settings
+group by default broke `openLooks` / `openSurface`, whose guarded `group.click()` then
+*collapsed* it. Before changing a default, grep the e2e directory for assertions on the old
+one.
+
+**Known flake, not a defect.** `aiCliAgentHost.spec.ts` intermittently hangs for minutes on
+a *different* test each run, then passes in ~3s alone; it was clean across ~40 runs and the
+whole suite at the configured worker count. It correlates with long unattended runs, not with
+the code — `timeout: 30000, retries: 0` makes a multi-minute test impossible unless the
+worker was descheduled. Don't chase it. Related: full-suite runs launched in the background
+have twice been killed mid-flight with no output; smaller batches complete reliably.
