@@ -13,6 +13,12 @@ import { closeTestApp, launchTestApp, type TestApp } from './launchTestApp';
  * These tests tab through real controls and assert the focused element actually
  * paints something. They are deliberately behavioural rather than a grep: a rule
  * can exist and still lose the cascade.
+ *
+ * Proven non-vacuous: an earlier draft still passed with the global ring
+ * deleted, because removing the `outline: none` resets let the browser's own
+ * default outline satisfy it. Anchored on the real regression it fails as it
+ * should — `controls focused with no visible ring: button[Filter],
+ * button[Search boards]`. Re-prove it that way if you change what these assert.
  */
 
 let app: TestApp;
