@@ -65,6 +65,30 @@ Selecting Agents opens the catalog, scopes are clear, unsafe items are visibly b
   the throwaway profile, drives the route, and asserts the fail-closed detail + a themed
   snapshot.
 
+## As built — shell revision (2026-09-03)
+
+The first cut built its own two-column catalog in the centre pane and suppressed
+the shell's right pane, and it borrowed 21 of the Workflow designer's `wf-`
+classes — which is why it read as out of place. Reworked to one idiom:
+
+- **Navigation is the sidebar.** The `Agents` destination expands into its
+  catalog, grouped Global / *project*, each row carrying the same trust and
+  running vocabulary as the runtime panel. Create / Import / Rescan hang off a
+  `+` menu on the row, replacing the four header buttons.
+- **The centre is the record** — hero, chips (transport · scope · trust), then a
+  definition-list of the manifest or skill package, in the ProjectHome rhythm.
+  It answers "what is this?" and nothing else.
+- **The right pane is the runtime** — host state with pid and uptime,
+  capabilities, active skills with their negotiated mode, the sessions
+  attributed to the agent, and every action that changes runtime state.
+  `App.showAux` no longer excludes `agents`.
+- App now owns the catalog snapshot (as it owns `workflowsByProject`), so the
+  tree, the record, and the runtime panel all read one source and the right pane
+  renders directly — no portal needed, unlike Workflows.
+- Shared primitives moved out of the `wf-` prefix: `rail-*`, `inspector-*`,
+  `inspector-actions`, `hint`, `lane*`, `issues`, `skeleton`, `form-field*`,
+  `form-fieldset`, `form-check`. The Agents surface owns `agent-*`.
+
 ## Items
 
 | Ref | Type | Name | Status |

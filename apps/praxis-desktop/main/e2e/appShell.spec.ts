@@ -59,11 +59,15 @@ test.afterEach(async () => {
 test('the Agent Hub and Workflow designer sit inside the normal app shell', async () => {
   const page = app.window;
 
-  // Agent Hub — reached from the Agents entry in the features list.
+  // Agent Hub — the Agents destination expands into its catalog in the sidebar,
+  // the centre carries the record, and the right pane carries the runtime.
   await page.getByTestId('nav-agents').click();
-  await expect(page.getByRole('heading', { name: 'Agents', level: 1 })).toBeVisible();
-  await page.getByRole('button', { name: /Refresh/ }).click();
-  await expect(page.getByRole('navigation', { name: 'Agent catalog' }).getByRole('button', { name: /Praxis Reviewer/ })).toBeVisible();
+  await page.getByTestId('nav-agents-new').click();
+  await page.getByTestId('rescan-agents').click();
+  const tree = page.getByRole('navigation', { name: 'Workspace' });
+  await tree.getByTestId('agent-nav-item').filter({ hasText: 'Praxis Reviewer' }).click();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Praxis Reviewer', level: 1 })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Agent runtime' })).toBeVisible();
   await expect(page).toHaveScreenshot('app-shell-agents.png');
 
   // Workflow designer — created from the project's Workflows tree section, with
