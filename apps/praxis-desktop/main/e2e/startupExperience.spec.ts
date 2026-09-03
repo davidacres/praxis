@@ -94,8 +94,9 @@ test('walks through every workspace and project onboarding screen to a created p
   await expect(win.getByRole('heading', { name: 'A useful brief is ready' })).toHaveCount(0);
   await expect(win.getByText('Deliver the smallest coherent release that can test the core value.')).toBeVisible();
   await expect(win.locator('.brief-section-option')).toHaveCount(6);
-  await expect(win.locator('.brief-section-option.included')).toHaveCount(0);
-  await expect(win.getByRole('button', { name: 'Select MVP' })).toHaveAttribute('aria-pressed', 'false');
+  // The recommended brief for the type is included by default.
+  await expect(win.locator('.brief-section-option.included')).toHaveCount(6);
+  await expect(win.getByRole('button', { name: 'Deselect MVP' })).toHaveAttribute('aria-pressed', 'true');
   await win.screenshot({ path: 'output/playwright/full-onboarding-05-guided-brief.png', fullPage: true });
   await win.getByRole('button', { name: 'Continue' }).click();
 
@@ -117,7 +118,7 @@ test('walks through every workspace and project onboarding screen to a created p
   await expect(win.getByText('Praxis only — no local folder')).toBeVisible();
   await expect(win.locator('.review-illustration, .review-project-card, .review-details-card')).toHaveCount(0);
   await expect(win.locator('.review-summary-list > div')).toHaveCount(4);
-  await expect(win.getByText('0 brief sections prepared')).toBeVisible();
+  await expect(win.getByText('6 brief sections drafted')).toBeVisible();
   await win.screenshot({ path: 'output/playwright/full-onboarding-08-review.png', fullPage: true });
   await win.getByRole('button', { name: 'Create project' }).click();
 
