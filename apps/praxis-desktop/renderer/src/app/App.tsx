@@ -655,6 +655,22 @@ export function App() {
     setNav({ entries: [{ feature: 'overview' }], index: 0 });
   }, [touchWorkspace]);
 
+  const startFirstProject = useCallback(async (wizardMode: 'create' | 'existing') => {
+    let workspaceId = activeWorkspaceId;
+    if (!workspaceId || !workspaces.some(workspace => workspace.id === workspaceId)) {
+      const workspace = await window.praxis.workspaces.create({ name: 'My workspace', projectIds: [] });
+      setWorkspaces(current => [...current, workspace]);
+      setActiveWorkspaceId(workspace.id);
+      localStorage.setItem(ACTIVE_WORKSPACE_KEY, workspace.id);
+      touchWorkspace(workspace.id);
+      workspaceId = workspace.id;
+    }
+    setCreatedWorkspaceId(undefined);
+    setGettingStarted(false);
+    setProjectWizardPresentation('onboarding');
+    setProjectWizardMode(wizardMode);
+  }, [activeWorkspaceId, workspaces, touchWorkspace]);
+
   const skipWorkspaceSetup = useCallback(() => {
     setCreatedWorkspaceId(undefined);
     setGettingStarted(false);
@@ -1497,6 +1513,7 @@ export function App() {
           onOpenWorkspace={openWorkspace}
           onOpenWorkspaceFile={openWorkspaceFromFile}
           onCreateWorkspace={createWorkspaceFromGettingStarted}
+          onStartFirstProject={startFirstProject}
           onSkipSetup={skipWorkspaceSetup}
           onCreateProject={() => requestProjectWizard('create', 'onboarding')}
           onAddExistingProject={() => requestProjectWizard('existing', 'onboarding')}
