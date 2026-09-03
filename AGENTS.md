@@ -116,6 +116,26 @@ app from the keyboard. This eroded once already (26 outline resets against 15 `:
 rules, while `:hover` was styled 91 times); `e2e/keyboardFocus.spec.ts` now tabs through the
 shell and fails loudly if any control paints nothing.
 
+## Dialogs
+
+There is no `window.confirm` / `window.prompt` in the renderer. They are OS-modal,
+unstyleable, ignore the app's themes, and block the renderer — and two of the prompts
+collected real data with no validation. Use `useDialogs()` from `ui/dialogs.tsx` instead:
+`await confirm({ title, message?, danger? })` and `await prompt({ title, label, validate? })`
+render inside the app's own modal surface and return a promise, so a call site still reads
+`if (!(await confirm(...))) return;`. `<DialogHost>` wraps `<App/>` in `main.tsx`. An e2e test
+that used to accept a native dialog with `page.on('dialog', …)` now clicks the button in the
+in-app dialog by its `confirmLabel`.
+
+## Command palette
+
+`⌘K` opens `app/CommandPalette.tsx` over a flat index built in `App` (`paletteEntries`) from
+the collections the shell already holds — projects, boards, sessions, agents, skills,
+workflows, feature destinations, settings pages. It is navigation only; each entry's `run`
+reuses the same `navigate()` / `setSettingsDialogCategory()` the sidebar uses. Add a new
+navigable surface → add an entry to that `useMemo`.
+
+## Settings
 ## Settings
 
 - One shared JSON document, read through `sanitizeAppSettings` (which also migrates) and

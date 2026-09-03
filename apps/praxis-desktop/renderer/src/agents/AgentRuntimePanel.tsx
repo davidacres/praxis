@@ -48,7 +48,7 @@ export function AgentRuntimePanel({
     return (
       <div className="empty-state" data-testid="agent-runtime-empty">
         <Icon name="zap" size={26} />
-        <span>Select an agent or skill to see its runtime.</span>
+        <span>Runtime state &mdash; host, capabilities, sessions &mdash; appears here for the selected agent or skill.</span>
       </div>
     );
   }

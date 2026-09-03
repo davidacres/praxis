@@ -21,13 +21,11 @@ let window: Page;
  * exist in the DOM while the group is expanded.
  */
 async function openLooks(): Promise<void> {
-  const group = window.locator('[data-testid="settings-nav-appearance-group"]');
   const looks = window.locator('[data-testid="settings-nav-appearance-looks"]');
-  if (!(await group.isVisible())) {
-    await window.locator('[data-testid="titlebar-settings"]').click();
-  }
+  // The settings dialog toggles from the titlebar; the Appearance group is
+  // expanded by default, so its children just need the dialog open.
   if (!(await looks.isVisible())) {
-    await group.click();
+    await window.locator('[data-testid="titlebar-settings"]').click();
   }
   await looks.click();
   await expect(window.locator('[data-testid="looks-strip"]')).toBeVisible();

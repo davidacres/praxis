@@ -21,6 +21,7 @@ import type {
   TaskDesignerWebsitePreviewNode
 } from '@praxis/core';
 import { Icon, type IconName } from '../ui/Icon';
+import { useDialogs } from '../ui/dialogs';
 import {
   anchorPoint,
   applyRecommendationToState,
@@ -135,6 +136,7 @@ export function TaskDesignerPage({
   onSelectionChange,
   externalSelectionId
 }: TaskDesignerPageProps) {
+  const { confirm } = useDialogs();
   const [canvas, setCanvas] = useState<TaskDesignerPersistedState>(emptyCanvasState);
   const [loaded, setLoaded] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
@@ -613,16 +615,18 @@ export function TaskDesignerPage({
   // ── Drop (board cards drag text/plain = issue key) ─────────────────────────
 
   const applyDroppedIssue = useCallback(
-    (payload: TaskDesignerResolvedDroppedIssue, dropPoint: { x: number; y: number }) => {
+    async (payload: TaskDesignerResolvedDroppedIssue, dropPoint: { x: number; y: number }) => {
       const relatedIssues = payload.relatedIssues.filter(issue => typeof issue.issueKey === 'string');
       const relations = payload.relations.filter(
         relation => typeof relation.sourceIssueKey === 'string' && typeof relation.targetIssueKey === 'string'
       );
       const includeRelated =
         relatedIssues.length > 0
-          ? window.confirm(
-              `Add ${relatedIssues.length} related ticket${relatedIssues.length === 1 ? '' : 's'} and connect them to the dropped ticket?`
-            )
+          ? await confirm({
+              title: `Add ${relatedIssues.length} related ticket${relatedIssues.length === 1 ? '' : 's'}?`,
+              message: 'They are placed near the dropped ticket and connected to it.',
+              confirmLabel: 'Add related'
+            })
           : false;
 
       const ensureIssueNode = (
@@ -700,7 +704,7 @@ export function TaskDesignerPage({
         includeRelated ? 'Dropped ticket added with related tickets and links.' : 'Dropped ticket added to the designer.'
       );
     },
-    [applyCanvas, persistNow, onSelectionChange, setFeedback]
+    [applyCanvas, persistNow, onSelectionChange, setFeedback, confirm]
   );
 
   const onCanvasDragOver = useCallback((event: ReactDragEvent) => {
@@ -725,7 +729,7 @@ export function TaskDesignerPage({
       const point = clientToCanvas(event.clientX, event.clientY);
       void window.praxis.taskDesigner
         .resolveIssue(issueKey, board.connectionId)
-        .then(payload => applyDroppedIssue(payload, point))
+        .then(payload => void applyDroppedIssue(payload, point))
         .catch(error => setFeedback(error instanceof Error ? error.message : String(error), true));
     },
     [board.connectionId, clientToCanvas, applyDroppedIssue, setFeedback]

@@ -4,6 +4,7 @@ import type { GitCommitDetails, GitDiffRequest, GitRepositoryPreflight, GitRepos
 import { useSettings } from '../settings/useSettings';
 import { GitDiffWorkspace } from './GitDiffWorkspace';
 import { GitConflictWorkspace } from './GitConflictWorkspace';
+import { useDialogs } from '../ui/dialogs';
 
 const LANE_COLORS = ['#1687ff', '#d900e8', '#ff2d55', '#ff8a00', '#d6e800', '#31d7b1', '#00b8d9', '#8c63ff', '#ff4f9a'];
 const LANE_GAP = 18;
@@ -45,6 +46,7 @@ export function GitGraphPage({
   onRequireAux?: () => void;
 }) {
   const { settings, update } = useSettings();
+  const { confirm, prompt } = useDialogs();
   const [snapshot, setSnapshot] = useState<GitRepositorySnapshot>();
   const [selectedHash, setSelectedHash] = useState<string>();
   const selectCommit = (hash: string) => {
@@ -67,6 +69,7 @@ export function GitGraphPage({
   const [toDate, setToDate] = useState('');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [compareLeft, setCompareLeft] = useState('');
   const [compareRight, setCompareRight] = useState('');
   const [compareBaseHash, setCompareBaseHash] = useState<string>();
@@ -236,7 +239,8 @@ export function GitGraphPage({
       if (picked) await inspectAndLoad(picked);
     };
     const initialize = async () => {
-      if (!preflight?.requestedPath || !window.confirm(`Initialize Git in ${preflight.requestedPath}? This creates a .git directory in that folder.`)) return;
+      if (!preflight?.requestedPath) return;
+      if (!(await confirm({ title: 'Initialize Git here?', message: `${preflight.requestedPath}\n\nThis creates a .git directory in that folder.`, confirmLabel: 'Initialize' }))) return;
       setLoading(true);
       try {
         const result = await window.praxis.git.initialize(preflight.requestedPath);
@@ -248,11 +252,11 @@ export function GitGraphPage({
       }
     };
     const clone = async () => {
-      const url = window.prompt('Repository URL');
+      const url = await prompt({ title: 'Clone a repository', label: 'Repository URL', placeholder: 'https://github.com/owner/repo.git', confirmLabel: 'Continue', validate: value => (/^(https?:\/\/|git@|ssh:\/\/|file:\/\/)/.test(value) ? undefined : 'Enter an http(s), ssh, or file URL.') });
       if (!url) return;
       const parent = await window.praxis.dialog.pickFolder('Choose clone destination');
       if (!parent) return;
-      const name = window.prompt('Folder name (optional)') ?? undefined;
+      const name = (await prompt({ title: 'Clone destination', label: 'Folder name', message: 'Leave blank to use the repository name.', confirmLabel: 'Clone' })) ?? undefined;
       setLoading(true);
       try {
         const result = await window.praxis.git.clone(url, parent, name);
@@ -282,7 +286,7 @@ export function GitGraphPage({
 
   const inspector = (
     <aside className="git-inspector aux-panel" aria-label="Commit details">
-          {!details ? <div className="git-inspector-empty">Select a commit to inspect its story.</div> : <>
+          {!details ? <div className="git-inspector-empty">A commit&rsquo;s author, files, and diffs appear here.</div> : <>
             <div className="git-inspector-kicker">COMMIT DETAILS</div>
             <h2>{details.message}</h2>
             <div className="git-sha">{details.shortHash} · {formatDate(details.date)}</div>
@@ -308,6 +312,10 @@ export function GitGraphPage({
         <div className="git-header-actions">
           <label className="git-search"><span>⌕</span><input aria-label="Search commits" placeholder="Search commits" value={query} onChange={event => setQuery(event.target.value)} /></label>
           <button className="git-button" onClick={() => { if (snapshot) void load(snapshot.repositoryPath, { force: true }); }} disabled={loading || !snapshot}>{loading ? 'Loading…' : '↻ Refresh'}</button>
+          {snapshot && <>
+            <button className="git-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pulling changes', async () => adoptSnapshot(await window.praxis.git.pull(snapshot.repositoryPath)))}>↓ Pull</button>
+            <button className="git-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pushing changes', async () => adoptSnapshot(await window.praxis.git.push(snapshot.repositoryPath)))}>↑ Push</button>
+          </>}
           <button className="git-button git-open-button" data-testid="git-open-repository" onClick={() => void window.praxis.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })} disabled={loading}>Open repository</button>
           <button className={`git-button git-settings-button${settingsOpen ? ' active' : ''}`} aria-label="Git settings" onClick={() => setSettingsOpen(value => !value)}>⚙</button>
           {snapshot && <button className="git-button git-changes-button" data-testid="git-changes" onClick={onOpenChanges}>Changes{status?.files.length ? ` ${status.files.length}` : ''}</button>}
@@ -322,21 +330,48 @@ export function GitGraphPage({
             {(snapshot?.branches ?? []).map(branch => <option key={branch.ref} value={branch.name}>{branch.isRemote ? `↗ ${branch.name}` : `● ${branch.name}`}</option>)}
           </select>
         </div>
+        {snapshot && (() => {
+          const target = branchFilter ? snapshot.branches.find(branch => branch.name === branchFilter) : undefined;
+          const isRemote = target?.isRemote ?? false;
+          const isCurrent = branchFilter === snapshot.currentBranch;
+          const busy = busyAction !== undefined;
+          const run = (label: string, action: () => Promise<GitRepositorySnapshot>) => { setBranchMenuOpen(false); void runAction(label, async () => adoptSnapshot(await action())); };
+          return (
+            <div className="git-menu-anchor">
+              <button className={`git-action-button git-menu-button${branchMenuOpen ? ' active' : ''}`} aria-haspopup="menu" aria-expanded={branchMenuOpen} onClick={() => { setBranchMenuOpen(value => !value); setSettingsOpen(false); setCompareOpen(false); }}>
+                Branch{branchFilter ? `: ${branchFilter}` : ''} ▾
+              </button>
+              {branchMenuOpen && (
+                <div className="git-menu" role="menu" onMouseLeave={() => setBranchMenuOpen(false)}>
+                  <button role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { const name = await prompt({ title: 'New branch', label: 'Branch name', placeholder: 'feature/short-description', confirmLabel: 'Create branch', validate: v => (/^[a-z0-9][a-z0-9._/-]*$/i.test(v) ? undefined : 'Letters, digits, and . _ / - only.') }); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name))); })(); }}>New branch…</button>
+                  {branchFilter && !isRemote && (
+                    <button role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { const name = await prompt({ title: `Rename ${branchFilter}`, label: 'New name', initialValue: branchFilter, confirmLabel: 'Rename', validate: v => (/^[a-z0-9][a-z0-9._/-]*$/i.test(v) ? undefined : 'Letters, digits, and . _ / - only.') }); if (name && name !== branchFilter) void runAction('Renaming branch', async () => adoptSnapshot(await window.praxis.git.renameBranch(snapshot.repositoryPath, branchFilter, name))); })(); }}>Rename…</button>
+                  )}
+                  {branchFilter && !isCurrent && (
+                    <button role="menuitem" disabled={busy} onClick={() => run('Checking out branch', () => window.praxis.git.checkout(snapshot.repositoryPath, branchFilter))}>Check out</button>
+                  )}
+                  {branchFilter && !isCurrent && (
+                    <button role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { if (await confirm({ title: `Merge ${branchFilter} into ${snapshot.currentBranch ?? 'the checked-out branch'}?`, message: 'Praxis preserves the branch history and opens the conflict editor if needed.', confirmLabel: 'Merge' })) void runAction('Merging branch', async () => adoptSnapshot(await window.praxis.git.merge(snapshot.repositoryPath, branchFilter))); })(); }}>Merge into current</button>
+                  )}
+                  {branchFilter && !isCurrent && (
+                    <button role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { if (await confirm({ title: `Rebase ${snapshot.currentBranch ?? 'the checked-out branch'} onto ${branchFilter}?`, message: 'This rewrites the current branch’s commits, and should not be used after sharing them.', confirmLabel: 'Rebase', danger: true })) void runAction('Rebasing branch', async () => adoptSnapshot(await window.praxis.git.rebase(snapshot.repositoryPath, branchFilter))); })(); }}>Rebase current onto it</button>
+                  )}
+                  <button role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { if (await confirm({ title: 'Restore the most recent Praxis stash?', message: 'It is applied onto the current branch. Conflicts open in the resolver.', confirmLabel: 'Pop stash' })) void runAction('Restoring stash', async () => adoptSnapshot(await window.praxis.git.popStash(snapshot.repositoryPath))); })(); }}>Pop latest stash</button>
+                  {branchFilter && !isRemote && !isCurrent && (
+                    <>
+                      <div className="git-menu-divider" />
+                      <button className="danger" role="menuitem" disabled={busy} onClick={() => { setBranchMenuOpen(false); void (async () => { if (await confirm({ title: `Delete branch ${branchFilter}?`, message: 'Git only deletes it when it has been merged.', confirmLabel: 'Delete branch', danger: true })) void runAction('Deleting branch', async () => adoptSnapshot(await window.praxis.git.deleteBranch(snapshot.repositoryPath, branchFilter))); })(); }}>Delete branch</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <button className={`git-filter${mergesOnly ? ' active' : ''}`} onClick={() => setMergesOnly(value => !value)}>◇ Merges only</button>
         <label className="git-date-filter">From <input aria-label="From date" type="date" value={fromDate} onChange={event => setFromDate(event.target.value)} /></label>
         <label className="git-date-filter">To <input aria-label="To date" type="date" value={toDate} onChange={event => setToDate(event.target.value)} /></label>
-        {snapshot && <>
-          <button className="git-action-button" onClick={() => { const name = window.prompt('New branch name'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name))); }}>+ Branch</button>
-          <button className="git-action-button" disabled={!branchFilter || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Switch to ${branchFilter}?`)) void runAction('Checking out branch', async () => adoptSnapshot(await window.praxis.git.checkout(snapshot.repositoryPath, branchFilter))); }}>Checkout</button>
-          <button className="git-action-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (!branchFilter) return; const name = window.prompt(`Rename ${branchFilter} to:`, branchFilter); if (name && name !== branchFilter) void runAction('Renaming branch', async () => adoptSnapshot(await window.praxis.git.renameBranch(snapshot.repositoryPath, branchFilter, name))); }}>Rename</button>
-          <button className="git-action-button git-danger-button" disabled={!branchFilter || snapshot.branches.find(branch => branch.name === branchFilter)?.isCurrent || snapshot.branches.find(branch => branch.name === branchFilter)?.isRemote || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Delete branch ${branchFilter}? Git will only delete it when it has been merged.`)) void runAction('Deleting branch', async () => adoptSnapshot(await window.praxis.git.deleteBranch(snapshot.repositoryPath, branchFilter))); }}>Delete</button>
-          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Merge ${branchFilter} into ${snapshot.currentBranch ?? 'the checked-out branch'}? Praxis will preserve the branch history and open the conflict editor if needed.`)) void runAction('Merging branch', async () => adoptSnapshot(await window.praxis.git.merge(snapshot.repositoryPath, branchFilter))); }}>Merge into current</button>
-          <button className="git-action-button" disabled={!branchFilter || branchFilter === snapshot.currentBranch || busyAction !== undefined} onClick={() => { if (branchFilter && window.confirm(`Rebase ${snapshot.currentBranch ?? 'the checked-out branch'} onto ${branchFilter}? This rewrites the current branch’s commits and should not be used after sharing them.`)) void runAction('Rebasing branch', async () => adoptSnapshot(await window.praxis.git.rebase(snapshot.repositoryPath, branchFilter))); }}>Rebase current</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pulling changes', async () => adoptSnapshot(await window.praxis.git.pull(snapshot.repositoryPath)))}>Pull</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => void runAction('Pushing changes', async () => adoptSnapshot(await window.praxis.git.push(snapshot.repositoryPath)))}>Push</button>
-          <button className="git-action-button" disabled={busyAction !== undefined} onClick={() => { if (window.confirm('Restore the most recent Praxis stash onto the current branch? Conflicts will open in the resolver.')) void runAction('Restoring stash', async () => adoptSnapshot(await window.praxis.git.popStash(snapshot.repositoryPath))); }}>Pop stash</button>
-          <button className={`git-action-button${compareOpen ? ' active' : ''}`} onClick={() => { setCompareOpen(value => !value); setSettingsOpen(false); }}>Compare…</button>
-        </>}
+        {snapshot && <button className={`git-action-button${compareOpen ? ' active' : ''}`} onClick={() => { setCompareOpen(value => !value); setSettingsOpen(false); setBranchMenuOpen(false); }}>Compare…</button>}
         <span className="git-toolbar-spacer" />
         <button className={`git-filter${smartVisibility ? ' active' : ''}`} onClick={() => setSmartVisibility(value => !value)}>Smart visibility</button>
         <span className="git-result-count">{commits.length.toLocaleString()} commits</span>
@@ -427,10 +462,10 @@ export function GitGraphPage({
       {commitMenu && snapshot && <div className="git-context-menu" style={{ left: commitMenu.x, top: commitMenu.y }} role="menu" aria-label="Commit actions">
         <div><strong>{commitMenu.hash.slice(0, 8)}</strong><button onClick={() => setCommitMenu(undefined)}>×</button></div>
         <button role="menuitem" onClick={() => { setCompareBaseHash(commitMenu.hash); setCommitMenu(undefined); }}>Set as comparison start</button>
-        <button role="menuitem" onClick={() => { const name = window.prompt('New branch name:'); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name, commitMenu.hash))); setCommitMenu(undefined); }}>Create branch here</button>
+        <button role="menuitem" onClick={() => { const hash = commitMenu.hash; setCommitMenu(undefined); void (async () => { const name = await prompt({ title: 'New branch at this commit', label: 'Branch name', message: `Starting from ${hash.slice(0, 8)}.`, placeholder: 'feature/short-description', confirmLabel: 'Create branch', validate: v => (/^[a-z0-9][a-z0-9._/-]*$/i.test(v) ? undefined : 'Letters, digits, and . _ / - only.') }); if (name) void runAction('Creating branch', async () => adoptSnapshot(await window.praxis.git.createBranch(snapshot.repositoryPath, name, hash))); })(); }}>Create branch here</button>
         <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(commitMenu.hash); setCommitMenu(undefined); }}>Copy commit SHA</button>
-        <button role="menuitem" onClick={() => { if (window.confirm(`Cherry-pick ${commitMenu.hash.slice(0, 8)} onto ${snapshot.currentBranch ?? 'the current branch'}?`)) void runAction('Cherry-picking commit', async () => adoptSnapshot(await window.praxis.git.cherryPick(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Cherry-pick commit</button>
-        <button className="danger" role="menuitem" onClick={() => { if (window.confirm(`Create a new commit that reverses ${commitMenu.hash.slice(0, 8)}? Published history will be preserved.`)) void runAction('Reverting commit', async () => adoptSnapshot(await window.praxis.git.revert(snapshot.repositoryPath, commitMenu.hash))); setCommitMenu(undefined); }}>Revert with new commit</button>
+        <button role="menuitem" onClick={() => { const hash = commitMenu.hash; setCommitMenu(undefined); void (async () => { if (await confirm({ title: `Cherry-pick ${hash.slice(0, 8)}?`, message: `Applied onto ${snapshot.currentBranch ?? 'the current branch'}.`, confirmLabel: 'Cherry-pick' })) void runAction('Cherry-picking commit', async () => adoptSnapshot(await window.praxis.git.cherryPick(snapshot.repositoryPath, hash))); })(); }}>Cherry-pick commit</button>
+        <button className="danger" role="menuitem" onClick={() => { const hash = commitMenu.hash; setCommitMenu(undefined); void (async () => { if (await confirm({ title: `Revert ${hash.slice(0, 8)}?`, message: 'A new commit is created that reverses it. Published history is preserved.', confirmLabel: 'Revert', danger: true })) void runAction('Reverting commit', async () => adoptSnapshot(await window.praxis.git.revert(snapshot.repositoryPath, hash))); })(); }}>Revert with new commit</button>
       </div>}
       {auxSlot ? createPortal(inspector, auxSlot) : null}
     </section>

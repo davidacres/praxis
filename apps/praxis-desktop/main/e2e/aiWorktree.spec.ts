@@ -80,8 +80,8 @@ test('a worktree session creates the branch + checkout and the console can remov
   await expect(win.locator('[data-testid="session-worktree"]')).toContainText(record.worktreeBranch!);
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
-  win.once('dialog', dialog => dialog.accept());
   await win.locator('[data-testid="session-remove-worktree"]').click();
+  await win.getByRole('dialog', { name: 'Remove the git worktree?' }).getByRole('button', { name: 'Remove worktree' }).click();
 
   await expect(win.locator('[data-testid="session-worktree"]')).toHaveCount(0);
   await expect.poll(() => fs.existsSync(record.worktreePath!)).toBe(false);

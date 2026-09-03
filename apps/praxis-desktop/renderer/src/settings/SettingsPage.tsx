@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
+import { useDialogs } from '../ui/dialogs';
 import type {
   AiProvider,
   AiProviderStatus,
@@ -61,6 +62,12 @@ interface NavGroupDef {
   children: SettingsCategory[];
 }
 
+/**
+ * Four sections, so the nav's shape tells the truth about where weight sits.
+ * Sixteen equal peers read as sixteen equally-important choices — with three of
+ * them appearance, a new user is told appearance matters three times as much as
+ * connecting their tracker. Overview stays loose at the top as the landing page.
+ */
 const APPEARANCE_GROUP: NavGroupDef = {
   id: 'appearance-group',
   label: 'Appearance',
@@ -68,23 +75,35 @@ const APPEARANCE_GROUP: NavGroupDef = {
   children: ['appearance-themes', 'appearance-surfaces', 'appearance-looks']
 };
 
-/** Ordered nav model — flat items with the Appearance group spliced in where "Themes" used to sit. */
+const WORKSPACE_GROUP: NavGroupDef = {
+  id: 'workspace-group',
+  label: 'Workspace',
+  icon: 'home',
+  children: ['startup', 'appearance']
+};
+
+const AI_GROUP: NavGroupDef = {
+  id: 'ai-group',
+  label: 'AI & agents',
+  icon: 'robot',
+  children: ['ai', 'agent-runtime', 'mcp', 'delivery']
+};
+
+const INTEGRATIONS_GROUP: NavGroupDef = {
+  id: 'integrations-group',
+  label: 'Integrations & tools',
+  icon: 'plug',
+  children: ['connections', 'jira', 'terminal', 'performance', 'preview']
+};
+
 type NavEntry = { type: 'item'; category: SettingsCategory } | { type: 'group'; group: NavGroupDef };
 
 const NAV: NavEntry[] = [
   { type: 'item', category: 'overview' },
-  { type: 'item', category: 'startup' },
+  { type: 'group', group: WORKSPACE_GROUP },
   { type: 'group', group: APPEARANCE_GROUP },
-  { type: 'item', category: 'terminal' },
-  { type: 'item', category: 'connections' },
-  { type: 'item', category: 'jira' },
-  { type: 'item', category: 'ai' },
-  { type: 'item', category: 'agent-runtime' },
-  { type: 'item', category: 'performance' },
-  { type: 'item', category: 'delivery' },
-  { type: 'item', category: 'mcp' },
-  { type: 'item', category: 'preview' },
-  { type: 'item', category: 'appearance' }
+  { type: 'group', group: AI_GROUP },
+  { type: 'group', group: INTEGRATIONS_GROUP }
 ];
 
 const CATEGORIES: CategoryDef[] = [
@@ -398,7 +417,7 @@ function NavGroup({
   onSelect: (id: SettingsCategory) => void;
 }) {
   const containsActive = group.children.includes(active);
-  const [open, setOpen] = useState(containsActive);
+  const [open, setOpen] = useState(true);
   useEffect(() => {
     if (containsActive) setOpen(true);
   }, [containsActive]);
@@ -888,6 +907,7 @@ function AiSection({
   update: (patch: AppSettingsPatch) => Promise<void>;
 }) {
   const category = CATEGORIES.find(c => c.id === 'ai')!;
+  const { confirm } = useDialogs();
   const [statuses, setStatuses] = useState<AiProviderStatus[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<AiProvider>(settings.ai.activeProvider);
   const [keyDraft, setKeyDraft] = useState('');
@@ -930,7 +950,7 @@ function AiSection({
   };
 
   const resetProviderKeys = async () => {
-    if (!window.confirm('Reset all saved AI provider keys? You will need to enter them again.')) return;
+    if (!(await confirm({ title: 'Reset saved AI provider keys?', message: 'You will need to enter them again.', confirmLabel: 'Reset keys', danger: true }))) return;
     setResettingKeys(true);
     setError(undefined);
     try {
