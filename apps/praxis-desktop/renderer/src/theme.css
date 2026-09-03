@@ -5019,68 +5019,6 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   background: transparent;
 }
 
-/* Dock the list to the right by reversing the row — the DOM order (list first)
-   is kept for tab order and tests. */
-.sessions-layout.side-right {
-  flex-direction: row-reverse;
-}
-
-/* The session list is a first-class themed panel, styled to match the app's
-   own Sidebar (.pane-sidebar): the theme's --bg base folded through
-   --surface-panel-opacity, the pack's tint wash, accent glow, blur, and its
-   own grain + watermark layers — not a plain sunken column. */
-.sessions-list {
-  position: relative;
-  isolation: isolate;
-  width: 300px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-right: 1px solid var(--surface-panel-border-color);
-  background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent);
-  background-image: var(--surface-panel-tint-layer);
-  box-shadow: var(--surface-accent-glow);
-  backdrop-filter: var(--surface-backdrop);
-}
-
-.sessions-layout.side-right .sessions-list {
-  border-right: none;
-  border-left: 1px solid var(--surface-panel-border-color);
-}
-
-/* Grain + watermark, mirroring .pane-sidebar::after / ::before so a surface
-   pack's material reads on the list panel too. Behind the content (z-index 0,
-   children lifted to 1); inert unless a pack sets a texture. */
-.sessions-list::after,
-.sessions-list::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-.sessions-list::after {
-  background-image: var(--surface-texture-image);
-  background-repeat: repeat;
-  background-size: var(--surface-texture-size);
-  mix-blend-mode: var(--surface-texture-blend);
-  opacity: calc(var(--surface-texture-opacity) * var(--surface-intensity) * var(--surface-texture));
-}
-.sessions-list::before {
-  background-image: var(--surface-watermark-image);
-  background-repeat: var(--surface-watermark-repeat);
-  background-position: var(--surface-watermark-position);
-  background-size: var(--surface-watermark-size);
-  background-attachment: var(--surface-watermark-attachment);
-  mix-blend-mode: var(--surface-watermark-blend);
-  opacity: calc(var(--surface-watermark-opacity) * var(--surface-intensity) * var(--surface-texture));
-}
-.sessions-list > * {
-  position: relative;
-  z-index: 1;
-}
-
 /* "Plain chat background" — the profile-wide Appearance setting or a per-session
    override (session console header). Strips the surface-pack material — texture,
    watermark, tint, glow, blur — from the whole sessions view so long transcripts
@@ -5098,132 +5036,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .pane-main:has(.sessions-layout.plain-surface)::after {
   display: none;
 }
-.sessions-layout.plain-surface .sessions-list,
-.sessions-layout.plain-surface .sessions-list-rail {
-  background-color: var(--bg-sunken);
-  background-image: none;
-  box-shadow: none;
-  backdrop-filter: none;
-}
-.sessions-layout.plain-surface .sessions-list-header {
-  background-color: var(--bg-elevated);
-  background-image: none;
-}
-.sessions-layout.plain-surface .sessions-list::before,
-.sessions-layout.plain-surface .sessions-list::after {
-  display: none;
-}
-
-/* Collapsed: the list tucks to a slim rail with just expand + new-session. */
-.sessions-list-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  width: 44px;
-  flex-shrink: 0;
-  padding: var(--space-2) 0;
-  border-right: 1px solid var(--surface-panel-border-color);
-  background-color: color-mix(in srgb, var(--bg) calc(var(--surface-panel-opacity) * 100%), transparent);
-  background-image: var(--surface-panel-tint-layer);
-  box-shadow: var(--surface-accent-glow);
-  backdrop-filter: var(--surface-backdrop);
-}
-
-.sessions-layout.side-right .sessions-list-rail {
-  border-right: none;
-  border-left: 1px solid var(--surface-panel-border-color);
-}
-
-.sessions-list-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border);
-  background-color: color-mix(in srgb, var(--bg-elevated) calc(var(--surface-panel-opacity) * 100%), transparent);
-}
-
-.sessions-list-header .btn {
-  margin-left: auto;
-}
-
-.sessions-list-title {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.sessions-list-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.session-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: var(--space-2);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.session-item:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.session-item:hover {
-  background: var(--bg-hover);
-}
-
-.session-item.active {
-  background: var(--bg-active);
-}
-
-.session-item-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.session-item-actions {
-  display: inline-flex;
-  flex-shrink: 0;
-  gap: 1px;
-}
-
-.session-item-actions .icon-btn {
-  width: 22px;
-  height: 22px;
-}
-
-.session-item-key {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-item-goal {
-  font-size: 12px;
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.session-list-error {
+  margin: 0 var(--space-2) var(--space-1);
+  font-size: 11px;
 }
 
 .session-title-input {
@@ -5239,16 +5054,18 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   outline: none;
 }
 
-.session-list-error {
-  margin-bottom: var(--space-1);
-  font-size: 11px;
-}
-
-.session-item-meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
+/* Sessions in the sidebar tree. The row is the tree idiom; the state dot is the
+   Agents tree's vocabulary (a full text badge does not fit), and the rename /
+   delete actions are what the old docked list column carried. Row actions stay
+   visible, as the board rows' settings icon does — the sidebar has no
+   hover-reveal idiom. */
+.session-nav-row { gap: 6px; }
+.session-nav-row .lane { flex-shrink: 0; margin-left: auto; }
+/* The tracker key, for a session with a real issue behind it — the handle
+   people (and the tests) reach for. */
+.session-item-key { flex-shrink: 0; color: var(--text-tertiary); font-size: 10px; font-weight: 600; }
+.session-nav-actions { display: inline-flex; align-items: center; flex-shrink: 0; gap: 1px; }
+.session-nav-row .session-title-input { flex: 1; min-width: 0; }
 
 /* Transparent shell: the header and composer keep their own solid fills, and
    the transcript (`.session-chat-scroll`) is the part that goes see-through so
@@ -8288,9 +8105,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    (a node's left/top, the pan transform) inline. See
    docs/plans/workflow-experience-design.md. */
 
-/* The docked stage/run list column — a first-class themed panel, matching
-   .sessions-list: the theme's --bg folded through --surface-panel-opacity, the
-   pack's tint wash, accent glow, blur, and its own grain layer. */
+/* The docked stage/run list column — a first-class themed panel: the theme's
+   --bg folded through --surface-panel-opacity, the pack's tint wash, accent
+   glow, blur, and its own grain layer. */
 .rail {
   position: relative;
   isolation: isolate;

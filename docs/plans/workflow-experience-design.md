@@ -67,9 +67,9 @@ distinct layout, not a swapped `<div>`.
 
 Praxis's left rail is the global `Sidebar` (project tree). The Designer's *stage
 list* and the Runs' *run list* are **secondary navigation** local to the page.
-They render as a **docked themed column** inside `pane-main`, using the exact
-`.sessions-list` pattern (surface-panel opacity, tint wash, accent glow, blur,
-grain) so it reads as a real panel and not a plain box. DOM order keeps the list
+They render as a **docked themed column** inside `pane-main` — see `.rail` in
+`theme.css` (surface-panel opacity, tint wash, accent glow, blur, grain) — so it
+reads as a real panel and not a plain box. DOM order keeps the list
 first for tab order; `flex-direction: row-reverse` is available if we ever want
 it on the right.
 
@@ -307,7 +307,7 @@ Move **all** workflow styling into `theme.css` under a `wf-` prefix. No inline
 | Concern | Token / class |
 | --- | --- |
 | Page frame, header, segmented control | reuse `.pane-main`, add `.wf-header`, reuse `.btn-compact` for `Design ⇄ Runs` |
-| Docked list column (stages / runs) | `.wf-rail` — copy `.sessions-list` (surface-panel opacity, tint, glow, blur, grain) |
+| Docked list column (stages / runs) | `.rail` (surface-panel opacity, tint, glow, blur, grain) |
 | Canvas | reuse `.designer-canvas`, `.designer-toolbar` |
 | Node card | `.wf-node` extending `.designer-node`; per-kind accent via `--designer-node-accent` set inline per node type only |
 | Node kind accents | `--wf-agent`, `--wf-check`, `--wf-approval`, `--wf-join` in `:root` and each theme block, defaulting to `--accent` / `--ok` / `--priority` / `--text-tertiary` |

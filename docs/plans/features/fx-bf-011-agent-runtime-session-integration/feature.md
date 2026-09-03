@@ -8,7 +8,7 @@ slug: agent-runtime-session-integration
 title: Agent runtime and session integration
 status: complete
 owner: Electron desktop app
-updated: 2026-08-31
+updated: 2026-09-03
 issues: docs/issues/features/fx-bf-011-agent-runtime-session-integration/feature-issues.md
 stories: [FX-BE-015, FX-BE-016, FX-BE-017]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
@@ -40,6 +40,40 @@ Make the Agent Hub operational with runtime health, lifecycle controls, skill ac
 ## Close when
 
 Users can operate trusted hosts, activate skills, open linked sessions, and diagnose runtime problems from the correct surfaces.
+
+## As built — shell revision (2026-09-03)
+
+The Sessions surface had the same shape the Agent Hub and the Git graph had
+before their revisions: it built its own navigation in the centre pane while the
+shell's right pane showed something unrelated.
+
+- **The dead right pane.** `onSelectFeature` navigates to a bare `{ feature }`,
+  so on `sessions` (and `epics`, `issues`, `connections`) the aux chain fell all
+  the way through to the `aux-empty` state — "Select a work item to see its
+  details.", which nothing on those routes can ever populate.
+- **The duplicated furniture.** The session list was a 300px column the feature
+  owned, with its own dock-left/dock-right preference, its own collapse-to-rail,
+  and CSS whose comment said it was "styled to match the app's own Sidebar
+  (`.pane-sidebar`)". The shell already provides all of that.
+
+Reworked to the one idiom:
+
+- **Navigation is the sidebar.** The `Sessions` destination expands into its
+  sessions, newest first, with rename and delete on the row and `+` for a new
+  session. State is a lane dot with the label as its tooltip — the Agents tree's
+  vocabulary; a full text badge does not fit a tree row.
+- **The centre is the conversation** — the console at full width, keeping only
+  the session's name and the two view toggles (plain background, browser).
+- **The right pane is the session** — live state, mode, started/steps, then the
+  facts fixed when it started (provider, model, tool access, folder, worktree),
+  then every action that changes it: mode switching and worktree removal (which
+  carry their own transition prompt and confirm dialog, so they moved whole),
+  and Abort. `SessionInspector` mirrors `AgentRuntimePanel`.
+- Naming and classification helpers moved to `ai/sessionNav.ts`, shared by the
+  three surfaces instead of duplicated.
+- Removed: `.sessions-list`, `.sessions-list-rail`, `.session-item*`, the
+  `side-left`/`side-right`/`list-collapsed` modifiers and the two localStorage
+  layout preferences behind them. No test covered the dock preference.
 
 ## Description
 

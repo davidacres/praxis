@@ -28,6 +28,7 @@ import { TaskDesignerPage } from '../taskDesigner/TaskDesignerPage';
 import { TaskDesignerItemDetail } from '../taskDesigner/TaskDesignerItemDetail';
 import { TaskDesignerSidebar } from '../taskDesigner/TaskDesignerSidebar';
 import { BottomPanel } from './BottomPanel';
+import { SessionInspector } from '../ai/SessionInspector';
 import { SessionsPage } from '../ai/SessionsPage';
 import { Icon } from '../ui/Icon';
 import { backendModeMeta, boardTypeToken } from '../board/boardMeta';
@@ -1187,7 +1188,6 @@ export function App() {
         <SessionsPage
           sessions={agentSessions}
           selectedKey={route.sessionKey}
-          onSelect={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
           onNewSession={() => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) })}
           onOpenAiSettings={() => setSettingsDialogCategory('ai')}
           initialBrowserOpen={route.browserOpen}
@@ -1480,6 +1480,20 @@ export function App() {
                   mode={mode}
                   onModeChange={setMode}
                   activeFeature={route.feature}
+                  sessions={agentSessions}
+                  {...(route.feature === 'sessions' && route.sessionKey
+                    ? { activeSessionKey: route.sessionKey }
+                    : {})}
+                  onSelectSession={issueKey => navigate({ feature: 'sessions', sessionKey: issueKey })}
+                  onRenameSession={async (issueKey, title) => {
+                    await window.praxis.ai.renameSession(issueKey, title);
+                  }}
+                  onDeleteSession={async issueKey => {
+                    await window.praxis.ai.deleteSession(issueKey);
+                    if (route.feature === 'sessions' && route.sessionKey === issueKey) {
+                      navigate({ feature: 'sessions' });
+                    }
+                  }}
                   onSelectFeature={feature => {
                     if (feature === 'connections') {
                       refreshConnections();
@@ -1584,7 +1598,9 @@ export function App() {
                   data-testid="issue-details-pane"
                   style={detailIsExpanded ? undefined : { width: aux.size }}
                 >
-                  {route.feature === 'git' ? (
+                  {route.feature === 'sessions' ? (
+                    <SessionInspector session={selectedAgentSession} />
+                  ) : route.feature === 'git' ? (
                     <div ref={setAuxSlotEl} className="aux-slot" data-testid="git-aux-slot" />
                   ) : route.feature === 'agents' ? (
                     <AgentRuntimePanel
