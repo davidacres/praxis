@@ -8684,6 +8684,22 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   border-top: 1px solid var(--border);
 }
 .agent-detail-caps p { margin: 0; font-size: 13px; }
+.agent-detail-sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-detail-sessions .btn-compact { width: 100%; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* New Session composer, when it was opened from the Agent Hub. */
+.session-agent-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
 
 /* Create / import dialogs — reuse .modal-* and the wf- field vocabulary. */
 .agent-hub-dialog-head h3 { margin-right: auto; }

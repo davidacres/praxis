@@ -29,14 +29,24 @@ export interface AgentsPageProps {
   project?: ProjectRecord;
   /** Opens the Settings agent-runtime section (paths, policy, diagnostics live there). */
   onOpenSettings?: () => void;
+  /** Persisted sessions, so an agent can list the ones attributed to it. */
+  sessions?: Array<{ issueKey: string; title: string; agentId?: string }>;
+  /** Opens a session in the Sessions view. */
+  onOpenSession?: (issueKey: string) => void;
+  /** Launches the New Session composer attributed to this agent + active skills. */
+  onStartSession?: (agentId: string, skillNames: string[]) => void;
 }
 
-export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
+/** Skill name → the mode the runtime negotiated when it was activated on an agent. */
+type ActivationMap = Record<string, Array<{ skill: string; mode: string }>>;
+
+export function AgentsPage({ project, onOpenSettings, sessions = [], onOpenSession, onStartSession }: AgentsPageProps) {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<Selection>();
   const [dialog, setDialog] = useState<'agent' | 'skill' | 'import'>();
+  const [activations, setActivations] = useState<ActivationMap>({});
 
   const load = useCallback(async (refresh: boolean) => {
     setBusy(true);
@@ -191,6 +201,8 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
               agent={selectedAgent}
               snapshot={snapshot}
               busy={busy}
+              activations={activations[selectedAgent.manifest.id] ?? []}
+              sessions={sessions.filter(session => session.agentId === selectedAgent.manifest.id)}
               onLifecycle={(id, action) =>
                 void act(() =>
                   action === 'stop'
@@ -200,15 +212,24 @@ export function AgentsPage({ project, onOpenSettings }: AgentsPageProps) {
                       : window.praxis.agentRuntime.start(id)
                 )
               }
+              {...(onStartSession
+                ? { onStartSession: (id: string) => onStartSession(id, (activations[id] ?? []).map(a => a.skill)) }
+                : {})}
+              {...(onOpenSession ? { onOpenSession } : {})}
             />
           ) : selectedSkill && snapshot ? (
             <SkillDetail
               skill={selectedSkill}
               agents={snapshot.agents}
               busy={busy}
+              activations={activations}
               onActivate={(agentId, name) =>
                 void act(async () => {
-                  await window.praxis.agentRuntime.activateSkill(agentId, name);
+                  const result = await window.praxis.agentRuntime.activateSkill(agentId, name);
+                  setActivations(current => ({
+                    ...current,
+                    [agentId]: [...(current[agentId] ?? []).filter(a => a.skill !== name), { skill: name, mode: result.mode }]
+                  }));
                   return window.praxis.agentRuntime.list();
                 })
               }
@@ -266,12 +287,20 @@ function AgentDetail({
   agent,
   snapshot,
   busy,
-  onLifecycle
+  activations,
+  sessions,
+  onLifecycle,
+  onStartSession,
+  onOpenSession
 }: {
   agent: DiscoveredAgent;
   snapshot: AgentRuntimeSnapshot;
   busy: boolean;
+  activations: Array<{ skill: string; mode: string }>;
+  sessions: Array<{ issueKey: string; title: string }>;
   onLifecycle: (id: string, action: LifecycleAction) => void;
+  onStartSession?: (id: string) => void;
+  onOpenSession?: (issueKey: string) => void;
 }) {
   const id = agent.manifest.id;
   const blocked = agentStartBlockedReason(agent);
@@ -315,6 +344,9 @@ function AgentDetail({
       )}
       {agent.manifest.skills && agent.manifest.skills.length > 0 && (
         <Row label="Declares skills">{agent.manifest.skills.join(', ')}</Row>
+      )}
+      {activations.length > 0 && (
+        <Row label="Active skills">{activations.map(a => `${a.skill} (${a.mode})`).join(', ')}</Row>
       )}
       <Row label="Source">
         <code className="agent-detail-path" title={agent.manifestPath}>
@@ -364,8 +396,28 @@ function AgentDetail({
             {state === 'failed' ? 'Retry start' : 'Start host'}
           </button>
         )}
+        {onStartSession && (
+          <button type="button" className="btn" disabled={busy || !!blocked} title={blocked} onClick={() => onStartSession(id)}>
+            <Icon name="chats" size={13} /> Open a session
+          </button>
+        )}
         {blocked && <p className="wf-hint is-warn">{blocked}</p>}
       </div>
+
+      {sessions.length > 0 && (
+        <div className="agent-detail-caps">
+          <span className="wf-rail-sub">Sessions</span>
+          <ul className="agent-detail-sessions">
+            {sessions.map(session => (
+              <li key={session.issueKey}>
+                <button type="button" className="btn-compact" onClick={() => onOpenSession?.(session.issueKey)}>
+                  {session.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -374,17 +426,22 @@ function SkillDetail({
   skill,
   agents,
   busy,
+  activations,
   onActivate
 }: {
   skill: DiscoveredSkill;
   agents: DiscoveredAgent[];
   busy: boolean;
+  activations: ActivationMap;
   onActivate: (agentId: string, skillName: string) => void;
 }) {
   const eligible = eligibleAgentsForSkill(skill, agents);
   const blocked = skillActivateBlockedReason(skill, agents);
   const [agentId, setAgentId] = useState('');
   const target = agentId || eligible[0]?.manifest.id || '';
+  const activeOn = Object.entries(activations)
+    .map(([id, list]) => ({ id, entry: list.find(a => a.skill === skill.metadata.name) }))
+    .filter((row): row is { id: string; entry: { skill: string; mode: string } } => !!row.entry);
 
   return (
     <div className="wf-inspector-card agent-detail">
@@ -420,6 +477,10 @@ function SkillDetail({
       </Row>
 
       {skill.error && <p className="wf-hint is-danger">{skill.error}</p>}
+
+      {activeOn.length > 0 && (
+        <Row label="Active on">{activeOn.map(row => `${row.id} · ${row.entry.mode} mode`).join(', ')}</Row>
+      )}
 
       <div className="wf-stage-actions">
         {eligible.length > 1 && (

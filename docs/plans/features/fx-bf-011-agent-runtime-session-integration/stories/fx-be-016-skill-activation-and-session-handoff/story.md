@@ -1,7 +1,7 @@
 ---
 id: FX-BE-016
 title: Skill activation and session handoff
-status: proposed
+status: complete
 feature: FX-BF-011
 issue: docs/issues/features/fx-bf-011-agent-runtime-session-integration/stories/fx-be-016-skill-activation-and-session-handoff/issue.md
 updated: 2026-08-31
