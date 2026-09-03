@@ -84,6 +84,9 @@ test('startup splash inherits the saved app theme', async () => {
   await window.locator('[data-testid="titlebar-settings"]').click();
   await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
   await window.locator('[data-testid="theme-card-humanist-light"]').click();
+  // Clear the "returning user" flag so the reload brings the full splash these
+  // colour assertions read, not the brief brand mark.
+  await window.evaluate(() => localStorage.removeItem('praxis-onboarded'));
   await window.reload();
 
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'humanist-light');

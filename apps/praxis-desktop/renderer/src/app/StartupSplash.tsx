@@ -83,8 +83,8 @@ function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-export function StartupSplash({ onDone, version }: { onDone: () => void; version?: string }) {
-  const [phase, setPhase] = useState<'crawl' | 'hold' | 'fade'>('crawl');
+export function StartupSplash({ onDone, version, brief = false }: { onDone: () => void; version?: string; brief?: boolean }) {
+  const [phase, setPhase] = useState<'crawl' | 'hold' | 'fade'>(brief ? 'hold' : 'crawl');
   const wordRef = useRef<SVGPathElement>(null);
   const helperRef = useRef<SVGPathElement>(null);
   const headCircleRef = useRef<SVGCircleElement>(null);
@@ -101,6 +101,21 @@ export function StartupSplash({ onDone, version }: { onDone: () => void; version
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       timers.current.push(setTimeout(finish, 200));
+      return () => timers.current.forEach(clearTimeout);
+    }
+
+    // A user who has been through onboarding once gets the brand mark, not the
+    // 6.5s crawl: the finished wordmark, a short hold, and a fade.
+    if (brief) {
+      if (wordRef.current) wordRef.current.setAttribute('d', WORD_PATH_LOCAL);
+      if (headCircleRef.current) {
+        headCircleRef.current.setAttribute('cx', String(RIVET.x));
+        headCircleRef.current.setAttribute('cy', String(RIVET.y));
+      }
+      timers.current.push(
+        setTimeout(() => setPhase('fade'), HOLD_MS),
+        setTimeout(finish, HOLD_MS + FADE_MS)
+      );
       return () => timers.current.forEach(clearTimeout);
     }
 

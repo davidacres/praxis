@@ -356,8 +356,12 @@ export function App() {
   useEffect(() => writePaneVisible('tm-pane-panel-visible', panelVisible), [panelVisible]);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
   const [importProjectsOpen, setImportProjectsOpen] = useState(false);
+  const ONBOARDED_KEY = 'praxis-onboarded';
   const [showSplash, setShowSplash] = useState(true);
   const [splashReplayKey, setSplashReplayKey] = useState(0);
+  // A returning user — past Getting Started at least once — gets the short
+  // brand mark rather than the full 6.5s crawl.
+  const [splashBrief] = useState(() => { try { return localStorage.getItem(ONBOARDED_KEY) === '1'; } catch { return false; } });
   const [settingsDialogCategory, setSettingsDialogCategory] = useState<SettingsCategory>();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [boardSettingsOpenFor, setBoardSettingsOpenFor] = useState<string>();
@@ -408,6 +412,10 @@ export function App() {
   useEffect(() => {
     if (startupResolved && activeWorkspaceId && !gettingStarted) writeLastWorkspaceRoute(route);
   }, [activeWorkspaceId, gettingStarted, route, startupResolved]);
+
+  useEffect(() => {
+    if (startupResolved && !gettingStarted) { try { localStorage.setItem(ONBOARDED_KEY, '1'); } catch { /* private mode */ } }
+  }, [startupResolved, gettingStarted]);
 
   // The sessions view selects its newest session when no explicit selection was
   // routed to it. Make that implicit selection durable too, so a restart opens
@@ -1935,7 +1943,7 @@ export function App() {
           onImported={snap => { setAgentSnapshot(snap); setAgentDialog(undefined); }}
         />
       )}
-      {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} onDone={() => setShowSplash(false)} />}
+      {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
       {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
     </div>
   );

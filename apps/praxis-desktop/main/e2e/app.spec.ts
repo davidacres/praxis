@@ -154,3 +154,17 @@ test('adding and removing a connection updates the list', async () => {
 
   await expect(window.locator('[data-testid="connection-row"]', { hasText: name })).not.toBeVisible();
 });
+
+test('a returning user gets the brief splash, not the full crawl', async () => {
+  // Opening the seeded workspace marks the profile onboarded; the reload then
+  // brings back the brief brand mark, which retires in about a second rather
+  // than running the ~6.5s crawl.
+  await expect(window.locator('[data-testid="overview-page"], .project-dashboard, [data-testid="new-session-view"]').first()).toBeVisible();
+  const onboarded = await window.evaluate(() => localStorage.getItem('praxis-onboarded'));
+  expect(onboarded).toBe('1');
+
+  const startedAt = Date.now();
+  await window.reload();
+  await window.locator('[data-testid="startup-splash"]').waitFor({ state: 'detached', timeout: 5000 });
+  expect(Date.now() - startedAt).toBeLessThan(4000);
+});
