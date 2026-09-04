@@ -112,7 +112,11 @@ test('creates a folderless Product project through the full wizard and opens its
   await expect(getStarted).toContainText('Project created');
   await expect(getStarted).toContainText('6/6 sections');
   await expect(getStarted.getByTestId('project-getstarted-start')).toBeVisible();
-  await expect(page).toHaveScreenshot('project-home.png');
+  // The created date is today's, so it is masked — an unmasked baseline here
+  // goes red at midnight on a change that has nothing to do with the app.
+  await expect(page).toHaveScreenshot('project-home.png', {
+    mask: [page.getByTestId('project-created-date')]
+  });
   await getStarted.getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
   const stored = await page.evaluate(() => window.praxis.projects.list());
