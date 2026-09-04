@@ -132,6 +132,36 @@ npm run app:installer:mac    # electron-builder -> apps/praxis-desktop/main/dist
 assisted installer share the app's warm charcoal, parchment, and terracotta
 visual language.
 
+### Signing and updates
+
+The app can check for updates (Settings surfaces the state; the main process
+handles it in `src/main/autoUpdate.ts`), but only from a **packaged build with a
+publish feed**. In development, and in any build made with `--publish never`,
+`update:check` reports `unsupported` with the reason rather than failing
+quietly.
+
+Publishing is driven entirely by environment variables, so an unsigned local
+build behaves exactly as it always did — electron-builder skips signing and
+notarization when the credentials are absent:
+
+| Variable | For |
+| --- | --- |
+| `PRAXIS_PUBLISH_OWNER` / `PRAXIS_PUBLISH_REPO` | the GitHub release feed updates are read from |
+| `GH_TOKEN` | uploading the release |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | the Developer ID certificate (macOS) or code-signing cert (Windows) |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | notarization |
+
+```bash
+npm run dist:mac:publish --workspace=@praxis/desktop-main
+npm run dist:win:publish --workspace=@praxis/desktop-main
+```
+
+**macOS updates require a signed build.** Squirrel.Mac refuses unsigned
+bundles, so an unsigned build can find an update but not install one — it
+reports `available` with `canInstall: false` rather than pretending to apply
+it. `build/entitlements.mac.plist` carries the hardened-runtime entitlements
+Electron, node-pty, and the CLI agent subprocesses need.
+
 ## Known limitations
 
 - GitHub mode is not yet a full issue/board backend.

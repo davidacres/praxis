@@ -10,19 +10,22 @@
   "scripts": {
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
-    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/adapters/jsonKeyValueStore.test.js",
-    "start": "npm run compile && electron .",
-    "test:e2e": "npm run compile && npx playwright test",
     "copy-renderer": "node scripts/copy-renderer.cjs",
-    "rebuild-terminal": "npm rebuild node-pty --build-from-source",
-    "predist": "npm run copy-renderer",
     "dist": "electron-builder --publish never",
     "dist:mac": "electron-builder --mac dmg --publish never",
-    "dist:win": "electron-builder --win nsis --publish never"
+    "dist:mac:publish": "electron-builder --mac dmg --publish always",
+    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:win:publish": "electron-builder --win nsis --publish always",
+    "predist": "npm run copy-renderer",
+    "rebuild-terminal": "npm rebuild node-pty --build-from-source",
+    "start": "npm run compile && electron .",
+    "test:e2e": "npm run compile && npx playwright test",
+    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/adapters/jsonKeyValueStore.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@praxis/core": "*",
+    "electron-updater": "^6.8.9",
     "jsonc-parser": "^3.3.1",
     "node-pty": "^1.1.0"
   },
@@ -63,7 +66,12 @@
     "mac": {
       "target": "dmg",
       "category": "public.app-category.productivity",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
     },
     "dmg": {
       "background": "build/dmg-background.png",
@@ -102,6 +110,13 @@
       "uninstallerSidebar": "build/installerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "artifactName": "${productName}-${version}-setup.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "${env.PRAXIS_PUBLISH_OWNER}",
+        "repo": "${env.PRAXIS_PUBLISH_REPO}"
+      }
+    ]
   }
 }

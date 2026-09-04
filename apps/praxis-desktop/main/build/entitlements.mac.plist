@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Electron needs both JIT and unsigned executable memory under the
+       hardened runtime; without them the app crashes on launch once signed. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- node-pty spawns the user's shell, and agent sessions spawn CLI agents. -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Terminals and agents read and write the folders the user picks. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

@@ -288,8 +288,33 @@ export interface BrowserIpc {
   onDidNavigate(listener: (state: BrowserNavigationState) => void): () => void;
 }
 
+/**
+ * Update state as the main process sees it. `unsupported` is the ordinary case
+ * in development and in a build published without a feed — not an error.
+ * `available` carries `canInstall: false` when the build can find an update but
+ * cannot apply one (an unsigned macOS bundle; Squirrel.Mac refuses those).
+ */
+export type UpdateStatus =
+  | { state: 'unsupported'; reason: string }
+  | { state: 'checking' }
+  | { state: 'current'; version: string }
+  | { state: 'available'; version: string; canInstall: boolean }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
+
+export interface UpdateIpc {
+  getStatus(): Promise<UpdateStatus>;
+  check(): Promise<UpdateStatus>;
+  download(): Promise<UpdateStatus>;
+  /** Quits and relaunches into the downloaded version. */
+  installNow(): Promise<UpdateStatus>;
+  onStatus(listener: (status: UpdateStatus) => void): () => void;
+}
+
 export interface AppIpc {
   getVersion(): Promise<string>;
+  update: UpdateIpc;
 }
 
 /** Durable app-managed projects and their default local boards. */
