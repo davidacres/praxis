@@ -204,6 +204,16 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
 - A full-tools `ai:delegate` **requires** an explicit `workingDirectory` — it will not
   fall back to the app's cwd. Folderless projects are coerced to `project-only`.
 
+- **Token usage is reported only by API providers.** The gateway wire parser reads
+  it from both formats (OpenAI's final `usage` chunk, which the request already asks
+  for via `stream_options.include_usage`, and Anthropic's `message_start` /
+  `message_delta` pair), the loop emits a `usage` event per turn, and
+  `addAgentTokenUsage` sums them. CLI-hosted agents run on their own account and
+  report nothing over ACP, so their sessions leave `tokenUsage` unset — **never
+  substitute a zero**, which reads as "this was free". Anthropic sends input and
+  output in *different* events, so a running total must not be derived until the
+  stream ends.
+
 **Testing an agent flow without a model:** `e2e/fixtures/codingAcpAgent.mjs` is a real ACP
 subprocess (real SDK, real wire framing) that performs a scripted edit through the same
 file-I/O handlers. Two non-obvious requirements: it needs the executable bit (the host

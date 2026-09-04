@@ -52,3 +52,34 @@ test('updateAgentRuntime persists Agent Hub attribution', () => {
   mgr.updateAgentRuntime('SESSION-abc', { activeSkills: [] });
   assert.equal(mgr.getAgentSession('SESSION-abc')?.activeSkills, undefined);
 });
+
+test('token usage accumulates across a session\'s turns', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
+
+  // A session with tools makes several model calls; each reports its own usage.
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 900, outputTokens: 50, totalTokens: 950 });
+  mgr.addAgentTokenUsage('SESSION-abc', { inputTokens: 1200, outputTokens: 80, totalTokens: 1280 });
+
+  assert.deepEqual(mgr.getAgentSession('SESSION-abc')?.tokenUsage, {
+    inputTokens: 2100,
+    outputTokens: 130,
+    totalTokens: 2230
+  });
+});
+
+test('a session with no reported usage keeps tokenUsage unset', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
+
+  // Nothing reported means nothing shown — a zero would read as "this was free".
+  assert.equal(mgr.getAgentSession('SESSION-abc')?.tokenUsage, undefined);
+});
+
+test('a provider reporting only some fields does not invent the others', () => {
+  const mgr = new AiSessionManager(storeWith({ 'SESSION-abc': baseRecord('executing') }));
+
+  mgr.addAgentTokenUsage('SESSION-abc', { outputTokens: 42 });
+
+  const usage = mgr.getAgentSession('SESSION-abc')?.tokenUsage;
+  assert.equal(usage?.outputTokens, 42);
+  assert.equal(usage?.inputTokens, undefined, 'an unreported input count stays unreported');
+});

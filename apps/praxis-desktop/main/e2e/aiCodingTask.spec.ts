@@ -279,3 +279,42 @@ test('a finished session shows its changeset and can commit it', async () => {
   expect(log).toBe('Fix the sum() function in sum.js so it returns a + b.');
   expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
 });
+
+test('a CLI-agent session reports no token count rather than a misleading zero', async () => {
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-tokens-'));
+  fs.writeFileSync(path.join(repo, 'sum.js'), 'function sum(a, b) {\n  return a - b;\n}\n');
+
+  app = await launchTestApp();
+  const win = app.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+
+  // A CLI agent runs on its own account and reports no usage over ACP. The
+  // header therefore shows steps and duration and simply omits tokens — a "0
+  // tokens" here would read as "this was free".
+  const meta = win.getByTestId('session-meta');
+  await expect(meta).toContainText('step');
+  await expect(win.getByTestId('session-tokens')).toHaveCount(0);
+  expect(
+    await win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.tokenUsage), session.issueKey)
+  ).toBeUndefined();
+});
