@@ -8806,7 +8806,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-changes-del { color: var(--danger); }
 
 .session-changes-list { display: flex; flex-direction: column; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.session-changes-list li {
+.session-changes-row {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) 22px;
   align-items: center;
@@ -8827,14 +8827,45 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    left so the filename, the part you actually read, always survives. */
 .session-changes-path {
   overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
   font-size: var(--text-sm);
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Truncate from the left so the filename — the part you actually read —
+     always survives a long path. */
   direction: rtl;
-  text-align: left;
+  cursor: pointer;
 }
+.session-changes-path:hover { color: var(--accent); }
 .session-changes-list li .icon-btn { opacity: 0; }
 .session-changes-list li:hover .icon-btn,
 .session-changes-list li .icon-btn:focus-visible { opacity: 1; }
+
+/* The inline diff for one file. Scrolls in its own box so a long line never
+   makes the inspector itself scroll sideways. */
+.session-changes-diff {
+  margin: var(--space-1) 0 var(--space-2) 62px;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow-x: auto;
+}
+.session-changes-diff pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+.session-changes-diff .diff-addition { color: var(--success); }
+.session-changes-diff .diff-deletion { color: var(--danger); }
+.session-changes-diff .diff-hunk { color: var(--text-tertiary); }
+.session-changes-diff .diff-notice { color: var(--warning); }
 
 .session-changes-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
