@@ -110,6 +110,19 @@ test('a filling context warns, and says what is causing it', async () => {
   // The bar is a real progressbar, so screen readers get the number too.
   await expect(context.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '72');
 
+  // Not smaller than the rest of the composer it sits above. The paragraph
+  // shipped at 11px once already — below the chat message body (12px) and
+  // AGENTS.md's own reading floor — because --text-xs is a label size, and a
+  // full sentence someone has to read is not a label.
+  const sizes = await win.evaluate(() => ({
+    heading: getComputedStyle(document.querySelector('.composer-context-heading')!).fontSize,
+    paragraph: getComputedStyle(document.querySelector('.composer-context-banner p')!).fontSize,
+    chip: getComputedStyle(document.querySelector('.session-runtime-chip')!).fontSize,
+    chatMessage: getComputedStyle(document.querySelector('.session-chat-message')!).fontSize
+  }));
+  expect(sizes.heading).toBe(sizes.chip);
+  expect(sizes.paragraph).toBe(sizes.chatMessage);
+
   await win.screenshot({ path: 'output/playwright/context-indicator-warn.png', fullPage: true });
 });
 
