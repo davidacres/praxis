@@ -5,6 +5,7 @@ import {
   type ChatCompletionToolCall,
   type GatewayOptions,
   type GatewayToolDefinition,
+  trimToolOutputToBudget,
   type TokenUsage,
   type WireMessage
 } from '../gateway';
@@ -19,6 +20,8 @@ export type AgentLoopEvent =
   | { type: 'step'; stepCount: number }
   /** Tokens the turn that just finished consumed, when the provider reports them. */
   | { type: 'usage'; usage: TokenUsage }
+  /** Older tool output was elided to keep the conversation inside its budget. */
+  | { type: 'history_trimmed'; droppedToolResults: number }
   | { type: 'completed'; text: string }
   | { type: 'error'; message: string };
 
@@ -45,8 +48,21 @@ export interface AgentLoopOptions {
   timeoutMs?: number;
   idleTimeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * Rough character budget for the conversation before the oldest tool output
+   * is elided. A proxy for the model's context window — see
+   * `trimToolOutputToBudget`. Defaults to `DEFAULT_HISTORY_BUDGET_CHARS`.
+   */
+  historyBudgetChars?: number;
   onEvent?: (event: AgentLoopEvent) => void;
 }
+
+/**
+ * ~480k characters, very roughly 120k tokens. Deliberately generous: this is a
+ * backstop against an unbounded climb, not a replacement for a model-aware
+ * budget, and trimming too eagerly costs the agent context it still needs.
+ */
+export const DEFAULT_HISTORY_BUDGET_CHARS = 480_000;
 
 export interface AgentLoopResult {
   status: 'completed' | 'aborted' | 'failed' | 'step_limit';
@@ -192,6 +208,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       }
 
       history.push(...toolResultMessages(toolResults));
+
+      // Bound the conversation before the provider does it for us with a
+      // context-length error. Only old tool output is sacrificed; the assistant
+      // and user turns that carry the thread of the work are never touched.
+      const budget = options.historyBudgetChars ?? DEFAULT_HISTORY_BUDGET_CHARS;
+      const bounded = trimToolOutputToBudget(history, budget);
+      if (bounded.trimmed > 0) {
+        history.length = 0;
+        history.push(...bounded.history);
+        emit({ type: 'history_trimmed', droppedToolResults: bounded.trimmed });
+      }
     }
   } catch (error) {
     if (options.signal?.aborted) {

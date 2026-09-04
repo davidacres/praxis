@@ -194,6 +194,50 @@ export function toolResultMessages(
  * already used to write its answer; re-sending it every turn just burns tokens.
  * An assistant message that was purely a tool call collapses away entirely.
  */
+/**
+ * Trims the oldest tool output when a conversation outgrows its budget.
+ *
+ * The turn loop appends every tool result at full size, so one large file read
+ * or shell dump can dominate the prompt and, left alone, the history grows
+ * until the provider rejects the turn outright. This replaces the *content* of
+ * the oldest `role: 'tool'` messages with a short marker — the message itself
+ * has to stay, because an assistant `tool_calls` entry without its matching
+ * result is a protocol error.
+ *
+ * Newest results are kept: recent tool output is what the next turn reasons
+ * about, and the oldest is the most likely to be spent.
+ *
+ * `budgetChars` is a proxy for tokens, not a token count. It only has to be in
+ * the right order of magnitude to stop an unbounded climb, and it avoids
+ * pulling a tokenizer into the loop.
+ */
+export function trimToolOutputToBudget(
+  history: ReadonlyArray<WireMessage>,
+  budgetChars: number
+): { history: WireMessage[]; trimmed: number } {
+  const total = history.reduce((sum, message) => sum + (message.content?.length ?? 0), 0);
+  if (total <= budgetChars) {
+    return { history: [...history], trimmed: 0 };
+  }
+
+  const out = history.map(message => ({ ...message }));
+  let over = total - budgetChars;
+  let trimmed = 0;
+  for (const message of out) {
+    if (over <= 0) break;
+    if (message.role !== 'tool') continue;
+    const length = message.content?.length ?? 0;
+    // Not worth replacing something already small.
+    if (length <= ELIDED_TOOL_RESULT.length) continue;
+    message.content = ELIDED_TOOL_RESULT;
+    over -= length - ELIDED_TOOL_RESULT.length;
+    trimmed += 1;
+  }
+  return { history: out, trimmed };
+}
+
+const ELIDED_TOOL_RESULT = '[earlier tool output dropped to stay within the context window]';
+
 export function compactHistoryForReplay(history: ReadonlyArray<WireMessage>): WireMessage[] {
   const out: WireMessage[] = [];
   for (const message of history) {

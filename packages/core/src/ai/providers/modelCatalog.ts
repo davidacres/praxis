@@ -14,6 +14,12 @@ export interface ModelChoice {
   value: string;
   name: string;
   description?: string;
+  /**
+   * The model's context window, when the provider's model listing reports one.
+   * Used to tell a session how much room it has left; absent for CLI-hosted
+   * agents and for gateways that do not publish it.
+   */
+  contextLength?: number;
 }
 
 export interface ModelOptions {
@@ -51,7 +57,13 @@ function normalize(raw: RawGatewayModel[]): ModelChoice[] {
       continue;
     }
     seen.add(model.id);
-    out.push({ value: model.id, name: model.name?.trim() || model.id });
+    out.push({
+      value: model.id,
+      name: model.name?.trim() || model.id,
+      ...(typeof model.context_length === 'number' && model.context_length > 0
+        ? { contextLength: model.context_length }
+        : {})
+    });
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;

@@ -13,6 +13,7 @@ import {
   type AgentToolMode
 } from './agentTypes';
 import { classifyLocalTool, summariseToolArgs } from './toolEventClassify';
+import { listCatalogModels } from './providers/modelCatalog';
 import type { AiSessionManager } from './aiSessionManager';
 import {
   compactHistoryForReplay,
@@ -125,6 +126,23 @@ export class VercelAgentService {
       throw new Error(`${descriptor.label} is a CLI-hosted provider — use AcpAgentHost, not VercelAgentService.`);
     }
     return descriptor;
+  }
+
+  /**
+   * Records the model's context window on the session, so the UI can show how
+   * much room a turn has left. Best-effort: a gateway that does not publish
+   * `context_length` simply leaves the session without a limit, and the UI then
+   * shows the prompt size without a percentage rather than guessing a window.
+   */
+  private noteContextLimit(issueKey: string, provider: AiProvider, gateway: GatewayOptions, model: string): void {
+    void listCatalogModels(provider, gateway)
+      .then(choices => {
+        const limit = choices.find(choice => choice.value === model)?.contextLength;
+        if (limit) this.sessionManager.setAgentContextLimit(issueKey, limit);
+      })
+      .catch(() => {
+        // Model listing is optional metadata; a failure must not affect the run.
+      });
   }
 
   private resolveConnection(provider: AiProvider, options: VercelAgentStartOptions): GatewayOptions {
@@ -270,6 +288,17 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
         break;
       case 'usage':
         this.sessionManager.addAgentTokenUsage(issueKey, event.usage);
+        break;
+      case 'history_trimmed':
+        // Visible in the transcript: the agent silently losing earlier tool
+        // output would otherwise look like it simply forgot.
+        this.appendEvent(
+          issueKey,
+          evt(
+            'message',
+            `Dropped ${event.droppedToolResults} earlier tool result${event.droppedToolResults === 1 ? '' : 's'} to stay within the context window`
+          )
+        );
         break;
       case 'message': {
         task.messageBuffer = event.text || task.messageBuffer;
@@ -458,6 +487,8 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
       workingDirectory,
       toolMode
     });
+    // After the record exists, so the limit has somewhere to land.
+    this.noteContextLimit(issue.key, provider, gateway, model);
     this.sessionManager.updateAgentState(issue.key, 'planning');
     this.appendEvent(
       issue.key,
@@ -518,6 +549,7 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
     const maxSteps = record.taskDefinition.maxSteps ?? AGENT_DEFAULTS.maxSteps;
     const timeoutMs = record.taskDefinition.timeoutMs ?? AGENT_DEFAULTS.timeoutMs;
     const model = options.model?.trim() || this.requireApiDescriptor(provider).defaultModel;
+    this.noteContextLimit(issueKey, provider, gateway, model);
     // Replay the prior turns as a plain text exchange — old tool output does not
     // need to travel back to the model on every follow-up.
     const history = compactHistoryForReplay(this.sessionManager.getAgentConversationHistory(issueKey));

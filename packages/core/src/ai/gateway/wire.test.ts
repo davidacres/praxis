@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compactHistoryForReplay, consumeChatStream, type WireMessage } from './wire';
+import { compactHistoryForReplay, consumeChatStream, trimToolOutputToBudget, type WireMessage } from './wire';
 
 test('compactHistoryForReplay strips tool round-trips, keeps the text exchange', () => {
   const history: WireMessage[] = [
@@ -90,4 +90,51 @@ test('a provider that reports no usage yields none, rather than zeroes', async (
   ]);
 
   assert.equal(result.usage, undefined);
+});
+
+test('trimToolOutputToBudget leaves a conversation inside budget untouched', () => {
+  const history: WireMessage[] = [
+    { role: 'user', content: 'do a thing' },
+    { role: 'tool', tool_call_id: 'c1', content: 'small result' }
+  ];
+
+  const result = trimToolOutputToBudget(history, 10_000);
+
+  assert.equal(result.trimmed, 0);
+  assert.deepEqual(result.history, history);
+});
+
+test('trimToolOutputToBudget drops the oldest tool output first, keeping the newest', () => {
+  const history: WireMessage[] = [
+    { role: 'user', content: 'go' },
+    { role: 'tool', tool_call_id: 'c1', content: 'A'.repeat(5000) },
+    { role: 'tool', tool_call_id: 'c2', content: 'B'.repeat(5000) },
+    { role: 'tool', tool_call_id: 'c3', content: 'C'.repeat(5000) }
+  ];
+
+  const result = trimToolOutputToBudget(history, 8000);
+
+  // Oldest goes first; the most recent result — what the next turn reasons
+  // about — survives.
+  assert.ok(result.trimmed >= 1);
+  assert.ok(!result.history[1].content?.startsWith('A'), 'the oldest result is elided');
+  assert.equal(result.history[3].content, 'C'.repeat(5000), 'the newest result is kept');
+  // The tool message itself must remain: an assistant tool_call without its
+  // matching result is a protocol error.
+  assert.equal(result.history.length, history.length);
+  assert.equal(result.history[1].role, 'tool');
+  assert.equal(result.history[1].tool_call_id, 'c1');
+});
+
+test('trimToolOutputToBudget never touches user or assistant turns', () => {
+  const history: WireMessage[] = [
+    { role: 'user', content: 'X'.repeat(9000) },
+    { role: 'assistant', content: 'Y'.repeat(9000) }
+  ];
+
+  const result = trimToolOutputToBudget(history, 100);
+
+  // Nothing can be freed without losing the thread of the work, so nothing is.
+  assert.equal(result.trimmed, 0);
+  assert.deepEqual(result.history, history);
 });
