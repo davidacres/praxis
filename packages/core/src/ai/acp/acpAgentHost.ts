@@ -324,6 +324,17 @@ export class AcpAgentHost {
         }
         break;
       }
+      case 'plan': {
+        // A stable ACP update (Claude Code's TodoWrite, Codex's plan tool land
+        // here), silently dropped until now — this switch had no case for it.
+        // Each one is a full snapshot per the spec ("the client replaces the
+        // entire plan with each update"), so it replaces rather than merges.
+        this.sessionManager.setAgentTaskList(
+          issueKey,
+          update.entries.map(entry => ({ content: entry.content, status: entry.status, priority: entry.priority }))
+        );
+        break;
+      }
       case 'agent_thought_chunk': {
         const text = update.content.type === 'text' ? update.content.text : '';
         if (text) {

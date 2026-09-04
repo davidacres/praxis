@@ -292,9 +292,12 @@ export interface AgentSessionRecord {
   completedAt?: string;
   /**
    * Tokens this session has consumed, summed across its turns — present only
-   * for providers that report usage. CLI-hosted agents (Claude Code, Codex)
-   * run on their own account and report nothing over ACP, so their sessions
-   * carry no usage rather than a misleading zero.
+   * for the API providers whose usage the gateway wire parser reads. ACP
+   * defines a `usage_update` (`used` / `size`, i.e. exactly `contextTokens` /
+   * `contextLimit` below, plus an optional cost) that could give CLI-hosted
+   * agents (Claude Code, Codex) the same figure, but `AcpAgentHost` does not
+   * read it yet — so those sessions carry no usage rather than a misleading
+   * zero, not because the protocol has nothing to offer.
    */
   tokenUsage?: TokenUsage;
   /**
@@ -309,9 +312,25 @@ export interface AgentSessionRecord {
   contextTokens?: number;
   /** The active model's context window, when the provider publishes one. */
   contextLimit?: number;
+  /**
+   * The agent's current task list, when it reports one (ACP's `plan` session
+   * update — Claude Code's TodoWrite and Codex's plan tool both surface this
+   * way). ACP defines a plan update as a complete snapshot, not a diff: each
+   * one replaces the array wholesale, so this is always the latest state, not
+   * an append log. Absent for a session that has never reported one, and for
+   * every non-ACP provider — the local-tools loop has no equivalent tool.
+   */
+  taskList?: AgentTaskListItem[];
   boardId?: string;
   /** Explicit session purpose; older records derive this from taskDefinition.kind. */
   mode?: SessionMode;
+}
+
+/** One entry in an agent's self-reported task list — see `AgentSessionRecord.taskList`. */
+export interface AgentTaskListItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'high' | 'medium' | 'low';
 }
 
 /** Default guardrail limits. */

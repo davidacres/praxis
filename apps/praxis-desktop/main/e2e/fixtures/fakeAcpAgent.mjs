@@ -13,6 +13,10 @@
 //     `respondToPermission`, which is equally unreachable for the existing
 //     local-tools path — so this marker is exercised via `AcpClientWrapper`
 //     directly in manual verification, not through the full app's IPC).
+//   - "WITH_PLAN": streams a three-task `plan` update, worked one at a time —
+//     each one a full snapshot, the way TodoWrite/the ACP spec define it, not
+//     a diff against the last. Add "STOP_PLAN_MIDWAY" too to stop after the
+//     third task is still `in_progress`, for asserting the mid-run state.
 
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
@@ -195,6 +199,55 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         ]
       }
     });
+  }
+
+  if (promptText.includes('WITH_PLAN')) {
+    // Claude Code's TodoWrite and Codex's plan tool both stream a `plan`
+    // update per change — each one a full snapshot, not a diff (the ACP spec:
+    // "the client replaces the entire plan with each update"). Three tasks,
+    // worked one at a time, so the host has to actually replace on every event
+    // rather than merge — a case that would still look right if it forgot one
+    // task's status update and only mixed the two together.
+    const plan = entries => ({
+      sessionId: ctx.params.sessionId,
+      update: { sessionUpdate: 'plan', entries }
+    });
+    // Real agents take real seconds between finishing one task and the next —
+    // paced here so a client watching the session actually gets a chance to
+    // observe each intermediate snapshot, not just the last one to land before
+    // the turn ends.
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
+      { content: 'Read the failing test', status: 'pending', priority: 'high' },
+      { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
+      { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
+    ]));
+    await wait(150);
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
+      { content: 'Read the failing test', status: 'in_progress', priority: 'high' },
+      { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
+      { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
+    ]));
+    await wait(150);
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
+      { content: 'Read the failing test', status: 'completed', priority: 'high' },
+      { content: 'Fix the off-by-one', status: 'in_progress', priority: 'high' },
+      { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
+    ]));
+    await wait(150);
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
+      { content: 'Read the failing test', status: 'completed', priority: 'high' },
+      { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
+      { content: 'Re-run the suite', status: 'in_progress', priority: 'medium' }
+    ]));
+    if (!promptText.includes('STOP_PLAN_MIDWAY')) {
+      await wait(150);
+      await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
+        { content: 'Read the failing test', status: 'completed', priority: 'high' },
+        { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
+        { content: 'Re-run the suite', status: 'completed', priority: 'medium' }
+      ]));
+    }
   }
 
   return { stopReason: 'end_turn' };

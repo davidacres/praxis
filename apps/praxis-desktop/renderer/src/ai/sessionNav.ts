@@ -94,8 +94,10 @@ export function formatElapsed(startedAt: string, completedAt?: string): string |
 
 /**
  * A session's token total, compactly. Returns undefined when the provider
- * reported nothing — CLI-hosted agents run on their own account and report no
- * usage over ACP, and an invented 0 would read as "this was free".
+ * reported nothing — today that means every CLI-hosted session, since
+ * `AcpAgentHost` does not yet read ACP's `usage_update`, not because the
+ * protocol has nothing to offer — and an invented 0 would read as "this was
+ * free" either way.
  */
 export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | undefined {
   const total = usage?.totalTokens;
@@ -124,9 +126,9 @@ export interface ContextPressure {
  * a session can spend a million tokens over fifty small turns without ever
  * filling its window, so a running total would cry wolf constantly.
  *
- * Returns undefined when either number is unknown — a CLI-hosted agent reports
- * no usage, and not every gateway publishes a context length. A guessed
- * percentage would be worse than none.
+ * Returns undefined when either number is unknown — a CLI-hosted session has
+ * no usage yet (see `formatTokens`), and not every gateway publishes a
+ * context length. A guessed percentage would be worse than none.
  */
 export function contextPressure(session: AgentSessionRecord): ContextPressure | undefined {
   const used = session.contextTokens;
