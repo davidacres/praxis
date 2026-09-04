@@ -8897,12 +8897,20 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   align-items: center;
   gap: var(--space-1);
   color: var(--warning);
-  font-size: var(--text-xs);
+  /* --text-md, matching the composer chips beside it — this carries a live
+     figure ("72% of 100k"), not a bare label, so it takes the app's reading
+     size rather than the --text-xs an eyebrow caption would use. */
+  font-size: var(--text-md);
   font-weight: 600;
 }
 .composer-context-banner.is-critical .composer-context-heading { color: var(--danger); }
 .composer-context-heading span { font-variant-numeric: tabular-nums; }
-.composer-context-banner p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-xs); }
+/* --text-sm, matching the chat message body and the button labels around it —
+   this is a sentence someone has to read, not a caption; AGENTS.md's own type
+   scale reserves --text-xs (11px) for labels and puts the reading floor at
+   --text-sm (12px). It was set to --text-xs originally, which fell below
+   every other piece of reading text in this pane. */
+.composer-context-banner p { margin: var(--space-1) 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .session-context-bar {
   height: 4px;
   margin-top: var(--space-2);
