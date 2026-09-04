@@ -247,6 +247,20 @@ group by default broke `openLooks` / `openSurface`, whose guarded `group.click()
 *collapsed* it. Before changing a default, grep the e2e directory for assertions on the old
 one.
 
+**Live-agent tests are opt-in and stay that way.** `*.live.spec.ts` drives a real
+CLI agent against a real model — it spends money on whoever's account the agent is
+signed in to and takes minutes. Those files are excluded from every other Playwright
+project and additionally refuse to run without the env opt-in:
+
+```bash
+PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
+```
+
+Never add them to `npm run test:desktop`. Keep the task small and self-verifying —
+the current one seeds a repository whose own `node --test` suite fails and asks the
+agent to make it pass, so success is measured by running that suite afterwards
+rather than by reading the agent's prose.
+
 **Known flake, not a defect.** `aiCliAgentHost.spec.ts` intermittently hangs for minutes on
 a *different* test each run, then passes in ~3s alone; it was clean across ~40 runs and the
 whole suite at the configured worker count. It correlates with long unattended runs, not with
