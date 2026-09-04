@@ -5,6 +5,7 @@ import type {
   AiAnalysisState,
   AiProviderStatus,
   PermissionDecision,
+  SessionMode,
   TerminalSessionInfo
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
@@ -13,8 +14,21 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, sessionLabel, sessionTitle } from './sessionNav';
+import { basename, contextPressure, isWorkflowStageSession, sessionLabel, sessionTitle } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
+
+/**
+ * Switching mode is not just a flag: the session is told, in its own thread,
+ * what the new mode means. These are the prompts the console used to send.
+ */
+const MODE_TRANSITION: Record<SessionMode, string> = {
+  analysis:
+    'Switch this conversation into Analysis mode. Inspect the relevant ticket and workspace read-only, then return a concrete analysis and implementation plan. Do not make changes.',
+  review:
+    'Switch this conversation into Review mode. Review the relevant ticket, workspace, and current implementation read-only, then report findings, risks, and actionable recommendations. Do not make changes.',
+  chat:
+    'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
+};
 
 export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
@@ -109,6 +123,7 @@ export function SessionsPage({
   const [followUpError, setFollowUpError] = useState<string | undefined>();
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [abortingSession, setAbortingSession] = useState(false);
+  const [switchingMode, setSwitchingMode] = useState(false);
   const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
   const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
@@ -307,6 +322,20 @@ export function SessionsPage({
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setAbortingSession(false);
+    }
+  };
+
+  const switchMode = async (mode: SessionMode) => {
+    if (!selected || mode === (selected.mode ?? 'chat') || !isTerminalAgentState(selected.state)) return;
+    setSwitchingMode(true);
+    setFollowUpError(undefined);
+    try {
+      await window.praxis.ai.switchSessionMode(selected.issueKey, mode);
+      await window.praxis.ai.continueSession(selected.issueKey, MODE_TRANSITION[mode]);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSwitchingMode(false);
     }
   };
 
@@ -638,6 +667,26 @@ export function SessionsPage({
                   }}
                 />
               <div className="composer-controls">
+                  {/* A finished session can be re-run in a different mode; a live
+                      one can only be stopped, so this only appears once it's
+                      actually a choice. Mirrors where the New Session composer
+                      puts the same control when a session starts. */}
+                  {isTerminalAgentState(selected.state) && !isWorkflowStageSession(selected) && (
+                    <div className="session-mode-toggle" role="group" aria-label="Switch session mode">
+                      {(['chat', 'analysis', 'review'] as const).map(mode => (
+                        <button
+                          key={mode}
+                          type="button"
+                          className={selected.mode === mode || (!selected.mode && mode === 'chat') ? 'active' : ''}
+                          disabled={switchingMode}
+                          onClick={() => void switchMode(mode)}
+                          data-testid={`session-switch-mode-${mode}`}
+                        >
+                          {mode[0].toUpperCase() + mode.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {terminalForContext && (
                     <button
                       className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
