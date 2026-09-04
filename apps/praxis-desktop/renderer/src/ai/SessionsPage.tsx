@@ -543,9 +543,11 @@ export function SessionsPage({
             {pendingPermission && (
               <div className="session-request-dock" data-testid="session-request-dock">
                 <div className="session-permission-card" data-testid="session-permission-card">
-                  <Icon name="shield" size={15} />
                   <div className="session-permission-body">
-                    <div className="session-permission-summary">{pendingPermission.summary}</div>
+                    <div className="session-permission-heading">
+                      <Icon name="shield" size={14} />
+                      <span data-testid="session-permission-summary">{pendingPermission.summary}</span>
+                    </div>
                     {pendingPermission.detail && (
                       <div className="session-permission-detail">{pendingPermission.detail}</div>
                     )}

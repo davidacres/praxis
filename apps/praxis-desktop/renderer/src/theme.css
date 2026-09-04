@@ -5246,17 +5246,19 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* Blocking approval prompt — the agent is paused until Allow/Deny, so it
-   gets an accent border rather than the neutral `.composer-notice` look. */
+/* Blocking approval prompt — the agent is paused on a decision, the same kind
+   of attention state as the context-pressure banner above, so it gets the
+   same warning tone rather than the accent. The accent means brand and
+   primary action only; a pending permission is neither — the one place it
+   still belongs is the Allow button itself, which *is* the primary action. */
 .session-permission-card {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-left: 3px solid var(--accent);
+  border: 1px solid var(--warning);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-elevated));
   box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.35);
 }
 
@@ -5265,9 +5267,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   min-width: 0;
 }
 
-.session-permission-summary {
+.session-permission-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--warning);
   font-weight: 600;
-  color: var(--text);
 }
 
 .session-permission-detail {
