@@ -86,7 +86,6 @@ export class AcpClientWrapper {
   private resumedSessionId?: string;
   private resumeAttempted = false;
   private disposed = false;
-
   constructor(private readonly options: AcpClientOptions) {}
 
   /** Spawns the agent subprocess and completes the ACP `initialize` handshake. */
@@ -122,6 +121,16 @@ export class AcpClientWrapper {
     child.stderr?.on('error', logStreamError('stderr'));
     child.on('error', err => {
       this.options.logSink?.appendLine(`[acp] subprocess error: ${err.message}`);
+    });
+    child.on('exit', (code, signal) => {
+      if (this.disposed) {
+        return;
+      }
+      // Diagnostics only: killing the child closes the ACP transport, and the
+      // SDK already rejects the in-flight turn from that. Verified — a test that
+      // kills the agent mid-turn passes with or without any extra signal here.
+      const how = signal ? `signal ${signal}` : `code ${code}`;
+      this.options.logSink?.appendLine(`[acp] agent exited unexpectedly (${how})`);
     });
 
     if (!child.stdin || !child.stdout) {
