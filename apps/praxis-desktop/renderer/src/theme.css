@@ -8869,3 +8869,20 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-changes-diff .diff-notice { color: var(--warning); }
 
 .session-changes-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+
+/* ── Session context pressure ─────────────────────────────────────────────
+   Shown only past two-thirds full. Uses the semantic tones, not the accent. */
+.session-context-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.session-context-figure { font-family: var(--font-mono); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.session-context-figure.is-warn { color: var(--warning); }
+.session-context-figure.is-critical { color: var(--danger); }
+.session-context-bar {
+  height: 4px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.session-context-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--warning); }
+.session-context-bar.is-critical > span { background: var(--danger); }
+.session-context .hint { margin-top: var(--space-2); }

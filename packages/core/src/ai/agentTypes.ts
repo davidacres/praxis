@@ -297,6 +297,18 @@ export interface AgentSessionRecord {
    * carry no usage rather than a misleading zero.
    */
   tokenUsage?: TokenUsage;
+  /**
+   * How full the model's context is *right now* — the input-token count of the
+   * most recent turn, replaced each turn rather than summed.
+   *
+   * Deliberately separate from `tokenUsage.inputTokens`, which totals every
+   * turn: a session can burn a million tokens across fifty small turns without
+   * ever filling its window. Context pressure is the size of the current
+   * prompt, and only the latest turn measures that.
+   */
+  contextTokens?: number;
+  /** The active model's context window, when the provider publishes one. */
+  contextLimit?: number;
   boardId?: string;
   /** Explicit session purpose; older records derive this from taskDefinition.kind. */
   mode?: SessionMode;

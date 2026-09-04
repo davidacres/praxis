@@ -106,3 +106,40 @@ export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | 
   if (total < 1_000_000) return `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}k tokens`;
   return `${(total / 1_000_000).toFixed(1)}M tokens`;
 }
+
+export interface ContextPressure {
+  /** 0–1 share of the model's window the current prompt occupies. */
+  fraction: number;
+  percent: number;
+  used: number;
+  limit: number;
+  /** `warn` past two-thirds, `critical` past 85% — where turns start failing. */
+  level: 'ok' | 'warn' | 'critical';
+}
+
+/**
+ * How full the model's context is for the *next* turn.
+ *
+ * Uses `contextTokens` (the latest turn's prompt) rather than cumulative usage:
+ * a session can spend a million tokens over fifty small turns without ever
+ * filling its window, so a running total would cry wolf constantly.
+ *
+ * Returns undefined when either number is unknown — a CLI-hosted agent reports
+ * no usage, and not every gateway publishes a context length. A guessed
+ * percentage would be worse than none.
+ */
+export function contextPressure(session: AgentSessionRecord): ContextPressure | undefined {
+  const used = session.contextTokens;
+  const limit = session.contextLimit;
+  if (typeof used !== 'number' || typeof limit !== 'number' || limit <= 0 || used <= 0) {
+    return undefined;
+  }
+  const fraction = Math.min(used / limit, 1);
+  return {
+    fraction,
+    percent: Math.round(fraction * 100),
+    used,
+    limit,
+    level: fraction >= 0.85 ? 'critical' : fraction >= 0.67 ? 'warn' : 'ok'
+  };
+}

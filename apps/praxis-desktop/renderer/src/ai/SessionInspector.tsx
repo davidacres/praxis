@@ -5,7 +5,7 @@ import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { SessionChanges } from './SessionChanges';
-import { basename, formatElapsed, formatStarted, formatTokens, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
+import { basename, contextPressure, formatElapsed, formatStarted, formatTokens, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -63,6 +63,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
   // runs on its own account and reports none, so its sessions show duration and
   // steps alone rather than a zero that would read as "this was free".
   const tokens = formatTokens(session.tokenUsage);
+  const context = contextPressure(session);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -146,6 +147,34 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           </Line>
         )}
       </div>
+
+      {/* How much of the model's window the next turn will start from. Shown
+          only once it matters — a mostly-empty context is not news. */}
+      {context && context.level !== 'ok' && (
+        <div className="agent-runtime-block session-context" data-testid="session-context">
+          <div className="session-context-heading">
+            <span className="rail-sub">Context</span>
+            <span className={`session-context-figure is-${context.level}`} data-testid="session-context-figure">
+              {context.percent}% of {Math.round(context.limit / 1000)}k
+            </span>
+          </div>
+          <div
+            className={`session-context-bar is-${context.level}`}
+            role="progressbar"
+            aria-valuenow={context.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Context window used"
+          >
+            <span style={{ width: `${context.percent}%` }} />
+          </div>
+          <p className="hint">
+            {context.level === 'critical'
+              ? 'The next turn may not fit. Start a fresh session to carry on with a clean context.'
+              : 'This conversation is filling the model’s window. Long tool output is the usual cause.'}
+          </p>
+        </div>
+      )}
 
       {/* What the session did to the working tree, and what to do about it.
           Renders nothing when the folder is not a repository or is clean. */}
