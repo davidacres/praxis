@@ -27,14 +27,29 @@ import type {
   TrackedBoard,
   UpdateIssueInput
 } from '@praxis/core';
-import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent } from '@praxis/core';
+import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
-    getVersion: () => ipcRenderer.invoke('app:getVersion')
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+    // Update checking. Inert in development and in a build published without a
+    // feed — `getStatus` reports `unsupported` with the reason in that case.
+    update: {
+      getStatus: () => ipcRenderer.invoke('update:getStatus'),
+      check: () => ipcRenderer.invoke('update:check'),
+      download: () => ipcRenderer.invoke('update:download'),
+      installNow: () => ipcRenderer.invoke('update:installNow'),
+      onStatus: (listener: (status: UpdateStatus) => void) => {
+        const handler = (_event: unknown, status: UpdateStatus) => listener(status);
+        ipcRenderer.on('update:status', handler);
+        return () => {
+          ipcRenderer.removeListener('update:status', handler);
+        };
+      }
+    }
   },
   board: {
     list: (filters: BoardFilters, connectionId?: string) =>
