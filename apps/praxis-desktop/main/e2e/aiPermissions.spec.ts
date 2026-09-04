@@ -69,6 +69,29 @@ test('allowing a pending permission lets the session continue to completion', as
   // composer the same way the pending-approval state was designed to read.
   await win.screenshot({ path: 'output/playwright/session-permission-request.png', fullPage: true });
 
+  // A pending approval is an attention state, not a brand moment — it takes
+  // the same warning tone as the context-pressure banner above the composer,
+  // not the accent border it used to carry. The accent means brand and
+  // primary action only; the one place it still belongs here is Allow itself.
+  const colours = await card.evaluate(element => {
+    const probe = (value: string) => {
+      const span = document.createElement('span');
+      span.style.color = value;
+      document.body.appendChild(span);
+      const resolved = getComputedStyle(span).color;
+      span.remove();
+      return resolved;
+    };
+    const root = getComputedStyle(document.documentElement);
+    return {
+      border: getComputedStyle(element).borderTopColor,
+      warning: probe(root.getPropertyValue('--warning').trim()),
+      accent: probe(root.getPropertyValue('--accent').trim())
+    };
+  });
+  expect(colours.border).toBe(colours.warning);
+  expect(colours.border).not.toBe(colours.accent);
+
   await win.locator('[data-testid="session-permission-allow-once"]').click();
 
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
