@@ -12,7 +12,8 @@ import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from './aiS
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
-import { sessionLabel, sessionTitle } from './sessionNav';
+import { PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { basename, contextPressure, sessionLabel, sessionTitle } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
 
 export interface SessionsPageProps {
@@ -225,6 +226,12 @@ export function SessionsPage({
   const pendingPermission = selected?.state === 'awaiting_approval'
     ? pendingPermissionEvent(selected.events)
     : undefined;
+  // How full the model's context is for the next turn — shown right above the
+  // input, the way Claude and Copilot surface it, rather than in a side panel
+  // the user has to go looking for. Hidden below two-thirds: a mostly-empty
+  // window is not news, and a warning that is always on screen stops reading
+  // as one.
+  const context = selected ? contextPressure(selected) : undefined;
   const respondToPermission = (decision: PermissionDecision) => {
     if (!selected) return;
     setRespondingTo(selected.issueKey);
@@ -575,6 +582,29 @@ export function SessionsPage({
 
             <div className="session-chat-composer">
               {followUpError && <div className="error-banner" data-testid="session-follow-up-error">{followUpError}</div>}
+              {context && context.level !== 'ok' && (
+                <div className={`composer-context-banner is-${context.level}`} data-testid="session-context">
+                  <div className="composer-context-heading">
+                    <Icon name={context.level === 'critical' ? 'warning' : 'zap'} size={13} />
+                    <span data-testid="session-context-figure">{context.percent}% of {Math.round(context.limit / 1000)}k context used</span>
+                  </div>
+                  <div
+                    className={`session-context-bar is-${context.level}`}
+                    role="progressbar"
+                    aria-valuenow={context.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Context window used"
+                  >
+                    <span style={{ width: `${context.percent}%` }} />
+                  </div>
+                  <p>
+                    {context.level === 'critical'
+                      ? 'The next turn may not fit. Start a fresh session to carry on with a clean context.'
+                      : 'This conversation is filling the model’s window. Long tool output is the usual cause.'}
+                  </p>
+                </div>
+              )}
               <div className="composer session-follow-up-composer">
                 {attachTerminalContext && terminalForContext && (
                   <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
@@ -619,6 +649,54 @@ export function SessionsPage({
                       Terminal
                       <span className="terminal-context-dot" aria-hidden="true" />
                     </button>
+                  )}
+                  {/* Fixed for the session's life — the same facts the New Session
+                      composer asked for when it started, read back here rather
+                      than tucked away in the inspector. */}
+                  {selected.provider && (
+                    <span className="composer-chip session-runtime-chip" data-testid="session-provider" title="This session's AI provider">
+                      <Icon name={providerIconName(selected.provider)} size={14} />
+                      {PROVIDER_LABELS[selected.provider]}
+                    </span>
+                  )}
+                  {selected.model && (
+                    <span className="composer-chip session-runtime-chip" data-testid="session-model" title="This session's AI model">
+                      <Icon name="sparkles" size={14} />
+                      {selected.model}
+                    </span>
+                  )}
+                  <span
+                    className="composer-chip session-runtime-chip"
+                    data-testid="session-tool-mode"
+                    title="Tool access for this session — fixed when it started"
+                  >
+                    <Icon name={selected.toolMode === 'full' ? 'tools' : 'search'} size={14} />
+                    {selected.toolMode === 'project-only'
+                      ? 'Project only'
+                      : selected.toolMode === 'read-only' ? 'Read only' : 'Full tools'}
+                  </span>
+                  {selected.workingDirectory && (
+                    <span
+                      className="composer-chip session-runtime-chip"
+                      data-testid="session-working-directory"
+                      title={selected.workingDirectory}
+                    >
+                      <Icon name="folder" size={14} />
+                      {basename(selected.workingDirectory)}
+                    </span>
+                  )}
+                  {selected.worktreeBranch && (
+                    <span
+                      className="composer-chip session-runtime-chip"
+                      data-testid="session-worktree"
+                      title={selected.worktreePath}
+                    >
+                      <Icon name="git-branch" size={14} />
+                      {selected.worktreeBranch}
+                      {selected.worktreeBaseBranch && (
+                        <span className="session-worktree-base"> from {selected.worktreeBaseBranch}</span>
+                      )}
+                    </span>
                   )}
                   <span className="spacer" />
                   <button
