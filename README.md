@@ -101,6 +101,17 @@ The e2e suite loads the pre-built renderer from
 `apps/praxis-desktop/main/renderer/`. A renderer change is invisible to e2e until
 you rebuild **and** run `npm run desktop:copy-renderer`.
 
+The "hand a ticket to an agent" flow has its own coverage. `aiCodingTask.spec.ts`
+drives it end to end with a scripted ACP agent fixture — no model, part of the
+normal suite. `aiLiveAgent.live.spec.ts` drives a real CLI agent against a real
+model; it spends money, is excluded from every ordinary run, and needs an explicit
+opt-in:
+
+```bash
+cd apps/praxis-desktop/main
+PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
+```
+
 ### Run the app
 
 ```bash
