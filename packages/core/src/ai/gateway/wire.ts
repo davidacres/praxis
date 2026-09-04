@@ -30,10 +30,38 @@ export interface ChatCompletionToolCall {
   arguments: Record<string, unknown>;
 }
 
+/**
+ * Tokens a turn consumed, when the provider reports them.
+ *
+ * Both wire formats carry this and neither is guessed at: OpenAI-compatible
+ * streams send a final chunk with `usage` (the request already asks for it via
+ * `stream_options.include_usage`), and Anthropic sends input tokens on
+ * `message_start` and output tokens on `message_delta`. A provider that reports
+ * nothing yields no usage at all rather than a zero, so "not reported" and
+ * "genuinely zero" stay distinguishable.
+ */
+export interface TokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+/** Fills in a total when the provider reported only the parts. */
+function withDerivedTotal(usage: TokenUsage): TokenUsage {
+  if (typeof usage.totalTokens === 'number') {
+    return usage;
+  }
+  if (usage.inputTokens === undefined && usage.outputTokens === undefined) {
+    return usage;
+  }
+  return { ...usage, totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) };
+}
+
 export interface ChatCompletionResult {
   text: string;
   toolCalls: ChatCompletionToolCall[];
   finishReason?: string;
+  usage?: TokenUsage;
 }
 
 export type StreamChatEvent =
@@ -256,6 +284,24 @@ export async function* consumeChatStream(
   const toolCalls = new Map<number, ToolCallAccumulator>();
   let text = '';
   let finishReason: string | undefined;
+  let usage: TokenUsage | undefined;
+
+  /**
+   * Merges a reported figure in without letting a later absent field clear it.
+   * A derived total is *not* stored, because Anthropic reports input and output
+   * in different events — deriving on the first one would freeze the total at
+   * the input count. Only a provider-reported total is kept; otherwise the
+   * total is computed once, at the end, from the final parts.
+   */
+  const noteUsage = (next: TokenUsage) => {
+    const merged: TokenUsage = { ...usage };
+    if (typeof next.inputTokens === 'number') merged.inputTokens = next.inputTokens;
+    if (typeof next.outputTokens === 'number') merged.outputTokens = next.outputTokens;
+    if (typeof next.totalTokens === 'number') merged.totalTokens = next.totalTokens;
+    usage = merged;
+  };
+  const readNumber = (source: Record<string, unknown> | undefined, key: string): number | undefined =>
+    typeof source?.[key] === 'number' ? (source[key] as number) : undefined;
 
   for await (const line of lines) {
     if (signal?.aborted) {
@@ -268,6 +314,17 @@ export async function* consumeChatStream(
 
     // Anthropic Messages SSE fallback
     if (typeof evt.type === 'string') {
+      if (evt.type === 'message_start') {
+        const message = evt.message as Record<string, unknown> | undefined;
+        const reported = message?.usage as Record<string, unknown> | undefined;
+        if (reported) {
+          noteUsage({
+            inputTokens: readNumber(reported, 'input_tokens'),
+            outputTokens: readNumber(reported, 'output_tokens')
+          });
+        }
+        continue;
+      }
       if (evt.type === 'content_block_start') {
         const block = evt.content_block as Record<string, unknown> | undefined;
         if (block?.type === 'tool_use') {
@@ -306,11 +363,29 @@ export async function* consumeChatStream(
         if (typeof delta?.stop_reason === 'string') {
           finishReason = delta.stop_reason;
         }
+        const reported = evt.usage as Record<string, unknown> | undefined;
+        if (reported) {
+          noteUsage({
+            inputTokens: readNumber(reported, 'input_tokens'),
+            outputTokens: readNumber(reported, 'output_tokens')
+          });
+        }
         continue;
       }
       if (evt.type === 'message_stop' || evt.type === 'ping') {
         continue;
       }
+    }
+
+    // The final OpenAI usage chunk carries no choices, so read usage before the
+    // choice guard below discards it.
+    const reportedUsage = evt.usage as Record<string, unknown> | undefined;
+    if (reportedUsage) {
+      noteUsage({
+        inputTokens: readNumber(reportedUsage, 'prompt_tokens'),
+        outputTokens: readNumber(reportedUsage, 'completion_tokens'),
+        totalTokens: readNumber(reportedUsage, 'total_tokens')
+      });
     }
 
     const choices = evt.choices as Array<Record<string, unknown>> | undefined;
@@ -359,7 +434,8 @@ export async function* consumeChatStream(
     result: {
       text,
       toolCalls: finalizeToolCalls(toolCalls),
-      finishReason
+      finishReason,
+      ...(usage ? { usage: withDerivedTotal(usage) } : {})
     }
   };
 }

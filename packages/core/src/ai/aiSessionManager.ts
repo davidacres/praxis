@@ -1,6 +1,7 @@
 import { Emitter } from '../host/emitter';
 import type { KeyValueStore } from '../host/stateStore';
 import type { AiAssignment, AiProvider } from '../types';
+import type { TokenUsage } from './gateway';
 import type {
   DeliverySessionMetadata,
   AgentEventSummary,
@@ -330,6 +331,27 @@ export class AiSessionManager {
   }
 
   /** Update accumulated assistant output for an agent session. */
+  /**
+   * Adds a turn's token usage to the session's running total. Sessions make
+   * several model calls when tools are involved, so this accumulates rather
+   * than replaces — and a provider that reports nothing leaves the field unset.
+   */
+  public addAgentTokenUsage(issueKey: string, usage: TokenUsage): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    const running = record.tokenUsage ?? {};
+    const add = (left: number | undefined, right: number | undefined) =>
+      left === undefined && right === undefined ? undefined : (left ?? 0) + (right ?? 0);
+    record.tokenUsage = {
+      inputTokens: add(running.inputTokens, usage.inputTokens),
+      outputTokens: add(running.outputTokens, usage.outputTokens),
+      totalTokens: add(running.totalTokens, usage.totalTokens)
+    };
+    this._onDidChangeAgentSession.fire(record);
+  }
+
   public updateAgentOutput(
     issueKey: string,
     output: {

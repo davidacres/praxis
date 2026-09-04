@@ -5,6 +5,7 @@ import {
   type ChatCompletionToolCall,
   type GatewayOptions,
   type GatewayToolDefinition,
+  type TokenUsage,
   type WireMessage
 } from '../gateway';
 import type { ProviderAdapter } from '../providers/providerAdapter';
@@ -16,6 +17,8 @@ export type AgentLoopEvent =
   | { type: 'tool_start'; callId: string; name: string; arguments: Record<string, unknown> }
   | { type: 'tool_complete'; callId: string; name: string; ok: boolean; content: string; data?: AgentToolEventData }
   | { type: 'step'; stepCount: number }
+  /** Tokens the turn that just finished consumed, when the provider reports them. */
+  | { type: 'usage'; usage: TokenUsage }
   | { type: 'completed'; text: string }
   | { type: 'error'; message: string };
 
@@ -128,6 +131,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         }
       });
       touch();
+
+      // One turn's usage. The loop makes several turns per session when tools
+      // are involved, so these accumulate downstream rather than replacing.
+      if (completion.usage) {
+        emit({ type: 'usage', usage: completion.usage });
+      }
 
       if (completion.text) {
         emit({ type: 'message', text: completion.text });

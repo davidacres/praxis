@@ -268,6 +268,9 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
           this.sessionManager.setAgentPlan(issueKey, task.messageBuffer, { persist: false });
         }
         break;
+      case 'usage':
+        this.sessionManager.addAgentTokenUsage(issueKey, event.usage);
+        break;
       case 'message': {
         task.messageBuffer = event.text || task.messageBuffer;
         this.sessionManager.updateAgentOutput(issueKey, { responseText: task.messageBuffer });

@@ -91,3 +91,18 @@ export function formatElapsed(startedAt: string, completedAt?: string): string |
   if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
+
+/**
+ * A session's token total, compactly. Returns undefined when the provider
+ * reported nothing — CLI-hosted agents run on their own account and report no
+ * usage over ACP, and an invented 0 would read as "this was free".
+ */
+export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | undefined {
+  const total = usage?.totalTokens;
+  if (typeof total !== 'number' || total <= 0) {
+    return undefined;
+  }
+  if (total < 1000) return `${total} tokens`;
+  if (total < 1_000_000) return `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}k tokens`;
+  return `${(total / 1_000_000).toFixed(1)}M tokens`;
+}

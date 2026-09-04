@@ -1,4 +1,5 @@
 import type { AiProvider } from '../types';
+import type { TokenUsage } from './gateway';
 
 // ── Agent Task State Machine ─────────────────────────────────────────────
 //
@@ -289,6 +290,13 @@ export interface AgentSessionRecord {
   stepCount: number;
   startedAt: string;
   completedAt?: string;
+  /**
+   * Tokens this session has consumed, summed across its turns — present only
+   * for providers that report usage. CLI-hosted agents (Claude Code, Codex)
+   * run on their own account and report nothing over ACP, so their sessions
+   * carry no usage rather than a misleading zero.
+   */
+  tokenUsage?: TokenUsage;
   boardId?: string;
   /** Explicit session purpose; older records derive this from taskDefinition.kind. */
   mode?: SessionMode;
