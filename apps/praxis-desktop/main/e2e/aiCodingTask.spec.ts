@@ -162,3 +162,57 @@ test('a read-only session cannot write the file', async () => {
   );
   expect(record?.responseText ?? '').toMatch(/could not write|read-only/i);
 });
+
+test('each turn records its reply once, and follow-ups carry the earlier answer', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-turns-'));
+  fs.writeFileSync(path.join(repo, 'sum.js'), 'function sum(a, b) {\n  return a - b;\n}\n');
+
+  app = await launchTestApp();
+  const win = app.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  const key = session.issueKey;
+  const stateOf = () =>
+    win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), key);
+  const messageEvents = async () =>
+    win.evaluate(
+      k => window.praxis.ai.listSessions().then(
+        l => (l.find(s => s.issueKey === k)?.events ?? []).filter(e => e.type === 'message').map(e => e.detail ?? '')
+      ),
+      key
+    );
+
+  await expect.poll(stateOf, { timeout: 20000 }).toBe('completed');
+
+  // The first turn records its reply as a conversation event — it used to live
+  // only in `responseText`, which kept it out of the follow-up's transcript.
+  expect(await messageEvents()).toHaveLength(1);
+  expect((await messageEvents())[0]).toContain('Ready for review');
+
+  // It now renders as a proper assistant turn rather than a trailing stream.
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('Ready for review');
+
+  // Two follow-ups: each adds exactly one reply. The retroactive flush this
+  // replaced re-appended the previous answer, so the second follow-up used to
+  // leave a duplicate behind.
+  for (const [index, text] of ['Is that all?', 'Thanks.'].entries()) {
+    await win.locator('[data-testid="session-follow-up-input"]').fill(text);
+    await win.locator('[data-testid="session-follow-up-send"]').click();
+    await expect.poll(stateOf, { timeout: 20000 }).toBe('completed');
+    expect(await messageEvents()).toHaveLength(index + 2);
+  }
+});

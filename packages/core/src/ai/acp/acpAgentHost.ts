@@ -443,6 +443,14 @@ export class AcpAgentHost {
         return;
       }
       this.sessionManager.updateAgentOutput(issue.key, { responseText: active.messageBuffer });
+      // Record the reply as a conversation event, the same as a follow-up turn
+      // does. Without this the agent's closing summary lived only in
+      // `responseText`: it never appeared in the transcript the user reads, and
+      // `buildConversationTranscript` — which reads `message` events — left the
+      // agent's own first answer out of the next turn's prompt.
+      if (active.messageBuffer) {
+        this.appendEvent(issue.key, evt('message', 'Assistant', active.messageBuffer));
+      }
       if (response.stopReason === 'end_turn' || response.stopReason === 'max_turn_requests') {
         this.sessionManager.updateAgentState(issue.key, 'completed');
         this.appendEvent(issue.key, evt('task_complete', 'Agent completed the task'));
@@ -547,7 +555,9 @@ export class AcpAgentHost {
     };
     this.activeTasks.set(issueKey, task);
     this.emitActiveTaskChange(issueKey);
-    if (record.responseText) this.appendEvent(issueKey, evt('message', 'Assistant', record.responseText));
+    // The previous turn recorded its own reply when it ended, so there is
+    // nothing to flush here. Re-appending `record.responseText` used to add a
+    // second copy of a reply already in the events from the second follow-up on.
     this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
     this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
     this.sessionManager.updateAgentState(issueKey, 'executing');

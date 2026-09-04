@@ -48,7 +48,10 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     <header className="project-home-hero">
       <div className="project-home-id">
         <h1>{project.name}</h1>
-        <p>{project.key} · {project.type} · {new Date(project.createdAt).toLocaleDateString()}</p>
+        {/* A project created during a test run carries today's date, so this is
+            tagged for snapshot masking — otherwise every baseline showing this
+            header expires at midnight. */}
+        <p>{project.key} · {project.type} · <span data-testid="project-created-date">{new Date(project.createdAt).toLocaleDateString()}</span></p>
       </div>
       {editing
         ? <div className="project-home-hero-actions"><button className="btn" onClick={cancelEdit}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></div>
