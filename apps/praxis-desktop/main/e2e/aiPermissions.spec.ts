@@ -64,6 +64,10 @@ test('allowing a pending permission lets the session continue to completion', as
   const card = win.locator('[data-testid="session-permission-card"]');
   await expect(card).toBeVisible();
   await expect(card).toContainText('Read a file');
+  // What the user actually sees while the agent is blocked on a decision: the
+  // tool it wants to run, and Deny / Always allow / Allow, docked above the
+  // composer the same way the pending-approval state was designed to read.
+  await win.screenshot({ path: 'output/playwright/session-permission-request.png', fullPage: true });
 
   await win.locator('[data-testid="session-permission-allow-once"]').click();
 
