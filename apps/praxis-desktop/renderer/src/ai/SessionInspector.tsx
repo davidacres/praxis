@@ -3,16 +3,17 @@ import type { AgentSessionRecord, SessionMode } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
-import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { SessionChanges } from './SessionChanges';
-import { basename, contextPressure, formatElapsed, formatStarted, formatTokens, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
+import { formatElapsed, formatStarted, formatTokens, isWorkflowStageSession, sessionMode } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
  *
- * Answers "what is this session and what can I do to it?": live state, the
- * facts fixed when it started (provider, model, tool access, folder, worktree),
- * and every action that changes it. The centre pane stays the conversation.
+ * Answers "what is this session and what can I do to it?": live state and
+ * every action that changes it. The facts fixed when the session started
+ * (provider, model, tool access, folder, worktree) live as chips on the
+ * composer in the centre pane, alongside the context indicator — both visible
+ * right where you are about to type, not in a panel you have to go looking at.
  *
  * Mirrors `AgentRuntimePanel`, which does the same job for the `agents` route.
  */
@@ -34,15 +35,6 @@ const MODE_TRANSITION: Record<SessionMode, string> = {
     'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
 };
 
-function Line({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="agent-runtime-line">
-      <span className="rail-sub">{label}</span>
-      <span>{children}</span>
-    </div>
-  );
-}
-
 export function SessionInspector({ session }: SessionInspectorProps) {
   const { confirm } = useDialogs();
   const [busy, setBusy] = useState(false);
@@ -52,7 +44,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
     return (
       <div className="empty-state" data-testid="session-inspector-empty">
         <Icon name="robot" size={26} />
-        <span>A session&rsquo;s provider, tools, and worktree appear here.</span>
+        <span>A session&rsquo;s status, changes, and actions appear here.</span>
       </div>
     );
   }
@@ -63,7 +55,6 @@ export function SessionInspector({ session }: SessionInspectorProps) {
   // runs on its own account and reports none, so its sessions show duration and
   // steps alone rather than a zero that would read as "this was free".
   const tokens = formatTokens(session.tokenUsage);
-  const context = contextPressure(session);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -112,69 +103,6 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           </p>
         </div>
       </div>
-
-      {/* Fixed for the session's life — the same facts the New Session composer
-          asks for, read back as the record of what this session actually got. */}
-      <div className="agent-runtime-block">
-        {session.provider && (
-          <Line label="Provider">
-            <span data-testid="session-provider">
-              <Icon name={providerIconName(session.provider)} size={13} /> {PROVIDER_LABELS[session.provider]}
-            </span>
-          </Line>
-        )}
-        {session.model && <Line label="Model"><span data-testid="session-model">{session.model}</span></Line>}
-        <Line label="Tool access">
-          <span data-testid="session-tool-mode">
-            <Icon name={session.toolMode === 'full' ? 'tools' : 'search'} size={13} /> {toolModeLabel(session.toolMode)}
-          </span>
-        </Line>
-        {session.workingDirectory && (
-          <Line label="Folder">
-            <span data-testid="session-working-directory" title={session.workingDirectory}>
-              {basename(session.workingDirectory)}
-            </span>
-          </Line>
-        )}
-        {session.worktreeBranch && (
-          <Line label="Worktree">
-            <span data-testid="session-worktree" title={session.worktreePath}>
-              {session.worktreeBranch}
-              {session.worktreeBaseBranch && (
-                <span className="session-worktree-base"> from {session.worktreeBaseBranch}</span>
-              )}
-            </span>
-          </Line>
-        )}
-      </div>
-
-      {/* How much of the model's window the next turn will start from. Shown
-          only once it matters — a mostly-empty context is not news. */}
-      {context && context.level !== 'ok' && (
-        <div className="agent-runtime-block session-context" data-testid="session-context">
-          <div className="session-context-heading">
-            <span className="rail-sub">Context</span>
-            <span className={`session-context-figure is-${context.level}`} data-testid="session-context-figure">
-              {context.percent}% of {Math.round(context.limit / 1000)}k
-            </span>
-          </div>
-          <div
-            className={`session-context-bar is-${context.level}`}
-            role="progressbar"
-            aria-valuenow={context.percent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Context window used"
-          >
-            <span style={{ width: `${context.percent}%` }} />
-          </div>
-          <p className="hint">
-            {context.level === 'critical'
-              ? 'The next turn may not fit. Start a fresh session to carry on with a clean context.'
-              : 'This conversation is filling the model’s window. Long tool output is the usual cause.'}
-          </p>
-        </div>
-      )}
 
       {/* What the session did to the working tree, and what to do about it.
           Renders nothing when the folder is not a repository or is clean. */}
