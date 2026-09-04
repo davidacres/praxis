@@ -74,6 +74,33 @@ interface ActiveAcpTask {
   ending?: boolean;
 }
 
+/** How long a `session/cancel` notification is given before we stop waiting. */
+const CANCEL_GRACE_MS = 3000;
+/** How long an in-flight turn is given to unwind after cancel, before the child is killed anyway. */
+const STOP_GRACE_MS = 5000;
+
+/**
+ * Awaits `work`, but gives up after `ms`. Used only where the alternative is an
+ * unbounded wait on a subprocess that may never answer: the caller's next step
+ * (disposing the client, which kills the child) is safe to take either way.
+ */
+async function settleWithin(work: Promise<unknown> | undefined, ms: number): Promise<void> {
+  if (!work) {
+    return;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      work.catch(() => {}),
+      new Promise<void>(resolve => {
+        timer = setTimeout(resolve, ms);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -647,14 +674,20 @@ export class AcpAgentHost {
       return;
     }
     if (task.ending) {
-      await task.promptPromise;
+      // A second stop while the first is draining must not block on a turn that
+      // may never settle — the first caller owns the cleanup either way.
+      await settleWithin(task.promptPromise, STOP_GRACE_MS);
       return;
     }
     task.ending = true;
     for (const pending of task.pendingPermissions.splice(0)) {
       pending.resolve('deny');
     }
-    await task.client.cancel().catch(() => {});
+    // Ask politely, then stop waiting. `cancel()` is a notification to a process
+    // that may already be wedged, and `cleanupTask`'s `dispose()` kills the child
+    // regardless — so a slow or ignored cancel must never hold the caller.
+    await settleWithin(task.client.cancel().catch(() => {}), CANCEL_GRACE_MS);
+    await settleWithin(task.promptPromise, STOP_GRACE_MS);
 
     const record = this.sessionManager.getAgentSession(issueKey);
     if (record && !this.isTerminalState(record.state)) {
