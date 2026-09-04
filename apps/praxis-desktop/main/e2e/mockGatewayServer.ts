@@ -47,8 +47,11 @@ export async function startMockGatewayServer(options: {
    *  workflow run that must end with a DELIVERY_RESULT / FEATURE_DECOMPOSITION_RESULT
    *  JSON block for the completion watcher to parse). */
   reply?: string;
-  /** `/v1/models` response — defaults to a single `mock/model` entry. */
-  models?: Array<{ id: string; name?: string }>;
+  /** `/v1/models` response — defaults to a single `mock/model` entry.
+   *  `context_length` is what the app reads to size the context indicator. */
+  models?: Array<{ id: string; name?: string; context_length?: number }>;
+  /** Token usage to report on the final chunk, as a real provider does. */
+  usage?: { prompt_tokens: number; completion_tokens: number };
   /** Optional first-turn tool call; the following request receives `reply`. */
   toolCall?: { name: string; arguments: Record<string, unknown> };
 }): Promise<MockGatewayServer> {
@@ -104,6 +107,22 @@ export async function startMockGatewayServer(options: {
               choices: [{ index: 0, delta: {}, finish_reason: shouldCallTool ? 'tool_calls' : 'stop' }]
             })
           );
+          if (options.usage) {
+            // A real provider sends usage on a final chunk carrying no choices
+            // at all, which is exactly the shape the parser has to survive.
+            res.write(
+              sseChunk({
+                id: 'chatcmpl-mock',
+                object: 'chat.completion.chunk',
+                choices: [],
+                usage: {
+                  prompt_tokens: options.usage.prompt_tokens,
+                  completion_tokens: options.usage.completion_tokens,
+                  total_tokens: options.usage.prompt_tokens + options.usage.completion_tokens
+                }
+              })
+            );
+          }
           res.write('data: [DONE]\n\n');
           res.end();
         } else {
