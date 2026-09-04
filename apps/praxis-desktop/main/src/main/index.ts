@@ -10,6 +10,7 @@ import { registerDialogIpc } from './dialogIpc';
 import { registerSettingsIpc } from './settingsIpc';
 import { registerLogIpc } from './logIpc';
 import { getLogBus } from './logBusInstance';
+import { registerAutoUpdate } from './autoUpdate';
 import { registerShellIpc } from './shellIpc';
 import { registerBrowserIpc } from './browserIpc';
 import { registerBoardPrefsIpc } from './boardPrefsIpc';
@@ -260,6 +261,7 @@ void app.whenReady().then(async () => {
   registerAgentRuntimeIpc();
   registerGitIpc();
   ipcMain.handle('app:getVersion', () => app.getVersion());
+  registerAutoUpdate(() => BrowserWindow.getAllWindows(), getLogBus());
   void getAgentRuntimeManager().refresh().then(async snapshot => {
     getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
     for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
