@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentSessionRecord, GitChangedFile, GitStatusSnapshot } from '@praxis/core';
+import type { AgentSessionRecord, GitChangedFile, GitDiffFile, GitStatusSnapshot } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { isTerminalAgentState } from './aiSessionState';
@@ -49,6 +49,9 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [checked, setChecked] = useState(false);
+  /** Path whose diff is expanded inline, and the diff itself once loaded. */
+  const [openPath, setOpenPath] = useState<string>();
+  const [openDiff, setOpenDiff] = useState<GitDiffFile>();
 
   // The worktree is the session's repository when it ran in one.
   const repositoryPath = session.worktreePath?.trim() || session.workingDirectory?.trim();
@@ -134,6 +137,31 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     await run(file.path, () => window.praxis.git.discard(repositoryPath, [file.path]));
   };
 
+  /**
+   * Reviewing a change means reading the diff, not the whole file — so this
+   * reuses the git comparison the diff workspace already uses, scoped to one
+   * path, rather than adding a file-read channel of its own.
+   */
+  const toggleDiff = async (file: GitChangedFile) => {
+    if (openPath === file.path) {
+      setOpenPath(undefined);
+      setOpenDiff(undefined);
+      return;
+    }
+    setOpenPath(file.path);
+    setOpenDiff(undefined);
+    try {
+      const document = await window.praxis.git.getComparison(repositoryPath, {
+        kind: file.staged ? 'staged' : 'working',
+        path: file.path
+      });
+      setOpenDiff(document.files.find(entry => entry.displayPath === file.path) ?? document.files[0]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setOpenPath(undefined);
+    }
+  };
+
   const additions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0);
   const deletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
 
@@ -156,18 +184,49 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
       <ul className="session-changes-list">
         {files.map(file => (
           <li key={file.path} data-testid="session-changes-file">
-            <span className={`session-changes-status is-${statusLabel(file)}`}>{statusLabel(file)}</span>
-            <span className="session-changes-path" title={file.path}>{file.path}</span>
-            <button
-              type="button"
-              className="icon-btn icon-btn-sm"
-              aria-label={`Discard ${file.path}`}
-              title="Discard this file"
-              disabled={Boolean(busy)}
-              onClick={() => void discardOne(file)}
-            >
-              <Icon name="close" size={12} />
-            </button>
+            <div className="session-changes-row">
+              <span className={`session-changes-status is-${statusLabel(file)}`}>{statusLabel(file)}</span>
+              <button
+                type="button"
+                className="session-changes-path"
+                title={`Show the diff for ${file.path}`}
+                aria-expanded={openPath === file.path}
+                data-testid="session-changes-open"
+                onClick={() => void toggleDiff(file)}
+              >
+                {file.path}
+              </button>
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm"
+                aria-label={`Discard ${file.path}`}
+                title="Discard this file"
+                disabled={Boolean(busy)}
+                onClick={() => void discardOne(file)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+            {openPath === file.path && (
+              <div className="session-changes-diff" data-testid="session-changes-diff">
+                {!openDiff ? (
+                  <span className="placeholder-text">Loading diff…</span>
+                ) : openDiff.isBinary ? (
+                  <span className="placeholder-text">Binary file — no text diff.</span>
+                ) : (
+                  <pre>
+                    {openDiff.hunks.flatMap(hunk => [
+                      <span key={hunk.id} className="diff-hunk">{hunk.header}{'\n'}</span>,
+                      ...hunk.lines.map((line, index) => (
+                        <span key={`${hunk.id}-${index}`} className={`diff-${line.kind}`}>
+                          {line.content || ' '}{'\n'}
+                        </span>
+                      ))
+                    ])}
+                  </pre>
+                )}
+              </div>
+            )}
           </li>
         ))}
       </ul>
