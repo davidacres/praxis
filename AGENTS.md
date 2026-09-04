@@ -184,6 +184,33 @@ Three layers, each with one job:
   more plans-folder roots on disk (native multi-root; each root's `board.praxis.json`
   carries its own `projectKey` / `projectName`).
 
+## Agent sessions (ACP)
+
+`packages/core/src/ai/acp/` hosts a CLI agent (Claude Code, Codex) as a subprocess over
+the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the events;
+`AcpClientWrapper` owns the wire and serves the agent's `fs/read_text_file` /
+`fs/write_text_file` requests against the session's working folder, **gated by tool mode**
+(`full` writes, `read-only` reads, `project-only` neither) and sandboxed to that folder.
+
+- **Every turn records its reply as a `message` event.** `buildConversationTranscript`
+  reads `message` events to build the next turn's prompt, so a turn that finishes without
+  appending one drops the agent's own answer from the following turn's context. The
+  initial-turn and follow-up paths must both do this; do not "flush" a prior reply
+  retroactively on the way into the next turn (that runs after the transcript is built,
+  and duplicates an event the history already holds).
+- Permission approval is wired end to end: `ai:respondToPermission` → the host resolves
+  the pending request, `SessionsPage` renders Allow / Always allow / Deny while the
+  session sits in `awaiting_approval`.
+- A full-tools `ai:delegate` **requires** an explicit `workingDirectory` — it will not
+  fall back to the app's cwd. Folderless projects are coerced to `project-only`.
+
+**Testing an agent flow without a model:** `e2e/fixtures/codingAcpAgent.mjs` is a real ACP
+subprocess (real SDK, real wire framing) that performs a scripted edit through the same
+file-I/O handlers. Two non-obvious requirements: it needs the executable bit (the host
+spawns the `cliPath` command directly, not via `node`), and it resolves
+`@agentclientprotocol/sdk` from its own location because it is spawned with `cwd` set to
+an arbitrary project folder. `e2e/aiCodingTask.spec.ts` is the worked example.
+
 ## Build and test
 
 Root scripts are prefixed by the surface they act on. `build` and `test` with no
