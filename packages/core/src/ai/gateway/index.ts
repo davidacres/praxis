@@ -32,6 +32,7 @@ export {
   type GatewayToolDefinition,
   type ChatCompletionToolCall,
   type ChatCompletionResult,
+  type TokenUsage,
   type StreamChatEvent,
   type BuildChatRequestArgs
 } from './wire';

@@ -5,7 +5,7 @@ import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { SessionChanges } from './SessionChanges';
-import { basename, formatElapsed, formatStarted, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
+import { basename, formatElapsed, formatStarted, formatTokens, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -58,9 +58,11 @@ export function SessionInspector({ session }: SessionInspectorProps) {
   }
 
   const finished = isTerminalAgentState(session.state);
-  // Wall clock, not cost: ACP reports no token usage and the CLI agent bills on
-  // its own account, so duration and steps are the only real numbers here.
   const elapsed = formatElapsed(session.startedAt, session.completedAt);
+  // Only providers that report usage have a token figure. A CLI-hosted agent
+  // runs on its own account and reports none, so its sessions show duration and
+  // steps alone rather than a zero that would read as "this was free".
+  const tokens = formatTokens(session.tokenUsage);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -105,6 +107,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           <p className="rail-sub" data-testid="session-meta">
             {formatStarted(session.startedAt)} · {session.stepCount} {session.stepCount === 1 ? 'step' : 'steps'}
             {elapsed && <> · {elapsed}</>}
+            {tokens && <> · <span data-testid="session-tokens">{tokens}</span></>}
           </p>
         </div>
       </div>
