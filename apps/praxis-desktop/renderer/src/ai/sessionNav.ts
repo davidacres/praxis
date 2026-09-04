@@ -70,3 +70,24 @@ export function formatStarted(iso: string): string {
 export function toolModeLabel(toolMode: AgentSessionRecord['toolMode']): string {
   return toolMode === 'project-only' ? 'Project only' : toolMode === 'read-only' ? 'Read only' : 'Full tools';
 }
+
+/**
+ * How long a session's work took — wall clock from start to finish, or so far
+ * while it is still running.
+ *
+ * Deliberately not a cost or token figure: ACP carries no usage data, and a
+ * CLI agent bills on its own account, so there is nothing real to report.
+ * Duration and step count are what this app actually observes.
+ */
+export function formatElapsed(startedAt: string, completedAt?: string): string | undefined {
+  const start = new Date(startedAt).getTime();
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) {
+    return undefined;
+  }
+  const seconds = Math.round((end - start) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}

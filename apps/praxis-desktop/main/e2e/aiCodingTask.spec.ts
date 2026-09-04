@@ -257,6 +257,14 @@ test('a finished session shows its changeset and can commit it', async () => {
   await expect(changes.getByTestId('session-changes-count')).toContainText('1 file');
   await expect(changes.getByTestId('session-changes-file')).toContainText('sum.js');
 
+  // A file opens its own diff in place, so reviewing does not mean leaving the
+  // app for an editor.
+  await changes.getByTestId('session-changes-open').click();
+  const inlineDiff = changes.getByTestId('session-changes-diff');
+  await expect(inlineDiff).toBeVisible();
+  await expect(inlineDiff.locator('.diff-addition')).toContainText('return a + b');
+  await expect(inlineDiff.locator('.diff-deletion')).toContainText('return a - b');
+
   await changes.getByTestId('session-commit').click();
   const dialog = win.getByRole('dialog', { name: 'Commit these changes' });
   await expect(dialog).toBeVisible();

@@ -5,7 +5,7 @@ import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { SessionChanges } from './SessionChanges';
-import { basename, formatStarted, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
+import { basename, formatElapsed, formatStarted, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -58,6 +58,9 @@ export function SessionInspector({ session }: SessionInspectorProps) {
   }
 
   const finished = isTerminalAgentState(session.state);
+  // Wall clock, not cost: ACP reports no token usage and the CLI agent bills on
+  // its own account, so duration and steps are the only real numbers here.
+  const elapsed = formatElapsed(session.startedAt, session.completedAt);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -99,8 +102,9 @@ export function SessionInspector({ session }: SessionInspectorProps) {
         </span>
         <div>
           <strong data-testid="session-mode-badge">{sessionMode(session)}</strong>
-          <p className="rail-sub">
+          <p className="rail-sub" data-testid="session-meta">
             {formatStarted(session.startedAt)} · {session.stepCount} {session.stepCount === 1 ? 'step' : 'steps'}
+            {elapsed && <> · {elapsed}</>}
           </p>
         </div>
       </div>
