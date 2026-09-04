@@ -228,6 +228,14 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
   totals every turn. A session can spend a million tokens over fifty small turns
   without ever filling its window, so never drive a "nearly full" warning from the
   cumulative figure.
+- **The facts fixed when a session started (provider, model, tool access, folder,
+  worktree) live as chips on the composer's `.composer-controls` row in
+  `SessionsPage`, not in `SessionInspector`.** They were moved there once already —
+  into the inspector for the sidebar-consolidation pass, then back to the composer
+  because that buried them where the user is about to act, instead of showing them
+  where Claude and Copilot both do: beside the input. The context-pressure banner
+  (`.composer-context-banner`) sits directly above the input for the same reason.
+  Keep both there; `SessionInspector` stays for live status, changes, and actions.
 
 **Testing an agent flow without a model:** `e2e/fixtures/codingAcpAgent.mjs` is a real ACP
 subprocess (real SDK, real wire framing) that performs a scripted edit through the same

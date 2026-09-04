@@ -87,12 +87,25 @@ test('a comfortable context says nothing at all', async () => {
   await expect(win.getByTestId('session-context')).toHaveCount(0);
 });
 
+test('the runtime facts sit on the composer as chips, not tucked in a side panel', async () => {
+  // A quiet context — the point here is what the composer shows regardless of
+  // context pressure: what started this session, read back where you type.
+  const win = await runSession(20_000);
+
+  const chips = win.locator('.composer-controls');
+  await expect(chips.getByTestId('session-provider')).toContainText('Vercel AI Gateway');
+  await expect(chips.getByTestId('session-model')).toContainText(MODEL.id);
+  await expect(chips.getByTestId('session-tool-mode')).toContainText('Read only');
+  await expect(chips.getByTestId('session-working-directory')).toBeVisible();
+  await win.screenshot({ path: 'output/playwright/composer-runtime-chips.png', fullPage: true });
+});
+
 test('a filling context warns, and says what is causing it', async () => {
   const win = await runSession(72_000);
 
   const context = win.getByTestId('session-context');
   await expect(context).toBeVisible();
-  await expect(context.getByTestId('session-context-figure')).toHaveText('72% of 100k');
+  await expect(context.getByTestId('session-context-figure')).toHaveText('72% of 100k context used');
   await expect(context).toContainText('filling the model’s window');
   // The bar is a real progressbar, so screen readers get the number too.
   await expect(context.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '72');
@@ -104,7 +117,7 @@ test('a nearly-full context escalates and tells the user what to do', async () =
   const win = await runSession(92_000);
 
   const context = win.getByTestId('session-context');
-  await expect(context.getByTestId('session-context-figure')).toHaveText('92% of 100k');
+  await expect(context.getByTestId('session-context-figure')).toHaveText('92% of 100k context used');
   // Not just a redder bar — the advice changes to the action that resolves it.
   await expect(context).toContainText('may not fit');
   await expect(context).toContainText('Start a fresh session');
