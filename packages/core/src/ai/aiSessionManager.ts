@@ -7,6 +7,7 @@ import type {
   AgentEventSummary,
   AgentSessionRecord,
   AgentTaskDefinition,
+  AgentTaskListItem,
   AgentTaskState,
   AgentWorkflowReference,
   IssueWorkflowAssignment,
@@ -363,6 +364,22 @@ export class AiSessionManager {
       return;
     }
     record.contextLimit = contextLimit;
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /**
+   * Replaces the session's task list wholesale — ACP's `plan` update is a full
+   * snapshot each time (see `AgentSessionRecord.taskList`), so there is
+   * nothing to merge. Not persisted directly, the same as the other live
+   * fields above: it rides along with whichever event or state change
+   * persists next, which for an in-flight turn is never far behind.
+   */
+  public setAgentTaskList(issueKey: string, items: AgentTaskListItem[]): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    record.taskList = items;
     this._onDidChangeAgentSession.fire(record);
   }
 

@@ -204,15 +204,29 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
 - A full-tools `ai:delegate` **requires** an explicit `workingDirectory` — it will not
   fall back to the app's cwd. Folderless projects are coerced to `project-only`.
 
-- **Token usage is reported only by API providers.** The gateway wire parser reads
-  it from both formats (OpenAI's final `usage` chunk, which the request already asks
-  for via `stream_options.include_usage`, and Anthropic's `message_start` /
-  `message_delta` pair), the loop emits a `usage` event per turn, and
-  `addAgentTokenUsage` sums them. CLI-hosted agents run on their own account and
-  report nothing over ACP, so their sessions leave `tokenUsage` unset — **never
+- **Token usage is only read from API providers today — that is a gap in `AcpAgentHost`,
+  not a limit of the protocol.** The gateway wire parser reads usage from both API wire
+  formats (OpenAI's final `usage` chunk, which the request already asks for via
+  `stream_options.include_usage`, and Anthropic's `message_start` / `message_delta`
+  pair), the loop emits a `usage` event per turn, and `addAgentTokenUsage` sums them.
+  ACP itself defines a stable `usage_update` (`used` / `size`, i.e. exactly
+  `contextTokens` / `contextLimit`, plus an optional cost) that would give CLI-hosted
+  agents (Claude Code, Codex) the same numbers — `AcpAgentHost.handleSessionUpdate`
+  simply has no case for it yet, the same way `plan` had none until this session added
+  one below. Until it does, those sessions leave `tokenUsage` unset — **never
   substitute a zero**, which reads as "this was free". Anthropic sends input and
   output in *different* events, so a running total must not be derived until the
   stream ends.
+- **The agent's self-reported task list (ACP's `plan` update — Claude Code's TodoWrite,
+  Codex's plan tool) renders in `SessionInspector` as `SessionTasks`, not in the
+  transcript.** A `plan` event is a complete snapshot every time ("the client replaces
+  the entire plan with each update" — the spec's words), so `setAgentTaskList` replaces
+  `session.taskList` wholesale rather than merging; a host that merged instead would
+  still look right on a single status flip and only break once two updates arrived
+  close together. It deliberately does not also become a chat message: the point is to
+  stay visible and current while the transcript scrolls underneath it, not to add one
+  more thing scrolling past. Absent for every non-ACP provider and for any ACP session
+  that never calls the tool — most won't.
 
 - **Context is bounded in two places, for two different reasons.**
   `compactHistoryForReplay` strips tool round-trips when a session is *continued*,
@@ -234,9 +248,9 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
   Every one of them was moved there once already — into the inspector for the
   sidebar-consolidation pass, then back to the composer because that buried them
   where the user is about to act, instead of showing them where Claude and Copilot
-  both do: beside the input. `SessionInspector` keeps only live status, the
-  changeset, and terminal actions (abort, remove worktree) — nothing a user reads
-  before acting on the conversation itself.
+  both do: beside the input. `SessionInspector` keeps live status, the task list, the
+  changeset, and terminal actions (abort, remove worktree) — things to watch or act on
+  for the session as a whole, not facts read once before typing a message.
 - **`.session-mode-toggle` is one shared style for the Chat/Analysis/Review
   control, used both when a session starts (`NewSession`) and to re-run a
   finished one (`SessionsPage`'s composer).** It used to be two near-identical

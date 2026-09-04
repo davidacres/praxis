@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
+import { SessionTasks } from './SessionTasks';
 import { formatElapsed, formatStarted, formatTokens, sessionMode } from './sessionNav';
 
 /**
@@ -39,9 +40,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
 
   const finished = isTerminalAgentState(session.state);
   const elapsed = formatElapsed(session.startedAt, session.completedAt);
-  // Only providers that report usage have a token figure. A CLI-hosted agent
-  // runs on its own account and reports none, so its sessions show duration and
-  // steps alone rather than a zero that would read as "this was free".
+  // Only providers whose usage we read have a token figure — see formatTokens.
   const tokens = formatTokens(session.tokenUsage);
 
   const run = async (action: () => Promise<void>) => {
@@ -83,6 +82,10 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           </p>
         </div>
       </div>
+
+      {/* What the agent says it's doing, live — stays put here while the
+          transcript in the centre pane keeps scrolling past it. */}
+      <SessionTasks session={session} />
 
       {/* What the session did to the working tree, and what to do about it.
           Renders nothing when the folder is not a repository or is clean. */}
