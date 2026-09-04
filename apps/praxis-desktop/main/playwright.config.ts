@@ -24,7 +24,10 @@ export default defineConfig({
         '**/brandIcons.spec.ts',
         '**/overview.spec.ts',
         '**/surfacePacks.spec.ts',
-        '**/themeLooks.spec.ts'
+        '**/themeLooks.spec.ts',
+        // Live-agent tests spend real model calls on a real account. They are
+        // never part of an ordinary run — see the `live-agent` project below.
+        '**/*.live.spec.ts'
       ],
       grepInvert: /@theme/
     },
@@ -43,7 +46,24 @@ export default defineConfig({
       // Keeps the occasional theme-specific assertion embedded in a broader
       // flow opt-in without duplicating the whole source test file.
       testMatch: '**/*.spec.ts',
+      testIgnore: '**/*.live.spec.ts',
       grep: /@theme/
+    },
+    {
+      /**
+       * Drives a real CLI agent against a real model. These spend money on
+       * whoever's account the agent is signed in to and take minutes, not
+       * seconds, so they are their own project, excluded from every other one,
+       * and additionally refuse to run without PRAXIS_LIVE_AGENT=1:
+       *
+       *   PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent
+       *
+       * Nothing here should ever be added to `npm run test:desktop`.
+       */
+      name: 'live-agent',
+      testMatch: '**/*.live.spec.ts',
+      timeout: 600000,
+      workers: 1
     }
   ]
 });
