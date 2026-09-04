@@ -8795,3 +8795,46 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .command-palette-row[data-active='true'] { background: var(--accent-soft); color: var(--text); }
 .command-palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .command-palette-hint { flex-shrink: 0; color: var(--text-tertiary); font-size: var(--text-xs); }
+
+/* ── Session changes ──────────────────────────────────────────────────────
+   The changeset a session left on disk, in the sessions inspector. Uses the
+   semantic tones for add/remove rather than the accent, which means brand and
+   primary action only. */
+.session-changes-heading { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.session-changes-count { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.session-changes-add { color: var(--success); }
+.session-changes-del { color: var(--danger); }
+
+.session-changes-list { display: flex; flex-direction: column; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.session-changes-list li {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+}
+.session-changes-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.session-changes-status.is-new, .session-changes-status.is-added { color: var(--success); }
+.session-changes-status.is-deleted { color: var(--danger); }
+.session-changes-status.is-conflicted { color: var(--warning); }
+/* The path is the one thing that can outgrow its track — truncate from the
+   left so the filename, the part you actually read, always survives. */
+.session-changes-path {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.session-changes-list li .icon-btn { opacity: 0; }
+.session-changes-list li:hover .icon-btn,
+.session-changes-list li .icon-btn:focus-visible { opacity: 1; }
+
+.session-changes-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }

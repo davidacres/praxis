@@ -216,3 +216,58 @@ test('each turn records its reply once, and follow-ups carry the earlier answer'
     expect(await messageEvents()).toHaveLength(index + 2);
   }
 });
+
+test('a finished session shows its changeset and can commit it', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-commit-'));
+  const sumFile = path.join(repo, 'sum.js');
+  fs.writeFileSync(sumFile, 'function sum(a, b) {\n  return a - b;\n}\n');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
+
+  const app_ = app = await launchTestApp();
+  const win = app_.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+
+  // The changeset is read from the working tree, not reconstructed from the
+  // transcript — so it reports what is actually on disk.
+  const changes = win.locator('[data-testid="session-changes"]');
+  await expect(changes).toBeVisible();
+  await expect(changes.getByTestId('session-changes-count')).toContainText('1 file');
+  await expect(changes.getByTestId('session-changes-file')).toContainText('sum.js');
+
+  await changes.getByTestId('session-commit').click();
+  const dialog = win.getByRole('dialog', { name: 'Commit these changes' });
+  await expect(dialog).toBeVisible();
+  // Pre-filled from the session's goal, so the common case is one click.
+  await expect(dialog.getByRole('textbox')).toHaveValue(goal);
+  await dialog.getByRole('button', { name: 'Commit', exact: true }).click();
+
+  // The commit landed, using the session's goal as its message, and the tree is
+  // clean afterwards — so the panel takes itself away.
+  await expect(changes).toHaveCount(0, { timeout: 10000 });
+  const log = execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: repo }).toString().trim();
+  expect(log).toBe('Fix the sum() function in sum.js so it returns a + b.');
+  expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
+});

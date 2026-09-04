@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
+import { SessionChanges } from './SessionChanges';
 import { basename, formatStarted, isWorkflowStageSession, sessionMode, toolModeLabel } from './sessionNav';
 
 /**
@@ -138,6 +139,10 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           </Line>
         )}
       </div>
+
+      {/* What the session did to the working tree, and what to do about it.
+          Renders nothing when the folder is not a repository or is clean. */}
+      <SessionChanges session={session} />
 
       {/* A finished session can be re-run in a different mode; a live one can
           only be stopped. */}
