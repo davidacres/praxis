@@ -349,6 +349,20 @@ export class AiSessionManager {
       outputTokens: add(running.outputTokens, usage.outputTokens),
       totalTokens: add(running.totalTokens, usage.totalTokens)
     };
+    // Context pressure is this turn's prompt, not the running total — replace.
+    if (typeof usage.inputTokens === 'number') {
+      record.contextTokens = usage.inputTokens;
+    }
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** Records the active model's context window, so the UI can show headroom. */
+  public setAgentContextLimit(issueKey: string, contextLimit: number | undefined): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record || !contextLimit || contextLimit <= 0) {
+      return;
+    }
+    record.contextLimit = contextLimit;
     this._onDidChangeAgentSession.fire(record);
   }
 

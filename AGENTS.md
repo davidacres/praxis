@@ -214,6 +214,21 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
   output in *different* events, so a running total must not be derived until the
   stream ends.
 
+- **Context is bounded in two places, for two different reasons.**
+  `compactHistoryForReplay` strips tool round-trips when a session is *continued*,
+  so old tool output does not replay on every follow-up.
+  `trimToolOutputToBudget` runs *inside* the turn loop and elides the oldest tool
+  results once the conversation passes `DEFAULT_HISTORY_BUDGET_CHARS` — without it
+  history grew monotonically until the provider rejected the turn. It replaces
+  content but never removes the `role: 'tool'` message: an assistant `tool_calls`
+  entry without its matching result is a protocol error. User and assistant turns
+  are never touched.
+- **`contextTokens` is not `tokenUsage.inputTokens`.** The former is the latest
+  turn's prompt (replaced each turn) and is what context pressure means; the latter
+  totals every turn. A session can spend a million tokens over fifty small turns
+  without ever filling its window, so never drive a "nearly full" warning from the
+  cumulative figure.
+
 **Testing an agent flow without a model:** `e2e/fixtures/codingAcpAgent.mjs` is a real ACP
 subprocess (real SDK, real wire framing) that performs a scripted edit through the same
 file-I/O handlers. Two non-obvious requirements: it needs the executable bit (the host

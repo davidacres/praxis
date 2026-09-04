@@ -24,6 +24,7 @@ export {
   assistantMessageWithToolCalls,
   toolResultMessages,
   compactHistoryForReplay,
+  trimToolOutputToBudget,
   consumeChatStream,
   collectChatCompletion,
   sanitizeToolCallId,
