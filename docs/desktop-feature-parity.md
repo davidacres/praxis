@@ -122,7 +122,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Theme-aware right-pane surfaces | ✓ | All panes inherit active theme; no opacity/fallback |
 | Status/connection indicator | ✗ | No title-bar or sidebar health indicator; connection state visible in Connections UI only |
 | Output / log panel | ✓ | Bottom panel with Output (terminal) tab; Application tab planned |
-| Application logs | ✗ | Agent session failures / workflow errors visible in console only; no persistent log viewer |
+| Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags); 500-line ring buffer, no search/export/persistence across restarts (FX-BE-041) |
 | Native window chrome | ✓ | Electron default frame; settings option to hide |
 | Auto-update | ✓ | Signed, notarized builds (FX-BE-034; blocked on credentials) |
 | Installer packaging | ✓ | DMG (Mac), MSI (Windows), AppImage (Linux) |
@@ -137,5 +137,6 @@ Largest unfinished items, ordered by adoption impact:
 4. **Issue details peek in sidebar** — Compact issue summary in sidebar instead of full detail pane.
 
 Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
-index, ACP available-commands/current-mode surfacing, the AI spend report, and
-workflow ticket-triggering with outcome write-back. See `PLAN_MAP.md`.
+index, ACP available-commands/current-mode surfacing, the AI spend report,
+workflow ticket-triggering with outcome write-back, and workflow failures
+wired into the Output tab's log bus. See `PLAN_MAP.md`.

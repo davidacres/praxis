@@ -12,7 +12,8 @@ have shipped (FX-BF-009 through FX-BF-014). This doc tracks what's left.
 
 **Also complete since: FX-BF-017** (AI session UX and workflow ticket
 integration) — command palette issue search, ACP session modes/slash commands,
-the AI spend report, and ticket-triggered workflow runs with write-back.
+the AI spend report, ticket-triggered workflow runs with write-back, and
+workflow failures wired into the Output tab's log bus.
 
 ---
 
@@ -76,7 +77,7 @@ tracker's own workflow). Full detail in `docs/PLAN_MAP.md`.
 | Gap | Work | Why |
 |---|---|---|
 | Connection status indicator | Title-bar or sidebar health indicator fed by connection health checks. | "Is Jira up?" today requires opening Connections UI. |
-| Application logs | Persistent log viewer for agent failures, workflow errors; searchable, exportable. | Debugging prod issues requires file system access; no in-app place to look. |
+| Application logs — search/export/persistence | The Output tab already tails the shared log bus live (ai/jira/gitlab/workflow tags, FX-BE-041); still a 500-line in-memory ring buffer with no search, export, or persistence across restarts. | Debugging an issue from days ago still needs file-system access. |
 
 #### Deferred (Jira-coupled or lower priority)
 

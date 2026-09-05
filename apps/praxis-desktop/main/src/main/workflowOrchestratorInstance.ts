@@ -15,6 +15,7 @@ import { runWorkflowCheck } from './workflowCheckRunner';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 import { getServiceForConnection } from './serviceRegistry';
+import { workflowLogSink } from './workflowLogSink';
 
 /**
  * The desktop app's workflow orchestrator (FX-BE-024).
@@ -96,9 +97,8 @@ export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
     const runs = new WorkflowRunStore(getWorkflowBackingStore());
     await runs.save({ ...run, issueWriteBackAt: new Date().toISOString() });
   } catch (error) {
-    console.error(
-      `[workflows] Could not write the outcome of run ${run.runId} back to ${run.issueKey}:`,
-      error instanceof Error ? error.message : error
+    workflowLogSink.appendLine(
+      `Could not write the outcome of run ${run.runId} back to ${run.issueKey}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
