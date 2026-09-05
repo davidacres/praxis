@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Interface System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* ── Page tokens ────────────────────────────────────────────────────────
+     Borrowed from the system this page documents: praxis-light for the light
+     ground, praxis-dark for the dark one. Declared complete on bare :root so
+     the un-stamped (system-preference) state resolves. */
+  :root {
+    --sans: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+    --ground: #f5f2eb;
+    --raised: #fffdf8;
+    --sunken: #ebe7de;
+    --ink: #2c2620;
+    --ink-2: #74695e;
+    --ink-3: #958878;
+    --rule: #ddd3c5;
+    --rule-strong: #ad9a85;
+    --brand: #c6431f;
+    --brand-soft: rgba(198, 67, 31, .1);
+    --shadow: 0 1px 2px rgba(44, 38, 32, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #100e0b;
+      --raised: #1b1713;
+      --sunken: #0b0907;
+      --ink: #f0e7d8;
+      --ink-2: #cdbfae;
+      --ink-3: #958878;
+      --rule: #372f27;
+      --rule-strong: #6c5b4a;
+      --brand: #ef6a3f;
+      --brand-soft: rgba(239, 106, 63, .14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #100e0b;
+    --raised: #1b1713;
+    --sunken: #0b0907;
+    --ink: #f0e7d8;
+    --ink-2: #cdbfae;
+    --ink-3: #958878;
+    --rule: #372f27;
+    --rule-strong: #6c5b4a;
+    --brand: #ef6a3f;
+    --brand-soft: rgba(239, 106, 63, .14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--brand); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .wrap {
+    display: grid;
+    grid-template-columns: 172px minmax(0, 1fr);
+    gap: 48px;
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 32px 96px;
+  }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 20px 64px; }
+    .rail { position: static; padding: 0 0 28px; border-bottom: 1px solid var(--rule); margin-bottom: 28px; }
+    .rail ol { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────────────────── */
+  header.masthead {
+    grid-column: 1 / -1;
+    padding: 56px 0 28px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    margin: 0 0 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(34px, 6vw, 52px);
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+  .standfirst {
+    max-width: 63ch;
+    margin: 18px 0 0;
+    font-size: 17px;
+    color: var(--ink-2);
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    margin: 26px 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  /* ── Rail ─────────────────────────────────────────────────────────────── */
+  .rail { position: sticky; top: 0; align-self: start; padding-top: 44px; }
+  .rail ol { margin: 0; padding: 0; list-style: none; }
+  .rail li { margin-bottom: 3px; }
+  .rail a {
+    display: block;
+    padding: 3px 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .rail a:hover { color: var(--brand); }
+  .rail a i { color: var(--ink-3); font-style: normal; margin-right: 8px; }
+
+  /* ── Sections ─────────────────────────────────────────────────────────── */
+  section { padding-top: 52px; }
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-strong);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+  }
+  h2 span {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--brand);
+  }
+  .lede { max-width: 66ch; margin: 16px 0 0; color: var(--ink-2); }
+  h3 {
+    margin: 34px 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .01em;
+  }
+  p { margin: 12px 0 0; }
+  p.tight { max-width: 66ch; }
+  code {
+    font-family: var(--mono);
+    font-size: .88em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+
+  /* ── Rule callout ─────────────────────────────────────────────────────── */
+  .rule {
+    max-width: 68ch;
+    margin: 22px 0 0;
+    padding: 14px 0 14px 18px;
+    border-left: 3px solid var(--brand);
+    font-size: 15px;
+  }
+  .rule b { font-weight: 600; }
+  .rule small {
+    display: block;
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+
+  /* ── Spec table ───────────────────────────────────────────────────────── */
+  .scroller { overflow-x: auto; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    padding: 0 14px 7px 0;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+  }
+  td.tok { font-family: var(--mono); font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+  td.val { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  td.note { color: var(--ink-2); font-size: 13px; }
+
+  .chip {
+    display: inline-block;
+    width: 30px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid rgba(128, 112, 96, .35);
+    vertical-align: -4px;
+  }
+
+  /* ── Specimen frames ──────────────────────────────────────────────────── */
+  .specimen {
+    margin-top: 20px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--raised);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .specimen-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    align-items: baseline;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--sunken);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .specimen-head em { font-style: normal; text-transform: none; letter-spacing: 0; color: var(--ink-2); }
+  .specimen-body { padding: 22px 20px; }
+
+  /* Panels that must show the app's real colours regardless of the viewer's
+     theme, so every colour inside them is stated outright. */
+  .app { padding: 26px 22px; font-family: var(--sans); }
+  .app.light { background: #f5f2eb; color: #2c2620; }
+  .app.dark { background: #100e0b; color: #f0e7d8; }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 620px) { .duo { grid-template-columns: 1fr; } }
+  .app-label {
+    margin: 0 0 16px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    opacity: .6;
+  }
+
+  /* ── Ramp strip ───────────────────────────────────────────────────────── */
+  .ramp { display: flex; flex-wrap: wrap; margin-top: 20px; border-radius: 6px; overflow: hidden; border: 1px solid var(--rule); }
+  .ramp div {
+    flex: 1 1 96px;
+    min-width: 96px;
+    padding: 20px 12px 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .ramp b { display: block; font-weight: 500; letter-spacing: .04em; }
+  .ramp i { font-style: normal; opacity: .72; }
+
+  /* ── Type specimen ────────────────────────────────────────────────────── */
+  .typerow {
+    display: grid;
+    grid-template-columns: 92px 58px minmax(0, 1fr);
+    gap: 18px;
+    align-items: baseline;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .typerow:last-child { border-bottom: 0; }
+  .typerow .t, .typerow .px {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .typerow .s { color: var(--ink); line-height: 1.3; }
+  @media (max-width: 560px) { .typerow { grid-template-columns: 84px 46px; } .typerow .s { grid-column: 1 / -1; } }
+
+  /* ── Geometry ─────────────────────────────────────────────────────────── */
+  .geo { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 20px; }
+  .geo figure { margin: 0; text-align: center; }
+  .geo .box {
+    width: 66px;
+    height: 52px;
+    border: 1px solid var(--rule-strong);
+    background: var(--sunken);
+  }
+  .geo figcaption {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .spacebars { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
+  .spacebars div { display: flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .spacebars span { height: 12px; background: var(--brand); border-radius: 2px; opacity: .8; }
+
+  /* ── Pattern replicas ─────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 13px;
+    border: 1px solid #ad9a85;
+    border-radius: 6px;
+    background: #fffdf8;
+    color: #2c2620;
+    font-family: var(--sans);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn.primary { border-color: #c6431f; background: #c6431f; color: #fffdf8; }
+  .app.dark .btn { border-color: #6c5b4a; background: #211c17; color: #f0e7d8; }
+  .app.dark .btn.primary { border-color: #c6431f; background: #c6431f; color: #fffdf8; }
+
+  .ring-focus { outline: 2px solid #c6431f; outline-offset: 2px; }
+  .ring-tour {
+    position: relative;
+    display: inline-block;
+    border: 3px dashed #e0499f;
+    border-radius: 11px;
+    padding: 5px;
+    box-shadow: 0 0 0 5px rgba(224, 73, 159, .26);
+  }
+
+  .callout {
+    max-width: 290px;
+    margin-top: 26px;
+    padding: 15px 17px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    border: 1px solid #6c5b4a;
+    border-top: 3px solid #e0499f;
+    border-radius: 10px;
+    background: #2c2620;
+    color: #f0e7d8;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+  }
+  .callout .step { color: #e0499f; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .callout strong { font-size: 13px; }
+  .callout p { margin: 0; color: #cdbfae; font-size: 12px; line-height: 1.5; }
+
+  .emptystate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 26px 16px;
+    color: #958878;
+    text-align: center;
+    font-size: 13px;
+  }
+  .emptystate .glyph { font-size: 22px; opacity: .55; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 620px) { .compare { grid-template-columns: 1fr; } }
+
+  /* ── Closing ──────────────────────────────────────────────────────────── */
+  .invariants { margin: 22px 0 0; padding: 0; list-style: none; }
+  .invariants li {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 14px;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .invariants .n {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--brand);
+    font-variant-numeric: tabular-nums;
+    padding-top: 2px;
+  }
+  .invariants b { font-weight: 600; }
+  .invariants small { display: block; margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+
+  footer {
+    grid-column: 1 / -1;
+    margin-top: 64px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis desktop · renderer</p>
+    <h1>Praxis Interface System</h1>
+    <p class="standfirst">The tokens, scales and patterns that <code>theme.css</code> defines, rendered at the values they actually carry. A written rule can say the type floor is 11px; only a specimen shows you what 11px looks like next to 13px.</p>
+    <ul class="meta">
+      <li><b>9,016</b> lines in theme.css</li>
+      <li><b>26</b> named themes</li>
+      <li><b>563</b> declarations on a type token</li>
+      <li>branch <b>main</b></li>
+    </ul>
+  </header>
+
+  <nav class="rail" aria-label="Sections">
+    <ol>
+      <li><a href="#contract"><i>01</i>Contract</a></li>
+      <li><a href="#colour"><i>02</i>Colour</a></li>
+      <li><a href="#tones"><i>03</i>Tones</a></li>
+      <li><a href="#type"><i>04</i>Type</a></li>
+      <li><a href="#geometry"><i>05</i>Geometry</a></li>
+      <li><a href="#patterns"><i>06</i>Patterns</a></li>
+      <li><a href="#invariants"><i>07</i>Invariants</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- 01 ───────────────────────────────────────────────────────────────── -->
+    <section id="contract">
+      <h2>The token contract <span>01</span></h2>
+      <p class="lede">Four layers resolve onto <code>:root</code>, each one narrower than the last. A component never reaches past this — it styles through a token, and the token is what a theme gets to move.</p>
+
+      <div class="scroller">
+        <table>
+          <thead>
+            <tr><th>Layer</th><th>Selector</th><th>Sets</th><th>Constant across themes</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="tok">Base</td>
+              <td class="val">:root</td>
+              <td class="note">Fonts, radius, space, the type scale, every <code>--tone-*</code></td>
+              <td class="note">Yes — these are the same in all 26</td>
+            </tr>
+            <tr>
+              <td class="tok">Mode</td>
+              <td class="val">[data-mode]</td>
+              <td class="note">The surface and text ramp: <code>--bg</code>, <code>--text</code>, <code>--border</code>, <code>--danger</code></td>
+              <td class="note">No</td>
+            </tr>
+            <tr>
+              <td class="tok">Accent</td>
+              <td class="val">[data-accent]</td>
+              <td class="note">One hue: <code>--accent</code> and its hover, contrast, soft and border variants</td>
+              <td class="note">No</td>
+            </tr>
+            <tr>
+              <td class="tok">Theme</td>
+              <td class="val">[data-theme]</td>
+              <td class="note">A complete named palette — ramp and accent together</td>
+              <td class="note">No</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="rule">
+        <b>Derive, don't duplicate.</b>
+        <small>Tokens that depend on the accent resolve lazily against it — <code>--focus-ring: var(--accent)</code>, <code>--wf-agent: var(--accent)</code>, <code>--success: var(--tone-green)</code>. Adding a theme therefore means setting the ramp and the accent, and nothing else: 26 palettes exist with no per-theme override for focus, workflow lanes or status.</small>
+      </div>
+
+      <p class="tight">The renderer's copy of the settings defaults is hand-maintained, because core is CommonJS and pulls <code>chokidar</code> and <code>markdown-it</code> into anything that imports it. An appearance token added in core must be mirrored in <code>settings/settingsDefaults.ts</code> or it silently reads as undefined.</p>
+    </section>
+
+    <!-- 02 ───────────────────────────────────────────────────────────────── -->
+    <section id="colour">
+      <h2>Colour <span>02</span></h2>
+      <p class="lede">Praxis ships its own identity as two named themes. Everything below is <code>praxis-light</code> and <code>praxis-dark</code> — a warm parchment ground rather than a neutral grey, with a single burnt-orange accent that survives both.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Surface ramp</span> <em>praxis-light</em></div>
+        <div class="ramp" style="border:0;border-radius:0">
+          <div style="background:#f5f2eb;color:#2c2620"><b>--bg</b><i>#f5f2eb</i></div>
+          <div style="background:#fffdf8;color:#2c2620"><b>--bg-elevated</b><i>#fffdf8</i></div>
+          <div style="background:#ebe7de;color:#2c2620"><b>--bg-sunken</b><i>#ebe7de</i></div>
+          <div style="background:#d5c8b8;color:#2c2620"><b>--border</b><i>#d5c8b8</i></div>
+          <div style="background:#ad9a85;color:#2c2620"><b>--border-strong</b><i>#ad9a85</i></div>
+          <div style="background:#74695e;color:#fffdf8"><b>--text-secondary</b><i>#74695e</i></div>
+          <div style="background:#2c2620;color:#f0e7d8"><b>--text</b><i>#2c2620</i></div>
+          <div style="background:#c6431f;color:#fffdf8"><b>--accent</b><i>#c6431f</i></div>
+        </div>
+      </div>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Surface ramp</span> <em>praxis-dark</em></div>
+        <div class="ramp" style="border:0;border-radius:0">
+          <div style="background:#100e0b;color:#f0e7d8"><b>--bg</b><i>#100e0b</i></div>
+          <div style="background:#2c2620;color:#f0e7d8"><b>--bg-elevated</b><i>#2c2620</i></div>
+          <div style="background:#0b0907;color:#f0e7d8"><b>--bg-sunken</b><i>#0b0907</i></div>
+          <div style="background:#443a30;color:#f0e7d8"><b>--border</b><i>#443a30</i></div>
+          <div style="background:#6c5b4a;color:#f0e7d8"><b>--border-strong</b><i>#6c5b4a</i></div>
+          <div style="background:#cdbfae;color:#100e0b"><b>--text-secondary</b><i>#cdbfae</i></div>
+          <div style="background:#f0e7d8;color:#100e0b"><b>--text</b><i>#f0e7d8</i></div>
+          <div style="background:#c6431f;color:#fffdf8"><b>--accent</b><i>#c6431f</i></div>
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>The accent means two things and no more: this is Praxis, and this is the primary action.</b>
+        <small>It had drifted into a third job — signalling that work was running — which made "brand", "click here" and "in progress" the same colour on one screen. Running work moved to <code>--tone-progress</code>, and the lane tokens now point there instead.</small>
+      </div>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Accent in use</span> <em>primary action vs. everything else</em></div>
+        <div class="duo">
+          <div class="app light">
+            <p class="app-label">praxis-light</p>
+            <button class="btn primary" type="button">Create project</button>
+            <button class="btn" type="button" style="margin-left:8px">Cancel</button>
+          </div>
+          <div class="app dark">
+            <p class="app-label">praxis-dark</p>
+            <button class="btn primary" type="button">Create project</button>
+            <button class="btn" type="button" style="margin-left:8px">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 ───────────────────────────────────────────────────────────────── -->
+    <section id="tones">
+      <h2>Tones <span>03</span></h2>
+      <p class="lede">The one part of the palette a theme cannot move. A Jira mark must stay Jira blue on a Dracula ground, and a failure must stay legible as failure — so these are declared once on the base <code>:root</code> and never overridden.</p>
+
+      <div class="scroller">
+        <table>
+          <thead>
+            <tr><th></th><th>Token</th><th>Value</th><th>Means</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="chip" style="background:#3fb950"></span></td><td class="tok">--tone-green</td><td class="val">#3fb950</td><td class="note">Aliased as <code>--success</code>; the done lane</td></tr>
+            <tr><td><span class="chip" style="background:#d29922"></span></td><td class="tok">--tone-amber</td><td class="val">#d29922</td><td class="note">Aliased as <code>--warning</code>; awaiting approval</td></tr>
+            <tr><td><span class="chip" style="background:#f85149"></span></td><td class="tok">--tone-red</td><td class="val">#f85149</td><td class="note">Failure</td></tr>
+            <tr><td><span class="chip" style="background:#4c9ee8"></span></td><td class="tok">--tone-progress</td><td class="val">#4c9ee8</td><td class="note">Work is running or ready to run — split out of the accent</td></tr>
+            <tr><td><span class="chip" style="background:#e0499f"></span></td><td class="tok">--tone-tour</td><td class="val">#e0499f</td><td class="note">The walkthrough annotation, and nothing else</td></tr>
+            <tr><td><span class="chip" style="background:#4ec9b0"></span></td><td class="tok">--tone-workspace</td><td class="val">#4ec9b0</td><td class="note">Workspace marks; also the workflow check node</td></tr>
+            <tr><td><span class="chip" style="background:#f59e0b"></span></td><td class="tok">--tone-folder</td><td class="val">#f59e0b</td><td class="note">Folder-backed sources</td></tr>
+            <tr><td><span class="chip" style="background:#3b82f6"></span></td><td class="tok">--tone-jira</td><td class="val">#3b82f6</td><td class="note">Backend brand</td></tr>
+            <tr><td><span class="chip" style="background:#8b7bb8"></span></td><td class="tok">--tone-github</td><td class="val">#8b7bb8</td><td class="note">Backend brand</td></tr>
+            <tr><td><span class="chip" style="background:#e24329"></span></td><td class="tok">--tone-gitlab</td><td class="val">#e24329</td><td class="note">Backend brand</td></tr>
+            <tr><td><span class="chip" style="background:#a855f7"></span></td><td class="tok">--tone-demo</td><td class="val">#a855f7</td><td class="note">Demo backend</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="tight"><code>--tone-tour</code> is the newest and the most deliberate. An annotation drawn over the app has to be legible as <em>not part of the app</em>; picking any existing token would have made the tour look like a control.</p>
+    </section>
+
+    <!-- 04 ───────────────────────────────────────────────────────────────── -->
+    <section id="type">
+      <h2>Type <span>04</span></h2>
+      <p class="lede">Seven steps, derived from where the app's type already sat rather than from a ratio. Twenty-six distinct sizes had accumulated — including 10.5, 11.5 and 12.5 — which is a continuum, not a hierarchy a reader can learn.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Scale</span> <em>rendered at its own value</em></div>
+        <div class="specimen-body">
+          <div class="typerow"><span class="t">--text-xs</span><span class="px">11px</span><span class="s" style="font-size:11px">Labels, eyebrows, metadata — the floor</span></div>
+          <div class="typerow"><span class="t">--text-sm</span><span class="px">12px</span><span class="s" style="font-size:12px">Secondary body, list rows, captions</span></div>
+          <div class="typerow"><span class="t">--text-md</span><span class="px">13px</span><span class="s" style="font-size:13px">The working default — most of the app</span></div>
+          <div class="typerow"><span class="t">--text-lg</span><span class="px">15px</span><span class="s" style="font-size:15px">Emphasis, card titles</span></div>
+          <div class="typerow"><span class="t">--text-xl</span><span class="px">18px</span><span class="s" style="font-size:18px">Section headings</span></div>
+          <div class="typerow"><span class="t">--text-2xl</span><span class="px">22px</span><span class="s" style="font-size:22px">Page headings</span></div>
+          <div class="typerow"><span class="t">--text-3xl</span><span class="px">30px</span><span class="s" style="font-size:30px">Display figures</span></div>
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>11px is the floor for anything a person reads.</b>
+        <small>All 29 declarations below it belong to <code>.praxis-preview-*</code> — the scale-model mockups on the theme cards, which draw the whole app at roughly a fifth size. Their 5–7px text is a drawing, not copy, and is deliberately left alone.</small>
+      </div>
+
+      <h3>The band that made this necessary</h3>
+      <p class="tight">The dense 11 / 12 / 13 band carries most of the interface, so a stray 11.5 sits invisibly between two real steps and quietly breaks alignment with everything around it. An early draft of this scale jumped 11 → 13 → 15 and erased the 12px band that some 120 declarations were using; the shipped scale keeps it.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Families</span></div>
+        <div class="specimen-body">
+          <div class="typerow"><span class="t">--font-sans</span><span class="px">UI</span><span class="s" style="font-size:13px">Segoe UI, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial</span></div>
+          <div class="typerow"><span class="t">--font-mono</span><span class="px">code</span><span class="s" style="font-family:var(--mono);font-size:13px">Cascadia Code, Consolas, SF Mono, Menlo</span></div>
+          <div class="typerow"><span class="t">--terminal-font</span><span class="px">xterm</span><span class="s" style="font-family:var(--mono);font-size:13px">Menlo, Monaco, SF Mono, Courier New</span></div>
+        </div>
+      </div>
+      <p class="tight">The terminal stack is separate on purpose: xterm.js receives the resolved value directly, and it follows VS Code's macOS terminal rather than the app's denser code-label font.</p>
+    </section>
+
+    <!-- 05 ───────────────────────────────────────────────────────────────── -->
+    <section id="geometry">
+      <h2>Geometry <span>05</span></h2>
+      <p class="lede">Radius carries meaning here: it separates an inline control from a panel from a floating surface. Spend it by role rather than stamping one value everywhere, which flattens the hierarchy it was meant to express.</p>
+
+      <div class="geo">
+        <figure><div class="box" style="border-radius:4px"></div><figcaption>--radius-sm<br>4px</figcaption></figure>
+        <figure><div class="box" style="border-radius:6px"></div><figcaption>--radius-md<br>6px</figcaption></figure>
+        <figure><div class="box" style="border-radius:10px"></div><figcaption>--radius-lg<br>10px</figcaption></figure>
+        <figure><div class="box" style="border-radius:14px"></div><figcaption>--radius-xl<br>14px</figcaption></figure>
+        <figure><div class="box" style="border-radius:999px"></div><figcaption>--radius-pill<br>999px</figcaption></figure>
+      </div>
+
+      <h3>Space</h3>
+      <div class="spacebars">
+        <div><span style="width:4px"></span>--space-1 · 4px</div>
+        <div><span style="width:8px"></span>--space-2 · 8px</div>
+        <div><span style="width:12px"></span>--space-3 · 12px</div>
+        <div><span style="width:16px"></span>--space-4 · 16px</div>
+        <div><span style="width:24px"></span>--space-5 · 24px</div>
+        <div><span style="width:32px"></span>--space-6 · 32px</div>
+      </div>
+      <p class="tight">Sibling groups are laid out with flex or grid and <code>gap</code>, taking their rhythm from this scale, rather than per-element margins that collapse or double. One fixed dimension sits alongside them: <code>--titlebar-height: 40px</code>.</p>
+    </section>
+
+    <!-- 06 ───────────────────────────────────────────────────────────────── -->
+    <section id="patterns">
+      <h2>Patterns <span>06</span></h2>
+      <p class="lede">Four recurring pieces of chrome. Each one is a single rule the whole app shares, which is what keeps a fix in one place from being undone in another.</p>
+
+      <h3>Keyboard focus</h3>
+      <p class="tight">One global <code>:focus-visible</code> ring, last in the stylesheet so it wins on source order against component rules that tint a border instead. <code>:focus-visible</code> rather than <code>:focus</code>, so pointer clicks stay quiet.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Focus ring</span> <em>2px solid var(--focus-ring), offset 2px</em></div>
+        <div class="duo">
+          <div class="app light">
+            <p class="app-label">at rest</p>
+            <button class="btn" type="button">Add connection</button>
+          </div>
+          <div class="app light" style="background:#ebe7de">
+            <p class="app-label">focused</p>
+            <button class="btn ring-focus" type="button">Add connection</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>A component may not swallow the ring with a bare <code>outline: none</code>.</b>
+        <small>That invariant had eroded once already — 26 resets against 15 <code>:focus-visible</code> rules, while <code>:hover</code> was styled 91 times. It is invisible in a screenshot and only bites people driving the app from the keyboard, so it is held by an e2e test that tabs 25 stops and asserts each one paints something. Eleven resets survive, each paired with its own visible treatment.</small>
+      </div>
+
+      <h3>The walkthrough annotation</h3>
+      <p class="tight">The ring the first-run tour draws over a real control. It began as <code>2px solid var(--focus-ring)</code> — byte-identical to the focus ring above, a fourth meaning for the accent, and invisible the moment it landed on an accent button.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Tour ring</span> <em>3px dashed var(--tone-tour) + a 5px halo</em></div>
+        <div class="app dark">
+          <p class="app-label">the collision, and the fix</p>
+          <div class="compare">
+            <div>
+              <p style="margin:0 0 12px;font-size:12px;color:#958878;font-family:var(--mono)">before — on an accent button</p>
+              <span style="display:inline-block;border:2px solid #c6431f;border-radius:8px;padding:4px">
+                <button class="btn primary" type="button">Start a session</button>
+              </span>
+            </div>
+            <div>
+              <p style="margin:0 0 12px;font-size:12px;color:#958878;font-family:var(--mono)">after</p>
+              <span class="ring-tour">
+                <button class="btn primary" type="button">Start a session</button>
+              </span>
+            </div>
+          </div>
+          <div class="callout">
+            <span class="step">Step 3 of 4</span>
+            <strong>Hand a ticket to an agent</strong>
+            <p>Start a session against a ticket and the agent works in your project.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rule">
+        <b>An annotation must not look like a control.</b>
+        <small>Dashed, in a hue used nowhere else, and never taking pointer events — the highlighted control stays clickable, so the tour can't trap anyone. Both properties are asserted, along with the callout's tour-coloured top edge; the ring's geometry is asserted to actually enclose its target, which is how a lagging transition was caught pointing at the previous control.</small>
+      </div>
+
+      <h3>Empty states</h3>
+      <p class="tight">A column: icon, one line of text, and — where an action makes sense — the button that fills it. A placeholder that only describes its own emptiness wastes the moment a person is most ready to act.</p>
+
+      <div class="specimen">
+        <div class="specimen-head"><span>Empty state</span> <em>icon · text · action</em></div>
+        <div class="duo">
+          <div class="app light">
+            <p class="app-label">actionable</p>
+            <div class="emptystate">
+              <span class="glyph">◍</span>
+              <span>No AI sessions yet.</span>
+              <button class="btn" type="button" style="margin-top:2px">Start a session</button>
+            </div>
+          </div>
+          <div class="app light" style="background:#ebe7de">
+            <p class="app-label">no action exists</p>
+            <div class="emptystate">
+              <span class="glyph">▤</span>
+              <span>Open a session from the sidebar to see its conversation.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="tight">The second is not a failure of the pattern. A detail pane waiting on a selection, and a loading state, have no action to offer — inventing one would be worse than the silence.</p>
+
+      <h3>Dialogs</h3>
+      <p class="tight">Twenty-three <code>window.confirm</code> and <code>window.prompt</code> calls used to hand the user an OS chrome that ignores every token on this page. They now route through one in-app <code>DialogHost</code> returning promises, at <code>min(420px, 90vw)</code>. None remain: the only match left in the renderer is the sentence in the module that replaced them.</p>
+    </section>
+
+    <!-- 07 ───────────────────────────────────────────────────────────────── -->
+    <section id="invariants">
+      <h2>Invariants <span>07</span></h2>
+      <p class="lede">The rules worth knowing before changing anything above — each one is here because it broke once.</p>
+
+      <ol class="invariants">
+        <li>
+          <span class="n">01</span>
+          <div><b>Style through a token, never a literal.</b>
+          <small>A literal is invisible to all 26 themes. The type scale exists because 26 distinct sizes had accumulated where seven were meant.</small></div>
+        </li>
+        <li>
+          <span class="n">02</span>
+          <div><b>The accent is brand and primary action. Nothing else.</b>
+          <small>Anything that means "running", "selected" or "annotated" takes a tone. Three meanings on one hue made a dashboard unreadable at a glance.</small></div>
+        </li>
+        <li>
+          <span class="n">03</span>
+          <div><b>Nothing readable goes below 11px.</b>
+          <small>Only the fifth-scale mockups may, because their text is a drawing.</small></div>
+        </li>
+        <li>
+          <span class="n">04</span>
+          <div><b>Order shorthands after the longhands they reset.</b>
+          <small>A <code>border-top</code> above a <code>border</code> shorthand is silently wiped. That is exactly how the tour callout lost its hue — no error, no failing test, just an unbranded panel.</small></div>
+        </li>
+        <li>
+          <span class="n">05</span>
+          <div><b>Define every token on the base <code>:root</code> before a theme redefines it.</b>
+          <small>The status aliases were referenced across the stylesheet but never declared, so status dots and health chips rendered colourless in every theme.</small></div>
+        </li>
+        <li>
+          <span class="n">06</span>
+          <div><b>Look at the rendered output, not just the test result.</b>
+          <small>Every visual regression here passed a fully green suite: a node label wrapping at 11px, an empty state collapsing into a column, a ring pointing at the wrong control. Where a visual property matters, assert it geometrically — and prove the assertion can fail before trusting it.</small></div>
+        </li>
+      </ol>
+    </section>
+
+  </main>
+
+  <footer>
+    Praxis desktop · renderer/src/theme.css · measured on branch main. Specimens are rendered replicas at the tokens' real values, not screenshots.
+  </footer>
+
+</div>
+
+
+</body>
+</html>

@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Surface Packs</title>
+<meta name="description" content="Implementation plan for a premium texture, pattern, and translucency layer that composes with every existing Praxis theme.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --bg: #efeae0;
+    --surface: #f8f5ef;
+    --raised: #f1ece1;
+    --ink: #221d18;
+    --muted: #6d6358;
+    --faint: #928676;
+    --border: #ddd2c0;
+    --border-strong: #c9bca6;
+    --accent: #c6431f;
+    --accent-ink: #a5361a;
+    --accent-soft: rgba(198, 67, 31, 0.1);
+    --slate: #46708d;
+    --slate-soft: rgba(70, 112, 141, 0.12);
+    --good: #4f7d5f;
+    --warn: #9a6a24;
+    --shadow: 0 1px 2px rgba(34, 29, 24, 0.06), 0 12px 32px rgba(34, 29, 24, 0.08);
+    --measure: 68ch;
+
+    --step--1: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
+    --step-0: clamp(1rem, 0.96rem + 0.2vw, 1.06rem);
+    --step-1: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
+    --step-2: clamp(1.5rem, 1.36rem + 0.7vw, 1.95rem);
+    --step-3: clamp(2rem, 1.7rem + 1.5vw, 2.9rem);
+    --step-4: clamp(2.6rem, 2rem + 3vw, 4.1rem);
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #15120e;
+      --surface: #1f1a15;
+      --raised: #2a231c;
+      --ink: #efe6d6;
+      --muted: #a89a86;
+      --faint: #837665;
+      --border: #382f26;
+      --border-strong: #4b3f33;
+      --accent: #e0653b;
+      --accent-ink: #ef7b53;
+      --accent-soft: rgba(224, 101, 59, 0.14);
+      --slate: #74a0bd;
+      --slate-soft: rgba(116, 160, 189, 0.16);
+      --good: #7fa98c;
+      --warn: #d4a373;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #15120e;
+    --surface: #1f1a15;
+    --raised: #2a231c;
+    --ink: #efe6d6;
+    --muted: #a89a86;
+    --faint: #837665;
+    --border: #382f26;
+    --border-strong: #4b3f33;
+    --accent: #e0653b;
+    --accent-ink: #ef7b53;
+    --accent-soft: rgba(224, 101, 59, 0.14);
+    --slate: #74a0bd;
+    --slate-soft: rgba(116, 160, 189, 0.16);
+    --good: #7fa98c;
+    --warn: #d4a373;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    --gutter: clamp(1.25rem, 5vw, 4rem);
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    max-width: 1180px;
+    margin-inline: auto;
+    padding: var(--gutter);
+  }
+
+  @media (min-width: 1000px) {
+    .page {
+      grid-template-columns: 15rem minmax(0, 1fr);
+      column-gap: clamp(2rem, 5vw, 5rem);
+      align-items: start;
+    }
+    .masthead { grid-column: 1 / -1; }
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    border-bottom: 1px solid var(--border-strong);
+    padding-bottom: 2.5rem;
+    margin-bottom: 3rem;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 1.25rem;
+  }
+  .masthead h1 {
+    font-family: "Spectral", Georgia, serif;
+    font-weight: 500;
+    font-size: var(--step-4);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+    max-width: 20ch;
+  }
+  .masthead .lede {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 54ch;
+    margin: 0;
+    font-weight: 400;
+  }
+  .masthead .lede strong { color: var(--ink); font-weight: 600; }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 2rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step--1);
+    color: var(--faint);
+  }
+  .meta-row span { white-space: nowrap; }
+  .meta-row b { color: var(--muted); font-weight: 500; }
+
+  /* ---------- Side rail ---------- */
+  .rail { position: sticky; top: 2rem; display: none; }
+  @media (min-width: 1000px) { .rail { display: block; } }
+  .rail nav { display: flex; flex-direction: column; gap: 0.1rem; border-left: 1px solid var(--border); }
+  .rail a {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 0.4rem 0 0.4rem 1rem;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .rail a:hover { color: var(--ink); }
+  .rail a.active { color: var(--accent-ink); border-left-color: var(--accent); }
+  .rail a .n { color: var(--faint); margin-right: 0.6rem; }
+
+  /* ---------- Content flow ---------- */
+  main { min-width: 0; }
+  section { margin-bottom: 4rem; scroll-margin-top: 2rem; }
+  section > h2 {
+    font-family: "Spectral", Georgia, serif;
+    font-weight: 600;
+    font-size: var(--step-2);
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 0.4rem;
+    padding-top: 1.5rem;
+    border-top: 3px solid var(--ink);
+    display: flex;
+    gap: 1rem;
+    align-items: baseline;
+  }
+  section > h2 .sn {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: var(--step-0);
+    font-weight: 500;
+    color: var(--accent-ink);
+    flex-shrink: 0;
+  }
+  section > .section-sub {
+    color: var(--muted);
+    max-width: var(--measure);
+    margin: 0 0 2rem;
+  }
+
+  h3 {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    letter-spacing: -0.005em;
+    margin: 2.5rem 0 0.75rem;
+    color: var(--ink);
+  }
+  h4 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 500;
+    font-size: var(--step--1);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 1.75rem 0 0.6rem;
+  }
+
+  p, li { max-width: var(--measure); }
+  p { margin: 0 0 1.1rem; }
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  ul, ol { margin: 0 0 1.2rem; padding-left: 1.3rem; }
+  li { margin-bottom: 0.5rem; }
+  li::marker { color: var(--faint); }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    padding: 0.1em 0.38em;
+    border-radius: 4px;
+    word-break: break-word;
+  }
+
+  .code-block {
+    margin: 1.25rem 0 1.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .code-block figcaption {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--raised);
+  }
+  .code-block pre {
+    margin: 0;
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.83rem;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .code-block pre .c { color: var(--faint); font-style: italic; }
+  .code-block pre .k { color: var(--slate); }
+  .code-block pre .s { color: var(--good); }
+
+  .table-wrap { overflow-x: auto; margin: 1.25rem 0 1.75rem; border: 1px solid var(--border); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+  th, td { text-align: left; padding: 0.7rem 0.95rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-weight: 500;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--raised);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { background: none; color: var(--slate); padding: 0; font-size: 0.85em; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  .callout {
+    margin: 1.5rem 0;
+    padding: 1.1rem 1.3rem;
+    background: var(--slate-soft);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--slate);
+    border-radius: 6px;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--slate);
+    display: block;
+    margin-bottom: 0.35rem;
+  }
+
+  /* Two-column split for "is / is not" */
+  .split {
+    display: grid;
+    gap: 1rem;
+    margin: 1.5rem 0 2rem;
+  }
+  @media (min-width: 620px) { .split { grid-template-columns: 1fr 1fr; } }
+  .split > div {
+    padding: 1.2rem 1.35rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  .split h4 { margin-top: 0; }
+  .split.is h4 { color: var(--good); }
+  .split.isnot h4 { color: var(--accent-ink); }
+  .split ul { margin-bottom: 0; }
+  .split li { font-size: var(--step--1); }
+
+  /* Pack cards */
+  .packs { display: grid; gap: 1rem; margin: 1.5rem 0 2rem; }
+  @media (min-width: 720px) { .packs { grid-template-columns: 1fr 1fr; } }
+  .pack {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .pack .swatch { height: 92px; position: relative; border-bottom: 1px solid var(--border); }
+  .pack .body { padding: 1rem 1.2rem 1.2rem; }
+  .pack .body h3 { margin: 0 0 0.15rem; font-size: var(--step-0); }
+  .pack .body .id {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--faint);
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+  .pack .body p { font-size: var(--step--1); color: var(--muted); margin: 0 0 0.75rem; max-width: none; }
+  .pack .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .chip {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    color: var(--muted);
+  }
+  .chip.p1 { border-color: var(--accent); color: var(--accent-ink); }
+  .chip.p2 { border-color: var(--slate); color: var(--slate); }
+
+  .sw-flat { background: var(--raised); }
+  .sw-parchment {
+    background:
+      radial-gradient(120% 90% at 20% 0%, rgba(198,67,31,0.1), transparent 60%),
+      repeating-linear-gradient(48deg, rgba(120,90,60,0.05) 0 2px, transparent 2px 5px),
+      var(--raised);
+  }
+  .sw-aurora {
+    background:
+      radial-gradient(60% 120% at 15% 20%, rgba(70,112,141,0.45), transparent 55%),
+      radial-gradient(70% 140% at 90% 90%, rgba(198,67,31,0.4), transparent 55%),
+      var(--raised);
+    backdrop-filter: blur(2px);
+  }
+  .sw-graphite {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.14), transparent 30%),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.05) 0 1px, transparent 1px 3px),
+      #2c2f33;
+  }
+  .sw-blueprint {
+    background:
+      linear-gradient(rgba(70,112,141,0.28) 1px, transparent 1px) 0 0 / 100% 14px,
+      linear-gradient(90deg, rgba(70,112,141,0.28) 1px, transparent 1px) 0 0 / 14px 100%,
+      #1c2b38;
+  }
+  .sw-noir {
+    background:
+      radial-gradient(80% 80% at 50% 40%, transparent 40%, rgba(0,0,0,0.75)),
+      repeating-conic-gradient(rgba(255,255,255,0.06) 0 0.6deg, transparent 0.6deg 1.2deg),
+      #101012;
+  }
+
+  /* Phase timeline */
+  .phase-list { list-style: none; padding: 0; margin: 1.5rem 0 2rem; counter-reset: ph; }
+  .phase-list > li {
+    max-width: none;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 1.2rem;
+    padding: 1.2rem 0;
+    border-top: 1px solid var(--border);
+  }
+  .phase-list > li:last-child { border-bottom: 1px solid var(--border); }
+  .phase-list .pnum {
+    counter-increment: ph;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8rem;
+    color: var(--accent-ink);
+    padding-top: 0.15rem;
+  }
+  .phase-list .pnum::before { content: "P" counter(ph); }
+  .phase-list h3 { margin: 0 0 0.3rem; font-size: var(--step-0); }
+  .phase-list p { margin: 0; font-size: var(--step--1); color: var(--muted); }
+  .phase-list .ship {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    color: var(--faint);
+    margin-top: 0.4rem;
+  }
+
+  .filelist { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.8rem; }
+  .filelist td:first-child { color: var(--slate); white-space: nowrap; }
+
+  hr.rule { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 3px solid var(--ink);
+    padding-top: 1.5rem;
+    margin-top: 2rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.76rem;
+    color: var(--faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis · Design system · Implementation plan</p>
+    <h1>Surface Packs for Praxis</h1>
+    <p class="lede">A <strong>premium material layer</strong> — textures, patterns, translucency, glow — that sits on top of the theme you already picked. Not more color themes. A second, orthogonal axis that composes with every one of them.</p>
+    <div class="meta-row">
+      <span><b>Scope:</b> frontend + core settings + (phase 3) electron main</span>
+      <span><b>New axis:</b> <code>data-surface</code></span>
+      <span><b>Ships default:</b> Praxis theme + <code>parchment</code> surface</span>
+      <span><b>Opt-out:</b> <code>flat</code></span>
+    </div>
+  </header>
+
+  <aside class="rail" aria-label="Contents">
+    <nav id="toc">
+      <a href="#today"><span class="n">00</span>Theming today</a>
+      <a href="#axis"><span class="n">01</span>The surface axis</a>
+      <a href="#tokens"><span class="n">02</span>Material tokens</a>
+      <a href="#consume"><span class="n">03</span>Consuming tokens</a>
+      <a href="#assets"><span class="n">04</span>Textures &amp; patterns</a>
+      <a href="#glass"><span class="n">05</span>Translucency &amp; vibrancy</a>
+      <a href="#data"><span class="n">06</span>Data model</a>
+      <a href="#packs"><span class="n">07</span>Bundled packs</a>
+      <a href="#ui"><span class="n">08</span>Settings UI</a>
+      <a href="#guardrails"><span class="n">09</span>Guardrails</a>
+      <a href="#rollout"><span class="n">10</span>Rollout</a>
+      <a href="#files"><span class="n">11</span>Files to touch</a>
+      <a href="#decisions"><span class="n">12</span>Decisions</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <div class="callout" style="margin-bottom:2.5rem">
+      <span class="tag">Decided</span>
+      <p><strong>The default Praxis experience is premium.</strong> New installs open on the Praxis theme with the <code>parchment</code> surface pack active — not <code>flat</code>. Phase-1 packs ship GA (no feature flag). On <em>upgrade</em>, only profiles that never touched appearance settings are moved to <code>parchment</code>; anyone who has customised keeps their current look, and <code>flat</code> stays as the one-click opt-out. See <a href="#data">§06</a> and <a href="#rollout">§10</a>.</p>
+    </div>
+
+    <section id="today">
+      <h2><span class="sn">00</span>How Praxis theming works today</h2>
+      <p class="section-sub">The surface layer is designed to slot into the existing machinery without disturbing it. Quick recap of what is already there.</p>
+
+      <ul>
+        <li><strong>Three attribute axes on <code>&lt;html&gt;</code></strong>, set by <code>themes.ts</code>: <code>data-mode="light|dark"</code> (surface + text ramp), <code>data-accent="violet|blue"</code> (accent hue), and <code>data-theme="praxis-dark|github-light|…"</code> (a complete named palette). They compose; there are no duplicated 4-way blocks.</li>
+        <li><strong>A token layer</strong> in <code>theme.css</code> — <code>--bg</code>, <code>--bg-elevated</code>, <code>--bg-sunken</code>, <code>--border</code>, <code>--text</code>, <code>--accent</code>, … redefined per <code>[data-theme]</code> / <code>[data-mode]</code> block. Components only ever read tokens.</li>
+        <li><strong>An apply pipeline</strong>: <code>applyThemePreference(themeId, pref)</code> resolves system mode, picks the matching variant, calls <code>applyTheme()</code> which sets the attributes, writes <code>localStorage</code> (<code>tm-theme-id</code>), and dispatches <code>tm-theme-changed</code>. <code>main.tsx</code> replays it before React mounts so there is no flash.</li>
+        <li><strong>Persistence</strong>: <code>AppearanceSettings</code> in <code>packages/core/src/config/appSettings.ts</code> holds <code>themeId</code>, <code>themeMode</code>, <code>installedThemeIds</code>, and <code>customThemes[]</code>; the settings doc is shared with the main process.</li>
+        <li><strong>Settings UI</strong>: <code>SettingsPage.tsx</code> → <code>ThemesSection</code> renders a gallery of <code>ThemePreviewCard</code>s and a full <code>CustomThemeEditor</code> with import / export / duplicate.</li>
+        <li><strong>Terminal</strong>: each family carries an ANSI palette consumed by xterm.js.</li>
+      </ul>
+
+      <p>Everything below adds one axis, one token group, one apply function, one settings sub-panel, and a handful of CSS refactors on structural surfaces. Nothing in the color system changes.</p>
+    </section>
+
+    <section id="axis">
+      <h2><span class="sn">01</span>The surface axis</h2>
+      <p class="section-sub">A surface pack describes <em>material</em>, never color. It answers "what is this panel made of and how does light hit it?" — paper fiber, brushed metal, frosted glass, blueprint vellum — while the active theme keeps deciding every hue.</p>
+
+      <div class="split">
+        <div class="is">
+          <h4>A pack defines</h4>
+          <ul>
+            <li>Background <em>images</em> — layered gradients + a texture tile</li>
+            <li>Panel opacity / translucency</li>
+            <li>Backdrop blur &amp; saturation (frosted glass)</li>
+            <li>A repeating pattern layer (dot-grid, topo lines, weave)</li>
+            <li>Grain / noise overlays and blend modes</li>
+            <li>Border treatment (bevel highlight, hairline, gradient edge)</li>
+            <li>Shadow depth and optional accent glow</li>
+          </ul>
+        </div>
+        <div class="isnot">
+          <h4>A pack never defines</h4>
+          <ul>
+            <li>Any <code>--bg</code>, <code>--text</code>, <code>--accent</code> value</li>
+            <li>Whether the UI is light or dark</li>
+            <li>Component layout, spacing, or type</li>
+            <li>Terminal ANSI colors</li>
+          </ul>
+          <p style="margin-top:0.8rem;font-size:var(--step--1);color:var(--muted)">Result: <strong>Parchment × GitHub Light</strong>, <strong>Aurora Glass × Praxis Dark</strong>, <strong>Graphite × Nord</strong> are all valid, and each reads correctly because the pack's assets tint themselves from the live theme tokens.</p>
+        </div>
+      </div>
+
+      <h4>The attribute</h4>
+      <p>One new attribute on <code>&lt;html&gt;</code>: <code>data-surface</code>, from <code>"flat"</code> (the inert CSS baseline — every token a no-op) to <code>"aurora-glass"</code>. <code>flat</code> is only the <em>fallback</em>; <code>DEFAULT_APP_SETTINGS</code> ships <code>parchment</code> (<a href="#data">§06</a>). Plus three user dials written as inline custom properties so they multiply into the pack: <code>--surface-intensity</code> (0–1), <code>--surface-translucency</code> (0/1 gate), <code>--surface-texture</code> (0/1 gate).</p>
+    </section>
+
+    <section id="tokens">
+      <h2><span class="sn">02</span>Material tokens</h2>
+      <p class="section-sub">A new custom-property group, defined inert on bare <code>:root</code> so an un-set pack is a guaranteed no-op, then overridden per <code>[data-surface]</code> block. Components read these exactly like they read color tokens today.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Token</th><th>Inert default</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>--surface-app-bg-image</code></td><td><code>none</code></td><td>Layered background behind the whole window (canvas vignette, ambient gradient)</td></tr>
+            <tr><td><code>--surface-panel-bg-image</code></td><td><code>none</code></td><td>Layered background for elevated panels (sidebar, editor pane, dialogs)</td></tr>
+            <tr><td><code>--surface-bg-blend</code></td><td><code>normal</code></td><td><code>background-blend-mode</code> for every layered background stack — app and panel</td></tr>
+            <tr><td><code>--surface-panel-opacity</code></td><td><code>1</code></td><td>Panel fill translucency; folded through <code>color-mix</code> so the theme color still drives the hue</td></tr>
+            <tr><td><code>--surface-panel-blur</code></td><td><code>0px</code></td><td><code>backdrop-filter</code> blur radius — glass</td></tr>
+            <tr><td><code>--surface-panel-saturate</code></td><td><code>1</code></td><td>Backdrop saturation boost that sells the frosted look</td></tr>
+            <tr><td><code>--surface-panel-border</code></td><td><code>1px solid var(--border)</code></td><td>Per-pack edge — bevel highlight, gradient hairline, none</td></tr>
+            <tr><td><code>--surface-panel-shadow</code></td><td><code>var(--shadow-panel)</code></td><td>Depth; packs can deepen or flatten</td></tr>
+            <tr><td><code>--surface-texture-image</code></td><td><code>none</code></td><td>Tiling grain / fiber / pattern drawn on a dedicated <code>::after</code> layer</td></tr>
+            <tr><td><code>--surface-texture-opacity</code></td><td><code>0</code></td><td>Strength of that layer — the main <code>--surface-intensity</code> multiplicand</td></tr>
+            <tr><td><code>--surface-texture-blend</code></td><td><code>overlay</code></td><td><code>mix-blend-mode</code> so one asset works on light <em>and</em> dark grounds</td></tr>
+            <tr><td><code>--surface-accent-glow</code></td><td><code>none</code></td><td>Optional <code>box-shadow</code> glow applied to focus rings / primary buttons</td></tr>
+            <tr><td><code>--surface-radius-boost</code></td><td><code>0px</code></td><td>Added to component radii for softer, more "premium" corners</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-block">
+        <figcaption>surfaces.css — inert defaults + one pack</figcaption>
+<pre><span class="c">/* Guaranteed no-op: every surface token resolves to "do nothing". */</span>
+<span class="k">:root</span> {
+  --surface-app-bg-image: none;
+  --surface-panel-bg-image: none;
+  --surface-bg-blend: normal;
+  --surface-panel-opacity: 1;
+  --surface-panel-blur: 0px;
+  --surface-panel-saturate: 1;
+  --surface-panel-border: 1px solid var(--border);
+  --surface-panel-shadow: var(--shadow-panel);
+  --surface-texture-image: none;
+  --surface-texture-opacity: 0;
+  --surface-texture-blend: overlay;
+  --surface-accent-glow: none;
+  --surface-radius-boost: 0px;
+  --surface-intensity: 1;
+  --surface-translucency: 1;
+  --surface-texture: 1;
+}
+
+<span class="k">:root[data-surface="parchment"]</span> {
+  --surface-app-bg-image:
+    radial-gradient(130% 90% at 15% 0%, var(--accent-soft), transparent 55%);
+  --surface-texture-image: url("data:image/svg+xml;base64,…paper-fiber…");
+  --surface-texture-opacity: calc(0.5 * var(--surface-intensity) * var(--surface-texture));
+  --surface-texture-blend: soft-light;
+  --surface-panel-border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 8%);
+  --surface-radius-boost: 1px;
+}</pre>
+      </div>
+    </section>
+
+    <section id="consume">
+      <h2><span class="sn">03</span>Consuming the tokens</h2>
+      <p class="section-sub">Roughly a dozen structural rules in <code>theme.css</code> change — the ones that today do a flat <code>background: var(--bg*)</code> on a full-bleed surface: <code>body</code> / <code>.window-root</code>, <code>.pane-sidebar</code>, <code>.pane-main</code>, <code>.pane-aux</code>, <code>.panel-shell</code>, <code>.titlebar</code>, dialog shells, and the canonical rounded-panel from <code>CLAUDE.md</code>. Cards and rows are untouched.</p>
+
+      <h4>Layered background — no extra DOM</h4>
+      <div class="code-block">
+        <figcaption>theme.css — .pane-main</figcaption>
+<pre>.pane-main {
+  <span class="c">/* color still owns the hue; image layers ride on top */</span>
+  background-color: var(--bg-elevated);
+  background-image: var(--surface-panel-bg-image);
+  background-blend-mode: var(--surface-bg-blend);
+  border: var(--surface-panel-border);
+  box-shadow: var(--surface-panel-shadow);
+  border-radius: calc(var(--radius-md) + var(--surface-radius-boost))
+                 calc(var(--radius-md) + var(--surface-radius-boost)) 0 0;
+}</pre>
+      </div>
+
+      <h4>Texture / grain — one dedicated layer per shell</h4>
+      <div class="code-block">
+        <figcaption>theme.css — shared texture pseudo-element</figcaption>
+<pre>.pane-sidebar, .pane-main, .pane-aux, .panel-shell { position: relative; }
+
+.pane-sidebar::after,
+.pane-main::after,
+.pane-aux::after,
+.panel-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;                 <span class="c">/* behind content, above the fill */</span>
+  background: var(--surface-texture-image) repeat;
+  opacity: var(--surface-texture-opacity);
+  mix-blend-mode: var(--surface-texture-blend);
+}
+<span class="c">/* children need an explicit stacking context so they clear the ::after */</span>
+.pane-main > * { position: relative; z-index: 1; }</pre>
+      </div>
+
+      <h4>Translucency — fold opacity through <code>color-mix</code></h4>
+      <div class="code-block">
+        <figcaption>theme.css — .pane-sidebar (glass path)</figcaption>
+<pre>.pane-sidebar {
+  background-color: color-mix(in srgb,
+    var(--bg-sunken) calc(var(--surface-panel-opacity) * 100%),
+    transparent);
+  backdrop-filter: blur(calc(var(--surface-panel-blur) * var(--surface-translucency)))
+                   saturate(var(--surface-panel-saturate));
+}</pre>
+      </div>
+      <p>Because opacity is applied via <code>color-mix</code> against the theme's own <code>--bg-sunken</code>, a glass pack over Praxis Dark frosts warm charcoal and a glass pack over Nord frosts arctic blue — automatically.</p>
+    </section>
+
+    <section id="assets">
+      <h2><span class="sn">04</span>Textures &amp; patterns</h2>
+      <p class="section-sub">The assets are what make it feel premium rather than gimmicky. Two families, both theme-aware.</p>
+
+      <h3>Patterns — a library, selected as data &nbsp;·&nbsp; <span style="color:var(--good)">SHIPPED</span></h3>
+      <ul>
+        <li><strong>A pattern is data, never CSS.</strong> <code>surfacePatterns.ts</code> holds the library — <code>hexagon</code>, <code>grid</code>, <code>dot-grid</code>, <code>triangle</code>, <code>diagonal</code>, <code>weave</code>, <code>topo</code>, <code>none</code>. Each entry knows its seamless tile geometry and draws itself at an arbitrary ink and stroke weight.</li>
+        <li>A pack references one by id: <code>pattern: { id: 'hexagon', scale: 124, opacity: 0.07, ink: 'accent' }</code>. <code>applySurfacePack</code> renders it into <code>--surface-watermark-*</code>, which every pane and the splash already read. <strong>Adding a material means adding a library entry — never a new <code>[data-surface]</code> block, and never a change to the panes.</strong></li>
+        <li>The <em>same</em> mechanism drives the custom editor: a Pattern dropdown plus scale / strength / ink dials, so a user builds a new material with no code at all.</li>
+        <li>Ink is resolved from the live theme at apply time and re-baked on <code>tm-theme-changed</code> — a data URI cannot carry a <code>var()</code>, so the colour is baked in and refreshed instead.</li>
+        <li>The watermark rides a dedicated <code>::before</code> layer <em>behind</em> the pane content, so a pattern can never erode text contrast.</li>
+      </ul>
+
+      <h3>The CSP that hid all of this</h3>
+      <ul>
+        <li>The renderer shipped <code>default-src 'self'</code> with <strong>no <code>img-src</code></strong>, so <em>every</em> <code>data:</code> SVG — pattern and grain alike — was silently blocked: computed styles were correct, nothing ever painted. This is why all six packs looked alike no matter how the values were tuned.</li>
+        <li>Fixed by adding <code>img-src 'self' data:</code>. Data images are inert (a CSS background or <code>&lt;img&gt;</code> never executes script) and no remote origin is permitted by any directive. A <code>surfacePacks.spec.ts</code> test now decodes the live tile through <code>Image()</code> so a regression fails loudly instead of silently.</li>
+      </ul>
+
+      <h3>Textures — rich raster, lazy, blended</h3>
+      <ul>
+        <li><strong>Decision: rich raster.</strong> Paper fiber, canvas weave, brushed metal, film grain are high-detail photographic seamless tiles — 256–512&nbsp;px, WebP, <code>@1x</code> + <code>@2x</code> — not synthetic noise. This is what makes the default look feel crafted rather than CSS-generated.</li>
+        <li>One <strong>desaturated</strong> tile per texture, working on both grounds through <code>mix-blend-mode: soft-light|overlay</code> at low opacity. Where a texture genuinely needs to differ per mode, key it on <code>:root[data-mode="dark"] [data-surface="x"]</code>.</li>
+        <li><strong>Parchment's tiles ship in the bundle</strong> (it is the default — a first-launch texture flash would undercut the whole point). It is the one exception; its <code>@1x</code> tile is a static <code>import</code> so Vite fingerprints and inlines it into the initial load, <code>@2x</code> preloaded right after paint.</li>
+        <li><strong>Every other pack's tiles are lazy.</strong> They live in <code>packages/frontend/src/assets/surfaces/</code> and are <code>fetch</code>-ed the first time their pack becomes active, then cached. Only the active pack's tiles are ever downloaded, so switching away from the default costs one pack's worth (~40–80&nbsp;KB), not the whole set.</li>
+        <li>Geometric patterns (Blueprint's drafting grid, dot-grid, hex) stay procedural inline SVG — a raster would only blur a grid — and tint from theme tokens.</li>
+      </ul>
+
+      <div class="callout">
+        <span class="tag">Constraint</span>
+        <p>Total surface texture assets: <strong>~300–400&nbsp;KB</strong> across all bundled packs. Only <strong>Parchment's <code>@1x</code> tile (~25–35&nbsp;KB)</strong> enters the initial bundle; everything else is lazy-loaded per active pack. Hard per-pack ceiling: <strong>≤ 90&nbsp;KB</strong> across both DPIs.</p>
+      </div>
+    </section>
+
+    <section id="glass">
+      <h2><span class="sn">05</span>Translucency &amp; window vibrancy</h2>
+      <p class="section-sub">Two levels. The CSS level ships first and works everywhere. The native level makes it genuinely translucent to the desktop behind, and needs main-process changes.</p>
+
+      <h3>Level A — faux depth (CSS only)</h3>
+      <p>Layered gradients, inner shadows, and texture ship in phase&nbsp;1 (this is how Parchment reads). Phase&nbsp;2 adds <code>backdrop-filter</code> blur <em>within</em> the window — the sidebar frosts the editor pane behind it — with no Electron change. Together this already looks like a polished "acrylic-ish" UI and is the safe fallback for the glass packs on every OS.</p>
+
+      <h3>Level B — true OS vibrancy (phase 3)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Platform</th><th>Mechanism</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>macOS</td><td><code>new BrowserWindow({ vibrancy: 'under-window', transparent: true, backgroundColor: '#00000000' })</code> + <code>win.setVibrancy()</code></td><td>Live-togglable. Transparent windows lose the native drop shadow &amp; some corner rounding — re-add in CSS.</td></tr>
+            <tr><td>Windows 11</td><td><code>backgroundMaterial: 'acrylic' | 'mica'</code>, togglable via <code>win.setBackgroundMaterial()</code></td><td>Mica tints from the desktop wallpaper; acrylic blurs. Pre-22H2 falls back to opaque.</td></tr>
+            <tr><td>Linux</td><td>Compositor-dependent; no reliable API</td><td>Feature-detect → always fall back to Level A.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="code-block">
+        <figcaption>electron main — new IPC, guarded</figcaption>
+<pre><span class="c">// windowIpc.ts</span>
+ipcMain.handle('window:setSurfaceVibrancy', (_e, mode: 'off' | 'glass') =&gt; {
+  if (process.platform === 'darwin') win.setVibrancy(mode === 'glass' ? 'under-window' : null);
+  else if (process.platform === 'win32') win.setBackgroundMaterial(mode === 'glass' ? 'acrylic' : 'none');
+  return { applied: process.platform !== 'linux' &amp;&amp; mode };
+});</pre>
+      </div>
+
+      <div class="callout">
+        <span class="tag">Gotchas to design around</span>
+        <p><strong>Transparent root:</strong> the renderer's <code>body</code> / <code>.window-root</code> must become transparent for a glass pack and re-opaque otherwise — driven by <code>--surface-panel-opacity</code>. <strong>Perf:</strong> <code>backdrop-filter</code> over large scrolling regions is expensive — restrict blur to sidebar, titlebar, and dialogs; never the scrolling editor pane. <strong>OS settings:</strong> honor <code>prefers-reduced-transparency</code> — drop straight to opaque. <strong>First paint:</strong> <code>main.tsx</code> must set <code>data-surface</code> from <code>localStorage</code> before mount, same as theme, or glass flashes solid.</p>
+      </div>
+    </section>
+
+    <section id="data">
+      <h2><span class="sn">06</span>Data model</h2>
+      <p class="section-sub">Additive changes to <code>AppearanceSettings</code>. Fresh installs default to <code>parchment</code>; upgrades are handled by the migration rule below.</p>
+
+      <div class="code-block">
+        <figcaption>packages/core/src/config/appSettings.ts</figcaption>
+<pre>export interface AppearanceSettings {
+  <span class="c">// … existing: showBrandArtwork, priorityColors, themeId, themeMode,</span>
+  <span class="c">//    installedThemeIds, customThemes</span>
+
+  <span class="k">surfacePackId</span>: string;                 <span class="c">// DEFAULT_APP_SETTINGS → 'parchment'</span>
+  <span class="k">surface</span>: {
+    intensity: number;                    <span class="c">// 0..1, default 1</span>
+    translucency: boolean;                <span class="c">// gate Level A/B blur, default true</span>
+    texture: boolean;                     <span class="c">// gate grain layers, default true</span>
+    windowVibrancy: boolean;              <span class="c">// phase 3, default false</span>
+  };
+  installedSurfacePackIds: string[];
+  customSurfacePacks: Array&lt;{
+    id: string; name: string; description: string;
+    basePackId?: string;                  <span class="c">// inherit + override</span>
+    tokens: Record&lt;string, string&gt;;       <span class="c">// validated --surface-* only</span>
+  }&gt;;
+}</pre>
+      </div>
+
+      <ul>
+        <li>Add <code>readSurfacePack()</code> / <code>readCustomSurfacePacks()</code> validators mirroring <code>readCustomThemes()</code> — whitelist <code>--surface-*</code> keys, reject arbitrary CSS, clamp numbers.</li>
+        <li>Extend <code>DEFAULT_APP_SETTINGS.appearance</code> (<code>surfacePackId: 'parchment'</code>) and the <code>mergeAppSettings</code> branch.</li>
+        <li>Renderer <code>ticketManager.d.ts</code> types follow automatically from core.</li>
+      </ul>
+
+      <h4>Migration — upgrade must not surprise customisers</h4>
+      <p>The settings reader can already tell a default-shaped profile from a customised one. When <code>raw.appearance.surfacePackId</code> is absent (pre-feature profile):</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Existing profile state</th><th>Migrated <code>surfacePackId</code></th></tr></thead>
+          <tbody>
+            <tr><td>No <code>appearance</code> block at all, or every appearance field still equals its default (theme never touched)</td><td><code>parchment</code> — they get the new signature look</td></tr>
+            <tr><td><code>themeId</code>, <code>themeMode</code>, <code>customThemes</code>, or <code>priorityColors</code> differ from defaults (user has been in Themes)</td><td><code>flat</code> — their look is preserved; Parchment is one click away in Settings</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>New installs write <code>DEFAULT_APP_SETTINGS</code> directly, so they start on <code>parchment</code> unconditionally. <code>flat</code> is always a selectable pack, so the migration is fully reversible by the user.</p>
+    </section>
+
+    <section id="packs">
+      <h2><span class="sn">07</span>Bundled premium packs</h2>
+      <p class="section-sub">Each is a <code>[data-surface]</code> block in <code>surfaces.css</code> plus a <code>SurfacePackDefinition</code> (<code>id</code>, name, description, <code>supports: ('light'|'dark')[]</code>, <code>glass?: boolean</code>, <code>phase</code>, preview params, asset refs). Every pack is designed to look right over the Praxis families first, then verified against GitHub / Nord / Xcode.</p>
+
+      <div class="packs">
+        <article class="pack">
+          <div class="swatch sw-flat"></div>
+          <div class="body">
+            <h3>Flat</h3><span class="id">flat · default</span>
+            <p>The no-op. Every surface token stays inert; the app looks exactly as it does today. Always first in the gallery.</p>
+            <div class="chips"><span class="chip">light + dark</span><span class="chip p1">Phase 1</span></div>
+          </div>
+        </article>
+
+        <article class="pack">
+          <div class="swatch sw-parchment"></div>
+          <div class="body">
+            <h3>Parchment <span style="font-weight:400;color:var(--accent-ink);font-size:0.8em">· default</span></h3><span class="id">parchment</span>
+            <p>Paper-fiber grain on panels, a warm vignette on the canvas, 1&nbsp;px softened corners, edge tinted a touch toward the accent. Made for Praxis / Humanist / Anthropic — and the out-of-the-box look for every new install.</p>
+            <div class="chips"><span class="chip">light + dark</span><span class="chip p1">Phase 1</span><span class="chip p1">ships on</span></div>
+          </div>
+        </article>
+
+        <article class="pack">
+          <div class="swatch sw-graphite"></div>
+          <div class="body">
+            <h3>Graphite</h3><span class="id">graphite</span>
+            <p>Brushed-metal micro-texture, a crisp 1&nbsp;px top bevel highlight, deeper shadows. Precision-instrument feel. Sings over GitHub / Xcode / Rider.</p>
+            <div class="chips"><span class="chip">light + dark</span><span class="chip p1">Phase 1</span></div>
+          </div>
+        </article>
+
+        <article class="pack">
+          <div class="swatch sw-blueprint"></div>
+          <div class="body">
+            <h3>Blueprint</h3><span class="id">blueprint</span>
+            <p>A faint dot-grid / drafting rule on the <em>canvas only</em>; panels stay clean and opaque. Procedural SVG, tinted from tokens. Reads as "engineering workspace".</p>
+            <div class="chips"><span class="chip">light + dark</span><span class="chip p1">Phase 1</span></div>
+          </div>
+        </article>
+
+        <article class="pack">
+          <div class="swatch sw-aurora"></div>
+          <div class="body">
+            <h3>Aurora Glass</h3><span class="id">aurora-glass</span>
+            <p>Translucent frosted panels, backdrop blur, soft accent glow on focus, a slow ambient gradient on the canvas (motion-gated). Full effect with phase-3 vibrancy; degrades to faux-depth.</p>
+            <div class="chips"><span class="chip">light + dark</span><span class="chip p2">Phase 2</span></div>
+          </div>
+        </article>
+
+        <article class="pack">
+          <div class="swatch sw-noir"></div>
+          <div class="body">
+            <h3>Noir</h3><span class="id">noir</span>
+            <p>Heavy film grain, high-contrast vignette, flattened shadows. Dark-only — the gallery hides it under a light theme (or offers a one-click switch to the family's dark variant).</p>
+            <div class="chips"><span class="chip p2">dark only</span><span class="chip p2">Phase 2</span></div>
+          </div>
+        </article>
+      </div>
+
+      <p>Preview cards in Settings render the pack's CSS <em>over the currently active theme's colors</em>, so what you see in the gallery is the real combination, not a generic mock.</p>
+    </section>
+
+    <section id="ui">
+      <h2><span class="sn">08</span>Settings UI</h2>
+      <p class="section-sub">Lives <em>inside</em> the Themes screen, not a new top-level category — it "works with the theme", so it sits with the theme.</p>
+
+      <ul>
+        <li><strong>New "Surface" block</strong> below the theme gallery in <code>ThemesSection</code>: a row of <code>SurfacePackCard</code>s (reusing the <code>.theme-gallery-card</code> idiom) rendered over the live theme tokens.</li>
+        <li><strong>Dials</strong>: an <em>Intensity</em> slider (0–100%), <em>Translucency</em> and <em>Texture</em> toggles, and — when <code>window.ticketManager.window.supportsVibrancy()</code> is true — a <em>Window blur</em> toggle.</li>
+        <li><strong>Live apply</strong> through the existing settings push channel + <code>tm-surface-changed</code> event; no reload.</li>
+        <li><strong>Custom surface editor</strong> (phase 4): sliders for opacity / blur / glow, a texture picker, a pattern picker, a blend-mode select, plus <em>Export</em> / <em>Import</em> JSON — a direct parallel of <code>CustomThemeEditor</code>. Import validates against the <code>--surface-*</code> whitelist.</li>
+        <li><strong>Quick switch</strong>: optional surface dropdown added to <code>ThemeSwitcher.tsx</code> for people who change it often.</li>
+        <li>The full pack gallery is always visible. No feature flag shipped — the Translucency toggle is gated to glass packs, and the Window-blur toggle only renders when <code>window.ticketManager.window.supportsVibrancy()</code> resolves true.</li>
+      </ul>
+
+      <div class="code-block">
+        <figcaption>themes.ts — apply pipeline, mirrors applyTheme</figcaption>
+<pre>export function applySurfacePack(packId: string, opts: SurfaceOpts): SurfacePackDefinition {
+  const pack = findSurfacePack(packId) ?? findSurfacePack('flat')!;
+  const root = document.documentElement;
+  root.setAttribute('data-surface', pack.id);
+  root.style.setProperty('--surface-intensity', String(opts.intensity));
+  root.style.setProperty('--surface-translucency', opts.translucency ? '1' : '0');
+  root.style.setProperty('--surface-texture', opts.texture ? '1' : '0');
+  localStorage.setItem('tm-surface-id', pack.id);
+  localStorage.setItem('tm-surface-opts', JSON.stringify(opts));
+  if (opts.windowVibrancy) void window.ticketManager.window?.setSurfaceVibrancy(
+    pack.glass ? 'glass' : 'off');
+  window.dispatchEvent(new CustomEvent('tm-surface-changed', { detail: pack.id }));
+  return pack;
+}</pre>
+      </div>
+      <p><code>main.tsx</code> gains one line before React mounts: replay <code>data-surface</code> + the three dial properties from <code>localStorage</code>, exactly like the theme bootstrap.</p>
+    </section>
+
+    <section id="guardrails">
+      <h2><span class="sn">09</span>Performance, accessibility &amp; quality guardrails</h2>
+
+      <h4>Performance</h4>
+      <ul>
+        <li>Only Parchment's <code>@1x</code> tile is in the initial bundle (it is the default). Every other pack's tiles lazy-load on activation (≤ 90&nbsp;KB/pack across both DPIs); that first switch shows a brief un-textured frame, then the tile fades in.</li>
+        <li>Blur restricted to sidebar / titlebar / dialogs — never the scrolling editor pane or the git diff view.</li>
+        <li>Animated gradients (<code>aurora-glass</code>) run on <code>transform</code>/<code>opacity</code> only, pause on <code>prefers-reduced-motion</code> and when the window is blurred/hidden.</li>
+        <li>Texture layers are a single <code>::after</code> per shell (4 total), not per card.</li>
+      </ul>
+
+      <h4>Accessibility</h4>
+      <ul>
+        <li>Honor <code>prefers-reduced-transparency</code> and <code>prefers-reduced-motion</code> — both collapse the pack to its opaque, static form via <code>@media</code> guards in <code>surfaces.css</code>.</li>
+        <li><strong>Contrast gate — release blocker.</strong> Because <code>parchment</code> is now the shipped default, an assertion that samples the effective composited background behind <code>--text</code> for each bundled pack × each bundled theme, failing below WCAG AA (4.5:1), gates the release — not just CI hygiene. <code>parchment × praxis-light</code> and <code>parchment × praxis-dark</code> are the two combinations that must never regress. Textures on panels stay under the breaching opacity — this is why patterns live on the canvas.</li>
+        <li>The Intensity slider has a real numeric label and keyboard steps; pack cards are <code>role="radio"</code> in a radiogroup, like the theme cards.</li>
+      </ul>
+
+      <h4>Tests</h4>
+      <ul>
+        <li>Extend <code>appearanceSettings.spec.ts</code>: the <code>theme-gallery</code> screenshot gains a surface row; add a <code>surface-gallery</code> snapshot.</li>
+        <li>New <code>surfacePacks.spec.ts</code>: apply each bundled pack over two base themes, assert <code>data-surface</code>, assert a known <code>--surface-*</code> computed value, screenshot the shell.</li>
+        <li>Core unit tests: <code>readCustomSurfacePacks()</code> rejects non-whitelisted keys / out-of-range numbers; the <strong>migration rule</strong> — default-shaped profile → <code>parchment</code>, customised profile → <code>flat</code>, new install → <code>parchment</code>.</li>
+        <li>Two standing regression guards: <code>praxis + parchment</code> is the <em>new</em> visual baseline; <code>flat</code> must stay pixel-identical to the pre-feature build (proves the token layer is a true no-op).</li>
+        <li><strong>One-time cost:</strong> every existing e2e screenshot snapshot changes — the whole shell picks up paper fiber + canvas vignette. Bulk <code>--update-snapshots</code> across <code>appearanceSettings</code>, <code>projects</code>, <code>gitGraph</code>, <code>shellPolish</code>, … in the landing PR, reviewed by eye rather than trusted.</li>
+      </ul>
+    </section>
+
+    <section id="rollout">
+      <h2><span class="sn">10</span>Rollout</h2>
+      <p class="section-sub">Four phases, each shippable on its own — <strong>all four now implemented</strong>. No feature flag was needed: every phase ships GA, opaque packs default-on and glass packs one click away. The one deviation from the sketch below: the translucency gate is a <code>data-translucency</code> attribute rather than a <code>--var</code> multiplicand (Chromium drops a <code>backdrop-filter</code> built through nested var + calc).</p>
+
+      <ol class="phase-list">
+        <li>
+          <span class="pnum"></span>
+          <div>
+            <h3>Token layer + opaque packs — ships default-on &nbsp;·&nbsp; <span style="color:var(--good)">DONE</span></h3>
+            <p>Pure CSS + assets, no main-process work. <code>surfaces.css</code>, the <code>theme.css</code> refactor, <code>surfacePacks.ts</code>, <code>applySurfacePack</code>, <code>main.tsx</code> bootstrap, data-model fields + the migration rule. Ships <strong>Flat, Parchment, Graphite, Blueprint</strong>; <code>DEFAULT_APP_SETTINGS</code> flips to <code>parchment</code>. Settings: pack gallery + Intensity + Texture toggle. Snapshot regen (<code>theme-gallery</code>, 5× <code>projects</code>) landed.</p>
+            <p class="ship">Shipped: new install opens on Praxis + Parchment; customised upgrades stay on <code>flat</code> (migration rule, unit-tested); <code>flat</code> is inert by construction; contrast guard green for both Praxis variants. 9 core tests + 5 e2e (<code>surfacePacks.spec.ts</code>). Textures shipped as SVG-turbulence placeholders in this phase; the swap to photographic WebP tiles (paper-fibre, brushed-metal, frost, film-grain, each <code>1x</code>/<code>2x</code>) has since landed.</p>
+          </div>
+        </li>
+        <li>
+          <span class="pnum"></span>
+          <div>
+            <h3>Translucency (faux depth) &nbsp;·&nbsp; <span style="color:var(--good)">DONE</span></h3>
+            <p>The <code>color-mix</code> opacity path on <code>.pane-sidebar</code> / <code>.pane-main</code> / <code>.pane-aux</code> / <code>.titlebar</code>, in-window <code>backdrop-filter</code> on the sidebar + titlebar only, <code>prefers-reduced-transparency</code> collapse, and a transform-only ambient <code>::before</code> cloud on <code>.shell</code> (motion-gated, paused on window blur). Ships <strong>Aurora Glass</strong> and <strong>Noir</strong> — GA, no flag.</p>
+            <p class="ship">Shipped: the translucency gate is a <code>data-translucency</code> attribute, not a <code>--var</code> — Chromium silently drops a <code>backdrop-filter</code> whose value routes through nested custom-property + calc indirection, so the glass packs carry literal values and the attribute switches them. The gate collapses Aurora to a fully opaque surface. Flat stays a byte-for-byte no-op. Settings: Translucency toggle, gated to glass packs. e2e: Aurora frosting + dial-collapse, Noir dark-only.</p>
+            <p class="ship"><strong>Visual retune.</strong> Screenshotting the real app showed every pack — Phase 1 included — reading as near-identical to plain dark: the panes tile the whole window, so canvas-based effects were fully occluded, and the grain <code>::after</code> sat <em>above</em> the text so it had to stay near-invisible. Fixed by moving the material onto the panels: a new <code>--surface-panel-tint-layer</code> wash (behind the content), the grain layer dropped behind the content too, and per-pack values pushed until each pack is unmistakable — Parchment warm paper, Graphite cool bevel + drop shadow, Blueprint a full drafting grid, Aurora a bright accent-lit glass, Noir a hard vignette. Re-verified by screenshot for all six.</p>
+          </div>
+        </li>
+        <li>
+          <span class="pnum"></span>
+          <div>
+            <h3>Native window vibrancy &nbsp;·&nbsp; <span style="color:var(--good)">DONE</span></h3>
+            <p><code>platformSupportsVibrancy()</code> (macOS / Win11 22000+), <code>setWindowVibrancy()</code>, the <code>window:supportsVibrancy</code> + <code>window:setSurfaceVibrancy</code> IPC, <code>WindowIpc</code> contract + preload bridge. <code>createMainWindow</code> reads the persisted <code>surface.windowVibrancy</code> and opens <code>transparent</code> + <code>vibrancy:'under-window'</code> (macOS) / <code>backgroundMaterial:'acrylic'</code> (Win11). <code>applySurfacePack</code> calls the bridge and sets <code>data-vibrancy='glass'</code> → transparent-root + shadow / corner recovery CSS. No feature flag — glass packs are GA.</p>
+            <p class="ship">Shipped: Window-blur toggle appears in Settings only when <code>supportsVibrancy()</code> resolves true, and only enables for a glass pack with Translucency on. Linux + pre-22H2 Windows fall through to the Phase-2 faux-depth path. e2e: toggle presence + persistence on a vibrancy-capable OS.</p>
+          </div>
+        </li>
+        <li>
+          <span class="pnum"></span>
+          <div>
+            <h3>Custom surfaces &nbsp;·&nbsp; <span style="color:var(--good)">DONE</span></h3>
+            <p><code>CustomSurfaceEditor</code> — friendly dials (panel opacity / blur / glow / texture / corner / blend) that write a validated <code>--surface-*</code> token map, plus Export / Import JSON. <code>registerCustomSurfacePacks()</code> carries <code>tokens</code> + <code>basePackId</code>; <code>applySurfacePack</code> applies a custom pack's tokens inline (no stylesheet block) and derives <code>--surface-backdrop</code> from its blur. "New custom surface" button + per-card edit affordance in the Surface section.</p>
+            <p class="ship">Shipped: a user can build, apply, export and re-import a pack; import + core's reader both whitelist <code>--surface-*</code> keys. Marketplace list deferred. e2e: create → apply → reload round-trip. Core: <code>basePackId</code> + token-whitelist unit tests (18 total).</p>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="files">
+      <h2><span class="sn">11</span>Files to touch</h2>
+      <div class="table-wrap">
+        <table class="filelist">
+          <thead><tr><th>File</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td>core/src/config/appSettings.ts</td><td>Add surface fields to <code>AppearanceSettings</code>, defaults, validators, <code>mergeAppSettings</code> branch, migration</td></tr>
+            <tr><td>frontend/src/surfacePacks.ts <em>(new)</em></td><td>Pack definitions, registry, <code>findSurfacePack</code>, <code>registerCustomSurfacePacks</code>, asset imports</td></tr>
+            <tr><td>frontend/src/surfaces.css <em>(new)</em></td><td><code>:root</code> inert tokens, <code>[data-surface]</code> blocks, <code>@media</code> reduced-* guards</td></tr>
+            <tr><td>frontend/src/theme.css</td><td>Refactor ~12 structural surface rules to read <code>--surface-*</code>; add shared <code>::after</code> texture layer; <code>@import</code> surfaces.css</td></tr>
+            <tr><td>frontend/src/themes.ts</td><td><code>applySurfacePack</code>, <code>getInitialSurfaceId</code>, compose into <code>applyThemePreference</code>, <code>tm-surface-changed</code></td></tr>
+            <tr><td>frontend/src/main.tsx</td><td>Replay <code>data-surface</code> + dial props from <code>localStorage</code> before mount; re-apply from settings</td></tr>
+            <tr><td>frontend/src/SettingsPage.tsx</td><td><code>SurfacePackCard</code>, surface block in <code>ThemesSection</code>, dials, later <code>CustomSurfaceEditor</code></td></tr>
+            <tr><td>frontend/src/ThemeSwitcher.tsx</td><td>Optional quick surface dropdown</td></tr>
+            <tr><td>frontend/src/assets/surfaces/ <em>(new)</em></td><td>Seamless WebP texture tiles (<code>@1x</code>/<code>@2x</code>) + procedural SVG patterns. Parchment's tile is a static <code>import</code>; the rest are referenced by URL for runtime <code>fetch</code></td></tr>
+            <tr><td>electron-app/src/main/windowIpc.ts + index.ts</td><td><em>(P3)</em> transparent window opts, <code>setVibrancy</code>/<code>setBackgroundMaterial</code>, <code>window:setSurfaceVibrancy</code></td></tr>
+            <tr><td>electron-app/src/preload/index.ts + frontend ticketManager.d.ts</td><td><em>(P3)</em> expose <code>window.setSurfaceVibrancy</code> + <code>supportsVibrancy</code></td></tr>
+            <tr><td>electron-app/e2e/appearanceSettings.spec.ts + surfacePacks.spec.ts <em>(new)</em></td><td>Gallery snapshot update, per-pack visual specs, contrast gate</td></tr>
+            <tr><td>electron-app/e2e/**/*.spec.ts-snapshots/ <em>(bulk)</em></td><td>One-time <code>--update-snapshots</code> across the suite — the default shell now carries the Parchment texture</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <h2><span class="sn">12</span>Decisions — all resolved</h2>
+      <p class="section-sub">Everything needed to start Phase&nbsp;1 is settled.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>Decision</th></tr></thead>
+          <tbody>
+            <tr><td>Default for new installs</td><td>Ship <code>parchment</code> on as the signature Praxis look. Phase-1 packs GA; upgrade migration preserves customised profiles (<a href="#data">§06</a>).</td></tr>
+            <tr><td>Translucency / vibrancy scope</td><td><strong>Full native in P3.</strong> Faux-depth blur in P2, real OS vibrancy in P3 on macOS + Win11, automatic faux-depth fallback on Linux / old Windows. Accept the transparent-window tradeoffs, recover shadow + rounding in CSS.</td></tr>
+            <tr><td>Asset strategy</td><td><strong>Rich raster.</strong> High-detail photographic texture tiles (~300–400&nbsp;KB total across packs). Geometric patterns stay procedural SVG. Only Parchment's <code>@1x</code> tile is bundled; the rest lazy-load per active pack, ≤&nbsp;90&nbsp;KB/pack (<a href="#assets">§04</a>).</td></tr>
+            <tr><td>Custom / marketplace packs</td><td><strong>Deferred past P3.</strong> Bundled packs only through P3; custom editor + import/export + marketplace become a P4 follow-up.</td></tr>
+            <tr><td>User-facing name</td><td><strong>"Surfaces."</strong> "Surface" pack, "Surfaces" section in Settings — matches <code>data-surface</code> / <code>--surface-*</code> and doesn't collide with "Themes".</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Praxis Surface Packs · All four phases implemented · 6 packs, a selectable pattern library, custom editor, native vibrancy<br>
+      Composes with: data-mode · data-accent · data-theme &nbsp;→&nbsp; adds: data-surface
+    </footer>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+    var map = links.map(function (a) {
+      return { a: a, el: document.getElementById(a.getAttribute('href').slice(1)) };
+    }).filter(function (x) { return x.el; });
+    if (!('IntersectionObserver' in window) || !map.length) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var id = e.target.getAttribute('id');
+        map.forEach(function (x) {
+          x.a.classList.toggle('active', x.el.getAttribute('id') === id);
+        });
+      });
+    }, { rootMargin: '-10% 0px -75% 0px' });
+    map.forEach(function (x) { io.observe(x.el); });
+  })();
+</script>
+
+
+</body>
+</html>

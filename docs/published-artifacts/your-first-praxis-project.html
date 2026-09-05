@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Your First Praxis Project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --sans: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+    --ground: #f5f2eb;
+    --raised: #fffdf8;
+    --sunken: #ebe7de;
+    --ink: #2c2620;
+    --ink-2: #74695e;
+    --ink-3: #958878;
+    --rule: #ddd3c5;
+    --rule-strong: #ad9a85;
+    --brand: #c6431f;
+    --brand-soft: rgba(198, 67, 31, .1);
+    --shadow: 0 2px 6px rgba(44, 38, 32, .07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+      --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+      --rule: #372f27; --rule-strong: #6c5b4a;
+      --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+      --shadow: 0 2px 6px rgba(0, 0, 0, .45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+    --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+    --rule: #372f27; --rule-strong: #6c5b4a;
+    --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+    --shadow: 0 2px 6px rgba(0, 0, 0, .45);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 32px 100px; }
+  @media (max-width: 640px) { .wrap { padding: 0 20px 64px; } }
+
+  header.masthead { padding: 64px 0 30px; }
+  .eyebrow {
+    margin: 0 0 16px; font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--brand);
+  }
+  h1 {
+    margin: 0; font-size: clamp(34px, 6vw, 50px); font-weight: 600;
+    letter-spacing: -.022em; line-height: 1.04; text-wrap: balance;
+  }
+  .standfirst { margin: 20px 0 0; font-size: 18px; color: var(--ink-2); }
+
+  /* The model strip — three things, in order */
+  .model {
+    display: flex; align-items: stretch; gap: 0; margin: 34px 0 0;
+    border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--raised);
+    box-shadow: var(--shadow);
+  }
+  .model > div { flex: 1; padding: 16px 18px; }
+  .model > div + div { border-left: 1px solid var(--rule); }
+  .model b {
+    display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--brand); margin-bottom: 6px;
+  }
+  .model strong { display: block; font-size: 15px; font-weight: 600; }
+  .model small { display: block; margin-top: 5px; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  @media (max-width: 620px) {
+    .model { flex-direction: column; }
+    .model > div + div { border-left: 0; border-top: 1px solid var(--rule); }
+  }
+
+  /* Numbered steps — a genuine sequence, so the numbers mean something */
+  .step { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 22px; padding-top: 52px; }
+  @media (max-width: 560px) { .step { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+  .step-n {
+    font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--brand);
+    padding-top: 6px; font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 560px) { .step-n { padding-top: 0; margin-bottom: 6px; } }
+  .step h2 {
+    margin: 0; font-size: 25px; font-weight: 600; letter-spacing: -.012em;
+    line-height: 1.2; text-wrap: balance;
+  }
+  .step p { margin: 14px 0 0; }
+  .step h3 { margin: 26px 0 6px; font-size: 15.5px; font-weight: 600; }
+
+  code {
+    font-family: var(--mono); font-size: .86em; padding: 1px 5px; border-radius: 3px;
+    background: var(--brand-soft); color: var(--brand);
+  }
+  kbd {
+    display: inline-block; font-family: var(--mono); font-size: 12.5px; font-weight: 500;
+    padding: 2px 7px; border: 1px solid var(--rule-strong); border-bottom-width: 2px;
+    border-radius: 4px; background: var(--raised); color: var(--ink); white-space: nowrap;
+  }
+
+  /* A drawn scrap of the app, the way Praxis draws its own theme previews */
+  .sketch {
+    margin: 24px 0 0; border: 1px solid var(--rule-strong); border-radius: 8px;
+    background: var(--sunken); overflow: hidden; box-shadow: var(--shadow);
+  }
+  .sketch-bar {
+    display: flex; align-items: center; gap: 6px; padding: 8px 12px;
+    border-bottom: 1px solid var(--rule); background: var(--raised);
+  }
+  .sketch-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--rule-strong); }
+  .sketch-bar span {
+    margin-left: 8px; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .sketch-body { display: flex; min-height: 150px; }
+  .sketch-side {
+    width: 152px; flex: none; padding: 12px 10px; border-right: 1px solid var(--rule);
+    background: var(--raised); font-size: 12px; color: var(--ink-2);
+  }
+  .sketch-side .lbl {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 7px;
+  }
+  .sketch-side .row { display: flex; align-items: center; gap: 7px; padding: 3px 0; }
+  .sketch-side .row.on { color: var(--brand); font-weight: 600; }
+  .sketch-side .row em { width: 11px; height: 11px; border-radius: 3px; background: var(--rule-strong); flex: none; }
+  .sketch-side .row.on em { background: var(--brand); }
+  .sketch-side .row.sub { padding-left: 18px; font-size: 11.5px; color: var(--ink-3); }
+  .sketch-main { flex: 1; padding: 12px; display: flex; gap: 8px; min-width: 0; }
+  .sketch-col { flex: 1; min-width: 0; }
+  .sketch-col > b {
+    display: block; font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-bottom: 7px;
+  }
+  .card {
+    padding: 7px 8px; margin-bottom: 6px; border: 1px solid var(--rule);
+    border-radius: 4px; background: var(--raised); font-size: 11px; line-height: 1.35;
+  }
+  .card u { display: block; height: 2px; width: 26px; background: var(--brand); text-decoration: none; margin-bottom: 5px; opacity: .75; }
+
+  .note {
+    margin: 24px 0 0; padding: 15px 0 15px 18px; border-left: 3px solid var(--brand);
+  }
+  .note b { font-weight: 600; }
+  .note small { display: block; margin-top: 6px; font-size: 14px; color: var(--ink-2); }
+
+  .scroller { overflow-x: auto; margin-top: 22px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    padding: 0 16px 8px 0; text-align: left; font-family: var(--mono); font-size: 10px;
+    font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+    border-bottom: 1px solid var(--rule-strong); white-space: nowrap;
+  }
+  td { padding: 11px 16px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td strong { font-weight: 600; }
+  td.note-cell { color: var(--ink-2); font-size: 13.5px; }
+  td .stages {
+    display: block; margin-top: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+
+  .onward {
+    margin-top: 60px; padding: 22px 24px; border: 1px solid var(--rule-strong);
+    border-radius: 8px; background: var(--raised);
+  }
+  .onward h2 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+  .onward p { margin: 0; color: var(--ink-2); font-size: 14.5px; }
+
+  footer {
+    margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis desktop · first run</p>
+    <h1>Your First Praxis Project</h1>
+    <p class="standfirst">Praxis keeps a piece of work and the AI sessions that move it in the same place: a board you can see, tickets you can hand to an agent, and the repository they touch. This walks the first ten minutes.</p>
+
+    <div class="model">
+      <div><b>Workspace</b><strong>The context</strong><small>Groups your projects and holds connections to Jira or a repository. One is created for you.</small></div>
+      <div><b>Project</b><strong>The piece of work</strong><small>A brief, a board, and optionally a folder on your computer.</small></div>
+      <div><b>Board</b><strong>The work itself</strong><small>Tickets moving through stages. Open one, or hand it to an agent.</small></div>
+    </div>
+  </header>
+
+  <div class="step">
+    <div class="step-n">01</div>
+    <div>
+      <h2>Open Praxis and make something</h2>
+      <p>The first screen asks for one thing: a project. Choose <b>New project</b> to start from scratch, or <b>Create from an existing folder</b> if you already have a repository you want Praxis to work with. You do not have to set up a workspace first — one is made for you and can be renamed whenever you like.</p>
+      <p>There is also <b>Skip for now</b>, which drops you straight into the empty app with a workspace ready. Nothing you choose here is permanent.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">02</div>
+    <div>
+      <h2>Three questions, then it exists</h2>
+      <p>Creating a project is three steps: pick a <b>type</b>, give it a <b>name</b>, and look at a <b>review</b> of exactly what will be created. That is it — the brief, the board's stages and the AI permissions all take sensible defaults you can change afterwards from the project's home page.</p>
+
+      <p>The type is the one choice worth thinking about, because it sets up the board:</p>
+
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Type</th><th>For</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Software Development</strong><span class="stages">Backlog → Requirements → Architecture → Implementation → Verification → Done</span></td>
+              <td class="note-cell">Building or changing a software system. Needs a folder on your computer.</td>
+            </tr>
+            <tr>
+              <td><strong>Product Development</strong><span class="stages">Backlog → Discovery → Definition → Delivery → Validation → Done</span></td>
+              <td class="note-cell">Defining and delivering a product outcome. Can live in Praxis alone, with no folder.</td>
+            </tr>
+            <tr>
+              <td><strong>Research</strong><span class="stages">Backlog → Source planning → Evidence → Synthesis → Review → Done</span></td>
+              <td class="note-cell">Gathering evidence and producing a recommendation. No folder required.</td>
+            </tr>
+            <tr>
+              <td><strong>Experiment / Prototype</strong><span class="stages">Backlog → Setup → Running → Observations → Decision → Done</span></td>
+              <td class="note-cell">Testing a hypothesis inside a timebox. Needs a folder.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <b>Want to see the whole thing instead?</b>
+        <small>Tick <b>Advanced setup</b> on the first screen and the three steps become six: you shape the brief question by question, choose the board's stages and starter tickets, and set AI tool access yourself.</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">03</div>
+    <div>
+      <h2>What you get</h2>
+      <p>The project opens on its home page — a dashboard showing work progress, the brief, recent activity and sessions. It is not empty. Praxis has already written a first draft of the brief for your project type, and put five starter tickets on the board, sitting in Backlog.</p>
+
+      <div class="sketch" role="img" aria-label="A sketch of the Praxis window: a sidebar listing the project with its board and repository, and a board with Backlog, Discovery and Done columns.">
+        <div class="sketch-bar"><i></i><i></i><i></i><span>Praxis</span></div>
+        <div class="sketch-body">
+          <div class="sketch-side">
+            <p class="lbl">Projects</p>
+            <div class="row on"><em></em>Customer Portal</div>
+            <div class="row sub"><em></em>Planning board</div>
+            <div class="row sub"><em></em>Repository</div>
+            <p class="lbl" style="margin-top:14px">Workspace</p>
+            <div class="row"><em></em>Overview</div>
+            <div class="row"><em></em>Connections</div>
+          </div>
+          <div class="sketch-main">
+            <div class="sketch-col">
+              <b>Backlog 5</b>
+              <div class="card"><u></u>Understand users and problem</div>
+              <div class="card"><u></u>Define desired outcomes</div>
+              <div class="card"><u></u>Write MVP requirements</div>
+            </div>
+            <div class="sketch-col">
+              <b>Discovery</b>
+            </div>
+            <div class="sketch-col">
+              <b>Done</b>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p>Those tickets are a real starting plan for the type you picked, not filler — a Research project begins with <em>Refine research questions</em> and <em>Create the source plan</em>; a Software one with <em>Define requirements</em> and <em>Describe architecture</em>. Edit them, delete them, or work straight through them.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">04</div>
+    <div>
+      <h2>Hand a ticket to an agent</h2>
+      <p>This is the part that makes Praxis different from a board. Press <b>Start a session</b> on the project home, pick a ticket, and an agent goes to work on it.</p>
+      <p>It plans first, and it asks before it uses a tool — reading a file, running a command — so you see what it intends before it happens. When it is done it reports what it changed. The session stays in the sidebar, so you can reopen the conversation later and see every step it took.</p>
+
+      <div class="note">
+        <b>You decide how much it can touch.</b>
+        <small>A project created without a folder gets project-board tools only: it works with the brief, board and tickets, and cannot reach files or a terminal. A folder-backed project can be set to full tools (read and edit files, run commands) or read-only. Whatever you choose, the provider, model and permissions are shown again when a session actually starts.</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">05</div>
+    <div>
+      <h2>Bring in your real work</h2>
+      <p>The starter board is yours to keep, but most people want their actual tickets. Open <b>Connections</b> in the sidebar and add one — its boards then appear alongside the project.</p>
+
+      <div class="scroller">
+        <table>
+          <thead><tr><th>Connect</th><th>What works today</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Jira Cloud</strong></td><td class="note-cell">The most complete: boards, issues, comments, transitions and linked-epic flows.</td></tr>
+            <tr><td><strong>A folder of markdown plans</strong></td><td class="note-cell">Reads feature plans from disk, and can write issue files back. The files stay the source of truth.</td></tr>
+            <tr><td><strong>GitLab</strong></td><td class="note-cell">Connection and merge-request flows. Its issue and board model does not match Jira's yet.</td></tr>
+            <tr><td><strong>GitHub</strong></td><td class="note-cell">Configuration only so far — there is no full board or issue backend behind it yet.</td></tr>
+            <tr><td><strong>Demo data</strong></td><td class="note-cell">Built-in sample boards for having a look around. Off by default.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-n">06</div>
+    <div>
+      <h2>Finding your way after that</h2>
+      <p>Two things are worth learning early. <kbd>⌘K</kbd> (or <kbd>Ctrl K</kbd>) opens a command palette that reaches every project, board, session, agent, workflow and settings page by name — it is almost always faster than the sidebar. And <b>Take a tour</b>, on the project home, replays the short walkthrough that points at the four things that matter in the shell.</p>
+      <p>Praxis reopens where you left off. Close it in the middle of a ticket and it comes back to that ticket, in that project, in that workspace — including which view you were in. If you would rather choose each time, turn it off in <b>Settings → Startup</b>.</p>
+    </div>
+  </div>
+
+  <div class="onward">
+    <h2>Already comfortable?</h2>
+    <p><a href="https://claude.ai/code/artifact/ca5631c2-92bd-4670-a0ba-6554e5c9f011"><b>Praxis Fast Paths</b></a> covers the same ground for people in a hurry: getting an existing repository in with three clicks, the full keyboard map, what is safe to skip, and how workspaces remember their place.</p>
+  </div>
+
+  <footer>
+    Praxis desktop · branch main
+  </footer>
+
+</div>
+
+
+</body>
+</html>
