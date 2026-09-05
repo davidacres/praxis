@@ -111,6 +111,23 @@ export interface WorkflowRun {
    * second one beside it.
    */
   worktreePath?: string;
+  /**
+   * The tracker issue this run was started from, if any. A run has no
+   * required ticket — workflows are project-scoped automation, not
+   * ticket-triggered — so this is opt-in at start time via `createWorkflowRun`.
+   * Read by the desktop host (never by this pure state machine) to write the
+   * run's outcome back as a comment once it settles.
+   */
+  issueKey?: string;
+  /** The connection `issueKey` lives on; undefined means the demo/default backend. */
+  issueConnectionId?: string;
+  /**
+   * Set once the terminal outcome has been written back to `issueKey` as a
+   * comment. An idempotency marker only — set directly by the host after a
+   * successful write-back (via `WorkflowRunPersistence.save`), never through a
+   * command, and never read by anything in this file.
+   */
+  issueWriteBackAt?: string;
 }
 
 // ── Commands ─────────────────────────────────────────────────────────────
@@ -140,6 +157,9 @@ export function createWorkflowRun(input: {
   projectId: string;
   definition: WorkflowDefinition;
   at: string;
+  /** The ticket this run was started from, if any — see `WorkflowRun.issueKey`. */
+  issueKey?: string;
+  issueConnectionId?: string;
 }): WorkflowRun {
   const nodes: Record<string, WorkflowNodeState> = {};
   for (const node of input.definition.nodes) {
@@ -157,7 +177,9 @@ export function createWorkflowRun(input: {
     nodes,
     events: [],
     gateDecisions: [],
-    startedAt: input.at
+    startedAt: input.at,
+    ...(input.issueKey ? { issueKey: input.issueKey } : {}),
+    ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {})
   };
 
   return append(run, { at: input.at, kind: 'run-started', message: `Run started for ${input.definition.name}.` });
@@ -512,7 +534,10 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
     startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
     ...(typeof raw.endedAt === 'string' ? { endedAt: raw.endedAt } : {}),
     ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {}),
-    ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {})
+    ...(typeof raw.worktreePath === 'string' ? { worktreePath: raw.worktreePath } : {}),
+    ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
+    ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
+    ...(typeof raw.issueWriteBackAt === 'string' ? { issueWriteBackAt: raw.issueWriteBackAt } : {})
   };
 }
 

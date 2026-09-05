@@ -71,6 +71,8 @@ export interface WorkflowRunSummary {
   events: WorkflowRunEvent[];
   startedAt: string;
   endedAt?: string;
+  /** The ticket this run was started from, if any — see `WorkflowRun.issueKey`. */
+  issueKey?: string;
 }
 
 function laneFor(
@@ -148,7 +150,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
     outstanding: outstandingNodes(run),
     events: run.events,
     startedAt: run.startedAt,
-    ...(run.endedAt ? { endedAt: run.endedAt } : {})
+    ...(run.endedAt ? { endedAt: run.endedAt } : {}),
+    ...(run.issueKey ? { issueKey: run.issueKey } : {})
   };
 }
 

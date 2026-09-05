@@ -35,7 +35,7 @@ import {
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
-import { getWorkflowOrchestrator } from './workflowOrchestratorInstance';
+import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -55,12 +55,26 @@ function summarize(run: WorkflowRun): WorkflowRunSummary {
   return summarizeWorkflowRun(run, policyFor(run.projectId));
 }
 
+/**
+ * The one path every run mutation in this file must save through — approval,
+ * bypass, cancel, manual advance, and startup recovery each persist a run
+ * directly, so a per-call-site write-back check is one call site away from
+ * being silently forgotten (this already happened once while building the
+ * feature: `approveRun` and `bypassGate` saved straight to the store and a
+ * settled, ticket-linked run through either one never wrote back). Route
+ * every save through here instead of `runStore().save(...)` directly.
+ */
+async function saveRun(run: WorkflowRun): Promise<WorkflowRun> {
+  await runStore().save(run);
+  if (isRunSettled(run)) void writeBackToIssue(run);
+  return run;
+}
+
 async function withRun(runId: string, apply: (run: WorkflowRun) => WorkflowRun): Promise<WorkflowRunSummary> {
   const store = runStore();
   const run = store.get(runId);
   if (!run) throw new Error(`Run ${runId} was not found.`);
-  const next = apply(run);
-  await store.save(next);
+  const next = await saveRun(apply(run));
   return summarize(next);
 }
 
@@ -73,7 +87,7 @@ export async function recoverWorkflowRunsOnStartup(): Promise<void> {
   const now = new Date().toISOString();
   for (const run of store.list()) {
     const recovered = recoverWorkflowRun(run, now);
-    if (recovered.interrupted.length > 0) await store.save(recovered.run);
+    if (recovered.interrupted.length > 0) await saveRun(recovered.run);
     // Re-enter the loop so anything still runnable is picked back up. The
     // orchestrator holds no state of its own, so this is all recovery needs.
     if (!isRunSettled(recovered.run)) void getWorkflowOrchestrator().step(run.runId);
@@ -250,7 +264,13 @@ export function registerWorkflowIpc(): void {
 
   ipcMain.handle(
     'workflows:startRun',
-    async (_event, projectId: string, workflowId: string, taskTitle: string): Promise<WorkflowRunSummary> => {
+    async (
+      _event,
+      projectId: string,
+      workflowId: string,
+      taskTitle: string,
+      issue?: { issueKey: string; connectionId?: string }
+    ): Promise<WorkflowRunSummary> => {
       const definition = (await projectDefinitions(projectId)).find(candidate => candidate.id === workflowId);
       if (!definition) throw new Error(`Workflow ${workflowId} was not found for this project.`);
 
@@ -263,9 +283,10 @@ export function registerWorkflowIpc(): void {
         runId: randomUUID(),
         projectId,
         definition: { ...definition, name: `${definition.name} — ${taskTitle}`.trim() },
-        at: new Date().toISOString()
+        at: new Date().toISOString(),
+        ...(issue?.issueKey ? { issueKey: issue.issueKey, issueConnectionId: issue.connectionId } : {})
       });
-      await runStore().save(run);
+      await saveRun(run);
       // Hand it straight to the orchestrator; deterministic stages start now.
       void getWorkflowOrchestrator().step(run.runId);
       return summarize(run);
@@ -337,7 +358,7 @@ export function registerWorkflowIpc(): void {
         policyFor(run.projectId)
       );
       if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');
-      await store.save(result.run);
+      await saveRun(result.run);
       return summarize(result.run);
     }
   );
@@ -358,7 +379,7 @@ export function registerWorkflowIpc(): void {
         policyFor(run.projectId)
       );
       if (!result.ok) throw new Error(result.reason ?? 'The bypass was refused.');
-      await store.save(result.run);
+      await saveRun(result.run);
       return summarize(result.run);
     }
   );
