@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { ProjectRecord, WorkflowRunSummary } from '@praxis/core';
+import type { Connection, IssueFilters, ProjectRecord, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { WorkflowPipeline } from './WorkflowPipeline';
+
+/** "KEY — Summary", the same picker convention IssueDetail's parent-issue field uses. */
+const ISSUE_OPTION_SEPARATOR = '—';
 
 /**
  * Workflow run monitor (FX-BE-022 / FX-BE-029).
@@ -34,6 +37,8 @@ const GATE_CHIP: Record<string, string> = {
 
 export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
+  /** For resolving the project's own board connection — see `issueOptions` below. */
+  connections: Connection[];
   runnableWorkflows: Array<{ id: string; name: string }>;
   /** The shell's right-pane element the stage detail portals into. */
   auxSlot: HTMLElement | null;
@@ -42,7 +47,28 @@ export interface WorkflowRunMonitorProps {
   onOpenSession?: (sessionKey: string) => void;
 }
 
-export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequireAux, onOpenSession }: WorkflowRunMonitorProps) {
+interface IssueOption {
+  key: string;
+  summary: string;
+  connectionId?: string;
+}
+
+/** Parses "KEY — Summary" (or a bare key typed past the datalist) back to just the key. */
+function extractIssueKey(raw: string): string {
+  const value = raw.trim();
+  const separator = ` ${ISSUE_OPTION_SEPARATOR} `;
+  const separatorIndex = value.indexOf(separator);
+  return separatorIndex === -1 ? value : value.slice(0, separatorIndex).trim();
+}
+
+export function WorkflowRunMonitor({
+  project,
+  connections,
+  runnableWorkflows,
+  auxSlot,
+  onRequireAux,
+  onOpenSession
+}: WorkflowRunMonitorProps) {
   const [runs, setRuns] = useState<WorkflowRunSummary[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
   const [selectedStageId, setSelectedStageId] = useState<string | undefined>();
@@ -50,11 +76,59 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
   const [taskTitle, setTaskTitle] = useState('');
   const [startWorkflowId, setStartWorkflowId] = useState('');
   const [timelineOpen, setTimelineOpen] = useState(false);
+  const [issueOptions, setIssueOptions] = useState<IssueOption[]>([]);
+  const [issueKeyDraft, setIssueKeyDraft] = useState('');
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
     if (runnableWorkflows.length === 1) setStartWorkflowId(runnableWorkflows[0].id);
   }, [runnableWorkflows]);
+
+  // Tickets this run's Start form can link — the project's own board plus any
+  // boards linked to it, mirroring exactly what its sidebar shows under this
+  // project. Own-board ownership is read from the connection record (never
+  // inferred from its id — see App.tsx's projectIdForConnection), so this
+  // holds even for a project whose own connection predates a storage change.
+  // The own board's *id* is likewise never assumed to be `project.defaultBoardId`
+  // — a folder-mode project's board id follows the folder backend's own
+  // convention instead, so it's resolved from `board.list` the same way the
+  // sidebar and the command palette's issue search do.
+  useEffect(() => {
+    let cancelled = false;
+    const ownConnectionId = connections.find(connection => connection.settings.projectId === project.id)?.id;
+    (async () => {
+      const ownBoard = ownConnectionId
+        ? (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' })).find(
+            candidate => candidate.connectionId === ownConnectionId
+          )
+        : undefined;
+      const boards: Array<{ connectionId?: string; boardId: string }> = [
+        ...(ownBoard ? [{ connectionId: ownConnectionId, boardId: ownBoard.id }] : []),
+        ...project.linkedBoards.map(link => ({ connectionId: link.connectionId, boardId: link.boardId }))
+      ];
+      const results = await Promise.allSettled(
+        boards.map(board => {
+          const filters: IssueFilters = {
+            projectKeys: [],
+            statuses: [],
+            issueTypes: [],
+            searchText: '',
+            assigneeMode: 'all',
+            boardId: board.boardId,
+            grouping: 'none'
+          };
+          return window.praxis.issue
+            .list(filters, 0, 50, board.connectionId)
+            .then(page => page.issues.map(issue => ({ key: issue.key, summary: issue.summary, connectionId: board.connectionId })));
+        })
+      );
+      if (cancelled) return;
+      setIssueOptions(results.flatMap(result => (result.status === 'fulfilled' ? result.value : [])));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, project.linkedBoards, connections]);
 
   const reload = useCallback(
     async (keepId?: string) => {
@@ -113,9 +187,23 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
           onSubmit={event => {
             event.preventDefault();
             if (!startWorkflowId || !taskTitle.trim()) return;
-            void act(() => window.praxis.workflows.startRun(project.id, startWorkflowId, taskTitle.trim())).then(() =>
-              setTaskTitle('')
-            );
+            const issueKey = extractIssueKey(issueKeyDraft);
+            const matchedIssue = issueKey ? issueOptions.find(option => option.key === issueKey) : undefined;
+            // A key that doesn't match any fetched option (typo, or a ticket outside
+            // this project's boards) starts an ordinary run rather than guessing at
+            // a connection to write back to — same "no invented attribution"
+            // discipline as the AI settings spend report.
+            void act(() =>
+              window.praxis.workflows.startRun(
+                project.id,
+                startWorkflowId,
+                taskTitle.trim(),
+                matchedIssue ? { issueKey: matchedIssue.key, connectionId: matchedIssue.connectionId } : undefined
+              )
+            ).then(() => {
+              setTaskTitle('');
+              setIssueKeyDraft('');
+            });
           }}
         >
           <strong>Start a run</strong>
@@ -149,6 +237,24 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
               placeholder="What is this run for?"
             />
           </label>
+          {issueOptions.length > 0 && (
+            <label>
+              <span>Ticket (optional)</span>
+              <input
+                aria-label="Run ticket"
+                list="wf-runstart-issue-options"
+                value={issueKeyDraft}
+                onChange={e => setIssueKeyDraft(e.target.value)}
+                placeholder="Write the outcome back as a comment"
+                data-testid="wf-runstart-issue"
+              />
+              <datalist id="wf-runstart-issue-options">
+                {issueOptions.map(option => (
+                  <option key={option.key} value={`${option.key} ${ISSUE_OPTION_SEPARATOR} ${option.summary}`} />
+                ))}
+              </datalist>
+            </label>
+          )}
           <button type="submit" className="btn btn-primary" disabled={!startWorkflowId || !taskTitle.trim()}>
             Start
           </button>
@@ -198,7 +304,15 @@ export function WorkflowRunMonitor({ project, runnableWorkflows, auxSlot, onRequ
             <div className="wf-board-status" role="status" aria-live="polite">
               <span className={`lane ${STATUS_TONE[selected.status]}`}>●</span>
               <div>
-                <strong>{selected.status}</strong>
+                <strong>
+                  {selected.status}
+                  {selected.issueKey && (
+                    <span className="wf-board-issue-key" data-testid="wf-board-issue-key">
+                      {' '}
+                      · linked to {selected.issueKey}
+                    </span>
+                  )}
+                </strong>
                 <p>{selected.explanation}</p>
               </div>
               <div className="wf-board-actions">

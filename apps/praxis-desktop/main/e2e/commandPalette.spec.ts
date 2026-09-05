@@ -47,6 +47,24 @@ test('closes on Escape without navigating', async () => {
   await expect(palette).toBeHidden();
 });
 
+test('finds a demo issue by summary text and navigates to it on Enter', async () => {
+  const page = app.window;
+  await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();
+
+  await page.keyboard.press('ControlOrMeta+k');
+  const palette = page.getByRole('dialog', { name: 'Go to' });
+  await expect(palette).toBeVisible();
+
+  // Issues aren't in the static index (they're paged per board), so this one
+  // exercises the debounced async path — see CommandPalette's `onSearch`.
+  // "Core platform feature" is APP-100's demo summary (see issueDetail.spec.ts).
+  await palette.getByRole('textbox').fill('platform feature');
+  await expect(palette.getByRole('option', { name: /APP-100/ })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(palette).toBeHidden();
+  await expect(page.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Core platform feature');
+});
+
 test('surfaces a settings page and opens the settings dialog', async () => {
   const page = app.window;
   await expect(page.getByRole('navigation', { name: 'Workspace' })).toBeVisible();

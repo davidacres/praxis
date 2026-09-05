@@ -369,6 +369,31 @@ export class AcpAgentHost {
         );
         break;
       }
+      case 'available_commands_update': {
+        // Stable, previously unhandled — the agent's own slash commands
+        // (Claude Code's, Codex's). Praxis doesn't invoke these through a
+        // dedicated RPC; they're plain prompt text (`/name args`), same as a
+        // user would type them at the agent's own CLI. This just makes them
+        // discoverable in the composer instead of requiring the user to
+        // already know they exist.
+        this.sessionManager.setAgentAvailableCommands(
+          issueKey,
+          update.availableCommands.map(command => ({
+            name: command.name,
+            description: command.description,
+            inputHint: command.input?.hint
+          }))
+        );
+        break;
+      }
+      case 'current_mode_update': {
+        // Stable, previously unhandled. The agent can switch its own Session
+        // Mode autonomously, not only in response to `setAcpMode` — this is
+        // the client's only way to learn about that, so it's handled the same
+        // whether it followed our own request or not.
+        this.sessionManager.setAgentCurrentMode(issueKey, update.currentModeId);
+        break;
+      }
       case 'tool_call_update':
         if (update.status === 'completed' || update.status === 'failed') {
           const ok = update.status === 'completed';
@@ -485,6 +510,18 @@ export class AcpAgentHost {
       await client.connect();
       if (options.model) {
         await client.setConfigOption('model', options.model);
+      }
+      // `session/new` triggers no prompt/completion of its own, so reading
+      // modes here (rather than only reacting to `current_mode_update` later)
+      // costs nothing and means the composer has something to show even
+      // before the agent's first reply.
+      const modes = await client.getSessionModes();
+      if (modes) {
+        this.sessionManager.setAgentAvailableModes(
+          issue.key,
+          modes.currentModeId,
+          modes.availableModes.map(mode => ({ id: mode.id, name: mode.name, description: mode.description ?? undefined }))
+        );
       }
       const response = await client.prompt(combinedPrompt);
       if (client.sessionId) {
@@ -682,6 +719,23 @@ export class AcpAgentHost {
       event: evt('aborted', 'Task aborted by user'),
       logLine: `[AcpAgent] Aborted task for ${issueKey}`
     });
+  }
+
+  /**
+   * Switches the agent's own Session Mode via `session/set_mode`. Only
+   * meaningful while a task is active — there's no ACP connection to send it
+   * over otherwise, since a resumed follow-up turn opens a fresh one.
+   * Updates the record optimistically on success rather than waiting for the
+   * `current_mode_update` echo, since not every agent sends one for a change
+   * it was explicitly asked to make.
+   */
+  public async setAcpMode(issueKey: string, modeId: string): Promise<void> {
+    const task = this.activeTasks.get(issueKey);
+    if (!task || task.ending) {
+      throw new Error(`No active agent session for ${issueKey}.`);
+    }
+    await task.client.setMode(modeId);
+    this.sessionManager.setAgentCurrentMode(issueKey, modeId);
   }
 
   public dispose(): void {

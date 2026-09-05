@@ -884,10 +884,25 @@ function ModeFields({
       );
     case 'github':
       return (
-        <p className="placeholder-text" data-testid="conn-mode-note">
-          GitHub mode is not implemented yet — there is no GitHub board backend in either the
-          extension or the desktop app. The connection saves as metadata only.
-        </p>
+        <>
+          {textField('owner', 'Repository owner', 'octocat')}
+          {textField('repo', 'Repository name', 'hello-world')}
+          {secretField('pat', 'Personal access token')}
+          {textField('url', 'API base URL (GitHub Enterprise only)', 'https://api.github.com')}
+          <Toggle
+            label="Allow issue creation"
+            description="When off, the board is read-only and the New issue button is disabled."
+            checked={values.allowIssueCreation === true}
+            onChange={next => setValue('allowIssueCreation', next)}
+            testId="conn-field-allowIssueCreation"
+          />
+          <p className="placeholder-text" data-testid="conn-mode-note">
+            Issues and comments load through the GitHub REST API using the saved token.
+            Board columns come from any "status: …" labels already on the repository — a
+            repo with none still shows Backlog and Closed. Editing covers summary,
+            description, and assignee.
+          </p>
+        </>
       );
     default:
       return null;
