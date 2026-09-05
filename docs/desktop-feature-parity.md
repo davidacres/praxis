@@ -17,7 +17,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Jira via custom MCP server (stdio/HTTP) | ✓ | "Advanced" connection mode; see `packages/core/src/mcp/` |
 | Jira Cloud OAuth sign-in (browser) | ✓ | `praxis://` scheme + loopback fallback for app-initiated OAuth |
 | Jira Cloud API-token sign-in (guided) | ✓ | Guided form in Connections UI; stores encrypted PAT |
-| GitHub boards | ✓ | REST API client (FX-BE-035, in active development) |
+| GitHub boards | ✗ | Connection saves a PAT and shows in the UI, but `getServiceForConnection` falls through to `StubBackendService` — reads empty, mutations throw. Planned as FX-BE-035 |
 | Connections manager UI | ✓ | Sidebar + detail pane; add/remove/test connections |
 | Connection health check | ✓ | Test button; reports auth/network status inline |
 | Encrypted secret storage | ✓ | Electron `safeStorage` API; autolock on suspend |
@@ -139,6 +139,10 @@ Largest unfinished items, ordered by adoption impact:
 Corrected in this pass (previously listed here as ✗ without independent
 verification — all three already exist and are e2e-tested):
 create idea, issue details peek in sidebar, connection status indicator.
+
+Also corrected: **GitHub boards** was marked ✓ ("REST API client, in active
+development"). It is not implemented — the mode has no `case` in
+`serviceRegistry.ts` and resolves to `StubBackendService`. Now ✗.
 
 Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
 index, ACP available-commands/current-mode surfacing, the AI spend report,
