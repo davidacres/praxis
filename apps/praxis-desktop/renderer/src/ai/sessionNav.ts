@@ -1,4 +1,5 @@
-import type { AgentEventSummary, AgentSessionRecord } from '@praxis/core';
+import type { AgentEventSummary, AgentSessionRecord, Connection } from '@praxis/core';
+import { PROVIDER_LABELS } from './modelProviders';
 
 /**
  * Naming and classification for an agent session, shared by the three surfaces
@@ -103,6 +104,11 @@ export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | 
   if (typeof total !== 'number' || total <= 0) {
     return undefined;
   }
+  return formatTokenCount(total);
+}
+
+/** The compact k/M rendering `formatTokens` uses, for a total already summed across sessions (e.g. a spend report's grouped rows). */
+export function formatTokenCount(total: number): string {
   if (total < 1000) return `${total} tokens`;
   if (total < 1_000_000) return `${(total / 1000).toFixed(total < 10_000 ? 1 : 0)}k tokens`;
   return `${(total / 1_000_000).toFixed(1)}M tokens`;
@@ -235,6 +241,82 @@ export function spendPressure(
     percent: Math.round(fraction * 100),
     level: fraction >= 0.85 ? 'critical' : fraction >= 0.67 ? 'warn' : 'ok'
   };
+}
+
+/** Sessions started within the last `days` days (by `startedAt`); every session when `days` is undefined. */
+export function sessionsWithinDays(sessions: readonly AgentSessionRecord[], days?: number): AgentSessionRecord[] {
+  if (!days) return sessions.slice();
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return sessions.filter(session => {
+    const started = new Date(session.startedAt).getTime();
+    return Number.isFinite(started) && started >= cutoff;
+  });
+}
+
+export interface SpendGroupRow {
+  label: string;
+  sessionCount: number;
+  /** Same shape as `SpendSummary.byCurrency` — see `summariseSpend`. */
+  costByCurrency: Array<{ currency: string; amount: number }>;
+  /** Cumulative tokens across the group's sessions that reported any; undefined when none did. */
+  totalTokens?: number;
+}
+
+function summariseGroup(sessions: readonly AgentSessionRecord[]): Omit<SpendGroupRow, 'label'> {
+  const { byCurrency } = summariseSpend(sessions);
+  let totalTokens: number | undefined;
+  for (const session of sessions) {
+    const tokens = session.tokenUsage?.totalTokens;
+    if (typeof tokens === 'number' && tokens > 0) {
+      totalTokens = (totalTokens ?? 0) + tokens;
+    }
+  }
+  return { sessionCount: sessions.length, costByCurrency: byCurrency, totalTokens };
+}
+
+function groupAndSort(groups: Map<string, AgentSessionRecord[]>): SpendGroupRow[] {
+  return [...groups.entries()]
+    .map(([label, list]) => ({ label, ...summariseGroup(list) }))
+    .sort(
+      (a, b) =>
+        (b.costByCurrency[0]?.amount ?? 0) - (a.costByCurrency[0]?.amount ?? 0) ||
+        (b.totalTokens ?? 0) - (a.totalTokens ?? 0)
+    );
+}
+
+/**
+ * Spend and tokens grouped by provider + model — "which model is burning it."
+ * A session with no provider recorded (older data) groups under "Unknown".
+ */
+export function summariseSpendByProviderModel(sessions: readonly AgentSessionRecord[]): SpendGroupRow[] {
+  const groups = new Map<string, AgentSessionRecord[]>();
+  for (const session of sessions) {
+    const label = session.provider
+      ? `${PROVIDER_LABELS[session.provider] ?? session.provider}${session.model ? ` · ${session.model}` : ''}`
+      : 'Unknown provider';
+    (groups.get(label) ?? groups.set(label, []).get(label)!).push(session);
+  }
+  return groupAndSort(groups);
+}
+
+/**
+ * Spend and tokens grouped by tracker connection — the closest thing to "which
+ * project is this costing" the data actually supports without inventing an
+ * attribution the app can't back. A session with no `connectionId` ran against
+ * the built-in demo backend.
+ */
+export function summariseSpendByConnection(
+  sessions: readonly AgentSessionRecord[],
+  connections: readonly Connection[]
+): SpendGroupRow[] {
+  const groups = new Map<string, AgentSessionRecord[]>();
+  for (const session of sessions) {
+    const label = session.connectionId
+      ? connections.find(connection => connection.id === session.connectionId)?.name ?? 'Removed connection'
+      : 'Demo';
+    (groups.get(label) ?? groups.set(label, []).get(label)!).push(session);
+  }
+  return groupAndSort(groups);
 }
 
 /**
