@@ -13,6 +13,7 @@
 //     `respondToPermission`, which is equally unreachable for the existing
 //     local-tools path — so this marker is exercised via `AcpClientWrapper`
 //     directly in manual verification, not through the full app's IPC).
+//   - "WITH_USAGE": sends a `usage_update` — context occupancy and a cost.
 //   - "WITH_PLAN": streams a three-task `plan` update, worked one at a time —
 //     each one a full snapshot, the way TodoWrite/the ACP spec define it, not
 //     a diff against the last. Add "STOP_PLAN_MIDWAY" too to stop after the
@@ -197,6 +198,21 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
             newText: 'first line\nsecond line added by the agent\n'
           }
         ]
+      }
+    });
+  }
+
+  if (promptText.includes('WITH_USAGE')) {
+    // ACP's `usage_update`: context occupancy (`used`/`size`) plus an optional
+    // cumulative cost. Note `used` is what is *in the window now*, not tokens
+    // spent to date — the protocol reports no cumulative token count at all.
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'usage_update',
+        used: 74_000,
+        size: 100_000,
+        cost: { amount: 0.42, currency: 'USD' }
       }
     });
   }

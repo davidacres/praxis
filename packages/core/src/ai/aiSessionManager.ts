@@ -368,6 +368,34 @@ export class AiSessionManager {
   }
 
   /**
+   * Context occupancy as the agent itself reports it (ACP's `usage_update`),
+   * rather than as the gateway wire parser measures it for API providers.
+   *
+   * Deliberately does not touch `tokenUsage`: ACP's `used` is what is in the
+   * context window right now, not what the session has spent, and conflating
+   * the two is exactly the error the `contextTokens` doc warns about.
+   */
+  public setAgentContextUsage(
+    issueKey: string,
+    usage: { contextTokens: number; contextLimit: number; cost?: { amount: number; currency: string } }
+  ): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    if (usage.contextTokens >= 0) {
+      record.contextTokens = usage.contextTokens;
+    }
+    if (usage.contextLimit > 0) {
+      record.contextLimit = usage.contextLimit;
+    }
+    if (usage.cost) {
+      record.cost = usage.cost;
+    }
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /**
    * Replaces the session's task list wholesale — ACP's `plan` update is a full
    * snapshot each time (see `AgentSessionRecord.taskList`), so there is
    * nothing to merge. Not persisted directly, the same as the other live
