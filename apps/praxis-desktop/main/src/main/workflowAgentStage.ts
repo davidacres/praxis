@@ -27,6 +27,7 @@ import {
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { getWorkflowPolicyStore } from './workflowStoreInstance';
+import { workflowLogSink } from './workflowLogSink';
 
 /**
  * Agent stages as real, attributed sessions (FX-BE-025 / TASK-114, TASK-115).
@@ -216,7 +217,9 @@ async function freezeWorktree(worktreePath: string, stageName: string): Promise<
     const head = await run('git', ['rev-parse', 'HEAD'], { cwd: worktreePath });
     return head.stdout.trim() || undefined;
   } catch (error) {
-    console.error('[workflow] could not freeze the worktree:', error);
+    workflowLogSink.appendLine(
+      `Could not freeze the worktree for "${stageName}": ${error instanceof Error ? error.message : String(error)}`
+    );
     return undefined;
   }
 }

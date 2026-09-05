@@ -3,7 +3,10 @@ import {
   WorkflowOrchestrator,
   WorkflowRunStore,
   isCheckNode,
+  isRunSettled,
+  summarizeWorkflowRun,
   type StageDispatcher,
+  type StageRow,
   type WorkflowRun
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
@@ -11,6 +14,8 @@ import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
+import { getServiceForConnection } from './serviceRegistry';
+import { workflowLogSink } from './workflowLogSink';
 
 /**
  * The desktop app's workflow orchestrator (FX-BE-024).
@@ -30,6 +35,71 @@ function projectFolderFor(run: WorkflowRun): string | undefined {
 function broadcastRunChanged(run: WorkflowRun): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send('workflows:runChanged', run.runId);
+  }
+}
+
+const STAGE_ICON: Partial<Record<StageRow['outcome'], string>> = {
+  succeeded: '✅',
+  failed: '❌',
+  skipped: '⏭️',
+  cancelled: '⏭️'
+};
+
+function formatRunDuration(startedAt: string, endedAt: string): string | undefined {
+  const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return undefined;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+const STATUS_LABEL: Record<'succeeded' | 'failed' | 'cancelled', string> = {
+  succeeded: 'Succeeded',
+  failed: 'Failed',
+  cancelled: 'Cancelled'
+};
+
+/** The comment body a settled, ticket-linked run writes back — see `writeBackToIssue`. */
+function buildWriteBackComment(run: WorkflowRun): string {
+  const status = run.status as 'succeeded' | 'failed' | 'cancelled';
+  const summary = summarizeWorkflowRun(run);
+  const duration = run.endedAt ? formatRunDuration(run.startedAt, run.endedAt) : undefined;
+  const stageLines = summary.stages
+    .filter(stage => stage.type === 'agent-task' || stage.type === 'check')
+    .map(stage => `- ${STAGE_ICON[stage.outcome] ?? '⏳'} ${stage.name}: ${stage.outcome}`);
+
+  return [
+    `**Workflow run ${STATUS_LABEL[status].toLowerCase()}: ${summary.workflowName}**`,
+    '',
+    `Status: ${STATUS_LABEL[status]}${duration ? ` · Duration: ${duration}` : ''}`,
+    ...(stageLines.length > 0 ? ['', ...stageLines] : []),
+    ...(run.endedReason ? ['', run.endedReason] : [])
+  ].join('\n');
+}
+
+/**
+ * Writes a settled run's outcome back to the ticket it was started from, once,
+ * as a comment. Praxis has no target-status mapping for a tracker's own
+ * workflow, so this deliberately never transitions the ticket — a comment is
+ * the one write-back every backend supports the same way.
+ *
+ * Best-effort: a failure here (network, permissions, a deleted ticket) is
+ * logged and never re-thrown — the run itself already succeeded or failed on
+ * its own terms, and that must not be clouded by a write-back problem.
+ */
+export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
+  if (!run.issueKey || run.issueWriteBackAt) return;
+  try {
+    const service = await getServiceForConnection(run.issueConnectionId);
+    await service.addComment(run.issueKey, buildWriteBackComment(run));
+    const runs = new WorkflowRunStore(getWorkflowBackingStore());
+    await runs.save({ ...run, issueWriteBackAt: new Date().toISOString() });
+  } catch (error) {
+    workflowLogSink.appendLine(
+      `Could not write the outcome of run ${run.runId} back to ${run.issueKey}: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -88,6 +158,7 @@ export function getWorkflowOrchestrator(): WorkflowOrchestrator {
         broadcastRunChanged(run);
         // A stage may have just gone `running`; make sure the tick is armed.
         if (Object.values(run.nodes).some(state => state.outcome === 'running')) ensureTimeoutTick();
+        if (isRunSettled(run)) void writeBackToIssue(run);
       }
     });
   }

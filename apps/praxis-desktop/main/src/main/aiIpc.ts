@@ -603,6 +603,24 @@ export function registerAiIpc(): void {
   );
 
   ipcMain.handle(
+    'ai:setAcpMode',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, modeId: string) => {
+      // Distinct from `ai:switchSessionMode` above: that switches Praxis's own
+      // chat/analysis/review phase between turns; this switches the agent's
+      // own protocol-level Session Mode mid-turn, over the live ACP
+      // connection — so unlike that one, it requires a running task.
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) throw new Error(`No agent session found for ${issueKey}.`);
+      const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
+      const descriptor = PROVIDER_DESCRIPTORS[provider];
+      if (descriptor.kind !== 'cli-agent' || descriptor.hostKind === 'copilot-sdk') {
+        throw new Error('Session modes are only available for ACP-hosted agents (Claude Code, Codex).');
+      }
+      await getAcpAgentHost().setAcpMode(issueKey, modeId);
+    }
+  );
+
+  ipcMain.handle(
     'ai:continueSession',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, message: string) => {
       const followUp = message.trim();

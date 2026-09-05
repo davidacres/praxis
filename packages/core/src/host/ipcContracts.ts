@@ -500,6 +500,15 @@ export interface AiIpc {
   /** Switches the active phase of a session and continues it with that mode's contract. */
   switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
   /**
+   * Switches an ACP-hosted agent's own Session Mode (e.g. "ask" / "architect"
+   * / "code") over its live connection — entirely distinct from
+   * `switchSessionMode` above, which is Praxis's own chat/analysis/review
+   * phase. Requires the session's task to still be running; throws for any
+   * non-ACP provider. `modeId` is one of the ids in the session record's
+   * `acpAvailableModes`.
+   */
+  setAcpMode(issueKey: string, modeId: string): Promise<void>;
+  /**
    * Resolves the oldest pending permission request for an issue's active
    * task (no-op when none is pending). `'allow_always'` also resolves every
    * other request currently queued for that task.
@@ -662,8 +671,19 @@ export interface WorkflowsIpc {
   effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
 
   // ── Runs (FX-BE-022) ────────────────────────────────────────────────────
-  /** Starts a run of one project workflow against a task; returns the new run's summary. */
-  startRun(projectId: string, workflowId: string, taskTitle: string): Promise<WorkflowRunSummary>;
+  /**
+   * Starts a run of one project workflow against a task; returns the new run's
+   * summary. `issue`, when given, ties the run to a tracker ticket: its
+   * outcome is written back to that ticket as a comment once the run settles
+   * (succeeded, failed, or cancelled) — see `WorkflowRun.issueKey`. Omit for
+   * an ordinary project-scoped run with nothing to write back to.
+   */
+  startRun(
+    projectId: string,
+    workflowId: string,
+    taskTitle: string,
+    issue?: { issueKey: string; connectionId?: string }
+  ): Promise<WorkflowRunSummary>;
   /** Run summaries for a project, newest first. */
   listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
   /** One run's summary, or undefined. */
