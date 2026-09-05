@@ -385,6 +385,28 @@ const praxis: PraxisIpc = {
     importItem: (kind: string, sourceDir: string, scope: string, onDuplicate: string) =>
       ipcRenderer.invoke('agentRuntime:importItem', kind, sourceDir, scope, onDuplicate)
   },
+  marketplace: {
+    getStatus: () => ipcRenderer.invoke('marketplace:getStatus'),
+    configure: (patch: unknown) => ipcRenderer.invoke('marketplace:configure', patch),
+    setToken: (token: string | null) => ipcRenderer.invoke('marketplace:setToken', token),
+    listCatalog: () => ipcRenderer.invoke('marketplace:listCatalog'),
+    listInstalled: () => ipcRenderer.invoke('marketplace:listInstalled'),
+    listActiveAppearance: () => ipcRenderer.invoke('marketplace:listActiveAppearance'),
+    install: (packageName: string, options?: unknown) =>
+      ipcRenderer.invoke('marketplace:install', packageName, options),
+    update: (kind: string, id: string) => ipcRenderer.invoke('marketplace:update', kind, id),
+    remove: (kind: string, id: string) => ipcRenderer.invoke('marketplace:remove', kind, id),
+    checkForUpdates: () => ipcRenderer.invoke('marketplace:checkForUpdates'),
+    setAgentTrust: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke('marketplace:setAgentTrust', id, enabled),
+    onChanged: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on('marketplace:changed', handler);
+      return () => {
+        ipcRenderer.removeListener('marketplace:changed', handler);
+      };
+    }
+  },
   git: {
     preflight: (repositoryPath?: string) => ipcRenderer.invoke('git:preflight', repositoryPath),
     initialize: (repositoryPath: string) => ipcRenderer.invoke('git:initialize', repositoryPath),

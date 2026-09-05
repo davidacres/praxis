@@ -29,7 +29,14 @@ import type {
 } from '../ai/agentRuntime';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
-import type { AppSettings, AppSettingsPatch } from '../config/appSettings';
+import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
+import type {
+  ActiveAppearanceAddons,
+  AddonKind,
+  AddonUpdate,
+  CatalogEntry,
+  InstalledAddon
+} from '../marketplace';
 import type {
   AgentSessionRecord,
   AgentTaskDefinition,
@@ -315,6 +322,62 @@ export interface UpdateIpc {
 export interface AppIpc {
   getVersion(): Promise<string>;
   update: UpdateIpc;
+}
+
+/** Marketplace configuration state, safe to show in the renderer (no token value). */
+export interface MarketplaceStatus {
+  /** `enabled`, an `owner`, and a stored token are all present. */
+  ready: boolean;
+  enabled: boolean;
+  owner: string;
+  ownerType: 'user' | 'org';
+  packageNamePrefix: string;
+  apiBaseUrl: string;
+  registryBaseUrl: string;
+  checkOnLaunch: boolean;
+  hasToken: boolean;
+}
+
+/** Config the renderer may change — everything in {@link MarketplaceStatus} bar the token. */
+export type MarketplaceConfigPatch = Partial<
+  Pick<
+    MarketplaceSettings,
+    | 'enabled'
+    | 'owner'
+    | 'ownerType'
+    | 'packageNamePrefix'
+    | 'apiBaseUrl'
+    | 'registryBaseUrl'
+    | 'checkOnLaunch'
+  >
+>;
+
+export interface MarketplaceInstallOptions {
+  /** Pin a published version instead of `latest`. */
+  version?: string;
+  /** Grant an agent add-on execution trust as part of installing it. */
+  trustAgent?: boolean;
+}
+
+export interface MarketplaceIpc {
+  getStatus(): Promise<MarketplaceStatus>;
+  /** Persists marketplace config (not the token) and returns the new status. */
+  configure(patch: MarketplaceConfigPatch): Promise<MarketplaceStatus>;
+  /** Stores or (with `null`) clears the GitHub token in the OS-encrypted secret store. */
+  setToken(token: string | null): Promise<MarketplaceStatus>;
+  /** The browsable catalogue — every publishable add-on, resolved to its latest version. */
+  listCatalog(): Promise<CatalogEntry[]>;
+  listInstalled(): Promise<InstalledAddon[]>;
+  /** Enabled declarative appearance content, for the renderer to register over the user's own. */
+  listActiveAppearance(): Promise<ActiveAppearanceAddons>;
+  install(packageName: string, options?: MarketplaceInstallOptions): Promise<InstalledAddon>;
+  update(kind: AddonKind, id: string): Promise<InstalledAddon>;
+  remove(kind: AddonKind, id: string): Promise<void>;
+  checkForUpdates(): Promise<AddonUpdate[]>;
+  /** Grants or revokes execution trust for an installed agent add-on. */
+  setAgentTrust(id: string, enabled: boolean): Promise<void>;
+  /** Fires after any install/remove/update/trust change. */
+  onChanged(listener: () => void): () => void;
 }
 
 /** Durable app-managed projects and their default local boards. */
@@ -630,6 +693,7 @@ export interface PraxisIpc {
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
   agentRuntime: AgentRuntimeIpc;
+  marketplace: MarketplaceIpc;
   taskDesigner: TaskDesignerIpc;
   workflows: WorkflowsIpc;
   projects: ProjectsIpc;

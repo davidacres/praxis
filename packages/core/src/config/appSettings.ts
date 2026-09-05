@@ -167,6 +167,27 @@ export interface StartupSettings {
   reopenLastWorkspace: boolean;
 }
 
+/**
+ * The add-on marketplace — a GitHub Packages npm registry the app browses for
+ * installable themes, surface packs, agents and workflow templates. The GitHub
+ * token is a secret and lives in the secrets store, not here.
+ */
+export interface MarketplaceSettings {
+  /** Master switch. When false the marketplace UI is hidden and nothing is fetched. */
+  enabled: boolean;
+  /** GitHub user or org that publishes the add-on packages. */
+  owner: string;
+  ownerType: 'user' | 'org';
+  /** Package-name prefix that marks a package as a Praxis add-on. */
+  packageNamePrefix: string;
+  /** GitHub REST API base — override for GitHub Enterprise Server. */
+  apiBaseUrl: string;
+  /** npm registry base that serves packuments and tarballs. */
+  registryBaseUrl: string;
+  /** Check installed add-ons for updates on launch. */
+  checkOnLaunch: boolean;
+}
+
 export interface AppearanceSettings {
   /**
    * When true (default), the board list shows each backend's brand artwork
@@ -394,6 +415,7 @@ export interface AppSettings {
   delivery: DeliverySettings;
   mcpServer: McpServerSettings;
   startup: StartupSettings;
+  marketplace: MarketplaceSettings;
   preview: PreviewSettings;
   appearance: AppearanceSettings;
   terminal: TerminalSettings;
@@ -476,6 +498,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   startup: {
     reopenLastWorkspace: true
   },
+  marketplace: {
+    enabled: false,
+    owner: '',
+    ownerType: 'user',
+    packageNamePrefix: 'praxis-addon-',
+    apiBaseUrl: 'https://api.github.com',
+    registryBaseUrl: 'https://npm.pkg.github.com',
+    checkOnLaunch: true
+  },
   preview: {
     enableCreateIdea: false,
     enableNewProject: true,
@@ -536,6 +567,7 @@ export interface AppSettingsPatch {
   delivery?: Partial<DeliverySettings>;
   mcpServer?: Partial<McpServerSettings>;
   startup?: Partial<StartupSettings>;
+  marketplace?: Partial<MarketplaceSettings>;
   preview?: Partial<PreviewSettings>;
   appearance?: {
     showBrandArtwork?: boolean;
@@ -979,6 +1011,27 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       }
     : { ...DEFAULT_APP_SETTINGS.startup };
 
+  const marketplace: MarketplaceSettings = isRecord(raw) && isRecord(raw.marketplace)
+    ? {
+        enabled: readBoolean(raw.marketplace.enabled, DEFAULT_APP_SETTINGS.marketplace.enabled),
+        owner: readString(raw.marketplace.owner, DEFAULT_APP_SETTINGS.marketplace.owner),
+        ownerType: raw.marketplace.ownerType === 'org' ? 'org' : 'user',
+        packageNamePrefix: readString(
+          raw.marketplace.packageNamePrefix,
+          DEFAULT_APP_SETTINGS.marketplace.packageNamePrefix
+        ),
+        apiBaseUrl: readString(raw.marketplace.apiBaseUrl, DEFAULT_APP_SETTINGS.marketplace.apiBaseUrl),
+        registryBaseUrl: readString(
+          raw.marketplace.registryBaseUrl,
+          DEFAULT_APP_SETTINGS.marketplace.registryBaseUrl
+        ),
+        checkOnLaunch: readBoolean(
+          raw.marketplace.checkOnLaunch,
+          DEFAULT_APP_SETTINGS.marketplace.checkOnLaunch
+        )
+      }
+    : { ...DEFAULT_APP_SETTINGS.marketplace };
+
   const preview: PreviewSettings = isRecord(raw) && isRecord(raw.preview)
     ? {
         enableCreateIdea: readBoolean(raw.preview.enableCreateIdea, DEFAULT_APP_SETTINGS.preview.enableCreateIdea),
@@ -1087,6 +1140,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     delivery,
     mcpServer,
     startup,
+    marketplace,
     preview,
     appearance,
     terminal,
@@ -1189,6 +1243,11 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     ...(patch.startup ?? {})
   };
 
+  const marketplace: MarketplaceSettings = {
+    ...base.marketplace,
+    ...(patch.marketplace ?? {})
+  };
+
   const preview: PreviewSettings = {
     ...base.preview,
     ...(patch.preview ?? {})
@@ -1226,6 +1285,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     delivery,
     mcpServer,
     startup,
+    marketplace,
     preview,
     appearance,
     terminal,

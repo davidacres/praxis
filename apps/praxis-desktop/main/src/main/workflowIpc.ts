@@ -35,6 +35,7 @@ import {
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
+import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import {
   getWorkflowPolicyStore,
@@ -45,6 +46,27 @@ import {
 
 function runStore(): WorkflowRunStore {
   return new WorkflowRunStore(getWorkflowBackingStore());
+}
+
+/**
+ * The "global" template tier: the user's saved global workflows plus any enabled
+ * `workflow-template` marketplace add-ons. Add-on definitions are normalised,
+ * forced to `scope: 'global'`, and dropped if they do not validate.
+ */
+async function globalTemplateDefinitions(): Promise<WorkflowDefinition[]> {
+  const saved = getWorkflowStore().list();
+  const savedIds = new Set(saved.map(definition => definition.id));
+  const fromAddons: WorkflowDefinition[] = [];
+  for (const raw of await marketplaceWorkflowTemplates()) {
+    try {
+      const normalized = normalizeWorkflow({ ...(raw as object), scope: 'global' });
+      if (!normalized || savedIds.has(normalized.id)) continue;
+      if (validateWorkflow(normalized).valid) fromAddons.push(normalized);
+    } catch {
+      /* a malformed add-on template is skipped, not fatal */
+    }
+  }
+  return [...saved, ...fromAddons];
 }
 
 function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
@@ -166,7 +188,7 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> => {
     const project = await projectDefinitions(projectId);
     return assembleTemplateLibrary({
-      global: getWorkflowStore().list(),
+      global: await globalTemplateDefinitions(),
       project: project.map(definition => ({ definition }))
     });
   });
@@ -175,7 +197,7 @@ export function registerWorkflowIpc(): void {
     const snapshot = await catalogSnapshot();
     const templates = [
       ...builtInWorkflowTemplates(),
-      ...getWorkflowStore().list(),
+      ...(await globalTemplateDefinitions()),
       ...(await projectDefinitions(projectId))
     ];
     return templates.map(template => assessTemplateReadiness(template, snapshot));
@@ -184,7 +206,7 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:catalog', async (_event, projectId: string): Promise<WorkflowCatalog> => {
     return resolveWorkflowCatalog({
       builtIn: builtInWorkflowTemplates(),
-      global: getWorkflowStore().list(),
+      global: await globalTemplateDefinitions(),
       project: (await projectDefinitions(projectId)).map(definition => ({ definition, source: 'project' as const }))
     });
   });
@@ -199,7 +221,7 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle(
     'workflows:instantiate',
     async (_event, projectId: string, templateId: string, name?: string): Promise<WorkflowDefinition> => {
-      const templates = [...builtInWorkflowTemplates(), ...getWorkflowStore().list(), ...(await projectDefinitions(projectId))];
+      const templates = [...builtInWorkflowTemplates(), ...(await globalTemplateDefinitions()), ...(await projectDefinitions(projectId))];
       const template = templates.find(candidate => candidate.id === templateId);
       if (!template) throw new Error(`Template ${templateId} was not found.`);
 
