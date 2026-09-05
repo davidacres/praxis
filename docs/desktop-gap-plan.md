@@ -76,8 +76,12 @@ tracker's own workflow). Full detail in `docs/PLAN_MAP.md`.
 
 | Gap | Work | Why |
 |---|---|---|
-| Connection status indicator | Title-bar or sidebar health indicator fed by connection health checks. | "Is Jira up?" today requires opening Connections UI. |
 | Application logs — search/export/persistence | The Output tab already tails the shared log bus live (ai/jira/gitlab/workflow tags, FX-BE-041); still a 500-line in-memory ring buffer with no search, export, or persistence across restarts. | Debugging an issue from days ago still needs file-system access. |
+
+**Corrected in this pass:** connection status indicator (`ConnectionStatusDot.tsx`
+on each sidebar connection group) and issue details peek in sidebar
+(`IssuePeek.tsx`) were listed here as gaps without independent verification —
+both already exist and are e2e-tested (`shellPolish.spec.ts`).
 
 #### Deferred (Jira-coupled or lower priority)
 
