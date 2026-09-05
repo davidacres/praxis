@@ -404,6 +404,16 @@ npm run test:desktop:git      # gitService unit tests
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run
 `copy-renderer`.
 
+**`vite build` needs a native binding, and the lockfile must carry every CI platform's.**
+Vite 8 bundles with `rolldown` and minifies CSS with `lightningcss` — both load a
+platform-specific `.node`. `npm` regenerating `package-lock.json` on macOS prunes the
+non-host platform bindings of *transitive* optional deps (npm/cli#4828), so `npm ci` on
+the Linux runner then has nothing to load and the build dies with `Cannot find native
+binding` — long after `tsc` and the tests have all passed locally. The bindings are
+pinned as root `optionalDependencies` (see the `//optionalDependencies` note in
+`package.json`) so the lockfile stays platform-complete; keep those versions matched to
+the resolved `rolldown` / `lightningcss` when either bumps.
+
 ## Verifying a UI change
 
 **A green suite does not mean it looks right.** Three real regressions in one session passed
