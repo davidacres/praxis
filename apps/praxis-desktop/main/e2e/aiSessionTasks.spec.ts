@@ -133,4 +133,6 @@ test('an ACP agent reporting usage drives the context banner and shows its cost'
   expect(
     await win.evaluate(() => window.praxis.ai.listSessions().then(l => l[0]?.tokenUsage))
   ).toBeUndefined();
+
+  await win.screenshot({ path: 'output/playwright/acp-usage-context-and-cost.png', fullPage: true });
 });
