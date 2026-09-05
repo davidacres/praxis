@@ -81,6 +81,7 @@ export * from './jira/jiraService';
 export * from './git/gitGraph';
 export * from './git/gitParsing';
 export * from './git/gitWorktreeManager';
+export * from './marketplace';
 
 // Board/issue helpers used by both the main process and the renderer.
 export * from './board/boardIssueFilters';
