@@ -60,6 +60,7 @@ test('finds a demo issue by summary text and navigates to it on Enter', async ()
   // "Core platform feature" is APP-100's demo summary (see issueDetail.spec.ts).
   await palette.getByRole('textbox').fill('platform feature');
   await expect(palette.getByRole('option', { name: /APP-100/ })).toBeVisible();
+  await page.screenshot({ path: 'output/playwright/command-palette-issue-search.png', fullPage: true });
   await page.keyboard.press('Enter');
   await expect(palette).toBeHidden();
   await expect(page.locator('[data-testid="issue-edit-summary"]')).toHaveValue('Core platform feature');
