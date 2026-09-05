@@ -16,6 +16,11 @@ validation: [npm run check-types, npm run test:core, npm run test:desktop]
 
 # FX-BF-011: Agent runtime and session integration
 
+> The Sessions surface this feature reshaped kept growing after it closed —
+> review, cost/context/task visibility, and correction controls are
+> `FX-BF-015`. This feature's own scope (runtime lifecycle, skill handoff,
+> the Settings boundary) is unchanged and complete as recorded below.
+
 ## Outcome
 
 Make the Agent Hub operational with runtime health, lifecycle controls, skill activation, and direct handoff into Sessions.
