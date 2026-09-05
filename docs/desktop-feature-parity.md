@@ -17,7 +17,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Jira via custom MCP server (stdio/HTTP) | ✓ | "Advanced" connection mode; see `packages/core/src/mcp/` |
 | Jira Cloud OAuth sign-in (browser) | ✓ | `praxis://` scheme + loopback fallback for app-initiated OAuth |
 | Jira Cloud API-token sign-in (guided) | ✓ | Guided form in Connections UI; stores encrypted PAT |
-| GitHub boards | ✗ | Connection saves a PAT and shows in the UI, but `getServiceForConnection` falls through to `StubBackendService` — reads empty, mutations throw. Planned as FX-BE-035 |
+| GitHub boards | ✓ | REST API client (`GitHubBoardService`); one board per repository, columns synthesized from "status: …" labels already on the repo (FX-BE-035) |
 | Connections manager UI | ✓ | Sidebar + detail pane; add/remove/test connections |
 | Connection health check | ✓ | Test button; reports auth/network status inline |
 | Encrypted secret storage | ✓ | Electron `safeStorage` API; autolock on suspend |
@@ -131,18 +131,30 @@ and Electron integration. Last audited: 2026-09-05.
 
 Largest unfinished items, ordered by adoption impact:
 
-1. **GitHub real backend** (FX-BE-035) — currently GitHub connections save metadata only. Real board requires REST client + issue list → board mapping.
-2. **Signed builds & auto-update** (FX-BE-034) — "try Praxis" currently means "maintain a local build." Blocked on code-signing credentials.
-3. **Multi-file / terminal agent proof** (FX-BE-036) — the ticket-to-agent flow is scripted-proven only for single-file, no-shell edits.
-4. **Application logs — search/export/persistence** — Output tab tails the log bus live (FX-BE-041); still a 500-line in-memory ring buffer with no history across restarts.
+1. **Signed builds & auto-update** (FX-BE-034) — "try Praxis" currently means "maintain a local build." Blocked on code-signing credentials.
+2. **Multi-file / terminal agent proof** (FX-BE-036) — the ticket-to-agent flow is scripted-proven only for single-file, no-shell edits.
+3. **Application logs — search/export/persistence** — Output tab tails the log bus live (FX-BE-041); still a 500-line in-memory ring buffer with no history across restarts.
+
+**Shipped since the last audit: GitHub real backend** (FX-BE-035) — `GitHubBoardService`
+in core, wired through `serviceRegistry.ts`'s `case 'github'`. One repository is one
+board (`autoSynthesizesBoard`, same model as folder/demo); columns synthesize from
+"status: …" labels already on the repo, with Backlog/Closed always present so a
+repo with none still renders a working board. Edits cover summary, description,
+and assignee — the same three fields GitLab supports, since GitHub's issue API
+has no native priority/severity/type. Issue creation is gated behind an
+`allowIssueCreation` connection setting, mirroring folder's gate. No new theme
+token or renderer component: `--tone-github` and `BACKEND_MODE_META.github`
+already existed.
 
 Corrected in this pass (previously listed here as ✗ without independent
 verification — all three already exist and are e2e-tested):
 create idea, issue details peek in sidebar, connection status indicator.
 
 Also corrected: **GitHub boards** was marked ✓ ("REST API client, in active
-development"). It is not implemented — the mode has no `case` in
-`serviceRegistry.ts` and resolves to `StubBackendService`. Now ✗.
+development") when it was not implemented at all — the mode had no `case` in
+`serviceRegistry.ts` and resolved to `StubBackendService`. Marked ✗, then
+shipped as FX-BE-035 in this pass (see below) and marked ✓ again — this time
+against real code and a passing e2e suite, not a forward-looking claim.
 
 Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
 index, ACP available-commands/current-mode surfacing, the AI spend report,

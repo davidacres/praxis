@@ -131,7 +131,7 @@
 | FX-BE-033 | Story | Review and correction controls | Complete | FX-BF-015 |
 | FX-BF-016 | Feature | Packaging, GitHub backend, and agent proof-of-concept | Planned | FX-BF-015 |
 | FX-BE-034 | Story | Signed auto-update | Blocked | — |
-| FX-BE-035 | Story | Real GitHub backend | Planned | — |
+| FX-BE-035 | Story | Real GitHub backend | Complete | — |
 | FX-BE-036 | Story | Prove multi-file and terminal-using agent paths | Planned | FX-BE-031 |
 | FX-BF-017 | Feature | AI session UX and workflow ticket integration | Complete | FX-BF-015 |
 | FX-BE-037 | Story | Command palette issue search | Complete | FX-BF-017 |
