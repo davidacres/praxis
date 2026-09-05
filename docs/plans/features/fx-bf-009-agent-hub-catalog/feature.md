@@ -8,7 +8,7 @@ slug: agent-hub-catalog
 title: Agent Hub catalog and navigation
 status: complete
 owner: Electron desktop app
-updated: 2026-08-31
+updated: 2026-09-03
 issues: docs/issues/features/fx-bf-009-agent-hub-catalog/feature-issues.md
 stories: [FX-BE-010, FX-BE-011]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]

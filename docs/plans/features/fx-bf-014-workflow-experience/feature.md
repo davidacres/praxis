@@ -8,7 +8,7 @@ slug: workflow-experience
 title: Workflow experience — native UI for the designer and run monitor
 status: complete
 owner: Electron desktop app
-updated: 2026-09-02
+updated: 2026-09-03
 issues: docs/issues/features/fx-bf-014-workflow-experience/feature-issues.md
 stories: [FX-BE-027, FX-BE-028, FX-BE-029, FX-BE-030]
 design: docs/plans/workflow-experience-design.md
