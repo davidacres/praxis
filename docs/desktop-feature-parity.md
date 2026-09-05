@@ -63,7 +63,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Linked issues | ✓ | Render "Linked issues" section; navigate to linked issue |
 | Attachments | ✓ | Render list; download via IPC dialog |
 | Paging ("load more") | ✓ | Load-more button when `hasMore` set; fetches next page per status |
-| Global quick-pick search | ✗ | Palette has board/project/session search only; no global issue search |
+| Global quick-pick search | ✓ | Palette (⌘K) searches issues across every board in the active workspace via debounced async lookup, capped at 25 results (FX-BE-037) |
 | Open issue in browser / copy key | ✓ | Buttons in detail header + right-click context menu |
 | Create idea | ✗ | Issue creation UI exists; "idea" type is Jira-specific mapping, not exposed |
 | Create epic | ✓ | Create issue with `parent: epic` or implicit new parent |
@@ -86,6 +86,10 @@ and Electron integration. Last audited: 2026-09-05.
 | Agent loop with local tools (shell allowlist, path sandbox) | ✓ | `LocalToolExecutor` runs user shell commands behind allowlist |
 | Live session event stream | ✓ | Console shows agent messages, tool calls, reasoning (ACP protocol) |
 | Cost tracking per session | ✓ | Shows cumulative cost if provider reports it; warning at `ai.spendLimit` |
+| Cost/token reporting over time | ✓ | Settings → AI Provider spend report; grouped by provider/model and connection, time-range filter (FX-BE-039) |
+| Agent's own operating mode (ACP Session Modes) | ✓ | Composer mode chip, live while the task is active — distinct from Praxis's own chat/analysis/review toggle (FX-BE-038) |
+| Agent's own slash commands (ACP `available_commands_update`) | ✓ | Composer commands chip inserts `/name ` into the draft (FX-BE-038) |
+| Workflow run started from a ticket, outcome written back | ✓ | Run monitor's Start form takes an optional ticket; a settled run posts a comment back to it (FX-BE-040) |
 
 ## Developer workflow
 
@@ -129,10 +133,9 @@ Largest unfinished items, ordered by adoption impact:
 
 1. **GitHub real backend** (FX-BE-035) — currently GitHub connections save metadata only. Real board requires REST client + issue list → board mapping.
 2. **Signed builds & auto-update** (FX-BE-034) — "try Praxis" currently means "maintain a local build." Blocked on code-signing credentials.
-3. **Command palette issue index** — ⌘K indexes projects/boards/sessions/agents but not issues. High-value daily quality-of-life gap.
-4. **Available slash commands from agent** (ACP `available_commands_update`) — Unhandled protocol update. Users can't discover agent's own ⌘ commands.
-5. **Workflow write-back to issue** — Runs complete, but outcome (status transition, comment, artifact link) doesn't write back to the source ticket.
-6. **Global issue search** — Palette has board/project search; no global quick-pick across all connections.
-7. **Cost attribution over time** — Per-session cost visible; no project/team-level spend report or historical view.
-8. **Idea creation** — Jira-specific; currently no first-class UI for it.
-9. **Issue details peek in sidebar** — Compact issue summary in sidebar instead of full detail pane.
+3. **Idea creation** — Jira-specific; currently no first-class UI for it.
+4. **Issue details peek in sidebar** — Compact issue summary in sidebar instead of full detail pane.
+
+Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
+index, ACP available-commands/current-mode surfacing, the AI spend report, and
+workflow ticket-triggering with outcome write-back. See `PLAN_MAP.md`.
