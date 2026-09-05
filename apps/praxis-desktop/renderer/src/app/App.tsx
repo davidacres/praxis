@@ -7,6 +7,7 @@ import type {
   BoardDetails,
   Connection,
   ConnectionCheck,
+  IssueFilters,
   IssueSummary,
   TaskDesignerCanvasNode,
   TaskDesignerTicketNode
@@ -1050,6 +1051,53 @@ export function App() {
     [boards, boardDetails, connections, agentSessions]
   );
 
+  /**
+   * ⌘K issue search. Issues aren't held in App state (each board pages its own
+   * from `issue:list`), so unlike every other palette entry this can't be a
+   * static index — it queries each board's connection directly, scoped by that
+   * board's `boardId`/`projectKey` the same way `BoardView.scopedFilters` does.
+   * Boards are queried in parallel and a failure on one connection (e.g. an
+   * unreachable Jira site) never blocks the others.
+   */
+  const searchIssues = useCallback(
+    async (query: string): Promise<CommandEntry[]> => {
+      const perBoardLimit = 6;
+      const results = await Promise.allSettled(
+        workspaceBoards.map(async board => {
+          const filters: IssueFilters = {
+            projectKeys: board.projectKey ? [board.projectKey] : [],
+            statuses: [],
+            issueTypes: [],
+            searchText: query,
+            assigneeMode: 'all',
+            boardId: board.id,
+            grouping: 'none'
+          };
+          const page = await window.praxis.issue.list(filters, 0, perBoardLimit, board.connectionId);
+          return { board, issues: page.issues };
+        })
+      );
+      const entries: CommandEntry[] = [];
+      results.forEach(result => {
+        if (result.status !== 'fulfilled') return;
+        const { board, issues } = result.value;
+        issues.forEach(issue => {
+          entries.push({
+            id: `issue:${board.id}:${issue.key}`,
+            label: issue.key,
+            hint: issue.summary,
+            group: 'Issues',
+            icon: 'ticket',
+            keywords: `${issue.summary} ${issue.status} ${issue.issueType}`,
+            run: () => navigate({ boardId: board.id, issueKey: issue.key })
+          });
+        });
+      });
+      return entries.slice(0, 25);
+    },
+    [workspaceBoards, navigate]
+  );
+
   /** One flat index for ⌘K — see CommandPalette. Rebuilt when the underlying
    *  collections change; the run callbacks reuse the same navigation the
    *  sidebar and dialogs already use. */
@@ -2056,7 +2104,9 @@ export function App() {
         />
       )}
       {showSplash && <StartupSplash key={splashReplayKey} version={appVersion} brief={splashBrief && splashReplayKey === 0} onDone={() => setShowSplash(false)} />}
-      {paletteOpen && <CommandPalette entries={paletteEntries} onClose={() => setPaletteOpen(false)} />}
+      {paletteOpen && (
+        <CommandPalette entries={paletteEntries} onSearch={searchIssues} onClose={() => setPaletteOpen(false)} />
+      )}
       {walkthroughOpen && <Walkthrough stops={walkthroughStops} onDone={finishWalkthrough} />}
     </div>
   );
