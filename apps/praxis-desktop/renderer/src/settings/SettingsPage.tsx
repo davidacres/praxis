@@ -1229,6 +1229,17 @@ function AiSection({
         testId="ai-analysis-gate-toggle"
         onChange={next => void update({ ai: { analysisGateEnabled: next } })}
       />
+      <FieldRow
+        label="Spend limit"
+        description="A budget you set, warned against the cost your agent reports. 0 turns it off. This is not an account balance — no provider tells Praxis one, and only CLI agents (Claude Code, Codex) report cost at all."
+      >
+        <DebouncedNumberField
+          ariaLabel="Spend limit"
+          value={settings.ai.spendLimit}
+          min={0}
+          onCommit={value => update({ ai: { spendLimit: value } })}
+        />
+      </FieldRow>
       <Toggle
         label="Let the AI use the in-app browser"
         description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."

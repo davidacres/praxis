@@ -105,6 +105,19 @@ export interface AiSettings {
   analysisPrompt: string;
   /** When true, an issue must have a confirmed analysis before it can be delegated. */
   analysisGateEnabled: boolean;
+  /**
+   * A spend ceiling **the user sets**, in whatever currency their agent reports
+   * costs in. `0` disables the warning entirely (the default).
+   *
+   * Explicitly not a credit balance: nothing Praxis talks to reports one. ACP's
+   * `usage_update` carries a cumulative cost but no limit, and the gateway
+   * client only calls `/v1/models` and `/v1/chat/completions`. So this is a
+   * self-imposed budget checked against genuinely reported spend — never
+   * present it as an account balance, and never infer spend for a provider that
+   * reports none (API providers report tokens, not cost; turning tokens into
+   * money needs a price table this app does not have and could not keep true).
+   */
+  spendLimit: number;
   /** Which configured provider new sessions use by default. */
   activeProvider: AiProvider;
   /**
@@ -432,6 +445,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     workingDirectory: '',
     analysisPrompt: '',
     analysisGateEnabled: false,
+    spendLimit: 0,
     activeProvider: 'vercel-gateway',
     providers: {},
     browserTools: { enabled: false, allowedHosts: [] }
@@ -893,6 +907,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         agentName: readString(raw.ai.agentName, DEFAULT_APP_SETTINGS.ai.agentName),
         workingDirectory: readString(raw.ai.workingDirectory, DEFAULT_APP_SETTINGS.ai.workingDirectory),
         analysisPrompt: readString(raw.ai.analysisPrompt, DEFAULT_APP_SETTINGS.ai.analysisPrompt),
+        spendLimit: clampNumber(raw.ai.spendLimit, 0, Number.MAX_SAFE_INTEGER, DEFAULT_APP_SETTINGS.ai.spendLimit),
         analysisGateEnabled: readBoolean(
           raw.ai.analysisGateEnabled,
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled

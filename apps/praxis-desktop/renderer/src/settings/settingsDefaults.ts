@@ -85,6 +85,7 @@ export const DEFAULT_APP_SETTINGS = {
     gatewayUrl: '',
     defaultModel: '',
     agentName: '',
+    spendLimit: 0,
     browserTools: { enabled: false, allowedHosts: [] as string[] }
   },
   jira: {

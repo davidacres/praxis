@@ -172,3 +172,67 @@ export function formatCost(cost: AgentSessionRecord['cost']): string | undefined
     return `${cost.amount.toFixed(2)} ${cost.currency}`;
   }
 }
+
+export interface SpendSummary {
+  /** Totals keyed by currency, because summing across currencies is nonsense. */
+  byCurrency: Array<{ currency: string; amount: number }>;
+  /** Set only when every reporting session used one currency — otherwise a
+   *  limit cannot be meaningfully compared and this stays undefined. */
+  single?: { currency: string; amount: number };
+}
+
+/**
+ * What the reporting sessions have cost, in total.
+ *
+ * Only sessions whose provider actually reported a cost count — today that is
+ * ACP agents only. API-provider sessions contribute nothing rather than a
+ * guess: turning their token counts into money would need a price table this
+ * app does not have.
+ *
+ * Totals are grouped by currency. An agent reporting USD and another reporting
+ * EUR cannot be added, so a mixed set yields no `single` total, and callers
+ * must not fabricate one by picking a favourite.
+ */
+export function summariseSpend(sessions: readonly AgentSessionRecord[]): SpendSummary {
+  const totals = new Map<string, number>();
+  for (const session of sessions) {
+    const cost = session.cost;
+    if (!cost || !Number.isFinite(cost.amount) || cost.amount <= 0) continue;
+    totals.set(cost.currency, (totals.get(cost.currency) ?? 0) + cost.amount);
+  }
+  const byCurrency = [...totals.entries()]
+    .map(([currency, amount]) => ({ currency, amount }))
+    .sort((left, right) => right.amount - left.amount);
+  return { byCurrency, ...(byCurrency.length === 1 ? { single: byCurrency[0] } : {}) };
+}
+
+export interface SpendPressure {
+  spent: number;
+  limit: number;
+  currency: string;
+  percent: number;
+  /** Same bands as context pressure, so the two warnings read alike. */
+  level: 'ok' | 'warn' | 'critical';
+}
+
+/**
+ * Spend against the user's own `ai.spendLimit`. Undefined when no limit is set
+ * (`0` disables it), when nothing has reported a cost, or when sessions span
+ * several currencies and the comparison would be meaningless.
+ */
+export function spendPressure(
+  sessions: readonly AgentSessionRecord[],
+  limit: number
+): SpendPressure | undefined {
+  if (!Number.isFinite(limit) || limit <= 0) return undefined;
+  const single = summariseSpend(sessions).single;
+  if (!single || single.amount <= 0) return undefined;
+  const fraction = single.amount / limit;
+  return {
+    spent: single.amount,
+    limit,
+    currency: single.currency,
+    percent: Math.round(fraction * 100),
+    level: fraction >= 0.85 ? 'critical' : fraction >= 0.67 ? 'warn' : 'ok'
+  };
+}

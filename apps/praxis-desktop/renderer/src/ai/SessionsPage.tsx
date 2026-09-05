@@ -14,7 +14,7 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, isWorkflowStageSession, sessionLabel, sessionTitle } from './sessionNav';
+import { basename, contextPressure, formatCost, isWorkflowStageSession, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
 
 /**
@@ -247,6 +247,10 @@ export function SessionsPage({
   // window is not news, and a warning that is always on screen stops reading
   // as one.
   const context = selected ? contextPressure(selected) : undefined;
+  // Spend against the user's own limit, totalled across every session that
+  // reported a cost — the budget is theirs, not this session's. Same bands as
+  // context, so the two warnings read as one family rather than two designs.
+  const spend = spendPressure(sessions, settings?.ai.spendLimit ?? 0);
   const respondToPermission = (decision: PermissionDecision) => {
     if (!selected) return;
     setRespondingTo(selected.issueKey);
@@ -613,6 +617,32 @@ export function SessionsPage({
 
             <div className="session-chat-composer">
               {followUpError && <div className="error-banner" data-testid="session-follow-up-error">{followUpError}</div>}
+              {spend && spend.level !== 'ok' && (
+                <div className={`composer-context-banner is-${spend.level}`} data-testid="session-spend">
+                  <div className="composer-context-heading">
+                    <Icon name={spend.level === 'critical' ? 'warning' : 'zap'} size={13} />
+                    <span data-testid="session-spend-figure">
+                      {formatCost({ amount: spend.spent, currency: spend.currency })} of{' '}
+                      {formatCost({ amount: spend.limit, currency: spend.currency })} spend limit
+                    </span>
+                  </div>
+                  <div
+                    className={`session-context-bar is-${spend.level}`}
+                    role="progressbar"
+                    aria-valuenow={Math.min(spend.percent, 100)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Spend limit used"
+                  >
+                    <span style={{ width: `${Math.min(spend.percent, 100)}%` }} />
+                  </div>
+                  <p>
+                    {spend.percent >= 100
+                      ? 'Sessions have cost more than the limit you set in Settings → AI Provider. Nothing is blocked — Praxis cannot stop your agent spending, only tell you.'
+                      : 'Approaching the spend limit you set in Settings → AI Provider.'}
+                  </p>
+                </div>
+              )}
               {context && context.level !== 'ok' && (
                 <div className={`composer-context-banner is-${context.level}`} data-testid="session-context">
                   <div className="composer-context-heading">
