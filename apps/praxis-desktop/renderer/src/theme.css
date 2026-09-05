@@ -8841,7 +8841,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-changes-list { display: flex; flex-direction: column; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .session-changes-row {
   display: grid;
-  grid-template-columns: 62px minmax(0, 1fr) 22px;
+  grid-template-columns: 62px minmax(0, 1fr) 22px 22px;
   align-items: center;
   gap: var(--space-2);
   padding: 3px 0;
@@ -8900,6 +8900,53 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-changes-diff .diff-deletion { color: var(--danger); }
 .session-changes-diff .diff-hunk { color: var(--text-tertiary); }
 .session-changes-diff .diff-notice { color: var(--warning); }
+
+/* The whole-file view — read-only, not a diff. Same box treatment as the
+   diff so the two read as siblings, but its own line-numbered body since it
+   has no add/remove gutter to reuse. */
+.session-changes-file {
+  margin: var(--space-1) 0 var(--space-2) 62px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.session-changes-file-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  background: var(--bg-elevated);
+}
+.session-changes-file-body {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: var(--space-2) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre;
+}
+.session-changes-file-line { display: block; padding: 0 var(--space-2); }
+.session-changes-file-line:hover { background: var(--bg-hover); }
+.session-changes-file-line-no {
+  display: inline-block;
+  min-width: 34px;
+  margin-right: var(--space-2);
+  color: var(--text-tertiary);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.session-changes-file-truncated { color: var(--warning); }
+.session-changes-file .git-code-keyword { color: var(--accent); }
+.session-changes-file .git-code-string { color: var(--tone-amber); }
+.session-changes-file .git-code-number { color: var(--text-secondary); }
+.session-changes-file .git-code-comment { color: var(--text-tertiary); }
 
 .session-changes-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
 

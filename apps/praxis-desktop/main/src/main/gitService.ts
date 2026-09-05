@@ -17,6 +17,7 @@ import {
   type GitDiffDocument,
   type GitDiffRequest,
   type GitDiffResult,
+  type GitFileContent,
   type GitHunkActionRequest,
   type GitFileHistoryEntry,
   type GitRepositorySnapshot,
@@ -27,6 +28,9 @@ import { getSettingsBackend } from './settingsBackendInstance';
 
 const execFile = util.promisify(execFileCallback);
 const MAX_COMMITS = 5000;
+/** A file viewer reads the whole file, unlike a diff — cap it so an accidental
+ *  open of a generated bundle or log doesn't try to render megabytes of text. */
+const MAX_FILE_VIEW_BYTES = 1_000_000;
 const CACHE_TTL_MS = 1500;
 const repositoryCache = new Map<string, GitRepositorySnapshot>();
 
@@ -513,4 +517,23 @@ export async function getGitBlame(input: string, filePath: string, ref = 'HEAD')
     }
   }
   return result;
+}
+
+/**
+ * A file's own text off the working tree — not a diff. This is the "just let
+ * me look at it" case: a file the session never touched, or one you'd rather
+ * read whole than as a hunk. Reads the tracked-or-not working copy directly
+ * (not a git object), so it shows exactly what's on disk right now, including
+ * untracked and locally-modified files.
+ */
+export async function getGitFileContent(input: string, filePath: string): Promise<GitFileContent> {
+  const repositoryPath = await resolveRepository(input);
+  const resolvedPath = await safeRepositoryFile(repositoryPath, filePath);
+  const stat = await fsp.stat(resolvedPath);
+  if (stat.isDirectory()) throw new Error(`${filePath} is a directory, not a file.`);
+  const buffer = await fsp.readFile(resolvedPath);
+  const isBinary = buffer.subarray(0, 8000).includes(0);
+  const truncated = !isBinary && buffer.length > MAX_FILE_VIEW_BYTES;
+  const content = isBinary ? '' : buffer.subarray(0, MAX_FILE_VIEW_BYTES).toString('utf8');
+  return { path: filePath, content, isBinary, size: stat.size, truncated };
 }

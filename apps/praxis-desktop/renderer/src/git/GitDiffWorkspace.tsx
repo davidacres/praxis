@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useDialogs } from '../ui/dialogs';
+import { highlightCode, languageFor } from '../ui/codeHighlight';
 import type { GitBlameLine, GitDiffDocument, GitDiffFile, GitDiffHunk, GitDiffLine, GitDiffRequest, GitFileHistoryEntry, GitHunkAction } from '@praxis/core';
 
 export type GitDiffViewMode = 'inline' | 'split' | 'hunks';
@@ -31,24 +32,6 @@ function fileName(path: string): string {
 function directoryName(path: string): string {
   const pieces = path.split('/');
   return pieces.length > 1 ? pieces.slice(0, -1).join('/') : '';
-}
-
-function languageFor(path: string): string {
-  const extension = path.split('.').pop()?.toLowerCase();
-  return ({ ts: 'TypeScript', tsx: 'TypeScript React', js: 'JavaScript', jsx: 'JavaScript React', css: 'CSS', json: 'JSON', md: 'Markdown', cs: 'C#', py: 'Python', sh: 'Shell', html: 'HTML', yml: 'YAML', yaml: 'YAML' } as Record<string, string>)[extension ?? ''] ?? (extension?.toUpperCase() || 'Text');
-}
-
-function highlightCode(value: string): ReactNode {
-  const pattern = /(\/\/.*$|#.*$|`[^`]*`|'(?:\\.|[^'])*'|"(?:\\.|[^"])*"|\b(?:const|let|var|function|return|if|else|for|while|class|interface|type|export|import|from|async|await|new|true|false|null|undefined|public|private|protected|readonly|extends|implements|using|namespace)\b|\b\d+(?:\.\d+)?\b)/gm;
-  return value.split(pattern).map((part, index) => {
-    if (!part) return null;
-    const className = part.startsWith('//') || part.startsWith('#') ? 'comment'
-      : /^['"`]/.test(part) ? 'string'
-      : /^\d/.test(part) ? 'number'
-      : /^(?:const|let|var|function|return|if|else|for|while|class|interface|type|export|import|from|async|await|new|true|false|null|undefined|public|private|protected|readonly|extends|implements|using|namespace)$/.test(part) ? 'keyword'
-      : undefined;
-    return className ? <span className={`git-code-${className}`} key={index}>{part}</span> : part;
-  });
 }
 
 function changedContent(before: string | undefined, after: string | undefined, side: 'before' | 'after'): ReactNode {

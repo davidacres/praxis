@@ -67,7 +67,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
-import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
+import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
  * Typed IPC contract for the Board and Issue Detail slices, shared (type-only) between the
@@ -822,6 +822,7 @@ export interface GitIpc {
   getConflict(repositoryPath: string, path: string): Promise<GitConflictFile>;
   resolveConflict(repositoryPath: string, path: string, resolution: GitConflictResolution): Promise<GitStatusSnapshot>;
   abortConflict(repositoryPath: string): Promise<GitRepositorySnapshot>;
+  getFileContent(repositoryPath: string, path: string): Promise<GitFileContent>;
   getFileHistory(repositoryPath: string, path: string, ref?: string): Promise<GitFileHistoryEntry[]>;
   getBlame(repositoryPath: string, path: string, ref?: string): Promise<GitBlameLine[]>;
   cherryPick(repositoryPath: string, commit: string): Promise<GitRepositorySnapshot>;
