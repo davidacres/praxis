@@ -18,6 +18,12 @@
 //     each one a full snapshot, the way TodoWrite/the ACP spec define it, not
 //     a diff against the last. Add "STOP_PLAN_MIDWAY" too to stop after the
 //     third task is still `in_progress`, for asserting the mid-run state.
+//   - "WITH_COMMANDS": sends an `available_commands_update` with two fake
+//     slash commands, one of them taking an argument.
+// `session/new` always advertises two Session Modes ("Ask"/"Code") — harmless
+// for every other test (nothing else reads `acpAvailableModes`), and it means
+// `session/set_mode` can be exercised without a marker: it applies the switch
+// and confirms it with `current_mode_update`, the same as a real agent would.
 
 import { Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
@@ -66,9 +72,22 @@ const modelConfigOption = () => ({
   ]
 });
 
+// Fake Session Modes for testing `AcpClientWrapper.getSessionModes`/`setMode`
+// and the composer's mode chip without a real CLI. Distinct from Praxis's own
+// `SessionMode` (chat/analysis/review) — see `agentTypes.ts`.
+let currentMode = 'ask';
+const availableModes = [
+  { id: 'ask', name: 'Ask', description: 'Answers questions without making changes' },
+  { id: 'code', name: 'Code', description: 'Makes changes directly' }
+];
+
 app.onRequest(acp.AGENT_METHODS.session_new, ctx => {
   browserMcp = (ctx.params.mcpServers ?? []).find(server => server.name === 'praxis-browser');
-  return { sessionId: 'fake-session-1', configOptions: [modelConfigOption()] };
+  return {
+    sessionId: 'fake-session-1',
+    configOptions: [modelConfigOption()],
+    modes: { currentModeId: currentMode, availableModes }
+  };
 });
 
 app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
@@ -76,6 +95,15 @@ app.onRequest(acp.AGENT_METHODS.session_set_config_option, ctx => {
     currentModel = ctx.params.value;
   }
   return { configOptions: [modelConfigOption()] };
+});
+
+app.onRequest(acp.AGENT_METHODS.session_set_mode, async ctx => {
+  currentMode = ctx.params.modeId;
+  await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+    sessionId: ctx.params.sessionId,
+    update: { sessionUpdate: 'current_mode_update', currentModeId: currentMode }
+  });
+  return {};
 });
 
 app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
@@ -218,6 +246,19 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
           amount: promptText.includes('COST_BIG') ? 9 : 0.42,
           currency: promptText.includes('COST_EUR') ? 'EUR' : 'USD'
         }
+      }
+    });
+  }
+
+  if (promptText.includes('WITH_COMMANDS')) {
+    await ctx.client.notify(acp.CLIENT_METHODS.session_update, {
+      sessionId: ctx.params.sessionId,
+      update: {
+        sessionUpdate: 'available_commands_update',
+        availableCommands: [
+          { name: 'research_codebase', description: 'Research the codebase before making changes' },
+          { name: 'create_plan', description: 'Draft a plan for the requested change', input: { hint: 'goal' } }
+        ]
       }
     });
   }

@@ -500,6 +500,15 @@ export interface AiIpc {
   /** Switches the active phase of a session and continues it with that mode's contract. */
   switchSessionMode(issueKey: string, mode: SessionMode): Promise<void>;
   /**
+   * Switches an ACP-hosted agent's own Session Mode (e.g. "ask" / "architect"
+   * / "code") over its live connection — entirely distinct from
+   * `switchSessionMode` above, which is Praxis's own chat/analysis/review
+   * phase. Requires the session's task to still be running; throws for any
+   * non-ACP provider. `modeId` is one of the ids in the session record's
+   * `acpAvailableModes`.
+   */
+  setAcpMode(issueKey: string, modeId: string): Promise<void>;
+  /**
    * Resolves the oldest pending permission request for an issue's active
    * task (no-op when none is pending). `'allow_always'` also resolves every
    * other request currently queued for that task.
