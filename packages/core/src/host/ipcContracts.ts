@@ -505,6 +505,16 @@ export interface AiIpc {
    * other request currently queued for that task.
    */
   respondToPermission(issueKey: string, decision: PermissionDecision): Promise<void>;
+  /**
+   * Reverts one file to what it was immediately before a specific recorded
+   * edit — restoring `oldText` on disk, sandboxed to the session's own
+   * working folder or worktree. Identifies the edit by the `tool_complete`
+   * event's own timestamp plus the path, since a session can touch the same
+   * file more than once. Refuses when the session has since made a later
+   * edit to that same path (undoing it would silently discard the newer
+   * one) or while a turn is still running.
+   */
+  undoToolFileChange(issueKey: string, eventTimestamp: string, path: string): Promise<AgentSessionRecord>;
   /** Subscribes to session record updates; returns an unsubscribe function. */
   onSessionChanged(listener: (record: AgentSessionRecord) => void): () => void;
   /** Subscribes to session deletions; returns an unsubscribe function. */

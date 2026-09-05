@@ -341,6 +341,86 @@ test('a changed file can be read whole, not just as a diff', async () => {
   await expect(fileView).toHaveCount(0);
 });
 
+test('a single hunk can be discarded without losing the rest of the file\'s edits', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-hunk-'));
+  const sumFile = path.join(repo, 'sum.js');
+  // Two independent functions, far enough apart that git diff never merges
+  // their hunks — the agent fixes one, the test edits the other by hand
+  // afterwards, to end up with a clean two-hunk working diff.
+  const seeded = [
+    'function sum(a, b) {',
+    '  return a - b;',
+    '}',
+    '',
+    '// spacer 1',
+    '// spacer 2',
+    '// spacer 3',
+    '// spacer 4',
+    '// spacer 5',
+    '// spacer 6',
+    '// spacer 7',
+    '// spacer 8',
+    '',
+    'function double(a) {',
+    '  return a * 1;',
+    '}',
+    ''
+  ].join('\n');
+  fs.writeFileSync(sumFile, seeded);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
+
+  const app_ = app = await launchTestApp();
+  const win = app_.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+
+  // A second, unrelated change the agent never made — this is the "other
+  // edits" a hunk-level discard must leave alone.
+  fs.writeFileSync(sumFile, fs.readFileSync(sumFile, 'utf8').replace('return a * 1;', 'return a * 2;'));
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+
+  const changes = win.locator('[data-testid="session-changes"]');
+  await changes.getByTestId('session-changes-open').click();
+  const hunks = changes.getByTestId('session-changes-hunk');
+  await expect(hunks).toHaveCount(2);
+
+  const doubleHunk = hunks.filter({ hasText: 'a * 2' });
+  await expect(doubleHunk).toHaveCount(1);
+  await doubleHunk.getByTestId('session-changes-hunk-discard').click();
+  const dialog = win.getByRole('dialog', { name: 'Discard this hunk?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Discard hunk', exact: true }).click();
+
+  // Only the discarded hunk is gone — the sum() fix survives on disk and in
+  // the diff.
+  await expect(hunks).toHaveCount(1);
+  await expect(hunks).toContainText('a + b');
+  const finalContent = fs.readFileSync(sumFile, 'utf8');
+  expect(finalContent).toContain('return a + b;');
+  expect(finalContent).toContain('return a * 1;');
+});
+
 test('a CLI-agent session reports no token count rather than a misleading zero', async () => {
   repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-tokens-'));
   fs.writeFileSync(path.join(repo, 'sum.js'), 'function sum(a, b) {\n  return a - b;\n}\n');
@@ -379,4 +459,60 @@ test('a CLI-agent session reports no token count rather than a misleading zero',
   expect(
     await win.evaluate(k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.tokenUsage), session.issueKey)
   ).toBeUndefined();
+});
+
+test('an edit can be undone straight from the transcript', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-undo-'));
+  const sumFile = path.join(repo, 'sum.js');
+  const original = 'function sum(a, b) {\n  return a - b;\n}\n';
+  fs.writeFileSync(sumFile, original);
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
+
+  const app_ = app = await launchTestApp();
+  const win = app_.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+  expect(fs.readFileSync(sumFile, 'utf8')).toContain('return a + b;');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+
+  // The edit lives in the transcript's tool-call row, not just the changeset
+  // panel — undoing it from there means not leaving the conversation to fix
+  // a mistake.
+  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
+  const undoButton = win.getByTestId('session-tool-undo');
+  await expect(undoButton).toBeVisible();
+  await undoButton.click();
+  const dialog = win.getByRole('dialog', { name: 'Undo the edit to sum.js?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Undo edit', exact: true }).click();
+
+  // The file is exactly what it was before the edit, and git agrees nothing
+  // changed.
+  await expect.poll(() => fs.readFileSync(sumFile, 'utf8')).toBe(original);
+  expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
+
+  // The undo itself is a visible, honest part of the record, not a silent rewrite.
+  await win.locator('.session-activity summary').click();
+  await expect(win.getByTestId('session-events')).toContainText('You undid the edit to sum.js.');
 });
