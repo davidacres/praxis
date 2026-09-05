@@ -1,0 +1,296 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { app } from 'electron';
+import {
+  type ActiveAppearanceAddons,
+  type AddonSurfacePackContent,
+  type AddonThemeContent,
+  type InstalledAddon,
+  type MarketplaceStatus,
+  GitHubPackagesRegistryClient,
+  MarketplaceService
+} from '@praxis/core';
+
+import { ElectronAddonStorage } from './adapters/electronAddonStorage';
+import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
+import { getSecretsStore } from './connectionStoreInstance';
+import { getLogBus } from './logBusInstance';
+import { getSettingsBackend } from './settingsBackendInstance';
+
+/**
+ * Wires `MarketplaceService` to the desktop host: config from `settings.marketplace`,
+ * the GitHub token from the OS-encrypted secret store, and disk under
+ * `userData/addons/`. Also owns *activation* — turning an installed add-on into
+ * something the rest of the app sees:
+ *
+ * - `theme` / `surface-pack`: exposed through {@link readActiveAppearance} for the
+ *   renderer to register alongside the user's own custom themes/packs.
+ * - `agent`: when trusted, the payload is mirrored into the global agents root
+ *   (`userData/agents/<id>`) so the existing discovery + trust model picks it up;
+ *   the download itself stays under `userData/addons/agent/<id>`.
+ * - `workflow-template`: read by `marketplaceWorkflowTemplates()` as a library tier.
+ */
+
+export const MARKETPLACE_TOKEN_KEY = 'marketplace:githubToken';
+
+let storage: ElectronAddonStorage | undefined;
+const changeListeners = new Set<() => void>();
+
+function addonsRoot(): string {
+  return path.join(app.getPath('userData'), 'addons');
+}
+
+export function getAddonStorage(): ElectronAddonStorage {
+  if (!storage) {
+    storage = new ElectronAddonStorage(addonsRoot());
+  }
+  return storage;
+}
+
+export function onMarketplaceChanged(listener: () => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+export function emitMarketplaceChanged(): void {
+  for (const listener of [...changeListeners]) {
+    try {
+      listener();
+    } catch (error) {
+      getLogBus().appendLine(`[marketplace] change listener failed: ${describe(error)}`);
+    }
+  }
+}
+
+async function getToken(): Promise<string | undefined> {
+  try {
+    return (await getSecretsStore().get(MARKETPLACE_TOKEN_KEY)) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getMarketplaceStatus(): Promise<MarketplaceStatus> {
+  const cfg = getSettingsBackend().read().marketplace;
+  const hasToken = Boolean(await getToken());
+  return {
+    ready: cfg.enabled && cfg.owner.trim().length > 0 && hasToken,
+    enabled: cfg.enabled,
+    owner: cfg.owner,
+    ownerType: cfg.ownerType,
+    packageNamePrefix: cfg.packageNamePrefix,
+    apiBaseUrl: cfg.apiBaseUrl,
+    registryBaseUrl: cfg.registryBaseUrl,
+    checkOnLaunch: cfg.checkOnLaunch,
+    hasToken
+  };
+}
+
+export async function configureMarketplace(patch: {
+  enabled?: boolean;
+  owner?: string;
+  ownerType?: 'user' | 'org';
+  packageNamePrefix?: string;
+  apiBaseUrl?: string;
+  registryBaseUrl?: string;
+  checkOnLaunch?: boolean;
+}): Promise<MarketplaceStatus> {
+  await getSettingsBackend().write({ marketplace: patch });
+  emitMarketplaceChanged();
+  return getMarketplaceStatus();
+}
+
+export async function setMarketplaceToken(token: string | null): Promise<MarketplaceStatus> {
+  if (token && token.trim()) {
+    await getSecretsStore().store(MARKETPLACE_TOKEN_KEY, token.trim());
+  } else {
+    await getSecretsStore().delete(MARKETPLACE_TOKEN_KEY);
+  }
+  emitMarketplaceChanged();
+  return getMarketplaceStatus();
+}
+
+/** Builds a service against the current config, or throws a user-facing reason why it cannot. */
+export async function buildMarketplaceService(): Promise<MarketplaceService> {
+  const cfg = getSettingsBackend().read().marketplace;
+  if (!cfg.enabled) {
+    throw new Error('The add-on marketplace is turned off in Settings.');
+  }
+  const owner = cfg.owner.trim();
+  if (!owner) {
+    throw new Error('Set a marketplace owner (a GitHub user or organisation) in Settings.');
+  }
+  const token = await getToken();
+  if (!token) {
+    throw new Error('Add a marketplace GitHub token in Settings (needs `read:packages`).');
+  }
+
+  const client = new GitHubPackagesRegistryClient({
+    owner,
+    ownerType: cfg.ownerType,
+    token,
+    packageNamePrefix: cfg.packageNamePrefix || undefined,
+    apiBaseUrl: cfg.apiBaseUrl || undefined,
+    registryBaseUrl: cfg.registryBaseUrl || undefined
+  });
+
+  return new MarketplaceService({
+    client,
+    storage: getAddonStorage(),
+    appVersion: app.getVersion(),
+    log: message => getLogBus().appendLine(message)
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Activation
+// ---------------------------------------------------------------------------
+
+function readPayloadJson(dir: string, file: string): unknown {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function coerceStringMap(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (isRecord(value)) {
+    for (const [key, entry] of Object.entries(value)) {
+      if (typeof entry === 'string') out[key] = entry;
+    }
+  }
+  return out;
+}
+
+function shapeTheme(id: string, raw: unknown): AddonThemeContent | undefined {
+  if (!isRecord(raw)) return undefined;
+  const mode = raw.mode === 'light' ? 'light' : raw.mode === 'dark' ? 'dark' : undefined;
+  if (!mode) return undefined;
+  return {
+    id,
+    name: typeof raw.name === 'string' ? raw.name : id,
+    mode,
+    description: typeof raw.description === 'string' ? raw.description : '',
+    preview: coerceStringMap(raw.preview),
+    terminal: isRecord(raw.terminal) ? coerceStringMap(raw.terminal) : undefined
+  };
+}
+
+function shapeSurfacePack(id: string, raw: unknown): AddonSurfacePackContent | undefined {
+  if (!isRecord(raw)) return undefined;
+  return {
+    id,
+    name: typeof raw.name === 'string' ? raw.name : id,
+    description: typeof raw.description === 'string' ? raw.description : '',
+    basePackId: typeof raw.basePackId === 'string' ? raw.basePackId : undefined,
+    tokens: coerceStringMap(raw.tokens),
+    pattern: isRecord(raw.pattern) ? (raw.pattern as Record<string, unknown>) : undefined
+  };
+}
+
+/** Enabled `theme` / `surface-pack` add-ons, shaped for the renderer to register. */
+export async function readActiveAppearance(): Promise<ActiveAppearanceAddons> {
+  const store = getAddonStorage();
+  const installed = await store.list();
+  const themes: AddonThemeContent[] = [];
+  const surfacePacks: AddonSurfacePackContent[] = [];
+
+  for (const addon of installed) {
+    if (!addon.enabled) continue;
+    const dir = store.addonDir(addon.manifest.kind, addon.manifest.id);
+    if (addon.manifest.kind === 'theme') {
+      const theme = shapeTheme(addon.manifest.id, readPayloadJson(dir, 'theme.json'));
+      if (theme) themes.push(theme);
+    } else if (addon.manifest.kind === 'surface-pack') {
+      const pack = shapeSurfacePack(addon.manifest.id, readPayloadJson(dir, 'pack.json'));
+      if (pack) surfacePacks.push(pack);
+    }
+  }
+  return { themes, surfacePacks };
+}
+
+/** Enabled `workflow-template` add-on definitions, for the workflow library. */
+export async function marketplaceWorkflowTemplates(): Promise<unknown[]> {
+  const store = getAddonStorage();
+  const installed = await store.list();
+  const out: unknown[] = [];
+  for (const addon of installed) {
+    if (addon.manifest.kind !== 'workflow-template' || !addon.enabled) continue;
+    const dir = store.addonDir('workflow-template', addon.manifest.id);
+    const definition = readPayloadJson(dir, 'template.json');
+    if (definition) out.push(definition);
+  }
+  return out;
+}
+
+/**
+ * Mirrors a trusted agent add-on's payload into the global agents root so the
+ * existing discovery + trust model runs it; clears the mirror otherwise. Called
+ * on every trust change, remove, and once on launch.
+ */
+export async function syncAgentAddons(): Promise<void> {
+  const store = getAddonStorage();
+  const globalAgentsRoot = getAgentRuntimeRoots().agents.global;
+  const installed = (await store.list()).filter(addon => addon.manifest.kind === 'agent');
+
+  await fs.promises.mkdir(globalAgentsRoot, { recursive: true });
+
+  for (const addon of installed) {
+    const target = path.join(globalAgentsRoot, addon.manifest.id);
+    const source = store.addonDir('agent', addon.manifest.id);
+    await fs.promises.rm(target, { recursive: true, force: true });
+    if (addon.enabled) {
+      await fs.promises.cp(source, target, { recursive: true });
+      // The install record is bookkeeping, not part of the agent.
+      await fs.promises.rm(path.join(target, '.praxis-addon.json'), { force: true });
+    }
+  }
+}
+
+export async function refreshAgentRuntimeForAddons(): Promise<void> {
+  await syncAgentAddons();
+  try {
+    await getAgentRuntimeManager().refresh();
+  } catch (error) {
+    getLogBus().appendLine(`[marketplace] agent runtime refresh failed: ${describe(error)}`);
+  }
+}
+
+export async function reconcileInstalledOnLaunch(): Promise<void> {
+  await syncAgentAddons();
+  const cfg = getSettingsBackend().read().marketplace;
+  if (!cfg.checkOnLaunch) return;
+  let status: MarketplaceStatus;
+  try {
+    status = await getMarketplaceStatus();
+  } catch {
+    return;
+  }
+  if (!status.ready) return;
+  try {
+    const service = await buildMarketplaceService();
+    const updates = await service.checkForUpdates();
+    if (updates.length > 0) {
+      getLogBus().appendLine(
+        `[marketplace] ${updates.length} add-on update(s) available: ${updates
+          .map(update => `${update.kind}/${update.id} ${update.installedVersion}→${update.latestVersion}`)
+          .join(', ')}`
+      );
+    }
+  } catch (error) {
+    getLogBus().appendLine(`[marketplace] launch update check failed: ${describe(error)}`);
+  }
+}
+
+export type { InstalledAddon };
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

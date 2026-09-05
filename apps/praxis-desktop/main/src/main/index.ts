@@ -31,6 +31,8 @@ import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
 import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
+import { registerMarketplaceIpc } from './marketplaceIpc';
+import { reconcileInstalledOnLaunch } from './marketplaceInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -259,22 +261,29 @@ void app.whenReady().then(async () => {
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
+  registerMarketplaceIpc();
   registerGitIpc();
   ipcMain.handle('app:getVersion', () => app.getVersion());
   registerAutoUpdate(() => BrowserWindow.getAllWindows(), getLogBus());
-  void getAgentRuntimeManager().refresh().then(async snapshot => {
-    getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
-    for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
-      try {
-        await getAgentRuntimeManager().start(agent.manifest.id);
-        getLogBus().appendLine(`[agent-runtime] started ${agent.manifest.id}`);
-      } catch (error) {
-        getLogBus().appendLine(`[agent-runtime] failed to start ${agent.manifest.id}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }).catch(error => {
-    getLogBus().appendLine(`[agent-runtime] discovery failed: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  // Mirror trusted agent add-ons onto disk before the first discovery pass, and
+  // (if configured) log any available add-on updates.
+  void reconcileInstalledOnLaunch()
+    .catch(error => getLogBus().appendLine(`[marketplace] launch reconcile failed: ${error instanceof Error ? error.message : String(error)}`))
+    .finally(() => {
+      void getAgentRuntimeManager().refresh().then(async snapshot => {
+        getLogBus().appendLine(`[agent-runtime] discovered ${snapshot.agents.length} agents and ${snapshot.skills.length} skills`);
+        for (const agent of snapshot.agents.filter(candidate => candidate.trusted && candidate.manifest.activation === 'startup')) {
+          try {
+            await getAgentRuntimeManager().start(agent.manifest.id);
+            getLogBus().appendLine(`[agent-runtime] started ${agent.manifest.id}`);
+          } catch (error) {
+            getLogBus().appendLine(`[agent-runtime] failed to start ${agent.manifest.id}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }).catch(error => {
+        getLogBus().appendLine(`[agent-runtime] discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    });
   // Seed the Output panel with a launch marker — also gives e2e a
   // deterministic first line to assert against.
   getLogBus().appendLine(`[app] Praxis ${app.getVersion()} started`);

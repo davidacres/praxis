@@ -111,6 +111,15 @@ export const DEFAULT_APP_SETTINGS = {
   startup: {
     reopenLastWorkspace: true
   },
+  marketplace: {
+    enabled: false,
+    owner: '',
+    ownerType: 'user' as 'user' | 'org',
+    packageNamePrefix: 'praxis-addon-',
+    apiBaseUrl: 'https://api.github.com',
+    registryBaseUrl: 'https://npm.pkg.github.com',
+    checkOnLaunch: true
+  },
   preview: {
     enableCreateIdea: false,
     enableNewProject: true,

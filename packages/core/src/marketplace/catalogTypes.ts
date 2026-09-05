@@ -97,6 +97,41 @@ export interface InstalledAddon {
   enabled: boolean;
 }
 
+/**
+ * The `addon/theme.json` payload of a `theme` add-on — the same shape the
+ * renderer's `registerCustomThemes` consumes, so an installed theme joins the
+ * gallery through the existing custom-theme path.
+ */
+export interface AddonThemeContent {
+  id: string;
+  name: string;
+  mode: 'light' | 'dark';
+  description: string;
+  /** Theme preview colour tokens (canvas, panel, accent, …). */
+  preview: Record<string, string>;
+  /** Optional 16-colour ANSI palette for the integrated terminal. */
+  terminal?: Record<string, string>;
+}
+
+/** The `addon/pack.json` payload of a `surface-pack` add-on. */
+export interface AddonSurfacePackContent {
+  id: string;
+  name: string;
+  description: string;
+  /** Built-in pack to inherit `[data-surface]` styling from. */
+  basePackId?: string;
+  /** `--surface-*` overrides; the renderer filters these against its whitelist. */
+  tokens: Record<string, string>;
+  /** Watermark pattern spec; the renderer ignores unknown pattern ids. */
+  pattern?: Record<string, unknown>;
+}
+
+/** Declarative appearance content contributed by enabled add-ons. */
+export interface ActiveAppearanceAddons {
+  themes: AddonThemeContent[];
+  surfacePacks: AddonSurfacePackContent[];
+}
+
 /** An installed add-on that has a newer version available. */
 export interface AddonUpdate {
   id: string;
