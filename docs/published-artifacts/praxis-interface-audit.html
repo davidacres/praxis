@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Interface Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eaeef2;
+    --ink: #12181f;
+    --ink-2: #4a5561;
+    --ink-3: #7c8794;
+    --rule: #dbe1e7;
+    --rule-strong: #c3ccd5;
+    --accent: #0f7d7d;
+    --accent-soft: #dcefee;
+    --impact-high: #b8342a;
+    --impact-high-bg: #fbe6e4;
+    --impact-med: #96600f;
+    --impact-med-bg: #fbf0dc;
+    --praxis: #cf5029;
+    --shadow: 0 1px 2px rgba(18, 24, 31, .06), 0 8px 24px -16px rgba(18, 24, 31, .28);
+
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1319;
+      --surface: #151c24;
+      --surface-2: #1c252f;
+      --ink: #e6ecf2;
+      --ink-2: #a6b2bf;
+      --ink-3: #6f7d8b;
+      --rule: #242e38;
+      --rule-strong: #35424e;
+      --accent: #46b8b3;
+      --accent-soft: #12302e;
+      --impact-high: #f0736b;
+      --impact-high-bg: #2c1614;
+      --impact-med: #e0a63f;
+      --impact-med-bg: #2b2214;
+      --praxis: #e0603a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -18px rgba(0, 0, 0, .8);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0e1319;
+    --surface: #151c24;
+    --surface-2: #1c252f;
+    --ink: #e6ecf2;
+    --ink-2: #a6b2bf;
+    --ink-3: #6f7d8b;
+    --rule: #242e38;
+    --rule-strong: #35424e;
+    --accent: #46b8b3;
+    --accent-soft: #12302e;
+    --impact-high: #f0736b;
+    --impact-high-bg: #2c1614;
+    --impact-med: #e0a63f;
+    --impact-med-bg: #2b2214;
+    --praxis: #e0603a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -18px rgba(0, 0, 0, .8);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: 56px 0 34px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(38px, 6vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -.025em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    max-width: var(--measure);
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    margin: 0;
+  }
+
+  .scope {
+    margin: 26px 0 0;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--ink-3);
+  }
+
+  .scope b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---------- headline metrics ---------- */
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 34px 0 0;
+  }
+
+  .metric {
+    background: var(--ground);
+    padding: 20px 22px 18px;
+  }
+
+  .metric-n {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  .metric-l {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ink-2);
+  }
+
+  .metric-s {
+    margin-top: 5px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ---------- body layout ---------- */
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+    margin-top: 52px;
+    align-items: start;
+  }
+
+  @media (min-width: 1000px) {
+    .layout { grid-template-columns: 218px minmax(0, 1fr); gap: 56px; }
+    .rail { position: sticky; top: 28px; }
+  }
+
+  /* ---------- index rail ---------- */
+
+  .rail h2 {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+
+  .rail a {
+    display: grid;
+    grid-template-columns: 20px 1fr 8px;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 6px 6px 0;
+    font-size: 13.5px;
+    line-height: 1.35;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: 3px;
+  }
+
+  .rail a:hover { color: var(--ink); background: var(--surface-2); }
+  .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .rail .n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .rail .dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; }
+  .dot.high { background: var(--impact-high); }
+  .dot.med { background: var(--impact-med); }
+
+  .rail-key {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    line-height: 2;
+    color: var(--ink-3);
+  }
+
+  .rail-key i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; }
+
+  /* ---------- sections ---------- */
+
+  .group { margin-bottom: 8px; }
+
+  .group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin: 46px 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+
+  .group:first-of-type .group-head { margin-top: 0; }
+
+  .group-head h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: .01em;
+    margin: 0;
+    color: var(--ink);
+  }
+
+  .group-head span {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  /* ---------- findings ---------- */
+
+  .finding {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 0 20px;
+    padding: 30px 0 34px;
+    border-bottom: 1px solid var(--rule);
+    scroll-margin-top: 24px;
+  }
+
+  .rank {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -.03em;
+    color: var(--rule-strong);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .finding-body { min-width: 0; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  .tag.high { color: var(--impact-high); background: var(--impact-high-bg); }
+  .tag.med { color: var(--impact-med); background: var(--impact-med-bg); }
+  .tag.effort { color: var(--ink-2); background: var(--surface-2); }
+
+  .finding h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 21px;
+    line-height: 1.28;
+    letter-spacing: -.012em;
+    margin: 0 0 12px;
+    max-width: 30ch;
+    text-wrap: balance;
+  }
+
+  .finding p { margin: 0 0 13px; max-width: var(--measure); color: var(--ink-2); font-size: 15.5px; }
+  .finding p:last-child { margin-bottom: 0; }
+  .finding strong { color: var(--ink); font-weight: 600; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .87em;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* evidence — quoted machine output, the one thing that gets a surface */
+  .evidence {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 13px 16px;
+    margin: 0 0 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.85;
+    color: var(--ink-2);
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+
+  .evidence .k { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .evidence .c { color: var(--ink-3); }
+
+  .fix {
+    border-left: 3px solid var(--ink);
+    padding: 2px 0 2px 15px;
+    margin-top: 16px;
+    max-width: var(--measure);
+  }
+
+  .fix-l {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .fix p { margin: 0; color: var(--ink); font-size: 15.5px; }
+
+  /* ---------- specimens ---------- */
+
+  .specimen {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    margin: 4px 0 16px;
+    box-shadow: var(--shadow);
+  }
+
+  .specimen-head {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface-2);
+  }
+
+  .specimen-body { padding: 16px; }
+
+  .ruler { display: flex; flex-direction: column; gap: 3px; }
+
+  .ruler-row {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    align-items: baseline;
+    gap: 14px;
+  }
+
+  .ruler-px {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ruler-row.bad .ruler-px { color: var(--impact-high); }
+  .ruler-sample { color: var(--ink); line-height: 1.35; }
+
+  .ruler-note {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+
+  .focus-demo { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-end; }
+  .focus-col { display: flex; flex-direction: column; gap: 9px; }
+
+  .focus-cap {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .demo-btn {
+    font-family: var(--body);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 9px 18px;
+    border: 1px solid var(--rule-strong);
+    background: var(--surface-2);
+    color: var(--ink);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  .demo-btn.stripped:focus { outline: none; }
+  .demo-btn.stripped:focus-visible { outline: none; }
+  .demo-btn.ringed:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .hint {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .bars { display: flex; flex-direction: column; gap: 18px; }
+  .bar-block { display: flex; flex-direction: column; gap: 7px; }
+
+  .bar-cap {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .bar-row { display: grid; grid-template-columns: 74px 1fr 26px; align-items: center; gap: 12px; font-size: 13px; }
+  .bar-row span:first-child { color: var(--ink-2); }
+  .bar-row span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; }
+  .bar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--praxis); border-radius: 4px; }
+
+  .seg { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+  .seg-part { height: 100%; }
+  .seg-legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink-2); }
+  .seg-legend span { display: flex; align-items: center; gap: 6px; }
+  .seg-legend i { width: 9px; height: 9px; border-radius: 2px; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); }
+  .swatch { flex: 1 1 150px; min-width: 0; }
+  .swatch-chip { height: 52px; background: var(--praxis); }
+  .swatch-cap { padding: 9px 12px 11px; border-top: 1px solid var(--rule); }
+  .swatch + .swatch { border-left: 1px solid var(--rule); }
+
+  .swatch-role { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .swatch-hex { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 2px; }
+
+  /* ---------- closing ---------- */
+
+  .closing {
+    margin-top: 54px;
+    padding: 30px 32px 32px;
+    border: 2px solid var(--ink);
+    background: var(--surface);
+  }
+
+  .closing h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 25px;
+    letter-spacing: -.018em;
+    margin: 0 0 8px;
+  }
+
+  .closing > p { margin: 0 0 22px; color: var(--ink-2); max-width: var(--measure); }
+
+  .picks { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--rule); }
+
+  .pick {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 15px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .pick-n { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); }
+  .pick-t { font-size: 15.5px; color: var(--ink); }
+  .pick-t em { display: block; font-style: normal; font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+  .pick-w { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+  footer {
+    margin-top: 42px;
+    padding-top: 20px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.9;
+    color: var(--ink-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Design review · Praxis desktop · 3 September 2026 · all 10 shipped</p>
+    <h1>Praxis Interface Audit</h1>
+    <p class="standfirst">Ten findings from a pass over the shipped interface, ranked by value against effort. Each one carries the measurement it came from and the change that closed it &mdash; all ten are now in <code>main</code>.</p>
+    <p class="scope">
+      <b>Reviewed:</b> Overview · Project home · Board · Diff workspace · Git graph · Project wizard · Onboarding · Settings · Sessions<br>
+      <b>Sources:</b> 12 rendered captures from the Playwright suite, plus <code>theme.css</code> (8,700 lines) and the renderer source
+    </p>
+  </header>
+
+  <section class="metrics" aria-label="Headline measurements">
+    <div class="metric">
+      <div class="metric-n">29</div>
+      <div class="metric-l">distinct font sizes in one stylesheet</div>
+      <div class="metric-s">Target: 6</div>
+    </div>
+    <div class="metric">
+      <div class="metric-n">74</div>
+      <div class="metric-l">readable-UI declarations below 10px</div>
+      <div class="metric-s">28 more are scale-model art</div>
+    </div>
+    <div class="metric">
+      <div class="metric-n">26<span style="color:var(--ink-3);font-size:22px;">&#8202;/&#8202;15</span></div>
+      <div class="metric-l">focus outlines stripped vs. restored</div>
+      <div class="metric-s">Hover rules: 91</div>
+    </div>
+    <div class="metric">
+      <div class="metric-n">23</div>
+      <div class="metric-l">native OS dialogs still in the flow</div>
+      <div class="metric-s">2 collect text input</div>
+    </div>
+  </section>
+
+  <div class="layout">
+
+    <nav class="rail" aria-label="Findings index">
+      <h2>Findings</h2>
+      <ol>
+        <li><a href="#f1"><span class="n">01</span> Overview contradicts itself <span class="dot high"></span></a></li>
+        <li><a href="#f2"><span class="n">02</span> Distribution drawn as progress <span class="dot high"></span></a></li>
+        <li><a href="#f3"><span class="n">03</span> The type scale collapsed <span class="dot high"></span></a></li>
+        <li><a href="#f4"><span class="n">04</span> Keyboard focus is stripped <span class="dot high"></span></a></li>
+        <li><a href="#f5"><span class="n">05</span> Native OS dialogs <span class="dot med"></span></a></li>
+        <li><a href="#f6"><span class="n">06</span> Git toolbar is verb soup <span class="dot med"></span></a></li>
+        <li><a href="#f7"><span class="n">07</span> The accent means three things <span class="dot med"></span></a></li>
+        <li><a href="#f8"><span class="n">08</span> Empty states are passive <span class="dot med"></span></a></li>
+        <li><a href="#f9"><span class="n">09</span> No command palette <span class="dot med"></span></a></li>
+        <li><a href="#f10"><span class="n">10</span> Settings IA is flat <span class="dot med"></span></a></li>
+      </ol>
+      <p class="rail-key"><i style="background:var(--impact-high)"></i>High impact<br><i style="background:var(--impact-med)"></i>Medium impact</p>
+    </nav>
+
+    <main>
+
+      <!-- ============ GROUP A ============ -->
+      <section class="group">
+        <div class="group-head">
+          <h2>What the interface claims</h2>
+          <span>01 – 02</span>
+        </div>
+
+        <article class="finding" id="f1">
+          <div class="rank">01</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag high">High impact</span><span class="tag effort">Effort: S</span></div>
+            <h3>The Overview shows three sessions and says there are none</h3>
+            <p>Under <strong>Active AI sessions</strong>, three cards render with “Ready” status pills, progress dots and sparkline bars — the exact visual grammar of a real session. Directly beneath them sits the line “No active sessions yet.” The panel asserts both things at once, and this is the first screen a new user meets.</p>
+            <div class="evidence">
+              <span class="c">// overview-dashboard.png — one panel, two claims</span><br>
+              <span class="k">3</span> cards styled as live sessions <span class="c">(status pill + progress track + bar chart)</span><br>
+              <span class="k">1</span> empty-state line: <span class="k">“No active sessions yet.”</span><br>
+              <span class="c">// the cards are promotional copy wearing data chrome</span>
+            </div>
+            <p><strong>It went wider than one panel.</strong> Two more places on the same screen invented figures and drew them as data: the project card's progress meter was <code>42 + index * 15</code>, a percentage derived from the row's position in the list, and the board card's “views” count was <code>index + 3</code>. In a delivery tool, a reader who finds one invented number has no way to trust the rest.</p>
+            <div class="fix">
+              <span class="fix-l">Fix — done</span>
+              <p>The three cards are replaced by one empty state in the shape the sibling panels already use: one claim, one sentence saying what a session is, one action. Both invented meters are gone rather than re-based, because nothing in that component knows a project's real progress or a board's real view count. <code>SessionCard</code>'s 35/55/78 stays — it encodes real session state rather than inventing a figure.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f2">
+          <div class="rank">02</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag high">High impact</span><span class="tag effort">Effort: S</span></div>
+            <h3>“Work progress” draws a distribution as if it were progress</h3>
+            <p>Replaced with one bar through the pipeline: each segment's width is the stage's share of the work, and the colour ramps from muted at the first stage to the accent at the last — so weight on the left reads as “not started”, weight on the right as “done”. The heading states the real percentage. <b>Then:</b> On a brand-new project, Backlog renders as a <em>full</em> accent bar directly beneath a heading that promises progress and a counter reading <code>0/5 complete</code>. The bar is a distribution — five of five items sit in Backlog — but it is drawn in the same language as a completion bar. A full warm bar reads as “nearly done” when it means “nothing started”.</p>
+            <div class="specimen">
+              <div class="specimen-head">Specimen · today, and the correction</div>
+              <div class="specimen-body">
+                <div class="bars">
+                  <div class="bar-block">
+                    <div class="bar-cap">Today — full bar, zero done</div>
+                    <div class="bar-row"><span>Backlog</span><span class="bar-track"><span class="bar-fill" style="width:100%"></span></span><span>5</span></div>
+                    <div class="bar-row"><span>Discovery</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span>0</span></div>
+                    <div class="bar-row"><span>Done</span><span class="bar-track"><span class="bar-fill" style="width:2%"></span></span><span>0</span></div>
+                  </div>
+                  <div class="bar-block">
+                    <div class="bar-cap">One stacked bar — position carries the meaning</div>
+                    <div class="seg">
+                      <span class="seg-part" style="width:100%;background:var(--ink-3)"></span>
+                    </div>
+                    <div class="seg-legend">
+                      <span><i style="background:var(--ink-3)"></i>Backlog 5</span>
+                      <span><i style="background:var(--rule-strong)"></i>Discovery 0</span>
+                      <span><i style="background:var(--praxis)"></i>Done 0</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>Collapse the six rows into one stacked bar running Backlog → Done, so left-to-right position carries the meaning and only the Done segment takes the accent. Filled then always means finished.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ GROUP B ============ -->
+      <section class="group">
+        <div class="group-head">
+          <h2>Legibility and access</h2>
+          <span>03 – 05</span>
+        </div>
+
+        <article class="finding" id="f3">
+          <div class="rank">03</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag high">High impact</span><span class="tag effort">Effort: M</span></div>
+            <h3>The type scale has collapsed into a continuum</h3>
+            <p>Twenty-nine distinct font sizes appear in <code>theme.css</code>, including <code>7px</code>, <code>7.5px</code>, <code>10.5px</code>, <code>11.5px</code> and <code>12.5px</code>. <strong>74 declarations of real UI text sit below 10px</strong>. At those sizes type is texture, not information — and half-pixel steps mean the scale carries no hierarchy a reader can learn.</p>
+            <p><strong>Correction.</strong> An earlier draft of this page counted 102. Twenty-eight of those live inside the scale-model mockups — <code>praxis-preview-*</code>, <code>project-preview-*</code>, the project-type picker and the Look cards — which draw the app at roughly a fifth scale. Their 4–6px text is a drawing, not something anyone reads, and lifting it would wreck the illustrations. The real number is 74.</p>
+            <div class="evidence">
+              <span class="c">// grep -o "font-size: [0-9.]*px" theme.css | sort | uniq -c</span><br>
+              <span class="k">130</span>× 11px &nbsp; <span class="k">120</span>× 12px &nbsp; <span class="k">91</span>× 10px &nbsp; <span class="k">51</span>× 13px<br>
+              <span class="k"> 46</span>× 9px &nbsp;<span class="k"> 28</span>× 8px &nbsp;<span class="k"> 12</span>× 5px &nbsp;<span class="k"> 8</span>× 7px &nbsp;<span class="k"> 6</span>× 6px &nbsp;<span class="k"> 1</span>× 4px<br>
+              <span class="c">// 29 distinct values; 102 declarations under 10px</span>
+            </div>
+            <div class="specimen">
+              <div class="specimen-head">Specimen · sizes rendered at their true value</div>
+              <div class="specimen-body">
+                <div class="ruler">
+                  <div class="ruler-row bad"><span class="ruler-px">4px</span><span class="ruler-sample" style="font-size:4px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row bad"><span class="ruler-px">6px</span><span class="ruler-sample" style="font-size:6px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row bad"><span class="ruler-px">8px</span><span class="ruler-sample" style="font-size:8px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row bad"><span class="ruler-px">9px</span><span class="ruler-sample" style="font-size:9px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row"><span class="ruler-px">11px</span><span class="ruler-sample" style="font-size:11px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row"><span class="ruler-px">13px</span><span class="ruler-sample" style="font-size:13px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                  <div class="ruler-row"><span class="ruler-px">16px</span><span class="ruler-sample" style="font-size:16px">Updated 3 Sept · Medium · CUSTOMER-1</span></div>
+                </div>
+                <p class="ruler-note">Everything above 11px in this specimen is a real string from the board card and the activity feed. The four red rows are sizes the app ships today.</p>
+              </div>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix</span>
+              <p><strong>Done.</strong> Seven steps, not six: <code>11 · 12 · 13 · 15 · 18 · 22 · 30</code>. A six-step scale jumping 11 → 13 → 15 would have erased the 12px band that 120 declarations sit in — this app runs denser than the generic scale assumes. 510 declarations now read from a token, every readable-UI size is 11px or above, and the mockups keep their literals on purpose. The 34 heading literals at 14px and up are a deliberate second pass.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f4">
+          <div class="rank">04</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag high">High impact</span><span class="tag effort">Effort: S</span></div>
+            <h3>Keyboard users get less than mouse users</h3>
+            <p>The stylesheet strips focus outlines <strong>26 times</strong> and restores a <code>:focus-visible</code> ring <strong>15 times</strong>, while styling <code>:hover</code> <strong>91 times</strong>. The net effect in a tool built for developers — people who live on the keyboard — is that pointing is rewarded six times more often than tabbing, and in places the focused control is invisible.</p>
+            <div class="specimen">
+              <div class="specimen-head">Specimen · press Tab to move between these</div>
+              <div class="specimen-body">
+                <div class="focus-demo">
+                  <div class="focus-col">
+                    <span class="focus-cap">Outline stripped — today</span>
+                    <button type="button" class="demo-btn stripped">Stage file</button>
+                  </div>
+                  <div class="focus-col">
+                    <span class="focus-cap">Focus ring restored</span>
+                    <button type="button" class="demo-btn ringed">Stage file</button>
+                  </div>
+                </div>
+                <p class="hint">Tab into the pair. The first button gives no indication it is focused; pressing Return would stage a file with nothing on screen saying so.</p>
+              </div>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix</span>
+              <p>One global <code>:focus-visible</code> ring defined on the token system, then delete the 26 blanket <code>outline: none</code> resets. It is close to a find-and-replace and it is the cheapest accessibility win on this list.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f5">
+          <div class="rank">05</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: M</span></div>
+            <h3>Twenty-three native OS dialogs interrupt the app</h3>
+            <p>All 23 native dialogs are gone. <code>useDialogs()</code> renders <code>confirm</code> / <code>prompt</code> inside the app's own modal surface and returns a promise, so a call site still reads <code>if (!(await confirm(…))) return;</code>. The two that collected data — a branch name, a repository URL — are now real fields that validate as you type. <b>Then:</b> They are unstyleable, ignore every theme you ship, and block the renderer while open. Two of them collect <em>text input</em> through <code>window.prompt</code> — a branch name and a repository URL — which means the two moments where a typo has real consequences are the two moments with no validation, no autocomplete and no visible context.</p>
+            <div class="evidence">
+              <span class="c">// renderer/src — window.confirm | prompt | alert</span><br>
+              <span class="k">23</span> total across <span class="k">8</span> files<br>
+              <span class="c">git/GitGraphPage.tsx</span> &nbsp; window.prompt(<span class="k">'New branch name'</span>)<br>
+              <span class="c">git/GitGraphPage.tsx</span> &nbsp; window.prompt(<span class="k">'Repository URL'</span>)<br>
+              <span class="c">git/GitDiffWorkspace.tsx</span> &nbsp; confirm(<span class="k">'Discard this change… cannot be undone'</span>)
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>You already have a dialog system carrying the project wizard and Settings. Route the destructive confirms through it, and turn the two prompts into real forms — the branch-name field can validate against existing refs as you type.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ GROUP C ============ -->
+      <section class="group">
+        <div class="group-head">
+          <h2>Density and hierarchy</h2>
+          <span>06 – 07</span>
+        </div>
+
+        <article class="finding" id="f6">
+          <div class="rank">06</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: M</span></div>
+            <h3>The Git toolbar is a wall of equally-weighted verbs</h3>
+            <p>Pull and Push moved to the header beside Refresh. The five branch verbs and Pop stash are behind one <code>Branch ▾</code> menu scoped to the selected branch, with Delete one deliberate step in. The toolbar is a single row again, so the height cap and scroll it grew when it wrapped to four are gone. <b>Then:</b> Nine branch and remote actions sit in one row at identical weight — Branch, Checkout, Rename, Delete, Merge into current, Rebase current, Pull, Push, Pop stash — joined by Compare, Merges only and Smart visibility. At 900px they wrap to <strong>four rows</strong> and push the commit graph out of view entirely. Delete is tinted red, but it is still one of nine siblings a mis-click away.</p>
+            <div class="evidence">
+              <span class="c">// git-graph-narrow-reduced-motion.png @ 900×650</span><br>
+              toolbar rows: <span class="k">4</span> &nbsp; controls: <span class="k">13</span> &nbsp; visible commits: <span class="k">4</span><br>
+              <span class="c">// hourly actions (Pull, Push) rank equal with Rebase and Pop stash</span>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>Promote the two you touch hourly — Pull and Push — into the header beside Refresh. Collapse the branch verbs into a single <code>Branch ▾</code> menu scoped to the selected branch, where Delete sits behind one deliberate step. Rebase and Pop stash go to overflow.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f7">
+          <div class="rank">07</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: S</span></div>
+            <h3>One accent colour is doing three unrelated jobs</h3>
+            <p>Added <code>--tone-progress</code>, a cool in-flight blue, and pointed the board and pipeline lanes at it — a running stage now carries a blue edge, clearly not the orange Approve button. The accent is the brand mark and the one primary action; status has its own scale. <b>Then:</b> The same warm orange marks the brand, the single primary action on a screen, and in-progress or backlog status. When a colour means three things it stops being a signal, and the eye can no longer use it to find the one button that matters on the page.</p>
+            <div class="specimen">
+              <div class="specimen-head">Specimen · one hue, three meanings</div>
+              <div class="specimen-body">
+                <div class="swatches">
+                  <div class="swatch">
+                    <div class="swatch-chip"></div>
+                    <div class="swatch-cap"><div class="swatch-role">Brand mark</div><div class="swatch-hex">Praxis wordmark, app icon</div></div>
+                  </div>
+                  <div class="swatch">
+                    <div class="swatch-chip"></div>
+                    <div class="swatch-cap"><div class="swatch-role">Primary action</div><div class="swatch-hex">New session, Attach folder</div></div>
+                  </div>
+                  <div class="swatch">
+                    <div class="swatch-chip"></div>
+                    <div class="swatch-cap"><div class="swatch-role">Status: in progress</div><div class="swatch-hex">Board lane, momentum bars</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>Reserve the accent for “the one action here”. Give status its own scale — a cool hue for in-progress, green for done — and let the brand mark carry the warm orange alone. Semantic colour and accent colour should never be the same value.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ============ GROUP D ============ -->
+      <section class="group">
+        <div class="group-head">
+          <h2>Flow and findability</h2>
+          <span>08 – 10</span>
+        </div>
+
+        <article class="finding" id="f8">
+          <div class="rank">08</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: M</span></div>
+            <h3>Twenty-nine empty states, nearly all of them passive</h3>
+            <p>The inspector empty states now say what the pane is <em>for</em> rather than only naming what wasn't selected, and the “not available yet” placeholder carries a way out. Empty states can carry one explanatory line and one action. <b>Then:</b> The house pattern is “Select a <em>thing</em> to see its <em>other thing</em>” — stage, run, work item, designer item, agent or skill, connection. Each describes the void rather than offering the way out. The Overview’s “Create project” state is the exception and the model: it names the action that fills the space.</p>
+            <div class="evidence">
+              <span class="c">// distinct empty-state copy, renderer/src</span><br>
+              “Select a stage to edit it.”<br>
+              “Select a run, or start one.” <span class="c">← names an action</span><br>
+              “Select a work item to see its details.”<br>
+              “Select an agent or skill to see its runtime.”<br>
+              <span class="c">// 29 empty states; most stop at the description</span>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>Give every empty state the verb that fills it, the way “Select a run, or start one” already does. Where nothing can be created from that pane, say what the pane is <em>for</em> rather than what the reader has failed to select.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f9">
+          <div class="rank">09</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: L</span></div>
+            <h3>A keyboard-first tool with no command palette</h3>
+            <p><code>⌘K</code> opens a flat index over projects, boards, sessions, agents, skills, workflows and settings, built from state the shell already holds — arrow keys, Enter, Escape. Navigation only for now; each entry reuses the same <code>navigate()</code> the sidebar uses. <b>Then:</b> Praxis nests projects → boards → issues → sessions → agents → skills → workflows → runs, plus sixteen settings pages, and ships <strong>seven</strong> keydown handlers with no global palette. Every destination is a mouse trip through the tree. This is the largest perceived-speed win available, and it reads mostly from state <code>App</code> already holds.</p>
+            <div class="evidence">
+              <span class="c">// renderer/src</span><br>
+              addEventListener('keydown'): <span class="k">7</span><br>
+              command palette / ⌘K: <span class="k">none</span><br>
+              <span class="c">// navigable entities: projects, boards, issues, sessions,</span><br>
+              <span class="c">// agents, skills, workflows, runs, 16 settings pages</span>
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>⌘K over one flat index built from <code>projects</code>, <code>boards</code>, <code>agentSessions</code>, <code>workflowsByProject</code> and the agent catalog — all already in <code>App</code>. Ship it navigation-only first; commands can follow once the surface earns its place.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="finding" id="f10">
+          <div class="rank">10</div>
+          <div class="finding-body">
+            <div class="tags"><span class="tag med">Medium impact</span><span class="tag effort">Effort: S</span></div>
+            <h3>Settings is sixteen flat peers, weighted toward appearance</h3>
+            <p>Sixteen flat entries became four sections — Workspace · Appearance · AI &amp; agents · Integrations &amp; tools — with Overview loose on top. Themes is now one of three in one of four groups, not three of sixteen. <b>Then:</b> Themes, Looks and Surfaces are three separate entries — <strong>19% of the settings surface</strong> — sitting at the same level as Jira, AI Provider, Agent Runtime, MCP Server and Delivery. The shape of the list tells a new user that appearance is three times more important than connecting their tracker.</p>
+            <div class="evidence">
+              <span class="c">// vc-looks-gallery.png — Settings navigation</span><br>
+              entries: <span class="k">16</span> &nbsp; nesting levels: <span class="k">2</span> &nbsp; appearance entries: <span class="k">3</span><br>
+              Overview · Startup · <span class="k">Appearance</span> · <span class="k">Themes</span> · <span class="k">Looks</span> · <span class="k">Surfaces</span> ·<br>
+              Terminal · Connections · Jira · AI Provider · Agent Runtime ·<br>
+              Performance · Delivery · MCP Server · Preview · Board Settings
+            </div>
+            <div class="fix">
+              <span class="fix-l">Fix &mdash; done</span>
+              <p>Four groups — Workspace · Appearance · AI &amp; Agents · Integrations — and fold Themes, Looks and Surfaces into one Appearance page with tabs. Same settings, a third of the navigation.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="closing">
+        <h2>All ten, shipped</h2>
+        <p>All ten landed on <code>main</code> across five commits, verified against the functional and themes e2e suites and the 311 core tests. The three that touched every screen &mdash; the type scale, the focus ring, the Overview &mdash; went first and took a commit each; the remaining five shipped together in <code>3505d4f</code>.</p>
+        <div class="picks">
+          <div class="pick">
+            <span class="pick-n">03</span>
+            <span class="pick-t">Collapse the type scale to seven tokens<em>Done — 510 declarations on a token, nothing readable under 11px</em></span>
+            <span class="pick-w">Shipped</span>
+          </div>
+          <div class="pick">
+            <span class="pick-n">04</span>
+            <span class="pick-t">One global focus ring, delete the 26 resets<em>Done — 16 resets removed, guarded by e2e/keyboardFocus.spec.ts</em></span>
+            <span class="pick-w">Shipped</span>
+          </div>
+          <div class="pick">
+            <span class="pick-n">01</span>
+            <span class="pick-t">Stop the Overview claiming three sessions and none<em>Done — and two invented meters removed alongside it</em></span>
+            <span class="pick-w">Shipped</span>
+          </div>
+        </div>
+      </section>
+
+      <footer>
+        Praxis desktop v0.2.1 · branch <code>main</code> · reviewed at commit <code>1da89e6</code><br>
+        Measurements taken from theme.css and renderer/src; screens from the Playwright functional and themes suites.
+      </footer>
+
+    </main>
+  </div>
+</div>
+
+
+</body>
+</html>

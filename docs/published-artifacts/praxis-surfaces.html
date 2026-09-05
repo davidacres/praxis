@@ -1,0 +1,1366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Surfaces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --page-bg: #f4f1ea;
+    --page-surface: #fffdf8;
+    --page-surface-2: #ece6da;
+    --page-ink: #2b2620;
+    --page-ink-soft: #6c6255;
+    --page-ink-faint: #948a7b;
+    --page-line: #ddd2c0;
+    --page-line-soft: #e8e0d2;
+    --page-accent: #c6431f;
+    --page-accent-ink: #a9381a;
+    --page-accent-soft: rgba(198, 67, 31, 0.11);
+    --page-brass: #9a6b2f;
+    --shadow-plate: 0 1px 2px rgba(43, 38, 32, 0.05), 0 10px 34px rgba(43, 38, 32, 0.08);
+
+    --maxw: 1140px;
+    --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #100e0b;
+      --page-surface: #191510;
+      --page-surface-2: #221c15;
+      --page-ink: #f0e7d8;
+      --page-ink-soft: #b8a993;
+      --page-ink-faint: #8a7d6b;
+      --page-line: #3a3127;
+      --page-line-soft: #2c2620;
+      --page-accent: #ef6a3f;
+      --page-accent-ink: #ef6a3f;
+      --page-accent-soft: rgba(239, 106, 63, 0.15);
+      --page-brass: #c79a54;
+      --shadow-plate: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 40px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #100e0b;
+    --page-surface: #191510;
+    --page-surface-2: #221c15;
+    --page-ink: #f0e7d8;
+    --page-ink-soft: #b8a993;
+    --page-ink-faint: #8a7d6b;
+    --page-line: #3a3127;
+    --page-line-soft: #2c2620;
+    --page-accent: #ef6a3f;
+    --page-accent-ink: #ef6a3f;
+    --page-accent-soft: rgba(239, 106, 63, 0.15);
+    --page-brass: #c79a54;
+    --shadow-plate: 0 1px 2px rgba(0, 0, 0, 0.4), 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--page-bg);
+    color: var(--page-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 32px 96px;
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────── */
+  .masthead {
+    padding: 88px 0 40px;
+    border-bottom: 1px solid var(--page-line);
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--page-accent-ink);
+    margin: 0 0 22px;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(2.6rem, 6vw, 4.1rem);
+    line-height: 1.04;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+    margin: 0 0 24px;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--page-accent-ink);
+  }
+  .standfirst {
+    font-size: 1.15rem;
+    line-height: 1.62;
+    color: var(--page-ink-soft);
+    max-width: 62ch;
+    margin: 0 0 32px;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--page-ink-soft);
+  }
+  .tag {
+    border: 1px solid var(--page-line);
+    border-radius: 999px;
+    padding: 4px 12px;
+    white-space: nowrap;
+  }
+  .tag strong { color: var(--page-ink); font-weight: 500; }
+
+  /* ── Principle band ──────────────────────────────────────── */
+  .principles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--page-line);
+    border: 1px solid var(--page-line);
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 48px 0 8px;
+  }
+  .principle {
+    background: var(--page-surface);
+    padding: 22px 24px 24px;
+  }
+  .principle .n {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--page-brass);
+    letter-spacing: 0.1em;
+  }
+  .principle h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.15rem;
+    margin: 8px 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .principle p {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--page-ink-soft);
+  }
+
+  /* ── Control bar ─────────────────────────────────────────── */
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    margin: 40px 0 8px;
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 26px;
+    background: color-mix(in srgb, var(--page-bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--page-line);
+    border-radius: 12px;
+  }
+  .controls .lede {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-ink-faint);
+  }
+  .ctl {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--page-ink-soft);
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--page-line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--page-ink-soft);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 13px;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] {
+    background: var(--page-accent);
+    color: #fff;
+  }
+  .ctl input[type="range"] {
+    width: 128px;
+    accent-color: var(--page-accent);
+  }
+  .ctl output {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--page-ink);
+    min-width: 3ch;
+  }
+  .switch {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid var(--page-line);
+    background: var(--page-surface-2);
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--page-ink-faint);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .switch[aria-pressed="true"] {
+    background: var(--page-accent);
+    border-color: var(--page-accent);
+  }
+  .switch[aria-pressed="true"]::after {
+    transform: translateX(18px);
+    background: #fff;
+  }
+
+  /* ── Plates ──────────────────────────────────────────────── */
+  .plate {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 296px;
+    gap: 28px 36px;
+    padding: 40px 0;
+    border-bottom: 1px solid var(--page-line);
+    align-items: start;
+  }
+  .plate-head {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .plate-no {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--page-brass);
+    letter-spacing: 0.14em;
+  }
+  .plate-head h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.9rem;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .plate-head .blurb {
+    color: var(--page-ink-soft);
+    font-size: 0.98rem;
+    flex: 1 1 320px;
+    min-width: 260px;
+  }
+  .default-flag {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--page-accent-ink);
+    border: 1px solid var(--page-accent-soft);
+    background: var(--page-accent-soft);
+    border-radius: 999px;
+    padding: 3px 9px;
+    align-self: center;
+  }
+
+  .spec {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    border: 1px solid var(--page-line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--page-surface);
+  }
+  .spec-title {
+    padding: 9px 14px;
+    background: var(--page-surface-2);
+    border-bottom: 1px solid var(--page-line);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-ink-faint);
+  }
+  .spec dl {
+    margin: 0;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+  }
+  .spec dt { color: var(--page-ink-soft); }
+  .spec dd {
+    margin: 0;
+    color: var(--page-ink);
+    text-align: right;
+  }
+  .spec .staged {
+    border-top: 1px solid var(--page-line);
+    padding: 10px 14px;
+    color: var(--page-ink-faint);
+  }
+  .spec .staged .h {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    color: var(--page-brass);
+  }
+  .spec .staged code { opacity: 0.75; }
+
+  /* ── Specimen window (faithful Praxis shell) ─────────────── */
+  .specimen[data-praxis="dark"] {
+    --px-bg: #100e0b;
+    --px-elev: #2c2620;
+    --px-sunken: #0b0907;
+    --px-input: #211c17;
+    --px-border: #443a30;
+    --px-border-strong: #6c5b4a;
+    --px-text: #f0e7d8;
+    --px-text-2: #cdbfae;
+    --px-text-3: #958878;
+    --px-accent: #c6431f;
+    --px-accent-soft: rgba(198, 67, 31, 0.2);
+    --px-shadow: 0 10px 30px rgba(0, 0, 0, 0.58);
+  }
+  .specimen[data-praxis="light"] {
+    --px-bg: #f5f2eb;
+    --px-elev: #fffdf8;
+    --px-sunken: #ebe7de;
+    --px-input: #fffaf2;
+    --px-border: #d5c8b8;
+    --px-border-strong: #ad9a85;
+    --px-text: #2c2620;
+    --px-text-2: #74695e;
+    --px-text-3: #a2937f;
+    --px-accent: #c6431f;
+    --px-accent-soft: rgba(198, 67, 31, 0.14);
+    --px-shadow: 0 10px 30px rgba(44, 38, 32, 0.18);
+  }
+
+  /* Inert surface tokens — mirrors surfaces.css :root. --surface-panel-tint-layer
+     is the main "material colour" lever: a wash over the panel fill, behind the
+     content, so it never touches text contrast. */
+  .specimen {
+    --surface-texture-image: none;
+    --surface-texture-size: auto;
+    --surface-texture-opacity: 0;
+    --surface-texture-blend: soft-light;
+    --surface-panel-border-color: var(--px-border);
+    --surface-radius-boost: 0px;
+    --surface-panel-opacity: 1;
+    --surface-panel-tint-layer: none;
+    --surface-panel-tint-size: auto;
+    --surface-backdrop: none;
+    --surface-accent-glow: none;
+    --surface-shell-bg: none;
+    /* Watermark layer — driven by the pattern library, not by per-pack CSS. */
+    --surface-watermark-image: none;
+    --surface-watermark-size: auto;
+    --surface-watermark-opacity: 0;
+  }
+
+  /* parchment (default) — warm paper wash + fibre grain + tinted rounded edges */
+  .specimen[data-pack="parchment"] {
+    --surface-watermark-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2217.321%22%20height%3D%2230%22%20viewBox%3D%220%200%2017.321%2030%22%3E%3Cpath%20d%3D%22M8.6605%200L17.321%205L17.321%2015L8.6605%2020L0%2015L0%205ZM8.6605%2020L8.6605%2030%22%20fill%3D%22none%22%20stroke%3D%22%23c6431f%22%20stroke-width%3D%220.8%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E");
+    --surface-watermark-size: 124px 214.8px;
+    --surface-watermark-opacity: 0.07;
+    --surface-panel-tint-layer:
+      radial-gradient(140% 120% at 12% 0%, color-mix(in srgb, var(--px-accent) 12%, transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb, var(--px-accent) 5%, transparent), color-mix(in srgb, var(--px-text) 4%, transparent));
+    --surface-texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6 0.02' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23p)' opacity='0.85'/%3E%3C/svg%3E");
+    --surface-texture-size: 260px 260px;
+    --surface-texture-opacity: 0.22;
+    --surface-texture-blend: soft-light;
+    --surface-panel-border-color: color-mix(in srgb, var(--px-border) 62%, var(--px-accent) 20%);
+    --surface-accent-glow: inset 0 1px 0 color-mix(in srgb, var(--px-accent) 14%, transparent);
+    --surface-radius-boost: 2px;
+  }
+
+  /* graphite — cool wash, top bevel highlight, deeper drop shadow */
+  .specimen[data-pack="graphite"] {
+    --surface-watermark-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2217.321%22%20viewBox%3D%220%200%2020%2017.321%22%3E%3Cpath%20d%3D%22M0%2017.321L10%200L20%2017.321M-10%2017.321L0%200M10%2017.321L20%200M0%2017.321H20M0%200H20%22%20fill%3D%22none%22%20stroke%3D%22%23f0e7d8%22%20stroke-width%3D%220.7%22%2F%3E%3C%2Fsvg%3E");
+    --surface-watermark-size: 62px 53.7px;
+    --surface-watermark-opacity: 0.07;
+    --surface-panel-tint-layer:
+      linear-gradient(180deg, color-mix(in srgb, var(--px-text) 10%, transparent), transparent 22%),
+      linear-gradient(180deg, transparent 60%, color-mix(in srgb, #000 22%, transparent));
+    --surface-texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.006' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='140' filter='url(%23g)' opacity='0.8'/%3E%3C/svg%3E");
+    --surface-texture-size: 300px 140px;
+    --surface-texture-opacity: 0.24;
+    --surface-texture-blend: overlay;
+    --surface-panel-border-color: color-mix(in srgb, var(--px-border) 50%, var(--px-text) 22%);
+    --surface-accent-glow:
+      inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
+      0 10px 26px color-mix(in srgb, #000 45%, transparent);
+    --surface-radius-boost: 1px;
+  }
+
+  /* blueprint — the drafting grid rides on the panel tint layer (behind content) */
+  .specimen[data-pack="blueprint"] {
+    --surface-watermark-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M0%206H24M0%2012H24M0%2018H24M6%200V24M12%200V24M18%200V24%22%20fill%3D%22none%22%20stroke%3D%22%23c6431f%22%20stroke-width%3D%220.55%22%20stroke-opacity%3D%220.4%22%2F%3E%3Cpath%20d%3D%22M0%200H24M0%200V24%22%20fill%3D%22none%22%20stroke%3D%22%23c6431f%22%20stroke-width%3D%221%22%2F%3E%3C%2Fsvg%3E");
+    --surface-watermark-size: 104px 104px;
+    --surface-watermark-opacity: 0.3;
+    --surface-panel-tint-layer:
+      linear-gradient(180deg, color-mix(in srgb, var(--px-accent) 5%, transparent), transparent 55%);
+    --surface-panel-border-color: color-mix(in srgb, var(--px-border) 55%, var(--px-accent) 26%);
+  }
+
+  /* aurora-glass (phase 2) — translucent frosted panels + bright ambient shell */
+  .specimen[data-pack="aurora-glass"] {
+    --surface-watermark-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2217.321%22%20height%3D%2230%22%20viewBox%3D%220%200%2017.321%2030%22%3E%3Cpath%20d%3D%22M8.6605%200L17.321%205L17.321%2015L8.6605%2020L0%2015L0%205ZM8.6605%2020L8.6605%2030%22%20fill%3D%22none%22%20stroke%3D%22%23f0e7d8%22%20stroke-width%3D%220.8%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E");
+    --surface-watermark-size: 150px 259.8px;
+    --surface-watermark-opacity: 0.09;
+    --surface-shell-bg:
+      linear-gradient(125deg, color-mix(in srgb, var(--px-accent) 42%, transparent), transparent 45%),
+      radial-gradient(80% 65% at 84% 8%, color-mix(in srgb, var(--px-accent) 48%, transparent), transparent 70%),
+      radial-gradient(75% 70% at 8% 96%, color-mix(in srgb, var(--px-accent) 30%, transparent), transparent 68%);
+    --surface-panel-tint-layer:
+      linear-gradient(150deg, color-mix(in srgb, #fff 12%, transparent), transparent 55%),
+      linear-gradient(330deg, color-mix(in srgb, var(--px-accent) 12%, transparent), transparent 50%);
+    --surface-texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='ag'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23ag)' opacity='0.5'/%3E%3C/svg%3E");
+    --surface-texture-size: 200px 200px;
+    --surface-texture-opacity: 0.08;
+    --surface-panel-opacity: 0.52;
+    --surface-backdrop: blur(16px) saturate(1.6);
+    --surface-panel-border-color: color-mix(in srgb, #fff 22%, var(--px-accent) 30%);
+    --surface-accent-glow:
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--px-accent) 30%, transparent),
+      0 8px 30px color-mix(in srgb, var(--px-accent) 26%, transparent);
+    --surface-radius-boost: 4px;
+  }
+  .specimen[data-pack="aurora-glass"] .win-body { isolation: isolate; }
+  .specimen[data-pack="aurora-glass"] .pane-sidebar,
+  .specimen[data-pack="aurora-glass"] .pane-main,
+  .specimen[data-pack="aurora-glass"] .pane-aux { z-index: 1; }
+  .specimen[data-pack="aurora-glass"] .win-body::before {
+    content: '';
+    position: absolute;
+    inset: -35%;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(40% 40% at 28% 30%, color-mix(in srgb, var(--px-accent) 70%, transparent), transparent 70%),
+      radial-gradient(46% 46% at 76% 72%, color-mix(in srgb, var(--px-accent) 52%, transparent), transparent 72%),
+      radial-gradient(34% 34% at 60% 12%, color-mix(in srgb, #fff 22%, transparent), transparent 70%);
+    filter: blur(42px) saturate(1.3);
+    opacity: 0.7;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .specimen[data-pack="aurora-glass"] .win-body::before {
+      animation: aurora-drift 24s ease-in-out infinite alternate;
+    }
+  }
+  @keyframes aurora-drift {
+    from { transform: translate3d(-7%, -5%, 0) rotate(-5deg) scale(1.15); }
+    to   { transform: translate3d(7%, 6%, 0) rotate(5deg) scale(1.32); }
+  }
+
+  /* noir (phase 2, dark only) — hard vignette + heavy grain drawn on the panels */
+  .specimen[data-pack="noir"] {
+    --surface-panel-tint-layer:
+      radial-gradient(150% 130% at 50% 0%, transparent 34%, color-mix(in srgb, #000 62%, transparent) 100%),
+      radial-gradient(150% 150% at 50% 120%, transparent 40%, color-mix(in srgb, #000 55%, transparent));
+    --surface-texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='nr'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.62' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='150' height='150' filter='url(%23nr)' opacity='0.9'/%3E%3C/svg%3E");
+    --surface-texture-size: 150px 150px;
+    --surface-texture-opacity: 0.3;
+    --surface-texture-blend: overlay;
+    --surface-panel-border-color: color-mix(in srgb, var(--px-border) 30%, #000 45%);
+    --surface-accent-glow:
+      inset 0 0 60px 8px color-mix(in srgb, #000 55%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, #000 40%, transparent);
+  }
+
+  .specimen { width: 100%; }
+  .specimen .win-body { position: relative; }
+  .specimen[data-pack="aurora-glass"] .win-body {
+    background-image: var(--surface-shell-bg);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+
+  .win {
+    height: 320px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 12px;
+    border: 1px solid var(--px-border);
+    overflow: hidden;
+    background-color: var(--px-bg);
+    background-image: var(--surface-app-bg-image);
+    background-size: var(--surface-app-bg-size);
+    background-blend-mode: var(--surface-app-bg-blend);
+    box-shadow: var(--px-shadow);
+  }
+  .win-bar {
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 13px;
+    background-color: var(--px-sunken);
+    border-bottom: 1px solid var(--px-border);
+  }
+  .win-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--px-text-3); opacity: 0.6; }
+  .win-bar .dot:first-child { background: var(--px-accent); opacity: 0.9; }
+  .win-bar .title {
+    margin-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    color: var(--px-text-3);
+    text-transform: uppercase;
+  }
+  .win-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    padding: 7px 7px 0;
+  }
+
+  /* Panel fill folded through --surface-panel-opacity (inert 1 → identical);
+     --surface-panel-tint-layer is a wash over the fill, behind the content;
+     backdrop-filter on the sidebar only — mirrors the shipping theme.css. */
+  .pane-sidebar {
+    width: 34%;
+    min-width: 96px;
+    position: relative;
+    background-color: color-mix(in srgb, var(--px-sunken) calc(var(--surface-panel-opacity) * 100%), transparent);
+    background-image: var(--surface-panel-tint-layer);
+    background-size: var(--surface-panel-tint-size);
+    box-shadow: var(--surface-accent-glow);
+    backdrop-filter: var(--surface-backdrop);
+    padding: 11px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    overflow: hidden;
+  }
+  .pane-main {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    isolation: isolate;
+    background-color: color-mix(in srgb, var(--px-elev) calc(var(--surface-panel-opacity) * 100%), transparent);
+    background-image: var(--surface-panel-tint-layer);
+    background-size: var(--surface-panel-tint-size);
+    box-shadow: var(--surface-accent-glow);
+    border: 1px solid var(--surface-panel-border-color);
+    border-bottom: none;
+    border-radius: calc(6px + var(--surface-radius-boost)) calc(6px + var(--surface-radius-boost)) 0 0;
+    overflow: hidden;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .pane-aux {
+    width: 22%;
+    min-width: 68px;
+    position: relative;
+    isolation: isolate;
+    background-color: color-mix(in srgb, var(--px-bg) calc(var(--surface-panel-opacity) * 100%), transparent);
+    background-image: var(--surface-panel-tint-layer);
+    background-size: var(--surface-panel-tint-size);
+    box-shadow: var(--surface-accent-glow);
+    border: 1px solid var(--surface-panel-border-color);
+    border-bottom: none;
+    border-radius: calc(6px + var(--surface-radius-boost)) calc(6px + var(--surface-radius-boost)) 0 0;
+    overflow: hidden;
+    padding: 11px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  /* the shipping overlay — theme.css .pane-*::after. z-index 0 (behind the
+     panes' content, which is lifted to z-index 1) so grain can be strong
+     without ever eroding text contrast. */
+  /* Watermark — the pattern library's layer, behind the content like the grain. */
+  .pane-sidebar::before,
+  .pane-main::before,
+  .pane-aux::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--surface-watermark-image);
+    background-repeat: repeat;
+    background-position: center;
+    background-size: var(--surface-watermark-size);
+    opacity: var(--surface-watermark-opacity);
+  }
+  .pane-sidebar::after,
+  .pane-main::after,
+  .pane-aux::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--surface-texture-image);
+    background-repeat: repeat;
+    background-size: var(--surface-texture-size);
+    mix-blend-mode: var(--surface-texture-blend);
+    opacity: calc(var(--surface-texture-opacity) * var(--surface-intensity, 1) * var(--surface-texture, 1));
+  }
+  .pane-sidebar > *,
+  .pane-main > *,
+  .pane-aux > * { position: relative; z-index: 1; }
+
+  /* specimen furniture */
+  .row { display: flex; align-items: center; gap: 7px; }
+  .ic { width: 12px; height: 12px; border-radius: 3px; background: var(--px-text-3); opacity: 0.55; flex-shrink: 0; }
+  .ic.sm { width: 9px; height: 9px; }
+  .lbl { height: 6px; border-radius: 3px; background: var(--px-text-3); opacity: 0.5; }
+  .lbl.strong { background: var(--px-text-2); opacity: 0.8; }
+  .w30 { width: 30%; } .w38 { width: 38%; } .w45 { width: 45%; }
+  .w50 { width: 50%; } .w55 { width: 55%; } .w62 { width: 62%; } .w70 { width: 70%; }
+
+  .sb-cap {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--px-text-3);
+    margin-top: 4px;
+  }
+  .sb-tree {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding-left: 13px;
+  }
+  .sb-tree::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 2px;
+    bottom: 4px;
+    width: 1px;
+    background: var(--px-border-strong);
+    opacity: 0.7;
+  }
+
+  .mn-bar { display: flex; align-items: center; gap: 8px; }
+  .chip {
+    margin-left: auto;
+    width: 34px; height: 12px;
+    border-radius: 999px;
+    background: var(--px-accent);
+    opacity: 0.85;
+  }
+  .cols { display: flex; gap: 8px; flex: 1; min-height: 0; }
+  .col {
+    flex: 1;
+    background: color-mix(in srgb, var(--px-sunken) 55%, transparent);
+    border: 1px solid var(--px-border);
+    border-radius: 5px;
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ct { height: 6px; width: 55%; border-radius: 3px; background: var(--px-text-3); opacity: 0.6; }
+  .card {
+    height: 24px;
+    border-radius: 4px;
+    background: var(--px-input);
+    border: 1px solid var(--px-border);
+  }
+  .card.accent { border-left: 2px solid var(--px-accent); }
+
+  .ax-block {
+    border-radius: 5px;
+    background: var(--px-input);
+    border: 1px solid var(--px-border);
+  }
+  .ax-block.lg { height: 62px; }
+  .ax-block.sm { height: 34px; }
+
+  /* ── Prose sections ─────────────────────────────────────── */
+  .section {
+    padding: 52px 0 8px;
+  }
+  .section h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.7rem;
+    letter-spacing: -0.015em;
+    margin: 0 0 8px;
+  }
+  .section .kicker {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--page-brass);
+    margin: 0 0 14px;
+  }
+  .notes {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 1px;
+    background: var(--page-line);
+    border: 1px solid var(--page-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .notes li {
+    background: var(--page-surface);
+    padding: 16px 20px;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--page-ink-soft);
+  }
+  .notes li b {
+    color: var(--page-ink);
+    font-weight: 600;
+  }
+  .notes code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--page-accent-soft);
+    color: var(--page-accent-ink);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .phase {
+    border: 1px solid var(--page-line);
+    border-radius: 12px;
+    padding: 20px;
+    background: var(--page-surface);
+  }
+  .phase .p {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-brass);
+  }
+  .phase h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 1.2rem;
+    margin: 8px 0 6px;
+  }
+  .phase p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--page-ink-soft);
+    line-height: 1.5;
+  }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 22px;
+    border-top: 1px solid var(--page-line);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--page-ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    justify-content: space-between;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .plate, .principle, .phase {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    .reveal-in {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .plate { grid-template-columns: 1fr; }
+    .principles, .phases { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 620px) {
+    .wrap { padding: 0 18px 72px; }
+    .masthead { padding: 56px 0 32px; }
+    .pane-aux { display: none; }
+    .controls { position: static; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis · Appearance</p>
+    <h1>The <em>material</em> layer<br>beneath every theme</h1>
+    <p class="standfirst">
+      Surfaces is a fourth theming axis, orthogonal to light/dark, accent, and the
+      named palettes. A Surface Pack sets only <code>--surface-*</code> custom
+      properties — texture, panel border, corner radius, canvas wash, translucency —
+      and never a colour token, so one pack composes cleanly over any theme. All four
+      rollout phases are now implemented: six built-in packs, a selectable pattern
+      library, a custom-surface editor, and native OS window vibrancy. Every pack's
+      figurative layer — the Praxis hexagon watermark, the drafting grid — is chosen
+      from that library by id, so a new material never means new code. The six packs
+      below are rendered live from the same CSS the app ships.
+    </p>
+    <div class="meta-row">
+      <span class="tag"><strong>4 / 4</strong> phases implemented</span>
+      <span class="tag"><strong>8</strong> patterns · <strong>6</strong> packs</span>
+      <span class="tag">Parchment ships <strong>default-on</strong></span>
+      <span class="tag">glass packs GA, <strong>no flag</strong></span>
+    </div>
+  </header>
+
+  <div class="principles">
+    <div class="principle">
+      <span class="n">A</span>
+      <h3>Orthogonal</h3>
+      <p>Lives on <code>data-surface</code> on the root element. Change your palette and the pack rides along unchanged.</p>
+    </div>
+    <div class="principle">
+      <span class="n">B</span>
+      <h3>Colour-blind</h3>
+      <p>A pack never defines a colour. It tints borders and washes from the theme's own <code>--accent</code> and <code>--text</code> via <code>color-mix</code>.</p>
+    </div>
+    <div class="principle">
+      <span class="n">C</span>
+      <h3>Patterns are data</h3>
+      <p>Hexagon, grid, triangle, weave and the rest live in one library. A pack — or a user — picks one by id. New materials need no new CSS.</p>
+    </div>
+  </div>
+
+  <div class="controls" id="stage" data-praxis="dark">
+    <span class="lede">Dials</span>
+    <div class="ctl">
+      <span>Theme</span>
+      <div class="seg" id="praxis-seg">
+        <button type="button" data-mode="dark" aria-pressed="true">Praxis Dark</button>
+        <button type="button" data-mode="light" aria-pressed="false">Praxis Light</button>
+      </div>
+    </div>
+    <div class="ctl">
+      <span>Intensity</span>
+      <input type="range" id="intensity" min="0" max="100" step="5" value="100" aria-label="Surface intensity">
+      <output id="intensity-out">100</output>
+    </div>
+    <div class="ctl">
+      <span>Texture</span>
+      <button type="button" class="switch" id="texture-toggle" aria-pressed="true" aria-label="Toggle texture"></button>
+    </div>
+  </div>
+
+  <!-- 01 · Flat -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">01</span>
+      <h2>Flat</h2>
+      <p class="blurb">No material layer. The app renders exactly as the theme alone defines it — the honest baseline, and where a heavily customised profile is pinned on upgrade.</p>
+    </div>
+    <div class="specimen" data-pack="flat" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Flat</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set</div>
+      <dl>
+        <dt>—</dt><dd>none</dd>
+      </dl>
+      <div class="staged">
+        Identical to the theme with the material layer switched off. The gallery still
+        shows a real "off" card so the choice is explicit.
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 · Parchment -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">02</span>
+      <h2>Parchment</h2>
+      <span class="default-flag">Default</span>
+      <p class="blurb">Paper-fibre grain on every panel and a warm accent-tinted vignette on the canvas. The default Praxis look — soft, tactile, a little analemma of light in the top-left.</p>
+    </div>
+    <div class="specimen" data-pack="parchment" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Parchment</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set</div>
+      <dl>
+        <dt>pattern</dt><dd>hexagon<br>124px · 7%</dd>
+        <dt>panel-tint</dt><dd>warm radial<br>+ linear wash</dd>
+        <dt>texture-opacity</dt><dd>0.22</dd>
+        <dt>texture-blend</dt><dd>soft-light</dd>
+        <dt>panel-border</dt><dd>border 62%<br>+ accent 20%</dd>
+        <dt>accent-glow</dt><dd>inset top<br>hairline</dd>
+        <dt>radius-boost</dt><dd>2px</dd>
+      </dl>
+      <div class="staged">
+        <span class="h">Staged for Phase 2</span>
+        <code>--surface-panel-opacity</code> · <code>--surface-panel-blur</code>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 · Graphite -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">03</span>
+      <h2>Graphite</h2>
+      <p class="blurb">Anisotropic brushed-metal micro-texture and a border pulled toward the ink. Cool and precise — it reads strongest over the GitHub, Xcode, and Rider palettes.</p>
+    </div>
+    <div class="specimen" data-pack="graphite" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Graphite</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set</div>
+      <dl>
+        <dt>pattern</dt><dd>triangle<br>62px · 7%</dd>
+        <dt>panel-tint</dt><dd>cool top +<br>deep bottom</dd>
+        <dt>texture-opacity</dt><dd>0.24</dd>
+        <dt>texture-blend</dt><dd>overlay</dd>
+        <dt>panel-border</dt><dd>border 50%<br>+ text 22%</dd>
+        <dt>accent-glow</dt><dd>1px bevel +<br>26px drop</dd>
+        <dt>radius-boost</dt><dd>1px</dd>
+      </dl>
+      <div class="staged">
+        <span class="h">Staged for Phase 2</span>
+        <code>--surface-accent-glow</code> (1px ring) — token is set now, no shell reads it yet.
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 · Blueprint -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">04</span>
+      <h2>Blueprint</h2>
+      <p class="blurb">A two-tier drafting grid on the canvas, tinted from the accent; panels stay clean and fully opaque so text contrast is untouched. Reads as an engineering workspace.</p>
+    </div>
+    <div class="specimen" data-pack="blueprint" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Blueprint</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set</div>
+      <dl>
+        <dt>pattern</dt><dd>grid<br>104px · 30%</dd>
+        <dt>rule</dt><dd>major + 3<br>minor</dd>
+        <dt>panel-tint</dt><dd>vellum<br>wash</dd>
+        <dt>panel-opacity</dt><dd>0.96</dd>
+        <dt>texture-opacity</dt><dd>0 (grain<br>off)</dd>
+      </dl>
+      <div class="staged">
+        Panels deliberately carry no grain — the pattern belongs to the canvas so
+        reading surfaces keep full contrast.
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 · Aurora Glass -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">05</span>
+      <h2>Aurora Glass</h2>
+      <span class="default-flag">Glass</span>
+      <p class="blurb">Frosted translucent panels, an accent glow on the pane edges, and a slow blurred gradient drifting behind the shell. Degrades to faux-depth everywhere; uses native OS window blur where the platform supports it.</p>
+    </div>
+    <div class="specimen" data-pack="aurora-glass" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Aurora Glass</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set · Phase 2</div>
+      <dl>
+        <dt>pattern</dt><dd>hexagon<br>150px · 9%</dd>
+        <dt>panel-opacity</dt><dd>0.52</dd>
+        <dt>backdrop</dt><dd>blur 26px<br>saturate 1.6</dd>
+        <dt>accent-glow</dt><dd>bevel + ring<br>+ 30px bloom</dd>
+        <dt>shell canvas</dt><dd>bright accent<br>gradients</dd>
+        <dt>ambient</dt><dd>blurred cloud,<br>28s drift</dd>
+        <dt>radius-boost</dt><dd>4px</dd>
+      </dl>
+      <div class="staged">
+        <span class="h">Gate</span>
+        The translucency dial and <code>prefers-reduced-transparency</code> flip a
+        <code>data-translucency</code> attribute that collapses every value here to
+        opaque — the pack carries literal <code>backdrop-filter</code> values because
+        Chromium drops one built through nested <code>var()</code> + <code>calc()</code>.
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 · Noir -->
+  <section class="plate">
+    <div class="plate-head">
+      <span class="plate-no">06</span>
+      <h2>Noir</h2>
+      <span class="default-flag">Dark only</span>
+      <p class="blurb">Coarse film grain across the panels, a hard vignette closing in from top and bottom, borders pulled toward black. The Settings gallery hides this pack under a light theme.</p>
+    </div>
+    <div class="specimen" data-pack="noir" data-praxis="dark">
+      <div class="win">
+        <div class="win-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="title">Praxis — Noir</span></div>
+        <div class="win-body">
+          <div class="pane-sidebar">
+            <div class="row"><span class="ic"></span><span class="lbl w62"></span></div>
+            <div class="row"><span class="ic"></span><span class="lbl w45"></span></div>
+            <div class="sb-cap">Boards</div>
+            <div class="sb-tree">
+              <div class="row"><span class="ic sm"></span><span class="lbl w55"></span></div>
+              <div class="row"><span class="ic sm"></span><span class="lbl w38"></span></div>
+            </div>
+            <div class="row"><span class="ic"></span><span class="lbl w50"></span></div>
+          </div>
+          <div class="pane-main">
+            <div class="mn-bar"><span class="lbl strong w30"></span><span class="chip"></span></div>
+            <div class="cols">
+              <div class="col"><span class="ct"></span><div class="card accent"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div><div class="card"></div><div class="card"></div></div>
+              <div class="col"><span class="ct"></span><div class="card"></div></div>
+            </div>
+          </div>
+          <div class="pane-aux">
+            <span class="lbl w70"></span>
+            <div class="ax-block lg"></div>
+            <span class="lbl w50"></span>
+            <div class="ax-block sm"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="spec">
+      <div class="spec-title">Tokens set · Phase 2</div>
+      <dl>
+        <dt>pattern</dt><dd>none — grain<br>carries it</dd>
+        <dt>panel-tint</dt><dd>2× black<br>vignette</dd>
+        <dt>texture-opacity</dt><dd>0.30</dd>
+        <dt>texture-blend</dt><dd>overlay</dd>
+        <dt>accent-glow</dt><dd>60px inset<br>vignette</dd>
+        <dt>panel-border</dt><dd>border 30%<br>+ #000 45%</dd>
+      </dl>
+      <div class="staged">
+        <code>supports: ['dark']</code> — the gallery filters this pack out whenever
+        <code>data-mode</code> is light, and the contrast guard only samples it in dark.
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="kicker">Where the build stands</p>
+    <h2>Honest about the current state</h2>
+    <ul class="notes">
+      <li><b>Patterns are a library, selected as data.</b> <code>surfacePatterns.ts</code> holds eight seamless tiles — hexagon, grid, dot-grid, triangle, diagonal, weave, topographic, none — each able to draw itself at any ink and stroke weight. A pack declares <code>pattern: { id: 'hexagon', scale: 124, opacity: 0.07, ink: 'accent' }</code> and <code>applySurfacePack</code> renders it into <code>--surface-watermark-*</code>. The custom editor exposes the same list as a dropdown, so a user changes the material with no code. Ink is re-baked from the live theme on every palette change, because a <code>data:</code> URI cannot carry a <code>var()</code>.</li>
+      <li><b>A CSP was hiding every texture.</b> The renderer shipped <code>default-src 'self'</code> with no <code>img-src</code>, so all <code>data:</code> SVGs were silently blocked — computed styles were correct and nothing painted, which is why the packs looked alike however they were tuned. Fixed with <code>img-src 'self' data:</code>; a test now decodes the live tile through <code>Image()</code> so this cannot regress quietly.</li>
+      <li><b>The material lives on the panels, not the canvas.</b> The app's three panes tile the whole window, so a body-level background is never seen. Every pack's colour, grain, grid and vignette ride on <code>--surface-panel-tint-layer</code> — a wash painted over the panel fill but <em>behind</em> the content, and the grain <code>::after</code> now sits behind content too (children lifted to <code>z-index: 1</code>). Text contrast is untouched at any strength.</li>
+      <li><b>Textures are photographic WebP now, not placeholders.</b> <code>--surface-texture-image: url(…)</code> resolves to a real seamless tile per pack — paper-fibre for Parchment, brushed-metal for Graphite, frost for Aurora Glass, film-grain for Noir — each shipped at <code>1x</code>/<code>2x</code> under <code>renderer/src/assets/surfaces/</code>. Blueprint carries no grain by design; its pattern is the procedural drafting grid, not a raster tile.</li>
+      <li><b>Translucency is live.</b> <code>.pane-sidebar</code> / <code>.pane-main</code> / <code>.pane-aux</code> / <code>.titlebar</code> fold their fill through <code>--surface-panel-opacity</code> via <code>color-mix</code>; Aurora Glass drops panels to 0.52 over a bright accent-lit <code>.shell</code> and frosts the sidebar with <code>backdrop-filter</code>. Flat / Parchment / Graphite / Blueprint keep opaque panels; Flat stays a byte-for-byte no-op.</li>
+      <li><b>Overlays never touch interaction.</b> Grain and ambient layers are <code>::after</code> / <code>::before</code> with <code>pointer-events: none</code>, scoped by <code>isolation: isolate</code>. Dialogs render outside the panes and are never textured or frosted.</li>
+      <li><b>Accessibility respected.</b> <code>prefers-reduced-transparency</code> forces the translucency gate off (glass → opaque); the ambient Aurora layer is transform-only, runs only under <code>prefers-reduced-motion: no-preference</code>, and pauses when the window loses focus.</li>
+      <li><b>Migration is settled.</b> An untouched pre-feature profile adopts <b>Parchment</b> on upgrade; a profile with a customised theme or priority colour is pinned to <b>Flat</b> so nobody's tuned look shifts under them.</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <p class="kicker">Shipped</p>
+    <h2>All four phases</h2>
+    <div class="phases">
+      <div class="phase">
+        <span class="p">Phase 1 · done</span>
+        <h3>Token layer + opaque packs</h3>
+        <p>The <code>data-surface</code> axis, inert <code>--surface-*</code> tokens, the <code>theme.css</code> refactor, migration rule, Settings gallery + Intensity / Texture dials. Ships Flat, Parchment (default), Graphite, Blueprint.</p>
+      </div>
+      <div class="phase">
+        <span class="p">Phase 2 · done</span>
+        <h3>Translucency + 2 glass packs</h3>
+        <p>The <code>color-mix</code> panel-opacity path, sidebar / titlebar <code>backdrop-filter</code>, the <code>data-translucency</code> gate, reduced-transparency + reduced-motion guards, the ambient Aurora layer. Ships <b>Aurora Glass</b> and <b>Noir</b>, GA.</p>
+      </div>
+      <div class="phase">
+        <span class="p">Phase 3 · done</span>
+        <h3>Native window vibrancy</h3>
+        <p><code>platformSupportsVibrancy()</code>, <code>window:setSurfaceVibrancy</code> IPC, transparent <code>BrowserWindow</code> + <code>vibrancy</code> / <code>backgroundMaterial</code> at launch, <code>data-vibrancy</code> transparent-root CSS with macOS shadow / corner recovery. Linux + pre-22H2 Windows fall through to Phase 2.</p>
+      </div>
+      <div class="phase">
+        <span class="p">Phase 4 · done</span>
+        <h3>Custom surface editor</h3>
+        <p>Dials → a validated <code>--surface-*</code> token map, Export / Import JSON, per-card edit. <code>applySurfacePack</code> applies a custom pack inline and derives its backdrop. Marketplace list deferred.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Praxis · Surfaces · all four phases · 8-pattern library</span>
+    <span>Rendered live from the shipping CSS · previews use placeholder textures</span>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var seg = document.getElementById('praxis-seg');
+    var intensity = document.getElementById('intensity');
+    var intensityOut = document.getElementById('intensity-out');
+    var textureToggle = document.getElementById('texture-toggle');
+    var specimens = Array.prototype.slice.call(document.querySelectorAll('.specimen'));
+
+    function eachSpecimen(fn) { specimens.forEach(fn); }
+
+    function applyIntensity() {
+      var v = Number(intensity.value);
+      intensityOut.textContent = String(v);
+      eachSpecimen(function (s) { s.style.setProperty('--surface-intensity', String(v / 100)); });
+    }
+
+    function applyTexture() {
+      var on = textureToggle.getAttribute('aria-pressed') === 'true';
+      eachSpecimen(function (s) { s.style.setProperty('--surface-texture', on ? '1' : '0'); });
+    }
+
+    function applyTheme(mode) {
+      eachSpecimen(function (s) { s.setAttribute('data-praxis', mode); });
+      seg.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+      });
+    }
+
+    seg.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-mode]');
+      if (btn) applyTheme(btn.dataset.mode);
+    });
+
+    intensity.addEventListener('input', applyIntensity);
+
+    textureToggle.addEventListener('click', function () {
+      var on = textureToggle.getAttribute('aria-pressed') === 'true';
+      textureToggle.setAttribute('aria-pressed', String(!on));
+      applyTexture();
+    });
+
+    applyTheme('dark');
+    applyIntensity();
+    applyTexture();
+
+    if (!window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) {
+            en.target.classList.add('reveal-in');
+            io.unobserve(en.target);
+          }
+        });
+      }, { threshold: 0.12 });
+      var watched = document.querySelectorAll('.plate, .principle, .phase');
+      watched.forEach(function (el) { io.observe(el); });
+      // Safety net: never leave content hidden if the observer misfires.
+      setTimeout(function () {
+        watched.forEach(function (el) { el.classList.add('reveal-in'); });
+      }, 1600);
+    }
+  })();
+</script>
+
+
+</body>
+</html>
