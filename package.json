@@ -50,7 +50,10 @@
   },
   "overrides": {
     "diff": "^8.0.4",
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "qs": "^6.16.0",
+    "fast-uri": "^3.1.6",
+    "@xmldom/xmldom": "^0.8.15"
   },
   "allowScripts": {
     "electron@43.4.1": true,
