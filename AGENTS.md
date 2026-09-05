@@ -192,6 +192,47 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
 `fs/write_text_file` requests against the session's working folder, **gated by tool mode**
 (`full` writes, `read-only` reads, `project-only` neither) and sandboxed to that folder.
 
+### What the protocol actually offers
+
+**Read the schema before claiming ACP can't do something.** This has now cost two
+mistakes in one session — `plan` and `usage_update` were each called impossible, and
+each turned out to be a stable part of the spec that this host simply had no `case`
+for. The switch in `handleSessionUpdate` has no `default`, so an unhandled kind is a
+silent no-op that looks exactly like the protocol not supporting it.
+
+The source of truth is the installed package, not memory:
+
+```bash
+# every update kind, and the payload type for each
+grep -n "^export type SessionUpdate" -A 40 \
+  node_modules/@agentclientprotocol/sdk/dist/schema/types.gen.d.ts
+```
+
+`dist/schema/` is the stable v1 export (`import * as acp from '@agentclientprotocol/sdk'`,
+what this app uses). `dist/v2/` is `experimental/v2` and is **not** what we import.
+Within the stable schema, individual types are still marked `**UNSTABLE**` in their
+doc comment — check for that before building on one.
+
+`sessionUpdate` kinds in the stable schema, and where each stands here:
+
+| Kind | Stability | Handled |
+| --- | --- | --- |
+| `agent_message_chunk` | stable | yes — buffered into `responseText` |
+| `agent_thought_chunk` | stable | yes — `reasoningText` |
+| `tool_call` / `tool_call_update` | stable | yes — `tool_start` / `tool_complete` events |
+| `plan` | stable | yes — `session.taskList` |
+| `usage_update` | stable | yes — `contextTokens` / `contextLimit` / `cost` |
+| `user_message_chunk` | stable | no |
+| `available_commands_update` | stable | no — the agent's slash commands |
+| `current_mode_update` | stable | no — the agent's own mode, distinct from our `SessionMode` |
+| `config_option_update` | stable | no — model picker reads config options on demand instead |
+| `session_info_update` | stable | no |
+| `plan_update` / `plan_removed` | **UNSTABLE** | no — the incremental multi-plan variant; `plan` is the stable one |
+| `compaction_update` / `compaction_summary_chunk` | **UNSTABLE** | no |
+
+Nothing in the "no" rows is unreachable — they are unhandled, and the table is here so
+the next gap is found by reading it rather than by assuming.
+
 - **Every turn records its reply as a `message` event.** `buildConversationTranscript`
   reads `message` events to build the next turn's prompt, so a turn that finishes without
   appending one drops the agent's own answer from the following turn's context. The
@@ -204,19 +245,19 @@ the Agent Client Protocol. `AcpAgentHost` owns the session state machine and the
 - A full-tools `ai:delegate` **requires** an explicit `workingDirectory` — it will not
   fall back to the app's cwd. Folderless projects are coerced to `project-only`.
 
-- **Token usage is only read from API providers today — that is a gap in `AcpAgentHost`,
-  not a limit of the protocol.** The gateway wire parser reads usage from both API wire
-  formats (OpenAI's final `usage` chunk, which the request already asks for via
+- **The two providers report different things, and the fields are not interchangeable.**
+  API providers report cumulative tokens: the gateway wire parser reads them from both
+  wire formats (OpenAI's final `usage` chunk, which the request already asks for via
   `stream_options.include_usage`, and Anthropic's `message_start` / `message_delta`
-  pair), the loop emits a `usage` event per turn, and `addAgentTokenUsage` sums them.
-  ACP itself defines a stable `usage_update` (`used` / `size`, i.e. exactly
-  `contextTokens` / `contextLimit`, plus an optional cost) that would give CLI-hosted
-  agents (Claude Code, Codex) the same numbers — `AcpAgentHost.handleSessionUpdate`
-  simply has no case for it yet, the same way `plan` had none until this session added
-  one below. Until it does, those sessions leave `tokenUsage` unset — **never
-  substitute a zero**, which reads as "this was free". Anthropic sends input and
-  output in *different* events, so a running total must not be derived until the
-  stream ends.
+  pair), the loop emits a `usage` event per turn, and `addAgentTokenUsage` sums them
+  into `tokenUsage`. ACP agents report the *other* half: `usage_update` carries `used`
+  (tokens **currently in the window**) and `size`, which feed `contextTokens` /
+  `contextLimit`, plus an optional cumulative `cost`. So an ACP session shows a context
+  bar and a cost but no token total — the protocol has no cumulative token count to
+  give — and an API session shows tokens. **Never map `used` onto `tokenUsage`**: it is
+  occupancy, not spend, and the two diverge the moment a conversation is trimmed.
+  Anthropic also sends input and output in *different* events, so a running total must
+  not be derived until the stream ends.
 - **The agent's self-reported task list (ACP's `plan` update — Claude Code's TodoWrite,
   Codex's plan tool) renders in `SessionInspector` as `SessionTasks`, not in the
   transcript.** A `plan` event is a complete snapshot every time ("the client replaces

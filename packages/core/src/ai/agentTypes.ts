@@ -313,6 +313,12 @@ export interface AgentSessionRecord {
   /** The active model's context window, when the provider publishes one. */
   contextLimit?: number;
   /**
+   * Cumulative cost of the session, when the agent reports one (ACP's
+   * `usage_update` carries an optional `cost`). Genuinely cumulative, unlike
+   * the `used` figure alongside it — see `contextTokens`.
+   */
+  cost?: { amount: number; currency: string };
+  /**
    * The agent's current task list, when it reports one (ACP's `plan` session
    * update — Claude Code's TodoWrite and Codex's plan tool both surface this
    * way). ACP defines a plan update as a complete snapshot, not a diff: each

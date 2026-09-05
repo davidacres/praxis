@@ -5,7 +5,7 @@ import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
 import { SessionTasks } from './SessionTasks';
-import { formatElapsed, formatStarted, formatTokens, sessionMode } from './sessionNav';
+import { formatCost, formatElapsed, formatStarted, formatTokens, sessionMode } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -40,8 +40,10 @@ export function SessionInspector({ session }: SessionInspectorProps) {
 
   const finished = isTerminalAgentState(session.state);
   const elapsed = formatElapsed(session.startedAt, session.completedAt);
-  // Only providers whose usage we read have a token figure — see formatTokens.
+  // Both depend on what the provider reports: API providers give tokens, ACP
+  // agents give cost. Neither is guessed when absent — see sessionNav.
   const tokens = formatTokens(session.tokenUsage);
+  const cost = formatCost(session.cost);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -79,6 +81,7 @@ export function SessionInspector({ session }: SessionInspectorProps) {
             {formatStarted(session.startedAt)} · {session.stepCount} {session.stepCount === 1 ? 'step' : 'steps'}
             {elapsed && <> · {elapsed}</>}
             {tokens && <> · <span data-testid="session-tokens">{tokens}</span></>}
+            {cost && <> · <span data-testid="session-cost">{cost}</span></>}
           </p>
         </div>
       </div>

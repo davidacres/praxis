@@ -106,3 +106,31 @@ test('a session that never reports a plan shows no Tasks block at all', async ()
   await expect(win.getByTestId('session-state-badge')).toHaveText('Completed');
   await expect(win.getByTestId('session-tasks')).toHaveCount(0);
 });
+
+test('an ACP agent reporting usage drives the context banner and shows its cost', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await delegate(win, 'WITH_USAGE please');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'WITH_USAGE please' }).click();
+
+  // `used`/`size` from ACP feed exactly the pair the composer banner reads, so
+  // a CLI-hosted session now gets the same warning an API-provider one does.
+  // This is the half of `usage_update` that was assumed impossible.
+  const context = win.getByTestId('session-context');
+  await expect(context).toBeVisible();
+  await expect(context.getByTestId('session-context-figure')).toHaveText('74% of 100k context used');
+
+  // Cost is cumulative and real, so it shows. Asserted loosely on purpose:
+  // Intl renders USD as "$0.42" or "US$0.42" depending on the machine's
+  // locale, and pinning one would fail on the other developer's laptop.
+  await expect(win.getByTestId('session-cost')).toContainText('0.42');
+  await expect(win.getByTestId('session-cost')).toContainText('$');
+  // ...while the cumulative *token* total stays absent, because ACP reports no
+  // such number. Showing a 0 or reusing `used` here would both be inventions.
+  await expect(win.getByTestId('session-tokens')).toHaveCount(0);
+  expect(
+    await win.evaluate(() => window.praxis.ai.listSessions().then(l => l[0]?.tokenUsage))
+  ).toBeUndefined();
+});
