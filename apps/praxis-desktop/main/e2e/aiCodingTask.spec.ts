@@ -280,6 +280,67 @@ test('a finished session shows its changeset and can commit it', async () => {
   expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
 });
 
+test('a changed file can be read whole, not just as a diff', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-fileview-'));
+  const sumFile = path.join(repo, 'sum.js');
+  // A line far from the edit, so it would not appear in a small diff hunk —
+  // the whole-file view is the only place it shows up.
+  fs.writeFileSync(sumFile, '// arithmetic helpers\n\nfunction sum(a, b) {\n  return a - b;\n}\n');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
+
+  const app_ = app = await launchTestApp();
+  const win = app_.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+
+  const changes = win.locator('[data-testid="session-changes"]');
+  await expect(changes).toBeVisible();
+
+  // The diff shows the edit; it need not show the untouched comment line above it.
+  await changes.getByTestId('session-changes-open').click();
+  const inlineDiff = changes.getByTestId('session-changes-diff');
+  await expect(inlineDiff.locator('.diff-addition')).toContainText('return a + b');
+  await win.screenshot({ path: 'output/playwright/session-changes-diff-view.png', fullPage: true });
+
+  // Viewing the file instead shows the whole thing, including that untouched
+  // line — and closes the diff, since only one pane is open at a time.
+  await changes.getByTestId('session-changes-view').click();
+  const fileView = changes.getByTestId('session-changes-file-view');
+  await expect(fileView).toBeVisible();
+  await expect(changes.getByTestId('session-changes-diff')).toHaveCount(0);
+  await expect(fileView).toContainText('arithmetic helpers');
+  await expect(fileView).toContainText('return a + b');
+  await expect(fileView.locator('.session-changes-file-line-no').first()).toHaveText('1');
+  await win.screenshot({ path: 'output/playwright/session-changes-file-view.png', fullPage: true });
+
+  // Toggling the diff back closes the file view in turn.
+  await changes.getByTestId('session-changes-open').click();
+  await expect(changes.getByTestId('session-changes-diff')).toBeVisible();
+  await expect(fileView).toHaveCount(0);
+});
+
 test('a CLI-agent session reports no token count rather than a misleading zero', async () => {
   repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-tokens-'));
   fs.writeFileSync(path.join(repo, 'sum.js'), 'function sum(a, b) {\n  return a - b;\n}\n');

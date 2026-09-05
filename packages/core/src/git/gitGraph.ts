@@ -151,6 +151,22 @@ export type GitConflictResolution =
   | { strategy: 'current' | 'incoming' }
   | { strategy: 'manual'; content: string };
 
+/**
+ * A file's own text, read straight off the working tree — not a diff against
+ * anything. This is the read-only "just let me look at it" case a diff can't
+ * serve: a file the session never touched, or one you want to see whole
+ * rather than as a hunk.
+ */
+export interface GitFileContent {
+  path: string;
+  content: string;
+  isBinary: boolean;
+  /** Byte size on disk, so a binary or truncated file can say how large it is. */
+  size: number;
+  /** True once `content` has been cut short — large files are capped rather than shipped whole. */
+  truncated: boolean;
+}
+
 export interface GitFileHistoryEntry {
   hash: string;
   shortHash: string;

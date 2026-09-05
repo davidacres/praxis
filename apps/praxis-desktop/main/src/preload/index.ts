@@ -406,6 +406,7 @@ const praxis: PraxisIpc = {
     getConflict: (repositoryPath, path) => ipcRenderer.invoke('git:getConflict', repositoryPath, path),
     resolveConflict: (repositoryPath, path, resolution) => ipcRenderer.invoke('git:resolveConflict', repositoryPath, path, resolution),
     abortConflict: (repositoryPath) => ipcRenderer.invoke('git:abortConflict', repositoryPath),
+    getFileContent: (repositoryPath: string, path: string) => ipcRenderer.invoke('git:getFileContent', repositoryPath, path),
     getFileHistory: (repositoryPath, path, ref) => ipcRenderer.invoke('git:getFileHistory', repositoryPath, path, ref),
     getBlame: (repositoryPath, path, ref) => ipcRenderer.invoke('git:getBlame', repositoryPath, path, ref),
     cherryPick: (repositoryPath, commit) => ipcRenderer.invoke('git:cherryPick', repositoryPath, commit),

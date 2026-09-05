@@ -309,6 +309,21 @@ the next gap is found by reading it rather than by assuming.
   rule sets (`.session-mode-toggle` / `.session-mode-switch`) after the second
   copy was written from scratch instead of reused — don't reintroduce a second
   one if this moves again.
+- **`SessionChanges` can show a changed file two ways: `getComparison` for the diff,
+  `git:getFileContent` for the whole current file.** This is deliberately not an
+  editor — Praxis has none by design — just "let me read it" for a file a diff's
+  hunk context doesn't fully show. `getGitFileContent` reads the *working tree*
+  directly (not a git object), through the same `safeRepositoryFile` sandbox
+  `getGitConflict` already used, so it reflects exactly what's on disk right now,
+  untracked files included, and cannot escape the repository. It caps what it reads
+  at `MAX_FILE_VIEW_BYTES` (1 MB) and returns `truncated` rather than growing
+  unbounded, and returns `isBinary` (a null byte in the first 8 KB) with empty
+  `content` rather than dumping binary bytes as text. The diff and file panes share
+  one `openPath`/`openMode` pair and are mutually exclusive — opening one closes
+  the other. Highlighting (`ui/codeHighlight.tsx`) is shared with `GitDiffWorkspace`:
+  one small regex-based highlighter for the languages this app actually shows, not
+  a real tokenizer — reach for a real one (Prism/Shiki) only if language fidelity
+  ever actually matters here.
 
 **Testing an agent flow without a model:** `e2e/fixtures/codingAcpAgent.mjs` is a real ACP
 subprocess (real SDK, real wire framing) that performs a scripted edit through the same
