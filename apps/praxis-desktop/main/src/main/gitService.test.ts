@@ -5,7 +5,7 @@ import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as util from 'node:util';
-import { applyGitHunk, cloneGitRepository, discardGit, getGitBlame, getGitComparison, getGitConflict, getGitFileHistory, getGitStatus, initializeGitRepository, loadGitRepository, mergeGit, popGitStash, preflightGitRepository, resolveGitConflict, stashGit } from './gitService';
+import { applyGitHunk, cloneGitRepository, discardGit, getGitBlame, getGitComparison, getGitConflict, getGitFileContent, getGitFileHistory, getGitStatus, initializeGitRepository, loadGitRepository, mergeGit, popGitStash, preflightGitRepository, resolveGitConflict, stashGit } from './gitService';
 
 const execFile = util.promisify(execFileCallback);
 
@@ -53,6 +53,16 @@ test('handles missing Git, non-repositories, worktrees, shallow history, and det
     assert.ok((await getGitStatus(repository)).repositoryPath.endsWith('/repo'));
     assert.equal((await getGitFileHistory(repository, 'README.md'))[0].message, 'feature');
     assert.equal((await getGitBlame(repository, 'README.md'))[0].author, 'Fixture User');
+
+    // Read-only file viewer: the working-tree text itself, not a diff.
+    const readme = await getGitFileContent(repository, 'README.md');
+    assert.equal(readme.content, 'feature\n');
+    assert.equal(readme.isBinary, false);
+    assert.equal(readme.truncated, false);
+    await fsp.writeFile(path.join(repository, 'image.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3]));
+    assert.equal((await getGitFileContent(repository, 'image.png')).isBinary, true);
+    await assert.rejects(() => getGitFileContent(repository, '../outside.txt'), /outside this repository/);
+    await assert.rejects(() => getGitFileContent(repository, 'does-not-exist.txt'), /ENOENT/);
 
     await fsp.writeFile(path.join(repository, 'README.md'), 'feature\nworking line\n');
     await fsp.writeFile(path.join(repository, 'notes.txt'), 'untracked note\n');

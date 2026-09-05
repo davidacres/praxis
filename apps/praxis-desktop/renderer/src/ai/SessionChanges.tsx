@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentSessionRecord, GitChangedFile, GitDiffFile, GitStatusSnapshot } from '@praxis/core';
+import type { AgentSessionRecord, GitChangedFile, GitDiffFile, GitFileContent, GitStatusSnapshot } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
+import { highlightCode, languageFor } from '../ui/codeHighlight';
 import { isTerminalAgentState } from './aiSessionState';
 
 /**
@@ -49,9 +50,13 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [checked, setChecked] = useState(false);
-  /** Path whose diff is expanded inline, and the diff itself once loaded. */
+  /** Path expanded inline, which of the two views it's showing, and that
+   *  view's content once loaded. Diff and file view are mutually exclusive —
+   *  only one row is open at a time. */
   const [openPath, setOpenPath] = useState<string>();
+  const [openMode, setOpenMode] = useState<'diff' | 'file'>();
   const [openDiff, setOpenDiff] = useState<GitDiffFile>();
+  const [openFile, setOpenFile] = useState<GitFileContent>();
 
   // The worktree is the session's repository when it ran in one.
   const repositoryPath = session.worktreePath?.trim() || session.workingDirectory?.trim();
@@ -137,19 +142,27 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     await run(file.path, () => window.praxis.git.discard(repositoryPath, [file.path]));
   };
 
+  const closeRow = () => {
+    setOpenPath(undefined);
+    setOpenMode(undefined);
+    setOpenDiff(undefined);
+    setOpenFile(undefined);
+  };
+
   /**
    * Reviewing a change means reading the diff, not the whole file — so this
    * reuses the git comparison the diff workspace already uses, scoped to one
    * path, rather than adding a file-read channel of its own.
    */
   const toggleDiff = async (file: GitChangedFile) => {
-    if (openPath === file.path) {
-      setOpenPath(undefined);
-      setOpenDiff(undefined);
+    if (openPath === file.path && openMode === 'diff') {
+      closeRow();
       return;
     }
     setOpenPath(file.path);
+    setOpenMode('diff');
     setOpenDiff(undefined);
+    setOpenFile(undefined);
     try {
       const document = await window.praxis.git.getComparison(repositoryPath, {
         kind: file.staged ? 'staged' : 'working',
@@ -158,7 +171,29 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
       setOpenDiff(document.files.find(entry => entry.displayPath === file.path) ?? document.files[0]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-      setOpenPath(undefined);
+      closeRow();
+    }
+  };
+
+  /**
+   * The diff shows what changed; this shows the file as it stands now — the
+   * "just let me read it" case a diff can't serve, for a file the session
+   * left untouched or one you'd rather see whole.
+   */
+  const toggleFile = async (file: GitChangedFile) => {
+    if (openPath === file.path && openMode === 'file') {
+      closeRow();
+      return;
+    }
+    setOpenPath(file.path);
+    setOpenMode('file');
+    setOpenDiff(undefined);
+    setOpenFile(undefined);
+    try {
+      setOpenFile(await window.praxis.git.getFileContent(repositoryPath, file.path));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      closeRow();
     }
   };
 
@@ -190,11 +225,22 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
                 type="button"
                 className="session-changes-path"
                 title={`Show the diff for ${file.path}`}
-                aria-expanded={openPath === file.path}
+                aria-expanded={openPath === file.path && openMode === 'diff'}
                 data-testid="session-changes-open"
                 onClick={() => void toggleDiff(file)}
               >
                 {file.path}
+              </button>
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm"
+                aria-label={`View ${file.path}`}
+                title="View the whole file, not just the diff"
+                aria-expanded={openPath === file.path && openMode === 'file'}
+                data-testid="session-changes-view"
+                onClick={() => void toggleFile(file)}
+              >
+                <Icon name="file" size={12} />
               </button>
               <button
                 type="button"
@@ -207,7 +253,7 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
                 <Icon name="close" size={12} />
               </button>
             </div>
-            {openPath === file.path && (
+            {openPath === file.path && openMode === 'diff' && (
               <div className="session-changes-diff" data-testid="session-changes-diff">
                 {!openDiff ? (
                   <span className="placeholder-text">Loading diff…</span>
@@ -224,6 +270,30 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
                       ))
                     ])}
                   </pre>
+                )}
+              </div>
+            )}
+            {openPath === file.path && openMode === 'file' && (
+              <div className="session-changes-file" data-testid="session-changes-file-view">
+                {!openFile ? (
+                  <span className="placeholder-text">Loading file…</span>
+                ) : openFile.isBinary ? (
+                  <span className="placeholder-text">Binary file ({(openFile.size / 1024).toFixed(1)} KB) — no text preview.</span>
+                ) : (
+                  <>
+                    <div className="session-changes-file-head">
+                      <span>{languageFor(file.path)}</span>
+                      {openFile.truncated && <span className="session-changes-file-truncated">showing first {(openFile.content.length / 1024).toFixed(0)} KB of {(openFile.size / 1024).toFixed(0)} KB</span>}
+                    </div>
+                    <pre className="session-changes-file-body">
+                      {openFile.content.split('\n').map((line, index) => (
+                        <span key={index} className="session-changes-file-line">
+                          <span className="session-changes-file-line-no">{index + 1}</span>
+                          <code>{highlightCode(line) || ' '}</code>
+                        </span>
+                      ))}
+                    </pre>
+                  </>
                 )}
               </div>
             )}

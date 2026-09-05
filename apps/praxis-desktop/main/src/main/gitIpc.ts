@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { abortGitConflict, applyGitHunk, checkoutGit, cherryPickGit, cloneGitRepository, commitGit, createBranchGit, deleteBranchGit, discardGit, fetchGit, getGitBlame, getGitCommit, getGitComparison, getGitConflict, getGitDiff, getGitFileHistory, getGitStatus, loadGitRepository, mergeGit, popGitStash, pullGit, pushGit, rebaseGit, renameBranchGit, resolveGitConflict, revertGit, stageGit, stashGit, unstageGit, preflightGitRepository, initializeGitRepository } from './gitService';
+import { abortGitConflict, applyGitHunk, checkoutGit, cherryPickGit, cloneGitRepository, commitGit, createBranchGit, deleteBranchGit, discardGit, fetchGit, getGitBlame, getGitCommit, getGitComparison, getGitConflict, getGitDiff, getGitFileContent, getGitFileHistory, getGitStatus, loadGitRepository, mergeGit, popGitStash, pullGit, pushGit, rebaseGit, renameBranchGit, resolveGitConflict, revertGit, stageGit, stashGit, unstageGit, preflightGitRepository, initializeGitRepository } from './gitService';
 
 export function registerGitIpc(): void {
   ipcMain.handle('git:preflight', async (_event, repositoryPath?: string) => preflightGitRepository(repositoryPath));
@@ -25,6 +25,7 @@ export function registerGitIpc(): void {
   ipcMain.handle('git:getConflict', async (_event, repositoryPath, path) => getGitConflict(repositoryPath, path));
   ipcMain.handle('git:resolveConflict', async (_event, repositoryPath, path, resolution) => resolveGitConflict(repositoryPath, path, resolution));
   ipcMain.handle('git:abortConflict', async (_event, repositoryPath) => abortGitConflict(repositoryPath));
+  ipcMain.handle('git:getFileContent', async (_event, repositoryPath, path) => getGitFileContent(repositoryPath, path));
   ipcMain.handle('git:getFileHistory', async (_event, repositoryPath, path, ref) => getGitFileHistory(repositoryPath, path, ref));
   ipcMain.handle('git:getBlame', async (_event, repositoryPath, path, ref) => getGitBlame(repositoryPath, path, ref));
   ipcMain.handle('git:cherryPick', async (_event, repositoryPath, commit) => cherryPickGit(repositoryPath, commit));
