@@ -75,9 +75,8 @@ export function toolModeLabel(toolMode: AgentSessionRecord['toolMode']): string 
  * How long a session's work took — wall clock from start to finish, or so far
  * while it is still running.
  *
- * Deliberately not a cost or token figure: ACP carries no usage data, and a
- * CLI agent bills on its own account, so there is nothing real to report.
- * Duration and step count are what this app actually observes.
+ * Always available, unlike tokens or cost, which depend on what the provider
+ * chooses to report — see `formatTokens` and `formatCost`.
  */
 export function formatElapsed(startedAt: string, completedAt?: string): string | undefined {
   const start = new Date(startedAt).getTime();
@@ -93,11 +92,11 @@ export function formatElapsed(startedAt: string, completedAt?: string): string |
 }
 
 /**
- * A session's token total, compactly. Returns undefined when the provider
- * reported nothing — today that means every CLI-hosted session, since
- * `AcpAgentHost` does not yet read ACP's `usage_update`, not because the
- * protocol has nothing to offer — and an invented 0 would read as "this was
- * free" either way.
+ * A session's cumulative token total, compactly. Returns undefined when the
+ * provider reported nothing, which is every CLI-hosted session: ACP's
+ * `usage_update` carries context occupancy and cost but no cumulative token
+ * count, so there is genuinely nothing to total. Those sessions show duration,
+ * steps, and cost instead — an invented 0 would read as "this was free".
  */
 export function formatTokens(usage: AgentSessionRecord['tokenUsage']): string | undefined {
   const total = usage?.totalTokens;
@@ -126,9 +125,11 @@ export interface ContextPressure {
  * a session can spend a million tokens over fifty small turns without ever
  * filling its window, so a running total would cry wolf constantly.
  *
- * Returns undefined when either number is unknown — a CLI-hosted session has
- * no usage yet (see `formatTokens`), and not every gateway publishes a
- * context length. A guessed percentage would be worse than none.
+ * Fed from two different places depending on the provider: the gateway wire
+ * parser measures it for API providers, and ACP agents report it themselves
+ * via `usage_update`. Returns undefined when either number is unknown — not
+ * every gateway publishes a context length, and an ACP agent need not send
+ * `usage_update` at all. A guessed percentage would be worse than none.
  */
 export function contextPressure(session: AgentSessionRecord): ContextPressure | undefined {
   const used = session.contextTokens;
@@ -144,4 +145,30 @@ export function contextPressure(session: AgentSessionRecord): ContextPressure | 
     limit,
     level: fraction >= 0.85 ? 'critical' : fraction >= 0.67 ? 'warn' : 'ok'
   };
+}
+
+/**
+ * A session's cumulative cost, when the agent reports one (ACP `usage_update`).
+ * Formatted through `Intl` so the agent's own currency code is respected rather
+ * than assuming dollars. Sub-cent amounts round up to the smallest displayable
+ * unit instead of showing "$0.00", which would read as free.
+ */
+export function formatCost(cost: AgentSessionRecord['cost']): string | undefined {
+  if (!cost || !Number.isFinite(cost.amount) || cost.amount <= 0) {
+    return undefined;
+  }
+  try {
+    const formatter = new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: cost.currency,
+      // Below a cent, two decimals renders "$0.00"; give those three so a
+      // cheap-but-not-free turn still reads as costing something.
+      maximumFractionDigits: cost.amount < 0.01 ? 3 : 2
+    });
+    return formatter.format(cost.amount);
+  } catch {
+    // An agent can send any string as a currency code; Intl throws on codes it
+    // does not know. Fall back rather than lose the number entirely.
+    return `${cost.amount.toFixed(2)} ${cost.currency}`;
+  }
 }

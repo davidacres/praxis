@@ -335,6 +335,20 @@ export class AcpAgentHost {
         );
         break;
       }
+      case 'usage_update': {
+        // `used` is tokens *currently in context*, not tokens consumed to date —
+        // it maps to contextTokens/contextLimit, the pair that drives the
+        // composer's context banner, and NOT to `tokenUsage`, which totals every
+        // turn. ACP reports no cumulative token count, so a CLI-hosted session
+        // still shows no token total; it does report a cumulative cost, which is
+        // a different figure and is kept as one.
+        this.sessionManager.setAgentContextUsage(issueKey, {
+          contextTokens: update.used,
+          contextLimit: update.size,
+          ...(update.cost ? { cost: { amount: update.cost.amount, currency: update.cost.currency } } : {})
+        });
+        break;
+      }
       case 'agent_thought_chunk': {
         const text = update.content.type === 'text' ? update.content.text : '';
         if (text) {
