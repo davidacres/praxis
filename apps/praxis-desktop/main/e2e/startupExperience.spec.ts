@@ -200,7 +200,10 @@ test('Getting Started remains usable in a narrow reduced-motion window and light
 
   await expect(win.locator('html')).toHaveAttribute('data-mode', 'light');
   await expect(win.getByTestId('getting-started')).toBeVisible();
-  await expect(win.getByRole('textbox', { name: 'Workspace name' })).toBeVisible();
+  // First run now lands on "Create your first project" — the workspace form is
+  // one link behind "Name a workspace first", not the first thing shown.
+  await expect(win.getByTestId('first-project-actions')).toBeVisible();
+  await expect(win.getByRole('button', { name: /New project/ })).toBeVisible();
   await win.screenshot({ path: 'output/playwright/getting-started-light-narrow.png', fullPage: true });
 });
 
