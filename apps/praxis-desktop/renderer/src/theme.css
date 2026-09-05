@@ -4330,6 +4330,36 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text);
 }
 
+/* A block of content inside a settings category that isn't a single field —
+   e.g. the AI section's spend report. Sits in the same border-top rhythm as
+   .settings-field-row so it reads as one more row in the list, not an
+   inserted panel. */
+.settings-section-block {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-section-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.settings-section-subhead:first-child {
+  margin-top: 0;
+}
+
+.settings-hint {
+  margin: var(--space-1) 0;
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
 .settings-section-description {
   margin: 0 0 var(--space-2);
   font-size: var(--text-sm);
@@ -4861,6 +4891,16 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .list-row.active {
   background: var(--accent-soft);
+}
+
+/* A row that only reports a value (e.g. one line of a spend report) — no
+   click target, so neither the pointer cursor nor the hover fill apply. */
+.list-row.is-static {
+  cursor: default;
+}
+
+.list-row.is-static:hover {
+  background: transparent;
 }
 
 .list-row-title {
