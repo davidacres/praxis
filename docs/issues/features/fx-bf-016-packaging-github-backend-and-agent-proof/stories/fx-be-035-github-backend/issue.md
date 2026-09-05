@@ -23,10 +23,22 @@ as planned, but turned out to have zero runtime consumers in either `main` or
 highest, since nothing was actually calling it.
 
 Non-regression gate: `folder.spec.ts` + `folderMulti.spec.ts` + `editIssue.spec.ts`
-+ `newIssue.spec.ts` — 13 passed, matched before and after. New coverage:
-`github.spec.ts` + `mockGitHubApi.ts`, 6 tests against an in-process mock REST
-server (connection health check, board column synthesis, comment/edit
-round-trip, label-preserving column transitions, gated issue creation).
++ `newIssue.spec.ts` — 13 passed, matched before and after.
+
+New coverage, two layers:
+- `github.spec.ts` + `mockGitHubApi.ts` (e2e, 6 tests) against an in-process
+  mock REST server — connection health check, board column synthesis,
+  comment/edit round-trip, label-preserving column transitions, gated issue
+  creation.
+- `githubBoardService.test.ts` (core unit, 10 tests, added to
+  `packages/core/package.json`'s explicit test-file list — this repo's `test`
+  script names each file rather than globbing, so a new `.test.ts` runs
+  silently zero times until it's added there) — every folder-style refusal
+  (`createBoard`/`updateBoard`/`deleteBoard`/`deleteIssue`/`attachFile`/
+  `downloadAttachment`) asserted against its exact message and proven to throw
+  before any network call; a missing PAT or repo throwing instead of silently
+  reading empty; a 401 and a 404 from GitHub surfacing verbatim rather than
+  being swallowed into a false "connected" result.
 
 ## Business or operational impact
 
@@ -68,11 +80,12 @@ resolution — never for scope.
   synthesized from the connection the way folder synthesizes from its primary
   root. Columns derive from a configured status-label set; `getBoard` maps
   `state` + status labels onto columns.
-- Implemented, matching folder's depth: `getIssues`, `getIssue`,
-  `getFilterMetadata`, `createIssue` (behind `allowIssueCreation`, as folder
-  does), `updateIssue` (summary, description, assignee, labels, milestone),
-  `addComment`, `transitionIssue` (status label swap + open/closed state),
-  `getBoards`, `getBoard`.
+- Implemented: `getIssues`, `getIssue`, `getFilterMetadata`, `createIssue`
+  (behind `allowIssueCreation`, as folder does), `updateIssue` (summary,
+  description, assignee — `UpdateIssueInput` is a frozen shared type with no
+  labels/milestone field, so this matches GitLab's three fields, not folder's
+  seven), `addComment`, `transitionIssue` (status label swap + open/closed
+  state — this is how a status label actually moves), `getBoards`, `getBoard`.
 - Refused, folder-style — a decided boundary that names the alternative, not
   "not implemented yet": `createBoard`/`updateBoard`/`deleteBoard` (a GitHub
   board is the repo), `deleteIssue` (GitHub has no issue delete on the REST API
@@ -149,28 +162,53 @@ unit tests; the full suite runs before the story closes.
 
 ## Acceptance criteria
 
+All verified — ✓ names the test that proves it, not a claim pending one.
+
 - A GitHub connection with a valid PAT lists real repo issues as a board, with
-  columns derived from the configured status labels.
-- Edit round-trips to the real issue for summary, description, assignee, labels
-  and milestone — folder-depth, not GitLab's three fields.
-- Comments and status transitions round-trip.
-- Issue creation respects `allowIssueCreation`, the same gate folder uses.
-- An invalid or expired PAT fails with the GitHub error text, never falling back
-  to demo or empty data.
-- Unsupported operations refuse in folder's voice — naming the alternative — not
-  with "not implemented yet".
+  columns derived from the discovered status labels. ✓ `github.spec.ts` "board
+  renders every synthesized column with its issue".
+- Edit round-trips to the real issue for summary, description, and assignee —
+  the same three fields GitLab supports, not folder's seven (`UpdateIssueInput`
+  is a frozen shared type with no labels/milestone field). ✓ `github.spec.ts`
+  "adding a comment and editing summary round-trips through the mock".
+- Comments and status transitions round-trip; a transition adds/removes only
+  the status label, leaving unrelated labels untouched. ✓ `github.spec.ts`
+  "adding a comment…" and "moving a card to a status column…".
+- Issue creation respects `allowIssueCreation`, the same gate folder uses. ✓
+  `github.spec.ts` "issue creation is disabled…" / "…round-trips a new issue
+  once enabled".
+- An invalid or expired PAT — and a missing owner/repo — fail with GitHub's own
+  error text, never falling back to demo or empty data. ✓
+  `githubBoardService.test.ts`, 4 tests (missing PAT, missing owner/repo, a
+  401, a 404).
+- Unsupported operations refuse in folder's voice — naming the alternative —
+  never "not implemented yet", and never touch the network to do it. ✓
+  `githubBoardService.test.ts`, 6 tests (one per refused method), each run
+  against a `fetch` that throws if called.
 - No new CSS token and no new renderer component; GitHub renders through the
-  existing `BACKEND_MODE_META` path under all four theme axes.
+  existing `BACKEND_MODE_META` path under all four theme axes. ✓ verified by
+  diff — the only renderer file touched besides wiring is `ConnectionForm.tsx`,
+  adding a mode branch with existing form primitives.
 - The folder gate above reports 13 passed after the change, and no non-github
-  arm of any shared switch differs in the diff.
+  arm of any shared switch differs in the diff. ✓ re-run before and after.
 
 ## Validation
 
-- `npm run check-types`
-- `npm run check-core-imports`
-- `npm run test:core`
-- `npm run test:desktop`
-- The folder gate, before and after each commit.
+- `npm run check-types` — clean, including `check-core-imports`.
+- `npm run test:core` — 334 passed (10 new: `githubBoardService.test.ts`).
+- `npm run test:desktop` (targeted, not the full 60-file suite — see below) —
+  `github.spec.ts` 6/6, the folder gate 13/13, plus `connectionsManager`,
+  `deadConnection`, `boardSettingsFile`, `gitlab` all green.
+- Not run in this environment: the OS-keychain-backed secret path for the real
+  `pat` secret (`connection:setSecret` needs Electron's `safeStorage`, which
+  this sandbox has no backend for — the same pre-existing gap
+  `aiProvider.spec.ts` and one `connectionsManager.spec.ts` GitLab test already
+  hit here). The e2e instead exercises the inline `settings.pat` fallback,
+  which is real production code — GitLab's `apiKey` setting works the same
+  way — but the keychain round-trip itself wants an environment with one.
+- Not run in this environment: the full `npm run test:desktop` across all 60
+  spec files — scoped intentionally to this change's actual blast radius
+  rather than run for its own sake.
 
 ## Open decisions
 
@@ -186,5 +224,5 @@ Blocking design questions, to be settled before implementation starts:
 
 ## Close when
 
-Connecting a GitHub repo gives a real board with folder-depth editing, and the
-folder gate is unchanged at 13 passed.
+Connecting a GitHub repo gives a real board with real editing, and the folder
+gate is unchanged at 13 passed. Met.
