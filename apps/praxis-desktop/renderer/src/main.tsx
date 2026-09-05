@@ -12,6 +12,7 @@ import {
   registerCustomThemes
 } from './settings/themes';
 import { registerCustomSurfacePacks } from './settings/surfacePacks';
+import type { AppSettings } from '@praxis/core';
 import './theme.css';
 import './surfaces.css';
 
@@ -38,10 +39,46 @@ setWindowActive(document.hasFocus());
 window.addEventListener('focus', () => setWindowActive(true));
 window.addEventListener('blur', () => setWindowActive(false));
 
-void window.praxis.settings.get().then(settings => {
-  registerCustomThemes(settings.appearance.customThemes);
+// The theme + surface-pack libraries are the user's own custom entries plus any
+// installed from the add-on marketplace. The marketplace set is not in the
+// settings document, so it is fetched separately and re-merged whenever an
+// add-on is installed, removed, or toggled.
+let userThemes: AppSettings['appearance']['customThemes'] = [];
+let userPacks: AppSettings['appearance']['customSurfacePacks'] = [];
+
+async function applyAppearanceLibraries(): Promise<void> {
+  let addonThemes: AppSettings['appearance']['customThemes'] = [];
+  let addonPacks: AppSettings['appearance']['customSurfacePacks'] = [];
+  try {
+    const active = await window.praxis.marketplace.listActiveAppearance();
+    addonThemes = active.themes.map(theme => ({
+      id: theme.id,
+      name: theme.name,
+      mode: theme.mode,
+      description: theme.description,
+      preview: theme.preview
+    }));
+    addonPacks = active.surfacePacks.map(pack => ({
+      id: pack.id,
+      name: pack.name,
+      description: pack.description,
+      basePackId: pack.basePackId,
+      tokens: pack.tokens,
+      pattern: pack.pattern as AppSettings['appearance']['customSurfacePacks'][number]['pattern']
+    }));
+  } catch {
+    // No marketplace configured or it is unreachable — the user's own custom
+    // themes/packs still apply.
+  }
+  registerCustomThemes([...userThemes, ...addonThemes]);
+  registerCustomSurfacePacks([...userPacks, ...addonPacks]);
+}
+
+void window.praxis.settings.get().then(async settings => {
+  userThemes = settings.appearance.customThemes;
+  userPacks = settings.appearance.customSurfacePacks;
+  await applyAppearanceLibraries();
   applyThemePreference(settings.appearance.themeId, settings.appearance.themeMode);
-  registerCustomSurfacePacks(settings.appearance.customSurfacePacks);
   applySurfacePack(settings.appearance.surfacePackId, {
     intensity: settings.appearance.surface.intensity,
     texture: settings.appearance.surface.texture,
@@ -52,6 +89,10 @@ void window.praxis.settings.get().then(settings => {
   });
 }).catch(() => {
   // Local storage remains a usable first-launch fallback when settings are unavailable.
+});
+
+window.praxis.marketplace.onChanged(() => {
+  void applyAppearanceLibraries();
 });
 
 createRoot(document.getElementById('root')!).render(
