@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   AgentEventSummary,
   AgentSessionRecord,
@@ -128,6 +129,17 @@ export function SessionsPage({
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
   const [undoingChange, setUndoingChange] = useState<string>();
   const [switchingMode, setSwitchingMode] = useState(false);
+  /** ACP's own Session Mode (e.g. "ask"/"architect"/"code") — see `setAcpMode` below. Unrelated to `switchingMode`/chat-analysis-review above. */
+  const [settingAcpMode, setSettingAcpMode] = useState(false);
+  // `bottom`, not `top` — these two open from the composer at the bottom of the
+  // page, so they must grow upward, not downward off the viewport like
+  // NewSession's model/provider menus.
+  const [acpModeMenuPos, setAcpModeMenuPos] = useState<{ bottom: number; left: number } | undefined>();
+  const [acpCommandMenuPos, setAcpCommandMenuPos] = useState<{ bottom: number; left: number } | undefined>();
+  const acpModeChipRef = useRef<HTMLButtonElement | null>(null);
+  const acpModeMenuRef = useRef<HTMLDivElement | null>(null);
+  const acpCommandChipRef = useRef<HTMLButtonElement | null>(null);
+  const acpCommandMenuRef = useRef<HTMLDivElement | null>(null);
   const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
   const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
@@ -376,8 +388,56 @@ export function SessionsPage({
     }
   };
 
+  const setAcpMode = async (modeId: string) => {
+    if (!selected || modeId === selected.acpCurrentModeId) {
+      setAcpModeMenuPos(undefined);
+      return;
+    }
+    setSettingAcpMode(true);
+    setFollowUpError(undefined);
+    try {
+      await window.praxis.ai.setAcpMode(selected.issueKey, modeId);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSettingAcpMode(false);
+      setAcpModeMenuPos(undefined);
+    }
+  };
+
+  /** Inserts `/name ` into the composer and focuses it — commands are plain prompt text, not a separate RPC (see `acpAgentHost.ts`). */
+  const insertAcpCommand = (name: string) => {
+    setFollowUp(current => (current.trim() ? `${current.trimEnd()} /${name} ` : `/${name} `));
+    setAcpCommandMenuPos(undefined);
+    document.querySelector<HTMLTextAreaElement>('[data-testid="session-follow-up-input"]')?.focus();
+  };
+
+  useEffect(() => {
+    if (!acpModeMenuPos) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (acpModeMenuRef.current?.contains(target) || acpModeChipRef.current?.contains(target)) return;
+      setAcpModeMenuPos(undefined);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
+  }, [acpModeMenuPos]);
+
+  useEffect(() => {
+    if (!acpCommandMenuPos) return;
+    const onDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (acpCommandMenuRef.current?.contains(target) || acpCommandChipRef.current?.contains(target)) return;
+      setAcpCommandMenuPos(undefined);
+    };
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+    return () => document.removeEventListener('pointerdown', onDocumentPointerDown);
+  }, [acpCommandMenuPos]);
+
   useEffect(() => {
     setAttachTerminalContext(false);
+    setAcpModeMenuPos(undefined);
+    setAcpCommandMenuPos(undefined);
   }, [selected?.issueKey]);
 
   const confirmAndContinue = async () => {
@@ -768,6 +828,120 @@ export function SessionsPage({
                       ))}
                     </div>
                   )}
+                  {/* ACP's own Session Mode — only meaningful while the agent's
+                      connection is live (`AcpAgentHost.setAcpMode` requires an
+                      active task), so this is the opposite condition from the
+                      chat/analysis/review toggle above, which only appears once
+                      terminal. Entirely distinct from that toggle. */}
+                  {!isTerminalAgentState(selected.state) &&
+                    selected.acpAvailableModes &&
+                    selected.acpAvailableModes.length > 0 && (
+                      <button
+                        ref={acpModeChipRef}
+                        className={`composer-chip${acpModeMenuPos ? ' active' : ''}`}
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={!!acpModeMenuPos}
+                        disabled={settingAcpMode}
+                        title="The agent's own operating mode"
+                        data-testid="session-acp-mode"
+                        onClick={() => {
+                          if (acpModeMenuPos) {
+                            setAcpModeMenuPos(undefined);
+                            return;
+                          }
+                          const rect = acpModeChipRef.current?.getBoundingClientRect();
+                          if (rect) setAcpModeMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+                        }}
+                      >
+                        <Icon name="sliders" size={14} />
+                        {selected.acpAvailableModes.find(mode => mode.id === selected.acpCurrentModeId)?.name ?? 'Mode'}
+                        <Icon name="chevron-down" size={12} />
+                      </button>
+                    )}
+                  {acpModeMenuPos &&
+                    selected.acpAvailableModes &&
+                    createPortal(
+                      <div
+                        ref={acpModeMenuRef}
+                        className="composer-provider-menu"
+                        role="listbox"
+                        aria-label="Agent mode"
+                        style={{ position: 'fixed', bottom: acpModeMenuPos.bottom, left: acpModeMenuPos.left }}
+                      >
+                        {selected.acpAvailableModes.map(mode => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            className={`composer-provider-option${mode.id === selected.acpCurrentModeId ? ' active' : ''}`}
+                            role="option"
+                            aria-selected={mode.id === selected.acpCurrentModeId}
+                            title={mode.description}
+                            data-testid={`session-acp-mode-option-${mode.id}`}
+                            onClick={() => void setAcpMode(mode.id)}
+                          >
+                            {mode.name}
+                          </button>
+                        ))}
+                      </div>,
+                      document.body
+                    )}
+                  {/* The agent's own slash commands (ACP's `available_commands_update`).
+                      Clicking one inserts `/name ` into the composer — commands are
+                      plain prompt text over the same `session/prompt`, not a
+                      separate RPC, so there is nothing to invoke here but text
+                      insertion. Available regardless of run state: it edits the
+                      draft, same as typing, so it works whenever the input does. */}
+                  {selected.acpAvailableCommands && selected.acpAvailableCommands.length > 0 && (
+                    <button
+                      ref={acpCommandChipRef}
+                      className={`composer-chip${acpCommandMenuPos ? ' active' : ''}`}
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={!!acpCommandMenuPos}
+                      disabled={!isTerminalAgentState(selected.state) || sendingFollowUp}
+                      title="The agent's own slash commands"
+                      data-testid="session-acp-commands"
+                      onClick={() => {
+                        if (acpCommandMenuPos) {
+                          setAcpCommandMenuPos(undefined);
+                          return;
+                        }
+                        const rect = acpCommandChipRef.current?.getBoundingClientRect();
+                        if (rect) setAcpCommandMenuPos({ bottom: window.innerHeight - rect.top + 6, left: rect.left });
+                      }}
+                    >
+                      <Icon name="terminal" size={14} />
+                      Commands
+                      <Icon name="chevron-down" size={12} />
+                    </button>
+                  )}
+                  {acpCommandMenuPos &&
+                    selected.acpAvailableCommands &&
+                    createPortal(
+                      <div
+                        ref={acpCommandMenuRef}
+                        className="composer-provider-menu"
+                        role="listbox"
+                        aria-label="Agent commands"
+                        style={{ position: 'fixed', bottom: acpCommandMenuPos.bottom, left: acpCommandMenuPos.left }}
+                      >
+                        {selected.acpAvailableCommands.map(command => (
+                          <button
+                            key={command.name}
+                            type="button"
+                            className="composer-provider-option"
+                            role="option"
+                            title={command.inputHint ? `${command.description} (${command.inputHint})` : command.description}
+                            data-testid={`session-acp-command-option-${command.name}`}
+                            onClick={() => insertAcpCommand(command.name)}
+                          >
+                            /{command.name}
+                          </button>
+                        ))}
+                      </div>,
+                      document.body
+                    )}
                   {terminalForContext && (
                     <button
                       className={`composer-chip terminal-context-button${attachTerminalContext ? ' active' : ''}`}
