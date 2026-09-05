@@ -471,6 +471,38 @@ test('a run started against a ticket writes its outcome back as a comment once i
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test('a write-back that fails is visible in the Output tab, not just the main-process console', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const seeded = await seedCheckWorkflow(page, repo, { command: 'git', args: ['--version'] });
+  // A ticket that was never created — the IPC itself has no picker to bounce
+  // this off of, so it starts the run, settles normally, and only the
+  // write-back attempt fails. Real-world equivalent: a ticket deleted between
+  // when a run started and when it finished.
+  await page.evaluate(
+    async ({ projectId, workflowId }) =>
+      window.praxis.workflows.startRun(projectId, workflowId, 'Ship it', { issueKey: 'GHOST-404' }),
+    seeded
+  );
+  await page.reload();
+  await openRunsTab(page);
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(runDetail.getByRole('status')).toContainText('completed');
+
+  await page.locator('[aria-label="Toggle panel"]').click();
+  await page.locator('[data-testid="panel-tab-output"]').click();
+  const output = page.locator('[data-testid="output-log"]');
+  await expect(output).toContainText('[workflow]', { timeout: 10000 });
+  await expect(output).toContainText('GHOST-404');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
 test('a check that outruns its timeout is failed with a stated reason', async () => {
   const repo = createRepository();
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });

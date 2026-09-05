@@ -138,3 +138,4 @@
 | FX-BE-038 | Story | Surface ACP session modes and slash commands | Complete | FX-BF-017 |
 | FX-BE-039 | Story | Cost and token spend report | Complete | FX-BF-017 |
 | FX-BE-040 | Story | Ticket-triggered workflow runs with outcome write-back | Complete | FX-BF-017 |
+| FX-BE-041 | Story | Wire workflow failures into the Output tab's log bus | Complete | FX-BF-017 |
