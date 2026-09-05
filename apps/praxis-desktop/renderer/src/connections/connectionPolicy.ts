@@ -43,7 +43,7 @@ export function secretNamesForMode(mode: BackendMode): readonly string[] {
  * others) instead of opening the board picker.
  */
 export function autoSynthesizesBoard(mode: BackendMode): boolean {
-  return mode === 'folder' || mode === 'demo';
+  return mode === 'folder' || mode === 'demo' || mode === 'github';
 }
 
 /** Modes with discoverable remote boards the user tracks via the board picker. */
@@ -57,11 +57,15 @@ export function stringSetting(connection: Connection, key: string): string | und
 }
 
 /**
- * The tracked board a demo/folder connection owns by construction. The id must
- * match what `FolderService.getBoards()` emits for its primary root
- * (`folder-<projectKey>`) so the manager's tracked list and the sidebar's board
- * list agree. A folder connection with several roots exposes the extra boards
- * through `getBoards()` — only the primary one is tracked here.
+ * The tracked board a demo/folder/github connection owns by construction. The
+ * id must match what each backend's own `getBoards()` emits — `folder-<projectKey>`
+ * for folder's primary root, `github:<owner>/<repo>` for GitHub's one board per
+ * repository — so the manager's tracked list and the sidebar's board list agree.
+ * A folder connection with several roots exposes the extra boards through
+ * `getBoards()` — only the primary one is tracked here. GitHub returns
+ * `undefined` until both owner and repo are set, matching folder's fallback
+ * defaults being always-present (so folder never returns undefined) while
+ * GitHub genuinely has nothing to synthesize yet.
  */
 export function createSynthesizedTrackedBoard(connection: Connection): TrackedBoard | undefined {
   if (connection.mode === 'folder') {
@@ -78,6 +82,18 @@ export function createSynthesizedTrackedBoard(connection: Connection): TrackedBo
       connectionId: connection.id,
       boardId: connection.id,
       displayName: connection.name
+    };
+  }
+  if (connection.mode === 'github') {
+    const owner = stringSetting(connection, 'owner');
+    const repo = stringSetting(connection, 'repo');
+    if (!owner || !repo) {
+      return undefined;
+    }
+    return {
+      connectionId: connection.id,
+      boardId: `github:${owner}/${repo}`,
+      displayName: `${owner}/${repo}`
     };
   }
   return undefined;
