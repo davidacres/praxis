@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import * as fsp from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import { BrowserWindow, ipcMain } from 'electron';
 import {
@@ -6,6 +7,9 @@ import {
   discoverWorkspaceAgentWorkflows,
   GitWorktreeManager,
   PROVIDER_DESCRIPTORS,
+  PathSandboxError,
+  isLatestEditToPath,
+  resolveSandboxedPath,
   stageIssueAttachments,
   storeProviderApiKey,
   resetProviderApiKeys,
@@ -663,6 +667,46 @@ export function registerAiIpc(): void {
     'ai:respondToPermission',
     async (_event: Electron.IpcMainInvokeEvent, issueKey: string, decision: PermissionDecision) => {
       respondToActivePermission(issueKey, decision);
+    }
+  );
+
+  ipcMain.handle(
+    'ai:undoToolFileChange',
+    async (_event: Electron.IpcMainInvokeEvent, issueKey: string, eventTimestamp: string, path: string) => {
+      const record = sessionManager.getAgentSession(issueKey);
+      if (!record) {
+        throw new Error(`No agent session found for ${issueKey}.`);
+      }
+      if (hasActiveTask(issueKey)) {
+        throw new Error('Wait for the session to finish this turn before undoing an edit.');
+      }
+      const change = record.events
+        .find(candidate => candidate.timestamp === eventTimestamp && candidate.type === 'tool_complete')
+        ?.data?.fileChanges?.find(entry => entry.path === path);
+      if (!change) {
+        throw new Error(`No recorded edit to ${path} at that point in the session.`);
+      }
+      if (!isLatestEditToPath(record.events, eventTimestamp, path)) {
+        throw new Error(`${path} was edited again after this — undoing this step would discard that later edit.`);
+      }
+      const workingDirectory = record.worktreePath?.trim() || record.workingDirectory?.trim();
+      if (!workingDirectory) {
+        throw new Error('This session has no working folder to undo the edit in.');
+      }
+      let absolute: string;
+      try {
+        absolute = resolveSandboxedPath(workingDirectory, path);
+      } catch (error) {
+        throw error instanceof PathSandboxError ? new Error(`${path} is outside this session's working folder.`) : error;
+      }
+      // `oldText` defaults to '' both for "the file was empty before" and for
+      // "the file did not exist before" — ACP's diff block does not distinguish
+      // the two, so a file this edit created comes back empty rather than gone.
+      await fsp.writeFile(absolute, change.oldText ?? '', 'utf8');
+      sessionManager.appendAgentEvents(issueKey, [
+        { timestamp: new Date().toISOString(), type: 'info', summary: `You undid the edit to ${path}.` }
+      ]);
+      return sessionManager.getAgentSession(issueKey) ?? record;
     }
   );
 

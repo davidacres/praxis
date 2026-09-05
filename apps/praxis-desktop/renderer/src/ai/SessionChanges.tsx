@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AgentSessionRecord, GitChangedFile, GitDiffFile, GitFileContent, GitStatusSnapshot } from '@praxis/core';
+import type { AgentSessionRecord, GitChangedFile, GitDiffFile, GitDiffHunk, GitFileContent, GitStatusSnapshot } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { highlightCode, languageFor } from '../ui/codeHighlight';
@@ -149,6 +149,14 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     setOpenFile(undefined);
   };
 
+  const loadDiff = async (file: GitChangedFile): Promise<GitDiffFile | undefined> => {
+    const document = await window.praxis.git.getComparison(repositoryPath, {
+      kind: file.staged ? 'staged' : 'working',
+      path: file.path
+    });
+    return document.files.find(entry => entry.displayPath === file.path) ?? document.files[0];
+  };
+
   /**
    * Reviewing a change means reading the diff, not the whole file — so this
    * reuses the git comparison the diff workspace already uses, scoped to one
@@ -164,14 +172,40 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     setOpenDiff(undefined);
     setOpenFile(undefined);
     try {
-      const document = await window.praxis.git.getComparison(repositoryPath, {
-        kind: file.staged ? 'staged' : 'working',
-        path: file.path
-      });
-      setOpenDiff(document.files.find(entry => entry.displayPath === file.path) ?? document.files[0]);
+      setOpenDiff(await loadDiff(file));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
       closeRow();
+    }
+  };
+
+  /**
+   * "The agent got a hunk wrong" no longer means discarding the whole file or
+   * writing a follow-up message asking for a fix — just this change goes,
+   * the file's other edits stay. Reuses the same hunk-level `applyHunk` the
+   * full diff workspace already relies on for staging.
+   */
+  const discardHunk = async (file: GitChangedFile, hunk: GitDiffHunk) => {
+    const ok = await confirm({
+      title: 'Discard this hunk?',
+      message: `${file.path}\n\nOnly this change is thrown away — the file's other edits are kept. This cannot be undone by Praxis.`,
+      confirmLabel: 'Discard hunk',
+      danger: true
+    });
+    if (!ok) return;
+    setBusy(`hunk:${hunk.id}`);
+    setError(undefined);
+    try {
+      await window.praxis.git.applyHunk(repositoryPath, { action: 'discard', path: file.path, patch: hunk.patch });
+      await refresh();
+      onChanged?.();
+      const updated = await loadDiff(file).catch(() => undefined);
+      if (updated) setOpenDiff(updated);
+      else closeRow();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
     }
   };
 
@@ -260,16 +294,32 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
                 ) : openDiff.isBinary ? (
                   <span className="placeholder-text">Binary file — no text diff.</span>
                 ) : (
-                  <pre>
-                    {openDiff.hunks.flatMap(hunk => [
-                      <span key={hunk.id} className="diff-hunk">{hunk.header}{'\n'}</span>,
-                      ...hunk.lines.map((line, index) => (
-                        <span key={`${hunk.id}-${index}`} className={`diff-${line.kind}`}>
-                          {line.content || ' '}{'\n'}
-                        </span>
-                      ))
-                    ])}
-                  </pre>
+                  openDiff.hunks.map(hunk => (
+                    <div className="session-changes-hunk" key={hunk.id} data-testid="session-changes-hunk">
+                      <div className="session-changes-hunk-head">
+                        <span className="diff-hunk">{hunk.header}</span>
+                        {!file.staged && (
+                          <button
+                            type="button"
+                            className="btn-quiet session-changes-hunk-discard"
+                            data-testid="session-changes-hunk-discard"
+                            disabled={Boolean(busy)}
+                            title="Discard just this change; the file's other edits are kept"
+                            onClick={() => void discardHunk(file, hunk)}
+                          >
+                            {busy === `hunk:${hunk.id}` ? 'Discarding…' : 'Discard hunk'}
+                          </button>
+                        )}
+                      </div>
+                      <pre>
+                        {hunk.lines.map((line, index) => (
+                          <span key={index} className={`diff-${line.kind}`}>
+                            {line.content || ' '}{'\n'}
+                          </span>
+                        ))}
+                      </pre>
+                    </div>
+                  ))
                 )}
               </div>
             )}

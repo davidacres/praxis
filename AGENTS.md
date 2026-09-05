@@ -20,8 +20,22 @@ types). It targets Node/Electron — no host-abstraction ports.
 
 When both `main` and `renderer` need the same logic it lives in `packages/core`.
 The renderer imports **types only** from core at runtime — core is CommonJS and
-pulls in `chokidar` / `markdown-it`, so it cannot be tree-shaken into the browser
-bundle (see the `settingsDefaults.ts` note below).
+pulls in `chokidar` / `markdown-it` (and, transitively, native bindings like
+`fsevents.node`), so it cannot be tree-shaken into the browser bundle (see the
+`settingsDefaults.ts` note below). **A value import from `@praxis/core` anywhere
+under `apps/praxis-desktop/renderer/src` compiles clean under `tsc --noEmit` and
+only fails `vite build`** — `types` don't care where a value comes from, so this
+is easy to reintroduce without noticing if you only typecheck. It happened once
+(a small pure function pulled in for reuse instead of duplicated locally,
+exactly like `settingsDefaults.ts` already does for `parseHexRgb`) and the
+failure read as an unrelated native-binding error three layers down, nothing
+like "you imported a value from core." Writing the rule down here did not stop
+it recurring, so it is now enforced, not just stated: `npm run check-core-imports`
+(`apps/praxis-desktop/renderer/scripts/checkCoreImports.cjs`, TS-compiler-API based,
+no regex) runs before both `check-types` and `build` and fails the exact line.
+If you need core logic in the renderer, duplicate the small pure function next to
+where it's used (as `sessionNav.ts`'s `isLatestEditToPath` duplicates core's
+`agentEventUtils.ts` one) rather than importing it.
 
 ---
 

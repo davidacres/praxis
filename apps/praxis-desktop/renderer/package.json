@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p . && vite build",
-    "check-types": "tsc --noEmit -p .",
+    "build": "npm run check-core-imports && tsc --noEmit -p . && vite build",
+    "check-types": "npm run check-core-imports && tsc --noEmit -p .",
+    "check-core-imports": "node scripts/checkCoreImports.cjs",
     "textures": "electron scripts/generate-surface-textures.cjs"
   },
   "dependencies": {

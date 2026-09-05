@@ -194,6 +194,8 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),
     respondToPermission: (issueKey: string, decision: PermissionDecision) =>
       ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
+    undoToolFileChange: (issueKey: string, eventTimestamp: string, path: string) =>
+      ipcRenderer.invoke('ai:undoToolFileChange', issueKey, eventTimestamp, path),
     onSessionChanged: (listener: (record: AgentSessionRecord) => void) => {
       // Wrap so the raw IpcRendererEvent never crosses the context bridge.
       const handler = (_event: Electron.IpcRendererEvent, record: AgentSessionRecord) =>
