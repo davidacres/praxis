@@ -10,6 +10,10 @@ have shipped (FX-BF-009 through FX-BF-014). This doc tracks what's left.
 
 **Actively open: FX-BF-016** (signed builds, GitHub backend, agent proof-of-concept)
 
+**Also complete since: FX-BF-017** (AI session UX and workflow ticket
+integration) — command palette issue search, ACP session modes/slash commands,
+the AI spend report, and ticket-triggered workflow runs with write-back.
+
 ---
 
 ## What shipped (reference only)
@@ -57,17 +61,22 @@ do real work.
 
 All of these are smaller than the FX-BF-016 blockers; grouped by the type of work.
 
+**Shipped since the last audit (FX-BF-017, 2026-09-05):** command palette issue
+index (workspace-wide, debounced async search), available slash commands from
+the agent (ACP `available_commands_update` → composer commands chip), the
+agent's own Session Mode (ACP `current_mode_update` → composer mode chip),
+cost/token attribution over time (Settings → AI Provider spend report, grouped
+by provider/model and connection), and workflow write-back to issue (a run can
+now start from a ticket and posts its outcome back as a comment once settled —
+no status transition, since Praxis has no target-status mapping for a
+tracker's own workflow). Full detail in `docs/PLAN_MAP.md`.
+
 #### UX gaps (high-value, low-effort)
 
 | Gap | Work | Why |
 |---|---|---|
-| Command palette issue index | Index all board issues (FX-BF-035 makes this multi-connection). | Daily quality-of-life; ⌘K currently can't find a ticket. |
-| Available slash commands from agent | Handle ACP `available_commands_update` event; surface agent's own ⌘ commands in composer. | Users can't discover agent's native capabilities (e.g., `⌘ ask`, `⌘run`). |
-| Workflow write-back to issue | On workflow run completion, write status transition or comment back to the source ticket. | Governance story incomplete; Jira users see no evidence workflow ran. |
-| Cost attribution over time | Add team/project spend view + historical cost tracking (per currency, honest about token vs. cost duality). | Team leads need to see what projects cost before approving AI adoption. |
 | Connection status indicator | Title-bar or sidebar health indicator fed by connection health checks. | "Is Jira up?" today requires opening Connections UI. |
 | Application logs | Persistent log viewer for agent failures, workflow errors; searchable, exportable. | Debugging prod issues requires file system access; no in-app place to look. |
-| Global issue quick-search | Extend palette to search across all boards + connections (all text + field-scoped filters). | Current search only works within the open board. |
 
 #### Deferred (Jira-coupled or lower priority)
 
