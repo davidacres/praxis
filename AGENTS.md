@@ -198,6 +198,39 @@ Three layers, each with one job:
   more plans-folder roots on disk (native multi-root; each root's `board.praxis.json`
   carries its own `projectKey` / `projectName`).
 
+### Backend modes → services
+
+Every mode resolves to one `IssueTrackerService` through `serviceRegistry.ts`'s
+`getServiceForConnection` — a `switch` on `connection.mode` with a `default` arm
+that returns a **stub** (`getStubService(mode)`: reads empty, throws a named
+message on mutation, and — deliberately — never silently becomes demo data).
+A mode with no `case` is a mode with no backend. Per-mode completeness lives in
+`docs/desktop-feature-parity.md`'s "Backends & connections" table — keep that
+current when a backend's state changes.
+
+- **`folder` (`FolderService`) is the reference for what "complete" means**, not
+  `GitLabBoardService`. GitLab is partial: seven of its methods throw
+  "not implemented yet" and `updateIssue` takes three fields. Folder's refusals
+  are decided boundaries that name the alternative ("Remove the markdown files
+  directly"), it has seven editable fields, working comments/transitions, board
+  synthesis from the connection itself, and gated issue creation. `github`
+  (`GitHubBoardService`, FX-BE-035) is modeled on folder — REST-tracker mechanics
+  borrowed from GitLab (auth headers, pagination, label↔column mapping), scope
+  judged against folder.
+- **Adding or changing a mode: `folder` must be provably unaffected.** The new
+  work is a `case` *before* `default` (unreachable from `case 'folder'`), plus a
+  github-only arm on each of the three shared switches that genuinely branch on
+  mode — `canCreateIssue` (`App.tsx`), `backendModeContext.ts` (split the
+  shared `case 'github': case 'gitlab':`, leave gitlab byte-identical),
+  `autoSynthesizesBoard` (`connectionPolicy.ts`). Run `folder.spec.ts` +
+  `folderMulti.spec.ts` + `editIssue.spec.ts` + `newIssue.spec.ts` before and
+  after and confirm the count is unchanged.
+- **No new renderer component or CSS token for a new backend.** Every visual
+  affordance is already mode-driven: `BACKEND_MODE_META.<mode>` (`boardMeta.ts`)
+  and a `--tone-<mode>` in `theme.css`'s base block, inherited by all four theme
+  axes with no per-theme override. The one renderer-visible change is a
+  `ConnectionForm` branch built from the existing form primitives.
+
 ## Agent sessions (ACP)
 
 `packages/core/src/ai/acp/` hosts a CLI agent (Claude Code, Codex) as a subprocess over

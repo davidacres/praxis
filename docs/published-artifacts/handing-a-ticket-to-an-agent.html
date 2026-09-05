@@ -276,9 +276,9 @@ function slugify(title) {
           <tr><td class="mark y">yes</td><td>Tool use pauses for Allow / Always allow / Deny</td><td class="note"><code>ai:respondToPermission</code> → host → <code>SessionsPage</code>, wired end to end</td></tr>
           <tr><td class="mark y">yes</td><td>A real model handles a small, well-specified ticket sensibly</td><td class="note">Live run: failing suite → passing, clean diff</td></tr>
           <tr><td class="mark y">yes</td><td>Each turn's reply is kept in context for the next turn</td><td class="note">Fixed in <code>aa271de</code>; regression test walks three turns</td></tr>
+          <tr><td class="mark y">yes</td><td>GitHub as a ticket source</td><td class="note">Real board now — <code>GitHubBoardService</code>, FX-BE-035; <code>github.spec.ts</code></td></tr>
           <tr><td class="mark n">not yet</td><td>A vague ticket against a large, unfamiliar codebase</td><td class="note">Different question. The honest way to answer it is to try one.</td></tr>
           <tr><td class="mark n">not yet</td><td>Multi-file changes, or a task needing the terminal</td><td class="note">The plumbing supports it; no run has exercised it</td></tr>
-          <tr><td class="mark n">not yet</td><td>GitHub as a ticket source</td><td class="note">Configuration surface only — no board/issue backend behind it</td></tr>
         </tbody>
       </table>
     </div>
