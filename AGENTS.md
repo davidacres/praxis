@@ -258,6 +258,17 @@ the next gap is found by reading it rather than by assuming.
   occupancy, not spend, and the two diverge the moment a conversation is trimmed.
   Anthropic also sends input and output in *different* events, so a running total must
   not be derived until the stream ends.
+- **`ai.spendLimit` is a budget the user sets, not a balance anyone reports.**
+  Nothing Praxis talks to exposes credits: ACP carries a cumulative `cost` but no
+  limit, and the gateway client only calls `/v1/models` and `/v1/chat/completions`.
+  So never word it as "credits remaining", and never derive cost from tokens for
+  API providers — that needs a price table this app has neither got nor could keep
+  true. `summariseSpend` totals **per currency** and yields a comparable `single`
+  total only when every reporting session used one: adding USD to EUR to fill the
+  banner would be exactly the invented number this section exists to prevent. The
+  warning is also explicit that nothing is blocked — Praxis cannot stop an agent
+  spending, only say so.
+
 - **The agent's self-reported task list (ACP's `plan` update — Claude Code's TodoWrite,
   Codex's plan tool) renders in `SessionInspector` as `SessionTasks`, not in the
   transcript.** A `plan` event is a complete snapshot every time ("the client replaces
