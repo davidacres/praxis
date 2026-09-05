@@ -1316,6 +1316,7 @@ export function App() {
             </header>
             <WorkflowRunMonitor
               project={selectedProject}
+              connections={connections}
               runnableWorkflows={workflowsByProject[selectedProject.id] ?? []}
               auxSlot={auxSlotEl}
               onRequireAux={requireAux}

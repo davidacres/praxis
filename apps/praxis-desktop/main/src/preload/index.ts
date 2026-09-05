@@ -290,8 +290,8 @@ const praxis: PraxisIpc = {
     validate: (projectId: string, definition: WorkflowDefinition) =>
       ipcRenderer.invoke('workflows:validate', projectId, definition),
     effectivePolicy: (projectId: string) => ipcRenderer.invoke('workflows:effectivePolicy', projectId),
-    startRun: (projectId: string, workflowId: string, taskTitle: string) =>
-      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle),
+    startRun: (projectId: string, workflowId: string, taskTitle: string, issue?: { issueKey: string; connectionId?: string }) =>
+      ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue),
     listRuns: (projectId: string) => ipcRenderer.invoke('workflows:listRuns', projectId),
     getRun: (runId: string) => ipcRenderer.invoke('workflows:getRun', runId),
     advanceStage: (
