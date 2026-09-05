@@ -1199,13 +1199,13 @@ export function App() {
     ? true
     : connection.mode === 'demo'
       ? true
-      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project'
+      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project' || connection.mode === 'github'
         ? connection.settings.allowIssueCreation === true
         : false;
   const createIssueHint =
     !connection || connection.mode === 'demo' || canCreateIssue
       ? undefined
-      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project'
+      : connection.mode === 'app' || connection.mode === 'folder' || connection.mode === 'project' || connection.mode === 'github'
         ? 'Issue creation is disabled for this connection. Enable "Allow issue creation" in its settings.'
         : `Ticket creation is not available for ${backendModeMeta(connection.mode).label} connections yet.`;
 

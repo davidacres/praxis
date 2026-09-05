@@ -41,11 +41,20 @@ developer account, Windows Authenticode cert).
 
 #### FX-BE-035 — Real GitHub backend
 
-**Status:** Planned. **Priority:** P2 (multi-platform parity)
+**Status:** Complete. **Priority:** P2 (multi-platform parity)
 
-GitHub connections exist in the UI and save metadata, but the backend stub
-throws. Need a REST client + issue-list-to-board mapping, identical shape to
-GitLab's existing service. Unblocks ~30% of the target user base (GitHub-first teams).
+`GitHubBoardService` (core) + `serviceRegistry.ts`'s `case 'github'`. Modeled on
+**folder**, not GitLab — GitLab's own `createIssue`/`deleteIssue`/`attachFile`/
+board CRUD all throw "not implemented yet"; folder's refusals name a real
+alternative instead, which is the bar GitHub's refusals are held to. One repo is
+one board (labels named `status: …` synthesize the columns; a repo with none
+still renders Backlog/Closed). Edits: summary, description, assignee — GitHub's
+issue API has nothing resembling priority/severity/type. Creation gated behind
+`allowIssueCreation`. Full e2e coverage against an in-process mock REST server
+(`github.spec.ts` / `mockGitHubApi.ts`), 6 tests. Folder's own suite (13 tests
+across `folder`/`folderMulti`/`editIssue`/`newIssue.spec.ts`) re-run green before
+and after, confirming the addition is structurally isolated
+(`getServiceForConnection` switches on `connection.mode`).
 
 #### FX-BE-036 — Prove multi-file and terminal-using agent paths
 

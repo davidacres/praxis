@@ -1,6 +1,32 @@
 # FX-BE-035 — Real GitHub backend
 
-**Type:** Story  **Status:** Planned  **Priority:** P2  **Depends on:** —
+**Type:** Story  **Status:** Complete  **Priority:** P2  **Depends on:** —
+
+## Implementation note
+
+Shipped as planned below, with the three open decisions resolved as: labels
+(a repo's `status: …` labels synthesize the board columns, discovered rather
+than a fixed default set — a repo with none still renders Backlog/Closed);
+issue creation follows folder (gated behind `allowIssueCreation`).
+
+One correction to this plan's own scope, caught before writing code: "Edit
+round-trips … summary, description, assignee, labels and milestone" overreached
+— `UpdateIssueInput` (a frozen shared type) has no `labels`/`milestone` field,
+so the generic edit panel is summary/description/assignee only, identical to
+GitLab's three fields. Status labels still move, but only via board drag-drop
+column transitions (`transitionIssue`), the same mechanism GitLab itself uses
+to add/remove its own board labels — never through the edit-issue form.
+
+`backendModeContext.ts`'s shared `case 'github': case 'gitlab':` arm was split
+as planned, but turned out to have zero runtime consumers in either `main` or
+`renderer` — the lowest-risk item in the non-regression list below, not the
+highest, since nothing was actually calling it.
+
+Non-regression gate: `folder.spec.ts` + `folderMulti.spec.ts` + `editIssue.spec.ts`
++ `newIssue.spec.ts` — 13 passed, matched before and after. New coverage:
+`github.spec.ts` + `mockGitHubApi.ts`, 6 tests against an in-process mock REST
+server (connection health check, board column synthesis, comment/edit
+round-trip, label-preserving column transitions, gated issue creation).
 
 ## Business or operational impact
 

@@ -1,6 +1,7 @@
 import type { BackendMode, IssueTrackerService, LogSink } from '@praxis/core';
 import {
   GitLabBoardService,
+  GitHubBoardService,
   JiraMcpConnectionResolver,
   JiraService,
   FolderService,
@@ -13,11 +14,13 @@ import { getLogBus } from './logBusInstance';
 import { ElectronFolderConfigProvider } from './adapters/electronFolderConfigProvider';
 import { DesktopJiraConfigProvider } from './adapters/desktopJiraConfigProvider';
 import { DesktopGitLabConfigProvider } from './adapters/desktopGitLabConfigProvider';
+import { DesktopGitHubConfigProvider } from './adapters/desktopGitHubConfigProvider';
 import { getProjectStore } from './projectStoreInstance';
 
 const folderServices = new Map<string, FolderService>();
 const jiraServices = new Map<string, JiraService>();
 const gitLabServices = new Map<string, GitLabBoardService>();
+const gitHubServices = new Map<string, GitHubBoardService>();
 const stubServices = new Map<BackendMode, StubBackendService>();
 const projectServices = new Map<string, IssueTrackerService>();
 
@@ -32,6 +35,8 @@ const consoleSink: LogSink = {
 const jiraLogSink: LogSink = getLogBus().tee('jira', consoleSink);
 
 const gitLabLogSink: LogSink = getLogBus().tee('gitlab', consoleSink);
+
+const gitHubLogSink: LogSink = getLogBus().tee('github', consoleSink);
 
 /**
  * Scopes a pre-registered Atlassian 3LO app needs for the remote MCP server
@@ -191,15 +196,41 @@ function createGitLabService(connectionId: string): IssueTrackerService {
   return service;
 }
 
+function createGitHubService(connectionId: string): IssueTrackerService {
+  const cached = gitHubServices.get(connectionId);
+  if (cached) {
+    return cached;
+  }
+
+  const store = getConnectionStore();
+  const connection = store.getConnection(connectionId);
+  if (!connection) {
+    return getStubService('github');
+  }
+
+  const provider = new DesktopGitHubConfigProvider(connection);
+  const service = new GitHubBoardService(
+    provider,
+    gitHubLogSink,
+    globalThis.fetch,
+    {
+      // Preferred secret name first, then the inline settings key — same
+      // fallback chain as GitLab's.
+      getApiKeyFromSecrets: async () =>
+        (await store.getSecret(connectionId, 'pat')) ?? provider.getGitHubApiKey().trim()
+    }
+  );
+  gitHubServices.set(connectionId, service);
+  return service;
+}
+
 /**
  * Resolves the backend for a connectionId. `undefined` (the built-in demo
  * boards) resolves to the demo backend only when explicit demo mode is active.
- * An unknown id never silently becomes demo data. A connection whose
- * mode has no desktop backend yet (github until its
- * ports land) — or a jiracloud connection whose MCP server can't be resolved —
- * resolves to a stub that reads empty and throws a clear message on mutation,
- * never silently to demo, which used to make a misconfigured connection
- * indistinguishable from demo data.
+ * An unknown id never silently becomes demo data. A jiracloud connection
+ * whose MCP server can't be resolved resolves to a stub that reads empty and
+ * throws a clear message on mutation, never silently to demo, which used to
+ * make a misconfigured connection indistinguishable from demo data.
  */
 export async function getServiceForConnection(
   connectionId: string | undefined
@@ -242,6 +273,8 @@ export async function getServiceForConnection(
       return createJiraService(connectionId);
     case 'gitlab':
       return createGitLabService(connectionId);
+    case 'github':
+      return createGitHubService(connectionId);
     default:
       return getStubService(connection.mode);
   }
