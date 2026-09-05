@@ -10,11 +10,12 @@ import type {
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from './aiSessionState';
+import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, formatCost, isWorkflowStageSession, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, formatCost, isLatestEditToPath, isWorkflowStageSession, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
 
 /**
@@ -117,12 +118,15 @@ export function SessionsPage({
   onBrowserUrlChange,
   browserSuspended
 }: SessionsPageProps) {
+  const { confirm } = useDialogs();
   const [status, setStatus] = useState<AiProviderStatus | undefined>();
   const [respondingTo, setRespondingTo] = useState<string | undefined>();
   const [followUp, setFollowUp] = useState('');
   const [followUpError, setFollowUpError] = useState<string | undefined>();
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [abortingSession, setAbortingSession] = useState(false);
+  /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
+  const [undoingChange, setUndoingChange] = useState<string>();
   const [switchingMode, setSwitchingMode] = useState(false);
   const [analysisState, setAnalysisState] = useState<AiAnalysisState | undefined>();
   const [confirmingAnalysis, setConfirmingAnalysis] = useState(false);
@@ -329,6 +333,35 @@ export function SessionsPage({
     }
   };
 
+  /**
+   * "The agent got a hunk wrong, recovery today is a follow-up message" — this
+   * is the other half: revert one recorded edit in place, from the transcript
+   * row that shows it, rather than asking the agent to fix its own mistake.
+   * Writes the file back to `oldText`; only offered while it's still the
+   * latest edit to that path (`isLatestEditToPath`) and the session isn't
+   * mid-turn, both re-checked server-side since this button's state can go
+   * stale while the dialog is open.
+   */
+  const undoEdit = async (eventTimestamp: string, path: string) => {
+    if (!selected) return;
+    const ok = await confirm({
+      title: `Undo the edit to ${path}?`,
+      message: `${path} is restored to what it was immediately before this edit — overwriting the file on disk now. This cannot be undone by Praxis.`,
+      confirmLabel: 'Undo edit',
+      danger: true
+    });
+    if (!ok) return;
+    setUndoingChange(`${eventTimestamp}|${path}`);
+    setFollowUpError(undefined);
+    try {
+      await window.praxis.ai.undoToolFileChange(selected.issueKey, eventTimestamp, path);
+    } catch (error) {
+      setFollowUpError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUndoingChange(undefined);
+    }
+  };
+
   const switchMode = async (mode: SessionMode) => {
     if (!selected || mode === (selected.mode ?? 'chat') || !isTerminalAgentState(selected.state)) return;
     setSwitchingMode(true);
@@ -504,12 +537,30 @@ export function SessionsPage({
                         <ToolTerminal text={shellOutput} />
                       ) : view === 'write' && (fileChanges?.length || singleDiff) ? (
                         fileChanges?.length ? (
-                          fileChanges.map((change, changeIndex) => (
-                            <div className="session-tool-file" key={changeIndex}>
-                              <span className="session-tool-file-path">{change.path}</span>
-                              <ToolDiff diff={change.diff ?? ''} />
-                            </div>
-                          ))
+                          fileChanges.map((change, changeIndex) => {
+                            const canUndo = isLatestEditToPath(selected.events, event.timestamp, change.path);
+                            const undoKey = `${event.timestamp}|${change.path}`;
+                            return (
+                              <div className="session-tool-file" key={changeIndex}>
+                                <div className="session-tool-file-head">
+                                  <span className="session-tool-file-path">{change.path}</span>
+                                  {canUndo && (
+                                    <button
+                                      type="button"
+                                      className="btn-quiet session-tool-undo"
+                                      data-testid="session-tool-undo"
+                                      disabled={!isTerminalAgentState(selected.state) || Boolean(undoingChange)}
+                                      title="Restore this file to what it was before this edit"
+                                      onClick={() => void undoEdit(event.timestamp, change.path)}
+                                    >
+                                      {undoingChange === undoKey ? 'Undoing…' : 'Undo edit'}
+                                    </button>
+                                  )}
+                                </div>
+                                <ToolDiff diff={change.diff ?? ''} />
+                              </div>
+                            );
+                          })
                         ) : (
                           <ToolDiff diff={singleDiff ?? ''} />
                         )

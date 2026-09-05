@@ -16,6 +16,7 @@ export * from './ai/acp/acpAgentHost';
 export * from './ai/copilot/copilotAgentHost';
 export * from './ai/cliProbe';
 export * from './ai/agentTypes';
+export * from './ai/agentEventUtils';
 export * from './ai/agentWorkflowCatalog';
 export * from './ai/agentPrompt';
 export * from './ai/agentRuntime';

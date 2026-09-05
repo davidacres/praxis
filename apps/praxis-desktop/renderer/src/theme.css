@@ -5461,11 +5461,25 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .session-tool-file { border-top: 1px solid var(--border); }
 .session-tool-file .session-tool-diff { border-top: none; }
-.session-tool-file-path {
-  display: block;
+.session-tool-file-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
   padding: 6px 10px 0;
+}
+.session-tool-file-path {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: var(--text-xs)/1.4 var(--font-mono);
+}
+.session-tool-undo {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  font-size: var(--text-xs);
 }
 
 .session-chat-author {
@@ -8900,6 +8914,11 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .session-changes-diff .diff-deletion { color: var(--danger); }
 .session-changes-diff .diff-hunk { color: var(--text-tertiary); }
 .session-changes-diff .diff-notice { color: var(--warning); }
+.session-changes-hunk + .session-changes-hunk { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px dashed var(--border); }
+.session-changes-hunk-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.session-changes-hunk-discard { flex: 0 0 auto; padding: 1px 7px; font-size: var(--text-xs); opacity: 0; }
+.session-changes-hunk:hover .session-changes-hunk-discard,
+.session-changes-hunk-discard:focus-visible { opacity: 1; }
 
 /* The whole-file view — read-only, not a diff. Same box treatment as the
    diff so the two read as siblings, but its own line-numbered body since it

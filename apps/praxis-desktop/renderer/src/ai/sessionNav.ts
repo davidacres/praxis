@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from '@praxis/core';
+import type { AgentEventSummary, AgentSessionRecord } from '@praxis/core';
 
 /**
  * Naming and classification for an agent session, shared by the three surfaces
@@ -235,4 +235,29 @@ export function spendPressure(
     percent: Math.round(fraction * 100),
     level: fraction >= 0.85 ? 'critical' : fraction >= 0.67 ? 'warn' : 'ok'
   };
+}
+
+/**
+ * Whether the file change recorded on the `tool_complete` event timestamped
+ * `eventTimestamp` is still the most recent edit to `path` — gates the
+ * transcript's "Undo edit" button.
+ *
+ * Duplicated from core's `isLatestEditToPath` (same logic, kept in sync by
+ * hand) rather than imported: `@praxis/core` is CommonJS with no
+ * `sideEffects: false` and pulls in `chokidar`/`node-pty` transitively, so
+ * Vite/Rollup cannot tree-shake a *value* import from it out of the renderer
+ * bundle — it tries to inline the whole package graph, including native
+ * bindings like `fsevents.node`, and the build fails. `sessionNav.ts` and
+ * every other renderer module only ever `import type` from core for exactly
+ * this reason; see `settingsDefaults.ts` for the same trade-off made the same
+ * way. The IPC handler that actually performs the undo (`aiIpc.ts`, main
+ * process) calls the real one and is the authoritative check regardless.
+ */
+export function isLatestEditToPath(events: readonly AgentEventSummary[], eventTimestamp: string, path: string): boolean {
+  return !events.some(
+    event =>
+      event.type === 'tool_complete' &&
+      event.timestamp > eventTimestamp &&
+      event.data?.fileChanges?.some(change => change.path === path)
+  );
 }
