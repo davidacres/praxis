@@ -192,6 +192,7 @@ const praxis: PraxisIpc = {
     removeWorktree: (issueKey: string) => ipcRenderer.invoke('ai:removeWorktree', issueKey),
     switchSessionMode: (issueKey: string, mode: SessionMode) =>
       ipcRenderer.invoke('ai:switchSessionMode', issueKey, mode),
+    setAcpMode: (issueKey: string, modeId: string) => ipcRenderer.invoke('ai:setAcpMode', issueKey, modeId),
     respondToPermission: (issueKey: string, decision: PermissionDecision) =>
       ipcRenderer.invoke('ai:respondToPermission', issueKey, decision),
     undoToolFileChange: (issueKey: string, eventTimestamp: string, path: string) =>

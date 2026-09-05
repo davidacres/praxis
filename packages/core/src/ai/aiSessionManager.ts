@@ -4,7 +4,9 @@ import type { AiAssignment, AiProvider } from '../types';
 import type { TokenUsage } from './gateway';
 import type {
   DeliverySessionMetadata,
+  AgentAvailableCommand,
   AgentEventSummary,
+  AgentModeOption,
   AgentSessionRecord,
   AgentTaskDefinition,
   AgentTaskListItem,
@@ -408,6 +410,41 @@ export class AiSessionManager {
       return;
     }
     record.taskList = items;
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** ACP's `available_commands_update` — see `AgentSessionRecord.acpAvailableCommands`. */
+  public setAgentAvailableCommands(issueKey: string, commands: AgentAvailableCommand[]): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    record.acpAvailableCommands = commands;
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /** Read once from `session/new`'s response — see `AgentSessionRecord.acpAvailableModes`. */
+  public setAgentAvailableModes(issueKey: string, currentModeId: string, availableModes: AgentModeOption[]): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    record.acpCurrentModeId = currentModeId;
+    record.acpAvailableModes = availableModes;
+    this._onDidChangeAgentSession.fire(record);
+  }
+
+  /**
+   * ACP's `current_mode_update` — the agent can switch modes on its own, not
+   * only in response to `setAcpMode`, so this is kept separate from
+   * `setAgentAvailableModes` rather than folded into it.
+   */
+  public setAgentCurrentMode(issueKey: string, currentModeId: string): void {
+    const record = this.agentSessions.get(issueKey);
+    if (!record) {
+      return;
+    }
+    record.acpCurrentModeId = currentModeId;
     this._onDidChangeAgentSession.fire(record);
   }
 

@@ -330,6 +330,42 @@ export interface AgentSessionRecord {
   boardId?: string;
   /** Explicit session purpose; older records derive this from taskDefinition.kind. */
   mode?: SessionMode;
+  /**
+   * The agent's own slash commands (ACP's `available_commands_update`),
+   * when it reports any — Claude Code and Codex both expose native
+   * commands this way. Prefixed "acp" throughout to keep this unambiguous
+   * against `mode`/`SessionMode` above, which is Praxis's own chat/analysis/
+   * review phase and has nothing to do with the agent's protocol-level state.
+   * Absent for a session that has never reported any, and for every
+   * non-ACP provider — the local-tools loop has no equivalent.
+   */
+  acpAvailableCommands?: AgentAvailableCommand[];
+  /**
+   * The agent's own operating mode (ACP's Session Modes — e.g. "ask" /
+   * "architect" / "code"), when the agent advertises any. Read once from
+   * `session/new`'s response at session start and kept current via
+   * `current_mode_update` (the agent can switch modes on its own, not just
+   * in response to `setAcpMode`). `acpCurrentModeId` is one of
+   * `acpAvailableModes[].id`, or absent for an agent that never reported
+   * modes.
+   */
+  acpCurrentModeId?: string;
+  acpAvailableModes?: AgentModeOption[];
+}
+
+/** One slash command the agent advertised via `available_commands_update`. */
+export interface AgentAvailableCommand {
+  name: string;
+  description: string;
+  /** Placeholder text for the command's argument, when it takes one. */
+  inputHint?: string;
+}
+
+/** One entry in `AgentSessionRecord.acpAvailableModes` — an ACP Session Mode. */
+export interface AgentModeOption {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 /** One entry in an agent's self-reported task list — see `AgentSessionRecord.taskList`. */

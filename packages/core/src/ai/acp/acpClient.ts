@@ -309,6 +309,39 @@ export class AcpClientWrapper {
   }
 
   /**
+   * The session's Session Modes (e.g. "ask" / "architect" / "code"), if the
+   * agent advertises any — from `session/new`'s response. Same no-cost shape
+   * as `getModelOption`: creates the session if needed, triggers no prompt.
+   */
+  public async getSessionModes(): Promise<acp.SessionModeState | null | undefined> {
+    const session = await this.ensureSession();
+    return session.modes;
+  }
+
+  /**
+   * Switches the agent's own operating mode via `session/set_mode`. Distinct
+   * from Praxis's own `SessionMode` (chat/analysis/review) — this is entirely
+   * the agent's protocol-level state, unrelated to that.
+   */
+  public async setMode(modeId: string): Promise<void> {
+    if (!this.connection || !this.acpModule) {
+      throw new Error('ACP client is not connected.');
+    }
+    if (await this.tryResumeSession()) {
+      await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_set_mode, {
+        sessionId: this.resumedSessionId!,
+        modeId
+      });
+      return;
+    }
+    const session = await this.ensureSession();
+    await this.connection.agent.request(this.acpModule.AGENT_METHODS.session_set_mode, {
+      sessionId: session.sessionId,
+      modeId
+    });
+  }
+
+  /**
    * Starts a new session and runs one prompt turn to completion, streaming
    * `session/update`s to `onSessionUpdate` as they arrive.
    */
