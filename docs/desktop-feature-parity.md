@@ -65,9 +65,9 @@ and Electron integration. Last audited: 2026-09-05.
 | Paging ("load more") | ✓ | Load-more button when `hasMore` set; fetches next page per status |
 | Global quick-pick search | ✓ | Palette (⌘K) searches issues across every board in the active workspace via debounced async lookup, capped at 25 results (FX-BE-037) |
 | Open issue in browser / copy key | ✓ | Buttons in detail header + right-click context menu |
-| Create idea | ✗ | Issue creation UI exists; "idea" type is Jira-specific mapping, not exposed |
+| Create idea | ✓ | "Idea" is a selectable issue type in the create form (`NewIssuePage.tsx`/`IssueDetail.tsx`) |
 | Create epic | ✓ | Create issue with `parent: epic` or implicit new parent |
-| Issue details peek (sidebar) | ✗ | No compact issue summary in sidebar; use detail pane instead |
+| Issue details peek (sidebar) | ✓ | `IssuePeek.tsx`, pinned above the sidebar footer when an issue is selected |
 
 ## AI & agents
 
@@ -120,7 +120,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Workspace-first startup and restore | ✓ | Getting Started; restore flow; recent workspaces picker |
 | Theme switching | ✓ | Settings → Appearance; active theme, 6+ built-in palettes + surface packs |
 | Theme-aware right-pane surfaces | ✓ | All panes inherit active theme; no opacity/fallback |
-| Status/connection indicator | ✗ | No title-bar or sidebar health indicator; connection state visible in Connections UI only |
+| Status/connection indicator | ✓ | `ConnectionStatusDot.tsx` on each non-demo sidebar connection group, fed by `connection.check` |
 | Output / log panel | ✓ | Bottom panel with Output (terminal) tab; Application tab planned |
 | Application logs | ✓ | Output tab tails the shared log bus (`[ai]`, `[jira]`, `[gitlab]`, `[workflow]` tags); 500-line ring buffer, no search/export/persistence across restarts (FX-BE-041) |
 | Native window chrome | ✓ | Electron default frame; settings option to hide |
@@ -133,8 +133,12 @@ Largest unfinished items, ordered by adoption impact:
 
 1. **GitHub real backend** (FX-BE-035) — currently GitHub connections save metadata only. Real board requires REST client + issue list → board mapping.
 2. **Signed builds & auto-update** (FX-BE-034) — "try Praxis" currently means "maintain a local build." Blocked on code-signing credentials.
-3. **Idea creation** — Jira-specific; currently no first-class UI for it.
-4. **Issue details peek in sidebar** — Compact issue summary in sidebar instead of full detail pane.
+3. **Multi-file / terminal agent proof** (FX-BE-036) — the ticket-to-agent flow is scripted-proven only for single-file, no-shell edits.
+4. **Application logs — search/export/persistence** — Output tab tails the log bus live (FX-BE-041); still a 500-line in-memory ring buffer with no history across restarts.
+
+Corrected in this pass (previously listed here as ✗ without independent
+verification — all three already exist and are e2e-tested):
+create idea, issue details peek in sidebar, connection status indicator.
 
 Closed since the previous audit (FX-BF-017, 2026-09-05): command palette issue
 index, ACP available-commands/current-mode surfacing, the AI spend report,
