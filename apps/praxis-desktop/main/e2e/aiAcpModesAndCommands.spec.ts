@@ -62,6 +62,7 @@ test('Session Modes advertised at start switch over the live connection and upda
   // agent makes, so this exercises the request path and the notification
   // path (`handleSessionUpdate`'s `current_mode_update` case) together.
   await expect(modeChip).toContainText('Code');
+  await win.screenshot({ path: 'output/playwright/acp-session-modes.png', fullPage: true });
 
   await win.evaluate(k => window.praxis.ai.abort(k), key);
 });
@@ -85,6 +86,7 @@ test('the agent\'s own slash commands populate the composer and insert into the 
   const planOption = win.getByTestId('session-acp-command-option-create_plan');
   await expect(planOption).toBeVisible();
   await expect(win.getByTestId('session-acp-command-option-research_codebase')).toBeVisible();
+  await win.screenshot({ path: 'output/playwright/acp-slash-commands.png', fullPage: true });
   await planOption.click();
 
   // Commands are plain prompt text over the same `session/prompt` — nothing to

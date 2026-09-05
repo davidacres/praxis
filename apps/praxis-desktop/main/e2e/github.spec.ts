@@ -96,6 +96,7 @@ test('test connection against the mock REST server reports success', async () =>
   await expect(result).toContainText('2 status column');
   expect(mock?.counters.getRepoHits ?? 0).toBeGreaterThanOrEqual(1);
   expect(mock?.counters.listLabelsHits ?? 0).toBeGreaterThanOrEqual(1);
+  await window.screenshot({ path: 'output/playwright/github-connection-form.png', fullPage: true });
 });
 
 test('board renders every synthesized column with its issue', async () => {
@@ -108,6 +109,7 @@ test('board renders every synthesized column with its issue', async () => {
   await expect(window.locator('[data-testid="issue-card"]', { hasText: 'Polish board rendering' })).toBeVisible();
   await expect(window.locator('[data-testid="issue-card"]', { hasText: 'Close stale migration issue' })).toBeVisible();
   expect(mock?.counters.listIssuesHits ?? 0).toBeGreaterThanOrEqual(1);
+  await window.screenshot({ path: 'output/playwright/github-board.png', fullPage: true });
 });
 
 test('adding a comment and editing summary round-trips through the mock', async () => {
