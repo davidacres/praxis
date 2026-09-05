@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Fast Paths</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --sans: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+    --ground: #f5f2eb;
+    --raised: #fffdf8;
+    --sunken: #ebe7de;
+    --ink: #2c2620;
+    --ink-2: #74695e;
+    --ink-3: #958878;
+    --rule: #ddd3c5;
+    --rule-strong: #ad9a85;
+    --brand: #c6431f;
+    --brand-soft: rgba(198, 67, 31, .1);
+    --go: #2f7d4f;
+    --go-soft: rgba(47, 125, 79, .12);
+    --shadow: 0 1px 2px rgba(44, 38, 32, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+      --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+      --rule: #372f27; --rule-strong: #6c5b4a;
+      --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+      --go: #6cc08b; --go-soft: rgba(108, 192, 139, .14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+    --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+    --rule: #372f27; --rule-strong: #6c5b4a;
+    --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+    --go: #6cc08b; --go-soft: rgba(108, 192, 139, .14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 32px 96px; }
+  @media (max-width: 640px) { .wrap { padding: 0 20px 64px; } }
+
+  header.masthead { padding: 56px 0 26px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    margin: 0 0 14px; font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--brand);
+  }
+  h1 {
+    margin: 0; font-size: clamp(32px, 5.6vw, 48px); font-weight: 600;
+    letter-spacing: -.02em; line-height: 1.05; text-wrap: balance;
+  }
+  .standfirst { max-width: 62ch; margin: 18px 0 0; font-size: 17px; color: var(--ink-2); }
+
+  section { padding-top: 50px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 14px; margin: 0 0 4px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-strong); font-size: 23px; font-weight: 600; letter-spacing: -.01em;
+  }
+  h2 span { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--brand); }
+  .lede { max-width: 66ch; margin: 16px 0 0; color: var(--ink-2); }
+  h3 { margin: 30px 0 8px; font-size: 15px; font-weight: 600; }
+  p { margin: 12px 0 0; max-width: 68ch; }
+  code {
+    font-family: var(--mono); font-size: .88em; padding: 1px 4px; border-radius: 3px;
+    background: var(--brand-soft); color: var(--brand);
+  }
+
+  /* Keyboard chips */
+  kbd {
+    display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 500;
+    padding: 2px 7px; border: 1px solid var(--rule-strong); border-bottom-width: 2px;
+    border-radius: 4px; background: var(--raised); color: var(--ink); white-space: nowrap;
+  }
+
+  .scroller { overflow-x: auto; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    padding: 0 16px 7px 0; text-align: left; font-family: var(--mono); font-size: 10.5px;
+    font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+    border-bottom: 1px solid var(--rule-strong); white-space: nowrap;
+  }
+  td { padding: 10px 16px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td.k { white-space: nowrap; width: 1%; }
+  td.tok { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  td.note { color: var(--ink-2); }
+
+  /* Skip / keep */
+  .verdicts { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 22px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  @media (max-width: 640px) { .verdicts { grid-template-columns: 1fr; } }
+  .verdict { padding: 18px 20px; background: var(--raised); }
+  .verdict + .verdict { border-left: 1px solid var(--rule); }
+  @media (max-width: 640px) { .verdict + .verdict { border-left: 0; border-top: 1px solid var(--rule); } }
+  .verdict h4 {
+    margin: 0 0 12px; font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  .verdict.skip h4 { color: var(--ink-3); }
+  .verdict.keep h4 { color: var(--go); }
+  .verdict ul { margin: 0; padding-left: 18px; }
+  .verdict li { margin-bottom: 9px; font-size: 13.5px; color: var(--ink-2); }
+  .verdict li b { color: var(--ink); font-weight: 600; }
+
+  /* Step ribbon */
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; align-items: stretch; }
+  .flow-step {
+    flex: 1 1 170px; padding: 13px 15px; border: 1px solid var(--rule);
+    border-top: 3px solid var(--brand); border-radius: 5px; background: var(--raised);
+  }
+  .flow-step b { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+  .flow-step strong { display: block; font-size: 14px; font-weight: 600; }
+  .flow-step small { display: block; margin-top: 4px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+  .callout {
+    max-width: 68ch; margin: 22px 0 0; padding: 14px 0 14px 18px;
+    border-left: 3px solid var(--brand); font-size: 15px;
+  }
+  .callout b { font-weight: 600; }
+  .callout small { display: block; margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+
+  footer {
+    margin-top: 62px; padding-top: 18px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  footer a { color: var(--ink-3); }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis desktop · for people who already know what they want</p>
+    <h1>Praxis Fast Paths</h1>
+    <p class="standfirst">Every guided screen in Praxis is optional. This is the short version: what to skip, what actually earns its place, and the keyboard route to all of it. If you have a repository already and want it under Praxis in under a minute, start at <a href="#repo">Bring your own repository</a>.</p>
+  </header>
+
+  <section id="repo">
+    <h2>Bring your own repository <span>01</span></h2>
+    <p class="lede">Three steps, and Praxis reads the folder without writing to it. Detection looks for Git, README files, manifests, languages and frameworks, and fills in the project name and ticket prefix from what it finds.</p>
+
+    <div class="flow">
+      <div class="flow-step"><b>Step 1</b><strong>Choose the folder</strong><small>Nothing is created or modified during inspection.</small></div>
+      <div class="flow-step"><b>Step 2</b><strong>Confirm what was detected</strong><small>Name, ticket prefix, and the project type — which decides the board's stages.</small></div>
+      <div class="flow-step"><b>Step 3</b><strong>Review and add</strong><small>Exactly what Praxis will record alongside the folder.</small></div>
+    </div>
+
+    <p>Reach it from the sidebar's <b>New</b> menu → <b>Create from existing folder</b>, or from the command palette with <kbd>⌘K</kbd> → <code>from folder</code>. The brief, the board plan and the tool-access level all take their recommended defaults and stay editable from the project home afterwards.</p>
+
+    <div class="callout">
+      <b>If the folder is already a Praxis project, it says so.</b>
+      <small>You are asked whether to use the existing project or create a second one against the same folder, rather than silently doing either.</small>
+    </div>
+
+    <h3>Several repositories at once</h3>
+    <p>The New menu also carries <b>Import plans folders</b>. Point it at a parent directory and it scans below, offering every Git repository that actually contains a plans structure — a repository with no discoverable plans is not offered rather than guessed at. Tick the rows you want, edit names and keys inline, and they are created in one batch. Each becomes a folder-backed project, so the markdown on disk stays the source of truth and the board reads it directly.</p>
+  </section>
+
+  <section id="skip">
+    <h2>What to skip, what to keep <span>02</span></h2>
+    <p class="lede">A new project is three steps unless you ask for more. <b>Advanced setup</b> — the checkbox on the first screen of either wizard — restores the full six, and also tells Praxis you do not need the first-run tour.</p>
+
+    <div class="verdicts">
+      <div class="verdict skip">
+        <h4>Safe to skip</h4>
+        <ul>
+          <li><b>Advanced setup.</b> The brief, plan and tool-access screens all have defaults that are the same thing you would pick, and every one is editable from the project home.</li>
+          <li><b>The walkthrough.</b> Offered once after a first project, never again. Ticking Advanced setup suppresses even that. <kbd>Esc</kbd> dismisses it and it counts as seen.</li>
+          <li><b>The Get Started strip</b> on a project home. Dismissible per project, and it disappears on its own once the project has a session.</li>
+          <li><b>The splash.</b> Full crawl on first run only; after that it is about a second. Click it to skip.</li>
+        </ul>
+      </div>
+      <div class="verdict keep">
+        <h4>Worth the screen</h4>
+        <ul>
+          <li><b>The project type.</b> It is not cosmetic — it picks the board's stages, the brief's questions, and five starter tickets. Changing it later means redoing the board.</li>
+          <li><b>Tool access</b>, if the project is folder-backed. <em>Full</em> reads and edits files and runs commands; <em>read-only</em> does neither. Folderless projects are forced to project-board tools.</li>
+          <li><b>Where the workspace is stored</b>, if you want the workspace file to travel with the repository rather than sit in the Praxis user folder.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="keyboard">
+    <h2>Keyboard <span>03</span></h2>
+    <p class="lede">The palette is the fastest route to anything with a name. It matches on a label prefix first, then a label substring, then anything else — so a couple of characters usually lands it.</p>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Key</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td class="k"><kbd>⌘K</kbd> / <kbd>Ctrl K</kbd></td><td class="note">Open (or close) the command palette</td></tr>
+          <tr><td class="k"><kbd>⌘N</kbd> / <kbd>Ctrl N</kbd></td><td class="note">New session composer</td></tr>
+          <tr><td class="k"><kbd>⌘R</kbd> / <kbd>Ctrl R</kbd></td><td class="note">Reload the window</td></tr>
+          <tr><td class="k"><kbd>⌘I</kbd> / <kbd>Ctrl I</kbd></td><td class="note">From inside the terminal, open the terminal's AI input</td></tr>
+          <tr><td class="k"><kbd>↑</kbd> <kbd>↓</kbd> <kbd>↵</kbd></td><td class="note">Move and run inside the palette</td></tr>
+          <tr><td class="k"><kbd>Esc</kbd></td><td class="note">Close the palette, a wizard, a dialog, or the walkthrough</td></tr>
+          <tr><td class="k"><kbd>Tab</kbd></td><td class="note">Every control paints a visible focus ring; the app is drivable without a mouse</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>What the palette can reach</h3>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Group</th><th>Contains</th></tr></thead>
+        <tbody>
+          <tr><td class="tok">Go to</td><td class="note">Overview, Epics, Sessions, Issues, Connections, Agents, Workflows, Git Graph — plus <b>New session</b>, <b>New project</b>, and <b>Add project from folder</b></td></tr>
+          <tr><td class="tok">Projects</td><td class="note">Every project in the workspace, and <code>&lt;project&gt;: Git graph</code> for each</td></tr>
+          <tr><td class="tok">Boards</td><td class="note">Every board in the workspace, local or connected</td></tr>
+          <tr><td class="tok">Sessions</td><td class="note">Every AI session by title or ticket key</td></tr>
+          <tr><td class="tok">Agents</td><td class="note">Installed agents and skills</td></tr>
+          <tr><td class="tok">Workflows</td><td class="note">Every workflow, per project</td></tr>
+          <tr><td class="tok">Settings</td><td class="note">All fifteen pages directly — Settings, Startup, Themes, Surfaces, Looks, AI Provider, Agent Runtime, MCP Server, Delivery, Connections, Jira, Terminal, Performance, Preview, Board settings</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="place">
+    <h2>Praxis remembers where you were <span>04</span></h2>
+    <p class="lede">Reopening the last workspace at launch is on by default, and it restores the actual place — the project, the board, the open ticket, the session, even which git view you were in — not just the workspace.</p>
+
+    <p>Each workspace keeps its own place independently. Switching to another workspace and back returns you to where you left off in each, rather than dumping you on a landing page. Transient state deliberately does not survive: an unfinished form or a half-built session is not reopened for you.</p>
+
+    <div class="callout">
+      <b>Turn it off in Settings → Startup</b> if you would rather choose a workspace each launch.
+      <small>With it off you land on the workspace list, and picking one still takes you to your last place inside it.</small>
+    </div>
+
+    <h3>Workspaces that travel</h3>
+    <p>A workspace can be saved to a <code>.workspace.praxis</code> file, and can be created with its storage in a folder you choose so the file sits with your repository instead of in the Praxis user folder. Credentials never go in it — those stay on the device.</p>
+  </section>
+
+  <section id="shape">
+    <h2>Shaping the shell <span>05</span></h2>
+    <p class="lede">The three panes — sidebar, main, and the right-hand context pane — are all resizable and hideable, and the sidebar has two modes.</p>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Mode</th><th>Shows</th></tr></thead>
+        <tbody>
+          <tr><td class="tok">Classic</td><td class="note">The full tree: projects with their boards, repository, workflows and documents, then the workspace-level features below</td></tr>
+          <tr><td class="tok">Work</td><td class="note">A flatter view built around what is actually in flight — projects with their boards and current issues, for driving work rather than navigating structure</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The right pane is context for whatever the centre is showing — a commit's detail on the Git Graph, a stage's settings in the workflow designer, a session's context in Sessions. It is not a fixed inspector, and it can be closed entirely.</p>
+  </section>
+
+  <section id="model">
+    <h2>The model, briefly <span>06</span></h2>
+    <p class="lede">Worth two minutes because it explains why some things are where they are.</p>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Thing</th><th>Is</th></tr></thead>
+        <tbody>
+          <tr><td class="tok">Workspace</td><td class="note">The top-level context. Groups projects and owns connections. You always have one — skipping setup creates it rather than leaving you without.</td></tr>
+          <tr><td class="tok">Project</td><td class="note">A brief, a board, a workflow, and optionally a folder on disk. Its type fixes the board's stages.</td></tr>
+          <tr><td class="tok">Connection</td><td class="note">Where real tickets come from: Jira Cloud, GitLab, GitHub, a folder of markdown plans, or the built-in demo data. A project can link boards from one.</td></tr>
+          <tr><td class="tok">Session</td><td class="note">An agent working a ticket. It plans, asks before using a tool, and reports what it changed. Provider, model and permissions are reviewable when it starts.</td></tr>
+          <tr><td class="tok">Workflow</td><td class="note">A governed sequence of stages — agent tasks, checks, approvals — that runs against a project.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Backend support is uneven and worth knowing before you commit: <b>Jira Cloud</b> is the primary tracker with full board, issue, comment and transition support. <b>Folder</b> reads markdown plans from disk. <b>GitLab</b> covers connection and merge-request flows but its issue model does not match Jira's. <b>GitHub</b> is a configuration surface only so far. <b>Demo</b> is sample data, off by default.</p>
+  </section>
+
+  <footer>
+    Praxis desktop · branch main. New to Praxis? <a href="https://claude.ai/code/artifact/6ec90c6b-0990-401f-a72a-b57cb6da292d">Your First Praxis Project</a> covers the same ground more slowly.
+  </footer>
+
+</div>
+
+
+</body>
+</html>

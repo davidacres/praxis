@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Project Details & Board Surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --bg: #f4f1ea;
+    --surface: #fbf9f4;
+    --surface-2: #f0ece1;
+    --ink: #211d17;
+    --ink-mut: #6f665a;
+    --line: #e3ddd0;
+    --accent: #c6431f;
+    --accent-soft: rgba(198, 67, 31, 0.10);
+    --ok: #3f7d4f;
+    --was: #9a8f7d;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14130f;
+      --surface: #1c1a16;
+      --surface-2: #211e19;
+      --ink: #eae6dd;
+      --ink-mut: #9a9186;
+      --line: #2e2a24;
+      --accent: #e0653f;
+      --accent-soft: rgba(224, 101, 63, 0.14);
+      --ok: #6bab77;
+      --was: #8a8175;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14130f;
+    --surface: #1c1a16;
+    --surface-2: #211e19;
+    --ink: #eae6dd;
+    --ink-mut: #9a9186;
+    --line: #2e2a24;
+    --accent: #e0653f;
+    --accent-soft: rgba(224, 101, 63, 0.14);
+    --ok: #6bab77;
+    --was: #8a8175;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink-mut);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: clamp(40px, 7vw, 84px) clamp(18px, 5vw, 44px) 96px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-weight: 600;
+    font-size: clamp(1.55rem, 1rem + 2.2vw, 2.15rem);
+    line-height: 1.16;
+    color: var(--ink);
+    margin: 0 0 16px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .lede {
+    max-width: 62ch;
+    font-size: 1.02rem;
+    margin: 0 0 26px;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-mut);
+    padding: 14px 0 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .pill.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+
+  .meta code { color: var(--ink); }
+
+  section {
+    margin-top: 52px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+  }
+
+  h2 {
+    font-weight: 600;
+    font-size: 1.16rem;
+    color: var(--ink);
+    margin: 6px 0 10px;
+    letter-spacing: -0.005em;
+  }
+
+  section > p { max-width: 64ch; margin: 0 0 18px; }
+
+  strong { color: var(--ink); font-weight: 600; }
+
+  ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  li {
+    position: relative;
+    padding-left: 20px;
+    max-width: 64ch;
+  }
+  li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 0.62em;
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .swap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 4px 0 20px;
+    font-size: 13.5px;
+  }
+  @media (min-width: 620px) { .swap { grid-template-columns: 1fr 1fr; } }
+  .swap > div { background: var(--surface); padding: 13px 16px; }
+  .swap .k {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .swap .before .k { color: var(--was); }
+  .swap .after .k { color: var(--ok); }
+  .swap .before { color: var(--ink-mut); }
+  .swap .after { color: var(--ink); }
+
+  .routing {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 8px;
+    font-size: 13.5px;
+  }
+  .routing th, .routing td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .routing th {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mut);
+    font-weight: 500;
+  }
+  .routing td:first-child { color: var(--ink); white-space: nowrap; }
+  .table-scroll { overflow-x: auto; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.9;
+  }
+  footer .k {
+    display: block;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  footer span { color: var(--ink); }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">FX-BF-008 &middot; Praxis desktop</p>
+  <h1>The right pane follows the theme, and the board can opt out</h1>
+  <p class="lede">
+    Selecting a project used to open a second navigation panel painted on an
+    opaque slab. It now opens a compact, theme-aware project-details inspector;
+    ticket details get the same treatment; and any board whose surface material
+    hurts legibility can switch to a plain background from its own settings.
+    Removing boards and starting from an empty workspace are handled where the
+    user already looks.
+  </p>
+  <div class="meta">
+    <span class="pill ok">Shipped</span>
+    <span>owner <code>@praxis/desktop-renderer</code></span>
+    <span>+ <code>@praxis/core</code> board prefs</span>
+  </div>
+
+  <section>
+    <p class="eyebrow">Project details</p>
+    <h2>An inspector, not a second navigation panel</h2>
+    <p>
+      The right pane's <code>ProjectHome</code> was a full-width card layout
+      squeezed into a narrow column, with its own opaque background and a
+      &ldquo;retained <code>PROJECT.md</code>&rdquo; banner that only ever
+      appeared here. It is now a stack of borderless, transparent sections that
+      inherit whatever theme and surface-pack material the pane behind them
+      paints.
+    </p>
+    <ul>
+      <li><strong>Identity header</strong> &mdash; name, <code>KEY &middot; TYPE &middot; created</code>, and <strong>Edit</strong> as a pencil icon in the top-right that swaps to Cancel / Save.</li>
+      <li><strong>Status chips</strong> &mdash; repository state (<code>Git repo</code> / <code>No repo</code> / <code>No folder</code>), default tool mode, linked-board count.</li>
+      <li><strong>Brief</strong> &mdash; a <code>filled / total</code> completion meter over a checklist of every field; a check and the value when filled, a muted label when empty. Edit mode expands to the full form.</li>
+      <li><strong>Workspace</strong> &mdash; folder path plus detected languages, frameworks, and manifests as tags.</li>
+      <li><strong>Planning sources</strong> &mdash; linked boards as compact rows, each with a trash control to remove it from the project.</li>
+    </ul>
+    <div class="swap">
+      <div class="before"><span class="k">Was</span>Opaque <code>--bg</code> card &middot; bordered panels &middot; &ldquo;Open plans board&rdquo; button &middot; text &ldquo;Edit&rdquo; link &middot; retained-file notice</div>
+      <div class="after"><span class="k">Now</span>Transparent sections on the pane's material &middot; pencil Edit in the header &middot; chips + brief meter &middot; no notice</div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">Ticket details</p>
+    <h2>The detail pane inherits the surface</h2>
+    <p>
+      <code>.detail-panel</code> painted a solid <code>--bg</code> fill over the
+      themed pane. It is now transparent, so the surface pack&mdash;texture,
+      watermark, tint&mdash;shows through behind the ticket fields, matching the
+      project-details view. The expanded reading mode keeps its own solid fill so
+      long descriptions stay legible.
+    </p>
+  </section>
+
+  <section>
+    <p class="eyebrow">Board appearance</p>
+    <h2>Plain background, per board</h2>
+    <p>
+      A strong surface material can make dense columns hard to scan. Board
+      settings gains an <strong>Appearance</strong> section with a
+      <strong>Plain background</strong> toggle. When on, that board's pane drops
+      the material&mdash;texture, watermark, tint, glass, accent glow&mdash;and
+      sits on a flat elevated fill. The colour theme is untouched.
+    </p>
+    <ul>
+      <li>New optional preference <code>BoardColumnPreferences.plainSurface</code> in core, persisted per board and restored on relaunch.</li>
+      <li>The renderer marks <code>.board-shell</code> with <code>data-plain-surface</code>; <code>.pane-main:has(&hellip;)</code> neutralises the surface layers.</li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Board lifecycle</p>
+    <h2>Remove a board from where its list lives</h2>
+    <p>
+      The trash control on the sidebar <strong>Boards</strong> list now shows for
+      every connection-backed board, not only plan boards. Demo boards have no
+      connection and stay put. &ldquo;Remove&rdquo; means different things per
+      backend, so the action is routed:
+    </p>
+    <div class="table-scroll">
+      <table class="routing">
+        <thead><tr><th>Board backend</th><th>Action</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td>User workspace</td><td><code>userWorkspace.deleteBoard</code></td><td>Drops just that board; the connection keeps its others.</td></tr>
+          <tr><td>Live folder</td><td><code>connection.remove</code></td><td>The connection <em>is</em> that one board, so it goes too.</td></tr>
+          <tr><td>Jira / GitLab</td><td><code>connection.removeTrackedBoard</code></td><td>Untracked from a shared connection; nothing remote is deleted.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>Deleting the board that is currently open navigates away first.</li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="eyebrow">Empty state</p>
+    <h2>No boards leads somewhere</h2>
+    <p>
+      When the workspace has no boards and none is selected, the centre pane
+      showed the AI session composer&mdash;which can do nothing without a board.
+      It now shows a <strong>No boards</strong> state with a
+      <strong>Create board</strong> button that opens the Connections screen.
+    </p>
+  </section>
+
+  <footer>
+    <span class="k">Verified</span>
+    <span>check-types (all workspaces) &middot; test:core (53) &middot; e2e: projects, userWorkspace, connectionsManager, boardPrefs, app, issueDetail, surfacePacks</span>
+  </footer>
+</div>
+
+
+</body>
+</html>

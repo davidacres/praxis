@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>The First Ten Minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;700&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper: #f6f6f9;
+    --card: #ffffff;
+    --card-2: #efeef4;
+    --ink: #14131a;
+    --ink-2: #514f5e;
+    --ink-3: #86838f;
+    --rule: #dddbe5;
+    --rule-2: #c8c5d3;
+    --indigo: #4f46e5;
+    --indigo-wash: #ecebfb;
+    --amber: #b45f0c;
+    --amber-wash: #f8ecda;
+    --strike: #b1aec0;
+    --shadow: 0 1px 2px rgba(20, 19, 26, .05), 0 10px 30px -18px rgba(20, 19, 26, .3);
+
+    --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --body: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 63ch;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f0e15;
+      --card: #17161f;
+      --card-2: #1f1d29;
+      --ink: #e9e7f1;
+      --ink-2: #aeabbc;
+      --ink-3: #787488;
+      --rule: #2a2836;
+      --rule-2: #3a3749;
+      --indigo: #8b83f5;
+      --indigo-wash: #1c1a33;
+      --amber: #dc9247;
+      --amber-wash: #2b2113;
+      --strike: #565266;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 34px -18px rgba(0, 0, 0, .8);
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0f0e15;
+    --card: #17161f;
+    --card-2: #1f1d29;
+    --ink: #e9e7f1;
+    --ink-2: #aeabbc;
+    --ink-3: #787488;
+    --rule: #2a2836;
+    --rule-2: #3a3749;
+    --indigo: #8b83f5;
+    --indigo-wash: #1c1a33;
+    --amber: #dc9247;
+    --amber-wash: #2b2113;
+    --strike: #565266;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 34px -18px rgba(0, 0, 0, .8);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 28px 100px; }
+
+  /* ── masthead ── */
+  .masthead { padding: 62px 0 40px; border-bottom: 1px solid var(--ink); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin: 0 0 20px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(40px, 6.4vw, 68px);
+    line-height: 1.03;
+    letter-spacing: -.018em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+
+  .standfirst { max-width: var(--measure); font-size: 18.5px; line-height: 1.55; color: var(--ink-2); margin: 0; }
+  .standfirst b { color: var(--ink); font-weight: 600; }
+
+  .scope { margin: 24px 0 0; font-family: var(--mono); font-size: 12px; line-height: 1.9; color: var(--ink-3); }
+  .scope span { color: var(--ink-2); }
+
+  /* ── the funnel comparison ── */
+  .funnels { margin: 44px 0 8px; }
+  .funnels-head {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-3);
+    padding-bottom: 14px; border-bottom: 1px solid var(--rule-2);
+  }
+
+  .funnel-grid {
+    display: grid;
+    grid-template-columns: 1fr 40px 1fr;
+    gap: 0;
+    align-items: start;
+    margin-top: 24px;
+  }
+  @media (max-width: 720px) { .funnel-grid { grid-template-columns: 1fr; } .funnel-arrow { display: none; } }
+
+  .funnel { display: flex; flex-direction: column; gap: 6px; }
+  .funnel-label {
+    font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .12em;
+    text-transform: uppercase; margin-bottom: 8px;
+  }
+  .funnel.now .funnel-label { color: var(--ink-3); }
+  .funnel.next .funnel-label { color: var(--indigo); }
+
+  .stop {
+    display: grid; grid-template-columns: 26px 1fr; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--card);
+    font-size: 13.5px;
+    box-shadow: var(--shadow);
+  }
+  .stop .n { font-family: var(--mono); font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .stop.cut {
+    box-shadow: none;
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--rule-2);
+    color: var(--strike);
+  }
+  .stop.cut .label { text-decoration: line-through; text-decoration-color: var(--strike); }
+  .stop.cut .n { color: var(--strike); }
+  .stop.merge { border-color: var(--indigo); background: var(--indigo-wash); }
+  .stop.win { border-color: var(--amber); background: var(--amber-wash); }
+  .stop.win .n { color: var(--amber); }
+
+  .funnel-arrow { display: grid; place-items: center; padding-top: 40px; color: var(--ink-3); font-size: 22px; }
+
+  .funnel-foot {
+    margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--rule-2);
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3); line-height: 1.7;
+  }
+  .funnel-foot b { color: var(--ink); }
+
+  .countbar { display: flex; gap: 18px; margin-top: 30px; flex-wrap: wrap; }
+  .count {
+    flex: 1 1 150px;
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--indigo);
+    padding: 13px 16px 12px;
+    background: var(--card);
+  }
+  .count b {
+    display: block;
+    font-family: var(--display); font-weight: 600; font-size: 24px; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  .count b em { font-style: normal; color: var(--ink-3); font-size: 17px; }
+  .count span { display: block; margin-top: 3px; font-size: 12.5px; color: var(--ink-2); }
+
+  /* ── prose sections ── */
+  h2 {
+    font-family: var(--display); font-weight: 600; font-size: 26px; letter-spacing: -.015em;
+    margin: 64px 0 6px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-2);
+    text-wrap: balance;
+  }
+  h2 .h2-mark {
+    font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: .1em;
+    color: var(--ink-3); margin-right: 12px; vertical-align: 3px;
+  }
+
+  .lede { max-width: var(--measure); color: var(--ink-2); margin: 16px 0 0; }
+
+  /* ── the walk ── */
+  .walk { list-style: none; margin: 22px 0 0; padding: 0; counter-reset: walk; }
+  .walk li {
+    display: grid; grid-template-columns: 30px 1fr; gap: 0 16px;
+    padding: 16px 0; border-bottom: 1px solid var(--rule);
+  }
+  .walk li::before {
+    counter-increment: walk; content: counter(walk, decimal-leading-zero);
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3); padding-top: 3px;
+  }
+  .walk strong { display: block; font-weight: 600; font-size: 15.5px; margin-bottom: 3px; }
+  .walk p { margin: 0; max-width: var(--measure); color: var(--ink-2); font-size: 15px; }
+  .walk .friction {
+    display: inline-block; margin-top: 7px;
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--amber); background: var(--amber-wash);
+    padding: 3px 8px; border-radius: 2px;
+  }
+
+  /* ── recommendations ── */
+  .rec {
+    display: grid; grid-template-columns: 42px 1fr; gap: 0 20px;
+    padding: 30px 0 32px; border-bottom: 1px solid var(--rule);
+    scroll-margin-top: 20px;
+  }
+  .rec-n {
+    font-family: var(--display); font-weight: 700; font-size: 27px; letter-spacing: -.03em;
+    color: var(--rule-2); font-variant-numeric: tabular-nums;
+  }
+  .rec-body { min-width: 0; }
+
+  .rec-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 11px; }
+  .tag {
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 2px;
+  }
+  .tag.eff { color: var(--ink-2); background: var(--card-2); }
+  .tag.win { color: var(--amber); background: var(--amber-wash); }
+
+  .rec h3 {
+    font-family: var(--display); font-weight: 600; font-size: 21px; line-height: 1.28;
+    letter-spacing: -.01em; margin: 0 0 14px; max-width: 32ch; text-wrap: balance;
+  }
+
+  .ba { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin-bottom: 14px; max-width: var(--measure); }
+  .ba > div { display: grid; grid-template-columns: 78px 1fr; gap: 14px; padding: 12px 15px; font-size: 14.5px; }
+  .ba > div:first-child { border-bottom: 1px solid var(--rule); background: var(--card-2); }
+  .ba > div:last-child { background: var(--card); }
+  .ba .k { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding-top: 3px; }
+  .ba .now .k { color: var(--ink-3); }
+  .ba .next .k { color: var(--indigo); }
+  .ba .v { color: var(--ink-2); }
+  .ba .next .v { color: var(--ink); }
+
+  .rec p { margin: 0; max-width: var(--measure); color: var(--ink-2); font-size: 15px; }
+  .rec p + p { margin-top: 10px; }
+  .rec code { font-family: var(--mono); font-size: .86em; background: var(--card-2); padding: 1px 5px; border-radius: 3px; color: var(--ink); }
+
+  /* ── closing ── */
+  .closing { margin-top: 60px; padding: 30px 30px 32px; border: 1px solid var(--ink); background: var(--card); }
+  .closing h2 { margin: 0 0 8px; border: 0; padding: 0; }
+  .closing > p { margin: 0 0 22px; max-width: var(--measure); color: var(--ink-2); }
+  .picks { border-top: 1px solid var(--rule); }
+  .pick {
+    display: grid; grid-template-columns: 28px 1fr auto; gap: 16px; align-items: baseline;
+    padding: 15px 0; border-bottom: 1px solid var(--rule);
+  }
+  .pick-n { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--indigo); }
+  .pick-t { font-size: 15.5px; color: var(--ink); }
+  .pick-t em { display: block; font-style: normal; font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+  .pick-w { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+  footer {
+    margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 11px; line-height: 1.9; color: var(--ink-3);
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis desktop · onboarding · design proposal · 7 of 9 shipped</p>
+    <h1>The First Ten Minutes</h1>
+    <p class="standfirst">A new user typed through roughly eight screens before anything happened, and landed on a dashboard of zeros. Seven of the nine changes below are now in <code style="font-family:var(--mono);font-size:.85em">main</code>: the wizard is <b>three steps</b> for a first project, the brief arrives <b>filled</b>, the last screen carries <b>one lit action</b>, and the splash charges once.</p>
+    <p class="scope">
+      <span>Walked:</span> Splash → Getting Started → “Workspace ready” → 6-step project wizard → project home<br>
+      <span>Source:</span> <code style="font-family:var(--mono);font-size:11px">GettingStarted.tsx</code>, <code style="font-family:var(--mono);font-size:11px">NewProjectWizard.tsx</code>, and the packaged first-run captures
+    </p>
+  </header>
+
+  <section class="funnels" aria-label="Funnel comparison">
+    <div class="funnels-head"><span>The path</span><span style="margin-left:auto;color:var(--ink-2)">now &nbsp;→&nbsp; proposed</span></div>
+
+    <div class="funnel-grid">
+      <div class="funnel now">
+        <div class="funnel-label">Today — 8 stops</div>
+        <div class="stop"><span class="n">1</span><span class="label">Splash (up to 7.8s, click to skip)</span></div>
+        <div class="stop"><span class="n">2</span><span class="label">Give your work a home — name a workspace</span></div>
+        <div class="stop"><span class="n">3</span><span class="label">“Workspace ready” — Create / Existing / Empty</span></div>
+        <div class="stop"><span class="n">4</span><span class="label">Wizard: choose a project type</span></div>
+        <div class="stop"><span class="n">5</span><span class="label">Wizard: name &amp; locate · brief · initial plan</span></div>
+        <div class="stop"><span class="n">6</span><span class="label">Wizard: choose tool access</span></div>
+        <div class="stop"><span class="n">7</span><span class="label">Wizard: review — a spec sheet of zeros</span></div>
+        <div class="stop"><span class="n">8</span><span class="label">Project home — WORK ITEMS 5 · <b>0</b> complete</span></div>
+        <div class="funnel-foot"><b>Every field is typed, no action is taken,</b> and the AI provider and tracker that the product is built around are never mentioned.</div>
+      </div>
+
+      <div class="funnel-arrow">→</div>
+
+      <div class="funnel next">
+        <div class="funnel-label">Proposed — 4 stops</div>
+        <div class="stop cut"><span class="n">—</span><span class="label">Splash: full only on first run, then a fade</span></div>
+        <div class="stop merge"><span class="n">1</span><span class="label">Name your first project (workspace defaults, renameable)</span></div>
+        <div class="stop merge"><span class="n">2</span><span class="label">Pick a type — the preview shifts to match it</span></div>
+        <div class="stop cut"><span class="n">—</span><span class="label">Brief · plan · tool access → sensible defaults, deferred</span></div>
+        <div class="stop merge"><span class="n">3</span><span class="label">Review — <b>6 brief sections drafted</b>, 5 tickets, one board</span></div>
+        <div class="stop win"><span class="n">4</span><span class="label">Land on the board with one lit action + a 3-item checklist</span></div>
+        <div class="funnel-foot"><b>Advanced setup</b> stays one toggle away for anyone who wants the full six steps.</div>
+      </div>
+    </div>
+
+    <div class="countbar">
+      <div class="count"><b>8&thinsp;<em>→</em>&thinsp;4</b><span>screens before the board</span></div>
+      <div class="count"><b>6&thinsp;<em>→</em>&thinsp;3</b><span>wizard steps for a first project</span></div>
+      <div class="count"><b>0&thinsp;<em>→</em>&thinsp;6</b><span>brief sections filled on arrival</span></div>
+      <div class="count"><b>0&thinsp;<em>→</em>&thinsp;1</b><span>next action lit on the last screen</span></div>
+    </div>
+  </section>
+
+  <h2><span class="h2-mark">A</span>The walk today</h2>
+  <p class="lede">Nothing here is broken. It is thorough, honest, and slow — and it ends where a first-time user has the least ability to act.</p>
+  <ol class="walk">
+    <li>
+      <strong>Splash</strong>
+      <p>Up to 7.8 seconds of brand animation on every launch, skippable by clicking, skipped entirely under reduced motion. A returning user pays it too.</p>
+    </li>
+    <li>
+      <strong>“Give your work a home”</strong>
+      <p>A form asking for a workspace name, description, and storage folder — a named container demanded before the user has a single thing to put in it. The <code>Skip for now</code> button quietly concedes the concept hasn't landed yet.</p>
+      <span class="friction">a speed bump with weak justification</span>
+    </li>
+    <li>
+      <strong>“Workspace ready — Start building”</strong>
+      <p>An interstitial between the workspace form and the project wizard: Create New Project / Create from existing folder / Continue with Empty Workspace. It exists only to bridge two screens.</p>
+    </li>
+    <li>
+      <strong>Wizard step 1 — Choose a project type</strong>
+      <p>Four planning models with illustrative mini-boards: Software, Product, Research, Experiment. This step earns its place — it changes everything downstream.</p>
+    </li>
+    <li>
+      <strong>Wizard steps 3–5 — brief, plan, tool access</strong>
+      <p>“Shape the brief” shows six sections, <em>every one marked</em> <code>SKIPPED</code> with an empty radio — the user is asked to opt <em>in</em> to structure they can't yet evaluate. Then “Set up the initial plan”, then “Choose tool access” (“Project-board tools only” vs alternatives a first-timer has no basis to weigh).</p>
+      <span class="friction">configuration wearing an onboarding costume</span>
+    </li>
+    <li>
+      <strong>Wizard step 6 — Review and create</strong>
+      <p>“Confirm exactly what Praxis will create”, then a manifest: <code>0 brief sections prepared</code>, <code>Praxis only — no local folder</code>, <code>5 starter tickets</code>, <code>No AI session starts during project creation</code>. It reads like a build log, and the “0 brief sections” line is a small self-own right after the user skipped that step.</p>
+    </li>
+    <li>
+      <strong>Project home</strong>
+      <p>The first real screen: <code>WORK ITEMS 5 · 0 complete</code>, <code>BRIEF 0/6</code>, <code>SESSIONS 0</code>, <code>AI STEPS 0</code>; the right pane's brief is <code>0/7</code>, all unanswered; “No board is linked yet.” The funnel ends and the user is alone with a dashboard of zeros.</p>
+      <span class="friction">the landing is emptier than the runway</span>
+    </li>
+  </ol>
+
+  <h2><span class="h2-mark">B</span>Shorten the runway</h2>
+
+  <article class="rec" id="r1">
+    <div class="rec-n">1</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: M</span></div>
+      <h3>Let the first project create the workspace</h3>
+      <p>Getting Started's first-run screen is now <em>Create your first project</em> — New project / Create from an existing folder, with “Name a workspace first” and “Skip for now” as links. Picking a project creates a default <code>My workspace</code> behind the scenes. </p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">Name a workspace → “workspace ready” interstitial → then start a project.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">The first project creates a default workspace (“My workspace”, renameable). The user names the <em>project</em>. Workspaces are introduced as a concept only when a second project appears.</span></div>
+      </div>
+      <p>Removes two screens and a concept the user isn't ready for. The multi-workspace switcher, the <code>Open workspace file</code> path, and the recents list all stay — they just belong to the returning user, not the first-run one.</p>
+    </div>
+  </article>
+
+  <article class="rec" id="r2">
+    <div class="rec-n">2</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: M</span></div>
+      <h3>Three steps for a first project, six behind a toggle</h3>
+      <p>A <code>create</code>-mode wizard now runs three panels by default &mdash; type, name, review. Brief, plan and tool access take their recommended values and move to the project home; an <em>Advanced setup</em> checkbox on the type step restores all six. Existing-folder mode is unchanged.</p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">Type → name &amp; locate → brief → initial plan → tool access → review. Six steps, several of them configuration.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Type → name → review. Brief, plan and tool access take their recommended defaults and move to the project home, which already surfaces the brief as <code>BRIEF 0/6</code> for the user to fill when it matters. An “Advanced setup” switch on step 1 restores all six.</span></div>
+      </div>
+      <p>A first-time user has no basis to choose “Project-board tools only” over its alternatives, or to decide which of six brief sections to skip. Deferring those isn't hiding them — it's putting them where the user can make the call with context.</p>
+    </div>
+    </article>
+
+  <article class="rec" id="r3">
+    <div class="rec-n">3</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: S</span></div>
+      <h3>The brief should arrive filled, not skipped</h3>
+      <p>The recommended brief for the chosen type is included and drafted by default; each section is still deselectable and rewritable. Review reads <code>6 brief sections drafted</code> instead of <code>0 … prepared</code>. </p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">Step 3 shows six brief sections, each marked <code>SKIPPED</code>. Review then says <code>0 brief sections prepared</code>.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">The recommended set for the chosen type is pre-selected and pre-drafted (the guided-brief variant already proves this is possible). “Continue” produces a real brief; review says <code>6 sections drafted</code>.</span></div>
+      </div>
+      <p>An empty default asks the user to build structure they don't understand yet. A filled default they can edit gives them something to react to — and removes the “you did nothing” note from the review screen.</p>
+    </div>
+  </article>
+
+  <h2><span class="h2-mark">C</span>Land on momentum</h2>
+
+  <article class="rec" id="r4">
+    <div class="rec-n">4</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag win">Activation</span><span class="tag eff">Effort: M</span></div>
+      <h3>End on an action, not a manifest</h3>
+      <p>A project with no sessions opens with a Get Started strip above the metrics: a three-step checklist and one primary <em>Start a session</em> button that opens the New Session composer scoped to the project. Dismissible per project. </p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">“Review and create — Confirm exactly what Praxis will create”, then a spec sheet, then Create.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Keep the summary, but make Create land on the board with one action lit: <em>Draft the brief with an agent</em>, or <em>Start a session on the first ticket</em>. The funnel's end becomes the product's start.</span></div>
+      </div>
+      <p>The whole product is “turn a ticket into visible progress.” Right now the user reaches that capability by finishing a form and then hunting for where to begin.</p>
+    </div>
+  </article>
+
+  <article class="rec" id="r5">
+    <div class="rec-n">5</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag win">Activation</span><span class="tag eff">Effort: M</span></div>
+      <h3>A stateful three-item checklist on the project home</h3>
+      <p>Shipped together with #4 as the same Get Started strip — the checklist (Project created · Brief drafted N/M · Start your first session) and the lit action, on the screen the funnel ends on. </p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">The real activation checklist — Create project · Connect a tracker · Start an AI session — lives on the Overview's starter strip, a screen you only reach if you <em>skip</em> project creation.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Move it into the project home as a dismissible checklist that tracks completion, and let it drive the user to Connections and AI Provider — the two setups onboarding never mentions.</span></div>
+      </div>
+      <p>Replaces the four zero-cards on the landing screen with one thing that visibly progresses.</p>
+    </div>
+  </article>
+
+  <article class="rec" id="r6">
+    <div class="rec-n">6</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag win">Activation</span><span class="tag eff">Effort: M</span></div>
+      <h3>“Explore a sample project” from the first screen</h3>
+      <p><strong>Answered differently.</strong> A pre-seeded demo project is a diorama &mdash; it shows what populated looks like but teaches nothing about operating the app, it is throwaway data the user then wants to delete, and it needs a runtime seeding path that does not exist. With setup now three steps landing on a Get Started strip, the cost it hedged against is largely gone. Shipped instead: a short walkthrough over the user&rsquo;s <em>real</em> project &mdash; four stops ringing controls the shell already renders, offered once after the first project and replayable from &ldquo;Take a tour&rdquo;. The ring never takes pointer events, so the highlighted control stays clickable.</p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">A prospect's only path in is the workspace form and the six-step wizard. Demo content (Application Board, Operations Board, starter tickets) exists but is never offered.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">One click from Getting Started into a <em>populated</em> project: a real board, a finished AI session, a written brief. Evaluate first, set up second.</span></div>
+      </div>
+      <p>The highest-leverage single addition for someone deciding whether Praxis is worth the setup. The data is already seeded — this is a route to it, not new content.</p>
+    </div>
+        </article>
+
+  <h2><span class="h2-mark">D</span>Polish</h2>
+
+  <article class="rec" id="r7">
+    <div class="rec-n">7</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: S</span></div>
+      <h3>Charge the splash once</h3>
+      <p><code>StartupSplash</code> gained a <code>brief</code> mode — the finished wordmark, a short hold, a fade, about a second. App turns it on once the profile has been past Getting Started. The full crawl still plays on first run and on a replay from What's New. </p>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v">Up to 7.8s of animation on every launch, for every user.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Full splash on first run — the brand moment. After onboarding completes once, a 400ms fade or nothing. The code already carries <code>splashReplayKey</code> and reduced-motion handling; this gates on one flag.</span></div>
+      </div>
+    </div>
+  </article>
+
+  <article class="rec" id="r8">
+    <div class="rec-n">8</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: S</span></div>
+      <h3>Make the structure preview answer the type choice</h3>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v"><code>ProductPreview</code> — a frozen Workspace → Project → Board mockup, the same whatever the user picks.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Pick “Research” and the preview shows an evidence-review board, not a Kanban. Small, and it makes the type choice feel consequential.</span></div>
+      </div>
+    </div>
+        <p style="color:var(--ink-3);border-left:2px solid var(--rule-2);padding-left:12px;margin-top:14px">Lower value now. With #1, the first-run path no longer has a “frozen preview before a type is chosen” problem — the type picker's own per-card previews already do this job.</p>
+    </article>
+
+  <article class="rec" id="r9">
+    <div class="rec-n">9</div>
+    <div class="rec-body">
+      <div class="rec-tags"><span class="tag eff">Effort: S</span></div>
+      <h3>One home for the “getting started” story</h3>
+      <div class="ba">
+        <div class="now"><span class="k">Now</span><span class="v"><code>GettingStarted.tsx</code> and the Overview's <code>overview-starter-strip</code> cover overlapping ground with different framing and no handoff between them.</span></div>
+        <div class="next"><span class="k">Proposed</span><span class="v">Pre-workspace: choose or create a context. Post-project: the activation checklist (#5). Each does one job and points at the next.</span></div>
+      </div>
+    </div>
+        <p style="color:var(--ink-3);border-left:2px solid var(--rule-2);padding-left:12px;margin-top:14px">Largely addressed by #1 and #4/#5: Getting Started owns the pre-project story, the Get Started strip owns activation. The Overview's starter strip remains only as the skip-path fallback.</p>
+    </article>
+
+  <section class="closing">
+    <h2>Where it started</h2>
+    <p>Recommendations&nbsp;1–3 were one coherent change to the wizard, and shortened the runway most. #6 was the cheapest way to help a prospect who isn't ready to commit to setup at all. All three picks below have since landed.</p>
+    <div class="picks">
+      <div class="pick">
+        <span class="pick-n">1–3</span>
+        <span class="pick-t">Collapse the wizard<em>Implicit workspace, three steps, a filled brief — 8 screens become 4</em></span>
+        <span class="pick-w">Effort M</span>
+      </div>
+      <div class="pick">
+        <span class="pick-n">6</span>
+        <span class="pick-t">“Explore a sample project”<em>A route into demo content that already exists — evaluate before setup</em></span>
+        <span class="pick-w">Effort S–M</span>
+      </div>
+      <div class="pick">
+        <span class="pick-n">4</span>
+        <span class="pick-t">End on an action<em>Create lands on the board with one lit next step, not a spec sheet</em></span>
+        <span class="pick-w">Effort M</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Praxis desktop v0.2.1 · branch <code style="font-family:var(--mono);font-size:11px">main</code><br>
+    Flow walked from GettingStarted.tsx and NewProjectWizard.tsx; screens from the packaged first-run captures.
+  </footer>
+
+</div>
+
+
+</body>
+</html>

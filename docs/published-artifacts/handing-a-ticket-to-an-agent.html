@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Handing a Ticket to an Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --sans: 'IBM Plex Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+    --mono: 'IBM Plex Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+
+    --ground: #f5f2eb;
+    --raised: #fffdf8;
+    --sunken: #ebe7de;
+    --ink: #2c2620;
+    --ink-2: #74695e;
+    --ink-3: #958878;
+    --rule: #ddd3c5;
+    --rule-strong: #ad9a85;
+    --brand: #c6431f;
+    --brand-soft: rgba(198, 67, 31, .1);
+    --pass: #2f7d4f;
+    --pass-soft: rgba(47, 125, 79, .12);
+    --open: #9a6a1a;
+    --open-soft: rgba(154, 106, 26, .13);
+    --shadow: 0 1px 2px rgba(44, 38, 32, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+      --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+      --rule: #372f27; --rule-strong: #6c5b4a;
+      --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+      --pass: #6cc08b; --pass-soft: rgba(108, 192, 139, .14);
+      --open: #d6a54a; --open-soft: rgba(214, 165, 74, .14);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #100e0b; --raised: #1b1713; --sunken: #0b0907;
+    --ink: #f0e7d8; --ink-2: #cdbfae; --ink-3: #958878;
+    --rule: #372f27; --rule-strong: #6c5b4a;
+    --brand: #ef6a3f; --brand-soft: rgba(239, 106, 63, .14);
+    --pass: #6cc08b; --pass-soft: rgba(108, 192, 139, .14);
+    --open: #d6a54a; --open-soft: rgba(214, 165, 74, .14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.58;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--brand); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+  .wrap { max-width: 840px; margin: 0 auto; padding: 0 32px 96px; }
+  @media (max-width: 640px) { .wrap { padding: 0 20px 64px; } }
+
+  header.masthead { padding: 56px 0 24px; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    margin: 0 0 14px; font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--brand);
+  }
+  h1 {
+    margin: 0; font-size: clamp(31px, 5.4vw, 46px); font-weight: 600;
+    letter-spacing: -.02em; line-height: 1.06; text-wrap: balance;
+  }
+
+  /* Verdict */
+  .verdict {
+    margin: 26px 0 0; padding: 20px 22px; border: 1px solid var(--rule);
+    border-left: 4px solid var(--pass); border-radius: 8px;
+    background: var(--raised); box-shadow: var(--shadow);
+  }
+  .verdict b {
+    display: block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--pass); margin-bottom: 8px;
+  }
+  .verdict p { margin: 0; font-size: 16px; }
+  .verdict p + p { margin-top: 10px; color: var(--ink-2); font-size: 14.5px; }
+
+  section { padding-top: 50px; }
+  h2 {
+    display: flex; align-items: baseline; gap: 14px; margin: 0 0 4px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule-strong); font-size: 22px; font-weight: 600; letter-spacing: -.01em;
+  }
+  h2 span { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--brand); }
+  .lede { max-width: 68ch; margin: 15px 0 0; color: var(--ink-2); }
+  h3 { margin: 28px 0 6px; font-size: 15px; font-weight: 600; }
+  p { margin: 12px 0 0; max-width: 70ch; }
+
+  code {
+    font-family: var(--mono); font-size: .86em; padding: 1px 4px; border-radius: 3px;
+    background: var(--brand-soft); color: var(--brand);
+  }
+
+  /* Two-layer cards */
+  .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+  @media (max-width: 680px) { .layers { grid-template-columns: 1fr; } }
+  .layer {
+    padding: 18px 20px; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--raised); box-shadow: var(--shadow);
+  }
+  .layer .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; margin-bottom: 12px;
+  }
+  .layer.scripted .tag { color: var(--pass); background: var(--pass-soft); }
+  .layer.live .tag { color: var(--brand); background: var(--brand-soft); }
+  .layer h4 { margin: 0 0 4px; font-size: 15.5px; font-weight: 600; }
+  .layer .file { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+  .layer ul { margin: 12px 0 0; padding-left: 18px; }
+  .layer li { margin-bottom: 7px; font-size: 13.5px; color: var(--ink-2); }
+  .layer li b { color: var(--ink); font-weight: 600; }
+  .layer .foot {
+    margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.5;
+  }
+
+  /* Proven / open table */
+  .scroller { overflow-x: auto; margin-top: 22px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    padding: 0 16px 8px 0; text-align: left; font-family: var(--mono); font-size: 10px;
+    font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+    border-bottom: 1px solid var(--rule-strong); white-space: nowrap;
+  }
+  td { padding: 11px 16px 11px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td.mark { width: 1%; white-space: nowrap; font-family: var(--mono); font-size: 12px; font-weight: 600; }
+  td.mark.y { color: var(--pass); }
+  td.mark.n { color: var(--open); }
+  td.note { color: var(--ink-2); font-size: 13.5px; }
+
+  /* Transcript card */
+  .run {
+    margin-top: 22px; border: 1px solid var(--rule-strong); border-radius: 8px;
+    background: var(--sunken); overflow: hidden; box-shadow: var(--shadow);
+  }
+  .run-head {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline;
+    padding: 12px 16px; border-bottom: 1px solid var(--rule); background: var(--raised);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+  .run-head b { color: var(--ink); font-weight: 600; }
+  .run-head .ok { color: var(--pass); font-weight: 600; }
+  .run-body { padding: 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--ink-2); overflow-x: auto; }
+  .run-body pre { margin: 0; white-space: pre; }
+  .run-body .c { color: var(--ink-3); }
+  .run-body .add { color: var(--pass); }
+  .run-cap { margin: 10px 16px 14px; font-size: 12.5px; color: var(--ink-3); }
+
+  /* Bug callout */
+  .bug {
+    margin-top: 22px; padding: 16px 20px; border: 1px solid var(--rule);
+    border-left: 3px solid var(--brand); border-radius: 6px; background: var(--raised);
+  }
+  .bug b { font-weight: 600; }
+  .bug p { margin-top: 8px; font-size: 14px; color: var(--ink-2); }
+  .bug .hash { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+
+  /* Fences list */
+  .fences { margin: 22px 0 0; padding: 0; list-style: none; }
+  .fences li {
+    display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 14px;
+    padding: 13px 0; border-bottom: 1px solid var(--rule);
+  }
+  .fences .n { font-family: var(--mono); font-size: 12px; color: var(--pass); padding-top: 2px; }
+  .fences b { font-weight: 600; }
+  .fences small { display: block; margin-top: 3px; font-size: 13px; color: var(--ink-2); }
+
+  .cmd {
+    margin-top: 18px; padding: 12px 15px; border: 1px solid var(--rule);
+    border-radius: 6px; background: var(--sunken);
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink); overflow-x: auto;
+  }
+
+  footer {
+    margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3);
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Praxis desktop · flow verification</p>
+    <h1>Handing a Ticket to an Agent</h1>
+
+    <div class="verdict">
+      <b>Verified — it works</b>
+      <p>A ticket goes in; a real agent reads a file in the project folder, edits it, and the change is on disk when the session completes. File access is sandboxed to that folder and gated by tool mode. Tool use pauses for approval.</p>
+      <p>Proven two ways: an automated end-to-end test with a scripted agent that runs in CI on every push, and one run against a real model (Claude&nbsp;Code) that took a failing test suite and made it pass.</p>
+    </div>
+  </header>
+
+  <section id="layers">
+    <h2>How it was tested <span>01</span></h2>
+    <p class="lede">Two layers. The first proves the plumbing carries a ticket to a file edit and back, deterministically and for free. The second proves a real model does something sensible with the ticket — the half the first can't touch.</p>
+
+    <div class="layers">
+      <div class="layer scripted">
+        <span class="tag">In the normal suite</span>
+        <h4>Scripted agent, end to end</h4>
+        <p class="file">e2e/aiCodingTask.spec.ts · 3 tests · ~10s · no model</p>
+        <ul>
+          <li>The agent is a real ACP subprocess — real SDK, real wire framing — that does one fixed edit through Praxis's own <b>fs/read_text_file</b> and <b>fs/write_text_file</b> handlers.</li>
+          <li><b>Full tools:</b> session reaches <code>completed</code>, the file on disk is changed, <code>node&nbsp;-e</code> proves the fixed function runs, git shows exactly one modified file, the edit renders as a red/green diff.</li>
+          <li><b>Read-only:</b> the write is refused by the host, the file is untouched, the session says why.</li>
+          <li><b>Turn recording:</b> a first turn plus two follow-ups; each records its reply once and carries the earlier answer forward.</li>
+        </ul>
+        <div class="foot">Part of the 197-test functional suite. Runs on every change.</div>
+      </div>
+
+      <div class="layer live">
+        <span class="tag">Opt-in only</span>
+        <h4>Real CLI agent, real model</h4>
+        <p class="file">e2e/aiLiveAgent.live.spec.ts · --project=live-agent</p>
+        <ul>
+          <li>Drives <code>claude-agent-acp</code> against a real model on whoever's account it is signed in to. Spends money; takes minutes.</li>
+          <li>The task is small and <b>self-verifying</b>: the seeded repo ships a failing <code>node --test</code> suite; the ticket asks for it to pass.</li>
+          <li>Success is measured by running that suite afterwards — not by reading the agent's prose — and by checking it fixed the source rather than deleting the test.</li>
+          <li>Excluded from every other Playwright project; skips outright without <code>PRAXIS_LIVE_AGENT=1</code>.</li>
+        </ul>
+        <div class="foot">Never part of <code>npm run test:desktop</code>. Run it by hand when you want the answer.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <h2>The live run <span>02</span></h2>
+    <p class="lede">The seeded repository: a <code>slugify()</code> that only lowercases and hyphenates, and a four-case suite it fails three of — repeated spaces, surrounding whitespace, punctuation. The ticket named the three faults and said: make the suite pass, don't touch the test file.</p>
+
+    <div class="run">
+      <div class="run-head">
+        <span>agent <b>claude-agent-acp</b></span>
+        <span>state <b>completed</b></span>
+        <span>steps <b>6</b></span>
+        <span>time <b>45.6s</b></span>
+        <span>suite <span class="ok">3/4 failing → 4/4 passing</span></span>
+        <span>files <b>slugify.js only</b></span>
+      </div>
+      <div class="run-body"><pre><span class="c"># the agent's move, in order</span>
+1  read slugify.js and slugify.test.js
+2  ran `node --test`  <span class="c">→ baseline: 3 failures confirmed</span>
+3  rewrote the transform
+4  ran `node --test`  <span class="c">→ 4/4 passing</span>
+
+<span class="c"># what it wrote</span>
+function slugify(title) {
+  return title
+    .toLowerCase()
+<span class="add">    .replace(/[^a-z0-9]+/g, ' ')</span>  <span class="c">// punctuation + repeated spaces, one rule</span>
+<span class="add">    .trim()</span>
+    .replace(/ /g, '-');
+}</pre></div>
+    </div>
+    <p class="run-cap">The three separate defects the ticket listed, collapsed into one substitution. It ran the suite itself for a baseline before editing and again to confirm — unprompted.</p>
+  </section>
+
+  <section id="proven">
+    <h2>What is proven, and what isn't <span>03</span></h2>
+
+    <div class="scroller">
+      <table>
+        <thead><tr><th></th><th>Claim</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td class="mark y">yes</td><td>A ticket reaches an agent and its edits land on disk</td><td class="note">Scripted test, every push</td></tr>
+          <tr><td class="mark y">yes</td><td>File access is sandboxed to the working folder and gated by tool mode</td><td class="note">Read-only case: write refused, file untouched</td></tr>
+          <tr><td class="mark y">yes</td><td>Tool use pauses for Allow / Always allow / Deny</td><td class="note"><code>ai:respondToPermission</code> → host → <code>SessionsPage</code>, wired end to end</td></tr>
+          <tr><td class="mark y">yes</td><td>A real model handles a small, well-specified ticket sensibly</td><td class="note">Live run: failing suite → passing, clean diff</td></tr>
+          <tr><td class="mark y">yes</td><td>Each turn's reply is kept in context for the next turn</td><td class="note">Fixed in <code>aa271de</code>; regression test walks three turns</td></tr>
+          <tr><td class="mark n">not yet</td><td>A vague ticket against a large, unfamiliar codebase</td><td class="note">Different question. The honest way to answer it is to try one.</td></tr>
+          <tr><td class="mark n">not yet</td><td>Multi-file changes, or a task needing the terminal</td><td class="note">The plumbing supports it; no run has exercised it</td></tr>
+          <tr><td class="mark n">not yet</td><td>GitHub as a ticket source</td><td class="note">Configuration surface only — no board/issue backend behind it</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="bug">
+    <h2>A real bug the testing found <span>04</span></h2>
+    <p class="lede">Not the flow itself — the conversation memory underneath it.</p>
+
+    <div class="bug">
+      <b>An agent turn never recorded its reply as a conversation event. <span class="hash">fixed in aa271de</span></b>
+      <p>The reply lived only in <code>responseText</code>, which the transcript still showed, so it looked cosmetic. It was not: the prompt for the next turn is built from <code>message</code> events, so the agent lost its own answer to the first turn the moment a user asked it to continue. The follow-up path papered over this by re-appending the prior reply on the way in — which runs too late to reach that prompt, and from the second follow-up on left a duplicate. Both paths now record the reply when the turn ends, and the retroactive flush is gone.</p>
+    </div>
+  </section>
+
+  <section id="fences">
+    <h2>Why the live test can't leak into a normal run <span>05</span></h2>
+    <p class="lede">It spends money, so it is fenced three ways — each verified, not assumed.</p>
+
+    <ol class="fences">
+      <li><span class="n">01</span><div><b>Excluded from every other project.</b><small>The functional and theme-regressions projects ignore <code>*.live.spec.ts</code>; it matches none of the themes patterns. Confirmed: collected by no other project.</small></div></li>
+      <li><span class="n">02</span><div><b>Its own project, isolated.</b><small><code>live-agent</code> only — 10-minute timeout, one worker, nothing else in it.</small></div></li>
+      <li><span class="n">03</span><div><b>Refuses to run without the opt-in.</b><small>Skips outright unless <code>PRAXIS_LIVE_AGENT=1</code>. Confirmed by running it without the variable.</small></div></li>
+    </ol>
+
+    <div class="cmd">cd apps/praxis-desktop/main<br>PRAXIS_LIVE_AGENT=1 npx playwright test --project=live-agent</div>
+  </section>
+
+  <footer>
+    Praxis desktop · branch main · commits 14326bf · aa271de · b42a6ea · 3ae1789
+  </footer>
+
+</div>
+
+
+</body>
+</html>

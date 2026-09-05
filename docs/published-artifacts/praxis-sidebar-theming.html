@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Praxis Sidebar Theming</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --page-bg: #f3f3f6;
+    --page-surface: #fbfbfd;
+    --page-ink: #1a1a20;
+    --page-ink-soft: #57575f;
+    --page-line: #e5e4ea;
+    --page-accent: #6a4bff;
+    --page-accent-soft: rgba(106, 75, 255, 0.10);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #111114;
+      --page-surface: #191920;
+      --page-ink: #e8e8ee;
+      --page-ink-soft: #9b9ba7;
+      --page-line: #2a2a32;
+      --page-accent: #a48dff;
+      --page-accent-soft: rgba(164, 141, 255, 0.14);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --page-bg: #111114;
+    --page-surface: #191920;
+    --page-ink: #e8e8ee;
+    --page-ink-soft: #9b9ba7;
+    --page-line: #2a2a32;
+    --page-accent: #a48dff;
+    --page-accent-soft: rgba(164, 141, 255, 0.14);
+  }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--page-ink-soft);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: clamp(40px, 7vw, 88px) clamp(18px, 4vw, 44px) 96px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--page-accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: clamp(1.7rem, 1rem + 2.6vw, 2.55rem);
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    color: var(--page-ink);
+    margin: 0 0 22px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    max-width: 64ch;
+    font-size: clamp(1rem, 0.95rem + 0.3vw, 1.15rem);
+    margin: 0 0 30px;
+  }
+
+  p em, li em, .lede em {
+    font-style: normal;
+    font-weight: 500;
+    color: var(--page-ink);
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--page-accent-soft);
+    color: var(--page-ink);
+    padding: 0.08em 0.38em;
+    border-radius: 4px;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+    border-top: 1px solid var(--page-line);
+    border-bottom: 1px solid var(--page-line);
+  }
+
+  .controls .lbl {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--page-ink-soft);
+  }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--page-line);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .seg button {
+    appearance: none;
+    border: 0;
+    background: var(--page-surface);
+    color: var(--page-ink-soft);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    padding: 7px 18px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .seg button + button { border-left: 1px solid var(--page-line); }
+  .seg button[aria-pressed="true"] { background: var(--page-accent); color: #fff; }
+  .seg button:focus-visible { outline: 2px solid var(--page-accent); outline-offset: 2px; }
+
+  .section { margin-top: 64px; }
+  .section > p.eyebrow { max-width: none; margin: 0 0 10px; }
+
+  .section h2 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 1.4rem;
+    line-height: 1.25;
+    color: var(--page-ink);
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+
+  .section p {
+    max-width: 64ch;
+    margin: 0 0 24px;
+  }
+
+  .mock-row {
+    display: grid;
+    gap: 22px;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 1000px) {
+    .mock-row { grid-template-columns: 1fr 1fr; }
+    .mock-row.mock-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+  }
+
+  .mock-row + .mock-row { margin-top: 22px; }
+
+  .mock-fig {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  figcaption {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.02em;
+    color: var(--page-ink-soft);
+  }
+
+  figcaption b { color: var(--page-ink); font-weight: 500; }
+
+  .notes {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-width: 68ch;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .notes li {
+    position: relative;
+    padding-left: 22px;
+  }
+
+  .notes li::before {
+    content: "\203A";
+    position: absolute;
+    left: 2px;
+    top: -1px;
+    color: var(--page-accent);
+    font-family: var(--font-mono);
+    font-size: 1.05em;
+  }
+
+  .foot {
+    margin-top: 76px;
+    padding-top: 20px;
+    border-top: 1px solid var(--page-line);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.75;
+    color: var(--page-ink-soft);
+    max-width: 70ch;
+  }
+
+  /* ── Reveal ─────────────────────────────────────────────── */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { opacity: 0; animation: rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+    .page > .reveal:nth-child(1) { animation-delay: 0s; }
+    .page > .reveal:nth-child(2) { animation-delay: 0.05s; }
+    .page > .reveal:nth-child(3) { animation-delay: 0.1s; }
+    .page > .reveal:nth-child(4) { animation-delay: 0.15s; }
+    .page > .reveal:nth-child(5) { animation-delay: 0.2s; }
+    .page > .reveal:nth-child(6) { animation-delay: 0.25s; }
+    .page > .reveal:nth-child(7) { animation-delay: 0.3s; }
+    .page > .reveal:nth-child(8) { animation-delay: 0.35s; }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Mock window — a CSS rebuild of the Praxis desktop shell.
+     --px-* tokens are the verbatim ramps from renderer/src/theme.css
+     and are set explicitly per window, never inherited from the
+     viewer's own light/dark preference.
+     ══════════════════════════════════════════════════════════ */
+  .mock-window {
+    --px-accent: #7c5cff;
+    --px-accent-soft: rgba(124, 92, 255, 0.16);
+    --px-accent-border: rgba(124, 92, 255, 0.40);
+    border: 1px solid var(--page-line);
+    border-radius: 11px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--page-surface);
+    box-shadow: 0 1px 2px rgba(10, 8, 30, 0.05), 0 22px 40px -22px rgba(10, 8, 30, 0.28);
+  }
+
+  :root[data-accent="blue"] .mock-window {
+    --px-accent: #0a84d8;
+    --px-accent-soft: rgba(10, 132, 216, 0.16);
+    --px-accent-border: rgba(10, 132, 216, 0.42);
+  }
+
+  .mock-window[data-px-mode="light"] {
+    --px-bg: #f6f6f6;
+    --px-bg-elevated: #ffffff;
+    --px-bg-sunken: #ececec;
+    --px-border: #e0e0e0;
+    --px-text: #1f1f1f;
+    --px-text-secondary: #616161;
+    --px-text-tertiary: #8b8b8b;
+    --px-sidebar-bg: #ececec;
+  }
+
+  .mock-window[data-px-mode="dark"] {
+    --px-bg: #1c1c1c;
+    --px-bg-elevated: #202020;
+    --px-bg-sunken: #181818;
+    --px-border: #2e2e2e;
+    --px-text: #e4e4e4;
+    --px-text-secondary: #9d9d9d;
+    --px-text-tertiary: #858585;
+    --px-sidebar-bg: #181818;
+  }
+
+  /* Independent panel treatments — scoped to the rail only. */
+  .mock-window[data-px-sidebar="dark"] .px-sidebar {
+    --px-bg-sunken: #181818;
+    --px-bg-elevated: #202020;
+    --px-border: #2e2e2e;
+    --px-text: #e4e4e4;
+    --px-text-secondary: #9d9d9d;
+    --px-text-tertiary: #858585;
+    --px-sidebar-bg: #181818;
+  }
+
+  .mock-window[data-px-sidebar="light"] .px-sidebar {
+    --px-bg-sunken: #ececec;
+    --px-bg-elevated: #ffffff;
+    --px-border: #e0e0e0;
+    --px-text: #1f1f1f;
+    --px-text-secondary: #616161;
+    --px-text-tertiary: #8b8b8b;
+    --px-sidebar-bg: #ececec;
+  }
+
+  .mock-window[data-px-sidebar="tint"] .px-sidebar {
+    --px-sidebar-bg: color-mix(in srgb, var(--px-accent) 8%, var(--px-bg-sunken));
+    --px-border: color-mix(in srgb, var(--px-accent) 22%, var(--px-border));
+  }
+
+  .mock-window[data-px-sidebar="elevated"] .px-sidebar {
+    --px-sidebar-bg: var(--px-bg-elevated);
+    box-shadow: 3px 0 16px -2px rgba(0, 0, 0, 0.30);
+    z-index: 1;
+  }
+
+  .mock-inner { min-width: 432px; }
+
+  .mock-chrome {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 13px;
+    background: color-mix(in srgb, var(--px-bg-elevated) 72%, var(--px-border));
+    border-bottom: 1px solid var(--px-border);
+  }
+
+  .mock-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--px-text-tertiary) 48%, transparent);
+  }
+
+  .mock-body {
+    display: flex;
+    height: 440px;
+    background-color: var(--px-bg);
+    background-image: var(--px-surface-canvas);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     Surface packs — the "premium" material layer (data-surface
+     axis in the real app). A pack sets only --surface-* props,
+     never a colour token, so it composes over any theme. Values
+     mirror renderer/src/surfaces.css and surfacePacks.ts.
+     ══════════════════════════════════════════════════════════ */
+  .mock-window {
+    --px-surface-canvas: none;
+    --px-surface-tint: none;
+    --px-surface-glow: none;
+    --px-surface-border: var(--px-border);
+    --px-surface-panel-opacity: 1;
+    --px-surface-backdrop: none;
+    --px-surface-grain: none;
+    --px-surface-grain-size: 140px 140px;
+    --px-surface-grain-opacity: 0;
+    --px-surface-grain-blend: soft-light;
+    --px-surface-mark: none;
+    --px-surface-mark-ink: var(--px-text);
+    --px-surface-mark-size: 60px 60px;
+    --px-surface-mark-repeat: repeat;
+    --px-surface-mark-position: center;
+    --px-surface-mark-opacity: 0;
+
+    --grain-fine: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23a)' opacity='0.55'/%3E%3C/svg%3E");
+    --grain-brushed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.7' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23a)' opacity='0.6'/%3E%3C/svg%3E");
+    --grain-heavy: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23a)' opacity='0.7'/%3E%3C/svg%3E");
+    --mark-hex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Cpolygon points='56,30 43,52.5 17,52.5 4,30 17,7.5 43,7.5' fill='none' stroke='%23000' stroke-width='2'/%3E%3C/svg%3E");
+    --mark-tri: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='38'%3E%3Cpath d='M0 38 L22 0 L44 38 M22 38 L44 0 M0 0 L22 38' fill='none' stroke='%23000' stroke-width='1.5'/%3E%3C/svg%3E");
+    --mark-grid: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26'%3E%3Cpath d='M26 0 V26 M0 26 H26' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+  }
+
+  .mock-window[data-px-surface="parchment"] {
+    --px-surface-canvas:
+      radial-gradient(135% 95% at 12% -5%, var(--px-accent-soft), transparent 55%),
+      radial-gradient(120% 90% at 100% 100%, color-mix(in srgb, var(--px-text) 6%, transparent), transparent 60%);
+    --px-surface-tint:
+      radial-gradient(140% 120% at 12% 0%, color-mix(in srgb, var(--px-accent) 12%, transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb, var(--px-accent) 5%, transparent), color-mix(in srgb, var(--px-text) 4%, transparent));
+    --px-surface-glow: inset 0 1px 0 color-mix(in srgb, var(--px-accent) 16%, transparent);
+    --px-surface-border: color-mix(in srgb, var(--px-border) 62%, var(--px-accent) 20%);
+    --px-surface-grain: var(--grain-fine);
+    --px-surface-grain-opacity: 0.22;
+    --px-surface-grain-blend: soft-light;
+    --px-surface-mark: var(--mark-hex);
+    --px-surface-mark-ink: var(--px-accent);
+    --px-surface-mark-size: 150px 150px;
+    --px-surface-mark-repeat: no-repeat;
+    --px-surface-mark-position: top right;
+    --px-surface-mark-opacity: 0.3;
+  }
+
+  .mock-window[data-px-surface="graphite"] {
+    --px-surface-tint:
+      linear-gradient(180deg, color-mix(in srgb, var(--px-text) 10%, transparent), transparent 22%),
+      linear-gradient(180deg, transparent 60%, color-mix(in srgb, #000 22%, transparent));
+    --px-surface-glow:
+      inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent),
+      0 10px 26px color-mix(in srgb, #000 45%, transparent);
+    --px-surface-border: color-mix(in srgb, var(--px-border) 50%, var(--px-text) 22%);
+    --px-surface-grain: var(--grain-brushed);
+    --px-surface-grain-opacity: 0.26;
+    --px-surface-grain-blend: overlay;
+    --px-surface-mark: var(--mark-tri);
+    --px-surface-mark-ink: var(--px-text);
+    --px-surface-mark-size: 44px 38px;
+    --px-surface-mark-opacity: 0.16;
+  }
+
+  .mock-window[data-px-surface="blueprint"] {
+    --px-surface-tint:
+      linear-gradient(180deg, color-mix(in srgb, var(--px-accent) 6%, transparent), transparent 55%);
+    --px-surface-border: color-mix(in srgb, var(--px-border) 55%, var(--px-accent) 26%);
+    --px-surface-mark: var(--mark-grid);
+    --px-surface-mark-ink: var(--px-accent);
+    --px-surface-mark-size: 26px 26px;
+    --px-surface-mark-opacity: 0.32;
+  }
+
+  .mock-window[data-px-surface="aurora-glass"] {
+    --px-surface-canvas:
+      linear-gradient(125deg, color-mix(in srgb, var(--px-accent) 42%, transparent), transparent 45%),
+      radial-gradient(80% 65% at 84% 8%, color-mix(in srgb, var(--px-accent) 48%, transparent), transparent 70%),
+      radial-gradient(75% 70% at 8% 96%, color-mix(in srgb, var(--px-accent) 34%, transparent), transparent 68%);
+    --px-surface-tint:
+      linear-gradient(150deg, color-mix(in srgb, #fff 14%, transparent), transparent 55%),
+      linear-gradient(330deg, color-mix(in srgb, var(--px-accent) 14%, transparent), transparent 50%);
+    --px-surface-glow:
+      inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--px-accent) 30%, transparent),
+      0 8px 30px color-mix(in srgb, var(--px-accent) 26%, transparent);
+    --px-surface-border: color-mix(in srgb, #fff 22%, var(--px-accent) 34%);
+    --px-surface-panel-opacity: 0.5;
+    --px-surface-backdrop: blur(14px) saturate(1.6);
+    --px-surface-grain: var(--grain-fine);
+    --px-surface-grain-opacity: 0.09;
+    --px-surface-grain-blend: soft-light;
+    --px-surface-mark: var(--mark-hex);
+    --px-surface-mark-ink: #ffffff;
+    --px-surface-mark-size: 150px 150px;
+    --px-surface-mark-repeat: no-repeat;
+    --px-surface-mark-position: top right;
+    --px-surface-mark-opacity: 0.16;
+  }
+
+  .mock-window[data-px-surface="noir"] {
+    --px-surface-tint:
+      radial-gradient(150% 130% at 50% 0%, transparent 34%, color-mix(in srgb, #000 62%, transparent) 100%),
+      radial-gradient(150% 150% at 50% 120%, transparent 40%, color-mix(in srgb, #000 55%, transparent));
+    --px-surface-glow:
+      inset 0 0 60px 8px color-mix(in srgb, #000 55%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, #000 40%, transparent);
+    --px-surface-border: color-mix(in srgb, var(--px-border) 30%, #000 45%);
+    --px-surface-grain: var(--grain-heavy);
+    --px-surface-grain-opacity: 0.3;
+    --px-surface-grain-blend: overlay;
+  }
+
+  /* ── Sidebar rebuild ────────────────────────────────────── */
+  .px-sidebar {
+    flex: 0 0 244px;
+    width: 244px;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
+    background-color: color-mix(in srgb, var(--px-sidebar-bg) calc(var(--px-surface-panel-opacity) * 100%), transparent);
+    background-image: var(--px-surface-tint);
+    box-shadow: var(--px-surface-glow);
+    -webkit-backdrop-filter: var(--px-surface-backdrop);
+    backdrop-filter: var(--px-surface-backdrop);
+    border-right: 1px solid var(--px-surface-border);
+    color: var(--px-text);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    position: relative;
+  }
+
+  /* Grain — above the fill, below the content (see .px-sidebar > *). */
+  .px-sidebar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--px-surface-grain);
+    background-size: var(--px-surface-grain-size);
+    mix-blend-mode: var(--px-surface-grain-blend);
+    opacity: var(--px-surface-grain-opacity);
+  }
+
+  /* Watermark motif — the pattern is a mask so its ink tracks the accent. */
+  .px-sidebar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: var(--px-surface-mark-ink);
+    -webkit-mask-image: var(--px-surface-mark);
+    mask-image: var(--px-surface-mark);
+    -webkit-mask-size: var(--px-surface-mark-size);
+    mask-size: var(--px-surface-mark-size);
+    -webkit-mask-repeat: var(--px-surface-mark-repeat);
+    mask-repeat: var(--px-surface-mark-repeat);
+    -webkit-mask-position: var(--px-surface-mark-position);
+    mask-position: var(--px-surface-mark-position);
+    opacity: var(--px-surface-mark-opacity);
+  }
+
+  .px-sidebar > * { position: relative; z-index: 1; }
+  .px-sidebar svg { flex: none; display: block; }
+
+  .px-sb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 8px 8px 12px;
+  }
+
+  .px-ws {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    padding: 4px 5px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--px-text);
+    font: inherit;
+  }
+
+  .px-ws-mark {
+    display: grid;
+    place-items: center;
+    width: 21px;
+    height: 21px;
+    border-radius: 5px;
+    color: var(--px-accent);
+    background: color-mix(in srgb, var(--px-accent) 14%, var(--px-bg));
+  }
+
+  .px-ws-name {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .px-ws > svg { margin-left: auto; color: var(--px-text-tertiary); }
+
+  .px-hbtn {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 4px;
+    color: var(--px-text-tertiary);
+    flex: none;
+  }
+
+  .px-seg {
+    display: flex;
+    gap: 2px;
+    margin: 0 12px 4px;
+    padding: 2px;
+    border: 1px solid var(--px-border);
+    border-radius: 6px;
+    background: var(--px-bg-sunken);
+  }
+
+  .px-seg-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--px-text-secondary);
+    font-size: 12px;
+  }
+
+  .px-seg-btn.is-active {
+    background: var(--px-bg-elevated);
+    color: var(--px-text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  }
+
+  .px-scroll {
+    flex: 1;
+    overflow: hidden;
+    padding-bottom: 8px;
+    -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent);
+    mask-image: linear-gradient(180deg, #000 88%, transparent);
+  }
+
+  .px-sec {
+    display: flex;
+    align-items: center;
+    margin-top: 12px;
+  }
+
+  .px-sec-toggle {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--px-text);
+  }
+
+  .px-sec-toggle .px-meta { margin-left: auto; }
+
+  .px-sec-add {
+    display: inline-grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    margin-right: 6px;
+    border-radius: 4px;
+    color: var(--px-text-tertiary);
+    flex: none;
+  }
+
+  /* tree-section-icon: an 18px box; picks up the accent when the group is open. */
+  .px-tsi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    flex: 0 0 18px;
+    color: var(--px-text-tertiary);
+  }
+
+  .px-tsi.open { color: var(--px-accent); }
+
+  .px-meta {
+    font-size: 11px;
+    color: var(--px-text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .px-tree-parent {
+    display: flex;
+    align-items: flex-start;
+    min-height: 38px;
+    border-left: 2px solid transparent;
+  }
+
+  /* Disclosure affordance — a caret, not a second folder. */
+  .px-twisty {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    flex: 0 0 16px;
+    margin: 8px 0 0 6px;
+    color: var(--px-text-tertiary);
+  }
+
+  .px-tree-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    padding: 5px 12px 5px 4px;
+  }
+
+  .px-tree-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--px-text-secondary);
+  }
+
+  .px-tree-icon.px-linked { color: var(--px-text-tertiary); }
+  .px-tree-content .px-tree-icon { margin-top: 1px; }
+  .px-tree-content .px-proj { color: var(--px-accent); }
+  .px-tree-content .px-meta { margin-top: 3px; }
+
+  .px-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .px-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .px-sub {
+    font-size: 11px;
+    color: var(--px-text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The project's contents nest one level in; the guide line drops from
+     the project row's caret so the ownership reads at a glance. */
+  .px-tree-children {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding-left: 26px;
+  }
+
+  .px-tree-children::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 6px;
+    left: 14px;
+    width: 1px;
+    background: color-mix(in srgb, var(--px-text-tertiary) 45%, transparent);
+  }
+
+  .px-subsec {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px 5px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--px-text-tertiary);
+  }
+
+  .px-subsec .px-meta { margin-left: auto; }
+
+  .px-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 12px 0 0;
+    border-left: 2px solid transparent;
+    color: var(--px-text);
+    font-size: 13px;
+  }
+
+  .px-row .px-label { flex: 1; }
+
+  .px-row.is-active {
+    background: var(--px-accent-soft);
+    border-left-color: var(--px-accent);
+  }
+
+  .px-board-row,
+  .px-git-row {
+    height: 28px;
+    padding-left: 14px;
+  }
+
+  .px-badge {
+    flex: none;
+    padding: 1px 5px;
+    border: 1px solid var(--px-border);
+    border-radius: 999px;
+    color: var(--px-text-tertiary);
+    font-size: 9px;
+    line-height: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .px-row.is-active .px-badge {
+    border-color: var(--px-accent-border);
+    color: var(--px-accent);
+  }
+
+  .px-ext {
+    position: relative;
+    margin-top: 2px;
+    padding-bottom: 8px;
+  }
+
+  .px-ext::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 12px;
+    left: 17px;
+    width: 1px;
+    background: var(--px-border);
+  }
+
+  .px-ext .px-row { padding-left: 30px; }
+
+  .px-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #3fb950;
+    margin-right: 2px;
+    flex: none;
+  }
+
+  .px-dot.warn { background: #d29922; }
+
+  .px-footer {
+    flex: none;
+    border-top: 1px solid var(--px-border);
+    padding: 8px 0;
+  }
+
+  .px-foot-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 0 12px;
+    margin-bottom: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--px-text);
+  }
+
+  .px-foot-label svg { color: var(--px-text-tertiary); }
+
+  .px-feat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 12px;
+    color: var(--px-text);
+    font-size: 13px;
+  }
+
+  .px-feat > svg:first-child { color: var(--px-text-secondary); }
+  .px-feat.is-active { background: var(--px-accent-soft); }
+  .px-feat-label { flex: 1; }
+
+  .px-feat-count {
+    font-size: 11px;
+    color: var(--px-text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Editor pane rebuild ────────────────────────────────── */
+  .px-editor {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--px-bg);
+    color: var(--px-text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+
+  .px-ed-bar {
+    height: 40px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 14px;
+    background: var(--px-bg-elevated);
+    border-bottom: 1px solid var(--px-border);
+    font-size: 12px;
+  }
+
+  .px-ed-crumb { color: var(--px-text-secondary); }
+  .px-ed-crumb.dim { color: var(--px-text-tertiary); }
+
+  .px-ed-cols {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    overflow: hidden;
+  }
+
+  .px-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .px-col-head {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--px-text-tertiary);
+  }
+
+  .px-card {
+    height: 44px;
+    border: 1px solid var(--px-border);
+    border-radius: 6px;
+    background: var(--px-bg-elevated);
+  }
+
+  .px-card.tall { height: 62px; }
+  .px-card.short { height: 32px; }
+</style>
+
+<div class="page">
+  <header class="reveal">
+    <p class="eyebrow">Praxis Desktop &middot; Appearance</p>
+    <h1>The left panel gets its own theme</h1>
+    <p class="lede">Right now the workspace sidebar is bolted to the board area's light/dark mode &mdash; change one and the other follows. This page mocks up letting the left panel hold its own <em>mode</em>, <em>tint</em>, <em>elevation</em>, or <em>premium material</em>, the way VS&nbsp;Code keeps its side bar dark over a light editor. Every window below is a CSS rebuild of the real sidebar using the exact token ramps from <code>theme.css</code>.</p>
+    <div class="controls">
+      <span class="lbl">Accent</span>
+      <div class="seg accent-switch" role="group" aria-label="Accent hue">
+        <button type="button" data-accent="violet" aria-pressed="true">Violet</button>
+        <button type="button" data-accent="blue" aria-pressed="false">Blue</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="section reveal">
+    <p class="eyebrow">Today</p>
+    <h2>The sidebar follows the app</h2>
+    <p>One mode setting drives the whole shell. On a light theme the nav is light; on a dark theme it's dark. There's no way to keep a calm dark rail while you read tickets on a bright board.</p>
+    <div class="mock-row">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="light"></div>
+        <figcaption><b>Light app.</b> panel mode = match</figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark"></div>
+        <figcaption><b>Dark app.</b> panel mode = match</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section reveal">
+    <p class="eyebrow">Option &mdash; independent mode</p>
+    <h2>Dark nav, light workspace</h2>
+    <p>The panel pins to dark while the board stays light. The nav recedes, the content you're actually reading stays bright, and the accent still ties the two together. This is the highest-contrast option and the one VS&nbsp;Code users will recognise.</p>
+    <div class="mock-row">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="light" data-px-sidebar="dark"></div>
+        <figcaption>workspace <b>light</b> &middot; panel <b>dark</b></figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-sidebar="light"></div>
+        <figcaption>workspace <b>dark</b> &middot; panel <b>light</b></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section reveal">
+    <p class="eyebrow">Option &mdash; accent tint</p>
+    <h2>A branded surface</h2>
+    <p>The panel keeps the app's mode, but its fill picks up roughly 8% of the accent hue and its hairlines lean the same way. Enough to read as &ldquo;ours&rdquo; without turning the nav into a colour block. It tracks the Violet&nbsp;/&nbsp;Blue switch above.</p>
+    <div class="mock-row">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="light" data-px-sidebar="tint"></div>
+        <figcaption>light &middot; panel <b>tinted</b></figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-sidebar="tint"></div>
+        <figcaption>dark &middot; panel <b>tinted</b></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section reveal">
+    <p class="eyebrow">Option &mdash; elevation</p>
+    <h2>Raised, not sunken</h2>
+    <p>Today the panel sits a shade <em>below</em> the board. Flip the depth: same palette, but a lighter fill and a soft shadow down its right edge so the rail reads as floating above the content instead of tucked under it.</p>
+    <div class="mock-row">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-sidebar="elevated"></div>
+        <figcaption>dark &middot; panel <b>raised</b></figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="light" data-px-sidebar="elevated"></div>
+        <figcaption>light &middot; panel <b>raised</b></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section reveal">
+    <p class="eyebrow">Premium styles &mdash; surface packs</p>
+    <h2>The material layer, on the panel</h2>
+    <p>Surface packs are Praxis's premium material axis (<code>data-surface</code>). A pack sets only <code>--surface-*</code> properties &mdash; a tint wash, an edge glow, a grain texture, a watermark motif &mdash; never a colour, so it composes over any theme. The panel already reads them: <code>--surface-panel-tint-layer</code> as its fill wash, <code>--surface-accent-glow</code> as its shadow, and the grain / watermark on its <code>::after</code> / <code>::before</code>. <b>Parchment</b> is the default Praxis look.</p>
+    <div class="mock-row">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-surface="parchment"></div>
+        <figcaption><b>Parchment.</b> warm wash, paper grain, corner hexagon &mdash; the default</figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-surface="aurora-glass"></div>
+        <figcaption><b>Aurora Glass.</b> frosted translucent fill, ambient canvas, accent halo</figcaption>
+      </figure>
+    </div>
+    <div class="mock-row mock-row-3">
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-surface="graphite"></div>
+        <figcaption><b>Graphite.</b> brushed-metal micro-texture, bevel, triangular lattice</figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="light" data-px-surface="blueprint"></div>
+        <figcaption><b>Blueprint.</b> accent-tinted drafting grid, clean fill</figcaption>
+      </figure>
+      <figure class="mock-fig">
+        <div class="mock-window" data-px-mode="dark" data-px-surface="noir"></div>
+        <figcaption><b>Noir.</b> heavy film grain, hard vignette &mdash; dark themes only</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="section reveal">
+    <p class="eyebrow">Build</p>
+    <h2>What it would take</h2>
+    <ul class="notes">
+      <li>A new attribute axis on the shell root &mdash; <code>data-sidebar-mode</code> (<code>match</code> / <code>light</code> / <code>dark</code>) and <code>data-sidebar-surface</code> (<code>flush</code> / <code>raised</code> / <code>tint</code>) &mdash; sitting alongside the <code>data-mode</code> and <code>data-accent</code> axes already documented at the top of <code>theme.css</code>.</li>
+      <li><code>.pane-sidebar</code> already paints its background from a single token, so a scoped token override on that one pane is additive &mdash; no component rules change and the blast radius stays one selector wide.</li>
+      <li>One control in <em>Settings &rarr; Themes</em>: a &ldquo;Left panel&rdquo; segmented &mdash; Match app / Always dark / Always light / Accent tint &mdash; persisted in <code>settings.appearance</code> and pushed live, the same path <code>showBrandArtwork</code> already rides.</li>
+      <li>The Themes gallery preview card gains a second swatch, so a packaged theme can ship its own panel treatment.</li>
+    </ul>
+  </section>
+
+  <p class="foot">Mockups reconstruct <code>renderer/src/app/Sidebar.tsx</code> with the token ramps from <code>renderer/src/theme.css</code> and the pack values from <code>renderer/src/surfaces.css</code> / <code>settings/surfacePacks.ts</code>. Grain and watermark motifs are approximated with inline SVG in place of the shipped WebP tiles. Not screenshots &mdash; a faithful CSS rebuild, so hues, spacing, and material track the app.</p>
+</div>
+
+<template id="tpl-window">
+  <div class="mock-inner">
+    <div class="mock-chrome"><span class="mock-dot"></span><span class="mock-dot"></span><span class="mock-dot"></span></div>
+    <div class="mock-body"></div>
+  </div>
+</template>
+
+<script>
+  (function () {
+    document.documentElement.dataset.accent = "violet";
+
+    var I = {
+      organization: '<path d="M5 21V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v16"/><path d="M13 21v-8a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v8"/><path d="M3 21h18"/><path d="M8 8h2M8 12h2M8 16h2"/>',
+      chevron: '<path d="M6 9l6 6 6-6"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      sliders: '<path d="M4 8h10M18 8h2M4 16h6M14 16h6M13 6v4M9 14v4"/>',
+      search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+      columns: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16"/>',
+      robot: '<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M8 4h8M9 13v2M15 13v2M2 13v3M22 13v3"/>',
+      folderOpen: '<path d="M4 20h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-8L10 5H4a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1z"/><path d="M3 11h18"/>',
+      branch: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5A6 6 0 0 1 12 17H8.5"/>',
+      link: '<path d="M10 14a4 4 0 0 0 6 .5l3-3A4 4 0 0 0 13 6l-1 1"/><path d="M14 10a4 4 0 0 0-6-.5l-3 3A4 4 0 0 0 11 18l1-1"/>',
+      home: '<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>',
+      rocket: '<path d="M12 3c3 2.5 4.5 6 4.5 10L14 16h-4l-2.5-3C7.5 9 9 5.5 12 3z"/><path d="M9 17l-2 4M15 17l2 4"/><circle cx="12" cy="10" r="1.2"/>',
+      ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4z"/><path d="M14 7v12"/>',
+      plug: '<path d="M9 3v6M15 3v6"/><path d="M7 9h10v2a5 5 0 0 1-10 0z"/><path d="M12 16v5"/>',
+      zap: '<path d="M13 3L5 13h6l-1 8 8-11h-6z"/>',
+      tools: '<path d="M14 7a4 4 0 0 1 5.5 5.5l-8 8-4-4 8-8z"/><path d="M13 8l-3-3"/><path d="M6 15l-2 5 5-2"/>'
+    };
+
+    function svg(name, size) {
+      return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size +
+        '" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        I[name] + '</svg>';
+    }
+
+    function sidebar() {
+      return '' +
+      '<aside class="px-sidebar">' +
+        '<div class="px-sb-header">' +
+          '<span class="px-ws">' +
+            '<span class="px-ws-mark">' + svg('organization', 13) + '</span>' +
+            '<span class="px-ws-name">All projects</span>' +
+            svg('chevron', 13) +
+          '</span>' +
+          '<span class="px-hbtn">' + svg('plus', 14) + '</span>' +
+          '<span class="px-hbtn">' + svg('sliders', 14) + '</span>' +
+          '<span class="px-hbtn">' + svg('search', 14) + '</span>' +
+        '</div>' +
+        '<div class="px-seg">' +
+          '<span class="px-seg-btn is-active">' + svg('columns', 13) + 'Classic</span>' +
+          '<span class="px-seg-btn">' + svg('robot', 13) + 'Work</span>' +
+        '</div>' +
+        '<div class="px-scroll">' +
+          '<div class="px-sec">' +
+            '<span class="px-sec-toggle"><span class="px-tsi open">' + svg('folderOpen', 14) + '</span><span>Projects</span><span class="px-meta">1</span></span>' +
+            '<span class="px-sec-add">' + svg('plus', 13) + '</span>' +
+          '</div>' +
+          '<div class="px-tree">' +
+            '<div class="px-tree-parent">' +
+              '<span class="px-twisty">' + svg('chevron', 12) + '</span>' +
+              '<span class="px-tree-content">' +
+                '<span class="px-tree-icon px-proj">' + svg('folderOpen', 15) + '</span>' +
+                '<span class="px-stack"><span class="px-label">Praxis</span><span class="px-sub">PRX &middot; app</span></span>' +
+                '<span class="px-meta">2</span>' +
+              '</span>' +
+            '</div>' +
+            '<div class="px-tree-children">' +
+              '<span class="px-subsec"><span class="px-tsi open">' + svg('columns', 13) + '</span><span>Boards</span><span class="px-meta">2</span></span>' +
+              '<span class="px-row px-board-row is-active"><span class="px-tree-icon">' + svg('columns', 14) + '</span><span class="px-label">Sprint Board</span><span class="px-badge">Default</span></span>' +
+              '<span class="px-row px-board-row"><span class="px-tree-icon px-linked">' + svg('link', 14) + '</span><span class="px-label">Roadmap</span><span class="px-badge">Linked</span></span>' +
+              '<span class="px-subsec"><span class="px-tsi open">' + svg('branch', 13) + '</span><span>Repository</span><span class="px-meta">1</span></span>' +
+              '<span class="px-row px-git-row"><span class="px-tree-icon">' + svg('branch', 14) + '</span><span class="px-label">Graph</span><span class="px-badge">Git</span></span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="px-sec"><span class="px-sec-toggle"><span class="px-tsi open">' + svg('columns', 14) + '</span><span>Boards</span><span class="px-meta">2</span></span></div>' +
+          '<div class="px-ext">' +
+            '<span class="px-row"><span class="px-tree-icon">' + svg('columns', 14) + '</span><span class="px-label">Design System</span><span class="px-dot"></span></span>' +
+            '<span class="px-row"><span class="px-tree-icon">' + svg('columns', 14) + '</span><span class="px-label">Bugs</span><span class="px-dot warn"></span></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="px-footer">' +
+          '<span class="px-foot-label"><span>Praxis</span>' + svg('tools', 14) + '</span>' +
+          '<span class="px-feat">' + svg('home', 15) + '<span class="px-feat-label">Overview</span></span>' +
+          '<span class="px-feat">' + svg('rocket', 15) + '<span class="px-feat-label">Epics</span></span>' +
+          '<span class="px-feat is-active">' + svg('robot', 15) + '<span class="px-feat-label">Sessions</span><span class="px-feat-count">3</span></span>' +
+          '<span class="px-feat">' + svg('ticket', 15) + '<span class="px-feat-label">Issues</span><span class="px-feat-count">12</span></span>' +
+          '<span class="px-feat">' + svg('plug', 15) + '<span class="px-feat-label">Connections</span></span>' +
+          '<span class="px-feat">' + svg('zap', 15) + '<span class="px-feat-label">Agents</span></span>' +
+        '</div>' +
+      '</aside>';
+    }
+
+    function editor() {
+      return '' +
+      '<div class="px-editor">' +
+        '<div class="px-ed-bar"><span class="px-ed-crumb">Sprint Board</span><span class="px-ed-crumb dim">/ In progress</span></div>' +
+        '<div class="px-ed-cols">' +
+          '<div class="px-col"><div class="px-col-head">To do</div><div class="px-card"></div><div class="px-card short"></div></div>' +
+          '<div class="px-col"><div class="px-col-head">In progress</div><div class="px-card tall"></div><div class="px-card"></div></div>' +
+          '<div class="px-col"><div class="px-col-head">Done</div><div class="px-card short"></div><div class="px-card"></div></div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    var tpl = document.getElementById('tpl-window');
+    document.querySelectorAll('.mock-window').forEach(function (win) {
+      var frag = tpl.content.cloneNode(true);
+      frag.querySelector('.mock-body').innerHTML = sidebar() + editor();
+      win.appendChild(frag);
+    });
+
+    var sw = document.querySelector('.accent-switch');
+    sw.addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-accent]');
+      if (!btn) return;
+      document.documentElement.dataset.accent = btn.dataset.accent;
+      sw.querySelectorAll('button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+    });
+  })();
+</script>
+
+
+</body>
+</html>
