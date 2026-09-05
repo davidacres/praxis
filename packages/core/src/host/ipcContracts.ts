@@ -671,8 +671,19 @@ export interface WorkflowsIpc {
   effectivePolicy(projectId: string): Promise<WorkflowPolicyProfile | undefined>;
 
   // ── Runs (FX-BE-022) ────────────────────────────────────────────────────
-  /** Starts a run of one project workflow against a task; returns the new run's summary. */
-  startRun(projectId: string, workflowId: string, taskTitle: string): Promise<WorkflowRunSummary>;
+  /**
+   * Starts a run of one project workflow against a task; returns the new run's
+   * summary. `issue`, when given, ties the run to a tracker ticket: its
+   * outcome is written back to that ticket as a comment once the run settles
+   * (succeeded, failed, or cancelled) — see `WorkflowRun.issueKey`. Omit for
+   * an ordinary project-scoped run with nothing to write back to.
+   */
+  startRun(
+    projectId: string,
+    workflowId: string,
+    taskTitle: string,
+    issue?: { issueKey: string; connectionId?: string }
+  ): Promise<WorkflowRunSummary>;
   /** Run summaries for a project, newest first. */
   listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
   /** One run's summary, or undefined. */

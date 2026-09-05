@@ -8563,6 +8563,7 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-gates thead th { border-top: none; color: var(--text-tertiary); font-weight: 500; font-size: var(--text-sm); }
 .wf-gates tbody th { text-transform: capitalize; font-weight: 600; }
 .wf-gates-tag { color: var(--text-tertiary); font-size: var(--text-xs); }
+.wf-board-issue-key { color: var(--text-tertiary); font-weight: 400; font-size: var(--text-sm); }
 
 .wf-timeline > summary { cursor: pointer; font-size: var(--text-md); color: var(--text-secondary); }
 .wf-timeline ol { margin: var(--space-2) 0 0; padding-left: var(--space-4); font-size: var(--text-sm); display: flex; flex-direction: column; gap: 3px; }
