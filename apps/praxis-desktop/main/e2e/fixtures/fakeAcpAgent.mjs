@@ -212,7 +212,12 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
         sessionUpdate: 'usage_update',
         used: 74_000,
         size: 100_000,
-        cost: { amount: 0.42, currency: 'USD' }
+        // COST_EUR / COST_BIG let a test build a multi-currency or
+        // over-budget set without needing several different fixtures.
+        cost: {
+          amount: promptText.includes('COST_BIG') ? 9 : 0.42,
+          currency: promptText.includes('COST_EUR') ? 'EUR' : 'USD'
+        }
       }
     });
   }
