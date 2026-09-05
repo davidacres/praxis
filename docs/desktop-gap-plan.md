@@ -50,10 +50,12 @@ alternative instead, which is the bar GitHub's refusals are held to. One repo is
 one board (labels named `status: …` synthesize the columns; a repo with none
 still renders Backlog/Closed). Edits: summary, description, assignee — GitHub's
 issue API has nothing resembling priority/severity/type. Creation gated behind
-`allowIssueCreation`. Full e2e coverage against an in-process mock REST server
-(`github.spec.ts` / `mockGitHubApi.ts`), 6 tests. Folder's own suite (13 tests
-across `folder`/`folderMulti`/`editIssue`/`newIssue.spec.ts`) re-run green before
-and after, confirming the addition is structurally isolated
+`allowIssueCreation`. e2e coverage against an in-process mock REST server
+(`github.spec.ts` / `mockGitHubApi.ts`, 6 tests) plus core unit coverage of
+every folder-style refusal and every error-surfacing path
+(`githubBoardService.test.ts`, 10 tests). Folder's own suite (13 tests across
+`folder`/`folderMulti`/`editIssue`/`newIssue.spec.ts`) re-run green before and
+after, confirming the addition is structurally isolated
 (`getServiceForConnection` switches on `connection.mode`).
 
 #### FX-BE-036 — Prove multi-file and terminal-using agent paths
