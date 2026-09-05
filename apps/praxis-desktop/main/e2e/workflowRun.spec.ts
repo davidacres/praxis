@@ -349,6 +349,160 @@ test('the run monitor reflects an unattended run as the orchestrator drives it',
   fs.rmSync(repo, { recursive: true, force: true });
 });
 
+test('a run started against a ticket writes its outcome back as a comment once it settles', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const seeded = await page.evaluate(async repoPath => {
+    const workspace = (await window.praxis.workspaces.list())[0];
+    const project = await window.praxis.projects.create(
+      {
+        name: 'Ticketed Delivery',
+        key: 'TICK',
+        type: 'software',
+        purpose: '',
+        brief: {},
+        // `storage: 'folder'` is what actually backs tickets with markdown
+        // (and so with a real addComment) — `startingPoint` only says how the
+        // git workspace folder was obtained, a separate axis. Every other
+        // project in this file is `storage: 'app'` (the default) because
+        // those tests only need the git worktree, never touch ticket data.
+        storage: 'folder',
+        startingPoint: 'existing-folder',
+        folderPath: repoPath,
+        workflowStages: [{ id: 'backlog', name: 'Backlog' }, { id: 'done', name: 'Done' }],
+        defaultAiToolMode: 'read-only'
+      },
+      workspace.id
+    );
+    const workflowId = `checks-${project.id}`;
+    const now = new Date().toISOString();
+    await window.praxis.workflows.save(project.id, {
+      schemaVersion: 1,
+      id: workflowId,
+      name: 'Checks only',
+      scope: 'project',
+      projectId: project.id,
+      version: 1,
+      entryNodeId: 'verify',
+      createdAt: now,
+      updatedAt: now,
+      nodes: [
+        {
+          type: 'check', id: 'verify', name: 'Verify', x: 0, y: 0, inputs: [],
+          command: 'git', args: ['--version'], successExitCodes: [0],
+          outputs: [{ id: 'verify-log', kind: 'log', required: true }],
+          satisfiesGate: 'qa'
+        },
+        {
+          type: 'approval', id: 'approve', name: 'Approve', x: 200, y: 0, inputs: ['verify-log'],
+          prompt: 'Ship?', requiredGates: ['qa'], allowBypass: false
+        }
+      ],
+      edges: [{ id: 'e1', from: 'verify', to: 'approve', on: 'success', required: true }]
+    } as never);
+    // The connection this project's own board lives on — read from the
+    // connection record, the way the app itself resolves it, not assumed from
+    // its id shape.
+    const connectionId = (await window.praxis.connection.list()).find(
+      connection => connection.settings.projectId === project.id
+    )?.id;
+    // The board's own id — folder-mode boards don't necessarily reuse
+    // `project.defaultBoardId`, so this is resolved the way the sidebar does,
+    // from `board.list`, not assumed from a shape.
+    const board = (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' })).find(
+      candidate => candidate.connectionId === connectionId
+    );
+    if (!board) throw new Error('Expected the new project to have its own board.');
+    // Folder mode requires a parent Feature/Epic under a Task; a top-level
+    // Feature needs no parent, which is all this test needs a real ticket for.
+    const ticket = await window.praxis.issue.create(
+      { projectKey: project.key, issueType: 'Feature', summary: 'Ship the widget', boardId: board.id },
+      connectionId
+    );
+    localStorage.setItem(
+      `praxis-last-workspace-route:${localStorage.getItem('praxis-active-workspace')}`,
+      JSON.stringify({ projectId: project.id, feature: 'workflows' })
+    );
+    return { projectId: project.id, workflowId, connectionId, ticketKey: ticket.key };
+  }, repo);
+
+  await page.reload();
+  await openRunsTab(page);
+
+  await page.getByLabel('Run task').fill('Ship it');
+  const ticketField = page.getByTestId('wf-runstart-issue');
+  await expect(ticketField).toBeVisible({ timeout: 10000 });
+  await ticketField.fill(seeded.ticketKey);
+  await page.getByRole('button', { name: 'Start' }).click();
+
+  // The run picked up the ticket — the board shows it linked immediately,
+  // before the run has even settled.
+  await expect(page.getByTestId('wf-board-issue-key')).toContainText(seeded.ticketKey);
+  await page.screenshot({ path: 'output/playwright/workflow-run-linked-ticket.png' });
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(runDetail.getByRole('status')).toContainText('completed');
+
+  // Write-back is best-effort and asynchronous (it runs after the settling
+  // transition, not as part of it), so poll rather than asserting immediately.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          async ({ key, connectionId }) => (await window.praxis.issue.get(key, connectionId)).comments?.length ?? 0,
+          { key: seeded.ticketKey, connectionId: seeded.connectionId }
+        ),
+      { timeout: 10000 }
+    )
+    .toBeGreaterThan(0);
+
+  const comments = await page.evaluate(
+    async ({ key, connectionId }) => (await window.praxis.issue.get(key, connectionId)).comments,
+    { key: seeded.ticketKey, connectionId: seeded.connectionId }
+  );
+  expect(comments?.[0]?.body).toContain('Workflow run succeeded');
+  expect(comments?.[0]?.body).toContain('Checks only');
+  expect(comments?.[0]?.body).toContain('Verify: succeeded');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('a write-back that fails is visible in the Output tab, not just the main-process console', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  const seeded = await seedCheckWorkflow(page, repo, { command: 'git', args: ['--version'] });
+  // A ticket that was never created — the IPC itself has no picker to bounce
+  // this off of, so it starts the run, settles normally, and only the
+  // write-back attempt fails. Real-world equivalent: a ticket deleted between
+  // when a run started and when it finished.
+  await page.evaluate(
+    async ({ projectId, workflowId }) =>
+      window.praxis.workflows.startRun(projectId, workflowId, 'Ship it', { issueKey: 'GHOST-404' }),
+    seeded
+  );
+  await page.reload();
+  await openRunsTab(page);
+
+  const runDetail = page.getByRole('region', { name: 'Run detail' });
+  await expect(runDetail.getByRole('status')).toContainText('waiting for a human approval', { timeout: 20000 });
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(runDetail.getByRole('status')).toContainText('completed');
+
+  await page.locator('[aria-label="Toggle panel"]').click();
+  await page.locator('[data-testid="panel-tab-output"]').click();
+  const output = page.locator('[data-testid="output-log"]');
+  await expect(output).toContainText('[workflow]', { timeout: 10000 });
+  await expect(output).toContainText('GHOST-404');
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
 test('a check that outruns its timeout is failed with a stated reason', async () => {
   const repo = createRepository();
   app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });

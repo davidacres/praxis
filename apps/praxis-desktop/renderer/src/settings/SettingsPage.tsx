@@ -4,6 +4,7 @@ import type {
   AiProvider,
   AiProviderStatus,
   AgentRuntimeSnapshot,
+  AgentSessionRecord,
   AppSettings,
   AppSettingsPatch,
   AppearanceLook,
@@ -20,6 +21,15 @@ import {
 import { Icon, type IconName } from '../ui/Icon';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
 import { MODEL_PROVIDERS } from '../ai/modelProviders';
+import {
+  formatCost,
+  formatTokenCount,
+  sessionsWithinDays,
+  summariseSpend,
+  summariseSpendByConnection,
+  summariseSpendByProviderModel,
+  type SpendGroupRow
+} from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
@@ -307,7 +317,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
-        {active === 'ai' && <AiSection settings={settings} update={update} />}
+        {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
         {active === 'agent-runtime' && <AgentRuntimeSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
@@ -899,12 +909,30 @@ const AI_PROVIDERS: AiProviderMeta[] = [
   }
 ];
 
+/**
+ * A group row's meta line: session count, cost per currency (only currencies
+ * that actually reported — never a blended total, per `summariseSpend`), and
+ * tokens if any session in the group reported those instead. A row can show
+ * both when its sessions mix ACP and API providers.
+ */
+function spendGroupMeta(row: SpendGroupRow): string {
+  const parts = [`${row.sessionCount} session${row.sessionCount === 1 ? '' : 's'}`];
+  const cost = row.costByCurrency
+    .map(({ currency, amount }) => formatCost({ amount, currency }))
+    .filter((value): value is string => Boolean(value));
+  if (cost.length > 0) parts.push(cost.join(' + '));
+  if (typeof row.totalTokens === 'number') parts.push(formatTokenCount(row.totalTokens));
+  return parts.join(' · ');
+}
+
 function AiSection({
   settings,
-  update
+  update,
+  connections
 }: {
   settings: AppSettings;
   update: (patch: AppSettingsPatch) => Promise<void>;
+  connections: Connection[];
 }) {
   const category = CATEGORIES.find(c => c.id === 'ai')!;
   const { confirm } = useDialogs();
@@ -915,6 +943,8 @@ function AiSection({
   const [resettingKeys, setResettingKeys] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [managingModels, setManagingModels] = useState(false);
+  const [spendSessions, setSpendSessions] = useState<AgentSessionRecord[]>([]);
+  const [spendRangeDays, setSpendRangeDays] = useState<number | undefined>(undefined);
 
   const reloadStatuses = () => {
     window.praxis.ai
@@ -924,6 +954,39 @@ function AiSection({
   };
 
   useEffect(reloadStatuses, []);
+
+  // Self-contained, like `reloadStatuses` above — the Settings dialog has no
+  // App-level session state threaded into it, so this section fetches and
+  // stays live on its own rather than growing App's already large prop
+  // surface for a section-local concern.
+  useEffect(() => {
+    let cancelled = false;
+    window.praxis.ai
+      .listSessions()
+      .then(sessions => {
+        if (!cancelled) setSpendSessions(sessions);
+      })
+      .catch(() => undefined);
+    const unsubscribeChanged = window.praxis.ai.onSessionChanged(record => {
+      setSpendSessions(current => [record, ...current.filter(session => session.issueKey !== record.issueKey)]);
+    });
+    const unsubscribeDeleted = window.praxis.ai.onSessionDeleted(issueKey => {
+      setSpendSessions(current => current.filter(session => session.issueKey !== issueKey));
+    });
+    return () => {
+      cancelled = true;
+      unsubscribeChanged();
+      unsubscribeDeleted();
+    };
+  }, []);
+
+  const spendRangeSessions = sessionsWithinDays(spendSessions, spendRangeDays);
+  const spendTotals = summariseSpend(spendRangeSessions);
+  const spendByProviderModel = summariseSpendByProviderModel(spendRangeSessions);
+  const spendByConnection = summariseSpendByConnection(spendRangeSessions, connections);
+  const spendReportingCount = spendRangeSessions.filter(
+    session => (session.cost && session.cost.amount > 0) || (session.tokenUsage?.totalTokens ?? 0) > 0
+  ).length;
   useEffect(() => {
     setKeyDraft('');
     setManagingModels(false);
@@ -1240,6 +1303,75 @@ function AiSection({
           onCommit={value => update({ ai: { spendLimit: value } })}
         />
       </FieldRow>
+      <div className="settings-section-block" data-testid="ai-spend-report">
+        <div className="settings-section-subhead">
+          <span>Spend report</span>
+          <div className="chip-row" role="group" aria-label="Spend report time range">
+            {(
+              [
+                { label: 'All time', days: undefined },
+                { label: '30 days', days: 30 },
+                { label: '7 days', days: 7 }
+              ] as const
+            ).map(range => (
+              <button
+                key={range.label}
+                type="button"
+                className={`chip${spendRangeDays === range.days ? ' filter-active' : ''}`}
+                onClick={() => setSpendRangeDays(range.days)}
+                data-testid={`ai-spend-range-${range.days ?? 'all'}`}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {spendRangeSessions.length === 0 ? (
+          <p className="settings-hint">No sessions in this range.</p>
+        ) : (
+          <>
+            <div className="list-row is-static">
+              <div>
+                <div className="list-row-title">Total cost</div>
+                <div className="list-row-meta" data-testid="ai-spend-total-cost">
+                  {spendTotals.byCurrency.length === 0
+                    ? 'No session in this range reported a cost.'
+                    : spendTotals.byCurrency
+                        .map(({ currency, amount }) => formatCost({ amount, currency }))
+                        .filter((value): value is string => Boolean(value))
+                        .join(' + ')}
+                </div>
+              </div>
+            </div>
+            <div className="list-row is-static">
+              <div>
+                <div className="list-row-title">Sessions reporting cost or tokens</div>
+                <div className="list-row-meta">
+                  {spendReportingCount} of {spendRangeSessions.length}
+                </div>
+              </div>
+            </div>
+            <div className="settings-section-subhead"><span>By provider &amp; model</span></div>
+            {spendByProviderModel.map(row => (
+              <div className="list-row is-static" key={row.label} data-testid="ai-spend-provider-row">
+                <div>
+                  <div className="list-row-title">{row.label}</div>
+                  <div className="list-row-meta">{spendGroupMeta(row)}</div>
+                </div>
+              </div>
+            ))}
+            <div className="settings-section-subhead"><span>By connection</span></div>
+            {spendByConnection.map(row => (
+              <div className="list-row is-static" key={row.label} data-testid="ai-spend-connection-row">
+                <div>
+                  <div className="list-row-title">{row.label}</div>
+                  <div className="list-row-meta">{spendGroupMeta(row)}</div>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
       <Toggle
         label="Let the AI use the in-app browser"
         description="Full-tools sessions get browser_navigate / browser_read / browser_click / browser_type against a browser docked in the session view. Each navigation to a new host asks first. Loopback and private-network addresses are always blocked."

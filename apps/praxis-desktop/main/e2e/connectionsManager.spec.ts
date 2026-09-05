@@ -85,7 +85,10 @@ test('the new-connection form renders the per-mode field sets', async () => {
   await expect(window.locator('[data-testid="conn-field-secret-apiKey"]')).toBeVisible();
 
   await modeSelect.selectOption('github');
-  await expect(window.locator('[data-testid="conn-mode-note"]')).toContainText('not implemented');
+  await expect(window.locator('[data-testid="conn-field-owner"]')).toBeVisible();
+  await expect(window.locator('[data-testid="conn-field-repo"]')).toBeVisible();
+  await expect(window.locator('[data-testid="conn-field-secret-pat"]')).toBeVisible();
+  await expect(window.locator('[data-testid="conn-field-allowIssueCreation"]')).toBeVisible();
 });
 
 test('saving a live folder connection auto-tracks its board', async () => {
