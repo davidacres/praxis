@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -55,13 +55,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Repair Electron bundle signature
+      - name: Install and repair Electron bundle
         run: |
           electron_app="node_modules/electron/dist/Electron.app"
+          node node_modules/electron/install.js
           xattr -cr "$electron_app"
           codesign --force --deep --sign - "$electron_app"
           codesign --verify --deep --strict --verbose=2 "$electron_app"
