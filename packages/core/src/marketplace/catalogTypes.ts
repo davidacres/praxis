@@ -58,6 +58,19 @@ export interface AddonManifest {
   minAppVersion?: string;
   author?: string;
   homepage?: string;
+  /**
+   * Optional display hints the per-kind marketplace UI can render *before* the
+   * add-on is installed (the payload isn't downloaded for the browse list). A
+   * `theme` add-on puts its preview colours + mode here so its catalogue card
+   * looks like a real theme card; a `surface-pack` can supply a `preview`
+   * swatch the same way. Unknown keys are ignored.
+   */
+  display?: {
+    /** Preview colour tokens (`canvas`, `panel`, `accent`, …). */
+    preview?: Record<string, string>;
+    /** For a theme: which appearance mode the preview represents. */
+    mode?: 'light' | 'dark';
+  };
 }
 
 /** One installable add-on, resolved from a registry package's latest version. */

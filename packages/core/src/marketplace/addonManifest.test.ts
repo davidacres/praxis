@@ -72,6 +72,30 @@ test('contentVersion and minAppVersion must be semver when present', () => {
   assert.match(validateAddonManifest(base({ minAppVersion: 'latest' })).errors.join(), /minAppVersion/);
 });
 
+test('display hints are validated and normalized when present', () => {
+  const { manifest, errors } = validateAddonManifest(
+    base({
+      display: {
+        preview: { canvas: '#111', accent: '#88c0d0', bogus: 42 },
+        mode: 'dark'
+      }
+    })
+  );
+  assert.deepEqual(errors, []);
+  assert.deepEqual(manifest?.display, { preview: { canvas: '#111', accent: '#88c0d0' }, mode: 'dark' });
+});
+
+test('a malformed display block is a blocking error', () => {
+  assert.match(validateAddonManifest(base({ display: 'nope' })).errors.join(), /display/);
+  assert.match(validateAddonManifest(base({ display: { preview: [] } })).errors.join(), /display\.preview/);
+  assert.match(validateAddonManifest(base({ display: { mode: 'sepia' } })).errors.join(), /display\.mode/);
+});
+
+test('an empty or colourless display block collapses to undefined', () => {
+  assert.equal(validateAddonManifest(base({ display: {} })).manifest?.display, undefined);
+  assert.equal(validateAddonManifest(base({ display: { preview: {} } })).manifest?.display, undefined);
+});
+
 test('absent summary and author are warnings, not errors', () => {
   const { manifest, errors, warnings } = validateAddonManifest({
     schemaVersion: 1,

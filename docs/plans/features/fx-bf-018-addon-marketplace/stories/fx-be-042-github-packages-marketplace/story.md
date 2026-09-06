@@ -76,23 +76,42 @@ update checks.
 
 ### Renderer
 
-- `SettingsPage.tsx` — "Add-ons" category under Integrations & tools.
-  `MarketplaceSection`: config (owner/type, token, advanced endpoints, enable),
-  browse, install/update/remove, per-agent trust toggle, check-for-updates.
+Config is central; browsing is per-kind.
+
+- `SettingsPage.tsx` → **Add-ons** category = marketplace *config only* (owner /
+  type, token, advanced endpoints, enable) plus a status line and installed
+  count. No catalogue or install controls.
+- `settings/marketplaceAddons.ts` — `useKindAddons(kind)` hook: wraps
+  `window.praxis.marketplace.*`, filters catalogue + installed to one kind,
+  exposes `browse / install / update / remove / setTrust / checkForUpdates`
+  with `busy` / `error`, subscribes to `marketplace:changed`.
+- `ThemesGallerySection` — the existing "Marketplace" section also renders real
+  catalogue themes as `ThemePreviewCard`s built from `manifest.display.preview`
+  / `.mode`; installed ones move to the gallery, with a "Installed from the
+  catalogue: … Remove" line.
+- `SurfacesSection` — a "Marketplace" block of compact cards (a colour strip
+  from `display.preview` + Install); installed packs get a Remove on the
+  gallery card.
+- `AgentRuntimeSection` — a "Marketplace" block: installed agents with
+  Trust / Revoke / Remove, catalogue agents with "Install (untrusted)".
 - `themes.ts` / `surfacePacks.ts` — installed marketplace themes/packs get
   their own bucket (`registerMarketplaceThemes` /
   `registerMarketplaceSurfacePacks`), separate from the user's own custom
   entries, so the editors' `registerCustom*` calls and the marketplace's never
   clobber each other. `SurfacePackDefinition.source` gains `'marketplace'`.
 - `main.tsx` — `applyMarketplaceAppearance()` on boot and on every
-  `marketplace:changed`.
+  `marketplace:changed`, then dispatches `praxis-marketplace-appearance` so an
+  open panel re-reads the registered lists.
+- `AddonManifest.display?` (`{ preview?, mode? }`) — optional catalogue-card
+  hints so an uninstalled theme/pack shows a real preview.
 
 ### Add-on package shape
 
 An add-on is an npm package whose `package.json` carries a `praxis` block
 (`{ schemaVersion: 1, kind, id, name, summary?, contentVersion?,
-minAppVersion?, author?, homepage? }`) and whose tarball places a
-kind-specific payload under `package/addon/`:
+minAppVersion?, author?, homepage?, display? }`, where `display` is
+`{ preview?: colour map, mode?: 'light' | 'dark' }` for the catalogue card) and
+whose tarball places a kind-specific payload under `package/addon/`:
 
 | Kind | Payload file |
 | --- | --- |
@@ -103,16 +122,17 @@ kind-specific payload under `package/addon/`:
 
 ## Tests
 
-- `packages/core/src/marketplace/*.test.ts` — 46 unit tests (semver, integrity,
-  manifest validation, registry client with a fake fetch, service with a fake
-  client + in-memory storage: install/verify/pin/tamper-reject/minAppVersion/
-  update/trust/remove).
-- `apps/praxis-desktop/main/e2e/marketplace.spec.ts` +
-  `mockAddonRegistry.ts` — one in-process server for both the REST listing and
-  the npm packument/tarball, building real gzipped tarballs. Browse → install a
-  theme → it appears as a real card in the Themes gallery → remove → the card
-  goes with it. Plus an unconfigured marketplace showing its guidance and a
-  disabled Browse.
+- `packages/core/src/marketplace/*.test.ts` — 49 unit tests (semver, integrity,
+  manifest validation incl. `display`, registry client with a fake fetch,
+  service with a fake client + in-memory storage:
+  install/verify/pin/tamper-reject/minAppVersion/update/trust/remove).
+- `apps/praxis-desktop/main/e2e/marketplace.spec.ts` + `mockAddonRegistry.ts` —
+  one in-process server for both the REST listing and the npm
+  packument/tarball, building real gzipped tarballs. Five tests: Add-ons panel
+  is config-only; Themes panel installs a theme into the gallery and removes
+  it; Surfaces panel installs/removes a pack; Agent Runtime installs an agent
+  untrusted and gates it behind trust; an unconfigured marketplace explains
+  itself in each panel.
 
 ## Open
 

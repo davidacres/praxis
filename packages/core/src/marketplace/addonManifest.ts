@@ -70,6 +70,37 @@ export function validateAddonManifest(value: unknown): AddonManifestValidation {
     }
   }
 
+  let display: AddonManifest['display'];
+  if (value.display !== undefined) {
+    if (!isRecord(value.display)) {
+      errors.push('`display` must be an object when present.');
+    } else {
+      const rawPreview = value.display.preview;
+      const preview: Record<string, string> = {};
+      if (rawPreview !== undefined) {
+        if (!isRecord(rawPreview)) {
+          errors.push('`display.preview` must be a map of colour tokens.');
+        } else {
+          for (const [key, entry] of Object.entries(rawPreview)) {
+            if (typeof entry === 'string') preview[key] = entry;
+          }
+        }
+      }
+      const mode =
+        value.display.mode === 'light' || value.display.mode === 'dark'
+          ? value.display.mode
+          : undefined;
+      if (value.display.mode !== undefined && mode === undefined) {
+        errors.push('`display.mode` must be "light" or "dark".');
+      }
+      display = {
+        ...(Object.keys(preview).length > 0 ? { preview } : {}),
+        ...(mode ? { mode } : {})
+      };
+      if (Object.keys(display).length === 0) display = undefined;
+    }
+  }
+
   if (value.summary === undefined) {
     warnings.push('No `summary` — the catalogue row will have no description.');
   }
@@ -90,7 +121,8 @@ export function validateAddonManifest(value: unknown): AddonManifestValidation {
     contentVersion: value.contentVersion as string | undefined,
     minAppVersion: value.minAppVersion as string | undefined,
     author: value.author as string | undefined,
-    homepage: value.homepage as string | undefined
+    homepage: value.homepage as string | undefined,
+    display
   };
   return { manifest, errors, warnings };
 }

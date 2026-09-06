@@ -36,6 +36,7 @@ import {
   type SpendGroupRow
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
+import { useKindAddons } from './marketplaceAddons';
 import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
@@ -482,6 +483,14 @@ function AgentRuntimeSection() {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
+  const agentAddons = useKindAddons('agent');
+  useEffect(() => {
+    if (agentAddons.ready && agentAddons.catalog === undefined && !agentAddons.busy) {
+      void agentAddons.browse();
+    }
+  }, [agentAddons.ready, agentAddons.catalog, agentAddons.busy, agentAddons.browse]);
+  const installedAgentAddonIds = new Set(agentAddons.installed.map(addon => addon.manifest.id));
+
   const refresh = async () => {
     setBusy(true);
     try {
@@ -551,23 +560,94 @@ function AgentRuntimeSection() {
             ))}
           </>
         )}
+
+        <div data-testid="agent-runtime-marketplace">
+        <h4 className="settings-subsection-title">Marketplace</h4>
+        {agentAddons.error && <div className="error-banner">{agentAddons.error}</div>}
+        {!agentAddons.ready && (
+          <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install agents from GitHub Packages.</p>
+        )}
+        {agentAddons.installed.map(addon => (
+          <div className="settings-field-row" key={addon.manifest.id} data-testid={`agent-marketplace-installed-${addon.manifest.id}`}>
+            <div className="settings-field-label">
+              <strong>{addon.manifest.name}</strong>
+              <div className="settings-field-help">
+                v{addon.version} · {addon.enabled ? 'trusted — runs like a global agent' : 'installed but not trusted — will not run until you allow it'}
+              </div>
+            </div>
+            <div className="settings-field-control settings-inline-controls">
+              <button
+                className="btn btn-quiet"
+                type="button"
+                disabled={agentAddons.busy === `trust:${addon.manifest.id}`}
+                onClick={() => void agentAddons.setTrust(addon.manifest.id, !addon.enabled)}
+              >
+                {addon.enabled ? 'Revoke trust' : 'Trust'}
+              </button>
+              <button
+                className="btn btn-quiet"
+                type="button"
+                disabled={agentAddons.busy === `remove:${addon.manifest.id}`}
+                onClick={() => void agentAddons.remove(addon.manifest.id)}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+        {agentAddons.ready && agentAddons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
+        {(agentAddons.catalog ?? [])
+          .filter(entry => !installedAgentAddonIds.has(entry.manifest.id))
+          .map(entry => (
+            <div className="settings-field-row" key={entry.packageName} data-testid={`agent-marketplace-${entry.manifest.id}`}>
+              <div className="settings-field-label">
+                <strong>{entry.manifest.name}</strong>
+                <div className="settings-field-help">
+                  v{entry.latestVersion}
+                  {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
+                  {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
+                  {entry.incompatible ? ' · needs a newer Praxis' : ''}
+                </div>
+              </div>
+              <div className="settings-field-control">
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={entry.incompatible || agentAddons.busy === `install:${entry.packageName}`}
+                  onClick={() => void agentAddons.install(entry.packageName)}
+                >
+                  Install (untrusted)
+                </button>
+              </div>
+            </div>
+          ))}
+        {agentAddons.ready &&
+          agentAddons.catalog?.filter(entry => !installedAgentAddonIds.has(entry.manifest.id)).length === 0 &&
+          agentAddons.installed.length === 0 && (
+            <div className="placeholder-text">No agents in the catalogue.</div>
+          )}
+        </div>
       </div>
     </section>
   );
 }
 
-const ADDON_KIND_LABELS: Record<AddonKind, string> = {
+export const ADDON_KIND_LABELS: Record<AddonKind, string> = {
   theme: 'Theme',
   'surface-pack': 'Surface pack',
   agent: 'Agent',
   'workflow-template': 'Workflow template'
 };
 
+/**
+ * Central marketplace *configuration* only — the GitHub Packages owner, token,
+ * and endpoints. Browsing and installing add-ons happens in each kind's own
+ * panel (Themes, Surfaces, Agent Runtime), so a user sees the add-ons for a
+ * thing where they already are.
+ */
 function MarketplaceSection() {
   const [status, setStatus] = useState<MarketplaceStatus>();
   const [installed, setInstalled] = useState<InstalledAddon[]>([]);
-  const [updates, setUpdates] = useState<AddonUpdate[]>([]);
-  const [catalog, setCatalog] = useState<CatalogEntry[]>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -580,36 +660,23 @@ function MarketplaceSection() {
   const [registryUrlDraft, setRegistryUrlDraft] = useState('');
   const [tokenDraft, setTokenDraft] = useState('');
 
-  const seedDrafts = (next: MarketplaceStatus) => {
+  const refreshStatus = async () => {
+    const next = await window.praxis.marketplace.getStatus();
+    setStatus(next);
     setOwnerDraft(next.owner);
     setOwnerTypeDraft(next.ownerType);
     setPrefixDraft(next.packageNamePrefix);
     setApiUrlDraft(next.apiBaseUrl);
     setRegistryUrlDraft(next.registryBaseUrl);
-  };
-
-  const refreshStatus = async () => {
-    const next = await window.praxis.marketplace.getStatus();
-    setStatus(next);
-    seedDrafts(next);
     return next;
-  };
-
-  const refreshInstalled = async () => {
-    try {
-      setInstalled(await window.praxis.marketplace.listInstalled());
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
   };
 
   useEffect(() => {
     void refreshStatus().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
-    void refreshInstalled();
-    const off = window.praxis.marketplace.onChanged(() => {
-      void refreshInstalled();
+    void window.praxis.marketplace.listInstalled().then(setInstalled).catch(() => {});
+    return window.praxis.marketplace.onChanged(() => {
+      void window.praxis.marketplace.listInstalled().then(setInstalled).catch(() => {});
     });
-    return off;
   }, []);
 
   const run = async (key: string, task: () => Promise<void>) => {
@@ -649,19 +716,13 @@ function MarketplaceSection() {
       await refreshStatus();
     });
 
-  const browse = () =>
-    run('browse', async () => {
-      setCatalog(await window.praxis.marketplace.listCatalog());
-    });
-
-  const checkUpdates = () =>
-    run('updates', async () => {
-      setUpdates(await window.praxis.marketplace.checkForUpdates());
-    });
-
-  const installedKey = (addon: { manifest: { kind: AddonKind; id: string } }) =>
-    `${addon.manifest.kind}/${addon.manifest.id}`;
-  const installedSet = new Set(installed.map(installedKey));
+  const byKind = new Map<AddonKind, number>();
+  for (const addon of installed) {
+    byKind.set(addon.manifest.kind, (byKind.get(addon.manifest.kind) ?? 0) + 1);
+  }
+  const installedSummary = [...byKind.entries()]
+    .map(([kind, count]) => `${count} ${ADDON_KIND_LABELS[kind].toLowerCase()}${count === 1 ? '' : 's'}`)
+    .join(' · ');
 
   const category = CATEGORIES.find(item => item.id === 'marketplace')!;
 
@@ -777,141 +838,13 @@ function MarketplaceSection() {
         </div>
 
         {error && <div className="error-banner" data-testid="marketplace-error">{error}</div>}
-        <div className="settings-section-description">
+        <div className="settings-section-description" data-testid="marketplace-status">
           {status?.ready
-            ? 'Marketplace is configured and ready.'
-            : 'Set an owner, add a token, and enable the marketplace to browse add-ons.'}
+            ? 'Marketplace is configured and ready. Browse and install add-ons from the Themes, Surfaces, and Agent Runtime panels.'
+            : 'Set an owner, add a token, and enable the marketplace, then browse add-ons from the Themes, Surfaces, and Agent Runtime panels.'}
         </div>
-
-        <h4 className="settings-subsection-title">Installed</h4>
-        {installed.length === 0 && <div className="placeholder-text">No add-ons installed yet.</div>}
-        {installed.map(addon => {
-          const update = updates.find(item => item.kind === addon.manifest.kind && item.id === addon.manifest.id);
-          return (
-            <div className="settings-field-row" key={installedKey(addon)} data-testid={`marketplace-installed-${addon.manifest.id}`}>
-              <div className="settings-field-label">
-                <strong>{addon.manifest.name}</strong>
-                <div className="settings-field-help">
-                  {ADDON_KIND_LABELS[addon.manifest.kind]} · v{addon.version}
-                  {update ? ` · update to v${update.latestVersion}` : ''}
-                  {addon.manifest.kind === 'agent' ? ` · ${addon.enabled ? 'trusted' : 'not trusted'}` : ''}
-                </div>
-              </div>
-              <div className="settings-field-control settings-inline-controls">
-                {addon.manifest.kind === 'agent' && (
-                  <button
-                    className="btn btn-quiet"
-                    type="button"
-                    disabled={busy === installedKey(addon)}
-                    onClick={() =>
-                      void run(installedKey(addon), async () => {
-                        await window.praxis.marketplace.setAgentTrust(addon.manifest.id, !addon.enabled);
-                        await refreshInstalled();
-                      })
-                    }
-                  >
-                    {addon.enabled ? 'Revoke trust' : 'Trust'}
-                  </button>
-                )}
-                {update && (
-                  <button
-                    className="btn"
-                    type="button"
-                    disabled={busy === installedKey(addon)}
-                    onClick={() =>
-                      void run(installedKey(addon), async () => {
-                        await window.praxis.marketplace.update(addon.manifest.kind, addon.manifest.id);
-                        await refreshInstalled();
-                        setUpdates(current => current.filter(item => !(item.kind === addon.manifest.kind && item.id === addon.manifest.id)));
-                      })
-                    }
-                  >
-                    Update
-                  </button>
-                )}
-                <button
-                  className="btn btn-quiet"
-                  type="button"
-                  disabled={busy === installedKey(addon)}
-                  onClick={() =>
-                    void run(installedKey(addon), async () => {
-                      await window.praxis.marketplace.remove(addon.manifest.kind, addon.manifest.id);
-                      await refreshInstalled();
-                    })
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        <div className="settings-field-row">
-          <div className="settings-field-control settings-inline-controls">
-            <button
-              className="btn"
-              type="button"
-              disabled={!status?.ready || busy === 'browse'}
-              onClick={() => void browse()}
-              data-testid="marketplace-browse"
-            >
-              {busy === 'browse' ? 'Loading…' : 'Browse add-ons'}
-            </button>
-            <button
-              className="btn btn-quiet"
-              type="button"
-              disabled={!status?.ready || installed.length === 0 || busy === 'updates'}
-              onClick={() => void checkUpdates()}
-            >
-              {busy === 'updates' ? 'Checking…' : 'Check for updates'}
-            </button>
-          </div>
-        </div>
-
-        {catalog && (
-          <>
-            <h4 className="settings-subsection-title">Available</h4>
-            {catalog.length === 0 && <div className="placeholder-text">The catalogue is empty.</div>}
-            {catalog.map(entry => {
-              const already = installedSet.has(`${entry.manifest.kind}/${entry.manifest.id}`);
-              const key = `catalog:${entry.packageName}`;
-              return (
-                <div className="settings-field-row" key={entry.packageName} data-testid={`marketplace-catalog-${entry.manifest.id}`}>
-                  <div className="settings-field-label">
-                    <strong>{entry.manifest.name}</strong>
-                    <div className="settings-field-help">
-                      {ADDON_KIND_LABELS[entry.manifest.kind]} · v{entry.latestVersion}
-                      {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
-                      {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
-                      {entry.incompatible ? ' · needs a newer Praxis' : ''}
-                    </div>
-                  </div>
-                  <div className="settings-field-control settings-inline-controls">
-                    {already ? (
-                      <span className="settings-field-help">Installed</span>
-                    ) : (
-                      <button
-                        className="btn"
-                        type="button"
-                        disabled={entry.incompatible || busy === key}
-                        onClick={() =>
-                          void run(key, async () => {
-                            await window.praxis.marketplace.install(entry.packageName, {
-                              trustAgent: false
-                            });
-                            await refreshInstalled();
-                          })
-                        }
-                      >
-                        {entry.manifest.kind === 'agent' ? 'Install (untrusted)' : 'Install'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </>
+        {installed.length > 0 && (
+          <div className="settings-section-description">Installed: {installedSummary}.</div>
         )}
       </div>
     </section>
@@ -1944,6 +1877,30 @@ function SidebarModeToggle({
   );
 }
 
+const ADDON_THEME_FALLBACK_PREVIEW: ThemePreviewColors = {
+  canvas: '#1c1c1c', panel: '#242424', raised: '#181818', border: '#3d3d3d',
+  text: '#e4e4e4', muted: '#8a8a8a', accent: '#7c5cff',
+  success: '#3fb950', warning: '#d29922', danger: '#f47067'
+};
+
+/** Builds a gallery-card shape for an uninstalled marketplace theme from its manifest display hints. */
+function addonThemePreview(entry: CatalogEntry): ThemeDefinition {
+  const hint = entry.manifest.display;
+  return {
+    id: entry.manifest.id,
+    name: entry.manifest.name,
+    family: 'Inspired palettes',
+    section: 'Recent',
+    source: 'marketplace',
+    mode: hint?.mode ?? 'dark',
+    description:
+      entry.manifest.summary ??
+      (entry.manifest.author ? `From ${entry.manifest.author}` : 'From your add-on catalogue') +
+        (entry.incompatible ? ' — needs a newer Praxis' : ''),
+    preview: { ...ADDON_THEME_FALLBACK_PREVIEW, ...(hint?.preview ?? {}) } as ThemePreviewColors
+  };
+}
+
 function ThemePreviewCard({
   theme,
   active,
@@ -2932,6 +2889,21 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
   const installedIds = settings.appearance.installedThemeIds ?? [];
   const custom = settings.appearance.customThemes ?? [];
 
+  // The add-on marketplace, scoped to themes. Auto-browses once configured so
+  // the Marketplace section fills in without an extra click.
+  const themeAddons = useKindAddons('theme');
+  useEffect(() => {
+    if (themeAddons.ready && themeAddons.catalog === undefined && !themeAddons.busy) {
+      void themeAddons.browse();
+    }
+  }, [themeAddons.ready, themeAddons.catalog, themeAddons.busy, themeAddons.browse]);
+  useEffect(() => {
+    const bump = () => refreshCustomThemes(value => value + 1);
+    window.addEventListener('praxis-marketplace-appearance', bump);
+    return () => window.removeEventListener('praxis-marketplace-appearance', bump);
+  }, []);
+  const installedAddonThemeIds = new Set(themeAddons.installed.map(addon => addon.manifest.id));
+
   useEffect(() => {
     registerCustomThemes(custom);
     refreshCustomThemes(value => value + 1);
@@ -3039,7 +3011,7 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
         <span>{visible.length} themes</span>
       </div>
       {(['Recent', 'Staff picks'] as const).map(section => {
-        const sectionThemes = visible.filter(theme => theme.section === section && (!theme.source || installedIds.includes(theme.id)));
+        const sectionThemes = visible.filter(theme => theme.section === section && (!theme.source || installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id)));
         if (sectionThemes.length === 0) return null;
         return (
           <section className="theme-gallery-section" key={section}>
@@ -3056,23 +3028,103 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
           </section>
         );
       })}
-      {visible.some(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)) && (
-        <section className="theme-gallery-section theme-marketplace-section">
-          <div className="theme-marketplace-heading">
-            <div><h4>Marketplace</h4><p>Install community-curated palettes into this workspace.</p></div>
-            <span className="theme-marketplace-count">{visible.filter(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)).length} available</span>
-          </div>
-          <div className="theme-gallery-grid">
-            {visible.filter(theme => theme.source === 'marketplace' && !installedIds.includes(theme.id)).map(theme => (
-              <ThemePreviewCard key={theme.id} theme={theme} active={false} installed={false} onSelect={() => undefined}
-                onInstall={() => void update({ appearance: { installedThemeIds: [...installedIds, theme.id], themeId: theme.id, themeMode: theme.mode } }).then(() => {
-                  setSelectedTheme(theme.id);
-                  applyThemePreference(theme.id, theme.mode);
-                })} />
-            ))}
-          </div>
-        </section>
-      )}
+      {(() => {
+        const bundled = visible.filter(
+          theme =>
+            theme.source === 'marketplace' &&
+            !installedIds.includes(theme.id) &&
+            !installedAddonThemeIds.has(theme.id)
+        );
+        const needle = query.trim().toLowerCase();
+        const fromCatalogue = (themeAddons.catalog ?? []).filter(
+          entry =>
+            !installedAddonThemeIds.has(entry.manifest.id) &&
+            (!needle ||
+              `${entry.manifest.name} ${entry.manifest.summary ?? ''} ${entry.manifest.author ?? ''}`
+                .toLowerCase()
+                .includes(needle))
+        );
+        const total = bundled.length + fromCatalogue.length;
+        if (total === 0 && themeAddons.ready && themeAddons.catalog !== undefined && bundled.length === 0) {
+          return null;
+        }
+        return (
+          <section className="theme-gallery-section theme-marketplace-section" data-testid="theme-marketplace">
+            <div className="theme-marketplace-heading">
+              <div>
+                <h4>Marketplace</h4>
+                <p>Install curated and community palettes into this workspace.</p>
+              </div>
+              {total > 0 && <span className="theme-marketplace-count">{total} available</span>}
+            </div>
+            {themeAddons.error && <div className="error-banner">{themeAddons.error}</div>}
+            {!themeAddons.ready && (
+              <p className="settings-field-help">
+                Set up the add-on catalogue in Settings › Add-ons to install themes from GitHub Packages.
+              </p>
+            )}
+            {themeAddons.ready && themeAddons.catalog === undefined && (
+              <p className="settings-field-help">Loading the catalogue…</p>
+            )}
+            <div className="theme-gallery-grid">
+              {bundled.map(theme => (
+                <ThemePreviewCard
+                  key={theme.id}
+                  theme={theme}
+                  active={false}
+                  installed={false}
+                  onSelect={() => undefined}
+                  onInstall={() =>
+                    void update({
+                      appearance: {
+                        installedThemeIds: [...installedIds, theme.id],
+                        themeId: theme.id,
+                        themeMode: theme.mode
+                      }
+                    }).then(() => {
+                      setSelectedTheme(theme.id);
+                      applyThemePreference(theme.id, theme.mode);
+                    })
+                  }
+                />
+              ))}
+              {fromCatalogue.map(entry => (
+                <ThemePreviewCard
+                  key={entry.packageName}
+                  theme={addonThemePreview(entry)}
+                  active={false}
+                  installed={false}
+                  onSelect={() => undefined}
+                  onInstall={
+                    entry.incompatible
+                      ? undefined
+                      : () => void themeAddons.install(entry.packageName)
+                  }
+                />
+              ))}
+            </div>
+            {themeAddons.installed.length > 0 && (
+              <p className="settings-field-help theme-marketplace-installed" data-testid="theme-marketplace-installed">
+                Installed from the catalogue:{' '}
+                {themeAddons.installed.map((addon, index) => (
+                  <span key={addon.manifest.id}>
+                    {index > 0 && ' · '}
+                    {addon.manifest.name}{' '}
+                    <button
+                      type="button"
+                      className="linklike"
+                      disabled={themeAddons.busy === `remove:${addon.manifest.id}`}
+                      onClick={() => void themeAddons.remove(addon.manifest.id)}
+                    >
+                      Remove
+                    </button>
+                  </span>
+                ))}
+              </p>
+            )}
+          </section>
+        );
+      })()}
       {visible.length === 0 && <div className="placeholder-text">No themes match “{query}”.</div>}
     </>
   );
@@ -3115,12 +3167,27 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
   const activeSurfacePack = allSurfacePacks().find(pack => pack.id === surfaceId);
   const [editingSurface, setEditingSurface] = useState<CustomSurfacePack>();
   const [vibrancySupported, setVibrancySupported] = useState(false);
+  const [, bumpPacks] = useState(0);
   useEffect(() => {
     void window.praxis.window.supportsVibrancy?.().then(setVibrancySupported).catch(() => setVibrancySupported(false));
   }, []);
   useEffect(() => {
     registerCustomSurfacePacks(customSurfacePacks);
   }, [customSurfacePacks]);
+
+  // The add-on marketplace, scoped to surface packs.
+  const packAddons = useKindAddons('surface-pack');
+  useEffect(() => {
+    if (packAddons.ready && packAddons.catalog === undefined && !packAddons.busy) {
+      void packAddons.browse();
+    }
+  }, [packAddons.ready, packAddons.catalog, packAddons.busy, packAddons.browse]);
+  useEffect(() => {
+    const bump = () => bumpPacks(value => value + 1);
+    window.addEventListener('praxis-marketplace-appearance', bump);
+    return () => window.removeEventListener('praxis-marketplace-appearance', bump);
+  }, []);
+  const installedAddonPackIds = new Set(packAddons.installed.map(addon => addon.manifest.id));
 
   const persistSurfacePacks = (packs: CustomSurfacePack[], nextActiveId?: string) => {
     registerCustomSurfacePacks(packs);
@@ -3171,6 +3238,15 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
                   onClick={() => setEditingSurface(customSurfacePacks.find(record => record.id === pack.id))}
                 >Edit</button>
               )}
+              {pack.source === 'marketplace' && installedAddonPackIds.has(pack.id) && (
+                <button
+                  type="button"
+                  className="surface-pack-edit"
+                  aria-label={`Remove ${pack.name}`}
+                  data-testid={`surface-remove-${pack.id}`}
+                  onClick={() => void packAddons.remove(pack.id)}
+                >Remove</button>
+              )}
             </div>
           ))}
         </div>
@@ -3180,6 +3256,57 @@ function SurfacesSection({ settings, update }: { settings: AppSettings; update: 
           data-testid="surface-new"
           onClick={() => setEditingSurface(newCustomSurface())}
         >+ New custom surface</button>
+        <div className="theme-marketplace-heading" data-testid="surface-marketplace">
+          <div>
+            <h4>Marketplace</h4>
+            <p>Install material packs from your add-on catalogue.</p>
+          </div>
+          {(packAddons.catalog?.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length ?? 0) > 0 && (
+            <span className="theme-marketplace-count">
+              {packAddons.catalog!.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length} available
+            </span>
+          )}
+        </div>
+        {packAddons.error && <div className="error-banner">{packAddons.error}</div>}
+        {!packAddons.ready && (
+          <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install surface packs.</p>
+        )}
+        {packAddons.ready && packAddons.catalog === undefined && <p className="settings-field-help">Loading the catalogue…</p>}
+        {packAddons.ready && packAddons.catalog?.filter(entry => !installedAddonPackIds.has(entry.manifest.id)).length === 0 && (
+          <p className="settings-field-help">No new surface packs in the catalogue.</p>
+        )}
+        <div className="surface-marketplace-grid">
+          {(packAddons.catalog ?? [])
+            .filter(entry => !installedAddonPackIds.has(entry.manifest.id))
+            .map(entry => (
+              <div className="surface-marketplace-card" key={entry.packageName} data-testid={`surface-marketplace-${entry.manifest.id}`}>
+                {entry.manifest.display?.preview && (
+                  <span className="surface-marketplace-swatch" aria-hidden="true">
+                    {['canvas', 'panel', 'accent', 'text'].map(token => (
+                      <i key={token} style={{ background: entry.manifest.display!.preview![token] ?? 'transparent' }} />
+                    ))}
+                  </span>
+                )}
+                <span className="surface-marketplace-meta">
+                  <strong>{entry.manifest.name}</strong>
+                  <small>
+                    v{entry.latestVersion}
+                    {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
+                    {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
+                    {entry.incompatible ? ' · needs a newer Praxis' : ''}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={entry.incompatible || packAddons.busy === `install:${entry.packageName}`}
+                  onClick={() => void packAddons.install(entry.packageName)}
+                >
+                  Install
+                </button>
+              </div>
+            ))}
+        </div>
         {editingSurface && (
           <CustomSurfaceEditor
             pack={editingSurface}
