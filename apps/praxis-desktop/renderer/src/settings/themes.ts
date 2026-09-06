@@ -119,19 +119,32 @@ const MARKETPLACE_THEMES: ThemeDefinition[] = [
 
 export const THEMES: ThemeDefinition[] = [...BUILT_IN_THEMES, ...MARKETPLACE_THEMES];
 export const BUILT_IN_THEME_IDS = BUILT_IN_THEMES.map(theme => theme.id);
+const THEME_PREVIEW_FALLBACK = { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' };
+
 let customThemes: ThemeDefinition[] = [];
+// Themes installed from the add-on marketplace. Kept in their own bucket so
+// `registerCustomThemes` (called from the Themes editor with just the user's
+// own drafts) never clears them, and vice versa.
+let installedAddonThemes: ThemeDefinition[] = [];
 
 export function registerCustomThemes(records: AppearanceSettings['customThemes']): void {
-  const fallback = { canvas: '#1c1c1c', panel: '#202020', raised: '#181818', border: '#3d3d3d', text: '#e4e4e4', muted: '#858585', accent: '#7c5cff', success: '#3fb950', warning: '#d29922', danger: '#f47067' };
-  customThemes = records.map(record => ({ ...record, family: 'Praxis' as const, section: 'Recent' as const, source: 'custom' as const, preview: { ...fallback, ...record.preview } as ThemePreviewColors }));
+  customThemes = records.map(record => ({ ...record, family: 'Praxis' as const, section: 'Recent' as const, source: 'custom' as const, preview: { ...THEME_PREVIEW_FALLBACK, ...record.preview } as ThemePreviewColors }));
+}
+
+export function registerMarketplaceThemes(records: AppearanceSettings['customThemes']): void {
+  installedAddonThemes = records.map(record => ({ ...record, family: 'Inspired palettes' as const, section: 'Recent' as const, source: 'marketplace' as const, preview: { ...THEME_PREVIEW_FALLBACK, ...record.preview } as ThemePreviewColors }));
 }
 
 function findTheme(themeId: string): ThemeDefinition | undefined {
-  return THEMES.find(theme => theme.id === themeId) ?? customThemes.find(theme => theme.id === themeId);
+  return (
+    THEMES.find(theme => theme.id === themeId) ??
+    customThemes.find(theme => theme.id === themeId) ??
+    installedAddonThemes.find(theme => theme.id === themeId)
+  );
 }
 
 export function allThemes(): ThemeDefinition[] {
-  return [...THEMES, ...customThemes];
+  return [...THEMES, ...customThemes, ...installedAddonThemes];
 }
 
 export const DEFAULT_THEME_ID = 'praxis-dark';

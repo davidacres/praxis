@@ -30,7 +30,7 @@ export interface SurfacePackDefinition {
   glass: boolean;
   /** Rollout phase the pack first ships in. */
   phase: 1 | 2 | 3;
-  source: 'built-in' | 'custom';
+  source: 'built-in' | 'custom' | 'marketplace';
   /** A built-in pack to inherit `data-surface` styling from (custom packs only). */
   basePackId?: string;
   /**
@@ -191,9 +191,12 @@ function readPatternSpec(value: unknown): SurfacePatternSpec | undefined {
   };
 }
 
-/** Registers the profile's user-created packs so `findSurfacePack` resolves them. */
-export function registerCustomSurfacePacks(records: AppearanceSettings['customSurfacePacks']): void {
-  customPacks = (records ?? []).map(record => {
+/** Coerces persisted pack records into resolved definitions (token whitelist, base-pack inheritance, pattern spec). */
+function coercePacks(
+  records: AppearanceSettings['customSurfacePacks'],
+  source: 'custom' | 'marketplace'
+): SurfacePackDefinition[] {
+  return (records ?? []).map(record => {
     const base = record.basePackId ? BUILT_IN.find(pack => pack.id === record.basePackId) : undefined;
     const tokens = Object.fromEntries(
       Object.entries(record.tokens ?? {}).filter(([key]) => SURFACE_TOKEN_KEYS.includes(key))
@@ -209,7 +212,7 @@ export function registerCustomSurfacePacks(records: AppearanceSettings['customSu
         || tokens['--surface-panel-opacity'] !== undefined
         || tokens['--surface-panel-blur'] !== undefined,
       phase: 2 as const,
-      source: 'custom' as const,
+      source,
       basePackId: record.basePackId,
       tokens,
       pattern,
@@ -218,8 +221,22 @@ export function registerCustomSurfacePacks(records: AppearanceSettings['customSu
   });
 }
 
+// Packs installed from the add-on marketplace — a bucket of their own so the
+// Surfaces editor's `registerCustomSurfacePacks` (user drafts only) and this
+// never overwrite each other.
+let installedAddonPacks: SurfacePackDefinition[] = [];
+
+/** Registers the profile's user-created packs so `findSurfacePack` resolves them. */
+export function registerCustomSurfacePacks(records: AppearanceSettings['customSurfacePacks']): void {
+  customPacks = coercePacks(records, 'custom');
+}
+
+export function registerMarketplaceSurfacePacks(records: AppearanceSettings['customSurfacePacks']): void {
+  installedAddonPacks = coercePacks(records, 'marketplace');
+}
+
 export function allSurfacePacks(): SurfacePackDefinition[] {
-  return [...SURFACE_PACKS, ...customPacks];
+  return [...SURFACE_PACKS, ...customPacks, ...installedAddonPacks];
 }
 
 export function findSurfacePack(id: string): SurfacePackDefinition | undefined {
