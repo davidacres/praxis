@@ -6,6 +6,7 @@ import {
   validateProjectRecord,
   normalizeWorkflowStages,
   discoverPlanFolders,
+  PROJECT_FILE_NAME,
   type AttachProjectFolderInput,
   type AttachProjectFolderResult,
   type CreateProjectInput,
@@ -106,7 +107,7 @@ export class ProjectManager {
     return {
       path: resolved, exists: true, isDirectory: true,
       hasGit: fs.existsSync(path.join(resolved, '.git')),
-      readme, projectFileExists: fs.existsSync(path.join(resolved, 'PROJECT.md')),
+      readme, projectFileExists: fs.existsSync(path.join(resolved, PROJECT_FILE_NAME)),
       manifests, languages, frameworks: [...new Set(frameworks)].sort(), planFiles
     };
   }
@@ -153,7 +154,7 @@ export class ProjectManager {
       return await this.store.create(project);
     } catch (error) {
       if (createdFolder && folder) await fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
-      else if (createdProjectFile && folder) await fs.promises.unlink(path.join(folder, 'PROJECT.md')).catch(() => undefined);
+      else if (createdProjectFile && folder) await fs.promises.unlink(path.join(folder, PROJECT_FILE_NAME)).catch(() => undefined);
       throw error;
     }
   }
@@ -213,7 +214,7 @@ export class ProjectManager {
     if (input.startingPoint === 'new-folder') {
       await fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
     } else if (project.projectFileStatus === 'created') {
-      await fs.promises.unlink(path.join(folder, 'PROJECT.md')).catch(() => undefined);
+      await fs.promises.unlink(path.join(folder, PROJECT_FILE_NAME)).catch(() => undefined);
     }
   }
 
@@ -235,7 +236,7 @@ export class ProjectManager {
       return { project: saved, projectFileStatus: status };
     } catch (error) {
       if (createdFolder) await fs.promises.rm(folder, { recursive: true, force: true }).catch(() => undefined);
-      else if (createdProjectFile) await fs.promises.unlink(path.join(folder, 'PROJECT.md')).catch(() => undefined);
+      else if (createdProjectFile) await fs.promises.unlink(path.join(folder, PROJECT_FILE_NAME)).catch(() => undefined);
       throw error;
     }
   }
@@ -252,7 +253,7 @@ export class ProjectManager {
   }
 
   /**
-   * Regenerates a project's `PROJECT.md` after something it renders changed.
+   * Regenerates a project's `project.praxis.md` after something it renders changed.
    * Safe on a hand-edited file — see `writeProjectSnapshot`.
    */
   public async refreshProjectFile(project: ProjectRecord): Promise<void> {
@@ -302,7 +303,7 @@ const SNAPSHOT_BEGIN = '<!-- praxis:begin — generated from the project. Edit i
 const SNAPSHOT_END = '<!-- praxis:end -->';
 
 /**
- * Writes `PROJECT.md` (FX-BE-047).
+ * Writes `project.praxis.md` (FX-BE-047).
  *
  * The file used to be written once with the `wx` flag and never reconciled,
  * which is how a project could advertise a workflow its board did not have.
@@ -312,7 +313,7 @@ const SNAPSHOT_END = '<!-- praxis:end -->';
  * - **Markers present** — replace only what is between them; anything outside
  *   is the user's and is preserved.
  * - **Markers absent** — leave the file completely alone. A marker-less
- *   `PROJECT.md` is one Praxis did not generate, and rewriting it destroys
+ *   project file is one Praxis did not generate, and rewriting it destroys
  *   content that is not ours to touch.
  *
  * That last rule is not caution for its own sake. An earlier version of this
@@ -323,7 +324,7 @@ const SNAPSHOT_END = '<!-- praxis:end -->';
  * safety property; keep it for anything Praxis did not create.
  */
 async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> {
-  const target = path.join(folder, 'PROJECT.md');
+  const target = path.join(folder, PROJECT_FILE_NAME);
   const generated = renderSnapshot(project);
   let existing: string;
   try {

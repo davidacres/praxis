@@ -137,7 +137,7 @@ export function registerProjectIpc(): void {
         // Folder unreadable / not a plans folder — the record still saved.
       }
     }
-    // PROJECT.md is generated, not frozen (FX-BE-047): regenerate it whenever
+    // project.praxis.md is generated, not frozen (FX-BE-047): regenerate it whenever
     // something it renders changes. Best-effort — the record has already saved.
     if ((patch.workflowStages || patch.purpose !== undefined || patch.brief) && updated.workspaceFolder) {
       try {

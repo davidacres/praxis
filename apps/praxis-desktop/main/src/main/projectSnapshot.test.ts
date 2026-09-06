@@ -8,12 +8,12 @@ import { ProjectManager } from './projectManager';
 import type { ProjectRecord } from '@praxis/core';
 
 /**
- * `PROJECT.md` generation (FX-BE-047).
+ * `project.praxis.md` generation (FX-BE-047).
  *
  * The rule these tests exist to hold: **Praxis rewrites only a file it wrote.**
  * The original implementation "adopted" a marker-less file by rewriting the
  * sections it recognised, and the first full e2e run after that change
- * overwrote this repository's own PROJECT.md with a fixture project's
+ * overwrote this repository's own project.praxis.md with a fixture project's
  * two-stage workflow and an empty purpose. The `wx` flag it replaced was crude,
  * but "never touch an existing file" was a real safety property.
  */
@@ -51,9 +51,9 @@ async function withTempDir(run: (dir: string) => Promise<void>): Promise<void> {
 }
 
 const manager = () => new ProjectManager({} as never);
-const read = (dir: string) => fs.readFile(path.join(dir, 'PROJECT.md'), 'utf8');
+const read = (dir: string) => fs.readFile(path.join(dir, 'project.praxis.md'), 'utf8');
 
-test('a new PROJECT.md is generated inside markers, from the effective workflow', async () => {
+test('a new project.praxis.md is generated inside markers, from the effective workflow', async () => {
   await withTempDir(async dir => {
     await manager().refreshProjectFile(project({ workspaceFolder: dir }));
     const body = await read(dir);
@@ -67,7 +67,7 @@ test('a new PROJECT.md is generated inside markers, from the effective workflow'
 test('regenerating replaces only the marked block; prose outside it survives', async () => {
   await withTempDir(async dir => {
     await manager().refreshProjectFile(project({ workspaceFolder: dir }));
-    await fs.appendFile(path.join(dir, 'PROJECT.md'), '\n## Team notes\n\nKeep this.\n');
+    await fs.appendFile(path.join(dir, 'project.praxis.md'), '\n## Team notes\n\nKeep this.\n');
 
     await manager().refreshProjectFile(
       project({
@@ -88,7 +88,7 @@ test('regenerating replaces only the marked block; prose outside it survives', a
   });
 });
 
-test('a PROJECT.md Praxis did not write is never modified', async () => {
+test('a project.praxis.md Praxis did not write is never modified', async () => {
   await withTempDir(async dir => {
     // Exactly the shape of this repository's own file: no markers, a real
     // purpose, and a workflow that is not the project record's.
@@ -110,7 +110,7 @@ test('a PROJECT.md Praxis did not write is never modified', async () => {
       '- Done',
       ''
     ].join('\n');
-    await fs.writeFile(path.join(dir, 'PROJECT.md'), handWritten, 'utf8');
+    await fs.writeFile(path.join(dir, 'project.praxis.md'), handWritten, 'utf8');
 
     const status = await manager().refreshProjectFile(
       project({ workspaceFolder: dir, purpose: 'Someone else’s purpose.' })

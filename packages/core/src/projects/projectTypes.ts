@@ -1,5 +1,20 @@
 import type { AgentToolMode } from '../ai/agentTypes';
 
+/**
+ * The Praxis project descriptor written into a project's own folder.
+ *
+ * Named under the rule every Praxis file follows (FX-BE-048): a file *tooling*
+ * reads keeps its real extension last and carries `.praxis` as a middle
+ * segment, matching `board.praxis.json` — same folder, same job. A file the
+ * user *opens with Praxis* uses `.praxis` as the extension itself
+ * (`<name>.workspace.praxis`).
+ *
+ * The generic `PROJECT.md` it replaced was a real collision: since FX-BE-047
+ * Praxis only rewrites a file carrying its own markers, so a repository with
+ * its own `PROJECT.md` silently got no Praxis project file at all.
+ */
+export const PROJECT_FILE_NAME = 'project.praxis.md';
+
 export type ProjectType = 'software' | 'product' | 'research' | 'experiment';
 export type ProjectStartingPoint = 'new-folder' | 'existing-folder' | 'app-storage';
 

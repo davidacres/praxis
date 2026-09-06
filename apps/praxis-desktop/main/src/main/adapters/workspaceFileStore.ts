@@ -115,7 +115,8 @@ export class WorkspaceFileStore implements KeyValueStore {
 
   private load(): WorkspaceFile {
     const raw = fs.readFileSync(this.filePath, 'utf8');
-    const parsed = readWorkspaceFile(raw);
+    // Relative folder paths resolve against the file's own directory.
+    const parsed = readWorkspaceFile(raw, path.dirname(path.resolve(this.filePath)));
     return {
       format: PRAXIS_WORKSPACE_FORMAT,
       schemaVersion: CURRENT_WORKSPACE_SCHEMA_VERSION,

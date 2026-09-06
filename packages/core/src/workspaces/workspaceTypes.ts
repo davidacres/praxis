@@ -1,4 +1,5 @@
 import type { Connection, TrackedBoard } from '../types';
+import { resolvePortableFolderPath, toPortableFolderPath } from './workspacePaths';
 import type { ProjectRecord } from '../projects/projectTypes';
 
 export const PRAXIS_WORKSPACE_FORMAT = 'praxis-workspace';
@@ -109,7 +110,16 @@ export interface WorkspaceContents {
   boards?: TrackedBoard[];
 }
 
-export function toWorkspaceFile(workspace: WorkspaceRecord, contents: WorkspaceContents = {}): WorkspaceFile {
+export function toWorkspaceFile(
+  workspace: WorkspaceRecord,
+  contents: WorkspaceContents = {},
+  /**
+   * Directory the file is being written to. Folder paths inside it are stored
+   * relative so the workspace survives being committed and cloned elsewhere
+   * (FX-BE-049); omit it and paths are written exactly as given.
+   */
+  workspaceFileDir?: string
+): WorkspaceFile {
   validateWorkspace(workspace);
   // `storagePath` is where the file lives, which the file itself must not
   // claim: moving or copying it would leave the copy pointing at the original.
@@ -120,8 +130,12 @@ export function toWorkspaceFile(workspace: WorkspaceRecord, contents: WorkspaceC
     createdWithAppVersion: workspace.createdWithAppVersion,
     lastSavedWithAppVersion: workspace.lastSavedWithAppVersion,
     workspace: JSON.parse(JSON.stringify(record)) as WorkspaceRecord,
-    ...(contents.projects ? { projects: JSON.parse(JSON.stringify(contents.projects)) as ProjectRecord[] } : {}),
-    ...(contents.connections ? { connections: stripSecretsFromConnections(contents.connections) } : {}),
+    ...(contents.projects
+      ? { projects: portableProjects(JSON.parse(JSON.stringify(contents.projects)) as ProjectRecord[], workspaceFileDir) }
+      : {}),
+    ...(contents.connections
+      ? { connections: portableConnections(stripSecretsFromConnections(contents.connections), workspaceFileDir) }
+      : {}),
     ...(contents.boards ? { boards: JSON.parse(JSON.stringify(contents.boards)) as TrackedBoard[] } : {})
   };
 }
@@ -143,12 +157,73 @@ export function stripSecretsFromConnections(connections: Connection[]): Connecti
   }));
 }
 
+/**
+ * Rewrites a project's folder for storage, and drops `folderInspection`.
+ *
+ * That field is a cache of *local filesystem facts* — detected languages,
+ * manifests, whether there is a git repo — captured on this machine. Writing it
+ * into a file meant to be shared would hand someone else our snapshot as if it
+ * were theirs, and it carries an absolute path besides. It is re-derived by
+ * `inspectFolder`, so dropping it costs nothing but a refresh.
+ */
+function portableProjects(projects: ProjectRecord[], dir?: string): ProjectRecord[] {
+  return projects.map(project => {
+    const { folderInspection: _cached, ...rest } = project;
+    const next = rest as ProjectRecord;
+    return dir && next.workspaceFolder
+      ? { ...next, workspaceFolder: toPortableFolderPath(next.workspaceFolder, dir) }
+      : next;
+  });
+}
+
+/** Folder connections carry their roots; those travel the same way. */
+function portableConnections(connections: Connection[], dir?: string): Connection[] {
+  if (!dir) return connections;
+  return connections.map(connection => {
+    const roots = connection.settings?.roots;
+    if (!Array.isArray(roots)) return connection;
+    return {
+      ...connection,
+      settings: {
+        ...connection.settings,
+        roots: roots.map(root => (typeof root === 'string' ? toPortableFolderPath(root, dir) : root))
+      }
+    };
+  });
+}
+
+function resolvedProjects(projects: ProjectRecord[], dir?: string): ProjectRecord[] {
+  if (!dir) return projects;
+  return projects.map(project => project.workspaceFolder
+    ? { ...project, workspaceFolder: resolvePortableFolderPath(project.workspaceFolder, dir) }
+    : project);
+}
+
+function resolvedConnections(connections: Connection[], dir?: string): Connection[] {
+  if (!dir) return connections;
+  return connections.map(connection => {
+    const roots = connection.settings?.roots;
+    if (!Array.isArray(roots)) return connection;
+    return {
+      ...connection,
+      settings: {
+        ...connection.settings,
+        roots: roots.map(root => (typeof root === 'string' ? resolvePortableFolderPath(root, dir) : root))
+      }
+    };
+  });
+}
+
 export function parseWorkspaceFile(raw: string): WorkspaceRecord {
   return readWorkspaceFile(raw).workspace;
 }
 
 /** The whole document — the workspace plus everything stored alongside it. */
-export function readWorkspaceFile(raw: string): { workspace: WorkspaceRecord } & WorkspaceContents {
+export function readWorkspaceFile(
+  raw: string,
+  /** Directory the file was read from — relative folder paths resolve against it. */
+  workspaceFileDir?: string
+): { workspace: WorkspaceRecord } & WorkspaceContents {
   let parsed: Partial<WorkspaceFile>;
   try { parsed = JSON.parse(raw) as Partial<WorkspaceFile>; }
   catch { throw new Error('The selected file is not valid JSON.'); }
@@ -164,8 +239,8 @@ export function readWorkspaceFile(raw: string): { workspace: WorkspaceRecord } &
   validateWorkspace(workspace);
   return {
     workspace,
-    ...(Array.isArray(parsed.projects) ? { projects: parsed.projects } : {}),
-    ...(Array.isArray(parsed.connections) ? { connections: parsed.connections } : {}),
+    ...(Array.isArray(parsed.projects) ? { projects: resolvedProjects(parsed.projects, workspaceFileDir) } : {}),
+    ...(Array.isArray(parsed.connections) ? { connections: resolvedConnections(parsed.connections, workspaceFileDir) } : {}),
     ...(Array.isArray(parsed.boards) ? { boards: parsed.boards } : {})
   };
 }
