@@ -20,6 +20,7 @@
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run compile && npx playwright test",
+    "test:workflows": "npm run compile && node --test out/main/workflowCheckProcess.test.js out/main/workflowIssueWriteBack.test.js",
     "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js"
   },
   "dependencies": {

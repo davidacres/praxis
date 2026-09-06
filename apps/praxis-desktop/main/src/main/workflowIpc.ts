@@ -77,15 +77,7 @@ function summarize(run: WorkflowRun): WorkflowRunSummary {
   return summarizeWorkflowRun(run, policyFor(run.projectId));
 }
 
-/**
- * The one path every run mutation in this file must save through — approval,
- * bypass, cancel, manual advance, and startup recovery each persist a run
- * directly, so a per-call-site write-back check is one call site away from
- * being silently forgotten (this already happened once while building the
- * feature: `approveRun` and `bypassGate` saved straight to the store and a
- * settled, ticket-linked run through either one never wrote back). Route
- * every save through here instead of `runStore().save(...)` directly.
- */
+/** Initial/recovered records; live mutations go through the orchestrator chain. */
 async function saveRun(run: WorkflowRun): Promise<WorkflowRun> {
   await runStore().save(run);
   if (isRunSettled(run)) void writeBackToIssue(run);
@@ -93,11 +85,10 @@ async function saveRun(run: WorkflowRun): Promise<WorkflowRun> {
 }
 
 async function withRun(runId: string, apply: (run: WorkflowRun) => WorkflowRun): Promise<WorkflowRunSummary> {
-  const store = runStore();
-  const run = store.get(runId);
+  await getWorkflowOrchestrator().updateRun(runId, apply);
+  const run = runStore().get(runId);
   if (!run) throw new Error(`Run ${runId} was not found.`);
-  const next = await saveRun(apply(run));
-  return summarize(next);
+  return summarize(run);
 }
 
 /**
@@ -112,7 +103,7 @@ export async function recoverWorkflowRunsOnStartup(): Promise<void> {
     if (recovered.interrupted.length > 0) await saveRun(recovered.run);
     // Re-enter the loop so anything still runnable is picked back up. The
     // orchestrator holds no state of its own, so this is all recovery needs.
-    if (!isRunSettled(recovered.run)) void getWorkflowOrchestrator().step(run.runId);
+    if (!isRunSettled(recovered.run) || recovered.run.worktreePath) void getWorkflowOrchestrator().step(run.runId);
   }
 }
 
@@ -367,42 +358,42 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle(
     'workflows:approveRun',
     async (_event, runId: string, actor: string, note?: string): Promise<WorkflowRunSummary> => {
-      const store = runStore();
-      const run = store.get(runId);
-      if (!run) throw new Error(`Run ${runId} was not found.`);
-      const approval = run.definition.nodes.find(node => node.type === 'approval');
-      if (!approval) throw new Error('This workflow has no approval stage.');
+      await withRun(runId, run => {
+        const approval = run.definition.nodes.find(node => node.type === 'approval');
+        if (!approval) throw new Error('This workflow has no approval stage.');
 
-      const result = approveStage(
-        run,
-        approval.id,
-        { actor, at: new Date().toISOString(), ...(note ? { note } : {}) },
-        policyFor(run.projectId)
-      );
-      if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');
-      await saveRun(result.run);
-      return summarize(result.run);
+        const result = approveStage(
+          run,
+          approval.id,
+          { actor, at: new Date().toISOString(), ...(note ? { note } : {}) },
+          policyFor(run.projectId)
+        );
+        if (!result.ok) throw new Error(result.reason ?? 'Approval was refused.');
+        return result.run;
+      });
+      await getWorkflowOrchestrator().step(runId);
+      return summarize(runStore().get(runId)!);
     }
   );
 
   ipcMain.handle(
     'workflows:bypassGate',
     async (_event, runId: string, gate: string, actor: string, reason: string): Promise<WorkflowRunSummary> => {
-      const store = runStore();
-      const run = store.get(runId);
-      if (!run) throw new Error(`Run ${runId} was not found.`);
-      const approval = run.definition.nodes.find(node => node.type === 'approval');
-      if (!approval) throw new Error('This workflow has no approval stage.');
+      await withRun(runId, run => {
+        const approval = run.definition.nodes.find(node => node.type === 'approval');
+        if (!approval) throw new Error('This workflow has no approval stage.');
 
-      const result = bypassWorkflowGate(
-        run,
-        approval.id,
-        { gate: gate as WorkflowGateKind, actor, reason, at: new Date().toISOString() },
-        policyFor(run.projectId)
-      );
-      if (!result.ok) throw new Error(result.reason ?? 'The bypass was refused.');
-      await saveRun(result.run);
-      return summarize(result.run);
+        const result = bypassWorkflowGate(
+          run,
+          approval.id,
+          { gate: gate as WorkflowGateKind, actor, reason, at: new Date().toISOString() },
+          policyFor(run.projectId)
+        );
+        if (!result.ok) throw new Error(result.reason ?? 'The bypass was refused.');
+        return result.run;
+      });
+      await getWorkflowOrchestrator().step(runId);
+      return summarize(runStore().get(runId)!);
     }
   );
 
@@ -416,12 +407,9 @@ export function registerWorkflowIpc(): void {
   });
 
   ipcMain.handle('workflows:cancelRun', async (_event, runId: string, reason?: string): Promise<WorkflowRunSummary> => {
-    return withRun(runId, run =>
-      applyWorkflowRunCommand(run, {
-        kind: 'cancel',
-        at: new Date().toISOString(),
-        ...(reason ? { reason } : {})
-      })
-    );
+    await getWorkflowOrchestrator().cancel(runId, reason);
+    const run = runStore().get(runId);
+    if (!run) throw new Error(`Run ${runId} was not found.`);
+    return summarize(run);
   });
 }

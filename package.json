@@ -11,7 +11,7 @@
   "scripts": {
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
-    "test": "npm run test:core && npm run test:desktop && npm run test:desktop:themes",
+    "test": "npm run test:core && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop && npm run test:desktop:themes",
 
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
@@ -27,6 +27,7 @@
     "test:desktop:themes": "npm run test:e2e --workspace=@praxis/desktop-main -- --project=themes --project=theme-regressions",
     "test:desktop:all": "npm run test:e2e --workspace=@praxis/desktop-main -- --project=functional --project=themes --project=theme-regressions",
     "reset:workspace-data": "node scripts/reset-praxis-workspace-data.mjs",
+    "test:desktop:workflows": "npm run test:workflows --workspace=@praxis/desktop-main",
     "test:desktop:git": "npm run test:git --workspace=@praxis/desktop-main",
     "desktop:dist": "npm run dist --workspace=@praxis/desktop-main",
 

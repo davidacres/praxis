@@ -54,6 +54,7 @@ export async function runWorkflowAgentStage(
   dispatch: StageDispatchContext,
   onSession: (sessionId: string) => void
 ): Promise<StageOutcome> {
+  dispatch.signal?.throwIfAborted();
   const workflowRun = dispatch.run;
   const worktreePath = dispatch.worktreePath;
   if (!worktreePath) {
@@ -78,6 +79,7 @@ export async function runWorkflowAgentStage(
     };
   }
 
+  dispatch.signal?.throwIfAborted();
   const context = buildStageContext(workflowRun, node.id, preflight.binding);
   if (!context) return { status: 'failed', error: `Stage ${node.id} is not part of this run.` };
 
@@ -113,6 +115,7 @@ export async function runWorkflowAgentStage(
         .join('\n\n')}`;
     }
 
+    dispatch.signal?.throwIfAborted();
     if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
       const { runtimePath, model } = resolveCopilotStartOptions(provider);
       await getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
@@ -131,7 +134,9 @@ export async function runWorkflowAgentStage(
       });
     } else {
       const gateway = await resolveConnectionOptions(provider);
+      dispatch.signal?.throwIfAborted();
       if (!gateway.apiKey) {
+        settled.cancel();
         return { status: 'failed', error: `No ${descriptor.label} API key configured for workflow stages.` };
       }
       await getVercelAgentService().startTask(issue, taskDefinition, {
@@ -148,6 +153,9 @@ export async function runWorkflowAgentStage(
     return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
   }
 
+  // Cancellation can arrive while the provider is still starting its task.
+  if (dispatch.signal?.aborted) await abortActiveTask(issueKey);
+
   const record = sessions.getAgentSession(issueKey);
   if (record) {
     onSession(record.sessionId);
@@ -162,7 +170,9 @@ export async function runWorkflowAgentStage(
   }
 
   const finished = await settled.promise;
-  const snapshotRef = node.mutatesWorktree ? await freezeWorktree(worktreePath, context.stageName) : undefined;
+  const snapshotRef = node.mutatesWorktree && !dispatch.signal?.aborted && finished.state === 'completed'
+    ? await freezeWorktree(worktreePath, context.stageName)
+    : undefined;
 
   return stageOutcomeFromSession(node, {
     ...finished,
