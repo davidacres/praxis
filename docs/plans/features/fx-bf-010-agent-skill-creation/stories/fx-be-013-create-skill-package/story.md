@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.988Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-013
 title: Create complete Skill package
@@ -32,3 +36,14 @@ Users can create reusable, discoverable skills with the structure expected by Pr
 ## Close when
 
 A generated skill indexes, displays, and can be activated through the Agent Hub.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.994Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-026
 title: Live updates, timeouts, and end-to-end verification
@@ -49,3 +53,14 @@ each stage.
 
 The built-in Governed delivery workflow runs from task to approval unattended in
 a packaged desktop test, and the monitor stays live throughout.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

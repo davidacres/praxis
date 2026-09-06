@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.996Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-030
 title: States, accessibility, and theme verification
@@ -63,3 +67,14 @@ and snapshots the library, designer, and run monitor — a hardcoded colour or m
 breaks a snapshot. (One representative dark palette rather than the whole gallery; there is no
 per-screen multi-theme harness and building one was out of proportion.) The `.wf-designer` and
 `.wf-runs` grids already carry a `@media (max-width: 1200px)` breakpoint from FX-BE-027.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

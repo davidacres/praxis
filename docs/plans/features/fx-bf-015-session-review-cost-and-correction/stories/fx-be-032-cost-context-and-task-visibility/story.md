@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.997Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-032
 title: Cost, context, and task visibility
@@ -74,3 +78,14 @@ task list stays visible while the conversation scrolls.
 Every session shows the truth about its own cost and context — including the
 truth that a figure isn't known — and the agent's task list is visible without
 scrolling the transcript.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

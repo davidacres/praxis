@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.991Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-022
 title: Run monitor, delivery template, and end-to-end verification
@@ -38,3 +42,14 @@ Users can operate a complete governed delivery pipeline and understand exactly w
 ## Close when
 
 The built-in workflow completes from a project task through approval with every transition and artifact visible and tested.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

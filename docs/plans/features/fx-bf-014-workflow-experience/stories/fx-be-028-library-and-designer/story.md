@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.995Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-028
 title: Workflow Library and Designer
@@ -82,3 +86,14 @@ Reworked so the shell does the heavy lifting:
   so the pane reveals itself. `App.showAux` no longer excludes workflows.
 - `WorkflowDesignerPage` now loads exactly one workflow by id (`workflows.get`) and carries
   a Delete action; it no longer owns template/library state.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

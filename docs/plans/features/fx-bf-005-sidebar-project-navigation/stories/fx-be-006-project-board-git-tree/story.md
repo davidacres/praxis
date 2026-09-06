@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.984Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-006
 title: Sidebar-owned project, board, and Git tree
@@ -57,3 +61,14 @@ Do not rename the underlying Git feature or repository contracts. This story cha
 ## Close when
 
 The sidebar is the authoritative project/board/Git navigation surface and the packaged app demonstrates an unambiguous project → board or project → Git path at desktop and narrow widths.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

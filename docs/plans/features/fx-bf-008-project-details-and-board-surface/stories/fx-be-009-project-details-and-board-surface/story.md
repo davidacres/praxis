@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.986Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-009
 title: Project-details inspector, theme-aware detail panes, per-board plain background, sidebar board removal, no-boards centre state
@@ -71,3 +75,14 @@ Taken from the feature's own close-when list:
 `npm run check-types`, `npm run test:core`, and the desktop e2e suites for
 `projects`, `userWorkspace`, `connectionsManager`, `boardPrefs`, `app`,
 `issueDetail`, and `surfacePacks`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

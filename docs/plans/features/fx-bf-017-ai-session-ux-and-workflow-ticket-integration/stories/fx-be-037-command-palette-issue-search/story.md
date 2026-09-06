@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.999Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-037
 title: Command palette issue search
@@ -42,3 +46,14 @@ this could not be a static index.
 
 `commandPalette.spec.ts` (e2e), plus a UI capture
 `output/playwright/command-palette-issue-search.png`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

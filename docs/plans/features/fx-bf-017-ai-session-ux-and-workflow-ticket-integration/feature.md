@@ -91,3 +91,10 @@ ACP mode/commands chips, the spend report, and the command-palette issue search.
 | FX-BE-039 | Story | Cost and token spend report | Complete |
 | FX-BE-040 | Story | Ticket-triggered workflow runs with outcome write-back | Complete |
 | FX-BE-041 | Story | Wire workflow failures into the Output tab's log bus | Complete |
+
+## Description
+
+
+## Comments
+
+
