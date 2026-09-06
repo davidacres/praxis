@@ -59,6 +59,12 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Repair Electron bundle signature
+        run: |
+          electron_app="node_modules/electron/dist/Electron.app"
+          xattr -cr "$electron_app"
+          codesign --force --deep --sign - "$electron_app"
+          codesign --verify --deep --strict --verbose=2 "$electron_app"
       - name: Build desktop and copy the current renderer
         run: npm run build
       - name: Desktop functional tests
