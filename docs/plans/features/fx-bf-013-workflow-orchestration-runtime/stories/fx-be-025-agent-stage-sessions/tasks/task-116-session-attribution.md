@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-114]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-116: Attribute stage sessions to their workflow run and node
 ## Attribute stage sessions to their workflow run and node
 ## Goal
 Make a stage session traceable from the Sessions view back to the run and node

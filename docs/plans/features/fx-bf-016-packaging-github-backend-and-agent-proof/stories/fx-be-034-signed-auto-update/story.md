@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-034
 title: Signed auto-update
 status: blocked

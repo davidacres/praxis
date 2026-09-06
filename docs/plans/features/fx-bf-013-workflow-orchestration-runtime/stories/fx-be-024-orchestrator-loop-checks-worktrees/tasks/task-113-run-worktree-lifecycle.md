@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-111]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-113: Add the per-run git worktree lifecycle and frozen snapshots
 ## Add the per-run git worktree lifecycle and frozen snapshots
 ## Goal
 Give a run one isolated worktree so mutating stages build on each other and

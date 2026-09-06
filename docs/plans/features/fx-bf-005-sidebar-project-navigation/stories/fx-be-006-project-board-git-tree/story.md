@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-006
 title: Sidebar-owned project, board, and Git tree
 status: complete
@@ -13,6 +14,8 @@ validation:
   - npm run electron:copy-renderer
   - npm run test:e2e --workspace @praxis/desktop-main -- e2e/projects.spec.ts
 ---
+
+# Sidebar-owned project, board, and Git tree
 
 ## Sidebar-owned project, board, and Git tree
 

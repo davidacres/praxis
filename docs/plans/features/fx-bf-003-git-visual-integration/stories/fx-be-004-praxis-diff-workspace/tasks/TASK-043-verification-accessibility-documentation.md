@@ -12,6 +12,8 @@ dependencies: [TASK-039, TASK-040, TASK-041, TASK-042]
 validation: [npm run test --workspace @praxis/core, npm run test:git --workspace @praxis/desktop-main, npm run build --workspace @praxis/desktop-renderer, npm run copy-renderer --workspace @praxis/desktop-main, npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts, git diff --check]
 ---
 
+# TASK-043: Verification, accessibility, and documentation
+
 ## Verification, Accessibility, And Documentation
 
 ## Goal

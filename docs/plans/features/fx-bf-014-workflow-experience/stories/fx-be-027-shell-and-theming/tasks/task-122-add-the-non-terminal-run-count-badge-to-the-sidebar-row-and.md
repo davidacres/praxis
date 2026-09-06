@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BF-013]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
 ---
+
+# TASK-122: Add the non-terminal run count badge to the sidebar row and the workflowView route field.
 ## Add the non-terminal run count badge to the sidebar row and the workflowView route field.
 ## Goal
 See docs/plans/workflow-experience-design.md for the full spec.

@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-104, TASK-105]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-106: Add workflow E2E and delivery documentation
 ## Add workflow E2E and delivery documentation
 ## Goal
 Verify the complete packaged desktop flow and document observable behavior and recovery.

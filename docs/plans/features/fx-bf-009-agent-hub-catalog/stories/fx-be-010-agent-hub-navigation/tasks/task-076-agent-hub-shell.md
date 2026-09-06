@@ -12,6 +12,8 @@ dependencies: []
 validation: [npm run check-types, focused Playwright test]
 ---
 
+# TASK-076: Implement Agent Hub shell and route
+
 ## Goal
 
 Replace the Agents route fallback with a tree/detail `AgentsPage` and accessible loading, empty, and error states.

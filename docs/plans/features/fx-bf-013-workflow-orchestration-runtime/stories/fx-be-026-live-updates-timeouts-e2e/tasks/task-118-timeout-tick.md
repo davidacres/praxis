@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-111]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-118: Add the timeout enforcement tick
 ## Add the timeout enforcement tick
 ## Goal
 A stage that hangs must not hang the run.

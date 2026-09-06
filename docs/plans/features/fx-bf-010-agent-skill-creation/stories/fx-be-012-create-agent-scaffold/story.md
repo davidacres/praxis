@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-012
 title: Create Agent wizard and starter scaffold
 status: complete

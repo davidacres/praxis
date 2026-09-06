@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BF-009, FX-BF-010, FX-BF-011, TASK-092]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-098: Add stage agent preflight and binding
 ## Add stage agent preflight and binding
 ## Goal
 Resolve workflow agent/skill references through Agent Hub discovery, trust, capability, and permission checks.

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-029
 title: Run Monitor
 status: complete

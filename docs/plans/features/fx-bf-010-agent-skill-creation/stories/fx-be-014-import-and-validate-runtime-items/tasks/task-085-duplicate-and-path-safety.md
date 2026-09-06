@@ -12,6 +12,8 @@ dependencies: [TASK-084]
 validation: [npm run test:core]
 ---
 
+# TASK-085: Enforce duplicate and path safety
+
 ## Goal
 
 Prevent silent overwrites, traversal, unsupported transports, missing files, and ambiguous duplicate names.

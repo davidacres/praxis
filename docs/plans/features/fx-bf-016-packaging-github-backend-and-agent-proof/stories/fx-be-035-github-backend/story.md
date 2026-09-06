@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-035
 title: Real GitHub backend
 status: complete

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-036
 title: Prove multi-file and terminal-using agent paths
 status: planned

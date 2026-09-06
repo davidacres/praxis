@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-018]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-095: Implement WorkflowRun persistence
 ## Implement WorkflowRun persistence
 ## Goal
 Store run status, node attempts, transitions, artifacts, approvals, and audit events after every meaningful boundary.

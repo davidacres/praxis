@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-032
 title: Cost, context, and task visibility
 status: complete

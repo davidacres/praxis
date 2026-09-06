@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-015
 title: Runtime lifecycle dashboard
 status: complete

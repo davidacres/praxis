@@ -12,6 +12,8 @@ dependencies: [TASK-080]
 validation: [npm run check-types, focused desktop test]
 ---
 
+# TASK-081: Generate transport starter scaffold
+
 ## Goal
 
 Generate clearly labeled starter implementation files for each supported agent transport.

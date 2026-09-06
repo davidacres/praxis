@@ -12,6 +12,8 @@ dependencies: [TASK-044]
 validation: ["npm run test --workspace @praxis/core", "npm run test:git --workspace @praxis/desktop-main"]
 ---
 
+# TASK-045: Implement Electron repository classification and safe initialization/open actions
+
 ## Implement Electron repository classification and safe initialization/open actions
 
 ## Goal

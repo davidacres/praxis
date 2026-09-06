@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BF-013]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
 ---
+
+# TASK-121: Add wf- classes and kind-accent tokens across every theme block; remove inline styles.
 ## Add wf- classes and kind-accent tokens across every theme block; remove inline styles.
 ## Goal
 See docs/plans/workflow-experience-design.md for the full spec.

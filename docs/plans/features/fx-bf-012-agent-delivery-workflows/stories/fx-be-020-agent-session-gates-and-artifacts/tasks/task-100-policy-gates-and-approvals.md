@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-096, TASK-099]
 validation: [npm run build:core, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-100: Implement policy gates and approvals
 ## Implement policy gates and approvals
 ## Goal
 Run deterministic checks, enforce required review/QA/security gates, and record human approval or optional bypass decisions.

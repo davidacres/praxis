@@ -12,6 +12,8 @@ dependencies: [TASK-054]
 validation: ["npm run core:check-types", "npm run test --workspace @praxis/core"]
 ---
 
+# TASK-055: Deterministic orbital layout solver in core
+
 ## Deterministic orbital layout solver in core
 
 ## Goal

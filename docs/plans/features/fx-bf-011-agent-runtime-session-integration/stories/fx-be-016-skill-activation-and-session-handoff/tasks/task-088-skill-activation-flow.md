@@ -12,6 +12,8 @@ dependencies: [TASK-087]
 validation: [npm run test:core, focused desktop test]
 ---
 
+# TASK-088: Implement skill activation flow
+
 ## Goal
 
 Activate a selected trusted skill using the host’s native, tools, or context capability mode.

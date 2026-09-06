@@ -12,6 +12,8 @@ dependencies: [TASK-079]
 validation: [npm run test:core, npm run check-types]
 ---
 
+# TASK-086: Extend runtime status contracts
+
 ## Goal
 
 Add serializable lifecycle status, errors, capabilities, and scope data to the runtime snapshot.

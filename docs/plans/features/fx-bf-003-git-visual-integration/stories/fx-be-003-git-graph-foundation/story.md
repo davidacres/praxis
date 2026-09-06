@@ -1,3 +1,11 @@
+---
+type: Story
+id: FX-BE-003
+title: Desktop Git graph foundation and editor shell
+status: complete
+feature: FX-BF-003
+---
+
 # FX-BE-003: Desktop Git Graph Foundation And Editor Shell
 
 **Status:** Complete

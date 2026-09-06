@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-023
 title: Designer completion and folder persistence
 status: complete

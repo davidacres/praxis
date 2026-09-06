@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-019
 title: Workflow execution, persistence, and recovery
 status: complete

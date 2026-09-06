@@ -16,6 +16,8 @@ validation:
   - npm run test:e2e --workspace @praxis/desktop-main -- e2e/atlas.spec.ts
 ---
 
+# TASK-059: Atlas navigation integration and vertical-slice verification
+
 ## Atlas navigation integration and vertical-slice verification
 
 ## Goal

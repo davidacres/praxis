@@ -12,6 +12,8 @@ dependencies: [TASK-039]
 validation: [npm run check-types --workspace @praxis/desktop-renderer, apps/praxis-desktop/main/e2e/gitGraph.spec.ts]
 ---
 
+# TASK-041: Graph-native workflows, history, and blame
+
 ## Graph-Native Workflows, History, And Blame
 
 ## Goal

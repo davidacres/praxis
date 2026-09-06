@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BF-009, TASK-094]
 validation: [npm run build:renderer, npm run build:desktop]
 ---
+
+# TASK-101: Add workflow template library
 ## Add workflow template library
 ## Goal
 Expose built-in, global, and project workflow templates with safe selection and explicit scope.

@@ -12,6 +12,8 @@ dependencies: [TASK-080]
 validation: [npm run test:core, focused desktop test]
 ---
 
+# TASK-082: Implement full skill package wizard
+
 ## Goal
 
 Generate `SKILL.md` plus scripts, references, examples, and test starter directories from guided metadata and content.
