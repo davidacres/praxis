@@ -150,3 +150,10 @@ from it rather than frozen beside it.
 | FX-BE-045 | Story | Folder boards read their workflow instead of declaring it | Complete |
 | FX-BE-046 | Story | Editing a project's workflow | Complete |
 | FX-BE-047 | Story | PROJECT.md derived from the effective workflow | Complete |
+
+## Description
+
+
+## Comments
+
+

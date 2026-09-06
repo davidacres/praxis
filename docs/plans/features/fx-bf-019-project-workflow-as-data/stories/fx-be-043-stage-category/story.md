@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T15:11:24.810Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-043
 title: Stage category as a first-class field
@@ -48,3 +52,14 @@ category; the project's own workflow type is the one that does not.
 - `npm run check-types`
 - `npm run test:core` — new cases in `projectService.test.ts` for the migration
   and the validation rules.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

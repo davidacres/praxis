@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T15:11:24.811Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-044
 title: Resolve a freeform status against a declared workflow
@@ -53,3 +57,14 @@ board from having the workflow its project declares.
 - `npm run check-types`
 - `npm run test:core` — a `statusResolver.test.ts` covering the four resolution
   tiers plus the ported legacy cases.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
