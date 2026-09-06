@@ -4402,6 +4402,19 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   gap: var(--space-2);
 }
 
+/* A wrapping cluster of controls (inputs + buttons) inside a settings row —
+   used by the Add-ons section for its owner/token/action groups. */
+.settings-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-inline-controls .input {
+  min-width: 180px;
+}
+
 /* Toggle row (label left, switch right) — matches the screenshot's row rhythm. */
 .settings-toggle-row {
   display: flex;

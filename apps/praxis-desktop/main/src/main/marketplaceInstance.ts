@@ -64,6 +64,10 @@ export function emitMarketplaceChanged(): void {
 }
 
 async function getToken(): Promise<string | undefined> {
+  // Env override first: the OS secret store has no keychain backend in the e2e
+  // sandbox (see AGENTS.md), and CI/headless setups may not either.
+  const fromEnv = process.env.PRAXIS_MARKETPLACE_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
   try {
     return (await getSecretsStore().get(MARKETPLACE_TOKEN_KEY)) || undefined;
   } catch {

@@ -5,9 +5,14 @@ import type {
   AiProviderStatus,
   AgentRuntimeSnapshot,
   AgentSessionRecord,
+  AddonKind,
+  AddonUpdate,
   AppSettings,
   AppSettingsPatch,
   AppearanceLook,
+  CatalogEntry,
+  InstalledAddon,
+  MarketplaceStatus,
   SurfaceMotifSettings,
   BoardsSidebarMode,
   Connection
@@ -44,6 +49,7 @@ export type SettingsCategory =
   | 'overview'
   | 'startup'
   | 'connections'
+  | 'marketplace'
   | 'jira'
   | 'ai'
   | 'agent-runtime'
@@ -103,7 +109,7 @@ const INTEGRATIONS_GROUP: NavGroupDef = {
   id: 'integrations-group',
   label: 'Integrations & tools',
   icon: 'plug',
-  children: ['connections', 'jira', 'terminal', 'performance', 'preview']
+  children: ['connections', 'marketplace', 'jira', 'terminal', 'performance', 'preview']
 };
 
 type NavEntry = { type: 'item'; category: SettingsCategory } | { type: 'group'; group: NavGroupDef };
@@ -206,6 +212,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Board Settings',
     icon: 'columns',
     description: 'Board presentation, brand artwork, and colors used by ticket cards.'
+  },
+  {
+    id: 'marketplace',
+    label: 'Add-ons',
+    icon: 'archive',
+    description: 'Install themes, surface packs, agents, and workflow templates from a GitHub Packages catalogue.'
   }
 ];
 
@@ -316,6 +328,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'connections' && (
           <ConnectionsSection connections={connections} onOpenConnections={onOpenConnections} />
         )}
+        {active === 'marketplace' && <MarketplaceSection />}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
         {active === 'agent-runtime' && <AgentRuntimeSection />}
@@ -536,6 +549,368 @@ function AgentRuntimeSection() {
                 </div>
               </div>
             ))}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const ADDON_KIND_LABELS: Record<AddonKind, string> = {
+  theme: 'Theme',
+  'surface-pack': 'Surface pack',
+  agent: 'Agent',
+  'workflow-template': 'Workflow template'
+};
+
+function MarketplaceSection() {
+  const [status, setStatus] = useState<MarketplaceStatus>();
+  const [installed, setInstalled] = useState<InstalledAddon[]>([]);
+  const [updates, setUpdates] = useState<AddonUpdate[]>([]);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState<string>();
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Local edit buffer for the config form, seeded from status.
+  const [ownerDraft, setOwnerDraft] = useState('');
+  const [ownerTypeDraft, setOwnerTypeDraft] = useState<'user' | 'org'>('user');
+  const [prefixDraft, setPrefixDraft] = useState('');
+  const [apiUrlDraft, setApiUrlDraft] = useState('');
+  const [registryUrlDraft, setRegistryUrlDraft] = useState('');
+  const [tokenDraft, setTokenDraft] = useState('');
+
+  const seedDrafts = (next: MarketplaceStatus) => {
+    setOwnerDraft(next.owner);
+    setOwnerTypeDraft(next.ownerType);
+    setPrefixDraft(next.packageNamePrefix);
+    setApiUrlDraft(next.apiBaseUrl);
+    setRegistryUrlDraft(next.registryBaseUrl);
+  };
+
+  const refreshStatus = async () => {
+    const next = await window.praxis.marketplace.getStatus();
+    setStatus(next);
+    seedDrafts(next);
+    return next;
+  };
+
+  const refreshInstalled = async () => {
+    try {
+      setInstalled(await window.praxis.marketplace.listInstalled());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  useEffect(() => {
+    void refreshStatus().catch(cause => setError(cause instanceof Error ? cause.message : String(cause)));
+    void refreshInstalled();
+    const off = window.praxis.marketplace.onChanged(() => {
+      void refreshInstalled();
+    });
+    return off;
+  }, []);
+
+  const run = async (key: string, task: () => Promise<void>) => {
+    setBusy(key);
+    setError(undefined);
+    try {
+      await task();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  };
+
+  const saveConfig = () =>
+    run('config', async () => {
+      await window.praxis.marketplace.configure({
+        owner: ownerDraft.trim(),
+        ownerType: ownerTypeDraft,
+        packageNamePrefix: prefixDraft.trim() || 'praxis-addon-',
+        apiBaseUrl: apiUrlDraft.trim() || 'https://api.github.com',
+        registryBaseUrl: registryUrlDraft.trim() || 'https://npm.pkg.github.com'
+      });
+      await refreshStatus();
+    });
+
+  const saveToken = () =>
+    run('token', async () => {
+      await window.praxis.marketplace.setToken(tokenDraft.trim() || null);
+      setTokenDraft('');
+      await refreshStatus();
+    });
+
+  const toggleEnabled = (enabled: boolean) =>
+    run('enabled', async () => {
+      await window.praxis.marketplace.configure({ enabled });
+      await refreshStatus();
+    });
+
+  const browse = () =>
+    run('browse', async () => {
+      setCatalog(await window.praxis.marketplace.listCatalog());
+    });
+
+  const checkUpdates = () =>
+    run('updates', async () => {
+      setUpdates(await window.praxis.marketplace.checkForUpdates());
+    });
+
+  const installedKey = (addon: { manifest: { kind: AddonKind; id: string } }) =>
+    `${addon.manifest.kind}/${addon.manifest.id}`;
+  const installedSet = new Set(installed.map(installedKey));
+
+  const category = CATEGORIES.find(item => item.id === 'marketplace')!;
+
+  return (
+    <section data-testid="settings-marketplace">
+      <CategoryHeader category={category} />
+      <div className="settings-list">
+        <FieldRow
+          label="Enable the marketplace"
+          description="When off, nothing is fetched and installed add-ons stay inactive."
+        >
+          <Toggle
+            checked={status?.enabled ?? false}
+            onChange={value => void toggleEnabled(value)}
+            label={status?.enabled ? 'On' : 'Off'}
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="Catalogue owner"
+          description="The GitHub user or organisation that publishes the add-on packages."
+        >
+          <div className="settings-inline-controls">
+            <input
+              className="input"
+              value={ownerDraft}
+              placeholder="e.g. your-org"
+              onChange={event => setOwnerDraft(event.target.value)}
+              data-testid="marketplace-owner"
+            />
+            <select
+              className="input"
+              value={ownerTypeDraft}
+              onChange={event => setOwnerTypeDraft(event.target.value === 'org' ? 'org' : 'user')}
+              data-testid="marketplace-owner-type"
+            >
+              <option value="user">User</option>
+              <option value="org">Organisation</option>
+            </select>
+          </div>
+        </FieldRow>
+
+        <FieldRow
+          label="GitHub token"
+          description={
+            status?.hasToken
+              ? 'A token is stored. Enter a new one to replace it, or clear it below.'
+              : 'A personal access token with `read:packages`. Stored with OS-backed encryption.'
+          }
+        >
+          <div className="settings-inline-controls">
+            <input
+              className="input"
+              type="password"
+              value={tokenDraft}
+              placeholder={status?.hasToken ? '•••••••• (stored)' : 'ghp_…'}
+              onChange={event => setTokenDraft(event.target.value)}
+              data-testid="marketplace-token"
+            />
+            <button
+              className="btn"
+              type="button"
+              disabled={busy === 'token' || tokenDraft.trim().length === 0}
+              onClick={() => void saveToken()}
+            >
+              Save token
+            </button>
+            {status?.hasToken && (
+              <button
+                className="btn btn-quiet"
+                type="button"
+                disabled={busy === 'token'}
+                onClick={() =>
+                  void run('token', async () => {
+                    await window.praxis.marketplace.setToken(null);
+                    await refreshStatus();
+                  })
+                }
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </FieldRow>
+
+        <div className="settings-field-row">
+          <div className="settings-field-label">
+            <button className="btn btn-quiet" type="button" onClick={() => setShowAdvanced(value => !value)}>
+              {showAdvanced ? 'Hide' : 'Show'} advanced endpoints
+            </button>
+          </div>
+        </div>
+        {showAdvanced && (
+          <>
+            <FieldRow label="Package name prefix" description="Only packages whose name starts with this are treated as add-ons.">
+              <input className="input" value={prefixDraft} onChange={event => setPrefixDraft(event.target.value)} />
+            </FieldRow>
+            <FieldRow label="GitHub API base URL" description="Override for GitHub Enterprise Server.">
+              <input className="input" value={apiUrlDraft} onChange={event => setApiUrlDraft(event.target.value)} />
+            </FieldRow>
+            <FieldRow label="npm registry base URL" description="Where packuments and tarballs are fetched from.">
+              <input className="input" value={registryUrlDraft} onChange={event => setRegistryUrlDraft(event.target.value)} />
+            </FieldRow>
+          </>
+        )}
+
+        <div className="settings-field-row">
+          <div className="settings-field-control">
+            <button className="btn" type="button" disabled={busy === 'config'} onClick={() => void saveConfig()} data-testid="marketplace-save">
+              {busy === 'config' ? 'Saving…' : 'Save configuration'}
+            </button>
+          </div>
+        </div>
+
+        {error && <div className="error-banner" data-testid="marketplace-error">{error}</div>}
+        <div className="settings-section-description">
+          {status?.ready
+            ? 'Marketplace is configured and ready.'
+            : 'Set an owner, add a token, and enable the marketplace to browse add-ons.'}
+        </div>
+
+        <h4 className="settings-subsection-title">Installed</h4>
+        {installed.length === 0 && <div className="placeholder-text">No add-ons installed yet.</div>}
+        {installed.map(addon => {
+          const update = updates.find(item => item.kind === addon.manifest.kind && item.id === addon.manifest.id);
+          return (
+            <div className="settings-field-row" key={installedKey(addon)} data-testid={`marketplace-installed-${addon.manifest.id}`}>
+              <div className="settings-field-label">
+                <strong>{addon.manifest.name}</strong>
+                <div className="settings-field-help">
+                  {ADDON_KIND_LABELS[addon.manifest.kind]} · v{addon.version}
+                  {update ? ` · update to v${update.latestVersion}` : ''}
+                  {addon.manifest.kind === 'agent' ? ` · ${addon.enabled ? 'trusted' : 'not trusted'}` : ''}
+                </div>
+              </div>
+              <div className="settings-field-control settings-inline-controls">
+                {addon.manifest.kind === 'agent' && (
+                  <button
+                    className="btn btn-quiet"
+                    type="button"
+                    disabled={busy === installedKey(addon)}
+                    onClick={() =>
+                      void run(installedKey(addon), async () => {
+                        await window.praxis.marketplace.setAgentTrust(addon.manifest.id, !addon.enabled);
+                        await refreshInstalled();
+                      })
+                    }
+                  >
+                    {addon.enabled ? 'Revoke trust' : 'Trust'}
+                  </button>
+                )}
+                {update && (
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={busy === installedKey(addon)}
+                    onClick={() =>
+                      void run(installedKey(addon), async () => {
+                        await window.praxis.marketplace.update(addon.manifest.kind, addon.manifest.id);
+                        await refreshInstalled();
+                        setUpdates(current => current.filter(item => !(item.kind === addon.manifest.kind && item.id === addon.manifest.id)));
+                      })
+                    }
+                  >
+                    Update
+                  </button>
+                )}
+                <button
+                  className="btn btn-quiet"
+                  type="button"
+                  disabled={busy === installedKey(addon)}
+                  onClick={() =>
+                    void run(installedKey(addon), async () => {
+                      await window.praxis.marketplace.remove(addon.manifest.kind, addon.manifest.id);
+                      await refreshInstalled();
+                    })
+                  }
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        <div className="settings-field-row">
+          <div className="settings-field-control settings-inline-controls">
+            <button
+              className="btn"
+              type="button"
+              disabled={!status?.ready || busy === 'browse'}
+              onClick={() => void browse()}
+              data-testid="marketplace-browse"
+            >
+              {busy === 'browse' ? 'Loading…' : 'Browse add-ons'}
+            </button>
+            <button
+              className="btn btn-quiet"
+              type="button"
+              disabled={!status?.ready || installed.length === 0 || busy === 'updates'}
+              onClick={() => void checkUpdates()}
+            >
+              {busy === 'updates' ? 'Checking…' : 'Check for updates'}
+            </button>
+          </div>
+        </div>
+
+        {catalog && (
+          <>
+            <h4 className="settings-subsection-title">Available</h4>
+            {catalog.length === 0 && <div className="placeholder-text">The catalogue is empty.</div>}
+            {catalog.map(entry => {
+              const already = installedSet.has(`${entry.manifest.kind}/${entry.manifest.id}`);
+              const key = `catalog:${entry.packageName}`;
+              return (
+                <div className="settings-field-row" key={entry.packageName} data-testid={`marketplace-catalog-${entry.manifest.id}`}>
+                  <div className="settings-field-label">
+                    <strong>{entry.manifest.name}</strong>
+                    <div className="settings-field-help">
+                      {ADDON_KIND_LABELS[entry.manifest.kind]} · v{entry.latestVersion}
+                      {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
+                      {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
+                      {entry.incompatible ? ' · needs a newer Praxis' : ''}
+                    </div>
+                  </div>
+                  <div className="settings-field-control settings-inline-controls">
+                    {already ? (
+                      <span className="settings-field-help">Installed</span>
+                    ) : (
+                      <button
+                        className="btn"
+                        type="button"
+                        disabled={entry.incompatible || busy === key}
+                        onClick={() =>
+                          void run(key, async () => {
+                            await window.praxis.marketplace.install(entry.packageName, {
+                              trustAgent: false
+                            });
+                            await refreshInstalled();
+                          })
+                        }
+                      >
+                        {entry.manifest.kind === 'agent' ? 'Install (untrusted)' : 'Install'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </>
         )}
       </div>
