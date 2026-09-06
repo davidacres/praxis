@@ -1,3 +1,7 @@
+---
+id: FX-BF-104
+---
+
 # Feature 04: Plan Artifact Generation
 
 **Status:** Proposed

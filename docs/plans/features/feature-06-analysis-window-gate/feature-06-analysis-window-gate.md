@@ -1,3 +1,7 @@
+---
+id: FX-BF-106
+---
+
 # Feature 06: Analysis Window Gate Before AI Assignment
 
 **Status:** Proposed
