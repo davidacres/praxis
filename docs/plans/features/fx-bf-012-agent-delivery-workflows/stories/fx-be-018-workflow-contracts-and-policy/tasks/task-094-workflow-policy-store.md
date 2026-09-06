@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-092, TASK-093]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-094: Add workflow and policy stores
 ## Add workflow and policy stores
 ## Goal
 Persist built-in, global, and project workflow definitions with explicit precedence and no silent shadowing.

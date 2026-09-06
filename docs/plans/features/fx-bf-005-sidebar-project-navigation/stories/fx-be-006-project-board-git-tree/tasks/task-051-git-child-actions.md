@@ -12,6 +12,8 @@ dependencies: [TASK-049]
 validation: ["npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
+# TASK-051: Connect Git child actions to Graph, Changes, and Conflict contexts
+
 ## Connect Git child actions to Graph, Changes, and Conflict contexts
 
 ## Goal

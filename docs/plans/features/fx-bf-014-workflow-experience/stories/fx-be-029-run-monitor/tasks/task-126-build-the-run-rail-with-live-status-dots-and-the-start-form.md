@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-027]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
 ---
+
+# TASK-126: Build the run rail with live status dots and the start form.
 ## Build the run rail with live status dots and the start form.
 ## Goal
 See docs/plans/workflow-experience-design.md for the full spec.

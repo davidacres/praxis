@@ -12,6 +12,8 @@ dependencies: [TASK-038]
 validation: [npm run build --workspace @praxis/desktop-renderer, apps/praxis-desktop/main/output/playwright/praxis-diff-workspace.png]
 ---
 
+# TASK-039: Clean responsive diff workspace
+
 ## Clean Responsive Diff Workspace
 
 ## Goal

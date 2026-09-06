@@ -12,6 +12,8 @@ dependencies: [TASK-038, TASK-039]
 validation: [npm run test:git --workspace @praxis/desktop-main, apps/praxis-desktop/main/e2e/gitGraph.spec.ts]
 ---
 
+# TASK-040: WIP and granular change actions
+
 ## WIP And Granular Change Actions
 
 ## Goal

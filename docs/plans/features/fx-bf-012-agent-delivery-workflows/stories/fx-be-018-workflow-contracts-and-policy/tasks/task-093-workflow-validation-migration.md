@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-092]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-093: Implement workflow validation and migration
 ## Implement workflow validation and migration
 ## Goal
 Normalize versioned workflow payloads and fail closed on cycles, dangling nodes, invalid joins, unsafe permissions, and missing required gates.

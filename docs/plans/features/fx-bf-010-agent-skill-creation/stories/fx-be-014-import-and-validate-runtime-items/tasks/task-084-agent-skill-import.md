@@ -12,6 +12,8 @@ dependencies: [TASK-083]
 validation: [npm run test:core, focused desktop test]
 ---
 
+# TASK-084: Add agent and skill import flow
+
 ## Goal
 
 Import existing manifests and folders into the selected scope with previewed validation results.

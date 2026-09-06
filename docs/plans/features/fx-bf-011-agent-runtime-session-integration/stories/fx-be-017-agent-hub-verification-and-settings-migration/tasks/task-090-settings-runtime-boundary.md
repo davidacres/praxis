@@ -12,6 +12,8 @@ dependencies: [TASK-089]
 validation: [npm run check-types, focused Settings test]
 ---
 
+# TASK-090: Move runtime management to advanced Settings
+
 ## Goal
 
 Retain discovery paths, trust policy, project policy, and diagnostics in Settings while removing duplicate catalog controls.

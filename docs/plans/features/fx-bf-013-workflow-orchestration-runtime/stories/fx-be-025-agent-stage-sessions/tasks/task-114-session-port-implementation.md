@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-020]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-114: Implement WorkflowSessionPort over the agent hosts
 ## Implement WorkflowSessionPort over the agent hosts
 ## Goal
 Turn a stage context plus a resolved binding into a running agent session,

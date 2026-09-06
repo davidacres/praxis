@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-018
 title: Workflow definition, policy, and validation contracts
 status: complete

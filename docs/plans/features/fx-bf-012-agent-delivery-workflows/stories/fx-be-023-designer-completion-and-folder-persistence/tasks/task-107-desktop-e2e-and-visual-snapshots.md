@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-022]
 validation: [npm run test:desktop]
 ---
+
+# TASK-107: Run the full desktop suite and add designer/monitor visual snapshots
 ## Run the full desktop suite and add designer/monitor visual snapshots
 ## Goal
 Confirm the FX-BE-021/022 changes to the sidebar, App routing, preload, and the

@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-097, TASK-100, TASK-102]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]
 ---
+
+# TASK-105: Implement workflow run monitor and controls
 ## Implement workflow run monitor and controls
 ## Goal
 Show stage status, branches, artifacts, evidence, failures, approvals, retry, cancel, and recovery actions.

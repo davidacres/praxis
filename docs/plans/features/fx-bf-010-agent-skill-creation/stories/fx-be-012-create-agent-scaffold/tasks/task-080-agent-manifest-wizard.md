@@ -12,6 +12,8 @@ dependencies: [TASK-079]
 validation: [npm run test:core, focused desktop test]
 ---
 
+# TASK-080: Implement agent manifest wizard
+
 ## Goal
 
 Collect scope, identity, transport, entry, arguments, activation, and optional skills, then produce validated `agent.json`.

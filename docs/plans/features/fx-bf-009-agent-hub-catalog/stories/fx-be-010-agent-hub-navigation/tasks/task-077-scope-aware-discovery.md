@@ -12,6 +12,8 @@ dependencies: [TASK-076]
 validation: [npm run test:core, focused Playwright test]
 ---
 
+# TASK-077: Add scope-aware discovery tree
+
 ## Goal
 
 Expose global user-data items and current-project `.praxis` items as distinct, refreshable groups.

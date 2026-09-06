@@ -12,6 +12,8 @@ dependencies: [TASK-086]
 validation: [npm run test:core, focused desktop test]
 ---
 
+# TASK-087: Add start, stop, and restart controls
+
 ## Goal
 
 Expose safe host lifecycle operations through typed Electron IPC and Agent Hub controls.

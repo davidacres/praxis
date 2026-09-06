@@ -12,6 +12,8 @@ dependencies: [TASK-053, TASK-055]
 validation: ["npm run frontend:build", "npm run electron:check-types"]
 ---
 
+# TASK-056: Atlas scene, LOD tiers, and semantic-zoom camera
+
 ## Atlas scene, LOD tiers, and semantic-zoom camera
 
 ## Goal

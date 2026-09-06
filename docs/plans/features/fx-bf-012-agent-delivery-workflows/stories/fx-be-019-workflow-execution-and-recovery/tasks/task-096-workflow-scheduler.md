@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-095]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-096: Implement workflow scheduler and joins
 ## Implement workflow scheduler and joins
 ## Goal
 Schedule ready nodes, allow safe read-only fan-out, and join required branches deterministically.

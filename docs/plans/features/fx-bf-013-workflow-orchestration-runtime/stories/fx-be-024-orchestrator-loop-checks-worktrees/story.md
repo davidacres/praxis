@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-024
 title: Orchestrator loop, check execution, and run worktrees
 status: complete

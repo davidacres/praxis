@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-016
 title: Skill activation and session handoff
 status: complete

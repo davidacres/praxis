@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-017
 title: Advanced Settings boundary and verification
 status: complete

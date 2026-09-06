@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-019]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-111: Add the WorkflowOrchestrator service and scheduler-driven dispatch
 ## Add the WorkflowOrchestrator service and scheduler-driven dispatch
 ## Goal
 The impure loop around the pure engine: watch a run, dispatch what is ready,

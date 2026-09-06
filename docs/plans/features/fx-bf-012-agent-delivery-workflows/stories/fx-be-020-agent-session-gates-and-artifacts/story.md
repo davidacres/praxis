@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-020
 title: Agent session stages, gates, artifacts, and approvals
 status: complete

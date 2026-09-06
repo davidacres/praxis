@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-101, TASK-093]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]
 ---
+
+# TASK-102: Implement workflow canvas and inspector
 ## Implement workflow canvas and inspector
 ## Goal
 Create project-level visual editing for agent, check, approval, and join nodes using the Task Designer interaction language.

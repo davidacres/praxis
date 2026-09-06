@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-022
 title: Run monitor, delivery template, and end-to-end verification
 status: complete

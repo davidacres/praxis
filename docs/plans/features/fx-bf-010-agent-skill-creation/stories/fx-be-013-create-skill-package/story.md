@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-013
 title: Create complete Skill package
 status: complete

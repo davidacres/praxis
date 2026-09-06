@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-028, FX-BE-029]
 validation: [npm run check-types, npm run build:renderer, npm run test:desktop]
 ---
+
+# TASK-130: Accessibility and focus-order pass.
 ## Accessibility and focus-order pass.
 ## Goal
 See docs/plans/workflow-experience-design.md for the full spec.

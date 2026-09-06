@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-095, TASK-098]
 validation: [npm run build:core, npm run build:desktop, npm run test:core]
 ---
+
+# TASK-099: Attribute sessions and typed artifacts to workflow stages
 ## Attribute sessions and typed artifacts to workflow stages
 ## Goal
 Extend session creation and handoff context with workflow run/node IDs, declared inputs, output artifacts, and concise summaries.

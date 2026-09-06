@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-095, TASK-096]
 validation: [npm run build:core, npm run test:core, npm run build:desktop]
 ---
+
+# TASK-097: Add workflow retry and recovery controls
 ## Add workflow retry and recovery controls
 ## Goal
 Implement bounded timeout, retry, cancellation, and restart recovery behavior in core and Electron main.

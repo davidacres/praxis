@@ -12,6 +12,8 @@ dependencies: [TASK-088]
 validation: [npm run check-types, focused Sessions Playwright test]
 ---
 
+# TASK-089: Add new-session agent selection
+
 ## Goal
 
 Launch the session composer with selected agent and skill context and link work back to Sessions.

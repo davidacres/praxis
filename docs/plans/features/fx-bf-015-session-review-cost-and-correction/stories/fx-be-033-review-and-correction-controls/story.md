@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-033
 title: Review and correction controls
 status: complete

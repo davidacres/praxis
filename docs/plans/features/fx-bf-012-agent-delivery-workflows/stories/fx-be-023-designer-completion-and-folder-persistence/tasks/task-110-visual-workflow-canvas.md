@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-021]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]
 ---
+
+# TASK-110: Add the pan/zoom workflow canvas with draggable nodes and edges
 ## Add the pan/zoom workflow canvas with draggable nodes and edges
 ## Goal
 Give the designer a spatial view: nodes as cards positioned by their stored

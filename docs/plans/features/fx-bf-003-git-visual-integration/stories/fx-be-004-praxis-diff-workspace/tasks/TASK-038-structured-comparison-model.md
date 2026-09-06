@@ -12,6 +12,8 @@ dependencies: [FX-BE-003]
 validation: [npm run test --workspace @praxis/core, npm run test:git --workspace @praxis/desktop-main]
 ---
 
+# TASK-038: Structured comparison and patch model
+
 ## Structured Comparison And Patch Model
 
 ## Goal
