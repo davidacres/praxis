@@ -268,12 +268,20 @@ any one backend, and `FolderService` no longer declares one.
   the record still loads, `normalizeWorkflowStages` infers by position, and the
   workflow is subtly wrong. Two shipped code paths did exactly this
   (`projectManager.create` and the wizard's stage state).
-- **`PROJECT.md` is generated, not frozen.** `writeProjectSnapshot` no longer
-  uses the `wx` flag. A new file gets a `praxis:begin`/`praxis:end` block; a
-  marked file has only that block replaced; a marker-less file is adopted by
-  rewriting just the sections Praxis recognises, leaving all other prose alone.
-  It renders the *effective* workflow, so it cannot advertise a column the
-  board does not have.
+- **`PROJECT.md` is generated, but Praxis rewrites only a file it wrote.**
+  A new file gets a `praxis:begin`/`praxis:end` block; a marked file has only
+  that block replaced; **a marker-less file is left completely alone.** It
+  renders the *effective* workflow, so a generated file cannot advertise a
+  column the board does not have.
+
+  The last rule is not caution for its own sake. `writeProjectSnapshot` used to
+  open with the `wx` flag — crude, but "never touch an existing file" was a
+  real safety property. The first version of FX-BE-047 replaced it with an
+  "adopt a marker-less file by rewriting the sections we recognise" path, and
+  the very next full e2e run overwrote **this repository's own PROJECT.md**
+  with a fixture project's two-stage workflow and an empty purpose.
+  `projectSnapshot.test.ts` (in the main workspace's `test:git` run) now holds
+  the line with a case built from this repo's actual file shape.
 
 ## Add-on marketplace (`packages/core/src/marketplace/`, FX-BF-018)
 
