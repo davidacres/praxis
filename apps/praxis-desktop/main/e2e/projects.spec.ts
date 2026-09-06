@@ -247,9 +247,9 @@ test('a first project is three steps: type, name, review', async () => {
   expect(created?.defaultAiToolMode).toBe('project-only');
 });
 
-test('retains an existing PROJECT.md and supports local board transitions and edits', async () => {
+test('retains an existing project.praxis.md and supports local board transitions and edits', async () => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-existing-'));
-  fs.writeFileSync(path.join(folder, 'PROJECT.md'), '# Existing\n');
+  fs.writeFileSync(path.join(folder, 'project.praxis.md'), '# Existing\n');
   try {
     const result = await app.window.evaluate(async folderPath => {
       const workspaceId = (await window.praxis.workspaces.list())[0].id;
@@ -272,7 +272,7 @@ test('retains an existing PROJECT.md and supports local board transitions and ed
     expect(result.project.projectFileStatus).toBe('retained');
     expect(result.issue?.summary).toBe('Edited slice');
     expect(result.issue?.status).toBe('Done');
-    expect(fs.readFileSync(path.join(folder, 'PROJECT.md'), 'utf8')).toBe('# Existing\n');
+    expect(fs.readFileSync(path.join(folder, 'project.praxis.md'), 'utf8')).toBe('# Existing\n');
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 
@@ -364,11 +364,11 @@ test('rejects prohibited folderless types and new-folder collisions without chan
     expect(errors.folderless).toContain('require');
     expect(errors.collision).toContain('Existing Folder');
     expect(fs.readFileSync(path.join(collision, 'keep.txt'), 'utf8')).toBe('keep');
-    expect(fs.existsSync(path.join(collision, 'PROJECT.md'))).toBe(false);
+    expect(fs.existsSync(path.join(collision, 'project.praxis.md'))).toBe(false);
   } finally { fs.rmSync(parent, { recursive: true, force: true }); }
 });
 
-test('rolls back a newly-created folder and PROJECT.md when project persistence fails', async () => {
+test('rolls back a newly-created folder and project.praxis.md when project persistence fails', async () => {
   const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-project-rollback-'));
   const state: KeyValueStore = { get: () => undefined, update: async () => { throw new Error('simulated persistence failure'); } };
   const manager = new ProjectManager(new ProjectStore(state));
@@ -503,7 +503,7 @@ test('attaches a folder later and enforces one-project ownership for linked boar
     expect(result.attachedBoardConnectionId).toBe(`project:${result.attached.project.id}`);
     expect(result.duplicateError).toContain('already linked');
     expect(result.linkedCountAfterUnlink).toBe(0);
-    expect(fs.existsSync(path.join(folder, 'PROJECT.md'))).toBe(true);
+    expect(fs.existsSync(path.join(folder, 'project.praxis.md'))).toBe(true);
   } finally { fs.rmSync(folder, { recursive: true, force: true }); }
 });
 

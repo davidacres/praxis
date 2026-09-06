@@ -147,3 +147,6 @@
 | FX-BE-045 | Story | Folder boards read their workflow instead of declaring it | Complete | FX-BE-044 |
 | FX-BE-046 | Story | Editing a project's workflow | Complete | FX-BE-045 |
 | FX-BE-047 | Story | PROJECT.md derived from the effective workflow | Complete | FX-BE-046 |
+| FX-BF-020 | Feature | Praxis files are namespaced, and a workspace file is portable | Complete | — |
+| FX-BE-048 | Story | A single naming rule for Praxis files | Complete | FX-BF-020 |
+| FX-BE-049 | Story | Workspace files store in-tree paths relative to themselves | Complete | FX-BF-020 |

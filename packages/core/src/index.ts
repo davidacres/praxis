@@ -55,6 +55,7 @@ export * from './projects/projectService';
 export * from './projects/projectConnection';
 export * from './workspaces/workspaceTypes';
 export * from './workspaces/workspaceStore';
+export * from './workspaces/workspacePaths';
 export * from './workflows/workflowTypes';
 export * from './workflows/workflowValidation';
 export * from './workflows/workflowRun';

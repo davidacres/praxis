@@ -67,7 +67,11 @@ export function registerWorkspaceIpc(): void {
     const projects = getProjectStore().list().filter(project => workspace.projectIds.includes(project.id));
     const connections = getConnectionStore().getConnections().filter(connection => workspace.connectionIds.includes(connection.id));
     const boards = getConnectionStore().getTrackedBoards().filter(board => workspace.connectionIds.includes(board.connectionId));
-    await fs.promises.writeFile(result.filePath, `${JSON.stringify(toWorkspaceFile(workspace, { projects, connections, boards }), null, 2)}\n`, 'utf8');
+    // Folder paths are stored relative to where the file lands, so a committed
+    // workspace opens wherever the tree is cloned (FX-BE-049).
+    const fileDir = path.dirname(path.resolve(result.filePath));
+    const document = toWorkspaceFile(workspace, { projects, connections, boards }, fileDir);
+    await fs.promises.writeFile(result.filePath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
     return result.filePath;
   });
   ipcMain.handle('workspaces:openFromFile', async () => {

@@ -9,7 +9,7 @@
 // `workItems` array while the plans sat on disk, ignored.
 //
 // The folder under test is a *copy* of this repository's own planning content:
-// its real `docs/plans` tree, `PROJECT.md` and `board.praxis.json`. That keeps
+// its real `docs/plans` tree, `project.praxis.md` and `board.praxis.json`. That keeps
 // the original intent — the journey runs against genuine content rather than a
 // hand-built fixture — without pointing Praxis's write paths at the working
 // tree.
@@ -18,7 +18,7 @@
 // `FolderService.loadFromDisk` runs a template-upgrade pass that rewrites plan
 // markdown (`ensureFrontMatter` injects **Status:** / **Created:** / **Type:** /
 // **Priority:** and appends `## Description` / `## Comments`), and
-// `writeProjectSnapshot` used to rewrite `PROJECT.md`. Both fired on the real
+// `writeProjectSnapshot` used to rewrite `project.praxis.md`. Both fired on the real
 // repo during ordinary test runs — the second one overwrote it outright. The
 // `assertRepositoryUntouched` guard below fails loudly if a future change aims
 // a write path back at the working tree.
@@ -38,7 +38,7 @@ let window: Page;
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
 /** Everything in the working tree this spec could plausibly cause a write to. */
-const GUARDED = ['PROJECT.md', 'board.praxis.json', path.join('docs', 'plans')];
+const GUARDED = ['project.praxis.md', 'board.praxis.json', path.join('docs', 'plans')];
 
 /** A stable fingerprint of the guarded paths, so a stray write is visible. */
 function repositoryFingerprint(): string {
@@ -69,7 +69,7 @@ function copyRepositoryContent(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-journey-repo-'));
   fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
   fs.cpSync(path.join(REPO_ROOT, 'docs', 'plans'), path.join(root, 'docs', 'plans'), { recursive: true });
-  for (const file of ['PROJECT.md', 'board.praxis.json']) {
+  for (const file of ['project.praxis.md', 'board.praxis.json']) {
     const source = path.join(REPO_ROOT, file);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(root, file));
   }
