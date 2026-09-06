@@ -539,6 +539,28 @@ npm run test:desktop:git      # gitService unit tests
 a dev server. A frontend change is invisible to e2e until you rebuild **and** run
 `copy-renderer`.
 
+**No test may point a Praxis write path at the working tree.** `journey.spec.ts`
+deliberately runs the "adopt a folder of real plans" journey against this
+repository's own planning content — that is what makes it worth having, because
+the data is genuine rather than a hand-built fixture. It now runs against a
+**temp copy** of `docs/plans` + `PROJECT.md` + `board.praxis.json`, and a
+`beforeAll`/`afterAll` fingerprint over those 180 files fails the spec if
+anything writes into the real tree.
+
+This is not hypothetical. Two Praxis write paths fire automatically on any
+folder a project points at:
+
+- `FolderService.loadFromDisk` runs a **template-upgrade pass**
+  (`ensureFrontMatter`) that rewrites plan markdown — injecting `**Status:**`,
+  `**Created:** <now>`, `**Type:**`, `**Priority:**` and appending
+  `## Description` / `## Comments`. Every plan doc in this repo carries that
+  front matter because a test run put it there; the `**Created:**` timestamps
+  in the newer files are the moment a suite ran, not the moment anyone wrote
+  them. It is idempotent once applied, so a *new* plan doc is the one that gets
+  rewritten.
+- `writeProjectSnapshot` regenerates `PROJECT.md` — and before the marker rule
+  it overwrote this repo's own file with a fixture project's workflow.
+
 **`vite build` needs a native binding, and the lockfile must carry every CI platform's.**
 Vite 8 bundles with `rolldown` and minifies CSS with `lightningcss` — both load a
 platform-specific `.node`. `npm` regenerating `package-lock.json` on macOS prunes the

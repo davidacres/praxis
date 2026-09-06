@@ -8,9 +8,22 @@
 // — the project was created as app storage and its board read an empty
 // `workItems` array while the plans sat on disk, ignored.
 //
-// The folder under test is this repository itself: it has a real `docs/plans`
-// tree, so the journey runs against genuine content rather than a fixture.
+// The folder under test is a *copy* of this repository's own planning content:
+// its real `docs/plans` tree, `PROJECT.md` and `board.praxis.json`. That keeps
+// the original intent — the journey runs against genuine content rather than a
+// hand-built fixture — without pointing Praxis's write paths at the working
+// tree.
+//
+// It used to run against the repository directly, and that is not theoretical:
+// `FolderService.loadFromDisk` runs a template-upgrade pass that rewrites plan
+// markdown (`ensureFrontMatter` injects **Status:** / **Created:** / **Type:** /
+// **Priority:** and appends `## Description` / `## Comments`), and
+// `writeProjectSnapshot` used to rewrite `PROJECT.md`. Both fired on the real
+// repo during ordinary test runs — the second one overwrote it outright. The
+// `assertRepositoryUntouched` guard below fails loudly if a future change aims
+// a write path back at the working tree.
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -24,7 +37,58 @@ let window: Page;
 /** The repo root — four levels up from apps/praxis-desktop/main/e2e. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
+/** Everything in the working tree this spec could plausibly cause a write to. */
+const GUARDED = ['PROJECT.md', 'board.praxis.json', path.join('docs', 'plans')];
+
+/** A stable fingerprint of the guarded paths, so a stray write is visible. */
+function repositoryFingerprint(): string {
+  const parts: string[] = [];
+  const walk = (absolute: string, relative: string): void => {
+    const stat = fs.statSync(absolute);
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(absolute).sort()) {
+        walk(path.join(absolute, entry), path.join(relative, entry));
+      }
+      return;
+    }
+    parts.push(`${relative}:${createHash('sha1').update(fs.readFileSync(absolute)).digest('hex')}`);
+  };
+  for (const target of GUARDED) {
+    const absolute = path.join(REPO_ROOT, target);
+    if (fs.existsSync(absolute)) walk(absolute, target);
+  }
+  return parts.join('\n');
+}
+
+let repositoryBefore = '';
+
+/** A temp copy of the repo's planning content — the folder actually under test. */
+let repoCopy: string;
+
+function copyRepositoryContent(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-journey-repo-'));
+  fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+  fs.cpSync(path.join(REPO_ROOT, 'docs', 'plans'), path.join(root, 'docs', 'plans'), { recursive: true });
+  for (const file of ['PROJECT.md', 'board.praxis.json']) {
+    const source = path.join(REPO_ROOT, file);
+    if (fs.existsSync(source)) fs.copyFileSync(source, path.join(root, file));
+  }
+  return root;
+}
+
+test.beforeAll(() => {
+  repositoryBefore = repositoryFingerprint();
+});
+
+test.afterAll(() => {
+  expect(
+    repositoryFingerprint(),
+    'this spec must never write into the working tree — point it at repoCopy, not REPO_ROOT'
+  ).toBe(repositoryBefore);
+});
+
 test.beforeEach(async () => {
+  repoCopy = copyRepositoryContent();
   app = await launchTestApp({ connections: [] }, undefined, undefined, { demoMode: false });
   window = app.window;
 });
@@ -34,13 +98,14 @@ test.afterEach(async () => {
     await closeTestApp(app);
     app = undefined;
   }
+  if (repoCopy) fs.rmSync(repoCopy, { recursive: true, force: true });
 });
 
 test('a project created from a folder of existing plans shows them on its board', async () => {
   // 1. The folder is inspected the way the wizard inspects it.
   const inspection = await window.evaluate(
     folder => window.praxis.projects.inspectFolder(folder),
-    REPO_ROOT
+    repoCopy
   );
   expect(inspection.exists).toBe(true);
   expect(inspection.planFiles?.length ?? 0).toBeGreaterThan(0);
@@ -68,7 +133,7 @@ test('a project created from a folder of existing plans shows them on its board'
       },
       workspaces[0].id
     );
-  }, REPO_ROOT);
+  }, repoCopy);
 
   expect(project.storage).toBe('folder');
   expect(project.workspaceFolder).toBeTruthy();
@@ -136,7 +201,7 @@ test('a project created from a folder with no plans stays on app storage', async
       },
       workspaces[0].id
     );
-  }, REPO_ROOT);
+  }, repoCopy);
 
   expect(project.storage).toBe('app');
   expect(project.workItems).toHaveLength(1);
