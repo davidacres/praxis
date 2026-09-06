@@ -603,6 +603,11 @@ the data is genuine rather than a hand-built fixture. It now runs against a
 `beforeAll`/`afterAll` fingerprint over those 180 files fails the spec if
 anything writes into the real tree.
 
+The guarded set is **derived from the naming rule**, not listed: every
+root-level `*.praxis.*` file plus `docs/plans`. A Praxis file added later is
+covered without anyone remembering to extend the guard — which matters, because
+the list had already gone stale once when the workspace file was renamed.
+
 This is not hypothetical. Two Praxis write paths fire automatically on any
 folder a project points at:
 
