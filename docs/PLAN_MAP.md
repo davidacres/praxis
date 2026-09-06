@@ -139,3 +139,5 @@
 | FX-BE-039 | Story | Cost and token spend report | Complete | FX-BF-017 |
 | FX-BE-040 | Story | Ticket-triggered workflow runs with outcome write-back | Complete | FX-BF-017 |
 | FX-BE-041 | Story | Wire workflow failures into the Output tab's log bus | Complete | FX-BF-017 |
+| FX-BF-018 | Feature | Add-on marketplace | In progress | None |
+| FX-BE-042 | Story | GitHub Packages add-on marketplace | In progress | FX-BF-018 |
