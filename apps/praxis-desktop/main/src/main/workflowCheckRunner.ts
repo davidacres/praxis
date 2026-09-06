@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawnCheck } from './workflowCheckProcess';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { app } from 'electron';
@@ -34,7 +34,7 @@ export async function runWorkflowCheck(
   }
 
   const successCodes = node.successExitCodes?.length ? node.successExitCodes : [0];
-  const result = await spawnCheck(node, cwd);
+  const result = await spawnCheck(node, cwd, context.signal);
 
   const artifactPath = await writeOutput(context.run.runId, node.id, result.output).catch(() => undefined);
   const artifacts = node.outputs.map(contract => ({
@@ -62,49 +62,6 @@ export async function runWorkflowCheck(
     }`,
     artifacts
   };
-}
-
-interface SpawnResult {
-  code: number | null;
-  output: string;
-  timedOut: boolean;
-  error?: string;
-}
-
-function spawnCheck(node: WorkflowCheckNode, cwd: string): Promise<SpawnResult> {
-  return new Promise<SpawnResult>(resolve => {
-    let output = '';
-    let timedOut = false;
-
-    // `shell: false` on purpose — the command and args come from a workflow
-    // definition that may have been committed by anyone with repo access, so
-    // they are never handed to a shell for interpretation.
-    const child = spawn(node.command, node.args ?? [], { cwd, shell: false });
-
-    const timer = node.timeoutMs
-      ? setTimeout(() => {
-          timedOut = true;
-          child.kill('SIGTERM');
-        }, node.timeoutMs)
-      : undefined;
-
-    const collect = (chunk: Buffer): void => {
-      output += chunk.toString();
-      // Bound memory for a chatty command; the tail is what matters.
-      if (output.length > 200_000) output = output.slice(-200_000);
-    };
-    child.stdout?.on('data', collect);
-    child.stderr?.on('data', collect);
-
-    child.on('error', error => {
-      if (timer) clearTimeout(timer);
-      resolve({ code: null, output, timedOut, error: `Could not run ${node.command}: ${error.message}` });
-    });
-    child.on('close', code => {
-      if (timer) clearTimeout(timer);
-      resolve({ code, output, timedOut });
-    });
-  });
 }
 
 async function writeOutput(runId: string, nodeId: string, output: string): Promise<string> {
