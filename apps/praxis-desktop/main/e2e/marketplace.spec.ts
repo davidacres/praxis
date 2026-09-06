@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 //
-// e2e spec for the add-on marketplace (Settings → Add-ons).
+// e2e spec for the add-on marketplace.
 //
-// `mockAddonRegistry.ts` serves both halves of the GitHub Packages surface the
-// marketplace uses (REST package listing + npm packument/tarball) from one
-// in-process server, and builds real gzipped tarballs so the integrity check
-// runs for real. The marketplace GitHub token is supplied via
-// `PRAXIS_MARKETPLACE_TOKEN` because the e2e sandbox has no keychain backend
-// for `safeStorage` (same constraint as github.spec.ts).
+// The marketplace *config* (owner, token, endpoints) lives in Settings →
+// Add-ons; browsing and installing happens in each kind's own panel — Themes,
+// Surfaces, Agent Runtime. This spec drives all of it.
+//
+// `mockAddonRegistry.ts` serves both halves of the GitHub Packages surface
+// (REST package listing + npm packument/tarball) from one in-process server,
+// building real gzipped tarballs so the integrity check runs for real. The
+// GitHub token is supplied via `PRAXIS_MARKETPLACE_TOKEN` because the e2e
+// sandbox has no `safeStorage` keychain (same as github.spec.ts).
 
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
@@ -29,7 +32,15 @@ const NORD_THEME = {
     id: 'nord-aurora',
     name: 'Nord Aurora',
     summary: 'A cool, muted palette.',
-    author: 'acme'
+    author: 'acme',
+    display: {
+      mode: 'dark',
+      preview: {
+        canvas: '#2e3440', panel: '#3b4252', raised: '#434c5e', border: '#4c566a',
+        text: '#eceff4', muted: '#d8dee9', accent: '#88c0d0',
+        success: '#a3be8c', warning: '#ebcb8b', danger: '#bf616a'
+      }
+    }
   },
   payload: {
     'theme.json': {
@@ -38,16 +49,9 @@ const NORD_THEME = {
       mode: 'dark',
       description: 'A cool, muted palette.',
       preview: {
-        canvas: '#2e3440',
-        panel: '#3b4252',
-        raised: '#434c5e',
-        border: '#4c566a',
-        text: '#eceff4',
-        muted: '#d8dee9',
-        accent: '#88c0d0',
-        success: '#a3be8c',
-        warning: '#ebcb8b',
-        danger: '#bf616a'
+        canvas: '#2e3440', panel: '#3b4252', raised: '#434c5e', border: '#4c566a',
+        text: '#eceff4', muted: '#d8dee9', accent: '#88c0d0',
+        success: '#a3be8c', warning: '#ebcb8b', danger: '#bf616a'
       }
     }
   }
@@ -62,7 +66,8 @@ const FADED_PACK = {
     id: 'faded-linen',
     name: 'Faded Linen',
     summary: 'A soft woven material.',
-    author: 'acme'
+    author: 'acme',
+    display: { preview: { canvas: '#efe9dd', panel: '#e2d9c6', accent: '#8a7a52', text: '#33302a' } }
   },
   payload: {
     'pack.json': {
@@ -97,7 +102,7 @@ const TIDY_AGENT = {
   }
 };
 
-function seededSettings(registryBase: string): Record<string, unknown> {
+function seeded(registryBase: string): Record<string, unknown> {
   return {
     marketplace: {
       enabled: true,
@@ -111,11 +116,8 @@ function seededSettings(registryBase: string): Record<string, unknown> {
   };
 }
 
-async function openAddons(): Promise<void> {
-  await window.locator('[data-testid="titlebar-settings"]').click();
-  await window.locator('[data-testid="settings-nav-marketplace"]').click();
-  await expect(window.locator('.settings-section-title')).toHaveText('Add-ons');
-}
+const openSettings = () => window.locator('[data-testid="titlebar-settings"]').click();
+const nav = (id: string) => window.locator(`[data-testid="settings-nav-${id}"]`).click();
 
 test.afterEach(async () => {
   if (app) {
@@ -128,48 +130,111 @@ test.afterEach(async () => {
   }
 });
 
-test('browses the catalogue, installs a theme, and the theme joins the gallery', async () => {
-  registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME, FADED_PACK] });
-  app = await launchTestApp(seededSettings(registry.baseUrl), undefined, {
+test('Add-ons panel holds only the central config and points at the per-kind panels', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
     PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
   });
   window = app.window;
 
-  await openAddons();
-  await expect(window.locator('[data-testid="settings-marketplace"]')).toContainText(
-    'Marketplace is configured and ready.'
+  await openSettings();
+  await nav('marketplace');
+  await expect(window.locator('.settings-section-title')).toHaveText('Add-ons');
+
+  await expect(window.locator('[data-testid="marketplace-owner"]')).toHaveValue(OWNER);
+  await expect(window.locator('[data-testid="marketplace-status"]')).toContainText(
+    'Browse and install add-ons from the Themes, Surfaces, and Agent Runtime panels'
   );
-
-  await window.locator('[data-testid="marketplace-browse"]').click();
-  await expect(window.locator('[data-testid="marketplace-catalog-nord-aurora"]')).toContainText('Nord Aurora');
-  await expect(window.locator('[data-testid="marketplace-catalog-faded-linen"]')).toContainText('Faded Linen');
-
-  await window
-    .locator('[data-testid="marketplace-catalog-nord-aurora"]')
-    .getByRole('button', { name: 'Install' })
-    .click();
-
-  const installed = window.locator('[data-testid="marketplace-installed-nord-aurora"]');
-  await expect(installed).toContainText('Nord Aurora');
-  await expect(installed).toContainText('Theme · v1.0.0');
-  await expect(window).toHaveScreenshot('marketplace-installed.png');
-
-  // Activation: the installed theme is now a real card in the gallery.
-  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.getByRole('searchbox', { name: 'Search themes' }).fill('nord');
-  await expect(window.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
-
-  // Remove it again — the card goes with it.
-  await window.locator('[data-testid="settings-nav-marketplace"]').click();
-  await installed.getByRole('button', { name: 'Remove' }).click();
-  await expect(window.locator('[data-testid="marketplace-installed-nord-aurora"]')).toHaveCount(0);
-
-  await window.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await window.getByRole('searchbox', { name: 'Search themes' }).fill('nord');
-  await expect(window.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
+  // No catalogue or install controls live here any more.
+  await expect(window.locator('[data-testid="marketplace-browse"]')).toHaveCount(0);
+  await expect(window).toHaveScreenshot('addons-config.png');
 });
 
-test('an unconfigured marketplace explains itself and cannot browse', async () => {
+test('Themes panel: the marketplace section installs a theme into the gallery, then removes it', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME, FADED_PACK] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('appearance-themes');
+
+  const marketplace = window.locator('[data-testid="theme-marketplace"]');
+  await expect(marketplace).toBeVisible();
+  // The uninstalled add-on renders as a real preview card, built from the
+  // manifest's display hints.
+  const available = marketplace.locator('[data-testid="theme-card-nord-aurora"]');
+  await expect(available).toBeVisible();
+  await marketplace.scrollIntoViewIfNeeded();
+  await expect(window).toHaveScreenshot('themes-marketplace.png');
+
+  await available.click(); // an uninstalled card's click is "install"
+  // It leaves the marketplace section and becomes a selectable gallery card.
+  await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('nord');
+  await expect(window.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
+  await expect(window.locator('[data-testid="theme-marketplace-installed"]')).toContainText('Nord Aurora');
+
+  await window.getByRole('searchbox', { name: 'Search themes' }).fill('');
+  await window
+    .locator('[data-testid="theme-marketplace-installed"]')
+    .getByRole('button', { name: 'Remove' })
+    .click();
+  // Gone from the gallery; back in the marketplace section as available again.
+  await expect(window.locator('[data-testid="theme-marketplace-installed"]')).toHaveCount(0);
+  const gallery = window.locator('.theme-gallery-section').filter({ hasText: 'Recent' }).first();
+  await expect(gallery.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
+  await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
+});
+
+test('Surfaces panel: the marketplace section installs a pack, and it can be removed from the gallery', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [FADED_PACK] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('appearance-surfaces');
+
+  const card = window.locator('[data-testid="surface-marketplace-faded-linen"]');
+  await expect(card).toContainText('Faded Linen');
+  await expect(window.locator('[data-testid="surface-section"]')).toHaveScreenshot('surfaces-marketplace.png');
+
+  await card.getByRole('button', { name: 'Install' }).click();
+  await expect(window.locator('[data-testid="surface-marketplace-faded-linen"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="surface-card-faded-linen"]')).toBeVisible();
+
+  await window.locator('[data-testid="surface-remove-faded-linen"]').click();
+  await expect(window.locator('[data-testid="surface-card-faded-linen"]')).toHaveCount(0);
+  await expect(window.locator('[data-testid="surface-marketplace-faded-linen"]')).toBeVisible();
+});
+
+test('Agent Runtime panel: an agent installs untrusted and only runs after trust is granted', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [TIDY_AGENT] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('agent-runtime');
+
+  const catalogRow = window.locator('[data-testid="agent-marketplace-tidy-bot"]');
+  await expect(catalogRow).toContainText('Tidy Bot');
+  await catalogRow.getByRole('button', { name: 'Install (untrusted)' }).click();
+
+  const installedRow = window.locator('[data-testid="agent-marketplace-installed-tidy-bot"]');
+  await expect(installedRow).toContainText('installed but not trusted');
+  await expect(window.locator('[data-testid="agent-runtime-marketplace"]')).toHaveScreenshot('agents-marketplace.png');
+
+  await installedRow.getByRole('button', { name: 'Trust' }).click();
+  await expect(installedRow).toContainText('trusted — runs like a global agent');
+  await expect(installedRow.getByRole('button', { name: 'Revoke trust' })).toBeVisible();
+});
+
+test('an unconfigured marketplace is explained inside each panel', async () => {
   registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME] });
   app = await launchTestApp(
     {
@@ -188,45 +253,14 @@ test('an unconfigured marketplace explains itself and cannot browse', async () =
   );
   window = app.window;
 
-  await openAddons();
-  await expect(window.locator('[data-testid="settings-marketplace"]')).toContainText(
+  await openSettings();
+  await nav('appearance-themes');
+  await expect(window.locator('[data-testid="theme-marketplace"]')).toContainText(
+    'Set up the add-on catalogue in Settings › Add-ons'
+  );
+
+  await nav('marketplace');
+  await expect(window.locator('[data-testid="marketplace-status"]')).toContainText(
     'Set an owner, add a token, and enable the marketplace'
   );
-  await expect(window.locator('[data-testid="marketplace-browse"]')).toBeDisabled();
-  await expect(window).toHaveScreenshot('marketplace-unconfigured.png');
-});
-
-test('review captures — configured panel, catalogue, and an agent trust gate', async () => {
-  registry = await startMockAddonRegistry({
-    owner: OWNER,
-    addons: [NORD_THEME, FADED_PACK, TIDY_AGENT]
-  });
-  app = await launchTestApp(seededSettings(registry.baseUrl), undefined, {
-    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
-  });
-  window = app.window;
-
-  await openAddons();
-  await expect(window.locator('[data-testid="settings-marketplace"]')).toContainText(
-    'Marketplace is configured and ready.'
-  );
-  await expect(window).toHaveScreenshot('marketplace-configured.png');
-
-  await window.locator('[data-testid="marketplace-browse"]').click();
-  await expect(window.locator('[data-testid="marketplace-catalog-tidy-bot"]')).toContainText('Tidy Bot');
-  await expect(window).toHaveScreenshot('marketplace-catalogue.png');
-
-  // An agent installs untrusted; the installed row offers a Trust action.
-  await window
-    .locator('[data-testid="marketplace-catalog-tidy-bot"]')
-    .getByRole('button', { name: 'Install (untrusted)' })
-    .click();
-  const agentRow = window.locator('[data-testid="marketplace-installed-tidy-bot"]');
-  await expect(agentRow).toContainText('Agent · v0.4.0 · not trusted');
-  await expect(agentRow.getByRole('button', { name: 'Trust' })).toBeVisible();
-  await expect(window).toHaveScreenshot('marketplace-agent-untrusted.png');
-
-  await agentRow.getByRole('button', { name: 'Trust' }).click();
-  await expect(agentRow).toContainText('Agent · v0.4.0 · trusted');
-  await expect(agentRow.getByRole('button', { name: 'Revoke trust' })).toBeVisible();
 });

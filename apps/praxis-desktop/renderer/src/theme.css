@@ -4150,6 +4150,31 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .theme-marketplace-heading p { margin: 0 0 8px; color: var(--text-tertiary); font-size: var(--text-xs); }
 .theme-marketplace-count { flex: none; margin-bottom: 9px; color: var(--text-tertiary); font-size: var(--text-xs); }
 
+/* Surface-pack marketplace rows — a pack's material isn't previewable before
+   install, so these are compact rows with a small colour strip when the
+   manifest carries one, not full swatch cards. */
+.surface-marketplace-grid { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.surface-marketplace-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.surface-marketplace-swatch { flex: none; display: flex; border-radius: var(--radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
+.surface-marketplace-swatch i { width: 16px; height: 32px; display: block; }
+.surface-marketplace-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.surface-marketplace-meta small { color: var(--text-tertiary); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surface-marketplace-card .btn { flex: none; }
+
+/* A button styled as an inline text link — used inside sentence-flow controls
+   like the Themes marketplace "Installed from the catalogue: … Remove" line. */
+.linklike {
+  border: none; background: none; padding: 0;
+  color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline;
+}
+.linklike:hover:not(:disabled) { color: var(--accent-strong, var(--accent)); }
+.linklike:disabled { opacity: 0.5; cursor: default; }
+.theme-marketplace-installed { margin-top: 10px; }
+
 @media (max-width: 860px) { .theme-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ── Surface packs (Settings › Themes › Surface) ─────────────────────────── */

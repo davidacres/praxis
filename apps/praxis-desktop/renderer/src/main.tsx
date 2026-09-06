@@ -91,8 +91,9 @@ void window.praxis.settings.get().then(async settings => {
 
 window.praxis.marketplace.onChanged(() => {
   void applyMarketplaceAppearance().then(() => {
-    // Nudge any open Themes/Surfaces gallery to re-read the pack/theme lists.
-    window.dispatchEvent(new Event('tm-theme-changed'));
+    // Let an open Themes/Surfaces panel re-read the registered lists once the
+    // marketplace buckets have actually been rebuilt.
+    window.dispatchEvent(new Event('praxis-marketplace-appearance'));
   });
 });
 
