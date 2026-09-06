@@ -8,12 +8,7 @@
 
 _Not specified_
 
-
 ## Workflow
 
 - Backlog
-- Requirements
-- Architecture
-- Implementation
-- Verification
 - Done

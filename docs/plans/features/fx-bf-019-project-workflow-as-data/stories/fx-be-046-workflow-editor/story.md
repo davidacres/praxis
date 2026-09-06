@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T15:11:24.811Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-046
 title: Editing a project's workflow
@@ -47,3 +51,14 @@ will become wrong — this repository is the proof.
 - `npm run check-types`
 - `npm run test:desktop` — a new `projectWorkflow.spec.ts`
 - `npm run test:desktop:themes` — the inspector's new section in the gallery
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
