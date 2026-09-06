@@ -75,6 +75,28 @@ const FADED_PACK = {
   }
 };
 
+const TIDY_AGENT = {
+  packageName: 'praxis-addon-tidy',
+  version: '0.4.0',
+  manifest: {
+    schemaVersion: 1,
+    kind: 'agent',
+    id: 'tidy-bot',
+    name: 'Tidy Bot',
+    summary: 'Keeps a working tree tidy between tasks.',
+    author: 'acme'
+  },
+  payload: {
+    'agent.json': {
+      id: 'tidy-bot',
+      name: 'Tidy Bot',
+      type: 'acp',
+      activation: 'manual',
+      description: 'Keeps a working tree tidy between tasks.'
+    }
+  }
+};
+
 function seededSettings(registryBase: string): Record<string, unknown> {
   return {
     marketplace: {
@@ -171,4 +193,40 @@ test('an unconfigured marketplace explains itself and cannot browse', async () =
     'Set an owner, add a token, and enable the marketplace'
   );
   await expect(window.locator('[data-testid="marketplace-browse"]')).toBeDisabled();
+  await expect(window).toHaveScreenshot('marketplace-unconfigured.png');
+});
+
+test('review captures — configured panel, catalogue, and an agent trust gate', async () => {
+  registry = await startMockAddonRegistry({
+    owner: OWNER,
+    addons: [NORD_THEME, FADED_PACK, TIDY_AGENT]
+  });
+  app = await launchTestApp(seededSettings(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openAddons();
+  await expect(window.locator('[data-testid="settings-marketplace"]')).toContainText(
+    'Marketplace is configured and ready.'
+  );
+  await expect(window).toHaveScreenshot('marketplace-configured.png');
+
+  await window.locator('[data-testid="marketplace-browse"]').click();
+  await expect(window.locator('[data-testid="marketplace-catalog-tidy-bot"]')).toContainText('Tidy Bot');
+  await expect(window).toHaveScreenshot('marketplace-catalogue.png');
+
+  // An agent installs untrusted; the installed row offers a Trust action.
+  await window
+    .locator('[data-testid="marketplace-catalog-tidy-bot"]')
+    .getByRole('button', { name: 'Install (untrusted)' })
+    .click();
+  const agentRow = window.locator('[data-testid="marketplace-installed-tidy-bot"]');
+  await expect(agentRow).toContainText('Agent · v0.4.0 · not trusted');
+  await expect(agentRow.getByRole('button', { name: 'Trust' })).toBeVisible();
+  await expect(window).toHaveScreenshot('marketplace-agent-untrusted.png');
+
+  await agentRow.getByRole('button', { name: 'Trust' }).click();
+  await expect(agentRow).toContainText('Agent · v0.4.0 · trusted');
+  await expect(agentRow.getByRole('button', { name: 'Revoke trust' })).toBeVisible();
 });
