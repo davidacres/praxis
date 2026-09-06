@@ -3,7 +3,8 @@ import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReferenc
 import { getProjectManager, getProjectStore } from './projectStoreInstance';
 import { getWorkspaceStore } from './workspaceStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
-import { buildProjectConnection, discoverPlanFolders } from '@praxis/core';
+import { FolderService, buildProjectConnection, discoverPlanFolders } from '@praxis/core';
+import { getServiceForConnection } from './serviceRegistry';
 
 /**
  * Ensures every project has a real connection. Once created, the connection is
@@ -121,8 +122,32 @@ export function registerProjectIpc(): void {
       }
     }
   });
-  ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) =>
-    getProjectStore().update(projectId, patch));
+  ipcMain.handle('projects:update', async (_event, projectId: string, patch: UpdateProjectInput) => {
+    const updated = await getProjectStore().update(projectId, patch);
+    // A folder-backed board's columns live in `board.praxis.json` so the
+    // workflow travels with the folder (FX-BE-045). Best-effort, exactly like
+    // the connection-edit path: an unreadable folder must not block the save.
+    if (patch.workflowStages && updated.storage === 'folder') {
+      try {
+        const service = await getServiceForConnection(buildProjectConnection(updated).id);
+        if (service instanceof FolderService) {
+          await service.syncBoardConfigToFolder({ workflow: updated.workflowStages });
+        }
+      } catch {
+        // Folder unreadable / not a plans folder — the record still saved.
+      }
+    }
+    // PROJECT.md is generated, not frozen (FX-BE-047): regenerate it whenever
+    // something it renders changes. Best-effort — the record has already saved.
+    if ((patch.workflowStages || patch.purpose !== undefined || patch.brief) && updated.workspaceFolder) {
+      try {
+        await getProjectManager().refreshProjectFile(updated);
+      } catch {
+        // Folder gone or read-only — the record still saved.
+      }
+    }
+    return updated;
+  });
   ipcMain.handle('projects:inspectFolder', (_event, folderPath: string) => getProjectManager().inspectFolder(folderPath));
   ipcMain.handle('projects:attachFolder', async (_event, projectId: string, input: AttachProjectFolderInput) => {
     // An attached folder adds project files and tools; a project's connection
