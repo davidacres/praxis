@@ -1,3 +1,7 @@
+---
+id: FX-BF-103
+---
+
 # Feature 03: AI Recommendation Flow
 
 **Status:** Proposed
