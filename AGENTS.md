@@ -231,6 +231,45 @@ current when a backend's state changes.
   axes with no per-theme override. The one renderer-visible change is a
   `ConnectionForm` branch built from the existing form primitives.
 
+## Naming a file Praxis writes (FX-BE-048)
+
+Every file Praxis puts in a user's folder carries `praxis` in its name, under
+one rule with two forms — both already in use, and each justified:
+
+| form | example | when |
+| --- | --- | --- |
+| `.praxis` **is the extension** | `praxis-code.workspace.praxis` | the user *opens it with Praxis*; OS file association and the picker filter depend on it |
+| `.praxis.<ext>` **is a middle segment** | `board.praxis.json`, `project.praxis.md` | *tooling* reads it; the real extension stays last so editors highlight and GitHub renders it |
+
+The generic name this replaced was a real bug, not untidiness: Praxis only
+rewrites a project file carrying its own markers, so a repository that already
+had a `PROJECT.md` silently got no Praxis project file at all — neither adopted
+nor created. Namespacing removes the collision rather than arbitrating it.
+
+Use `PROJECT_FILE_NAME` from core; do not write the filename as a literal.
+
+## Workspace files are meant to be committed (FX-BE-049)
+
+`toWorkspaceFile` strips anything matching
+`/token|secret|password|apikey|api_key|\bpat\b/i` from connection settings —
+the point being that "a token must not be the thing that leaks when a workspace
+file is committed to a repo". Two things follow that are easy to undo by
+accident:
+
+- **Folder paths inside the file's own tree are stored relative to the file**
+  (`./apps/web`, POSIX separators) and resolved against the file's directory on
+  read, so a committed workspace opens wherever the tree is cloned. A folder
+  *outside* that tree stays absolute — there is nothing sensible to make it
+  relative to, and rewriting it would be worse than being honest.
+- **`folderInspection` is dropped on write.** It caches *local* filesystem
+  facts — detected languages, manifests, whether there is a git repo. Shipping
+  it to someone else hands them our snapshot as if it were theirs. It is
+  re-derived by `inspectFolder`.
+
+`workspacePaths.ts` holds both directions and is unit-tested; pass the file's
+directory to `toWorkspaceFile` / `readWorkspaceFile` or paths are written
+verbatim.
+
 ## A project's workflow is data (FX-BF-019)
 
 A workflow describes **how a team works**. It is authored once, stays editable,
