@@ -112,6 +112,7 @@ to create one instead of showing an inert composer.
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
+| FX-BE-009 | Story | Project-details inspector, theme-aware detail panes, per-board plain background, sidebar board removal, no-boards centre state | Complete |
 
 
 ## Comments
