@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-044
 title: Resolve a freeform status against a declared workflow
-status: proposed
+status: complete
 feature: FX-BF-019
 updated: 2026-09-06
 commits: []

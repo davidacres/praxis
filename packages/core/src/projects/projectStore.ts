@@ -4,6 +4,7 @@ import type {
   ProjectRecord,
   UpdateProjectInput
 } from './projectTypes';
+import { normalizeWorkflowStages, validateWorkflowStages } from './projectWorkflow';
 
 const PROJECTS_KEY = 'praxis.projects.v1';
 
@@ -104,11 +105,9 @@ export function validateProjectRecord(project: ProjectRecord): void {
   if (!/^[A-Z][A-Z0-9_]{0,14}$/.test(project.key)) {
     throw new Error('Project key must start with a letter and contain 1-15 uppercase letters, numbers, or underscores.');
   }
-  if (project.workflowStages.length < 2 || project.workflowStages.some(stage => !stage.name.trim())) {
-    throw new Error('At least two named workflow stages are required.');
-  }
+  const workflowProblem = validateWorkflowStages(project.workflowStages);
+  if (workflowProblem) throw new Error(workflowProblem);
   const stageNames = new Set(project.workflowStages.map(stage => stage.name.toLowerCase()));
-  if (stageNames.size !== project.workflowStages.length) throw new Error('Workflow stage names must be unique.');
   if (project.workItems.some(item => !stageNames.has(item.status.toLowerCase()))) {
     throw new Error('Every starter ticket must use one of the project workflow stages.');
   }
@@ -132,5 +131,9 @@ function isProjectRecord(value: unknown): value is ProjectRecord {
 }
 
 function cloneProject(project: ProjectRecord): ProjectRecord {
-  return JSON.parse(JSON.stringify(project)) as ProjectRecord;
+  const copy = JSON.parse(JSON.stringify(project)) as ProjectRecord;
+  // Records written before FX-BE-043 have category-less stages. Repairing on
+  // read means no migration script and no half-typed record reaching a caller.
+  copy.workflowStages = normalizeWorkflowStages(copy.workflowStages);
+  return copy;
 }

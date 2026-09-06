@@ -49,6 +49,7 @@ export * from './folder/markdownStatusWriter';
 export * from './projects/projectTypes';
 export * from './projects/projectImportPlanner';
 export * from './projects/projectTemplates';
+export * from './projects/projectWorkflow';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';

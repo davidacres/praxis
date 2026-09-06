@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-043
 title: Stage category as a first-class field
-status: proposed
+status: complete
 feature: FX-BF-019
 updated: 2026-09-06
 commits: []
