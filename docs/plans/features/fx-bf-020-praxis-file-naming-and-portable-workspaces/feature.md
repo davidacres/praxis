@@ -10,7 +10,7 @@ status: complete
 owner: Electron desktop app
 updated: 2026-09-06
 issues: docs/issues/features/fx-bf-020-praxis-file-naming-and-portable-workspaces/feature-issues.md
-stories: [FX-BE-048, FX-BE-049]
+stories: [FX-BE-048, FX-BE-049, FX-BE-050]
 validation: [npm run check-types, npm run test:core, npm run test:desktop]
 ---
 
@@ -28,7 +28,7 @@ rule rather than a preference:
 
 | pattern | example | why |
 | --- | --- | --- |
-| `.praxis` **is the extension** | `praxis-code.workspace.praxis` | the user *opens it with Praxis* — OS file association and the picker filter depend on it (`workspaceFile.spec.ts` asserts the filter) |
+| `.praxis` **is the extension** | `praxis-code.workspace.praxis.json` | the user *opens it with Praxis* — OS file association and the picker filter depend on it (`workspaceFile.spec.ts` asserts the filter) |
 | `.praxis.<ext>` **is a middle segment** | `board.praxis.json` | tooling reads it — keeping the real extension last preserves editor highlighting and GitHub rendering |
 
 `PROJECT.md` is the only Praxis file that followed neither. It becomes
@@ -57,6 +57,7 @@ That is a functional distinction, not a compatibility one.
 
 - **`FX-BE-048`** — the naming rule; `PROJECT.md` → `project.praxis.md`.
 - **`FX-BE-049`** — workspace files store in-tree paths relative to themselves.
+- **`FX-BE-050`** — the workspace file becomes `.praxis.json`, collapsing the rule to one form.
 
 **No migration.** Praxis has not shipped, so there is no installed base to carry:
 no legacy-name fallback, no path-shape upgrade, no one-time rename. This
@@ -65,7 +66,7 @@ repository's own files are updated in the same commits.
 ## Close when
 
 Every file Praxis writes carries `praxis` in its name, and this repository's
-`praxis-code.workspace.praxis` can be cloned to a different path and opened
+`praxis-code.workspace.praxis.json` can be cloned to a different path and opened
 without editing.
 
 ## Items
@@ -74,3 +75,4 @@ without editing.
 | --- | --- | --- | --- |
 | FX-BE-048 | Story | A single naming rule for Praxis files | Complete |
 | FX-BE-049 | Story | Workspace files store in-tree paths relative to themselves | Complete |
+| FX-BE-050 | Story | A workspace file is .praxis.json, not .praxis | Complete |

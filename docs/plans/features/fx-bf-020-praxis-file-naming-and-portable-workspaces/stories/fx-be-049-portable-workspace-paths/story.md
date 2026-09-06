@@ -39,7 +39,7 @@ machine. Sharing it is the stated purpose and it does not survive the trip.
   same tree from a different absolute location resolves every folder.
 - A folder outside the file's tree round-trips unchanged as an absolute path.
 - Separators are POSIX in the file regardless of host.
-- This repository's `praxis-code.workspace.praxis` no longer contains
+- This repository's `praxis-code.workspace.praxis.json` no longer contains
   `/Users/daveacres`.
 
 ## Validation

@@ -46,7 +46,7 @@ packages/
 
 ## Workspace / project / connection model
 
-- **Workspace** — a saved, shareable context (`.workspace.praxis`) that groups
+- **Workspace** — a saved, shareable context (`.workspace.praxis.json`) that groups
   project and connection references without copying their data. The sidebar has a
   workspace switcher; the tree is scoped to the active workspace. Exported files
   carry a `schemaVersion` and the app versions that wrote them, and contain

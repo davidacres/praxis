@@ -28,7 +28,7 @@ export const WORKSPACE_FILE_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A single `.workspace.praxis` file presented as a `KeyValueStore`.
+ * A single `.workspace.praxis.json` file presented as a `KeyValueStore`.
  *
  * The file is the live store for a workspace kept outside the app, not a
  * snapshot of one: the workspace record, the projects in it, its connections

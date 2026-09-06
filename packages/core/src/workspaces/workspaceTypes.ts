@@ -18,14 +18,29 @@ export const PRAXIS_WORKSPACE_FORMAT = 'praxis-workspace';
 export const CURRENT_WORKSPACE_SCHEMA_VERSION = 2;
 
 /**
- * Saved workspaces are written as `<slug>.workspace.praxis`. The dialog filter
- * matches on the final segment only (Electron ignores the `.workspace.` part),
- * so `PRAXIS_WORKSPACE_FILE_EXTENSION` is what the open/save filters use.
+ * Saved workspaces are written as `<slug>.workspace.praxis.json` (FX-BE-050).
+ *
+ * The `.json` is last on purpose. This file is meant to be committed — that is
+ * what `stripSecretsFromConnections` and the relative paths in
+ * `workspacePaths.ts` exist for — so it is read, diffed and reviewed far more
+ * often than it is opened. Keeping the real extension last buys editor
+ * highlighting, GitHub rendering and JSON schema association; a bespoke
+ * `.praxis` extension bought none of that.
+ *
+ * It also did not buy the thing a bespoke extension is *for*: there is no
+ * `fileAssociations` entry in the electron-builder config and no `open-file`
+ * handler, so double-clicking one has never opened anything. If that changes,
+ * the association can be registered against this extension just as easily —
+ * the same trade VS Code makes for `.code-workspace`, which GitHub also
+ * declines to highlight.
+ *
+ * The dialog filter matches on the final segment only (Electron ignores the
+ * earlier dots), so `PRAXIS_WORKSPACE_FILE_EXTENSION` is what the filters use.
  */
-export const PRAXIS_WORKSPACE_FILE_EXTENSION = 'praxis';
-export const PRAXIS_WORKSPACE_FILE_SUFFIX = '.workspace.praxis';
+export const PRAXIS_WORKSPACE_FILE_EXTENSION = 'json';
+export const PRAXIS_WORKSPACE_FILE_SUFFIX = '.workspace.praxis.json';
 
-/** `My Team` → `my-team.workspace.praxis` — the default name for a saved workspace file. */
+/** `My Team` → `my-team.workspace.praxis.json` — the default name for a saved workspace file. */
 export function workspaceFileName(name: string): string {
   const slug = name.trim().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
   return `${slug || 'workspace'}${PRAXIS_WORKSPACE_FILE_SUFFIX}`;
@@ -40,7 +55,7 @@ export interface WorkspaceRecord {
   objectives: string[];
   defaultProjectId?: string;
   /**
-   * Absolute path of the `.workspace.praxis` file this workspace is stored in,
+   * Absolute path of the `.workspace.praxis.json` file this workspace is stored in,
    * when it is kept outside the app. Absent means the app's own user folder
    * holds it. Set from the location registry as the record is loaded, never
    * written into the file itself — a file that has been moved would otherwise
@@ -63,7 +78,7 @@ export interface CreateWorkspaceInput {
   defaultProjectId?: string;
   /**
    * Folder to keep this workspace in, instead of the app's user folder. The
-   * file is created inside it as `<slug>.workspace.praxis` and holds the
+   * file is created inside it as `<slug>.workspace.praxis.json` and holds the
    * workspace, its projects and its connections — so the workspace travels with
    * a repo, and deleting the file removes everything it owns.
    */
