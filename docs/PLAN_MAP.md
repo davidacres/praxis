@@ -150,3 +150,4 @@
 | FX-BF-020 | Feature | Praxis files are namespaced, and a workspace file is portable | Complete | — |
 | FX-BE-048 | Story | A single naming rule for Praxis files | Complete | FX-BF-020 |
 | FX-BE-049 | Story | Workspace files store in-tree paths relative to themselves | Complete | FX-BF-020 |
+| FX-BE-050 | Story | A workspace file is .praxis.json, not .praxis | Complete | FX-BE-049 |

@@ -16,7 +16,7 @@ import { createWorkspaceInAppStore } from './workspaceStoreInstance';
 import { getProjectStore } from './projectStoreInstance';
 import { getConnectionStore } from './connectionStoreInstance';
 
-// Both file dialogs offer the same choices: the dedicated `.workspace.praxis`
+// Both file dialogs offer the same choices: the dedicated `.workspace.praxis.json`
 // extension first (the default view), with an All Files escape hatch.
 const WORKSPACE_FILE_FILTERS = [
   { name: 'Praxis Workspace', extensions: [PRAXIS_WORKSPACE_FILE_EXTENSION] },

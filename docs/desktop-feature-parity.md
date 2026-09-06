@@ -12,7 +12,7 @@ and Electron integration. Last audited: 2026-09-05.
 |---|---|---|---|
 | Demo backend | ✓ | Seeded board with starter issues |
 | Live folder (markdown plans) | ✓ | Reads `.praxis/` markdown with `board.praxis.json` schema |
-| User workspace | ✓ | Persisted project/connection set, versioned `.workspace.praxis` files |
+| User workspace | ✓ | Persisted project/connection set, versioned `.workspace.praxis.json` files |
 | GitLab boards | ✓ | REST API integration via core `GitLabService` |
 | Jira via custom MCP server (stdio/HTTP) | ✓ | "Advanced" connection mode; see `packages/core/src/mcp/` |
 | Jira Cloud OAuth sign-in (browser) | ✓ | `praxis://` scheme + loopback fallback for app-initiated OAuth |
@@ -42,7 +42,7 @@ and Electron integration. Last audited: 2026-09-05.
 | Per-column manual issue ordering | ✓ | Drag issues within a column; persists to board prefs |
 | Max-age filter (hide stale issues) | ✓ | Board Settings: days since last update threshold |
 | New project wizard | ✓ | Guided flow for Demo / Folder / Jira / GitLab / GitHub projects |
-| Saved Praxis workspace contexts | ✓ | `.workspace.praxis` files; Getting Started offers recent workspaces |
+| Saved Praxis workspace contexts | ✓ | `.workspace.praxis.json` files; Getting Started offers recent workspaces |
 | Project-first sidebar hierarchy | ✓ | Sidebar tree: projects own boards and Git; unlinked boards stay discoverable |
 | Project-details inspector (right pane) | ✓ | Status summary, completion tracker, workspace tags, planning-source switcher (FX-BF-008) |
 | Remove / delete board from the sidebar list | ✓ | Context menu; routes per backend (user-workspace, live-folder, tracked-board) |
