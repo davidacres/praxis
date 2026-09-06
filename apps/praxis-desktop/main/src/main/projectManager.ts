@@ -306,13 +306,21 @@ const SNAPSHOT_END = '<!-- praxis:end -->';
  *
  * The file used to be written once with the `wx` flag and never reconciled,
  * which is how a project could advertise a workflow its board did not have.
- * It is now regenerated, without clobbering anything a human added:
+ * It is now regenerated — but **only ever a file Praxis itself wrote**:
  *
  * - **No file** — write the generated block wrapped in markers.
- * - **Markers present** — replace only what is between them.
- * - **Markers absent** (every file written before this story) — adopt it by
- *   rewriting only the sections Praxis recognises, leaving all other prose
- *   exactly where it is.
+ * - **Markers present** — replace only what is between them; anything outside
+ *   is the user's and is preserved.
+ * - **Markers absent** — leave the file completely alone. A marker-less
+ *   `PROJECT.md` is one Praxis did not generate, and rewriting it destroys
+ *   content that is not ours to touch.
+ *
+ * That last rule is not caution for its own sake. An earlier version of this
+ * function "adopted" a marker-less file by rewriting the sections it
+ * recognised, and the first full e2e run overwrote *this repository's own*
+ * PROJECT.md with a fixture project's two-stage workflow and an empty purpose.
+ * The `wx` flag was crude, but never touching an existing file was a real
+ * safety property; keep it for anything Praxis did not create.
  */
 async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> {
   const target = path.join(folder, 'PROJECT.md');
@@ -328,40 +336,14 @@ async function writeProjectSnapshot(folder: string, project: ProjectRecord): Pro
 
   const begin = existing.indexOf(SNAPSHOT_BEGIN);
   const end = existing.indexOf(SNAPSHOT_END);
-  const next = begin >= 0 && end > begin
-    ? `${existing.slice(0, begin)}${SNAPSHOT_BEGIN}\n${generated}${existing.slice(end)}`
-    : adoptLegacySnapshot(existing, project);
+  // Not ours — retained untouched, exactly as the old `wx` write did.
+  if (begin < 0 || end <= begin) return 'retained';
+  const next = `${existing.slice(0, begin)}${SNAPSHOT_BEGIN}\n${generated}${existing.slice(end)}`;
   if (next !== existing) await fs.promises.writeFile(target, next, 'utf8');
   return 'retained';
 }
 
-/**
- * Brings a marker-less `PROJECT.md` up to date by replacing the body of the
- * sections Praxis generates — `## Purpose` and `## Workflow` — and leaving
- * every other line untouched. Adding markers is deliberately not done here: it
- * would rewrite a file the user may have restructured.
- */
-function adoptLegacySnapshot(existing: string, project: ProjectRecord): string {
-  let next = replaceSection(existing, 'Purpose', `${project.purpose || '_Not specified_'}\n`);
-  next = replaceSection(
-    next,
-    'Workflow',
-    `${effectiveWorkflow(project).map(stage => `- ${stage.name}`).join('\n')}\n`
-  );
-  return next;
-}
 
-/** Replaces the body of one `## <heading>` section, leaving the rest of the document alone. */
-function replaceSection(content: string, heading: string, body: string): string {
-  const lines = content.split(/\r?\n/);
-  const start = lines.findIndex(line => line.trim().toLowerCase() === `## ${heading}`.toLowerCase());
-  if (start < 0) return content;
-  let end = lines.length;
-  for (let index = start + 1; index < lines.length; index += 1) {
-    if (/^##\s/.test(lines[index])) { end = index; break; }
-  }
-  return [...lines.slice(0, start + 1), '', ...body.split('\n'), ...lines.slice(end)].join('\n');
-}
 
 /**
  * The workflow the board actually renders. The project record is the source

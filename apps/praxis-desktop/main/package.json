@@ -20,7 +20,7 @@
     "rebuild-terminal": "npm rebuild node-pty --build-from-source",
     "start": "npm run compile && electron .",
     "test:e2e": "npm run compile && npx playwright test",
-    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/adapters/jsonKeyValueStore.test.js"
+    "test:git": "npm run compile && node --test out/main/gitService.test.js out/main/projectSnapshot.test.js out/main/adapters/jsonKeyValueStore.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
