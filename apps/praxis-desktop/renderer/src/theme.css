@@ -4165,6 +4165,23 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .surface-marketplace-meta small { color: var(--text-tertiary); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .surface-marketplace-card .btn { flex: none; }
 
+/* Project workflow editor (FX-BE-046) — the stages a board shows as columns. */
+.ph-hint { margin: 0 0 8px; color: var(--text-tertiary); font-size: var(--text-xs); }
+.ph-hint.is-warn { color: var(--warning, var(--text-secondary)); }
+.ph-stage {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-top: 1px solid var(--border);
+}
+.ph-stage:first-of-type { border-top: none; }
+.ph-stage-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); }
+.ph-stage-dot.is-todo { background: var(--text-tertiary); }
+.ph-stage-dot.is-indeterminate { background: var(--accent); }
+.ph-stage-dot.is-done { background: var(--success, var(--accent)); }
+.ph-stage-meta { margin-left: auto; color: var(--text-tertiary); font-size: var(--text-xs); }
+.ph-stage.is-editing { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+.ph-stage-actions { display: flex; gap: 2px; }
+
+
 /* A button styled as an inline text link — used inside sentence-flow controls
    like the Themes marketplace "Installed from the catalogue: … Remove" line. */
 .linklike {

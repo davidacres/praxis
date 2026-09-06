@@ -4,6 +4,7 @@ import {
   ProjectStore,
   WorkspaceStore,
   validateProjectRecord,
+  normalizeWorkflowStages,
   discoverPlanFolders,
   type AttachProjectFolderInput,
   type AttachProjectFolderResult,
@@ -127,7 +128,7 @@ export class ProjectManager {
       id, name: input.name.trim(), key: input.key.trim().toUpperCase(), type: input.type,
       purpose: input.purpose.trim(), brief: cleanBrief(input.brief), workspaceFolder: folder,
       storage,
-      workflowStages: input.workflowStages.map(stage => ({ id: stage.id, name: stage.name.trim() })),
+      workflowStages: input.workflowStages.map(stage => ({ id: stage.id, name: stage.name.trim(), ...(stage.category ? { category: stage.category } : {}) })),
       defaultBoardId: `${id}-board`, linkedBoards: [],
       defaultAiToolMode: folder ? input.defaultAiToolMode : 'project-only',
       workItems: storage === 'folder' ? [] : input.starterTickets.map((ticket, index) => ({
@@ -249,6 +250,15 @@ export class ProjectManager {
     }
     return path.resolve(folderPath);
   }
+
+  /**
+   * Regenerates a project's `PROJECT.md` after something it renders changed.
+   * Safe on a hand-edited file — see `writeProjectSnapshot`.
+   */
+  public async refreshProjectFile(project: ProjectRecord): Promise<void> {
+    if (!project.workspaceFolder) return;
+    await writeProjectSnapshot(project.workspaceFolder, project);
+  }
 }
 
 function validateCreateInput(input: CreateProjectInput, projects: ProjectRecord[]): void {
@@ -288,5 +298,78 @@ function documentStatus(content: string): string | undefined {
   const normalized = raw?.replace(/^[^A-Za-z0-9]+/, '').trim().replace(/[-_]+/g, ' ');
   return normalized || undefined;
 }
-async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> { const target = path.join(folder, 'PROJECT.md'); try { const handle = await fs.promises.open(target, 'wx'); await handle.writeFile(renderSnapshot(project), 'utf8'); await handle.close(); return 'created'; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'EEXIST') return 'retained'; throw error; } }
-function renderSnapshot(project: ProjectRecord): string { const fields = Object.entries(project.brief).map(([key, value]) => `## ${key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}\n\n${value || '_Not specified_'}\n`).join('\n'); return `# ${project.name}\n\n- Key: ${project.key}\n- Type: ${project.type}\n- Created: ${project.createdAt}\n\n## Purpose\n\n${project.purpose || '_Not specified_'}\n\n${fields}\n## Workflow\n\n${project.workflowStages.map(stage => `- ${stage.name}`).join('\n')}\n`; }
+const SNAPSHOT_BEGIN = '<!-- praxis:begin — generated from the project. Edit in Praxis; text outside this block is yours. -->';
+const SNAPSHOT_END = '<!-- praxis:end -->';
+
+/**
+ * Writes `PROJECT.md` (FX-BE-047).
+ *
+ * The file used to be written once with the `wx` flag and never reconciled,
+ * which is how a project could advertise a workflow its board did not have.
+ * It is now regenerated, without clobbering anything a human added:
+ *
+ * - **No file** — write the generated block wrapped in markers.
+ * - **Markers present** — replace only what is between them.
+ * - **Markers absent** (every file written before this story) — adopt it by
+ *   rewriting only the sections Praxis recognises, leaving all other prose
+ *   exactly where it is.
+ */
+async function writeProjectSnapshot(folder: string, project: ProjectRecord): Promise<'created' | 'retained'> {
+  const target = path.join(folder, 'PROJECT.md');
+  const generated = renderSnapshot(project);
+  let existing: string;
+  try {
+    existing = await fs.promises.readFile(target, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    await fs.promises.writeFile(target, `${SNAPSHOT_BEGIN}\n${generated}${SNAPSHOT_END}\n`, 'utf8');
+    return 'created';
+  }
+
+  const begin = existing.indexOf(SNAPSHOT_BEGIN);
+  const end = existing.indexOf(SNAPSHOT_END);
+  const next = begin >= 0 && end > begin
+    ? `${existing.slice(0, begin)}${SNAPSHOT_BEGIN}\n${generated}${existing.slice(end)}`
+    : adoptLegacySnapshot(existing, project);
+  if (next !== existing) await fs.promises.writeFile(target, next, 'utf8');
+  return 'retained';
+}
+
+/**
+ * Brings a marker-less `PROJECT.md` up to date by replacing the body of the
+ * sections Praxis generates — `## Purpose` and `## Workflow` — and leaving
+ * every other line untouched. Adding markers is deliberately not done here: it
+ * would rewrite a file the user may have restructured.
+ */
+function adoptLegacySnapshot(existing: string, project: ProjectRecord): string {
+  let next = replaceSection(existing, 'Purpose', `${project.purpose || '_Not specified_'}\n`);
+  next = replaceSection(
+    next,
+    'Workflow',
+    `${effectiveWorkflow(project).map(stage => `- ${stage.name}`).join('\n')}\n`
+  );
+  return next;
+}
+
+/** Replaces the body of one `## <heading>` section, leaving the rest of the document alone. */
+function replaceSection(content: string, heading: string, body: string): string {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex(line => line.trim().toLowerCase() === `## ${heading}`.toLowerCase());
+  if (start < 0) return content;
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (/^##\s/.test(lines[index])) { end = index; break; }
+  }
+  return [...lines.slice(0, start + 1), '', ...body.split('\n'), ...lines.slice(end)].join('\n');
+}
+
+/**
+ * The workflow the board actually renders. The project record is the source
+ * for both backends — a folder-backed project's stages are written through to
+ * `board.praxis.json` — so this can never advertise a column that does not
+ * exist.
+ */
+function effectiveWorkflow(project: ProjectRecord) {
+  return normalizeWorkflowStages(project.workflowStages);
+}
+function renderSnapshot(project: ProjectRecord): string { const fields = Object.entries(project.brief).map(([key, value]) => `## ${key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}\n\n${value || '_Not specified_'}\n`).join('\n'); return `# ${project.name}\n\n- Key: ${project.key}\n- Type: ${project.type}\n- Created: ${project.createdAt}\n\n## Purpose\n\n${project.purpose || '_Not specified_'}\n\n${fields}\n## Workflow\n\n${effectiveWorkflow(project).map(stage => `- ${stage.name}`).join('\n')}\n`; }

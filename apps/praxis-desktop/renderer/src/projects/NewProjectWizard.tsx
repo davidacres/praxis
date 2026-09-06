@@ -5,7 +5,8 @@ import {
   type FolderInspection,
   type ProjectRecord,
   type ProjectStartingPoint,
-  type ProjectType
+  type ProjectType,
+  type ProjectWorkflowStage
 } from '@praxis/core';
 // Deep import on purpose: `@praxis/core`'s barrel pulls in node-only services
 // (chokidar, node:fs) that cannot be bundled for the browser — importing
@@ -352,7 +353,7 @@ export function NewProjectWizard({ workspaceId, workspaceName, presentation = 'd
   const chooseWorkflow = (choice: PlanChoice) => {
     setWorkflowChoice(choice);
     const nextStages = choice === 'none'
-      ? [{ id: 'stage-1', name: 'To do' }, { id: 'stage-2', name: 'Done' }]
+      ? [{ id: 'stage-1', name: 'To do', category: 'todo' as const }, { id: 'stage-2', name: 'Done', category: 'done' as const }]
       : defaultProjectWorkflow(type);
     setStages(nextStages);
     setTickets(current => current.map(ticket => ({ ...ticket, status: nextStages[0].name })));
@@ -486,7 +487,7 @@ function BriefStep({ type, fields, brief, included, draft, draftSkipped, selecte
 
 function InitialPlanStep({ type, stages, tickets, workflowChoice, ticketChoice, allowEmptyTickets, workflowEditorRef, ticketEditorRef, onChooseWorkflow, onChooseTickets, onStagesChange, onTicketsChange }: {
   type: ProjectType;
-  stages: Array<{ id: string; name: string }>;
+  stages: ProjectWorkflowStage[];
   tickets: Array<{ summary: string; description: string; issueType: string; status: string }>;
   workflowChoice: PlanChoice;
   ticketChoice: PlanChoice;
@@ -499,7 +500,7 @@ function InitialPlanStep({ type, stages, tickets, workflowChoice, ticketChoice, 
   onTicketsChange: Dispatch<SetStateAction<Array<{ summary: string; description: string; issueType: string; status: string }>>>;
 }) {
   return <div className="initial-plan-step">
-    <section className="plan-section"><div className="plan-section-heading"><div><h3>Workflow</h3><p>Choose how work moves across the first board.</p></div></div><div className="plan-choice-grid"><PlanOption selected={workflowChoice === 'standard'} eyebrow="Recommended" title={`Standard ${typeLabel(type).toLowerCase()} workflow`} detail={defaultProjectWorkflow(type).map(stage => stage.name).join(' → ')} onClick={() => onChooseWorkflow('standard')} /><PlanOption selected={workflowChoice === 'none'} eyebrow="Simple" title="To do and Done" detail="A minimal board with room to grow later." onClick={() => onChooseWorkflow('none')} /><PlanOption selected={workflowChoice === 'custom'} eyebrow="Custom" title="Choose the stages" detail="Edit the suggested workflow before creating the project." onClick={() => onChooseWorkflow('custom')} /></div>{workflowChoice === 'custom' && <div className="plan-custom-editor" ref={workflowEditorRef}><div className="section-heading"><h2>Workflow stages</h2><button className="btn" onClick={() => onStagesChange(current => [...current, { id: `stage-${Date.now()}`, name: 'New stage' }])}>Add stage</button></div>{stages.map((stage, index) => <div className="editable-row" key={stage.id}><span>{index + 1}</span><input className="input" aria-label={`Workflow stage ${index + 1}`} value={stage.name} onChange={event => { const value = event.target.value; onStagesChange(current => current.map(item => item.id === stage.id ? { ...item, name: value } : item)); onTicketsChange(current => current.map(ticket => ticket.status === stage.name ? { ...ticket, status: value } : ticket)); }} /><button className="icon-btn" aria-label="Remove stage" onClick={() => onStagesChange(current => current.filter(item => item.id !== stage.id))}>×</button></div>)}</div>}</section>
+    <section className="plan-section"><div className="plan-section-heading"><div><h3>Workflow</h3><p>Choose how work moves across the first board.</p></div></div><div className="plan-choice-grid"><PlanOption selected={workflowChoice === 'standard'} eyebrow="Recommended" title={`Standard ${typeLabel(type).toLowerCase()} workflow`} detail={defaultProjectWorkflow(type).map(stage => stage.name).join(' → ')} onClick={() => onChooseWorkflow('standard')} /><PlanOption selected={workflowChoice === 'none'} eyebrow="Simple" title="To do and Done" detail="A minimal board with room to grow later." onClick={() => onChooseWorkflow('none')} /><PlanOption selected={workflowChoice === 'custom'} eyebrow="Custom" title="Choose the stages" detail="Edit the suggested workflow before creating the project." onClick={() => onChooseWorkflow('custom')} /></div>{workflowChoice === 'custom' && <div className="plan-custom-editor" ref={workflowEditorRef}><div className="section-heading"><h2>Workflow stages</h2><button className="btn" onClick={() => onStagesChange(current => [...current.slice(0, -1), { id: `stage-${Date.now()}`, name: 'New stage', category: 'indeterminate' as const }, ...current.slice(-1)])}>Add stage</button></div>{stages.map((stage, index) => <div className="editable-row" key={stage.id}><span>{index + 1}</span><input className="input" aria-label={`Workflow stage ${index + 1}`} value={stage.name} onChange={event => { const value = event.target.value; onStagesChange(current => current.map(item => item.id === stage.id ? { ...item, name: value } : item)); onTicketsChange(current => current.map(ticket => ticket.status === stage.name ? { ...ticket, status: value } : ticket)); }} /><button className="icon-btn" aria-label="Remove stage" onClick={() => onStagesChange(current => current.filter(item => item.id !== stage.id))}>×</button></div>)}</div>}</section>
     <section className="plan-section"><div className="plan-section-heading"><div><h3>Starter tickets</h3><p>{allowEmptyTickets ? 'Existing project detected. Keep its current plan and skip creating starter tickets here, or add prompts if needed.' : 'Choose suggested prompts or customize them. At least one titled ticket is required to start the board.'}</p></div></div><div className="plan-choice-grid"><PlanOption selected={ticketChoice === 'standard'} eyebrow="Recommended" title="Add suggested tickets" detail={`${defaultProjectTickets(type).length} editable prompts for this project type.`} onClick={() => onChooseTickets('standard')} />{allowEmptyTickets && <PlanOption selected={ticketChoice === 'none'} eyebrow="Existing plan" title="No starter tickets" detail="Use the tickets already in this project folder." onClick={() => onChooseTickets('none')} />}<PlanOption selected={ticketChoice === 'custom'} eyebrow="Custom" title="Edit starter tickets" detail="Review, rename, add, or remove the suggestions." onClick={() => onChooseTickets('custom')} /></div>{ticketChoice === 'custom' && <div className="plan-custom-editor" ref={ticketEditorRef}><div className="section-heading"><h2>Starter tickets</h2><button className="btn" onClick={() => onTicketsChange(current => [...current, { summary: '', description: '', issueType: 'Task', status: stages[0]?.name ?? '' }])}>Add ticket</button></div>{tickets.map((ticket, index) => <div className="ticket-edit" key={index}><input className="input" aria-label={`Starter ticket ${index + 1}`} value={ticket.summary} onChange={event => onTicketsChange(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, summary: event.target.value } : item))} /><select className="input" aria-label={`Starter ticket ${index + 1} stage`} value={ticket.status} onChange={event => onTicketsChange(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, status: event.target.value } : item))}>{stages.map(stage => <option key={stage.id}>{stage.name}</option>)}</select><button className="icon-btn" aria-label="Remove ticket" onClick={() => onTicketsChange(current => current.filter((_, itemIndex) => index !== itemIndex))}>×</button></div>)}</div>}</section>
   </div>;
 }
@@ -511,7 +512,7 @@ function ToolAccessStep({ mode, folderless, onChange }: { mode: AgentToolMode; f
   </div>;
 }
 
-function ReviewStep({ type, name, projectKey, purpose, workspaceName, folderless, previewPath, briefCount, stages, ticketCount, toolMode }: { type: ProjectType; name: string; projectKey: string; purpose: string; workspaceName?: string; folderless: boolean; previewPath: string; briefCount: number; stages: Array<{ id: string; name: string }>; ticketCount: number; toolMode: AgentToolMode }) {
+function ReviewStep({ type, name, projectKey, purpose, workspaceName, folderless, previewPath, briefCount, stages, ticketCount, toolMode }: { type: ProjectType; name: string; projectKey: string; purpose: string; workspaceName?: string; folderless: boolean; previewPath: string; briefCount: number; stages: ProjectWorkflowStage[]; ticketCount: number; toolMode: AgentToolMode }) {
   return <div className="review-summary">
     <header className="review-summary-heading"><span>Ready to create</span><div><h2>{name}</h2><code>{projectKey}</code></div>{purpose && <p>{purpose}</p>}<p>Praxis will add this project to <strong>{workspaceName ?? 'the current workspace'}</strong> and open its default board.</p></header>
     <dl className="review-summary-list">
