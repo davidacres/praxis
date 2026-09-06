@@ -11,9 +11,12 @@ import {
   configureMarketplace,
   emitMarketplaceChanged,
   getMarketplaceStatus,
+  listInstalledAddons,
   onMarketplaceChanged,
   readActiveAppearance,
   refreshAgentRuntimeForAddons,
+  removeInstalledAddon,
+  setInstalledAgentTrust,
   setMarketplaceToken
 } from './marketplaceInstance';
 
@@ -39,10 +42,8 @@ export function registerMarketplaceIpc(): void {
     return service.listCatalog();
   });
 
-  ipcMain.handle('marketplace:listInstalled', async () => {
-    const service = await buildMarketplaceService();
-    return service.listInstalled();
-  });
+  // Installed add-ons are read straight from disk — no registry, no token.
+  ipcMain.handle('marketplace:listInstalled', () => listInstalledAddons());
 
   ipcMain.handle('marketplace:listActiveAppearance', () => readActiveAppearance());
 
@@ -72,26 +73,19 @@ export function registerMarketplaceIpc(): void {
     return record;
   });
 
-  ipcMain.handle('marketplace:remove', async (_event, kind: AddonKind, id: string) => {
-    const service = await buildMarketplaceService();
-    await service.remove(kind, id);
-    if (kind === 'agent') {
-      await refreshAgentRuntimeForAddons();
-    }
-    emitMarketplaceChanged();
-  });
+  // Removing and (un)trusting are local disk operations — no registry, no token.
+  ipcMain.handle('marketplace:remove', (_event, kind: AddonKind, id: string) =>
+    removeInstalledAddon(kind, id)
+  );
 
   ipcMain.handle('marketplace:checkForUpdates', async () => {
     const service = await buildMarketplaceService();
     return service.checkForUpdates();
   });
 
-  ipcMain.handle('marketplace:setAgentTrust', async (_event, id: string, enabled: boolean) => {
-    const service = await buildMarketplaceService();
-    await service.setAgentTrust(id, enabled);
-    await refreshAgentRuntimeForAddons();
-    emitMarketplaceChanged();
-  });
+  ipcMain.handle('marketplace:setAgentTrust', (_event, id: string, enabled: boolean) =>
+    setInstalledAgentTrust(id, enabled)
+  );
 
   onMarketplaceChanged(() => {
     for (const win of BrowserWindow.getAllWindows()) {
