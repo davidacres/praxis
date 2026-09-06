@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-06T00:00:00.000Z
 **Type:** Feature
 **Priority:** High
 id: FX-BF-019
 slug: project-workflow-as-data
 title: A project's workflow is data, authored once and rendered by every backend
-status: proposed
+status: complete
 owner: Electron desktop app
 updated: 2026-09-06
 issues: docs/issues/features/fx-bf-019-project-workflow-as-data/feature-issues.md
@@ -145,8 +145,8 @@ from it rather than frozen beside it.
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| FX-BE-043 | Story | Stage category as a first-class field | Proposed |
-| FX-BE-044 | Story | Resolve a freeform status against a declared workflow | Proposed |
-| FX-BE-045 | Story | Folder boards read their workflow instead of declaring it | Proposed |
-| FX-BE-046 | Story | Editing a project's workflow | Proposed |
-| FX-BE-047 | Story | PROJECT.md derived from the effective workflow | Proposed |
+| FX-BE-043 | Story | Stage category as a first-class field | Complete |
+| FX-BE-044 | Story | Resolve a freeform status against a declared workflow | Complete |
+| FX-BE-045 | Story | Folder boards read their workflow instead of declaring it | Complete |
+| FX-BE-046 | Story | Editing a project's workflow | Complete |
+| FX-BE-047 | Story | PROJECT.md derived from the effective workflow | Complete |

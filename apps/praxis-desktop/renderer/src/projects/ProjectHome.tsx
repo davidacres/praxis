@@ -1,10 +1,19 @@
 import { useState } from 'react';
-import type { AgentToolMode, Board, Connection, ProjectRecord, ProjectStartingPoint, ProjectType } from '@praxis/core';
+import type {
+  AgentToolMode, Board, Connection, ProjectRecord, ProjectStartingPoint, ProjectType,
+  ProjectWorkflowCategory, ProjectWorkflowStage
+} from '@praxis/core';
 // Deep import on purpose: `@praxis/core`'s barrel pulls in node-only services
 // (chokidar, node:fs) that cannot be bundled for the browser — importing
 // PROJECT_BRIEF_FIELDS from the package root fails the vite build.
 import { PROJECT_BRIEF_FIELDS } from '@praxis/core/out/projects/projectTemplates';
 import { Icon } from '../ui/Icon';
+
+const CATEGORY_LABEL: Record<ProjectWorkflowCategory, string> = {
+  todo: 'Not started',
+  indeterminate: 'In flight',
+  done: 'Done'
+};
 
 const TOOL_MODE_LABEL: Record<AgentToolMode, string> = {
   'project-only': 'Project tools',
@@ -18,6 +27,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const [toolMode, setToolMode] = useState<AgentToolMode>(project.defaultAiToolMode);
   const [purpose, setPurpose] = useState(project.purpose);
   const [brief, setBrief] = useState(project.brief);
+  const [stages, setStages] = useState<ProjectWorkflowStage[]>(project.workflowStages);
   const [error, setError] = useState<string>();
   const [attachMode, setAttachMode] = useState<ProjectStartingPoint>('existing-folder');
   const [attachPath, setAttachPath] = useState('');
@@ -39,8 +49,28 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
       ? { label: 'Git repo', on: true }
       : { label: inspection ? 'No repo' : 'Folder attached', on: false };
 
-  const cancelEdit = () => { setEditing(false); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); };
-  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { type, purpose, brief, defaultAiToolMode: toolMode })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
+  const cancelEdit = () => { setEditing(false); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
+
+  // How many tickets sit on each stage, so renaming or removing one can say
+  // what it will move rather than silently re-resolving.
+  const ticketsOn = (stageName: string) =>
+    project.workItems.filter(item => item.status === stageName).length;
+  const moveStage = (index: number, delta: number) => setStages(current => {
+    const next = [...current];
+    const target = index + delta;
+    if (target < 0 || target >= next.length) return current;
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
+  const editStage = (index: number, patch: Partial<ProjectWorkflowStage>) =>
+    setStages(current => current.map((stage, i) => (i === index ? { ...stage, ...patch } : stage)));
+  const addStage = () => setStages(current => [
+    ...current.slice(0, current.length - 1),
+    { id: `stage-${Date.now().toString(36)}`, name: 'New stage', category: 'indeterminate' },
+    ...current.slice(current.length - 1)
+  ]);
+  const removeStage = (index: number) => setStages(current => current.filter((_, i) => i !== index));
+  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const chooseAttach = async () => { const value = await window.praxis.dialog.pickFolder(attachMode === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder'); if (value) setAttachPath(value); };
   const attach = async () => { try { const result = await window.praxis.projects.attachFolder(project.id, { startingPoint: attachMode as 'new-folder' | 'existing-folder', folderPath: attachPath, folderName: folderName || undefined, createProjectFile: true }); onChanged(result.project); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
 
@@ -80,6 +110,54 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
         {briefFields.map(field => editing
           ? <label className="field" key={field.key}><span>{field.label}</span><textarea className="input textarea" value={brief[field.key] ?? ''} onChange={e => setBrief(current => ({ ...current, [field.key]: e.target.value }))} /></label>
           : <div className={`ph-brief-row${project.brief[field.key]?.trim() ? ' is-filled' : ''}`} key={field.key}><Icon name={project.brief[field.key]?.trim() ? 'check' : 'dot'} size={12} /><div><strong>{field.label}</strong>{project.brief[field.key]?.trim() && <p>{project.brief[field.key]}</p>}</div></div>)}
+      </section>
+
+      <section className="project-panel" data-testid="project-workflow">
+        <div className="ph-section-head">
+          <h2>Workflow</h2>
+          <span className="ph-count">{(editing ? stages : project.workflowStages).length}</span>
+        </div>
+        <p className="ph-hint">The columns this project&rsquo;s board shows, in order. The last stage is what &ldquo;done&rdquo; means.</p>
+        {(editing ? stages : project.workflowStages).map((stage, index, all) => editing
+          ? <div className="ph-stage is-editing" key={stage.id} data-testid={`workflow-stage-${index}`}>
+              <input
+                className="input"
+                aria-label={`Stage ${index + 1} name`}
+                value={stage.name}
+                onChange={e => editStage(index, { name: e.target.value })}
+              />
+              <select
+                className="input"
+                aria-label={`Stage ${index + 1} category`}
+                value={stage.category ?? 'indeterminate'}
+                onChange={e => editStage(index, { category: e.target.value as ProjectWorkflowCategory })}
+              >
+                {(['todo', 'indeterminate', 'done'] as const).map(value =>
+                  <option key={value} value={value}>{CATEGORY_LABEL[value]}</option>)}
+              </select>
+              <div className="ph-stage-actions">
+                <button className="icon-btn icon-btn-sm" title="Move up" aria-label={`Move ${stage.name} up`} disabled={index === 0} onClick={() => moveStage(index, -1)}><Icon name="arrow-up" size={12} /></button>
+                <button className="icon-btn icon-btn-sm" title="Move down" aria-label={`Move ${stage.name} down`} disabled={index === all.length - 1} onClick={() => moveStage(index, 1)}><Icon name="chevron-down" size={12} /></button>
+                <button className="icon-btn icon-btn-sm" title="Remove stage" aria-label={`Remove ${stage.name}`} disabled={all.length <= 2} onClick={() => removeStage(index)}><Icon name="trash" size={12} /></button>
+              </div>
+            </div>
+          : <div className="ph-stage" key={stage.id} data-testid={`workflow-stage-${index}`}>
+              <span className={`ph-stage-dot is-${stage.category ?? 'indeterminate'}`} aria-hidden="true" />
+              <strong>{stage.name}</strong>
+              <span className="ph-stage-meta">{CATEGORY_LABEL[stage.category ?? 'indeterminate']}{ticketsOn(stage.name) > 0 ? ` · ${ticketsOn(stage.name)} ticket${ticketsOn(stage.name) === 1 ? '' : 's'}` : ''}</span>
+            </div>)}
+        {editing && <>
+          <button className="btn btn-quiet" onClick={addStage} data-testid="workflow-add-stage">+ Add stage</button>
+          {stages.some((stage, index) => stage.name !== project.workflowStages[index]?.name && ticketsOn(project.workflowStages[index]?.name ?? '') > 0) &&
+            <p className="ph-hint is-warn" data-testid="workflow-rename-warning">
+              Renaming a stage re-resolves the tickets on it to the closest remaining stage.
+            </p>}
+          {project.workflowStages.some(stage =>
+            ticketsOn(stage.name) > 0 && !stages.some(next => next.name === stage.name)) &&
+            <p className="ph-hint is-warn" data-testid="workflow-remove-warning">
+              A removed stage&rsquo;s tickets move to the closest remaining stage of the same kind.
+            </p>}
+        </>}
       </section>
 
       <section className="project-panel">

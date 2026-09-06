@@ -128,6 +128,30 @@ test('creates a folderless Product project through the full wizard and opens its
   expect(created?.brief.mvp).toBe('Deliver the smallest coherent release that can test the core value.');
   expect(Object.values(created?.brief ?? {}).filter(Boolean)).toHaveLength(6);
   expect(created?.workItems).toHaveLength(5);
+  // FX-BE-046 — the workflow is data the user owns, not a value frozen at
+  // creation. Every stage carries a category (FX-BE-043) and the last one is
+  // what "done" means.
+  expect(created?.workflowStages.map(stage => stage.category)).toEqual([
+    'todo', 'todo', 'indeterminate', 'indeterminate', 'indeterminate', 'done'
+  ]);
+  const workflowPanel = page.getByTestId('project-workflow');
+  await expect(workflowPanel).toBeVisible();
+  await expect(workflowPanel.getByTestId('workflow-stage-0')).toContainText('Backlog');
+  await expect(workflowPanel.getByTestId('workflow-stage-5')).toContainText('Done');
+
+  // Rename a stage and add one, then save — the record must follow.
+  await page.getByRole('button', { name: 'Edit project brief' }).click();
+  await workflowPanel.getByRole('textbox', { name: 'Stage 2 name' }).fill('Shaping');
+  await workflowPanel.getByTestId('workflow-add-stage').click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(workflowPanel.getByTestId('workflow-stage-1')).toContainText('Shaping');
+
+  const afterEdit = (await page.evaluate(() => window.praxis.projects.list()))
+    .find(project => project.key === 'CUSTOMER');
+  expect(afterEdit?.workflowStages.map(stage => stage.name)).toContain('Shaping');
+  expect(afterEdit?.workflowStages).toHaveLength(7);
+  // The stage that means done stays last however the list is edited.
+  expect(afterEdit?.workflowStages[afterEdit.workflowStages.length - 1].category).toBe('done');
 
   // Project surfaces — including the detail panels — must inherit the active
   // application theme instead of painting an opaque default background over the
