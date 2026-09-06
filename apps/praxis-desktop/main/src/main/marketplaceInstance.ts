@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { app } from 'electron';
 import {
   type ActiveAppearanceAddons,
+  type AddonKind,
   type AddonSurfacePackContent,
   type AddonThemeContent,
   type InstalledAddon,
@@ -291,6 +292,28 @@ export async function reconcileInstalledOnLaunch(): Promise<void> {
   } catch (error) {
     getLogBus().appendLine(`[marketplace] launch update check failed: ${describe(error)}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Disk-only operations — no network, no token required
+// ---------------------------------------------------------------------------
+
+export function listInstalledAddons(): Promise<InstalledAddon[]> {
+  return getAddonStorage().list();
+}
+
+export async function removeInstalledAddon(kind: AddonKind, id: string): Promise<void> {
+  await getAddonStorage().remove(kind, id);
+  if (kind === 'agent') await refreshAgentRuntimeForAddons();
+  emitMarketplaceChanged();
+}
+
+export async function setInstalledAgentTrust(id: string, enabled: boolean): Promise<void> {
+  const addon = await getAddonStorage().get('agent', id);
+  if (!addon) throw new Error(`No installed agent add-on with id "${id}".`);
+  await getAddonStorage().setEnabled('agent', id, enabled);
+  await refreshAgentRuntimeForAddons();
+  emitMarketplaceChanged();
 }
 
 export type { InstalledAddon };
