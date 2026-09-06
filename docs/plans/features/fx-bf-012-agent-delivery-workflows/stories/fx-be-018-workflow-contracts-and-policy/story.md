@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.990Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-018
 title: Workflow definition, policy, and validation contracts
@@ -38,3 +42,14 @@ Workflow authors have a stable, versioned contract that references Agent Hub ide
 ## Close when
 
 Core tests prove valid definitions round-trip and invalid or unsafe definitions fail closed.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:44.000Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-040
 title: Ticket-triggered workflow runs with outcome write-back
@@ -57,3 +61,14 @@ cancel) left no trace anywhere a team using a real tracker would see it.
 
 `workflowRun.test.ts`, `workflowRunSummary.test.ts`, `workflowOrchestrator.test.ts`
 (core) and `workflowRun.spec.ts` (e2e).
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

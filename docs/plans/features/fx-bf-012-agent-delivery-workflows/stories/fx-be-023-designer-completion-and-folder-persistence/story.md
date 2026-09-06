@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.991Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-023
 title: Designer completion and folder persistence
@@ -59,3 +63,14 @@ canvas.
 A folder-backed project's workflow is authored on the canvas against real
 agents, committed to `.praxis/workflows`, and reloaded intact, with the desktop
 suite green.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

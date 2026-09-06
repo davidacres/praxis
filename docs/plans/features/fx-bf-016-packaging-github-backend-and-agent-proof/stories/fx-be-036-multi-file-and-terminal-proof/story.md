@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.999Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-036
 title: Prove multi-file and terminal-using agent paths
@@ -58,3 +62,14 @@ Not yet broken into tasks.
 "It can take a ticket and do the work" holds for multi-file and
 terminal-using tickets with the same scripted, always-on proof the
 single-file case already has — not just plumbing that's assumed to work.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

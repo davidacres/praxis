@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.991Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-021
 title: Visual workflow designer and template library
@@ -38,3 +42,14 @@ Users can start from safe delivery templates and customize supported workflow st
 ## Close when
 
 A user can visually configure a valid workflow using discovered agents and save it to the intended scope.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

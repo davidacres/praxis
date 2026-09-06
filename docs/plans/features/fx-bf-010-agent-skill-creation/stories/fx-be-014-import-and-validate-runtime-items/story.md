@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.988Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-014
 title: Import and validate runtime items
@@ -32,3 +36,14 @@ Existing agents and skills can be brought into Praxis with visible validation ra
 ## Close when
 
 Import is safe, deterministic, scope-aware, and covered by malicious-path and invalid-input tests.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

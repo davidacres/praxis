@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.989Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-016
 title: Skill activation and session handoff
@@ -32,3 +36,14 @@ Users can move from choosing an agent and skill into actual work without reconfi
 ## Close when
 
 An Agent Hub selection launches a correctly attributed session and links back to its runtime context.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

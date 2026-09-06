@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.986Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-010
 title: Agent Hub navigation and scope-aware catalog
@@ -33,3 +37,14 @@ Users need a trustworthy place to see what agents and skills are available inste
 ## Close when
 
 The route is visibly distinct from Sessions and the catalog correctly reflects both discovery scopes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

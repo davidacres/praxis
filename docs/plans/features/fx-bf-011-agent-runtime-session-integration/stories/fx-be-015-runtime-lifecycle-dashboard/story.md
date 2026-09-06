@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.988Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-015
 title: Runtime lifecycle dashboard
@@ -32,3 +36,14 @@ Users can see and control trusted agent hosts from the same place where they dis
 ## Close when
 
 Runtime state is accurate after refresh, lifecycle actions are safe, and no process is spawned by discovery alone.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

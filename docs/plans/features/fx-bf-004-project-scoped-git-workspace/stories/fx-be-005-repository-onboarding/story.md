@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.983Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-005
 title: Project-scoped Git entry point and repository onboarding
@@ -56,3 +60,14 @@ Keep the existing graph/diff visual language. The new work owns entry-point/cont
 ## Close when
 
 The project-first Git flow is usable by a non-expert from an empty project through repository initialization or opening the graph, with typed failures, explicit mutation confirmation, and green packaged Electron verification.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

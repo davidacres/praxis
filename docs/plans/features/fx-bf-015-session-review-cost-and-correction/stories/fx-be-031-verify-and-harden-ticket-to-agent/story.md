@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.997Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-031
 title: Verify and harden the ticket-to-agent flow
@@ -63,3 +67,14 @@ and confirms each one's reply is recorded once and carried forward.
 The scripted suite runs green on every push and the live-agent test is
 reachable and useful on request, without either being able to interfere with
 the other.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

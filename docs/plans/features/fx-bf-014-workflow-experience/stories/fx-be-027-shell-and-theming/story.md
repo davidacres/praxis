@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.995Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-027
 title: Shell integration and theming foundation
@@ -39,3 +43,14 @@ The workflow surface uses the app's three-pane shell and its token system, so it
 ## Close when
 
 Every workflow screen renders through the shell and the token system, verified by a theme-switch pass.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

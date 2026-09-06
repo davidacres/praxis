@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.996Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-029
 title: Run Monitor
@@ -40,3 +44,14 @@ A run's state is legible in two seconds — a sentence, a pipeline picture, a ga
 ## Close when
 
 A run reads as a status board and every stage's evidence is one click away in the right pane.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

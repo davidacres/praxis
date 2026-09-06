@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.987Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-012
 title: Create Agent wizard and starter scaffold
@@ -32,3 +36,14 @@ Users can define a new agent without hand-authoring an invalid manifest or guess
 ## Close when
 
 A new agent can be created, discovered, inspected, and safely left unstarted.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

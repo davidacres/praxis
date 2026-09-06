@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.987Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-011
 title: Agent and skill detail, trust, and capabilities
@@ -32,3 +36,14 @@ Users must understand what an item can do and why an action is blocked before al
 ## Close when
 
 Detail and trust states are understandable, keyboard accessible, and covered by focused UI tests.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

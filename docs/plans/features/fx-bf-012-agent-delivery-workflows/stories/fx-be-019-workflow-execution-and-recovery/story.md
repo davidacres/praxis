@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.990Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-019
 title: Workflow execution, persistence, and recovery
@@ -38,3 +42,14 @@ Long-running delivery workflows remain observable and resumable across failures 
 ## Close when
 
 Core and Electron tests demonstrate deterministic execution, failure isolation, and restart recovery.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

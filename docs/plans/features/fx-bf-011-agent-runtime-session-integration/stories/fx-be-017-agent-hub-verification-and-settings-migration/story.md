@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.989Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-017
 title: Advanced Settings boundary and verification
@@ -32,3 +36,14 @@ Runtime configuration has one clear home and the new Agent Hub is verified at th
 ## Close when
 
 The Agent Hub and Settings boundary are coherent and all affected checks pass.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

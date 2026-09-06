@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.991Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-020
 title: Agent session stages, gates, artifacts, and approvals
@@ -38,3 +42,14 @@ Each workflow stage runs through the trusted Agent Hub/runtime boundary and prod
 ## Close when
 
 A workflow run visibly links every stage to its agent session, inputs, outputs, evidence, and gate decision.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
