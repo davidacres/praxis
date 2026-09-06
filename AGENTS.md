@@ -187,7 +187,7 @@ control — the dashed style and the off-palette hue are both asserted.
 
 Three layers, each with one job:
 
-- **Workspace** (`.workspace.praxis` file, `WorkspaceRecord`) — a saved, shareable set
+- **Workspace** (`.workspace.praxis.json` file, `WorkspaceRecord`) — a saved, shareable set
   of project + connection references. Groups; owns no board data.
 - **Project** (`ProjectRecord`, `ProjectStore`) — the unit of planned work. One board.
   `storage: 'app'` keeps work items in app JSON; `storage: 'folder'` backs them with a
@@ -231,22 +231,39 @@ current when a backend's state changes.
   axes with no per-theme override. The one renderer-visible change is a
   `ConnectionForm` branch built from the existing form primitives.
 
-## Naming a file Praxis writes (FX-BE-048)
+## Naming a file Praxis writes (FX-BE-048, FX-BE-050)
 
-Every file Praxis puts in a user's folder carries `praxis` in its name, under
-one rule with two forms — both already in use, and each justified:
+**One form: `<name>.praxis.<ext>`.** Every file Praxis puts in a user's folder
+carries `praxis` in its name and keeps its real extension last.
 
-| form | example | when |
-| --- | --- | --- |
-| `.praxis` **is the extension** | `praxis-code.workspace.praxis` | the user *opens it with Praxis*; OS file association and the picker filter depend on it |
-| `.praxis.<ext>` **is a middle segment** | `board.praxis.json`, `project.praxis.md` | *tooling* reads it; the real extension stays last so editors highlight and GitHub renders it |
+| file | |
+| --- | --- |
+| `project.praxis.md` | the project's identity, purpose, brief and workflow |
+| `board.praxis.json` | that folder's board — key, name, workflow |
+| `<slug>.workspace.praxis.json` | a workspace — which projects and connections travel together |
 
-The generic name this replaced was a real bug, not untidiness: Praxis only
-rewrites a project file carrying its own markers, so a repository that already
-had a `PROJECT.md` silently got no Praxis project file at all — neither adopted
-nor created. Namespacing removes the collision rather than arbitrating it.
+The real extension goes last because **these files are meant to be committed**,
+so they are read, diffed and reviewed far more often than they are opened by
+the app. That buys editor highlighting, GitHub rendering and JSON schema
+association.
 
-Use `PROJECT_FILE_NAME` from core; do not write the filename as a literal.
+There was briefly a second form — `.praxis` as the extension itself, on the
+grounds that a workspace file is "opened with Praxis". That justification was
+aspirational: there is no `fileAssociations` entry in the electron-builder
+config and no `open-file` handler, so double-clicking one has never opened
+anything. It was paying the tooling cost for an affordance that did not exist.
+If double-click-to-open is built later, register the association against
+`.praxis.json` — the same trade VS Code makes for `.code-workspace`, which
+GitHub also declines to highlight.
+
+The generic name this replaced (`PROJECT.md`) was a real bug, not untidiness:
+Praxis only rewrites a project file carrying its own markers, so a repository
+that already had a `PROJECT.md` silently got no Praxis project file at all —
+neither adopted nor created. Namespacing removes the collision rather than
+arbitrating it.
+
+Use `PROJECT_FILE_NAME` and `PRAXIS_WORKSPACE_FILE_SUFFIX` from core; do not
+write either filename as a literal.
 
 ## Workspace files are meant to be committed (FX-BE-049)
 

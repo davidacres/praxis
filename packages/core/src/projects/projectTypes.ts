@@ -7,7 +7,7 @@ import type { AgentToolMode } from '../ai/agentTypes';
  * reads keeps its real extension last and carries `.praxis` as a middle
  * segment, matching `board.praxis.json` — same folder, same job. A file the
  * user *opens with Praxis* uses `.praxis` as the extension itself
- * (`<name>.workspace.praxis`).
+ * (`<name>.workspace.praxis.json`).
  *
  * The generic `PROJECT.md` it replaced was a real collision: since FX-BE-047
  * Praxis only rewrites a file carrying its own markers, so a repository with
