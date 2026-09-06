@@ -1,4 +1,6 @@
 import * as path from 'node:path';
+import type { ProjectWorkflowStage } from '../projects/projectTypes';
+import { DEFAULT_WORKFLOW, resolveStatus } from '../projects/projectWorkflow';
 import { folderFs } from './folderFs';
 import {
   buildUnreadablePathError,
@@ -201,24 +203,13 @@ export function buildDescription(content: string): string {
 }
 
 /** Map free-text markdown status lines to workflow status names. */
+/**
+ * @deprecated Use `resolveStatus(raw, workflow)` — a plan folder's statuses now
+ * come from the board's declared workflow (FX-BE-044). This remains as the
+ * default-workflow shorthand so existing callers keep their exact behaviour.
+ */
 export function mapMarkdownStatusToPlanStatus(raw: string): string {
-  const s = raw.toLowerCase();
-  if (s.includes('complete') || s.includes('✅') || s.includes('done')) {
-    return 'Done';
-  }
-  if (s.includes('block')) {
-    return 'Blocked';
-  }
-  if (s.includes('progress') || s.includes('doing') || s.includes('wip') || s.includes('🔄')) {
-    return 'In Progress';
-  }
-  if (s.includes('to do') || s.includes('todo') || s.includes('pending') || s.includes('planned')) {
-    return 'To Do';
-  }
-  if (s.includes('backlog')) {
-    return 'Backlog';
-  }
-  return 'Backlog';
+  return resolveStatus(raw, DEFAULT_WORKFLOW);
 }
 
 type FileKind = 'file' | 'directory';
@@ -805,12 +796,14 @@ export async function identifyPlanFolder(
  */
 export async function parsePlanFolder(
   plansRoot: string,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  /** The board's declared workflow; defaults to the five statuses folders have always used. */
+  workflow?: readonly ProjectWorkflowStage[]
 ): Promise<ParsedPlanFolder> {
   const progress = onProgress ?? (() => undefined);
 
   const identified = await identifyPlanFolder(plansRoot, progress);
-  return parsePlanFolderRecursively(identified, progress);
+  return parsePlanFolderRecursively(identified, progress, workflow);
 
   // Legacy depth-limited implementation retained below until the recursive
   // parser has fully replaced it and its compatibility coverage is complete.
@@ -1138,7 +1131,11 @@ function planningFeatureId(file: MarkdownPlanFile, featureDirectories: Map<strin
   return planningNumber(file.name);
 }
 
-async function parsePlanFolderRecursively(identified: IdentifiedPlanFolder, progress: (message: string) => void): Promise<ParsedPlanFolder> {
+async function parsePlanFolderRecursively(
+  identified: IdentifiedPlanFolder,
+  progress: (message: string) => void,
+  workflow: readonly ProjectWorkflowStage[] = DEFAULT_WORKFLOW
+): Promise<ParsedPlanFolder> {
   const { plansRootPath, featuresRootPath } = identified;
   const files = await readMarkdownPlanFiles(plansRootPath);
   const featureFiles = files.filter(file => file.name.toLowerCase() === 'feature.md' || extractTypeRaw(file.content)?.trim().toLowerCase() === 'feature');
@@ -1159,7 +1156,7 @@ async function parsePlanFolderRecursively(identified: IdentifiedPlanFolder, prog
       dirName: path.relative(featuresRootPath, directory).replaceAll(path.sep, '/') || path.basename(directory),
       featureId,
       title: extractMainHeading(file.content),
-      planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(file.content)),
+      planStatus: resolveStatus(extractStatusRaw(file.content), workflow),
       description: buildDescription(file.content),
       featureMdPath: file.filePath,
       depTokens: collectDependencyTokens(file.content),
@@ -1188,7 +1185,7 @@ async function parsePlanFolderRecursively(identified: IdentifiedPlanFolder, prog
       filename: file.name,
       issueType,
       title: extractMainHeading(file.content),
-      planStatus: mapMarkdownStatusToPlanStatus(extractStatusRaw(file.content)),
+      planStatus: resolveStatus(extractStatusRaw(file.content), workflow),
       description: buildDescription(file.content),
       ideaTranscript: extractSectionBody(file.content, 'Research Transcript'),
       relativePath: file.relativePath,
