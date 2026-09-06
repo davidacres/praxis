@@ -141,3 +141,9 @@
 | FX-BE-041 | Story | Wire workflow failures into the Output tab's log bus | Complete | FX-BF-017 |
 | FX-BF-018 | Feature | Add-on marketplace | In progress | None |
 | FX-BE-042 | Story | GitHub Packages add-on marketplace | In progress | FX-BF-018 |
+| FX-BF-019 | Feature | A project's workflow is data, authored once and rendered by every backend | Proposed | — |
+| FX-BE-043 | Story | Stage category as a first-class field | Proposed | FX-BF-019 |
+| FX-BE-044 | Story | Resolve a freeform status against a declared workflow | Proposed | FX-BE-043 |
+| FX-BE-045 | Story | Folder boards read their workflow instead of declaring it | Proposed | FX-BE-044 |
+| FX-BE-046 | Story | Editing a project's workflow | Proposed | FX-BE-045 |
+| FX-BE-047 | Story | PROJECT.md derived from the effective workflow | Proposed | FX-BE-046 |
