@@ -37,8 +37,22 @@ let window: Page;
 /** The repo root — four levels up from apps/praxis-desktop/main/e2e. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
-/** Everything in the working tree this spec could plausibly cause a write to. */
-const GUARDED = ['project.praxis.md', 'board.praxis.json', path.join('docs', 'plans')];
+/**
+ * Everything in the working tree this spec could plausibly cause a write to.
+ *
+ * Derived from the naming rule rather than listed, so a Praxis file added later
+ * is covered without anyone remembering to add it here — every root-level
+ * `*.praxis.*` (project.praxis.md, board.praxis.json,
+ * <slug>.workspace.praxis.json) plus the plans tree the folder backend parses
+ * and its template-upgrade pass can rewrite.
+ */
+function guardedPaths(): string[] {
+  const rootPraxisFiles = fs
+    .readdirSync(REPO_ROOT)
+    .filter(name => name.includes('.praxis.'))
+    .sort();
+  return [...rootPraxisFiles, path.join('docs', 'plans')];
+}
 
 /** A stable fingerprint of the guarded paths, so a stray write is visible. */
 function repositoryFingerprint(): string {
@@ -53,7 +67,7 @@ function repositoryFingerprint(): string {
     }
     parts.push(`${relative}:${createHash('sha1').update(fs.readFileSync(absolute)).digest('hex')}`);
   };
-  for (const target of GUARDED) {
+  for (const target of guardedPaths()) {
     const absolute = path.join(REPO_ROOT, target);
     if (fs.existsSync(absolute)) walk(absolute, target);
   }
