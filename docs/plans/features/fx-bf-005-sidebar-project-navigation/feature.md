@@ -1,6 +1,6 @@
 ---
 **Status:** 📋 Proposed
-**Created:** 2026-08-30T01:28:58.134Z
+**Created:** 2026-08-27T21:20:02.000Z
 **Type:** Feature
 **Priority:** Medium
 id: FX-BF-005
