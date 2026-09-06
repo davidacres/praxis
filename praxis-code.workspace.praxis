@@ -31,28 +31,29 @@
       "storage": "folder",
       "workflowStages": [
         {
-          "id": "stage-1",
-          "name": "Backlog"
+          "id": "stage-backlog",
+          "name": "Backlog",
+          "category": "todo"
         },
         {
-          "id": "stage-2",
-          "name": "Requirements"
+          "id": "stage-to-do",
+          "name": "To Do",
+          "category": "todo"
         },
         {
-          "id": "stage-3",
-          "name": "Architecture"
+          "id": "stage-in-progress",
+          "name": "In Progress",
+          "category": "indeterminate"
         },
         {
-          "id": "stage-4",
-          "name": "Implementation"
+          "id": "stage-blocked",
+          "name": "Blocked",
+          "category": "indeterminate"
         },
         {
-          "id": "stage-5",
-          "name": "Verification"
-        },
-        {
-          "id": "stage-6",
-          "name": "Done"
+          "id": "stage-done",
+          "name": "Done",
+          "category": "done"
         }
       ],
       "defaultBoardId": "project-1788215224012-rap082-board",
