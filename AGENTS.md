@@ -231,6 +231,50 @@ current when a backend's state changes.
   axes with no per-theme override. The one renderer-visible change is a
   `ConnectionForm` branch built from the existing form primitives.
 
+## A project's workflow is data (FX-BF-019)
+
+A workflow describes **how a team works**. It is authored once, stays editable,
+and every backend *renders* it in its own storage — Jira as its board's
+statuses, GitHub as `status: …` labels, folder as the status text in its
+markdown, app-storage as the project record's stages. It is not a constant in
+any one backend, and `FolderService` no longer declares one.
+
+- **A stage carries a category.** `ProjectWorkflowStage` is
+  `{ id, name, category: 'todo' | 'indeterminate' | 'done' }`. The category is
+  load-bearing, not decoration: plan documents are prose ("✅ Complete",
+  "🚧 In progress", "📋 Proposed") and you cannot fuzzy-infer "Architecture"
+  from "Proposed". Resolving *through the category* is what lets freeform text
+  land somewhere sensible on a workflow whose stages are named nothing like the
+  default five.
+- **`resolveStatus(raw, workflow)` (`projects/projectWorkflow.ts`) is the only
+  status mapper.** Four tiers: exact stage name → the synonym's preferred name →
+  the first stage of the synonym's category → the first stage. The preferred
+  name matters — "blocked" must reach `Blocked`, not merely the first in-flight
+  stage. `mapMarkdownStatusToPlanStatus` remains only as a deprecated alias for
+  `resolveStatus(raw, DEFAULT_WORKFLOW)`.
+- **`DEFAULT_WORKFLOW` is the compatibility contract.** It is exactly the five
+  statuses folder boards always had, in the same order with the same
+  categories. Anything with no declared workflow must stay byte-identical, and
+  the gate for that is `folder.spec.ts` + `folderMulti.spec.ts` +
+  `editIssue.spec.ts` + `newIssue.spec.ts` holding at **13 passed**.
+- **A folder board's workflow lives in `board.praxis.json`** — that file exists
+  so a board's identity travels with its folder, and a workflow is board
+  identity. An invalid or malformed one is *ignored*, never fatal.
+- **Read the board config before parsing.** `loadFromDisk` identifies the plans
+  root, reads `board.praxis.json`, *then* parses. Parsing first resolves every
+  status against the default five, so a document naming a declared stage
+  silently lands in the first column — a bug that passes every unit test.
+- **Never rebuild a stage as `{ id, name }`.** Dropping `category` is silent:
+  the record still loads, `normalizeWorkflowStages` infers by position, and the
+  workflow is subtly wrong. Two shipped code paths did exactly this
+  (`projectManager.create` and the wizard's stage state).
+- **`PROJECT.md` is generated, not frozen.** `writeProjectSnapshot` no longer
+  uses the `wx` flag. A new file gets a `praxis:begin`/`praxis:end` block; a
+  marked file has only that block replaced; a marker-less file is adopted by
+  rewriting just the sections Praxis recognises, leaving all other prose alone.
+  It renders the *effective* workflow, so it cannot advertise a column the
+  board does not have.
+
 ## Add-on marketplace (`packages/core/src/marketplace/`, FX-BF-018)
 
 Installs **themes, surface packs, agents, and workflow templates** from a

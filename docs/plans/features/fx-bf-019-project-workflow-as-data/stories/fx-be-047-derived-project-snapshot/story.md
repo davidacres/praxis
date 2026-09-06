@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T15:11:24.812Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-047
 title: PROJECT.md derived from the effective workflow
@@ -46,3 +50,14 @@ its board cannot render.
 - `npm run check-types`
 - `npm run test:desktop` — `projects.spec.ts` extended for regeneration and for
   hand-edit preservation
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T15:11:24.811Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-045
 title: Folder boards read their workflow instead of declaring it
@@ -54,3 +58,14 @@ must be unchanged.
 - `npm run test:core`
 - `npm run test:desktop` — the four folder specs above, plus a new case for a
   declared workflow.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
