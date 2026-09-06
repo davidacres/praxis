@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.994Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-025
 title: Agent stage sessions and completion
@@ -53,3 +57,14 @@ Sessions view tagged with its run and node.
 
 An agent stage in the built-in template runs as a real session, preflighted and
 attributed, and its diff and report reach the downstream gates.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

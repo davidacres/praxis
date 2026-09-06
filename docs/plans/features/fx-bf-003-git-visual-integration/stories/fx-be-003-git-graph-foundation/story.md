@@ -1,4 +1,7 @@
 ---
+**Created:** 2026-09-06T13:41:43.981Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-003
 title: Desktop Git graph foundation and editor shell
@@ -48,3 +51,14 @@ Deliver the first read-only vertical slice: choose or detect a repository, load 
 - Core graph tests cover linear, split, merge, criss-cross, detached, multiple refs, and a 5,000-commit history benchmark.
 - The Electron visual flow covers keyboard commit selection, settings persistence, merge filtering, zoom, working-tree changes, and narrow reduced-motion layout.
 - The horizontal timeline mode and fetch interval setting are wired through the desktop settings and Git IPC layers.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

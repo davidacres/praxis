@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.998Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-035
 title: Real GitHub backend
@@ -97,3 +101,14 @@ anticipated — see the commits above.
 
 Connecting a GitHub repo gives a real board with real editing, and the folder
 gate is unchanged at 13 passed. **Met.**
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

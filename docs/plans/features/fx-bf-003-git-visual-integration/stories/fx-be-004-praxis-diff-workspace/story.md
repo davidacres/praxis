@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.982Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-004
 title: Praxis diff workspace and safe Git workflows
@@ -72,3 +76,14 @@ All acceptance criteria have current unit, integration, packaged Electron, and v
 - `git diff --check` passed.
 
 The repository-wide Electron suite currently has unrelated legacy board-navigation and AI/session-state failures. They are recorded at the parent feature and are not used as evidence for this independently testable Git slice.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:44.001Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-042
 title: GitHub Packages add-on marketplace
@@ -140,3 +144,14 @@ whose tarball places a kind-specific payload under `package/addon/`:
 - Agent add-on end-to-end proof against a live registry (only mock-tested).
 - Marketplace token fallback to a configured GitHub connection's token.
 - A published example add-on repo.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

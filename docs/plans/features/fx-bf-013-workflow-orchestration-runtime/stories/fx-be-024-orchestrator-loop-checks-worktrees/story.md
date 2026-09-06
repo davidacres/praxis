@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.993Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-024
 title: Orchestrator loop, check execution, and run worktrees
@@ -51,3 +55,14 @@ its own against a stable snapshot, with no manual stage advancement.
 
 A workflow whose only agent stage is stubbed runs its checks, joins, and gate
 evaluation end to end against one per-run worktree, verified by a desktop test.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

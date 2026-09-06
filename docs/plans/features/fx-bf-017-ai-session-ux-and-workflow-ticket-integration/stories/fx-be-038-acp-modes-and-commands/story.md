@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.999Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-038
 title: Surface ACP session modes and slash commands
@@ -53,3 +57,14 @@ was really just a missing case.
 
 `aiAcpModesAndCommands.spec.ts` (e2e), with captures
 `output/playwright/acp-session-modes.png` and `acp-slash-commands.png`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

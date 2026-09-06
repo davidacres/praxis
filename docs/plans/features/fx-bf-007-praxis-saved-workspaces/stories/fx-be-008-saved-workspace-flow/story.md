@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.985Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-008
 title: Saved workspace model, versioned file format, and sidebar flow
@@ -43,3 +47,14 @@ Core contracts, Electron IPC, renderer flow, and verification are complete.
 - Versioned workspace round-trip and rejection of schema version `99` passed.
 - `npm run electron:copy-renderer` passed.
 - `git diff --check` passed.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

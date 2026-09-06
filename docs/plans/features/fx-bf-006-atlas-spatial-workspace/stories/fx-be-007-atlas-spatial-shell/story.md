@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.985Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-007
 title: Atlas spatial shell and continuous zoom vertical slice
@@ -83,3 +87,14 @@ sessions already expose plus a live subscription.
 A person can fly universe → project → board → task → session on the test fixture,
 the three target questions are answerable faster than on the board, and the
 read-only scene is stable, exitable, and reduced-motion safe in the packaged app.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

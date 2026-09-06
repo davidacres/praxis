@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.998Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-033
 title: Review and correction controls
@@ -67,3 +71,14 @@ button in the place you're already looking.
 
 A session's changeset is reviewable, committable, and correctable — down to
 one hunk or one edit — entirely from the Sessions console.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

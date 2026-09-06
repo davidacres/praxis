@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:43.998Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-034
 title: Signed auto-update
@@ -43,3 +47,14 @@ nobody does for long.
 ## Close when
 
 A user installs a signed build once and it updates itself from then on.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

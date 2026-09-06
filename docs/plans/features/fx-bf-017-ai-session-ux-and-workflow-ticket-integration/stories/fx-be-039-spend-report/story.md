@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:44.000Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-039
 title: Cost and token spend report
@@ -49,3 +53,14 @@ and never a token count turned into an invented cost.
 
 `aiSpendReport.spec.ts` (e2e), with captures
 `output/playwright/ai-spend-report.png` and `spend-limit-warn.png`.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

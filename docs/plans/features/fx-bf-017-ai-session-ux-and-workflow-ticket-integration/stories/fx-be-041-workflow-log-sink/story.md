@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-06T13:41:44.000Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-041
 title: Wire workflow failures into the Output tab's log bus
@@ -48,3 +52,14 @@ visible surface at all.
 ## Tests
 
 `workflowRun.spec.ts` (e2e).
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
