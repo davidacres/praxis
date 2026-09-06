@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-014
 title: Import and validate runtime items
 status: complete

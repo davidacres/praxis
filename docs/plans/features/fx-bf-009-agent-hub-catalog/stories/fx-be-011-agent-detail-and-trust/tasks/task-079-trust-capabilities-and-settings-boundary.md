@@ -12,6 +12,8 @@ dependencies: [TASK-078]
 validation: [npm run test:core, npm run check-types]
 ---
 
+# TASK-079: Define trust, capabilities, and settings boundary
+
 ## Goal
 
 Make invalid and approval-required actions fail closed and define which controls remain advanced Settings concerns.

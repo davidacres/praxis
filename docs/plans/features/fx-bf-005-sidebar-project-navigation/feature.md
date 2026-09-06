@@ -14,6 +14,8 @@ stories: [FX-BE-006]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/projects.spec.ts"]
 ---
 
+# FX-BF-005: Sidebar project, board, and Git navigation
+
 ## Sidebar project, board, and Git navigation
 
 ## Outcome

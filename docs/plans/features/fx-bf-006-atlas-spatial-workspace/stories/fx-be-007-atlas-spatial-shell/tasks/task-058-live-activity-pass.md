@@ -12,6 +12,8 @@ dependencies: [TASK-056]
 validation: ["npm run frontend:build", "npm run electron:check-types"]
 ---
 
+# TASK-058: Live activity pass and the awaiting-approval signal
+
 ## Live activity pass and the awaiting-approval signal
 
 ## Goal

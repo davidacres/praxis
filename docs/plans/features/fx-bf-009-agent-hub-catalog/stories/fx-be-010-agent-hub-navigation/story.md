@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-010
 title: Agent Hub navigation and scope-aware catalog
 status: complete

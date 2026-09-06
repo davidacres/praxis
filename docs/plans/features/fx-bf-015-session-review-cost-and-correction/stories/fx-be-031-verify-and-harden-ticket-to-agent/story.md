@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-031
 title: Verify and harden the ticket-to-agent flow
 status: complete

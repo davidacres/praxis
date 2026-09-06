@@ -12,6 +12,8 @@ dependencies: [TASK-038, TASK-041]
 validation: [npm run test:git --workspace @praxis/desktop-main, apps/praxis-desktop/main/output/playwright/praxis-conflict-editor.png]
 ---
 
+# TASK-042: Three-way conflict resolution
+
 ## Three-Way Conflict Resolution
 
 ## Goal

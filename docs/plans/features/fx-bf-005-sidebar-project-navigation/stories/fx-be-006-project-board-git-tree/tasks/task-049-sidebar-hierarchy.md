@@ -12,6 +12,8 @@ dependencies: [FX-BF-004]
 validation: ["npm run frontend:build"]
 ---
 
+# TASK-049: Refactor sidebar hierarchy for project-owned Boards and Git
+
 ## Refactor sidebar hierarchy for project-owned Boards and Git
 
 ## Goal

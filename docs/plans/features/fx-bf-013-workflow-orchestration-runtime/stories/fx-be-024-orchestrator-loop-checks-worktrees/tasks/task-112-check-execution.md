@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-111, TASK-113]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-112: Implement deterministic check execution and artifact capture
 ## Implement deterministic check execution and artifact capture
 ## Goal
 Run a `WorkflowCheckNode`'s command and let its exit code decide the outcome —

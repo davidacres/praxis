@@ -12,6 +12,8 @@ dependencies: [TASK-049, TASK-050, TASK-051]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run electron:copy-renderer", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/projects.spec.ts"]
 ---
 
+# TASK-052: Verify navigation semantics, accessibility, responsive layout, and migration snapshots
+
 ## Verify navigation semantics, accessibility, responsive layout, and migration snapshots
 
 ## Goal

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-027
 title: Shell integration and theming foundation
 status: complete

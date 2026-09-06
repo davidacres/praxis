@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-042
 title: GitHub Packages add-on marketplace
 status: in-progress

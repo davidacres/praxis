@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-111]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]
 ---
+
+# TASK-117: Add the workflows:runChanged push channel and monitor subscription
 ## Add the workflows:runChanged push channel and monitor subscription
 ## Goal
 The monitor must reflect a run the orchestrator advances in the background,

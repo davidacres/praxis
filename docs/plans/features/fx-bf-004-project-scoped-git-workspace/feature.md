@@ -14,6 +14,8 @@ stories: [FX-BE-005]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
+# FX-BF-004: Project-scoped Git workspace and repository onboarding
+
 ## Project-scoped Git workspace and repository onboarding
 
 ## Outcome

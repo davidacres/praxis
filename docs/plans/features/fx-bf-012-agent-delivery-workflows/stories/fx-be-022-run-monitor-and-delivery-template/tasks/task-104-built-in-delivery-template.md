@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-094, TASK-100]
 validation: [npm run build:core, npm run test:core]
 ---
+
+# TASK-104: Define the built-in governed delivery template
 ## Define the built-in governed delivery template
 ## Goal
 Register Plan → Implement → Review/QA/Security → Approval with required joins and policy gates.

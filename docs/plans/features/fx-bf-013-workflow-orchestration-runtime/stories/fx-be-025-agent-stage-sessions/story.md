@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-025
 title: Agent stage sessions and completion
 status: complete

@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-102]
 validation: [npm run build:renderer, npm run test:desktop]
 ---
+
+# TASK-103: Add workflow persistence and accessibility verification
 ## Add workflow persistence and accessibility verification
 ## Goal
 Wire save/load IPC, validation feedback, project switching, keyboard interaction, and empty/error states.

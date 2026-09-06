@@ -12,6 +12,8 @@ dependencies: [TASK-044]
 validation: ["npm run frontend:build"]
 ---
 
+# TASK-046: Add project-scoped Git navigation and onboarding states
+
 ## Add project-scoped Git navigation and onboarding states
 
 ## Goal

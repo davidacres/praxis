@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-021
 title: Visual workflow designer and template library
 status: complete

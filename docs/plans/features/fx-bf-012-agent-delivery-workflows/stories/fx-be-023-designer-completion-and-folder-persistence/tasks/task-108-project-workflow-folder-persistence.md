@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-021]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-108: Persist project workflows to .praxis/workflows with path safety and reload
 ## Persist project workflows to .praxis/workflows with path safety and reload
 ## Goal
 Make a folder-backed project's workflows real files under

@@ -12,6 +12,8 @@ dependencies: [TASK-090]
 validation: [npm run build:core, npm run build:renderer, npm run desktop:copy-renderer, focused Playwright tests]
 ---
 
+# TASK-091: Add desktop E2E and accessibility verification
+
 ## Goal
 
 Verify visible Agent Hub behavior in the packaged desktop renderer, including keyboard and failure states.

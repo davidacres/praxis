@@ -12,6 +12,8 @@ dependencies: [TASK-056]
 validation: ["npm run frontend:build", "npm run electron:check-types"]
 ---
 
+# TASK-057: Node visual encoding and raycast selection into detail surfaces
+
 ## Node visual encoding and raycast selection into detail surfaces
 
 ## Goal

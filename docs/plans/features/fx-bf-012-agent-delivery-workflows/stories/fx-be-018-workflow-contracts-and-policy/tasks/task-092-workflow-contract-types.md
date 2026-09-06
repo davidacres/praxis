@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BF-009, FX-BF-011]
 validation: [npm run build:core, npm run check-types]
 ---
+
+# TASK-092: Add workflow contract types
 ## Add workflow contract types
 ## Goal
 Define versioned workflow definitions, typed nodes/edges, artifact contracts, policies, and run references in `packages/core`.

@@ -12,6 +12,8 @@ dependencies: [FX-BF-003]
 validation: ["npm run electron:check-types"]
 ---
 
+# TASK-044: Define project Git context and typed repository preflight contract
+
 ## Define project Git context and typed repository preflight contract
 
 ## Goal

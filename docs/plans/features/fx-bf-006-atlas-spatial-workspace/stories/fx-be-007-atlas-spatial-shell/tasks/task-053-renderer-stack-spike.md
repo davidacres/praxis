@@ -12,6 +12,8 @@ dependencies: [FX-BF-005]
 validation: ["npm run frontend:build"]
 ---
 
+# TASK-053: Renderer stack spike and visual contract gate
+
 ## Renderer stack spike and visual contract gate
 
 ## Goal

@@ -12,6 +12,8 @@ dependencies: [TASK-046, TASK-047]
 validation: ["npm run frontend:build", "npm run electron:check-types", "npm run electron:copy-renderer", "npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts"]
 ---
 
+# TASK-048: Add packaged Electron, accessibility, and responsive verification
+
 ## Add packaged Electron, accessibility, and responsive verification
 
 ## Goal

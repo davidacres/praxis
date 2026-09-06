@@ -12,6 +12,8 @@ dependencies: [TASK-053]
 validation: ["npm run core:check-types", "npm run test --workspace @praxis/core"]
 ---
 
+# TASK-054: Atlas snapshot model and builder in core
+
 ## Atlas snapshot model and builder in core
 
 ## Goal

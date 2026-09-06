@@ -9,6 +9,8 @@ status: complete
 story: FX-BE-008
 ---
 
+# TASK-060: Workspace model and versioned file format
+
 Define the serializable workspace record, persistence store, import/export
 format, provenance metadata, validation, and fail-closed schema checks.
 

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-007
 title: Atlas spatial shell and continuous zoom vertical slice
 status: proposed
@@ -12,6 +13,8 @@ validation:
   - npm run electron:copy-renderer
   - npm run test:e2e --workspace @praxis/desktop-main -- e2e/atlas.spec.ts
 ---
+
+# Atlas spatial shell and continuous zoom vertical slice
 
 ## Atlas spatial shell and continuous zoom vertical slice
 

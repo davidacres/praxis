@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-026
 title: Live updates, timeouts, and end-to-end verification
 status: complete

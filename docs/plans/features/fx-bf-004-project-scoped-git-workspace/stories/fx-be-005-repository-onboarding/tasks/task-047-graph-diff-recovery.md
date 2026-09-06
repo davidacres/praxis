@@ -12,6 +12,8 @@ dependencies: [TASK-045, TASK-046]
 validation: ["npm run frontend:build", "npm run electron:check-types"]
 ---
 
+# TASK-047: Integrate onboarding with Graph/diff loading and friendly error recovery
+
 ## Integrate onboarding with Graph/diff loading and friendly error recovery
 
 ## Goal

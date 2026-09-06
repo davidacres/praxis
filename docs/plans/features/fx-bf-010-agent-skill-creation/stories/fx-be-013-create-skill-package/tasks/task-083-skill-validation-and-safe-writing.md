@@ -12,6 +12,8 @@ dependencies: [TASK-082]
 validation: [npm run test:core, npm run check-types]
 ---
 
+# TASK-083: Validate and safely write skill packages
+
 ## Goal
 
 Enforce skill metadata, duplicate, scope, and path safety before writing files.

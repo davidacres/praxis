@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-115, TASK-117, TASK-118]
 validation: [npm run build, npm run test:desktop]
 ---
+
+# TASK-119: Add the unattended-run E2E with a stub agent, and update the docs
 ## Add the unattended-run E2E with a stub agent, and update the docs
 ## Goal
 Prove the built-in Governed delivery workflow runs on its own.

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-004
 title: Praxis diff workspace and safe Git workflows
 status: complete
@@ -16,6 +17,8 @@ validation:
   - npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts
   - git diff --check
 ---
+
+# Praxis diff workspace and safe Git workflows
 
 ## Praxis Diff Workspace And Safe Git Workflows
 

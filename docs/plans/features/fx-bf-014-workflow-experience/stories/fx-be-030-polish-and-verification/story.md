@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-030
 title: States, accessibility, and theme verification
 status: complete

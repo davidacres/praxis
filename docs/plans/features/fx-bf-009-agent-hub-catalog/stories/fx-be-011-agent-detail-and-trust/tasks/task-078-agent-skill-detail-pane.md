@@ -12,6 +12,8 @@ dependencies: [TASK-077]
 validation: [npm run check-types, focused Playwright test]
 ---
 
+# TASK-078: Build agent and skill detail panes
+
 ## Goal
 
 Present manifest, skill metadata, source, transport, activation, fingerprint, capabilities, and errors.

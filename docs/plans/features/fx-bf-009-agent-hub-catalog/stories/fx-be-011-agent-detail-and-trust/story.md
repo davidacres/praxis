@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-011
 title: Agent and skill detail, trust, and capabilities
 status: complete

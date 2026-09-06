@@ -9,6 +9,8 @@ status: complete
 story: FX-BE-008
 ---
 
+# TASK-061: Electron workspace persistence and native file actions
+
 Expose typed list, create, update, remove, save-to-file, and open-from-file
 operations through the Electron main process and preload bridge.
 

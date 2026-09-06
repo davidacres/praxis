@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-005
 title: Project-scoped Git entry point and repository onboarding
 status: complete
@@ -12,6 +13,8 @@ validation:
   - npm run electron:check-types
   - npm run test:e2e --workspace @praxis/desktop-main -- e2e/gitGraph.spec.ts
 ---
+
+# Project-scoped Git entry point and repository onboarding
 
 ## Project-scoped Git entry point and repository onboarding
 

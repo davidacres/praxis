@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [TASK-114, TASK-113]
 validation: [npm run build, npm run test:core, npm run test:desktop]
 ---
+
+# TASK-115: Wire stage completion, artifact extraction, and the snapshot commit
 ## Wire stage completion, artifact extraction, and the snapshot commit
 ## Goal
 Close the loop between a finished agent session and the run.

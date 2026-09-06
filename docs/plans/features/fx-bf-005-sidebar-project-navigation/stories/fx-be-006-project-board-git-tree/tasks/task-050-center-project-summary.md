@@ -12,6 +12,8 @@ dependencies: [TASK-049]
 validation: ["npm run frontend:build"]
 ---
 
+# TASK-050: Replace center project navigation cards with focused project summary
+
 ## Replace center project navigation cards with focused project summary
 
 ## Goal

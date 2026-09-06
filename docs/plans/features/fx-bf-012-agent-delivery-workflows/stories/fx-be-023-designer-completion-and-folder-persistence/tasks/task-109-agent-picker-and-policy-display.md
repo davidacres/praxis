@@ -11,6 +11,8 @@ updated: 2026-09-02
 dependencies: [FX-BE-021]
 validation: [npm run build:renderer, npm run build:desktop, npm run test:desktop]
 ---
+
+# TASK-109: Add the Agent Hub picker and effective-policy display to the inspector
 ## Add the Agent Hub picker and effective-policy display to the inspector
 ## Goal
 Configure an agent stage against the real discovered catalog rather than a

@@ -1,4 +1,5 @@
 ---
+type: Story
 id: FX-BE-008
 title: Saved workspace model, versioned file format, and sidebar flow
 status: complete
@@ -12,6 +13,8 @@ validation:
   - npm run frontend:build
   - git diff --check
 ---
+
+# Saved workspace model, versioned file format, and sidebar flow
 
 ## Impact
 
