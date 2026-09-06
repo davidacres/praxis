@@ -1,6 +1,8 @@
 import * as path from 'node:path';
 import { readBoardConfigFile, writeBoardConfigFile, type BoardConfigFile } from './boardConfigFile';
 import { folderFs } from './folderFs';
+import type { ProjectWorkflowStage } from '../projects/projectTypes';
+import { DEFAULT_WORKFLOW, normalizeWorkflowStages } from '../projects/projectWorkflow';
 import { folderWatch, type FolderWatcher } from './folderWatch';
 import type { IssueTrackerService } from '../backends/issueTrackerService';
 import { Emitter, type Event } from '../host/emitter';
@@ -35,6 +37,7 @@ import {
   type ParsedPlanFolder,
   discoverPlanFolders,
   extractComments,
+  identifyPlanFolder,
   parsePlanFolder,
   readUtf8,
   stableChildKey,
@@ -61,15 +64,11 @@ import { generateIssueMarkdown, type IssueType } from './markdownTemplate';
 
 // ── Workflow ────────────────────────────────────────────────────────
 
-const STATUSES = [
-  { name: 'Backlog', category: 'todo' },
-  { name: 'To Do', category: 'todo' },
-  { name: 'In Progress', category: 'indeterminate' },
-  { name: 'Blocked', category: 'indeterminate' },
-  { name: 'Done', category: 'done' }
-];
-
-const STATUS_NAMES = STATUSES.map(s => s.name);
+// A folder board's columns are its *project's workflow*, not a constant here
+// (FX-BE-045). `board.praxis.json` declares it so it travels with the folder;
+// a folder that declares none falls back to DEFAULT_WORKFLOW, which is the five
+// statuses this constant used to hold — same names, order and categories — so
+// an existing folder board is unchanged.
 const FOLDER_CREATION_DISABLED_ERROR =
   'Issue creation is disabled for this folder. Enable it on the connection to create markdown issues.';
 
@@ -82,12 +81,15 @@ const CHILD_FILE_PREFIX_BY_TYPE: Record<Exclude<CreatableFolderIssueType, 'Featu
   Bug: 'bug'
 };
 
-function categoryForStatus(name: string): string {
-  return STATUSES.find(s => s.name === name)?.category ?? 'todo';
+function categoryForStatus(name: string, workflow: readonly ProjectWorkflowStage[]): string {
+  return workflow.find(s => s.name === name)?.category ?? 'todo';
 }
 
-function transitionsFrom(currentStatus: string): WorkflowTransition[] {
-  return STATUS_NAMES.filter(s => s !== currentStatus).map((s, i) => ({
+function transitionsFrom(
+  currentStatus: string,
+  workflow: readonly ProjectWorkflowStage[]
+): WorkflowTransition[] {
+  return workflow.map(s => s.name).filter(s => s !== currentStatus).map((s, i) => ({
     id: `lf-${i}-${s.replace(/\s/g, '-').toLowerCase()}`,
     name: `Move to ${s}`,
     toStatus: s
@@ -275,6 +277,20 @@ export class FolderService implements IssueTrackerService {
 
   public constructor(private readonly configStore: FolderConfigProvider) {}
 
+  /**
+   * This board's columns: the folder's declared workflow, else the five
+   * statuses folder boards have always had.
+   */
+  private currentWorkflow(): readonly ProjectWorkflowStage[] {
+    return this.boardConfig.workflow?.length
+      ? normalizeWorkflowStages(this.boardConfig.workflow)
+      : DEFAULT_WORKFLOW;
+  }
+
+  private statusNames(): string[] {
+    return this.currentWorkflow().map(stage => stage.name);
+  }
+
   /** `board.praxis.json` wins over the connection setting when it specifies a value. */
   private allowsIssueCreation(): boolean {
     return this.boardConfig.allowIssueCreation ?? this.configStore.getFolderAllowIssueCreation();
@@ -289,14 +305,22 @@ export class FolderService implements IssueTrackerService {
    * per-board setting (the desktop connection form) — never from the user
    * workspace path, where it is a single app-wide toggle.
    */
-  public async syncBoardConfigToFolder(options?: { includeAllowIssueCreation?: boolean }): Promise<void> {
+  public async syncBoardConfigToFolder(options?: {
+    includeAllowIssueCreation?: boolean;
+    /** The board's columns, written so the workflow travels with the folder (FX-BE-045). */
+    workflow?: readonly ProjectWorkflowStage[];
+  }): Promise<void> {
     await this.ensureLoaded();
     if (!this.plansRootPath) {
       return;
     }
+    // An explicit workflow replaces what is on disk; otherwise whatever the
+    // folder already declares is preserved rather than silently dropped.
+    const workflow = options?.workflow ?? this.boardConfig.workflow;
     const next: BoardConfigFile = {
       projectKey: this.configStore.getFolderProjectKey() || undefined,
       projectName: this.configStore.getFolderProjectName() || undefined,
+      ...(workflow?.length ? { workflow: normalizeWorkflowStages(workflow) } : {}),
       ...(options?.includeAllowIssueCreation
         ? { allowIssueCreation: this.configStore.getFolderAllowIssueCreation() }
         : {})
@@ -342,15 +366,20 @@ export class FolderService implements IssueTrackerService {
     await this.ensureLoaded();
   }
 
-  public dispose(): void {
-    for (const watcher of this.watchers) {
-      void watcher.close();
-    }
+  /**
+   * Closes the file watchers. The returned promise settles once they have
+   * released their handles — callers that just want the service gone can
+   * ignore it, but a test suite must await it or the process hangs on an open
+   * chokidar handle.
+   */
+  public dispose(): Promise<void> {
+    const closing = this.watchers.map(watcher => watcher.close());
     this.watchers = [];
     this._onDidReceiveExternalComment.dispose();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
+    return Promise.all(closing).then(() => undefined);
   }
 
   // ── Connection ──────────────────────────────────────────────────
@@ -430,7 +459,7 @@ export class FolderService implements IssueTrackerService {
 
   public async getFilterMetadata(_filters: IssueFilters): Promise<FilterMetadata> {
     await this.ensureLoaded();
-    const statuses = [...new Set([...STATUS_NAMES, ...this.issues.map(i => i.status)])];
+    const statuses = [...new Set([...this.statusNames(), ...this.issues.map(i => i.status)])];
     const issueTypes = [...new Set(this.issues.map(i => i.issueType))];
     return { statuses, issueTypes };
   }
@@ -485,24 +514,24 @@ export class FolderService implements IssueTrackerService {
     const root = this.boardRoots.find(candidate => candidate.id === board.id);
     const issues = root ? (this.issuesByRoot.get(root.rootPath) ?? []) : this.issues;
     const columnMap = new Map<string, IssueSummary[]>();
-    for (const s of STATUS_NAMES) {
+    for (const s of this.statusNames()) {
       columnMap.set(s, []);
     }
     for (const issue of issues) {
-      const bucket = columnMap.get(issue.status) ?? columnMap.get('Backlog')!;
+      const bucket = columnMap.get(issue.status) ?? columnMap.get(this.statusNames()[0])!;
       bucket.push(issue);
     }
-    const columns: BoardColumn[] = STATUS_NAMES.map(s => ({
+    const columns: BoardColumn[] = this.statusNames().map(s => ({
       id: s,
       name: s,
-      statusCategory: categoryForStatus(s),
+      statusCategory: categoryForStatus(s, this.currentWorkflow()),
       issues: columnMap.get(s) ?? []
     }));
     return {
       board,
       columns,
       issues: [...issues],
-      columnStatusOrder: STATUS_NAMES
+      columnStatusOrder: this.statusNames()
     };
   }
 
@@ -526,7 +555,7 @@ export class FolderService implements IssueTrackerService {
     if (!issue) {
       throw new Error(`Issue ${issueKey} not found`);
     }
-    const transitions = transitionsFrom(issue.status);
+    const transitions = transitionsFrom(issue.status, this.currentWorkflow());
     const parentIssue = issue.parentKey
       ? this.issues.find(candidate => candidate.key === issue.parentKey)
       : undefined;
@@ -661,7 +690,7 @@ export class FolderService implements IssueTrackerService {
       issueType,
       childSeq,
       summary,
-      STATUS_NAMES[0] ?? 'Backlog'
+      this.statusNames()[0] ?? 'Backlog'
     );
 
     await this.loadFromDisk();
@@ -791,7 +820,7 @@ export class FolderService implements IssueTrackerService {
     return {
       ...issue,
       parentIssue: toParentIssueReference(parentIssue),
-      transitions: transitionsFrom(issue.status),
+      transitions: transitionsFrom(issue.status, this.currentWorkflow()),
       comments
     };
   }
@@ -842,7 +871,7 @@ export class FolderService implements IssueTrackerService {
     if (!issue) {
       return [];
     }
-    return transitionsFrom(issue.status);
+    return transitionsFrom(issue.status, this.currentWorkflow());
   }
 
   public async transitionIssue(issueKey: string, transitionId: string): Promise<void> {
@@ -852,7 +881,7 @@ export class FolderService implements IssueTrackerService {
       throw new Error(`Issue ${issueKey} not found`);
     }
 
-    const available = transitionsFrom(issue.status);
+    const available = transitionsFrom(issue.status, this.currentWorkflow());
     const transition = available.find(t => t.id === transitionId);
     if (!transition?.toStatus) {
       throw new Error(`Transition ${transitionId} not valid for ${issueKey}`);
@@ -880,7 +909,7 @@ export class FolderService implements IssueTrackerService {
 
     // Update in-memory model
     issue.status = newStatus;
-    issue.statusCategory = categoryForStatus(newStatus);
+    issue.statusCategory = categoryForStatus(newStatus, this.currentWorkflow());
     issue.updated = new Date().toISOString();
     if (newStatus === 'Done' && !issue.completed) {
       issue.completed = new Date().toISOString();
@@ -919,7 +948,7 @@ export class FolderService implements IssueTrackerService {
               setTimeout(() => this.recentWrites.delete(parentFeature.sourcePath), 2000);
             }
             parentFeature.status = rollupStatus;
-            parentFeature.statusCategory = categoryForStatus(rollupStatus);
+            parentFeature.statusCategory = categoryForStatus(rollupStatus, this.currentWorkflow());
             parentFeature.updated = new Date().toISOString();
           }
         }
@@ -1004,10 +1033,19 @@ export class FolderService implements IssueTrackerService {
       return;
     }
 
+    // The board's workflow decides what a plan document's status resolves to,
+    // so `board.praxis.json` has to be read *before* the parse — otherwise a
+    // doc whose status names a declared stage ("Architecture") is resolved
+    // against the default five and silently lands in the first column.
+    // Identifying the plans root is a directory scan; parsing is the expensive
+    // part, and it still happens exactly once per load.
+    const identified = await identifyPlanFolder(roots[0]);
+    this.boardConfig = await readBoardConfigFile(identified.plansRootPath);
+
     // Primary root: the first configured folder. parsePlanFolder throws the
     // familiar "unreadable / not a plans folder" errors and its output drives
     // the template-upgrade pass — only this root is ever written to.
-    let parsed = await parsePlanFolder(roots[0]);
+    let parsed = await parsePlanFolder(roots[0], undefined, this.currentWorkflow());
     this.plansRootPath = parsed.plansRootPath;
     this.featuresRootPath = parsed.featuresRootPath;
 
@@ -1016,7 +1054,7 @@ export class FolderService implements IssueTrackerService {
 
     // Re-parse if any files were upgraded so the model reflects new fields
     if (anyUpgraded) {
-      parsed = await parsePlanFolder(roots[0]);
+      parsed = await parsePlanFolder(roots[0], undefined, this.currentWorkflow());
       this.plansRootPath = parsed.plansRootPath;
       this.featuresRootPath = parsed.featuresRootPath;
     }
@@ -1044,7 +1082,7 @@ export class FolderService implements IssueTrackerService {
           }
           seen.add(candidateKey);
           try {
-            rootParses.push(await parsePlanFolder(candidate.plansRootPath));
+            rootParses.push(await parsePlanFolder(candidate.plansRootPath, undefined, this.currentWorkflow()));
           } catch {
             // A root that vanishes mid-scan is skipped, not fatal.
           }
@@ -1141,7 +1179,7 @@ export class FolderService implements IssueTrackerService {
         key,
         summary: f.title,
         status: f.planStatus,
-        statusCategory: categoryForStatus(f.planStatus),
+        statusCategory: categoryForStatus(f.planStatus, this.currentWorkflow()),
         issueType: 'Feature',
         projectKey: pk,
         projectName: pn,
@@ -1177,7 +1215,7 @@ export class FolderService implements IssueTrackerService {
         key,
         summary: child.title,
         status: child.planStatus,
-        statusCategory: categoryForStatus(child.planStatus),
+        statusCategory: categoryForStatus(child.planStatus, this.currentWorkflow()),
         issueType: child.issueType,
         projectKey: pk,
         projectName: pn,

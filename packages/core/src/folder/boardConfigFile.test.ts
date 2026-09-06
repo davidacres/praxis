@@ -198,3 +198,113 @@ test('FolderService.syncBoardConfigToFolder rejects (and writes nothing) for an 
     service.dispose();
   });
 });
+
+// ── Declared workflow (FX-BE-045) ───────────────────────────────────
+
+const SOFTWARE_WORKFLOW = [
+  { id: 's1', name: 'Backlog', category: 'todo' as const },
+  { id: 's2', name: 'Requirements', category: 'todo' as const },
+  { id: 's3', name: 'Architecture', category: 'indeterminate' as const },
+  { id: 's4', name: 'Implementation', category: 'indeterminate' as const },
+  { id: 's5', name: 'Verification', category: 'indeterminate' as const },
+  { id: 's6', name: 'Done', category: 'done' as const }
+];
+
+/** A plans tree with one feature whose status names an arbitrary stage. */
+async function writePlans(dir: string, featureStatus: string): Promise<void> {
+  const featureDir = path.join(dir, 'features', 'feature-01-demo');
+  await fs.mkdir(featureDir, { recursive: true });
+  await fs.writeFile(
+    path.join(featureDir, 'feature.md'),
+    ['# Demo Feature', '', `**Status:** ${featureStatus}`, '**Type:** Feature', ''].join('\n'),
+    'utf8'
+  );
+}
+
+test('a workflow round-trips through board.praxis.json', async () => {
+  await withTempDir(async dir => {
+    await writeBoardConfigFile(dir, { projectKey: 'APP', workflow: SOFTWARE_WORKFLOW });
+    const read = await readBoardConfigFile(dir);
+    assert.deepEqual(read.workflow?.map(stage => stage.name), [
+      'Backlog', 'Requirements', 'Architecture', 'Implementation', 'Verification', 'Done'
+    ]);
+    assert.equal(read.workflow?.[2].category, 'indeterminate');
+  });
+});
+
+test('a malformed or invalid workflow is ignored rather than breaking the board', async () => {
+  await withTempDir(async dir => {
+    for (const workflow of [
+      'not an array',
+      [],
+      [{ name: 'Only one' }],                                   // fewer than two stages
+      [{ name: 'A' }, { name: 'a' }],                           // duplicate names
+      [{ name: 'Doing', category: 'indeterminate' }, { name: 'Done', category: 'done' }] // no todo
+    ]) {
+      await fs.writeFile(
+        path.join(dir, BOARD_CONFIG_FILENAME),
+        JSON.stringify({ projectKey: 'APP', workflow }),
+        'utf8'
+      );
+      const read = await readBoardConfigFile(dir);
+      assert.equal(read.workflow, undefined, JSON.stringify(workflow));
+      assert.equal(read.projectKey, 'APP', 'the rest of the file still loads');
+    }
+  });
+});
+
+test('FolderService with no declared workflow renders the five statuses folders have always had', async () => {
+  await withTempDir(async dir => {
+    await writePlans(dir, '🚧 In progress');
+    const service = new FolderService(stubConfig(dir));
+    const filters = { projectKeys: [], types: [], searchText: '' };
+    const [board] = await service.getBoards(filters);
+    const details = await service.getBoardDetails(board);
+    assert.deepEqual(details.columnStatusOrder, [
+      'Backlog', 'To Do', 'In Progress', 'Blocked', 'Done'
+    ]);
+    assert.equal(details.issues[0].status, 'In Progress');
+    await service.dispose();
+  });
+});
+
+test('FolderService renders the workflow the folder declares, and a doc lands in a named stage', async () => {
+  await withTempDir(async dir => {
+    await writePlans(dir, 'Architecture');
+    await writeBoardConfigFile(dir, { projectKey: 'APP', workflow: SOFTWARE_WORKFLOW });
+
+    const service = new FolderService(stubConfig(dir));
+    const filters = { projectKeys: [], types: [], searchText: '' };
+    const [board] = await service.getBoards(filters);
+    const details = await service.getBoardDetails(board);
+
+    assert.deepEqual(details.columnStatusOrder, [
+      'Backlog', 'Requirements', 'Architecture', 'Implementation', 'Verification', 'Done'
+    ]);
+    assert.equal(details.issues[0].status, 'Architecture');
+    assert.deepEqual(
+      details.columns.find(column => column.name === 'Architecture')?.issues.map(i => i.summary),
+      ['Demo Feature']
+    );
+    // Transitions offered are the declared workflow's other stages.
+    const transitions = await service.getTransitions(details.issues[0].key);
+    assert.deepEqual(transitions.map(t => t.toStatus), [
+      'Backlog', 'Requirements', 'Implementation', 'Verification', 'Done'
+    ]);
+    await service.dispose();
+  });
+});
+
+test('a freeform status resolves onto a declared workflow through its categories', async () => {
+  await withTempDir(async dir => {
+    await writePlans(dir, '✅ Complete');
+    await writeBoardConfigFile(dir, { projectKey: 'APP', workflow: SOFTWARE_WORKFLOW });
+    const service = new FolderService(stubConfig(dir));
+    const filters = { projectKeys: [], types: [], searchText: '' };
+    const [board] = await service.getBoards(filters);
+    const details = await service.getBoardDetails(board);
+    // No exact "Complete" stage — resolves via category to this workflow's done.
+    assert.equal(details.issues[0].status, 'Done');
+    await service.dispose();
+  });
+});

@@ -3,9 +3,26 @@ import type { AgentToolMode } from '../ai/agentTypes';
 export type ProjectType = 'software' | 'product' | 'research' | 'experiment';
 export type ProjectStartingPoint = 'new-folder' | 'existing-folder' | 'app-storage';
 
+/**
+ * Where a stage sits on the universal todo → in-progress → done spine.
+ *
+ * Jira's vocabulary, already used by `folderService`'s status table and by
+ * `jiraShape.statusCategoryRank`. It is what lets a freeform status string
+ * ("✅ Complete", "🚧 In progress") resolve onto an *arbitrary* workflow: an
+ * exact stage-name match is tried first, and the category is the fallback that
+ * works whatever the stages happen to be called.
+ */
+export type ProjectWorkflowCategory = 'todo' | 'indeterminate' | 'done';
+
 export interface ProjectWorkflowStage {
   id: string;
   name: string;
+  /**
+   * Optional on the wire so records written before FX-BE-043 still load.
+   * `normalizeWorkflowStages` fills it in on read, so anything that has been
+   * through the store carries one.
+   */
+  category?: ProjectWorkflowCategory;
 }
 
 export interface ProjectWorkItem {

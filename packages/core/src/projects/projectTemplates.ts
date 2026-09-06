@@ -1,4 +1,4 @@
-import type { ProjectType, ProjectWorkflowStage } from './projectTypes';
+import type { ProjectType, ProjectWorkflowCategory, ProjectWorkflowStage } from './projectTypes';
 
 export const PROJECT_BRIEF_FIELDS: Record<ProjectType, Array<{ key: string; label: string }>> = {
   software: [
@@ -23,11 +23,29 @@ export const PROJECT_BRIEF_FIELDS: Record<ProjectType, Array<{ key: string; labe
   ]
 };
 
-const STAGE_NAMES: Record<ProjectType, string[]> = {
-  software: ['Backlog', 'Requirements', 'Architecture', 'Implementation', 'Verification', 'Done'],
-  product: ['Backlog', 'Discovery', 'Definition', 'Delivery', 'Validation', 'Done'],
-  research: ['Backlog', 'Source planning', 'Evidence', 'Synthesis', 'Review', 'Done'],
-  experiment: ['Backlog', 'Setup', 'Running', 'Observations', 'Decision', 'Done']
+/**
+ * Each template's stages, with the category that places them on the universal
+ * todo → in-progress → done spine (FX-BE-043). The category is what lets a
+ * freeform status ("✅ Complete") resolve onto a workflow whose stages are
+ * named nothing like the default five — see `projectWorkflow.resolveStatus`.
+ */
+const STAGE_NAMES: Record<ProjectType, ReadonlyArray<[string, ProjectWorkflowCategory]>> = {
+  software: [
+    ['Backlog', 'todo'], ['Requirements', 'todo'], ['Architecture', 'indeterminate'],
+    ['Implementation', 'indeterminate'], ['Verification', 'indeterminate'], ['Done', 'done']
+  ],
+  product: [
+    ['Backlog', 'todo'], ['Discovery', 'todo'], ['Definition', 'indeterminate'],
+    ['Delivery', 'indeterminate'], ['Validation', 'indeterminate'], ['Done', 'done']
+  ],
+  research: [
+    ['Backlog', 'todo'], ['Source planning', 'todo'], ['Evidence', 'indeterminate'],
+    ['Synthesis', 'indeterminate'], ['Review', 'indeterminate'], ['Done', 'done']
+  ],
+  experiment: [
+    ['Backlog', 'todo'], ['Setup', 'todo'], ['Running', 'indeterminate'],
+    ['Observations', 'indeterminate'], ['Decision', 'indeterminate'], ['Done', 'done']
+  ]
 };
 
 const TICKETS: Record<ProjectType, string[]> = {
@@ -38,7 +56,7 @@ const TICKETS: Record<ProjectType, string[]> = {
 };
 
 export function defaultProjectWorkflow(type: ProjectType): ProjectWorkflowStage[] {
-  return STAGE_NAMES[type].map((name, index) => ({ id: `stage-${index + 1}`, name }));
+  return STAGE_NAMES[type].map(([name, category], index) => ({ id: `stage-${index + 1}`, name, category }));
 }
 
 export function defaultProjectTickets(type: ProjectType) {
