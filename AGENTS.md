@@ -231,6 +231,44 @@ current when a backend's state changes.
   axes with no per-theme override. The one renderer-visible change is a
   `ConnectionForm` branch built from the existing form primitives.
 
+## Add-on marketplace (`packages/core/src/marketplace/`, FX-BF-018)
+
+Installs **themes, surface packs, agents, and workflow templates** from a
+**GitHub Packages** npm registry the user configures. Not connection modes —
+those are code (see above), never catalogue data.
+
+- **Two endpoints, one transport.** Discovery is the GitHub REST API
+  (`GET /users|orgs/<owner>/packages?package_type=npm`, Link-paginated,
+  name-prefix filtered). Version metadata and tarballs come from
+  `npm.pkg.github.com` (a standard packument). A bearer token is required for
+  **both**, even for public packages — 401/403 carry a `read:packages` hint.
+- **The core module has no host dependencies.** No `fs`, no Electron — disk
+  work goes through the `AddonStorage` port (`ElectronAddonStorage` writes
+  `userData/addons/<kind>/<id>/`). It unit-tests with a fake fetch + in-memory
+  storage.
+- **A tarball is verified before it is unpacked.** `assertTarballIntegrity`
+  checks the registry's SRI (`sha512`/`384`/`256`) or hex `shasum`; a version
+  the registry published **no** hash for is refused, not waved through.
+- **Declarative kinds activate on install; an agent does not.** `theme`,
+  `surface-pack`, `workflow-template` are config and take effect immediately.
+  An `agent` add-on installs **disabled** — its payload is mirrored into
+  `userData/agents/<id>` (the trusted discovery root) only once the user grants
+  trust in the Add-ons panel, and removed on revoke. Nothing downloaded runs
+  code until then.
+- **Marketplace themes/packs are a separate bucket.** `registerMarketplaceThemes`
+  / `registerMarketplaceSurfacePacks` (renderer `settings/themes.ts` +
+  `surfacePacks.ts`) are distinct from `registerCustom*`, which the Themes /
+  Surfaces editors call with the user's own drafts. Merging the two into one
+  `registerCustom*` call means whichever runs last wins and silently drops the
+  other set.
+- **Token lives in the secret store**, key `marketplace:githubToken`, with a
+  `PRAXIS_MARKETPLACE_TOKEN` env fallback — the e2e sandbox and headless CI
+  have no `safeStorage` keychain (same as `github.spec.ts`).
+- **`MarketplaceSettings` is mirrored** in `renderer/settingsDefaults.ts` like
+  every other settings section — add the field there too or Settings drifts.
+- e2e: `mockAddonRegistry.ts` serves both endpoints from one in-process server
+  and builds real gzipped tarballs so the integrity path runs for real.
+
 ## Agent sessions (ACP)
 
 `packages/core/src/ai/acp/` hosts a CLI agent (Claude Code, Codex) as a subprocess over
