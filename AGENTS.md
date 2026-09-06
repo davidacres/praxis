@@ -249,25 +249,39 @@ those are code (see above), never catalogue data.
 - **A tarball is verified before it is unpacked.** `assertTarballIntegrity`
   checks the registry's SRI (`sha512`/`384`/`256`) or hex `shasum`; a version
   the registry published **no** hash for is refused, not waved through.
+- **Config is central; browsing is per-kind.** Settings → **Add-ons** holds
+  only the marketplace *config* (owner, token, endpoints, enable). Each kind's
+  own panel — Themes, Surfaces, Agent Runtime — carries its own marketplace
+  section that browses and installs *that kind*, so a user installs a theme
+  where they pick themes. `useKindAddons(kind)` (`settings/marketplaceAddons.ts`)
+  wraps `window.praxis.marketplace.*` and filters catalogue/installed to one
+  kind. Do **not** add a cross-kind catalogue back to the Add-ons panel.
 - **Declarative kinds activate on install; an agent does not.** `theme`,
   `surface-pack`, `workflow-template` are config and take effect immediately.
   An `agent` add-on installs **disabled** — its payload is mirrored into
   `userData/agents/<id>` (the trusted discovery root) only once the user grants
-  trust in the Add-ons panel, and removed on revoke. Nothing downloaded runs
-  code until then.
+  trust (in the Agent Runtime panel's marketplace section), and removed on
+  revoke. Nothing downloaded runs code until then.
+- **Manifest `display` hints make the catalogue visual.** A `theme`/`surface-pack`
+  add-on's `praxis.display.preview` (+ `.mode` for themes) lets the panel render
+  a real preview card *before* install — the payload isn't downloaded for the
+  browse list.
 - **Marketplace themes/packs are a separate bucket.** `registerMarketplaceThemes`
   / `registerMarketplaceSurfacePacks` (renderer `settings/themes.ts` +
   `surfacePacks.ts`) are distinct from `registerCustom*`, which the Themes /
   Surfaces editors call with the user's own drafts. Merging the two into one
   `registerCustom*` call means whichever runs last wins and silently drops the
-  other set.
+  other set. `main.tsx` re-registers the marketplace buckets on every
+  `marketplace:changed` and dispatches `praxis-marketplace-appearance` so an
+  open panel re-reads the lists.
 - **Token lives in the secret store**, key `marketplace:githubToken`, with a
   `PRAXIS_MARKETPLACE_TOKEN` env fallback — the e2e sandbox and headless CI
   have no `safeStorage` keychain (same as `github.spec.ts`).
 - **`MarketplaceSettings` is mirrored** in `renderer/settingsDefaults.ts` like
   every other settings section — add the field there too or Settings drifts.
 - e2e: `mockAddonRegistry.ts` serves both endpoints from one in-process server
-  and builds real gzipped tarballs so the integrity path runs for real.
+  and builds real gzipped tarballs so the integrity path runs for real;
+  `marketplace.spec.ts` drives install/remove/trust from each panel.
 
 ## Agent sessions (ACP)
 
