@@ -587,9 +587,12 @@ test('Aurora Glass frosts the sidebar and the translucency dial collapses it', a
     return values[0] ?? 'none';
   });
   const isTranslucent = (color: string) => /\/\s*0?\.\d+\s*\)/.test(color) || /,\s*0?\.\d+\s*\)/.test(color);
+  const translucencyAllowed = await window.evaluate(
+    () => !matchMedia('(prefers-reduced-transparency: reduce)').matches
+  );
 
-  await expect.poll(async () => isTranslucent(await fill())).toBe(true);
-  expect(await backdrop()).toContain('blur');
+  await expect.poll(async () => isTranslucent(await fill())).toBe(translucencyAllowed);
+  expect(await backdrop()).toBe(translucencyAllowed ? 'blur(26px) saturate(1.6)' : 'none');
 
   // The session console must keep the premium material visible instead of
   // covering the pane with an opaque legacy fill: it is fully transparent so
@@ -637,11 +640,14 @@ test('a custom surface pack can be created, applied, and survives a reload', asy
 
   await expect(window.locator('html')).toHaveAttribute('data-surface', /^custom-/);
   const inlineOpacity = () => window.locator('html').evaluate(el => el.style.getPropertyValue('--surface-panel-opacity').trim());
-  await expect.poll(inlineOpacity).toBe('0.70');
+  const expectedOpacity = await window.evaluate(
+    () => matchMedia('(prefers-reduced-transparency: reduce)').matches ? '' : '0.70'
+  );
+  await expect.poll(inlineOpacity).toBe(expectedOpacity);
 
   await window.reload();
   await expect(window.locator('html')).toHaveAttribute('data-surface', /^custom-/);
-  await expect.poll(inlineOpacity).toBe('0.70');
+  await expect.poll(inlineOpacity).toBe(expectedOpacity);
 });
 
 test('a user can swap the material by picking a pattern — no code, no new CSS', async () => {

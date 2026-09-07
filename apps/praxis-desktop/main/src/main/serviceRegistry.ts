@@ -327,7 +327,7 @@ export function resetServiceForConnection(connectionId: string): void {
  */
 export function disposeAllServices(): void {
   for (const service of folderServices.values()) {
-    service.dispose();
+    void service.dispose();
   }
   folderServices.clear();
 
