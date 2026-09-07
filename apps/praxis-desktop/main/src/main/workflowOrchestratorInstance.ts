@@ -1,3 +1,4 @@
+import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
 import { BrowserWindow } from 'electron';
 import {
   WorkflowOrchestrator,
@@ -89,13 +90,18 @@ function buildWriteBackComment(run: WorkflowRun): string {
  * logged and never re-thrown — the run itself already succeeded or failed on
  * its own terms, and that must not be clouded by a write-back problem.
  */
-export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
-  if (!run.issueKey || run.issueWriteBackAt) return;
-  try {
+const issueWriteBack = new WorkflowIssueWriteBack({
+  get: runId => new WorkflowRunStore(getWorkflowBackingStore()).get(runId),
+  send: async run => {
     const service = await getServiceForConnection(run.issueConnectionId);
-    await service.addComment(run.issueKey, buildWriteBackComment(run));
-    const runs = new WorkflowRunStore(getWorkflowBackingStore());
-    await runs.save({ ...run, issueWriteBackAt: new Date().toISOString() });
+    await service.addComment(run.issueKey!, buildWriteBackComment(run));
+  },
+  mark: (runId, at) => getWorkflowOrchestrator().updateRun(runId, current => ({ ...current, issueWriteBackAt: at }))
+});
+
+export async function writeBackToIssue(run: WorkflowRun): Promise<void> {
+  try {
+    await issueWriteBack.write(run.runId);
   } catch (error) {
     workflowLogSink.appendLine(
       `Could not write the outcome of run ${run.runId} back to ${run.issueKey}: ${error instanceof Error ? error.message : String(error)}`
