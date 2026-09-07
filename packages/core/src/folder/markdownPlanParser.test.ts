@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { discoverPlanFolders, discoverRepositoryFolders, parsePlanFolder } from './markdownPlanParser';
+import { discoverPlanFolders, discoverRepositoryFolders, parsePlanFolder, resolvePlanDependencyKeys } from './markdownPlanParser';
 
 /** Minimal plans root: one feature folder with a typed markdown file. */
 async function writeFeature(plansRoot: string, title: string): Promise<void> {
@@ -98,4 +98,39 @@ test('discovery stops at nested git checkouts so a worktree cannot duplicate its
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test('canonical planning dependencies resolve to board keys without partial FX identifiers', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'praxis-plan-dependencies-'));
+  const feature = path.join(root, 'features', 'delivery');
+  const story = path.join(feature, 'stories', 'diagnose');
+  const tasks = path.join(story, 'tasks');
+  await mkdir(tasks, { recursive: true });
+  try {
+    await writeFile(path.join(feature, 'feature.md'), '---\nid: FX-BF-042\ntype: Feature\n---\n# Delivery\n');
+    await writeFile(path.join(story, 'story.md'), '---\nid: FX-BE-101\ntype: Story\n---\n# Diagnose\n\n## Dependencies\n- FX-BF-042\n');
+    await writeFile(path.join(tasks, 'first.md'), '---\nid: TASK-202\ntype: Task\n---\n# Evidence\n\n## Dependencies\n- FX-BE-101\n');
+    await writeFile(path.join(tasks, 'second.md'), '---\nid: TASK-203\ntype: Task\n---\n# Repair\n\n## Dependencies\n- TASK-202\n- KAMAI-4\n- TASK-203\n');
+    const parsed = await parsePlanFolder(root);
+    assert.deepEqual(parsed.childItems.find(item => item.sequence === 101)?.depTokens, ['FX-BF-042']);
+    assert.deepEqual(parsed.childItems.find(item => item.sequence === 202)?.depTokens, ['FX-BE-101']);
+    const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
+    assert.deepEqual(resolved.get('PRAXIS-S42-101'), ['PRAXIS-F42']);
+    assert.deepEqual(resolved.get('PRAXIS-T42-202'), ['PRAXIS-S42-101']);
+    assert.deepEqual(resolved.get('PRAXIS-T42-203'), ['PRAXIS-T42-202', 'KAMAI-4']);
+    // Changing the board key changes local references, not external tracker keys.
+    assert.deepEqual(resolvePlanDependencyKeys(parsed, 'OTHER').get('OTHER-T42-203'), ['OTHER-T42-202', 'KAMAI-4']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('legacy filename dependencies and external issue keys remain supported', () => {
+  const feature = { featureId: 1, dirName: 'feature-01-demo', depTokens: [] };
+  const story = { featureId: 1, sequence: 2, issueType: 'Story', filename: 'story-01-02-work.md', depTokens: ['feature-01-demo', 'KAMAI-4'] };
+  const task = { featureId: 1, sequence: 3, issueType: 'Task', filename: 'task-01-03-check.md', depTokens: ['story-01-02-work'] };
+  const parsed = { features: [feature], childItems: [story, task] } as unknown as Parameters<typeof resolvePlanDependencyKeys>[0];
+  const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
+  assert.deepEqual(resolved.get('PRAXIS-S01-2'), ['PRAXIS-F01', 'KAMAI-4']);
+  assert.deepEqual(resolved.get('PRAXIS-T01-3'), ['PRAXIS-S01-2']);
 });
