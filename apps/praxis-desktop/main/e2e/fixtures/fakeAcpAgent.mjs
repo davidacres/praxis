@@ -291,26 +291,26 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
       { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(500);
+    await wait(1500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'in_progress', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(500);
+    await wait(1500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'completed', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'in_progress', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(500);
+    await wait(1500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'completed', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
       { content: 'Re-run the suite', status: 'in_progress', priority: 'medium' }
     ]));
     if (!promptText.includes('STOP_PLAN_MIDWAY')) {
-      await wait(500);
+      await wait(1500);
       await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
         { content: 'Read the failing test', status: 'completed', priority: 'high' },
         { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
