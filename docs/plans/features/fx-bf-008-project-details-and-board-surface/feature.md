@@ -1,3 +1,7 @@
+---
+id: FX-BF-008
+---
+
 # FX-BF-008: Project-details inspector and board surface controls
 
 **Created:** 2026-08-30T00:00:00.000Z

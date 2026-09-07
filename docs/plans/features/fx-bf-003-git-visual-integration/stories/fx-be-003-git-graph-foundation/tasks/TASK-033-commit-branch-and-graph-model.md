@@ -1,3 +1,7 @@
+---
+id: TASK-033
+---
+
 # TASK-033: Commit Branch And Graph Model
 
 **Created:** 2026-08-26T10:54:14.000Z
