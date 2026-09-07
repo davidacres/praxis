@@ -134,3 +134,22 @@ test('legacy filename dependencies and external issue keys remain supported', ()
   assert.deepEqual(resolved.get('PRAXIS-S01-2'), ['PRAXIS-F01', 'KAMAI-4']);
   assert.deepEqual(resolved.get('PRAXIS-T01-3'), ['PRAXIS-S01-2']);
 });
+
+test('a legacy basename shared by more than one record resolves to nothing, not to whichever record loaded last', () => {
+  // The nested feature/story layout gives every story its own story.md, so
+  // two unrelated stories both carry the filename-derived name "story".
+  const storyA = { featureId: 1, sequence: 1, issueType: 'Story', filename: 'story.md', depTokens: [] };
+  const storyB = { featureId: 2, sequence: 1, issueType: 'Story', filename: 'story.md', depTokens: [] };
+  const task = { featureId: 1, sequence: 1, issueType: 'Task', filename: 'task-01-01-check.md', depTokens: ['story'] };
+  const parsed = { features: [], childItems: [storyA, storyB, task] } as unknown as Parameters<typeof resolvePlanDependencyKeys>[0];
+  const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
+  assert.equal(resolved.get('PRAXIS-T01-1'), undefined);
+});
+
+test('a multi-segment local id is never truncated to its trailing segment, for any prefix', () => {
+  const feature = { featureId: 42, dirName: 'demo', depTokens: [] };
+  const story = { featureId: 42, sequence: 1, issueType: 'Story', filename: 'story.md', depTokens: ['FX-XY-042'] };
+  const parsed = { features: [{ ...feature, planningId: 'FX-XY-042' }], childItems: [story] } as unknown as Parameters<typeof resolvePlanDependencyKeys>[0];
+  const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
+  assert.deepEqual(resolved.get('PRAXIS-S42-1'), ['PRAXIS-F42']);
+});
