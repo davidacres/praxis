@@ -70,6 +70,7 @@ export * from './workflows/workflowDesignerState';
 export * from './workflows/workflowRunSummary';
 export * from './workflows/workflowOrchestrator';
 export * from './workflows/workflowStore';
+export * from './workflows/workflowEvidence';
 export * from './mcp/clientFactory';
 export * from './gitlab/gitLabApiService';
 export * from './gitlab/gitLabConfigStore';
