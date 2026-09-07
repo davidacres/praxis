@@ -64,6 +64,8 @@ function fakeDispatcher(auto?: (nodeId: string) => StageOutcome) {
     },
     cancelStage: async nodeId => {
       cancelled.push(nodeId);
+      pending.get(nodeId)?.resolve({ status: 'failed', error: 'Cancelled' });
+      pending.delete(nodeId);
     }
   };
 
@@ -501,4 +503,85 @@ test('every transition notifies the run-changed listener', async () => {
 
   assert.ok(changes.length >= 4, `expected several notifications, got ${changes.length}`);
   assert.ok(changes.every(id => id === 'run-1'));
+});
+
+
+test('cancellation waits for execution to exit before recording cancellation and cleanup', async () => {
+  const runs = memoryRuns();
+  seed(runs);
+  let finish!: (outcome: StageOutcome) => void;
+  let signal: AbortSignal | undefined;
+  const workspace = fakeWorkspace();
+  const dispatcher: StageDispatcher = {
+    runCheck: async () => ({ status: 'succeeded' }),
+    runAgentStage: (_node, context) => {
+      signal = context.signal;
+      return new Promise(resolve => { finish = resolve; });
+    },
+    cancelStage: async () => undefined
+  };
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher, workspace: workspace.provider, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  const cancelling = orchestrator.cancel('run-1', 'Stop now');
+  await settleAll();
+  assert.equal(signal?.aborted, true);
+  assert.equal(runs.get('run-1')?.status, 'running', 'do not report stopped before execution exits');
+  assert.deepEqual(workspace.released, []);
+  finish({ status: 'failed', error: 'aborted' });
+  await cancelling;
+  await settleAll();
+  assert.equal(runs.get('run-1')?.status, 'cancelled');
+  assert.equal(runs.get('run-1')?.endedReason, 'Stop now');
+  assert.deepEqual(workspace.released, ['run-1']);
+  assert.deepEqual(orchestrator.inFlightStages(), []);
+});
+
+test('cancelling a check fan-out stops every child and never dispatches a successor', async () => {
+  const runs = memoryRuns();
+  const def = definition();
+  seed(runs, def);
+  const fake = fakeDispatcher();
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fake.dispatcher, now });
+  await orchestrator.step('run-1');
+  await settleAll();
+  fake.finish('implement', { status: 'succeeded', artifacts: outputsFor(def, 'implement'), snapshotRef: 'sha' });
+  await settleAll();
+  await orchestrator.cancel('run-1');
+  await settleAll();
+  assert.deepEqual(fake.cancelled, ['qa', 'security']);
+  assert.deepEqual(fake.started, ['implement', 'qa', 'security']);
+  assert.equal(runs.get('run-1')?.status, 'cancelled');
+});
+
+test('failed cleanup retains the worktree path and a later step retries removal', async () => {
+  const runs = memoryRuns();
+  const run = seed(runs);
+  await runs.save({ ...run, status: 'cancelled', worktreePath: '/tmp/retained' });
+  let attempts = 0;
+  const orchestrator = new WorkflowOrchestrator({
+    runs, dispatcher: fakeDispatcher().dispatcher,
+    workspace: {
+      acquire: async () => '/tmp/retained',
+      release: async () => { if (++attempts === 1) throw new Error('busy'); }
+    }, now
+  });
+  await orchestrator.step('run-1');
+  assert.equal(runs.get('run-1')?.worktreePath, '/tmp/retained');
+  await orchestrator.step('run-1');
+  assert.equal(attempts, 2);
+  assert.equal(runs.get('run-1')?.worktreePath, undefined);
+});
+
+test('metadata updates merge after queued cleanup without restoring a stale worktree', async () => {
+  const runs = memoryRuns();
+  const run = seed(runs);
+  await runs.save({ ...run, status: 'cancelled', worktreePath: '/tmp/old' });
+  const orchestrator = new WorkflowOrchestrator({ runs, dispatcher: fakeDispatcher().dispatcher, workspace: fakeWorkspace().provider, now });
+  await Promise.all([
+    orchestrator.step('run-1'),
+    orchestrator.updateRun('run-1', current => ({ ...current, issueWriteBackAt: 'sent' }))
+  ]);
+  assert.equal(runs.get('run-1')?.worktreePath, undefined);
+  assert.equal(runs.get('run-1')?.issueWriteBackAt, 'sent');
 });

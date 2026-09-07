@@ -49,6 +49,8 @@ export interface StageOutcome {
 
 export interface StageDispatchContext {
   run: WorkflowRun;
+  /** Aborted before cancellation waits for stage execution to stop. */
+  signal?: AbortSignal;
   /** The run's worktree, when one was acquired. */
   worktreePath?: string;
 }
@@ -108,6 +110,7 @@ export interface WorkflowOrchestratorOptions {
 export class WorkflowOrchestrator {
   /** `${runId}:${nodeId}` for stages launched but not yet settled. */
   private readonly inFlight = new Set<string>();
+  private readonly executions = new Map<string, { controller: AbortController; completion: Promise<StageOutcome> }>();
   /** Per-run promise chain; see the "one step at a time" invariant. */
   private readonly chains = new Map<string, Promise<void>>();
 
@@ -154,18 +157,61 @@ export class WorkflowOrchestrator {
    * here so the cancel-then-record ordering lives with the rest of the loop.
    */
   public async enforceTimeouts(runId: string): Promise<void> {
-    const run = this.options.runs.get(runId);
-    if (!run || isRunSettled(run)) return;
-    const timedOut = findTimedOutNodes(run, this.now);
-    if (timedOut.length === 0) return;
-
-    for (const nodeId of timedOut) {
-      await this.options.dispatcher
-        .cancelStage?.(nodeId, { run, ...(run.worktreePath ? { worktreePath: run.worktreePath } : {}) })
-        .catch(() => undefined);
-      await this.settle(runId, nodeId, { kind: 'timeout' });
-    }
+    await this.enqueue(runId, async () => {
+      const run = this.options.runs.get(runId);
+      if (!run || isRunSettled(run)) return;
+      for (const nodeId of findTimedOutNodes(run, this.now)) {
+        await this.stopStage(run, nodeId);
+        const current = this.options.runs.get(runId)!;
+        await this.persist(applyWorkflowRunCommand(current, { kind: 'node-timed-out', nodeId, at: this.now }));
+      }
+    }, 'timeouts');
     await this.step(runId);
+  }
+
+  /** Stop execution before recording cancellation or releasing its worktree. */
+  public async cancel(runId: string, reason?: string): Promise<void> {
+    let failure: unknown;
+    await this.enqueue(runId, async () => {
+      try {
+        const run = this.options.runs.get(runId);
+        if (!run) throw new Error(`Run ${runId} was not found.`);
+        const stopped = await Promise.allSettled(Object.keys(run.nodes)
+          .filter(nodeId => this.executions.has(this.key(runId, nodeId)))
+          .map(nodeId => this.stopStage(run, nodeId)));
+        const failed = stopped.find(result => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
+        const current = this.options.runs.get(runId)!;
+        await this.persist(applyWorkflowRunCommand(current, { kind: 'cancel', at: this.now, reason }));
+      } catch (error) {
+        failure = error;
+      }
+    }, 'cancel');
+    if (failure) throw failure;
+    await this.step(runId);
+  }
+
+  /** Merge host metadata into the latest record on the same chain as cleanup. */
+  public async updateRun(runId: string, update: (run: WorkflowRun) => WorkflowRun): Promise<void> {
+    let failure: unknown;
+    await this.enqueue(runId, async () => {
+      try {
+        const run = this.options.runs.get(runId);
+        if (!run) throw new Error(`Run ${runId} was not found.`);
+        await this.persist(update(run));
+      } catch (error) {
+        failure = error;
+      }
+    }, 'update');
+    if (failure) throw failure;
+  }
+
+  private async stopStage(run: WorkflowRun, nodeId: string): Promise<void> {
+    const execution = this.executions.get(this.key(run.runId, nodeId));
+    execution?.controller.abort();
+    await this.options.dispatcher.cancelStage?.(nodeId, { run, worktreePath: run.worktreePath });
+    // Wait for the execution, not dispatch(): its settlement is queued behind us.
+    await execution?.completion.catch(() => undefined);
   }
 
   // ── The loop ───────────────────────────────────────────────────────────
@@ -230,19 +276,26 @@ export class WorkflowOrchestrator {
     node: WorkflowCheckNode | WorkflowAgentTaskNode,
     run: WorkflowRun
   ): Promise<void> {
+    const controller = new AbortController();
     const context: StageDispatchContext = {
       run,
+      signal: controller.signal,
       ...(run.worktreePath ? { worktreePath: run.worktreePath } : {})
     };
 
+    const completion = Promise.resolve().then(() => isCheckNode(node)
+      ? this.options.dispatcher.runCheck(node, context)
+      : this.options.dispatcher.runAgentStage(node, context, sessionId => {
+          void this.recordSession(runId, node.id, sessionId);
+        }));
+    const key = this.key(runId, node.id);
+    this.executions.set(key, { controller, completion });
     try {
-      const outcome = isCheckNode(node)
-        ? await this.options.dispatcher.runCheck(node, context)
-        : await this.options.dispatcher.runAgentStage(node, context, sessionId => {
-            void this.recordSession(runId, node.id, sessionId);
-          });
+      const outcome = await completion;
+      this.executions.delete(key);
       await this.settle(runId, node.id, { kind: 'outcome', outcome });
     } catch (error) {
+      this.executions.delete(key);
       await this.settle(runId, node.id, {
         kind: 'outcome',
         outcome: { status: 'failed', error: error instanceof Error ? error.message : String(error) }
@@ -322,9 +375,13 @@ export class WorkflowOrchestrator {
 
   private async releaseWorkspace(run: WorkflowRun): Promise<void> {
     if (!this.options.workspace || !run.worktreePath) return;
-    await this.options.workspace.release(run).catch(error => {
+    if ([...this.executions.keys()].some(key => key.startsWith(`${run.runId}:`))) return;
+    try {
+      await this.options.workspace.release(run);
+    } catch (error) {
       console.error(`[workflow] could not release the worktree for run ${run.runId}:`, error);
-    });
+      return; // Keep the path so cleanup can be retried, including after restart.
+    }
     await this.persist({ ...run, worktreePath: undefined });
   }
 
