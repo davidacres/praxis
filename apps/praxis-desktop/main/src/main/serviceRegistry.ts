@@ -325,9 +325,10 @@ export function resetServiceForConnection(connectionId: string): void {
  * (Electron/Node won't exit while an fs watcher — e.g. macOS FSEvents — is
  * still active).
  */
-export function disposeAllServices(): void {
+export async function disposeAllServices(): Promise<void> {
+  const folderDisposals: Promise<void>[] = [];
   for (const service of folderServices.values()) {
-    service.dispose();
+    folderDisposals.push(service.dispose());
   }
   folderServices.clear();
 
@@ -345,4 +346,6 @@ export function disposeAllServices(): void {
     service.dispose();
   }
   projectServices.clear();
+
+  await Promise.all(folderDisposals);
 }

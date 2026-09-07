@@ -305,8 +305,18 @@ app.on('window-all-closed', () => {
 // Close any folder/user-workspace file watchers before the process
 // exits — an open chokidar watcher otherwise keeps the event loop alive and
 // hangs a graceful quit (see disposeAllServices' doc comment).
-app.on('before-quit', () => {
-  disposeAllServices();
+let isDisposingForQuit = false;
+
+app.on('before-quit', event => {
+  if (isDisposingForQuit) {
+    return;
+  }
+
+  event.preventDefault();
+  isDisposingForQuit = true;
+  void disposeAllServices()
+    .catch(error => console.error('Failed to dispose backend services during shutdown:', error))
+    .finally(() => app.quit());
   // An ACP-hosted session's subprocess (or a Copilot SDK session's runtime
   // process) is a child of this process — leaving either running past quit
   // is the exact same "process won't exit" hang as an unclosed chokidar
