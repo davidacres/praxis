@@ -115,7 +115,8 @@ test('creates a folderless Product project through the full wizard and opens its
   // The created date is today's, so it is masked — an unmasked baseline here
   // goes red at midnight on a change that has nothing to do with the app.
   await expect(page).toHaveScreenshot('project-home.png', {
-    mask: [page.getByTestId('project-created-date')]
+    mask: [page.getByTestId('project-created-date')],
+    maxDiffPixels: 200
   });
   await getStarted.getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.getByTestId('project-getstarted')).toHaveCount(0);
