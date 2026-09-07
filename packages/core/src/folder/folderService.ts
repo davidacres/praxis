@@ -39,6 +39,7 @@ import {
   extractComments,
   identifyPlanFolder,
   parsePlanFolder,
+  resolvePlanDependencyKeys,
   readUtf8,
   stableChildKey,
   stableFeatureKey,
@@ -1238,66 +1239,11 @@ export class FolderService implements IssueTrackerService {
       });
     }
 
-    // Resolve dependency tokens to stable keys
-    const featureKeyByDir = new Map<string, string>();
-    for (const f of parsed.features) {
-      featureKeyByDir.set(f.dirName, stableFeatureKey(pk, f.featureId));
-    }
-    const childKeyByBaseName = new Map<string, string>();
-    for (const child of parsed.childItems) {
-      const fid = child.featureId ?? 0;
-      const key =
-        child.issueType === 'Story'
-          ? stableStoryKey(pk, fid, child.sequence)
-          : stableChildKey(pk, child.issueType, fid, child.sequence);
-      childKeyByBaseName.set(child.filename.replace(/\.md$/i, '').toLowerCase(), key);
-    }
-
-    // Attach dependsOn to each issue
-    const allParsed = [
-      ...parsed.features.map(f => ({
-        key: stableFeatureKey(pk, f.featureId),
-        tokens: f.depTokens
-      })),
-      ...parsed.childItems.map(child => {
-        const fid = child.featureId ?? 0;
-        return {
-          key:
-            child.issueType === 'Story'
-              ? stableStoryKey(pk, fid, child.sequence)
-              : stableChildKey(pk, child.issueType, fid, child.sequence),
-          tokens: child.depTokens
-        };
-      })
-    ];
-
-    for (const { key, tokens } of allParsed) {
-      if (!tokens.length) {
-        continue;
-      }
-      const issue = issues.find(i => i.key === key);
-      if (!issue) {
-        continue;
-      }
-      const resolved: string[] = [];
-      for (const token of tokens) {
-        if (/^[A-Z][A-Z0-9_]{1,14}-\d+$/.test(token)) {
-          resolved.push(token);
-        } else if (/^feature-\d+/i.test(token)) {
-          const k = featureKeyByDir.get(token);
-          if (k) {
-            resolved.push(k);
-          }
-        } else {
-          const k = childKeyByBaseName.get(token.toLowerCase());
-          if (k) {
-            resolved.push(k);
-          }
-        }
-      }
-      if (resolved.length > 0) {
-        issue.dependsOn = resolved.filter(r => r !== key);
-      }
+    // Explicit planning ids must resolve to this board's generated keys.
+    const dependencyKeys = resolvePlanDependencyKeys(parsed, pk);
+    for (const issue of issues) {
+      const keys = dependencyKeys.get(issue.key);
+      if (keys?.length) issue.dependsOn = keys;
     }
 
     return issues;
