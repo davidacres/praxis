@@ -3,8 +3,15 @@ name: Build
 on:
   push:
     branches: [main]
+  # Also verify stacked PRs targeting a feature branch, such as PR #3.
   pull_request:
-    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -16,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -47,31 +54,57 @@ jobs:
         run: npm run test:desktop:workflows
 
   desktop:
+    name: Desktop (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: functional-1
+            args: --project=functional --shard=1/4
+          - suite: functional-2
+            args: --project=functional --shard=2/4
+          - suite: functional-3
+            args: --project=functional --shard=3/4
+          - suite: functional-4
+            args: --project=functional --shard=4/4
+          - suite: appearance
+            args: --project=themes --project=theme-regressions
     # Committed Playwright baselines are Darwin snapshots. Do not regenerate
     # baselines in CI; missing or changed screenshots must fail for review.
     runs-on: macos-14
     timeout-minutes: 45
+    env:
+      SHELL: /bin/bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install and repair Electron bundle
+        run: |
+          electron_app="node_modules/electron/dist/Electron.app"
+          node node_modules/electron/install.js
+          npm rebuild node-pty --build-from-source --runtime=electron --target=43.4.1 --dist-url=https://electronjs.org/headers
+          xattr -cr "$electron_app"
+          codesign --force --deep --sign - "$electron_app"
+          codesign --verify --deep --strict --verbose=2 "$electron_app"
       - name: Build desktop and copy the current renderer
         run: npm run build
-      - name: Desktop functional tests
-        run: npm run test:desktop
-      - name: Desktop appearance regressions
-        if: ${{ !cancelled() }}
-        run: npm run test:desktop:themes
+      # Each shard has its own machine and Electron bundle. Keep launches
+      # serial within a runner to retain the macOS signature stability fix.
+      - name: Desktop tests
+        working-directory: apps/praxis-desktop/main
+        run: npx playwright test ${{ matrix.args }} --workers=1 --reporter=list,html
       - name: Upload desktop test diagnostics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-test-results
+          name: desktop-test-results-${{ matrix.suite }}
           path: |
             apps/praxis-desktop/main/test-results/
+            apps/praxis-desktop/main/playwright-report/
             apps/praxis-desktop/main/output/playwright/
           if-no-files-found: ignore

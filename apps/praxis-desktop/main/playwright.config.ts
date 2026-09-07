@@ -12,7 +12,9 @@ export default defineConfig({
    * a whole Chromium per worker, so this stays well under the core count to
    * leave headroom rather than thrash.
    */
-  workers: process.env.CI ? 2 : 4,
+  // Concurrent Electron launches on macOS CI eventually fail its framework
+  // signature validation, so CI runs desktop suites serially.
+  workers: process.env.CI ? 1 : 4,
   reporter: 'list',
   projects: [
     {
