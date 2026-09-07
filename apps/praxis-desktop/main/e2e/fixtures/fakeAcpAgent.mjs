@@ -279,31 +279,38 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
     // observe each intermediate snapshot, not just the last one to land before
     // the turn ends.
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    // Give the renderer time to navigate to the session before changing the
+    // first snapshot. The test observes every subsequent update, so starting
+    // the cadence immediately would make that assertion scheduler-dependent
+    // on slower macOS runners.
+    if (promptText.includes('STOP_PLAN_MIDWAY')) {
+      await wait(2000);
+    }
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'pending', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(150);
+    await wait(500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'in_progress', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'pending', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(150);
+    await wait(500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'completed', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'in_progress', priority: 'high' },
       { content: 'Re-run the suite', status: 'pending', priority: 'medium' }
     ]));
-    await wait(150);
+    await wait(500);
     await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
       { content: 'Read the failing test', status: 'completed', priority: 'high' },
       { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
       { content: 'Re-run the suite', status: 'in_progress', priority: 'medium' }
     ]));
     if (!promptText.includes('STOP_PLAN_MIDWAY')) {
-      await wait(150);
+      await wait(500);
       await ctx.client.notify(acp.CLIENT_METHODS.session_update, plan([
         { content: 'Read the failing test', status: 'completed', priority: 'high' },
         { content: 'Fix the off-by-one', status: 'completed', priority: 'high' },
