@@ -1,3 +1,7 @@
+---
+id: TASK-032
+---
+
 # TASK-032: System Git Runner And Repository Discovery
 
 **Created:** 2026-08-26T10:54:14.000Z

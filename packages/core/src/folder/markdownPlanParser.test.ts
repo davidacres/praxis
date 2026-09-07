@@ -4,7 +4,13 @@ import assert from 'node:assert/strict';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
-import { discoverPlanFolders, discoverRepositoryFolders, parsePlanFolder, resolvePlanDependencyKeys } from './markdownPlanParser';
+import {
+  collectDependencyTokens,
+  discoverPlanFolders,
+  discoverRepositoryFolders,
+  parsePlanFolder,
+  resolvePlanDependencyKeys
+} from './markdownPlanParser';
 
 /** Minimal plans root: one feature folder with a typed markdown file. */
 async function writeFeature(plansRoot: string, title: string): Promise<void> {
@@ -152,4 +158,45 @@ test('a multi-segment local id is never truncated to its trailing segment, for a
   const parsed = { features: [{ ...feature, planningId: 'FX-XY-042' }], childItems: [story] } as unknown as Parameters<typeof resolvePlanDependencyKeys>[0];
   const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
   assert.deepEqual(resolved.get('PRAXIS-S42-1'), ['PRAXIS-F42']);
+});
+
+test('a dependency declared only in the flow-style frontmatter array is still collected', () => {
+  // Matches the actual shape of ~120 pre-existing plan docs: a `## Dependencies`
+  // heading is present (from the template-upgrade pass) but left blank, and the
+  // only real declaration is the frontmatter array.
+  const content = [
+    '---',
+    'id: TASK-045',
+    'dependencies: [TASK-044, FX-BF-003]',
+    '---',
+    '',
+    '# TASK-045: Example',
+    '',
+    '## Dependencies',
+    '',
+    '',
+    '## Comments'
+  ].join('\n');
+  assert.deepEqual(collectDependencyTokens(content), ['TASK-044', 'FX-BF-003']);
+});
+
+test('frontmatter-only dependencies resolve to real board keys end to end', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'praxis-plan-frontmatter-deps-'));
+  const feature = path.join(root, 'features', 'fx-bf-003-demo');
+  const story = path.join(feature, 'stories', 'fx-be-005-demo');
+  await mkdir(story, { recursive: true });
+  try {
+    await writeFile(path.join(feature, 'feature.md'), '---\nid: FX-BF-003\n---\n# Demo feature\n');
+    await writeFile(
+      path.join(story, 'story.md'),
+      '---\ntype: Story\nid: FX-BE-005\ndependencies: [FX-BF-003]\n---\n# Demo story\n\n## Dependencies\n\n\n## Comments\n'
+    );
+    const parsed = await parsePlanFolder(root);
+    const storyItem = parsed.childItems.find(item => item.issueType === 'Story');
+    assert.deepEqual(storyItem?.depTokens, ['FX-BF-003']);
+    const resolved = resolvePlanDependencyKeys(parsed, 'PRAXIS');
+    assert.deepEqual(resolved.get('PRAXIS-S03-5'), ['PRAXIS-F03']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
