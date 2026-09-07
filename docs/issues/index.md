@@ -27,3 +27,31 @@
 | FX-BE-028 | Workflow Library and Designer | Complete | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-028-library-and-designer/issue.md) |
 | FX-BE-029 | Run Monitor | Complete | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-029-run-monitor/issue.md) |
 | FX-BE-030 | States, accessibility, and theme verification | Complete | [issue](features/fx-bf-014-workflow-experience/stories/fx-be-030-polish-and-verification/issue.md) |
+
+## Diagnosis, preview, deployment and debugging
+
+| Ref | Story | Status | Issue mirror |
+| --- | --- | --- | --- |
+| FX-BE-051 | Failure evidence contracts and retained logs | Planned | [issue](features/fx-bf-021-failure-diagnosis/stories/fx-be-051-failure-evidence-contracts-and-retained-logs/issue.md) |
+| FX-BE-052 | Bounded diagnose and verify workflow | Planned | [issue](features/fx-bf-021-failure-diagnosis/stories/fx-be-052-bounded-diagnose-and-verify-workflow/issue.md) |
+| FX-BE-053 | Import CI failures with exact run provenance | Planned | [issue](features/fx-bf-021-failure-diagnosis/stories/fx-be-053-import-ci-failures-with-exact-run-provenance/issue.md) |
+| FX-BE-054 | Portable run profiles and readiness contracts | Planned | [issue](features/fx-bf-022-managed-run-and-preview/stories/fx-be-054-portable-run-profiles-and-readiness-contracts/issue.md) |
+| FX-BE-055 | Managed service lifecycle and scoped preview access | Planned | [issue](features/fx-bf-022-managed-run-and-preview/stories/fx-be-055-managed-service-lifecycle-and-scoped-preview-access/issue.md) |
+| FX-BE-056 | Browser diagnostics and repeatable verification | Planned | [issue](features/fx-bf-022-managed-run-and-preview/stories/fx-be-056-browser-diagnostics-and-repeatable-verification/issue.md) |
+| FX-BE-057 | Independent deployment profiles and immutable artifacts | Planned | [issue](features/fx-bf-023-project-deployment-foundation/stories/fx-be-057-independent-deployment-profiles-and-immutable-artifacts/issue.md) |
+| FX-BE-058 | Durable deployment state and workflow operations | Planned | [issue](features/fx-bf-023-project-deployment-foundation/stories/fx-be-058-durable-deployment-state-and-workflow-operations/issue.md) |
+| FX-BE-059 | Script-based direct deployment executor | Planned | [issue](features/fx-bf-023-project-deployment-foundation/stories/fx-be-059-script-based-direct-deployment-executor/issue.md) |
+| FX-BE-060 | Deployment profile and history experience | Planned | [issue](features/fx-bf-023-project-deployment-foundation/stories/fx-be-060-deployment-profile-and-history-experience/issue.md) |
+| FX-BE-061 | GitHub Actions deployment executor | Planned | [issue](features/fx-bf-024-pipeline-managed-deployment/stories/fx-be-061-github-actions-deployment-executor/issue.md) |
+| FX-BE-062 | GitLab CI deployment executor | Planned | [issue](features/fx-bf-024-pipeline-managed-deployment/stories/fx-be-062-gitlab-ci-deployment-executor/issue.md) |
+| FX-BE-063 | Pipeline setup and recovery experience | Planned | [issue](features/fx-bf-024-pipeline-managed-deployment/stories/fx-be-063-pipeline-setup-and-recovery-experience/issue.md) |
+| FX-BE-064 | IIS capability preflight and target configuration | Planned | [issue](features/fx-bf-025-iis-deployment-target/stories/fx-be-064-iis-capability-preflight-and-target-configuration/issue.md) |
+| FX-BE-065 | IIS install health and explicit rollback | Planned | [issue](features/fx-bf-025-iis-deployment-target/stories/fx-be-065-iis-install-health-and-explicit-rollback/issue.md) |
+| FX-BE-066 | IIS end-to-end proof and operational guidance | Planned | [issue](features/fx-bf-025-iis-deployment-target/stories/fx-be-066-iis-end-to-end-proof-and-operational-guidance/issue.md) |
+| FX-BE-067 | Debugger contracts and adapter capability proof | Planned | [issue](features/fx-bf-026-interactive-agent-debugging/stories/fx-be-067-debugger-contracts-and-adapter-capability-proof/issue.md) |
+| FX-BE-068 | DAP service and Node TypeScript debugging | Planned | [issue](features/fx-bf-026-interactive-agent-debugging/stories/fx-be-068-dap-service-and-node-typescript-debugging/issue.md) |
+| FX-BE-069 | Debug workspace and .NET support | Planned | [issue](features/fx-bf-026-interactive-agent-debugging/stories/fx-be-069-debug-workspace-and-net-support/issue.md) |
+| FX-BE-070 | Controlled agent debugging tools | Planned | [issue](features/fx-bf-026-interactive-agent-debugging/stories/fx-be-070-controlled-agent-debugging-tools/issue.md) |
+| FX-BE-071 | Capability-led session recovery and cost attribution | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-071-capability-led-session-recovery-and-cost-attribution/issue.md) |
+| FX-BE-072 | Event-triggered bounded failure repair | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-072-event-triggered-bounded-failure-repair/issue.md) |
+| FX-BE-073 | Shared executor feasibility and runner boundary | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/issue.md) |

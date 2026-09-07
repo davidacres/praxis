@@ -15,6 +15,8 @@ export interface ParsedPlanningDates {
 }
 
 export interface ParsedFeatureFolder {
+  /** Explicit document id, used to resolve local planning references. */
+  planningId?: string;
   dirName: string;
   featureId: number;
   title: string;
@@ -44,6 +46,8 @@ export interface ParsedStoryFile {
 }
 
 export interface ParsedChildFile {
+  /** Explicit document id; absent legacy files retain filename resolution. */
+  planningId?: string;
   featureId: number | undefined;
   sequence: number;
   filename: string;
@@ -322,7 +326,7 @@ function extractDependsOnLine(content: string): string {
 
 function scanDependencyTokens(text: string): string[] {
   const out = new Set<string>();
-  const issueKey = /\b([A-Z][A-Z0-9_]{1,14}-\d+)\b/g;
+  const issueKey = /\b((?:FX-(?:BF|BE)|[A-Z][A-Z0-9_]{1,14})-\d+)\b/g;
   let m: RegExpExecArray | null;
   while ((m = issueKey.exec(text))) {
     out.add(m[1]);
@@ -1153,6 +1157,7 @@ async function parsePlanFolderRecursively(
     featureDirectories.set(directory, featureId);
     progress(`Reading feature: ${file.relativePath}`);
     features.push({
+      planningId: extractFrontMatterValue(file.content, 'id'),
       dirName: path.relative(featuresRootPath, directory).replaceAll(path.sep, '/') || path.basename(directory),
       featureId,
       title: extractMainHeading(file.content),
@@ -1180,6 +1185,7 @@ async function parsePlanFolderRecursively(
     const sequence = planningNumber(extractFrontMatterValue(file.content, 'id')) ?? parsedName?.sequence ?? autoSequence++;
     progress(`Reading ${issueType.toLowerCase()}: ${file.relativePath}`);
     childItems.push({
+      planningId: extractFrontMatterValue(file.content, 'id'),
       featureId,
       sequence,
       filename: file.name,
@@ -1208,4 +1214,48 @@ async function parsePlanFolderRecursively(
     planningDates: child.planningDates, branch: child.branch
   }));
   return { features, stories, childItems, plansRootPath, featuresRootPath };
+}
+
+/** Resolve explicit local planning ids before interpreting tokens as tracker keys. */
+export function resolvePlanDependencyKeys(parsed: ParsedPlanFolder, projectKey: string): Map<string, string[]> {
+  const records = [
+    ...parsed.features.map(feature => ({
+      key: stableFeatureKey(projectKey, feature.featureId),
+      id: feature.planningId,
+      name: feature.dirName,
+      tokens: feature.depTokens
+    })),
+    ...parsed.childItems.map(child => ({
+      key: child.issueType === 'Story'
+        ? stableStoryKey(projectKey, child.featureId ?? 0, child.sequence)
+        : stableChildKey(projectKey, child.issueType, child.featureId ?? 0, child.sequence),
+      id: child.planningId,
+      name: child.filename.replace(/\.md$/i, '').toLowerCase(),
+      tokens: child.depTokens
+    }))
+  ];
+  const localIds = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  const names = new Map(records.map(record => [record.name, record.key]));
+  for (const record of records) {
+    if (!record.id) continue;
+    if (localIds.has(record.id)) ambiguous.add(record.id);
+    else localIds.set(record.id, record.key);
+  }
+  for (const id of ambiguous) localIds.delete(id);
+  const result = new Map<string, string[]>();
+  for (const record of records) {
+    if (!record.tokens.length) continue;
+    const keys: string[] = [];
+    for (const token of record.tokens) {
+      if (ambiguous.has(token)) continue;
+      const key = localIds.get(token)
+        ?? (/^(?:FX-(?:BF|BE)|[A-Z][A-Z0-9_]{1,14})-\d+$/.test(token)
+          ? token
+          : names.get(token) ?? names.get(token.toLowerCase()));
+      if (key && key !== record.key && !keys.includes(key)) keys.push(key);
+    }
+    if (keys.length) result.set(record.key, keys);
+  }
+  return result;
 }
