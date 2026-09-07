@@ -65,6 +65,7 @@ jobs:
         run: |
           electron_app="node_modules/electron/dist/Electron.app"
           node node_modules/electron/install.js
+          npm rebuild node-pty --build-from-source --runtime=electron --target=43.4.1 --dist-url=https://electronjs.org/headers
           xattr -cr "$electron_app"
           codesign --force --deep --sign - "$electron_app"
           codesign --verify --deep --strict --verbose=2 "$electron_app"
