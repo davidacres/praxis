@@ -126,9 +126,26 @@ export function extractTypeRaw(content: string): string | undefined {
     || undefined;
 }
 
+function getFrontmatterBlock(content: string): string | undefined {
+  return /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+}
+
 function extractFrontMatterValue(content: string, key: string): string | undefined {
-  const frontmatter = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(content)?.[1];
+  const frontmatter = getFrontmatterBlock(content);
   return frontmatter?.match(new RegExp(`^${key}:\\s*["']?(.+?)["']?\\s*$`, 'm'))?.[1]?.trim();
+}
+
+/**
+ * Reads the flow-style `dependencies: [A, B]` frontmatter array. Most plan
+ * documents carry this alongside a matching `## Dependencies` prose section,
+ * but a large legacy subset (fx-bf-003/004/005 and siblings) declare it only
+ * here — without this, those dependency edges never reach depTokens at all.
+ */
+function extractFrontMatterDependencyTokens(content: string): string[] {
+  const frontmatter = getFrontmatterBlock(content);
+  const list = frontmatter?.match(/^dependencies:\s*\[([^\]]*)\]\s*$/m)?.[1];
+  if (!list) return [];
+  return list.split(',').map(token => token.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
 }
 
 export function extractComplexityRaw(content: string): string | undefined {
@@ -359,7 +376,11 @@ export function collectDependencyTokens(content: string): string[] {
   if (line.length > 0) {
     parts.push(line);
   }
-  return scanDependencyTokens(parts.join('\n'));
+  const tokens = new Set(scanDependencyTokens(parts.join('\n')));
+  for (const token of extractFrontMatterDependencyTokens(content)) {
+    tokens.add(token);
+  }
+  return [...tokens];
 }
 
 function parseFlexibleDate(value: string): string | undefined {

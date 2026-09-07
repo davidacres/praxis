@@ -1,3 +1,7 @@
+---
+id: TASK-031
+---
+
 # TASK-031: Confirm Desktop Fit And Visual Contract
 
 **Created:** 2026-08-26T10:54:14.000Z

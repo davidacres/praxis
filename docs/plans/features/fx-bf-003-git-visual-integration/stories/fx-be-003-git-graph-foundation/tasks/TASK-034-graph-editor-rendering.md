@@ -1,3 +1,7 @@
+---
+id: TASK-034
+---
+
 # TASK-034: Graph Editor Rendering
 
 **Created:** 2026-08-26T10:54:14.000Z
