@@ -324,9 +324,16 @@ function extractDependsOnLine(content: string): string {
   return m?.[1]?.trim() ?? '';
 }
 
+/**
+ * An issue key, local or external: one or more hyphenated uppercase segments
+ * ending in a numeric id (FX-BE-051, TASK-031, KAMAI-4). Segments, not a fixed
+ * prefix list, so a new local id shape (e.g. FX-XY-001) is never truncated.
+ */
+const ISSUE_KEY_SOURCE = '[A-Z][A-Z0-9_]*(?:-[A-Z][A-Z0-9_]*)*-\\d+';
+
 function scanDependencyTokens(text: string): string[] {
   const out = new Set<string>();
-  const issueKey = /\b((?:FX-(?:BF|BE)|[A-Z][A-Z0-9_]{1,14})-\d+)\b/g;
+  const issueKey = new RegExp(`\\b(${ISSUE_KEY_SOURCE})\\b`, 'g');
   let m: RegExpExecArray | null;
   while ((m = issueKey.exec(text))) {
     out.add(m[1]);
@@ -1235,22 +1242,34 @@ export function resolvePlanDependencyKeys(parsed: ParsedPlanFolder, projectKey: 
     }))
   ];
   const localIds = new Map<string, string>();
-  const ambiguous = new Set<string>();
-  const names = new Map(records.map(record => [record.name, record.key]));
+  const ambiguousIds = new Set<string>();
   for (const record of records) {
     if (!record.id) continue;
-    if (localIds.has(record.id)) ambiguous.add(record.id);
+    if (localIds.has(record.id)) ambiguousIds.add(record.id);
     else localIds.set(record.id, record.key);
   }
-  for (const id of ambiguous) localIds.delete(id);
+  for (const id of ambiguousIds) localIds.delete(id);
+
+  // Legacy fallback: a story.md/feature.md basename repeats across every
+  // feature/story folder, so a name shared by more than one record must
+  // resolve to nothing rather than silently pick whichever record was last.
+  const names = new Map<string, string>();
+  const ambiguousNames = new Set<string>();
+  for (const record of records) {
+    if (names.has(record.name)) ambiguousNames.add(record.name);
+    else names.set(record.name, record.key);
+  }
+  for (const name of ambiguousNames) names.delete(name);
+
+  const issueKeyPattern = new RegExp(`^${ISSUE_KEY_SOURCE}$`);
   const result = new Map<string, string[]>();
   for (const record of records) {
     if (!record.tokens.length) continue;
     const keys: string[] = [];
     for (const token of record.tokens) {
-      if (ambiguous.has(token)) continue;
+      if (ambiguousIds.has(token)) continue;
       const key = localIds.get(token)
-        ?? (/^(?:FX-(?:BF|BE)|[A-Z][A-Z0-9_]{1,14})-\d+$/.test(token)
+        ?? (issueKeyPattern.test(token)
           ? token
           : names.get(token) ?? names.get(token.toLowerCase()));
       if (key && key !== record.key && !keys.includes(key)) keys.push(key);
