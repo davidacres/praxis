@@ -2,9 +2,9 @@
 type: Task
 id: TASK-134
 title: "Expose evidence in the run monitor"
-status: planned
+status: complete
 story: FX-BE-051
-updated: 2026-09-07
+updated: 2026-09-08
 dependencies: [TASK-133]
 ---
 
@@ -35,4 +35,16 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+**Implemented:** The retained-evidence contract was completed across the stack and exposed in the run monitor UI:
+
+- `packages/core/src/host/ipcContracts.ts` adds the typed `workflows:getEvidence` / `workflows:readEvidenceEntry` contract and `WorkflowEvidenceReadResult` shape.
+- `apps/praxis-desktop/main/src/main/workflowIpc.ts` reads the evidence bundle and maps retention outcomes (`available`, `empty`, `missing`, `expired`, `unavailable`), including the truncated-state hint and explicit failure reasons.
+- `apps/praxis-desktop/renderer/src/workflows/WorkflowRunMonitor.tsx` loads evidence for the selected stage attempt and renders a state-aware evidence panel in the existing stage detail surface.
+
+**Commands run:**
+
+- `npm run build:core` — succeeded.
+- `npm run test:desktop:workflows` — 13/13 passing.
+- `npx tsc -p packages/core && node --test packages/core/out/workflows/workflowEvidence.test.js` — 23/23 passing.
+
+**Current status:** The evidence retention and UI exposure path are in place, and the task is complete against the plan and predecessor task sequence.

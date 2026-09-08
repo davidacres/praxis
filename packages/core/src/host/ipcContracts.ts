@@ -74,6 +74,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
+import type { WorkflowEvidenceBundle, WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -708,6 +709,13 @@ export interface PraxisIpc {
  * designer edits project-scoped definitions and reads the template library and
  * live validation from here.
  */
+export interface WorkflowEvidenceReadResult {
+  entry: WorkflowEvidenceEntry;
+  state: 'available' | 'empty' | 'missing' | 'expired' | 'unavailable';
+  content?: string;
+  reason?: string;
+}
+
 export interface WorkflowsIpc {
   /**
    * The template library offered to a project: built-in, then the user's
@@ -752,6 +760,16 @@ export interface WorkflowsIpc {
   listRuns(projectId: string): Promise<WorkflowRunSummary[]>;
   /** One run's summary, or undefined. */
   getRun(runId: string): Promise<WorkflowRunSummary | undefined>;
+  /** Retained evidence bundle for one stage attempt, if any was captured. */
+  getEvidence(projectId: string, runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceBundle | undefined>;
+  /** Reads one evidence entry's content and status, including expired/missing/unavailable outcomes. */
+  readEvidenceEntry(
+    projectId: string,
+    runId: string,
+    nodeId: string,
+    attempt: number,
+    label: string
+  ): Promise<WorkflowEvidenceReadResult | undefined>;
   /**
    * Records a stage outcome. FX-BF-011 will drive stages from real agent
    * sessions; until then the run monitor advances them explicitly, which is

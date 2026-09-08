@@ -294,6 +294,10 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('workflows:startRun', projectId, workflowId, taskTitle, issue),
     listRuns: (projectId: string) => ipcRenderer.invoke('workflows:listRuns', projectId),
     getRun: (runId: string) => ipcRenderer.invoke('workflows:getRun', runId),
+    getEvidence: (projectId: string, runId: string, nodeId: string, attempt: number) =>
+      ipcRenderer.invoke('workflows:getEvidence', projectId, runId, nodeId, attempt),
+    readEvidenceEntry: (projectId: string, runId: string, nodeId: string, attempt: number, label: string) =>
+      ipcRenderer.invoke('workflows:readEvidenceEntry', projectId, runId, nodeId, attempt, label),
     advanceStage: (
       runId: string,
       nodeId: string,

@@ -53,6 +53,14 @@ interface IssueOption {
   connectionId?: string;
 }
 
+interface EvidenceState {
+  label: string;
+  kind: string;
+  state: 'available' | 'empty' | 'missing' | 'expired' | 'unavailable';
+  content?: string;
+  reason?: string;
+}
+
 /** Parses "KEY — Summary" (or a bare key typed past the datalist) back to just the key. */
 function extractIssueKey(raw: string): string {
   const value = raw.trim();
@@ -78,6 +86,7 @@ export function WorkflowRunMonitor({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [issueOptions, setIssueOptions] = useState<IssueOption[]>([]);
   const [issueKeyDraft, setIssueKeyDraft] = useState('');
+  const [evidence, setEvidence] = useState<Record<string, EvidenceState>>({});
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
@@ -162,6 +171,51 @@ export function WorkflowRunMonitor({
 
   const selected = runs.find(run => run.runId === selectedRunId);
   const stage = selected?.stages.find(row => row.nodeId === selectedStageId);
+
+  useEffect(() => {
+    if (!selected || !selectedStageId) {
+      setEvidence({});
+      return;
+    }
+    const row = selected.stages.find(candidate => candidate.nodeId === selectedStageId);
+    if (!row || row.attempts <= 0) {
+      setEvidence({});
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const bundle = await window.praxis.workflows.getEvidence(project.id, selected.runId, row.nodeId, row.attempts);
+      if (!bundle || cancelled) return;
+
+      const next = await Promise.all(
+        bundle.entries.map(async entry => {
+          const read = await window.praxis.workflows.readEvidenceEntry(
+            project.id,
+            selected.runId,
+            row.nodeId,
+            row.attempts,
+            entry.label
+          );
+          if (!read) return undefined;
+          return {
+            label: read.entry.label,
+            kind: read.entry.kind,
+            state: read.state,
+            content: read.content,
+            reason: read.reason
+          } satisfies EvidenceState;
+        })
+      );
+
+      if (cancelled) return;
+      setEvidence(Object.fromEntries(next.filter((entry): entry is EvidenceState => !!entry).map(entry => [entry.label, entry])));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, selected, selectedStageId]);
 
   const act = useCallback(
     async (fn: () => Promise<WorkflowRunSummary>) => {
@@ -419,6 +473,30 @@ export function WorkflowRunMonitor({
                 ))}
               </ul>
             )}
+
+            <div className="wf-stage-evidence">
+              <div className="wf-stage-evidence-header">Evidence</div>
+              {Object.keys(evidence).length === 0 ? (
+                <p className="rail-sub">No retained evidence for this attempt yet.</p>
+              ) : (
+                Object.values(evidence).map(entry => (
+                  <div key={entry.label} className={`wf-stage-evidence-item is-${entry.state}`}>
+                    <div className="wf-stage-evidence-head">
+                      <strong>{entry.label}</strong>
+                      <span className={`chip ${entry.state === 'available' ? 'chip-success' : entry.state === 'missing' ? 'chip-danger' : entry.state === 'expired' ? 'chip-warn' : entry.state === 'empty' ? 'chip-muted' : 'chip-warn'}`}>
+                        {entry.state}
+                      </span>
+                    </div>
+                    {entry.reason && <p className="rail-sub">{entry.reason}</p>}
+                    {entry.state === 'empty' ? (
+                      <p className="rail-sub">This command produced no output.</p>
+                    ) : entry.content !== undefined ? (
+                      <pre>{entry.content}</pre>
+                    ) : null}
+                  </div>
+                ))
+              )}
+            </div>
 
             <div className="inspector-actions">
               {stage.sessionKey && onOpenSession && (

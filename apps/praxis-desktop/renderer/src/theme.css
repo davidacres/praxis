@@ -8628,6 +8628,11 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-stagecard code { font-family: var(--font-mono); font-size: var(--text-sm); }
 .wf-stage-error { margin: 0; color: var(--danger); font-size: var(--text-sm); }
 .wf-stage-artifacts { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary); }
+.wf-stage-evidence { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+.wf-stage-evidence-header { font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
+.wf-stage-evidence-item { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-subtle); }
+.wf-stage-evidence-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wf-stage-evidence-item pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: var(--text-sm); background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2); max-height: 18rem; overflow: auto; }
 .inspector-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
 
 /* Template library — this-project cards + template list. */

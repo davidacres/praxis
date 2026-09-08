@@ -35,7 +35,7 @@ function projectFolderFor(run: WorkflowRun): string | undefined {
 }
 
 /** `userData/workflow-evidence/` — isolated per profile; see `workflowEvidence.ts` for the tree shape beneath it. */
-function evidenceStorageRoot(): string {
+export function evidenceStorageRoot(): string {
   return path.join(app.getPath('userData'), 'workflow-evidence');
 }
 

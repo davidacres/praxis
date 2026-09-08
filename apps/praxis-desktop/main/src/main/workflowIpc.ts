@@ -11,10 +11,13 @@ import {
   createWorkflowRun,
   deleteProjectWorkflow,
   instantiateTemplateForProject,
+  isEvidenceExpired,
   loadProjectWorkflows,
   migrateWorkflow,
   normalizeWorkflow,
   isRunSettled,
+  readEvidenceBundle,
+  readEvidenceContent,
   recoverWorkflowRun,
   resolveWorkflowCatalog,
   summarizeWorkflowRun,
@@ -36,7 +39,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
-import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
+import { evidenceStorageRoot, getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -316,6 +319,49 @@ export function registerWorkflowIpc(): void {
     const run = runStore().get(runId);
     return run ? summarize(run) : undefined;
   });
+
+  ipcMain.handle(
+    'workflows:getEvidence',
+    async (_event, projectId: string, runId: string, nodeId: string, attempt: number) => {
+      const key = { projectId, runId, nodeId, attempt };
+      const { bundle, issues } = await readEvidenceBundle(evidenceStorageRoot(), key);
+      if (!bundle || issues.length > 0) return undefined;
+      return bundle;
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:readEvidenceEntry',
+    async (_event, projectId: string, runId: string, nodeId: string, attempt: number, label: string) => {
+      const key = { projectId, runId, nodeId, attempt };
+      const { bundle, issues } = await readEvidenceBundle(evidenceStorageRoot(), key);
+      if (!bundle || issues.length > 0) return undefined;
+      const entry = bundle.entries.find(candidate => candidate.label === label);
+      if (!entry) return undefined;
+
+      if (entry.presence === 'missing') {
+        return { entry, state: 'missing', reason: entry.missingReason ?? 'Not captured.' };
+      }
+      if (entry.presence === 'empty') {
+        return { entry, state: 'empty', content: '' };
+      }
+      if (isEvidenceExpired(entry.retention)) {
+        return { entry, state: 'expired', reason: 'This retained evidence has expired.' };
+      }
+
+      try {
+        const content = await readEvidenceContent(evidenceStorageRoot(), key, entry);
+        return {
+          entry,
+          state: 'available',
+          content,
+          ...(entry.truncated ? { reason: 'This retained log was truncated to fit the evidence budget.' } : {})
+        };
+      } catch {
+        return { entry, state: 'unavailable', reason: 'The retained evidence could not be read.' };
+      }
+    }
+  );
 
   ipcMain.handle(
     'workflows:advanceStage',
