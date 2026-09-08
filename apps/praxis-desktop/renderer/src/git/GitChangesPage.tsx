@@ -104,6 +104,7 @@ export function GitChangesPage({ repositoryPath, onOpenGraph }: GitChangesPagePr
   const files = status?.files ?? [];
   const stagedFiles = files.filter(file => file.staged);
   const unstagedFiles = files.filter(file => !file.staged && !file.conflicted);
+  const activeRepositoryPath = repositoryPath ?? snapshot?.repositoryPath;
 
   return <section className="git-page git-changes-page" aria-label="Git changes" data-testid="git-changes-page">
     <header className="git-header">
@@ -113,12 +114,12 @@ export function GitChangesPage({ repositoryPath, onOpenGraph }: GitChangesPagePr
       </div>
       <div className="git-header-actions">
         <button className="git-button" onClick={onOpenGraph}>← Graph</button>
-        <button className="git-button" onClick={() => void load(snapshot?.repositoryPath ?? repositoryPath, true)} disabled={loading}>{loading ? 'Loading…' : '↻ Refresh'}</button>
+        <button className="git-button" onClick={() => void load(activeRepositoryPath, true)} disabled={loading || !activeRepositoryPath}>{loading ? 'Loading…' : '↻ Refresh'}</button>
         <button className="git-button git-open-button" onClick={() => void window.praxis.dialog.pickFolder('Open Git repository').then(path => { if (path) void load(path); })}>Open repository</button>
       </div>
     </header>
 
-    {error && <div className="git-error" role="alert"><strong>Git is unavailable</strong><span>{error}</span><button onClick={() => void load(snapshot?.repositoryPath ?? repositoryPath, true)}>Try again</button></div>}
+    {error && <div className="git-error" role="alert"><strong>Git is unavailable</strong><span>{error}</span><button onClick={() => void load(activeRepositoryPath, true)} disabled={!activeRepositoryPath}>Try again</button></div>}
     {busyAction && <div className="git-progress" role="status"><span className="git-progress-dot" />{busyAction}…</div>}
     {loading && !snapshot ? <div className="git-empty"><div className="git-spinner" /><h2>Reading working tree</h2><p>Checking local changes, the staging area, and current branch.</p></div>
       : !snapshot ? <div className="git-empty"><div className="git-empty-icon">⌘</div><h2>No repository selected</h2><p>Open a project workspace containing a Git repository to review changes.</p></div>
