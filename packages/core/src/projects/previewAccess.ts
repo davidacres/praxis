@@ -81,6 +81,12 @@ export class PreviewAccessRegistry {
     const origin = normalizeOrigin(rawUrl);
     return origin !== undefined && this.grantsByOrigin.has(origin);
   }
+
+  /** The grant (and so the owning project/run/service) behind `rawUrl`'s origin, if any — how a consumer that only has a URL (e.g. the preview surface, capturing diagnostics for whatever page is currently open) recovers whose evidence this is. */
+  grantFor(rawUrl: string): PreviewOriginGrant | undefined {
+    const origin = normalizeOrigin(rawUrl);
+    return origin !== undefined ? this.grantsByOrigin.get(origin) : undefined;
+  }
 }
 
 /**
