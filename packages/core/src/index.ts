@@ -57,6 +57,7 @@ export * from './projects/projectImportPlanner';
 export * from './projects/projectTemplates';
 export * from './projects/projectWorkflow';
 export * from './projects/runProfile';
+export * from './projects/runProfileDiscovery';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';

@@ -2,7 +2,7 @@
 type: Task
 id: TASK-142
 title: "Resolve launch configuration"
-status: planned
+status: in-progress
 story: FX-BE-054
 updated: 2026-09-07
 dependencies: [TASK-141]
@@ -35,4 +35,35 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+**Status: discovery logic is implemented and tested; nothing yet walks a real project tree to find
+manifests, and no UI presents/persists the proposal. Left `in-progress`.**
+
+**Implemented:** `packages/core/src/projects/runProfileDiscovery.ts` (new):
+- `proposeNodeRunService(packageJsonContent)` — reads a `package.json`'s own `scripts`, preferring
+  `dev` > `start` > `serve` (a `dev` script wins over `start` when both exist, matching how a
+  Vite/Next-style frontend is actually launched locally). Proposes `npm run <script>`, never
+  evaluates the script string itself.
+- `proposeDotnetRunService(launchSettingsContent)` — reads `Properties/launchSettings.json`,
+  preferring the `commandName: "Project"` profile over an `IISExpress` one even when IIS Express is
+  listed first. **Distinguishes bind address from browser origin explicitly**: `port` comes from the
+  first URL in `applicationUrl`'s semicolon-separated list (the process's own bind address);
+  `browserOrigin` is separate and only set when `launchBrowser` is true — either the bind URL itself,
+  or, when `launchUrl` names a sub-path (e.g. `"swagger"`), that sub-path joined onto it. These are
+  never conflated into one field.
+- Both functions only ever call `JSON.parse` on the given string — there is no `child_process`
+  import in this module, so "no detected script or launch settings file is executed during
+  discovery" is true by construction, not by care taken at each call site. A malformed manifest (bad
+  JSON, no matching script/profile) returns `undefined` rather than throwing.
+
+**Commands run:** `npm run test:core` — 569/569 (13 new: a Vite-style and a start-only Node package,
+dev-preferred-over-start, no-matching-script, malformed JSON, a dangerous-looking script string
+proven never executed, an ASP.NET bind port distinct from a swagger browser origin, `launchBrowser:
+false` producing no origin, Project-profile-preferred-over-IISExpress, and a combined
+frontend+API "multiple services" scenario). `check-types` (root, all three workspaces) — clean.
+
+**Remaining limitations:** No file-tree walk exists yet to actually *find* `package.json` /
+`Properties/launchSettings.json` under a project folder — these functions take already-read content
+and are called by a caller kept out of core. No IPC exposes discovery to the renderer, and nothing
+persists a proposal into a `run.praxis.json` (TASK-141's `validateRunProfile`/`serializeRunProfile`
+exist for that, unwired). "Persist only after review" has no reviewing surface yet — that is
+TASK-143's editor.
