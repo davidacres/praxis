@@ -324,6 +324,54 @@ test('agent prose cannot pass a deterministic check gate', () => {
   assert.equal(approvalReadiness(r, 'approve').canApprove, false);
 });
 
+/** Same shape as `definition()`, but "qa" is a deployment stage rather than a check — proving a deployment-backed gate is deterministic the same way a check-backed one is. */
+function definitionWithDeploymentGate(): WorkflowDefinition {
+  const base = definition();
+  return {
+    ...base,
+    nodes: base.nodes.map(node =>
+      node.id === 'qa'
+        ? {
+            type: 'deployment',
+            id: 'qa',
+            name: 'Deploy to staging',
+            x: 0,
+            y: 0,
+            inputs: ['change-diff'],
+            deploymentProfileId: 'staging',
+            outputs: [{ id: 'qa-results', kind: 'test-results', required: true }],
+            satisfiesGate: 'qa'
+          }
+        : node
+    )
+  };
+}
+
+test('a deployment-backed gate is deterministic too, and agent prose still cannot pass it', () => {
+  let r = createWorkflowRun({ runId: 'r1', projectId: 'p1', definition: definitionWithDeploymentGate(), at: T(0) });
+  r = succeed(r, 'implement', 1, 'sha-abc');
+  r = succeed(r, 'review', 3);
+  r = applyWorkflowRunCommand(r, { kind: 'node-started', nodeId: 'qa', at: T(5) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-failed', nodeId: 'qa', at: T(6), error: 'health check failed' });
+
+  const gates = evaluateGates(r, 'approve');
+  const qa = gates.find(gate => gate.gate === 'qa');
+  assert.equal(qa?.state, 'failed');
+  assert.equal(qa?.deterministic, true, 'a deployment-backed gate is marked deterministic');
+  assert.equal(approvalReadiness(r, 'approve').canApprove, false);
+});
+
+test('a deployment stage passing its gate lets approval proceed, same as a check node', () => {
+  let r = createWorkflowRun({ runId: 'r1', projectId: 'p1', definition: definitionWithDeploymentGate(), at: T(0) });
+  r = succeed(r, 'implement', 1, 'sha-abc');
+  r = succeed(r, 'review', 3);
+  r = succeed(r, 'qa', 5);
+
+  const gates = evaluateGates(r, 'approve');
+  assert.deepEqual(gates.map(gate => gate.state), ['passed', 'passed']);
+  assert.equal(approvalReadiness(r, 'approve').canApprove, true);
+});
+
 test('policy widens the required gate set beyond what the definition names', () => {
   let r = succeed(run(), 'implement', 1, 'sha-abc');
   r = succeed(r, 'review', 3);

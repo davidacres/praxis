@@ -39,6 +39,7 @@ import {
 const NODE_KINDS: Array<{ type: WorkflowNodeType; label: string; icon: string }> = [
   { type: 'agent-task', label: 'Agent stage', icon: 'robot' },
   { type: 'check', label: 'Check', icon: 'shield' },
+  { type: 'deployment', label: 'Deployment', icon: 'rocket' },
   { type: 'approval', label: 'Approval', icon: 'check-square' },
   { type: 'join', label: 'Join', icon: 'split-horizontal' }
 ];
@@ -48,7 +49,9 @@ const OUTCOMES: WorkflowEdgeOutcome[] = ['success', 'failure', 'always'];
 
 /** The gate a stage satisfies, without importing a core runtime helper. */
 function railGate(node: WorkflowNode): WorkflowGateKind | undefined {
-  return node.type === 'agent-task' || node.type === 'check' ? node.satisfiesGate : undefined;
+  return node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment'
+    ? node.satisfiesGate
+    : undefined;
 }
 
 export interface WorkflowDesignerPageProps {
@@ -448,6 +451,22 @@ function NodeInspector({
               onChange={event => set({ args: event.target.value.split(/\s+/).filter(Boolean) })}
             />
           </Field>
+          <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
+        </>
+      )}
+
+      {node.type === 'deployment' && (
+        <>
+          <Field label="Deployment profile ID">
+            <input
+              value={node.deploymentProfileId}
+              placeholder="staging"
+              onChange={event => set({ deploymentProfileId: event.target.value })}
+            />
+          </Field>
+          <p className="hint">
+            Resolved against the project&rsquo;s deployment profiles when the run reaches this stage.
+          </p>
           <GateSelect value={node.satisfiesGate} onChange={gate => set({ satisfiesGate: gate })} />
         </>
       )}

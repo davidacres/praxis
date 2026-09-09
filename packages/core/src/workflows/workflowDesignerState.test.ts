@@ -194,6 +194,58 @@ test('adding then removing an output also cleans up any consumer input', () => {
   assert.deepEqual(consumerNode?.inputs, [], 'the consumer input went with the artifact');
 });
 
+// ── Deployment nodes (FX-BE-058 / TASK-155) ─────────────────────────────
+
+test('newNode creates a deployment stage with an empty profile id and no outputs', () => {
+  const node = newNode('deployment', { x: 10, y: 20 });
+  assert.equal(node.type, 'deployment');
+  assert.equal(node.type === 'deployment' && node.deploymentProfileId, '');
+  assert.deepEqual(node.type === 'deployment' ? node.outputs : undefined, []);
+});
+
+test('addOutput and removeOutput work on a deployment node the same as a check node', () => {
+  let definition = blank();
+  definition = addNode(definition, newNode('deployment', { x: 300, y: 80 }));
+  const [, deploy] = definition.nodes;
+  definition = addOutput(definition, deploy.id, { id: 'deploy-report', kind: 'report', required: true });
+  const withOutput = definition.nodes.find(node => node.id === deploy.id);
+  assert.deepEqual(withOutput?.type === 'deployment' ? withOutput.outputs.map(o => o.id) : [], ['deploy-report']);
+
+  definition = removeOutput(definition, deploy.id, 'deploy-report');
+  const withoutOutput = definition.nodes.find(node => node.id === deploy.id);
+  assert.deepEqual(withoutOutput?.type === 'deployment' ? withoutOutput.outputs : ['x'], []);
+});
+
+test('removing a node that produced a deployment stage input clears that input', () => {
+  let definition = blank();
+  definition = addNode(definition, newNode('deployment', { x: 300, y: 80 }));
+  const [producer, deploy] = definition.nodes;
+  definition = addOutput(definition, producer.id, { id: 'build-artifact', kind: 'diff', required: true });
+  definition = updateNode(definition, deploy.id, { inputs: ['build-artifact'] });
+
+  const next = removeNode(definition, producer.id);
+  const survivor = next.nodes.find(node => node.id === deploy.id);
+  assert.deepEqual(survivor?.inputs, [], 'the input went with its producer, the same rule check/agent-task nodes follow');
+});
+
+test('a duplicated deployment node does not carry the original gate or artifact ids', () => {
+  let definition = blank();
+  definition = addNode(definition, newNode('deployment', { x: 300, y: 80 }));
+  const [, deploy] = definition.nodes;
+  definition = addOutput(definition, deploy.id, { id: 'deploy-report', kind: 'report', required: true });
+  definition = updateNode(definition, deploy.id, { satisfiesGate: 'security' } as never);
+
+  const next = duplicateNode(definition, deploy.id);
+  const copy = next.nodes[next.nodes.length - 1];
+  assert.equal(copy.type, 'deployment');
+  assert.equal(copy.type === 'deployment' && copy.satisfiesGate, undefined);
+  assert.equal(
+    copy.type === 'deployment' && copy.outputs[0].id !== 'deploy-report',
+    true,
+    'the copy gets a fresh artifact id so contracts do not collide'
+  );
+});
+
 // ── setEntryNode ─────────────────────────────────────────────────────────
 
 test('setEntryNode only accepts a node that exists', () => {

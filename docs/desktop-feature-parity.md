@@ -2,9 +2,9 @@
 
 Legend: **✓** complete · **?** partial / not finished · **✗** missing
 
-Current state of Praxis desktop (Electron) as of 2026-09-05. Core backends ship
+Current state of Praxis desktop (Electron) as of 2026-09-09. Core backends ship
 to all hosts; desktop-specific features are in the renderer (`apps/praxis-desktop/renderer`)
-and Electron integration. Last audited: 2026-09-05.
+and Electron integration. Last audited: 2026-09-09.
 
 ## Backends & connections
 
@@ -101,6 +101,14 @@ and Electron integration. Last audited: 2026-09-05.
 | Create branch from issue | ✓ | Git graph context menu; launches branch-naming dialog |
 | Git graph | ✓ | Full commit history view; interactive branch/tag/rebase; conflict resolution UI |
 | Diff workspace | ✓ | Structured change view per commit; hunk-level staging; WIP tracking |
+| Failure diagnosis from retained evidence | ~ | Core-only (FX-BE-051/052): evidence capture, redaction, bounded repair attempts and a "Diagnose" action in the run monitor. No Electron e2e verification yet — see the task completion evidence under `docs/plans/features/fx-bf-021-failure-diagnosis/`. |
+| CI evidence import (GitHub Actions / GitLab CI) | ~ | Core-only (FX-BE-053): read-only providers, log import into the evidence store, commit-availability preflight before diagnosing. **Credential scope: `actions:read`/`contents:read` for a GitHub token, `read_api` for a GitLab token — read-only; nothing here dispatches, cancels, or re-runs a job.** No connection/picker UI yet — see the task completion evidence for what remains. |
+| Deployment profiles (executor/target selection, credentials, review) | ~ | FX-BE-059/060: profile CRUD (main IPC + renderer editor), executor and target as independent selectors, credential name/bound-status editing. No Electron e2e verification yet. |
+| Direct-process executor — `local-process` target | ~ | Spawns a configured, reviewed script with typed inputs passed as environment variables (no shell interpolation); bounded output, timeout, cancellation. Core-verified (`packages/core/src/deployments`); no Electron e2e. |
+| Direct-process executor — `directory` target | ~ | Stages, backs up, and replaces a persistent web root; post-install health check with an explicit (never automatic) rollback action. Core-verified; no Electron e2e. |
+| Deployment promotion (shared artifact digest, environment-scoped approval) | ~ | The same published artifact redeployed to a different profile gets a fresh, independently-scoped approval and health evidence — proven end to end at the core level (`directDeliveryJourney.test.ts`); renderer "promote" action exists, no Electron e2e. |
+| Pipeline-managed deployment executors (GitHub Actions / GitLab CI) | ✗ | Schema-valid profile fields only (`DeploymentProfile.executor`); execution deferred to FX-BF-024. |
+| IIS deployment target | ✗ | Schema-valid target fields only (`DeploymentProfile.target`); Windows-only, deferred to FX-BF-025. |
 
 ## Import / migration
 
