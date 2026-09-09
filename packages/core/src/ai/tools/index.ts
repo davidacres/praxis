@@ -21,8 +21,10 @@ export {
   executeBrowserTool,
   isPrivateOrLoopbackHost,
   type BrowserBridge,
+  type BrowserDiagnosticsSummary,
   type BrowserElement,
   type BrowserPageState,
+  type BrowserScreenshotResult,
   type BrowserToolContext,
   type BrowserToolExtensionOptions
 } from './browserTools';

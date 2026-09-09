@@ -139,3 +139,94 @@ test('navigate/click/type return a brief; only browser_read returns the full bod
   const read = await ext.execute('browser_read', {}, async () => 'deny');
   assert.ok(read.content.includes(long), 'browser_read returns the full body');
 });
+
+test('browser_diagnostics reports unsupported rather than inventing an empty result on a bridge without it', async () => {
+  const bridge = fakeBridge(); // no getDiagnostics
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_diagnostics', {}, async () => 'deny');
+  assert.equal(res.ok, false);
+  assert.match(res.content, /not supported/);
+});
+
+test('browser_screenshot reports unsupported rather than inventing a capture on a bridge without it', async () => {
+  const bridge = fakeBridge(); // no captureScreenshot
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_screenshot', {}, async () => 'deny');
+  assert.equal(res.ok, false);
+  assert.match(res.content, /not supported/);
+});
+
+test('browser_diagnostics formats console and network entries from a bridge that supports it', async () => {
+  const bridge: BrowserBridge = {
+    ...fakeBridge(),
+    async getDiagnostics() {
+      return {
+        console: [{ level: 'error', message: 'TypeError: fetch failed', at: '2026-09-09T00:00:00.000Z' }],
+        network: [
+          { url: 'http://127.0.0.1:5000/api/orders', method: 'GET', status: 500, at: '2026-09-09T00:00:00.000Z' },
+          { url: 'http://127.0.0.1:5000/api/x', method: 'POST', error: 'net::ERR_CONNECTION_REFUSED', at: '2026-09-09T00:00:00.000Z' }
+        ],
+        truncated: false
+      };
+    }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_diagnostics', {}, async () => 'deny');
+  assert.equal(res.ok, true);
+  assert.match(res.content, /TypeError: fetch failed/);
+  assert.match(res.content, /HTTP 500/);
+  assert.match(res.content, /net::ERR_CONNECTION_REFUSED/);
+  assert.doesNotMatch(res.content, /older entries were dropped/);
+});
+
+test('browser_diagnostics notes when the capture was truncated', async () => {
+  const bridge: BrowserBridge = {
+    ...fakeBridge(),
+    async getDiagnostics() {
+      return { console: [], network: [], truncated: true };
+    }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_diagnostics', {}, async () => 'deny');
+  assert.match(res.content, /older entries were dropped/);
+});
+
+test('browser_diagnostics reports empty console/network plainly, not as an error', async () => {
+  const bridge: BrowserBridge = {
+    ...fakeBridge(),
+    async getDiagnostics() {
+      return { console: [], network: [], truncated: false };
+    }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_diagnostics', {}, async () => 'deny');
+  assert.equal(res.ok, true);
+  assert.match(res.content, /Console \(0\):\n\(none\)/);
+  assert.match(res.content, /Failed requests \(0\):\n\(none\)/);
+});
+
+test('browser_screenshot reports what happened without ever carrying image content', async () => {
+  const bridge: BrowserBridge = {
+    ...fakeBridge(),
+    async captureScreenshot() {
+      return { captured: true, note: 'Screenshot captured (1280x800, 42 KB).' };
+    }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_screenshot', {}, async () => 'deny');
+  assert.equal(res.ok, true);
+  assert.equal(res.content, 'Screenshot captured (1280x800, 42 KB).');
+});
+
+test('browser_screenshot surfaces a capture failure as ok:false with the reason, not a thrown error', async () => {
+  const bridge: BrowserBridge = {
+    ...fakeBridge(),
+    async captureScreenshot() {
+      return { captured: false, note: 'The preview window is not currently visible.' };
+    }
+  };
+  const ext = createBrowserToolExtension({ bridge, allowedHosts: [] });
+  const res = await ext.execute('browser_screenshot', {}, async () => 'deny');
+  assert.equal(res.ok, false);
+  assert.equal(res.content, 'The preview window is not currently visible.');
+});
