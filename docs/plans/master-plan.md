@@ -39,3 +39,14 @@ Master planning index for feature-level artifacts under plans/features, maintain
 The historical Task Designer phases above remain unchanged. The new project execution initiative is indexed in [the delivery/debugging roadmap](../delivery-debugging-roadmap.md) and [Plan Map](../PLAN_MAP.md).
 
 Recommended order: FX-BF-021 diagnosis → FX-BF-022 previews → FX-BF-023 deployment foundation → FX-BF-024 pipeline deployment → FX-BF-025 IIS → FX-BF-026 interactive/agent debugging. FX-BF-027 is deferred. Hard prerequisites and permitted parallel implementation are recorded in each item's Dependencies section and the roadmap; this recommendation is priority order, not an extra inferred dependency.
+
+
+## Praxis Mobile companion
+
+The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 13 stories and 36 tasks: FX-BF-028–033, FX-BE-074–086, TASK-201–236. Local work is planned first; cloud integration is deferred.
+
+The root desktop board is unchanged. Add the mobile folder as a separate project to see its work. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
+
+## Local-first priority (2026-09-09)
+
+GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
