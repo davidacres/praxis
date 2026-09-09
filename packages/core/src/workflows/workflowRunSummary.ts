@@ -44,6 +44,8 @@ export interface StageRow {
   gate?: WorkflowGateKind;
   artifacts: Array<{ contractId: string; kind: string; path?: string }>;
   lastError?: string;
+  /** The in-flight attempt's reported sub-phase, e.g. a deployment stage's `'deploying'`/`'verifying'` — see `WorkflowNodeState.phase`. */
+  phase?: string;
 }
 
 export interface BranchGroup {
@@ -92,7 +94,9 @@ function laneFor(
 }
 
 function attemptBudget(node: WorkflowNode): number | undefined {
-  return node.type === 'agent-task' || node.type === 'check' ? node.maxAttempts : undefined;
+  return node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment'
+    ? node.maxAttempts
+    : undefined;
 }
 
 /** Builds the monitor view. Pass the composed policy so gate rows match enforcement. */
@@ -122,7 +126,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
         kind: artifact.kind,
         ...(artifact.path ? { path: artifact.path } : {})
       })),
-      ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {})
+      ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {}),
+      ...(state?.phase ? { phase: state.phase } : {})
     };
   });
 

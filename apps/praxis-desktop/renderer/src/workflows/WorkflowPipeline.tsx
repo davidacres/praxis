@@ -28,6 +28,18 @@ const LANE_GLYPH: Record<WorkflowRunSummary['stages'][number]['lane'], string> =
   awaiting: '◆'
 };
 
+/**
+ * A running deployment stage's own sub-phase, for the screen-reader-only
+ * stage list — so "deploying" and "verifying" are heard as distinct states
+ * rather than both collapsing into "running". Renderer-local mirror of
+ * core's `deploymentNodeDisplayPhase`; see `WorkflowRunMonitor.tsx`'s copy
+ * of the same helper for why it is not imported as a value.
+ */
+function deploymentPhaseLabel(stage: Pick<WorkflowRunSummary['stages'][number], 'type' | 'outcome' | 'phase'>): string | undefined {
+  if (stage.type !== 'deployment' || stage.outcome !== 'running') return undefined;
+  return stage.phase === 'verifying' ? 'verifying' : 'deploying';
+}
+
 export interface WorkflowPipelineProps {
   summary: WorkflowRunSummary;
   selectedNodeId: string | undefined;
@@ -89,7 +101,7 @@ export function WorkflowPipeline({ summary, selectedNodeId, onSelectNode }: Work
       <ol className="sr-only">
         {summary.stages.map(row => (
           <li key={row.nodeId}>
-            {row.name} ({row.type}): {row.lane}
+            {row.name} ({row.type}): {deploymentPhaseLabel(row) ?? row.lane}
             {row.gate ? `, ${row.gate} gate` : ''}
           </li>
         ))}
