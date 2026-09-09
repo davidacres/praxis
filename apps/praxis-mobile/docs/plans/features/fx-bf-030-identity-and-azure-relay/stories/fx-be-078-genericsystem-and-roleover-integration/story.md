@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-078
 title: "GenericSystem and Roleover integration"
-status: planned
+status: backlog
 feature: FX-BF-030
 updated: 2026-09-09
 dependencies: [FX-BE-075]
@@ -10,7 +10,7 @@ dependencies: [FX-BE-075]
 
 # FX-BE-078: GenericSystem and Roleover integration
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Outcome

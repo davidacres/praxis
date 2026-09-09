@@ -1,21 +1,21 @@
 ---
 type: Task
 id: TASK-230
-title: "Verify full internet execution milestone"
+title: "Verify full local execution milestone"
 status: planned
 story: FX-BE-083
 updated: 2026-09-09
 dependencies: [TASK-229]
 ---
 
-# TASK-230: Verify full internet execution milestone
+# TASK-230: Verify full local execution milestone
 
 **Priority:** High
 **Created:** 2026-09-09
 
 ## Goal
 
-Combine relay sign-in, authorised host list, start/continue, phone backgrounding, permission resolution and final result. Switch to LAN mid-run, then test host sign-out and device revocation.
+Combine account-free pairing, host selection, start/continue, phone backgrounding, permission resolution and final result over LAN. Test device revocation and host restart with all cloud services unavailable.
 
 ## Implementation entry points
 
@@ -23,7 +23,7 @@ Mobile Attention UI, host permission/approval services and remote auth checks. P
 
 ## Acceptance criteria
 
-- One physical phone completes a fixture workflow via Azure; relay interruption never grants approval or repeats execution. Revocation meets the documented bound and local jobs continue.
+- A physical phone completes a fixture workflow over LAN with GenericSystem, Roleover and Azure unavailable. Network interruption never grants approval or repeats execution; device revocation blocks access while local jobs continue.
 - Preserve the access-mode and product-scope decisions in the mobile architecture document.
 
 ## Dependencies
@@ -37,3 +37,7 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Local-first delivery gate
+
+Complete this item with GenericSystem, Roleover and Azure unavailable. Implement and verify local behaviours now. Any cloud sign-in, Roleover, relay, remote revocation or cloud operational scenarios above describe later compatibility requirements and are verified in FX-BE-078/079, not prerequisites to close this item. Keep internet controls disabled with an explicit unavailable explanation until that integration ships. Protocol/identity fixtures may exercise future interfaces; no production mock-auth path is permitted. Local pairing, device scopes and request-specific approvals remain enforced.

@@ -5,7 +5,7 @@ title: "Verify interruption and accessibility matrix"
 status: planned
 story: FX-BE-084
 updated: 2026-09-09
-dependencies: [TASK-232]
+dependencies: [TASK-231]
 ---
 
 # TASK-233: Verify interruption and accessibility matrix
@@ -28,7 +28,7 @@ Mobile main lifecycle/push adapters, renderer connection state and connection AP
 
 ## Dependencies
 
-- TASK-232
+- TASK-231
 
 ## Verification
 
@@ -37,3 +37,7 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Local-first delivery gate
+
+Complete this item with GenericSystem, Roleover and Azure unavailable. Implement and verify local behaviours now. Any cloud sign-in, Roleover, relay, remote revocation or cloud operational scenarios above describe later compatibility requirements and are verified in FX-BE-078/079, not prerequisites to close this item. Keep internet controls disabled with an explicit unavailable explanation until that integration ships. Protocol/identity fixtures may exercise future interfaces; no production mock-auth path is permitted. Local pairing, device scopes and request-specific approvals remain enforced.

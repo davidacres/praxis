@@ -2,14 +2,9 @@
 
 **Status:** Planned
 **Type:** Story
-**Feature:** FX-BF-028
 
-Canonical implementation plan: [story](../../../../../plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-075-host-lifecycle-and-access-enforcement/story.md).
+Canonical [story](../../../../../plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-075-host-lifecycle-and-access-enforcement/story.md) owns scope, dependencies and evidence. This is a navigational mirror, not another execution item.
 
 ## Dependencies
 
 - FX-BE-074
-
-## Acceptance
-
-The canonical story and its three ordered tasks own scope, acceptance and verification. This mirror is not a second execution item; open docs/plans as the board source.

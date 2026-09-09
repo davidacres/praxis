@@ -43,3 +43,7 @@ Recommended order: FX-BF-021 diagnosis → FX-BF-022 previews → FX-BF-023 depl
 ## Mobile companion initiative
 
 See the self-contained [Praxis Mobile master plan](../../apps/praxis-mobile/docs/plans/master-plan.md) and [mobile Plan Map](../../apps/praxis-mobile/docs/PLAN_MAP.md). Its separate folder-backed project owns the mobile and prerequisite connectivity plans. Desktop and LAN use remain account-free; authenticated internet access uses the proposed GenericSystem/Roleover and Azure Relay integration. Existing desktop phases above remain unchanged.
+
+## Local-first priority (2026-09-09)
+
+GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.

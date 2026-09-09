@@ -260,6 +260,10 @@ Canonical sequencing and architectural decisions: [delivery roadmap](delivery-de
 
 ## Praxis Mobile companion
 
-The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 12 stories and 36 tasks: FX-BF-028–033, FX-BE-074–085, TASK-201–236. These IDs are reserved across this repository. All are Planned.
+The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 13 stories and 36 tasks: FX-BF-028–033, FX-BE-074–086, TASK-201–236. These IDs are reserved across this repository. Local work is Planned; cloud integration is Backlog.
 
 The root desktop board is unchanged; add the mobile folder as a separate project to see its work. Host/core/API changes required by mobile are tracked once in that initiative and implemented in their owning code. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
+
+## Local-first priority (2026-09-09)
+
+GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
