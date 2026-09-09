@@ -31,7 +31,8 @@ export type FeatureId =
   | 'agents'
   | 'workflows'
   | 'git'
-  | 'run';
+  | 'run'
+  | 'deployments';
 
 interface FeatureDef {
   id: FeatureId;
@@ -98,6 +99,8 @@ export interface SidebarProps {
   onSelectWorkflowRuns: (project: ProjectRecord) => void;
   /** Opens the project's Run profile editor (FX-BE-054). */
   onSelectRun: (project: ProjectRecord) => void;
+  /** Opens the project's deployment profiles (FX-BE-059 / FX-BE-060). */
+  onSelectDeployments: (project: ProjectRecord) => void;
   onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteBoard: (board: Board) => void;
   onConfigureBoard: (board: Board) => void;
@@ -155,6 +158,7 @@ export function Sidebar({
   onSelectWorkflow,
   onSelectWorkflowRuns,
   onSelectRun,
+  onSelectDeployments,
   onNewWorkflow,
   onDeleteBoard,
   onConfigureBoard,
@@ -517,6 +521,11 @@ export function Sidebar({
                           data-testid="project-run-nav-item"
                           onClick={() => onSelectRun(project)}
                         ><span className="tree-icon"><Icon name="server" size={14} /></span><span className="tree-label">Run</span></button>
+                        <button
+                          className={`tree-row project-deployments-row${activeFeature === 'deployments' && selectedProjectId === project.id ? ' active' : ''}`}
+                          data-testid="project-deployments-nav-item"
+                          onClick={() => onSelectDeployments(project)}
+                        ><span className="tree-icon"><Icon name="rocket" size={14} /></span><span className="tree-label">Deployments</span></button>
                         <div className="tree-subsection-heading">
                           <button
                             className="sidebar-subsection-toggle"

@@ -29,6 +29,7 @@ import { registerProjectIpc } from './projectIpc';
 import { registerRunProfileIpc } from './runProfileIpc';
 import { registerRunControlIpc } from './runControlIpc';
 import { registerDeploymentControlIpc } from './deploymentControlIpc';
+import { registerDeploymentProfileIpc } from './deploymentProfileIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
@@ -264,6 +265,7 @@ void app.whenReady().then(async () => {
   registerRunProfileIpc();
   registerRunControlIpc();
   registerDeploymentControlIpc();
+  registerDeploymentProfileIpc();
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();

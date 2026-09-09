@@ -58,6 +58,7 @@ import { WorkflowDesignerPage } from '../workflows/WorkflowDesignerPage';
 import { WorkflowRunMonitor } from '../workflows/WorkflowRunMonitor';
 import { NewWorkflowDialog } from '../workflows/NewWorkflowDialog';
 import { RunProfileEditor } from '../projects/RunProfileEditor';
+import { DeploymentsPage } from '../deployments/DeploymentsPage';
 import { AgentDetailPage } from '../agents/AgentDetailPage';
 import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
@@ -116,7 +117,8 @@ const FEATURE_TITLES: Record<FeatureId, string> = {
   agents: 'Agents',
   workflows: 'Workflows',
   git: 'Git Graph',
-  run: 'Run'
+  run: 'Run',
+  deployments: 'Deployments'
 };
 
 /** Legacy single-slot key. Still read once per workspace as a fallback so an
@@ -1110,8 +1112,8 @@ export function App() {
         id: `feature:${feature}`,
         label: FEATURE_TITLES[feature],
         group: 'Go to',
-        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : 'home',
-        run: () => navigate((feature === 'git' || feature === 'run') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
+        icon: feature === 'git' ? 'git-branch' : feature === 'run' ? 'server' : feature === 'deployments' ? 'rocket' : feature === 'agents' ? 'zap' : feature === 'sessions' ? 'robot' : 'home',
+        run: () => navigate((feature === 'git' || feature === 'run' || feature === 'deployments') && selectedProject ? { projectId: selectedProject.id, feature } : { feature })
       });
     });
     entries.push({ id: 'action:new-session', label: 'New session', group: 'Go to', icon: 'plus', keywords: 'start agent', run: () => navigate({ newSession: true, ...(composerProject ? { projectId: composerProject.id } : {}) }) });
@@ -1121,6 +1123,7 @@ export function App() {
       entries.push({ id: `project:${project.id}`, label: project.name, hint: `${project.key} · ${project.type}`, group: 'Projects', icon: 'folder-open', run: () => navigate({ projectId: project.id }) });
       entries.push({ id: `project-git:${project.id}`, label: `${project.name}: Git graph`, hint: project.key, group: 'Projects', icon: 'git-branch', keywords: 'repository history commits', run: () => navigate({ projectId: project.id, feature: 'git' }) });
       entries.push({ id: `project-run:${project.id}`, label: `${project.name}: Run`, hint: project.key, group: 'Projects', icon: 'server', keywords: 'run profile services launch', run: () => navigate({ projectId: project.id, feature: 'run' }) });
+      entries.push({ id: `project-deployments:${project.id}`, label: `${project.name}: Deployments`, hint: project.key, group: 'Projects', icon: 'rocket', keywords: 'deploy deployment profile target executor', run: () => navigate({ projectId: project.id, feature: 'deployments' }) });
       (workflowsByProject[project.id] ?? []).forEach(workflow => {
         entries.push({ id: `workflow:${workflow.id}`, label: workflow.name, hint: `${project.name} · workflow`, group: 'Workflows', icon: 'graph', run: () => navigate({ projectId: project.id, feature: 'workflows', workflowId: workflow.id }) });
       });
@@ -1365,7 +1368,7 @@ export function App() {
         />
       );
     }
-    if (selectedProject && route.feature !== 'git' && route.feature !== 'run') {
+    if (selectedProject && route.feature !== 'git' && route.feature !== 'run' && route.feature !== 'deployments') {
       return <ProjectWorkspace project={selectedProject} sessions={agentSessions} onStartSession={() => navigate({ newSession: true, projectId: selectedProject.id })} onStartTour={startWalkthrough} />;
     }
     if (route.feature === 'connections') {
@@ -1437,6 +1440,17 @@ export function App() {
         );
       }
       return <RunProfileEditor project={selectedProject} />;
+    }
+    if (route.feature === 'deployments') {
+      if (!selectedProject) {
+        return (
+          <div className="empty-state" data-testid="deployments-no-project">
+            <Icon name="rocket" size={28} />
+            <span>Pick a project to manage its deployment profiles.</span>
+          </div>
+        );
+      }
+      return <DeploymentsPage project={selectedProject} />;
     }
     if (route.feature) {
       return (
@@ -1765,6 +1779,7 @@ export function App() {
                   onSelectWorkflow={(project, workflowId) => navigate({ projectId: project.id, feature: 'workflows', workflowId })}
                   onSelectWorkflowRuns={project => navigate({ projectId: project.id, feature: 'workflows', workflowView: 'runs' })}
                   onSelectRun={project => navigate({ projectId: project.id, feature: 'run' })}
+                  onSelectDeployments={project => navigate({ projectId: project.id, feature: 'deployments' })}
                   onNewWorkflow={project => setNewWorkflowForProject(project.id)}
                   onDeleteBoard={board => {
                     if (!board.connectionId) return;
