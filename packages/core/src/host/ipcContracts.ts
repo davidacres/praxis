@@ -74,6 +74,7 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
+import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -776,6 +777,23 @@ export interface WorkflowsIpc {
    * advancing a stage in the background included. Returns an unsubscribe.
    */
   onRunChanged(listener: (runId: string) => void): () => void;
+  /**
+   * Reads back the retained evidence for one stage attempt (FX-BE-051).
+   * `entry` is undefined when nothing was ever captured for that attempt — a
+   * stage that hasn't run, or one from before this capability shipped; that
+   * is `unavailable`, not `expired`. `content` is withheld once `expired` is
+   * true, even though the entry itself still says `present` — retention is
+   * enforced on read here, not only by a future reclaim sweep.
+   */
+  getEvidence(runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceView>;
+}
+
+/** One stage attempt's retained evidence, as read back through `WorkflowsIpc.getEvidence`. */
+export interface WorkflowEvidenceView {
+  entry?: WorkflowEvidenceEntry;
+  /** Present only when `entry.presence === 'present'` and `expired` is false. */
+  content?: string;
+  expired: boolean;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */

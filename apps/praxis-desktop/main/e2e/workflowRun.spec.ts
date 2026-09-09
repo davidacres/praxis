@@ -526,3 +526,68 @@ test('a check that outruns its timeout is failed with a stated reason', async ()
 
   fs.rmSync(repo, { recursive: true, force: true });
 });
+
+test('the stage detail panel opens a failed check’s retained log, reachable by keyboard, with an echoed secret redacted', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  await seedCheckWorkflow(page, repo, {
+    command: process.execPath,
+    args: ['-e', "console.error('missing dependency left-pad, API_KEY=sk_live_abcdef1234567890'); process.exit(1);"]
+  });
+  await page.reload();
+  await openRunsTab(page);
+
+  await page.getByLabel('Run task').fill('Broken build');
+  await page.getByRole('button', { name: 'Start' }).click();
+
+  const verifyNode = page.getByRole('region', { name: 'Run detail' }).getByRole('button', { name: /^Verify / });
+  await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
+  await verifyNode.click();
+
+  const stageDetail = page.getByRole('complementary', { name: 'Stage detail' });
+  const viewLogButton = stageDetail.getByRole('button', { name: 'View log' });
+  await expect(viewLogButton).toBeVisible();
+
+  // Keyboard-reachable, activated without a click.
+  await viewLogButton.focus();
+  await expect(viewLogButton).toBeFocused();
+  await page.keyboard.press('Enter');
+
+  const evidencePanel = page.getByTestId('wf-evidence-panel');
+  await expect(evidencePanel).toContainText('missing dependency left-pad');
+  await expect(evidencePanel).toContainText('API_KEY=[REDACTED]');
+  await expect(evidencePanel).not.toContainText('sk_live_abcdef1234567890');
+
+  // A second activation (still by keyboard) closes it again.
+  await stageDetail.getByRole('button', { name: 'Hide log' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(evidencePanel).toBeHidden();
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});
+
+test('the stage detail panel shows the empty state for a check that produced no output', async () => {
+  const repo = createRepository();
+  app = await launchTestApp(undefined, undefined, undefined, { openNewSession: false });
+  const page = app.window;
+
+  // `sleep 30` under a 1s timeout is killed before it ever prints anything —
+  // a real "ran, produced nothing" case, not a stand-in for a spawn failure.
+  await seedCheckWorkflow(page, repo, { command: 'sleep', args: ['30'], timeoutMs: 1000 });
+  await page.reload();
+  await openRunsTab(page);
+
+  await page.getByLabel('Run task').fill('Too slow');
+  await page.getByRole('button', { name: 'Start' }).click();
+
+  const verifyNode = page.getByRole('region', { name: 'Run detail' }).getByRole('button', { name: /^Verify / });
+  await expect(verifyNode).toHaveAttribute('aria-label', /failed/, { timeout: 20000 });
+  await verifyNode.click();
+  await page.getByRole('complementary', { name: 'Stage detail' }).getByRole('button', { name: 'View log' }).click();
+
+  await expect(page.getByTestId('wf-evidence-panel')).toContainText(/produced no output/i);
+
+  fs.rmSync(repo, { recursive: true, force: true });
+});

@@ -8630,6 +8630,39 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-stage-artifacts { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary); }
 .inspector-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
 
+/* A stage attempt's retained log (FX-BE-051). Same box treatment as
+   session-changes-file so a read-only text pane reads consistently across
+   the app; simpler body since a log has no line-numbered gutter to give it. */
+.wf-evidence {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.wf-evidence > .placeholder-text,
+.wf-evidence > .wf-stage-error { display: block; padding: var(--space-2); }
+.wf-evidence-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  background: var(--bg-elevated);
+}
+.wf-evidence-body {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Template library — this-project cards + template list. */
 .wf-library { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); overflow-y: auto; }
 .wf-library h2 { margin: 0 0 var(--space-3); font-size: var(--text-lg); }

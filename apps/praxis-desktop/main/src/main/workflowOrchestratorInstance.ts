@@ -1,6 +1,5 @@
 import { WorkflowIssueWriteBack } from './workflowIssueWriteBack';
-import { BrowserWindow, app } from 'electron';
-import * as path from 'node:path';
+import { BrowserWindow } from 'electron';
 import {
   WorkflowOrchestrator,
   WorkflowRunStore,
@@ -14,6 +13,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 import { getServiceForConnection } from './serviceRegistry';
@@ -32,11 +32,6 @@ let orchestrator: WorkflowOrchestrator | undefined;
 
 function projectFolderFor(run: WorkflowRun): string | undefined {
   return getProjectStore().get(run.projectId)?.workspaceFolder?.trim() || undefined;
-}
-
-/** `userData/workflow-evidence/` — isolated per profile; see `workflowEvidence.ts` for the tree shape beneath it. */
-function evidenceStorageRoot(): string {
-  return path.join(app.getPath('userData'), 'workflow-evidence');
 }
 
 function broadcastRunChanged(run: WorkflowRun): void {
