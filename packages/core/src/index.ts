@@ -87,6 +87,7 @@ export * from './workflows/workflowGates';
 export * from './workflows/workflowTemplates';
 export * from './workflows/workflowDesignerState';
 export * from './workflows/workflowRunSummary';
+export * from './workflows/workflowDeploymentPhase';
 export * from './workflows/workflowOrchestrator';
 export * from './workflows/workflowStore';
 export * from './workflows/workflowEvidence';

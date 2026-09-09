@@ -20,6 +20,7 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  isDeploymentNode,
   isTerminalOutcome,
   nodeOutputs,
   WORKFLOW_SCHEMA_VERSION,
@@ -50,6 +51,7 @@ export type WorkflowRunEventKind =
   | 'node-cancelled'
   | 'node-retried'
   | 'node-interrupted'
+  | 'node-progress'
   | 'artifact-produced'
   | 'gate-decided';
 
@@ -87,6 +89,15 @@ export interface WorkflowNodeState {
    * worktree happens to hold by the time they run.
    */
   snapshotRef?: string;
+  /**
+   * A free-form sub-phase of the current attempt, reported via the
+   * `node-progress` command — e.g. a deployment stage moving from
+   * `'deploying'` to `'verifying'` before it settles. Generic to the engine
+   * (it does not interpret the string); cleared the moment a node starts a
+   * new attempt or settles, so a stale phase can never outlive the attempt
+   * that reported it.
+   */
+  phase?: string;
 }
 
 export interface WorkflowRun {
@@ -148,6 +159,8 @@ export type WorkflowRunCommand =
   | { kind: 'node-skipped'; nodeId: string; at: string; reason: string }
   | { kind: 'node-retry'; nodeId: string; at: string }
   | { kind: 'node-interrupted'; nodeId: string; at: string }
+  /** Reports a sub-phase of an in-flight attempt; see `WorkflowNodeState.phase`. */
+  | { kind: 'node-progress'; nodeId: string; at: string; phase: string }
   | { kind: 'gate-decided'; at: string; decision: WorkflowGateDecision }
   | { kind: 'cancel'; at: string; reason?: string };
 
@@ -220,6 +233,8 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
       return retryNode(run, command.nodeId, command.at);
     case 'node-interrupted':
       return interruptNode(run, command.nodeId, command.at);
+    case 'node-progress':
+      return progressNode(run, command.nodeId, command.at, command.phase);
     case 'gate-decided':
       return recordGate(run, command.at, command.decision);
     case 'cancel':
@@ -245,7 +260,9 @@ function startNode(
     ...(command.sessionId ? { sessionId: command.sessionId } : {})
   };
 
-  const next = withNode(run, { ...state, outcome: 'running', attempts: [...state.attempts, attempt] });
+  // A fresh attempt starts with no phase — whatever the previous attempt
+  // reported (if this is a retry) must not leak into the new one's status.
+  const next = withNode(run, { ...clearPhase(state), outcome: 'running', attempts: [...state.attempts, attempt] });
   return append(next, {
     at: command.at,
     kind: 'node-started',
@@ -300,7 +317,8 @@ function settleNode(
   };
 
   let next = withNode(run, {
-    ...state,
+    // A settled node reports no phase — its outcome is the whole story now.
+    ...clearPhase(state),
     outcome: effective,
     attempts,
     artifacts,
@@ -351,7 +369,8 @@ function retryNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRun {
   if (!state || state.outcome !== 'failed') return run;
 
   const node = findNode(run, nodeId);
-  const maxAttempts = (isAgentTaskNode(node!) || isCheckNode(node!) ? node!.maxAttempts : undefined) ?? 1;
+  const maxAttempts =
+    (isAgentTaskNode(node!) || isCheckNode(node!) || isDeploymentNode(node!) ? node!.maxAttempts : undefined) ?? 1;
   if (state.attempts.length >= maxAttempts) return run;
 
   // Returning to pending lets the scheduler pick the node up again under the
@@ -385,7 +404,7 @@ function interruptNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRu
     error: 'Interrupted — the app stopped while this stage was running.'
   };
 
-  const next = withNode(run, { ...state, outcome: 'failed', attempts });
+  const next = withNode(run, { ...clearPhase(state), outcome: 'failed', attempts });
   return settleRunIfDone(
     append(next, {
       at,
@@ -396,6 +415,31 @@ function interruptNode(run: WorkflowRun, nodeId: string, at: string): WorkflowRu
     }),
     at
   );
+}
+
+/**
+ * Records a sub-phase of the attempt currently running — e.g. a deployment
+ * stage moving from `'deploying'` to `'verifying'`.
+ *
+ * Only valid while the node is actually running: a phase reported for a node
+ * that has not started, or has already settled, is silently dropped rather
+ * than resurrecting or pre-empting a state the node itself has not reached.
+ * Idempotent for the same phase, so a caller that re-reports the phase it
+ * already announced (recovery replay, a retried notification) does not
+ * double-log an event.
+ */
+function progressNode(run: WorkflowRun, nodeId: string, at: string, phase: string): WorkflowRun {
+  const state = run.nodes[nodeId];
+  if (!state || state.outcome !== 'running') return run;
+  if (state.phase === phase) return run;
+
+  const next = withNode(run, { ...state, phase });
+  return append(next, {
+    at,
+    kind: 'node-progress',
+    nodeId,
+    message: `${label(run, nodeId)} entered phase "${phase}".`
+  });
 }
 
 function recordGate(run: WorkflowRun, at: string, decision: WorkflowGateDecision): WorkflowRun {
@@ -424,7 +468,7 @@ function cancelRun(run: WorkflowRun, at: string, reason?: string): WorkflowRun {
     if (state.outcome === 'running' && attempts.length > 0) {
       attempts[attempts.length - 1] = { ...attempts[attempts.length - 1], outcome: 'cancelled', endedAt: at };
     }
-    next = withNode(next, { ...state, outcome: 'cancelled', attempts });
+    next = withNode(next, { ...clearPhase(state), outcome: 'cancelled', attempts });
     next = append(next, { at, kind: 'node-cancelled', nodeId, message: `${label(run, nodeId)} cancelled.` });
   }
 
@@ -475,7 +519,8 @@ export function canRetry(run: WorkflowRun, nodeId: string): boolean {
   const state = run.nodes[nodeId];
   const node = findNode(run, nodeId);
   if (!state || !node || state.outcome !== 'failed') return false;
-  const maxAttempts = (isAgentTaskNode(node) || isCheckNode(node) ? node.maxAttempts : undefined) ?? 1;
+  const maxAttempts =
+    (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.maxAttempts : undefined) ?? 1;
   return state.attempts.length < maxAttempts;
 }
 
@@ -516,7 +561,12 @@ export function normalizeWorkflowRun(value: unknown): WorkflowRun | undefined {
       outcome: isOutcome(stored?.outcome) ? stored.outcome : 'pending',
       attempts: Array.isArray(stored?.attempts) ? stored.attempts : [],
       artifacts: Array.isArray(stored?.artifacts) ? stored.artifacts : [],
-      ...(typeof stored?.snapshotRef === 'string' ? { snapshotRef: stored.snapshotRef } : {})
+      ...(typeof stored?.snapshotRef === 'string' ? { snapshotRef: stored.snapshotRef } : {}),
+      // Only meaningful while running; a normalized non-running node simply
+      // omits it rather than trusting a stale value from disk.
+      ...(typeof stored?.phase === 'string' && isOutcome(stored?.outcome) && stored.outcome === 'running'
+        ? { phase: stored.phase }
+        : {})
     };
   }
 
@@ -549,6 +599,18 @@ function append(run: WorkflowRun, event: Omit<WorkflowRunEvent, 'id'>): Workflow
 
 function withNode(run: WorkflowRun, state: WorkflowNodeState): WorkflowRun {
   return { ...run, nodes: { ...run.nodes, [state.nodeId]: state } };
+}
+
+/**
+ * Strips `phase` entirely rather than setting it to `undefined` — an
+ * own-property set to `undefined` is not the same value as an absent
+ * property to a strict deep-equal, and would make an in-memory run diverge
+ * from the exact same run read back from a JSON store (which drops
+ * `undefined` values), even though nothing meaningful changed.
+ */
+function clearPhase(state: WorkflowNodeState): WorkflowNodeState {
+  const { phase: _phase, ...rest } = state;
+  return rest;
 }
 
 function findNode(run: WorkflowRun, nodeId: string): WorkflowNode | undefined {

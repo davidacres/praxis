@@ -3,9 +3,11 @@
  *
  * A gate is satisfied by a **node outcome**, never by a claim. The node that
  * declares `satisfiesGate` owns that gate, and its outcome is decided by the
- * engine: an exit code for a check, or — for an agent stage — success plus the
- * artifacts its contract required, enforced in `workflowRun`. An agent cannot
- * reach into a check's outcome, so prose cannot mark QA or security passed.
+ * engine: an exit code for a check, success plus the required artifacts for a
+ * deployment stage's health verification, or — for an agent stage — success
+ * plus the artifacts its contract required, enforced in `workflowRun`. An
+ * agent cannot reach into a check's or a deployment's outcome, so prose
+ * cannot mark QA or security passed.
  *
  * Worth being straight about the limit: a *review* gate backed by an agent is
  * only as good as that agent, because the agent decides whether it succeeded.
@@ -72,7 +74,7 @@ export function evaluateGates(
         gate,
         ...(owner ? { nodeId: owner.id } : {}),
         state: 'bypassed' as const,
-        deterministic: owner?.type === 'check',
+        deterministic: owner?.type === 'check' || owner?.type === 'deployment',
         detail: `Bypassed by ${decision.bypassedBy ?? 'unknown'}: ${decision.reason ?? 'no reason given'}`
       };
     }
@@ -87,7 +89,7 @@ export function evaluateGates(
     }
 
     const state = run.nodes[owner.id];
-    const deterministic = owner.type === 'check';
+    const deterministic = owner.type === 'check' || owner.type === 'deployment';
 
     if (state?.outcome === 'succeeded') {
       return { gate, nodeId: owner.id, state: 'passed' as const, deterministic, detail: `${owner.name} succeeded.` };
