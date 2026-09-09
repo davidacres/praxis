@@ -158,6 +158,65 @@ test('mark-unknown is refused outside deploying/verifying — an approval or que
   assert.equal(r.status, 'prepared');
 });
 
+test('a fresh run starts at attempt 1 with no external id', () => {
+  const r = run();
+  assert.equal(r.attempt, 1);
+  assert.equal(r.externalId, undefined);
+});
+
+test('record-external-id enriches the run without changing status, and is idempotent for the same id', () => {
+  let r = toDeploying();
+  r = applyDeploymentRunCommand(r, { kind: 'record-external-id', at: nextAt(), externalId: 'pid:4242' });
+  assert.equal(r.externalId, 'pid:4242');
+  assert.equal(r.status, 'deploying');
+  const eventCount = r.events.length;
+  const again = applyDeploymentRunCommand(r, { kind: 'record-external-id', at: nextAt(), externalId: 'pid:4242' });
+  assert.equal(again.events.length, eventCount, 'recording the same id again appends no event');
+});
+
+test('record-external-id is refused outside deploying/verifying', () => {
+  const r = applyDeploymentRunCommand(run(), { kind: 'record-external-id', at: nextAt(), externalId: 'pid:1' });
+  assert.equal(r.externalId, undefined);
+});
+
+test('retry-dispatch from unknown bumps attempt, moves to queued, and keeps the original approval', () => {
+  let r = toDeploying();
+  const approval = r.approval;
+  r = applyDeploymentRunCommand(r, { kind: 'mark-unknown', at: nextAt(), reason: 'crash' });
+  assert.equal(r.status, 'unknown');
+  r = applyDeploymentRunCommand(r, { kind: 'retry-dispatch', at: nextAt() });
+  assert.equal(r.status, 'queued');
+  assert.equal(r.attempt, 2);
+  assert.deepEqual(r.approval, approval);
+});
+
+test('retry-dispatch clears a prior external id and outcome fields so a stale pid from a previous attempt is never mistaken for the new one', () => {
+  let r = toDeploying();
+  r = applyDeploymentRunCommand(r, { kind: 'record-external-id', at: nextAt(), externalId: 'pid:old' });
+  r = applyDeploymentRunCommand(r, { kind: 'mark-unknown', at: nextAt(), reason: 'crash' });
+  r = applyDeploymentRunCommand(r, { kind: 'retry-dispatch', at: nextAt() });
+  assert.equal(r.externalId, undefined);
+});
+
+test('retry-dispatch from failed also works, reusing the same approval', () => {
+  let r = toDeploying();
+  r = applyDeploymentRunCommand(r, { kind: 'start-verifying', at: nextAt() });
+  r = applyDeploymentRunCommand(r, { kind: 'health-failed', at: nextAt(), error: 'boom' });
+  assert.equal(r.status, 'failed');
+  r = applyDeploymentRunCommand(r, { kind: 'retry-dispatch', at: nextAt() });
+  assert.equal(r.status, 'queued');
+  assert.equal(r.attempt, 2);
+});
+
+test('retry-dispatch refuses a run with no approval attached (never got past awaiting-approval)', () => {
+  let r = run();
+  r = applyDeploymentRunCommand(r, { kind: 'request-approval', at: nextAt() });
+  r = applyDeploymentRunCommand(r, { kind: 'cancel', at: nextAt() });
+  assert.equal(r.status, 'cancelled');
+  const retried = applyDeploymentRunCommand(r, { kind: 'retry-dispatch', at: nextAt() });
+  assert.deepEqual(retried, r, 'a cancelled run is truly terminal — retry-dispatch is a no-op');
+});
+
 test('rollback: succeeded -> rolling-back -> rolled-back', () => {
   let r = toDeploying();
   r = applyDeploymentRunCommand(r, { kind: 'start-verifying', at: nextAt() });
