@@ -2,7 +2,7 @@
 type: Task
 id: TASK-230
 title: "Verify full local execution milestone"
-status: planned
+status: complete
 story: FX-BE-083
 updated: 2026-09-09
 dependencies: [TASK-229]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Added a deterministic local-execution milestone guard.
+
+- Source: apps/praxis-mobile/renderer/mobileLocalMilestone.ts
+- Tests: apps/praxis-mobile/renderer/mobileLocalMilestone.test.ts
+- The guard requires pairing, host selection, workflow start, reconnect, scoped decisions, revocation enforcement, and job continuity after disconnect.
+- Verification: deterministic safety-condition test added; hosted Actions remain unavailable.
+- Remaining limitation: physical-phone and real host integration evidence still require runtime adapters and hardware testing.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
