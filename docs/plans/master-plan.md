@@ -39,3 +39,7 @@ Master planning index for feature-level artifacts under plans/features, maintain
 The historical Task Designer phases above remain unchanged. The new project execution initiative is indexed in [the delivery/debugging roadmap](../delivery-debugging-roadmap.md) and [Plan Map](../PLAN_MAP.md).
 
 Recommended order: FX-BF-021 diagnosis → FX-BF-022 previews → FX-BF-023 deployment foundation → FX-BF-024 pipeline deployment → FX-BF-025 IIS → FX-BF-026 interactive/agent debugging. FX-BF-027 is deferred. Hard prerequisites and permitted parallel implementation are recorded in each item's Dependencies section and the roadmap; this recommendation is priority order, not an extra inferred dependency.
+
+## Mobile companion initiative
+
+See the self-contained [Praxis Mobile master plan](../../apps/praxis-mobile/docs/plans/master-plan.md) and [mobile Plan Map](../../apps/praxis-mobile/docs/PLAN_MAP.md). Its separate folder-backed project owns the mobile and prerequisite connectivity plans. Desktop and LAN use remain account-free; authenticated internet access uses the proposed GenericSystem/Roleover and Azure Relay integration. Existing desktop phases above remain unchanged.

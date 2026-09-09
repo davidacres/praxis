@@ -1,0 +1,31 @@
+{
+  "projectKey": "PRAXISMOBILE",
+  "projectName": "Praxis Mobile",
+  "workflow": [
+    {
+      "id": "stage-backlog",
+      "name": "Backlog",
+      "category": "todo"
+    },
+    {
+      "id": "stage-to-do",
+      "name": "To Do",
+      "category": "todo"
+    },
+    {
+      "id": "stage-in-progress",
+      "name": "In Progress",
+      "category": "indeterminate"
+    },
+    {
+      "id": "stage-blocked",
+      "name": "Blocked",
+      "category": "indeterminate"
+    },
+    {
+      "id": "stage-done",
+      "name": "Done",
+      "category": "done"
+    }
+  ]
+}
