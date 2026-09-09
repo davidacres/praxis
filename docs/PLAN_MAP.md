@@ -258,6 +258,35 @@ Canonical sequencing and architectural decisions: [delivery roadmap](delivery-de
 | [FX-BE-073](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/story.md) | Story | Shared executor feasibility and runner boundary | Backlog | FX-BE-072 |
 | [FX-BF-027](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/feature.md) | Feature | Deferred execution reliability and automation extensions | Backlog | FX-BF-024, FX-BF-026 |
 
+## Full SDLC quality and security gates
+
+Canonical sequencing and architectural decisions: [SDLC quality gates roadmap](sdlc-quality-gates-roadmap.md).
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| [TASK-237](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-087-structured-check-results-and-threshold-gates/tasks/task-237-define-check-findings-contract-and-artifact-kind.md) | Task | Define the CheckFindings contract and the findings artifact kind | Planned | FX-BE-020, FX-BE-024 |
+| [TASK-238](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-087-structured-check-results-and-threshold-gates/tasks/task-238-add-result-format-adapters.md) | Task | Add SARIF / JUnit / lcov / npm-audit / osv-scanner adapters | Planned | TASK-237 |
+| [TASK-239](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-087-structured-check-results-and-threshold-gates/tasks/task-239-add-metric-and-severity-threshold-gates.md) | Task | Add metric and severity threshold gate policy | Planned | TASK-237 |
+| [TASK-240](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-087-structured-check-results-and-threshold-gates/tasks/task-240-render-findings-and-metrics-in-the-run-monitor.md) | Task | Render findings and metrics in the run monitor | Planned | TASK-238, TASK-239 |
+| [FX-BE-087](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-087-structured-check-results-and-threshold-gates/story.md) | Story | Structured check results and threshold gates | Planned | FX-BE-020, FX-BE-024 |
+| [TASK-241](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-088-bundled-security-scanners/tasks/task-241-add-secret-sast-sca-and-license-check-presets.md) | Task | Add secret / SAST / SCA / license check presets with stack detection | Planned | FX-BE-087 |
+| [TASK-242](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-088-bundled-security-scanners/tasks/task-242-add-an-audited-waiver-register.md) | Task | Add an audited, expiring waiver register | Planned | TASK-241 |
+| [TASK-243](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-088-bundled-security-scanners/tasks/task-243-compose-the-security-gate-over-enabled-scanners.md) | Task | Compose the security gate over the union of enabled scanners | Planned | TASK-242 |
+| [FX-BE-088](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-088-bundled-security-scanners/story.md) | Story | Bundled security scanners behind the security gate | Planned | FX-BE-087 |
+| [TASK-244](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-089-structured-code-review-and-inline-delivery/tasks/task-244-define-the-structured-reviewer-artifact-contract.md) | Task | Define the structured reviewer artifact contract | Planned | FX-BE-087 |
+| [TASK-245](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-089-structured-code-review-and-inline-delivery/tasks/task-245-deliver-review-findings-as-inline-comments.md) | Task | Deliver review findings as inline PR / ticket comments with dedupe | Planned | TASK-244 |
+| [TASK-246](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-089-structured-code-review-and-inline-delivery/tasks/task-246-add-a-bounded-review-fix-loop.md) | Task | Add a bounded review to implement fix loop | Planned | TASK-245 |
+| [FX-BE-089](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-089-structured-code-review-and-inline-delivery/story.md) | Story | Structured code review and inline delivery | Planned | FX-BE-087, FX-BE-033 |
+| [TASK-247](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-090-bundled-agents-and-full-sdlc-template/tasks/task-247-ship-bundled-trusted-agent-manifests.md) | Task | Ship bundled trusted agent manifests | Planned | FX-BE-011 |
+| [TASK-248](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-090-bundled-agents-and-full-sdlc-template/tasks/task-248-add-the-full-sdlc-workflow-template.md) | Task | Add the full-sdlc workflow template | Planned | TASK-247, FX-BE-088, FX-BE-089 |
+| [TASK-249](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-090-bundled-agents-and-full-sdlc-template/tasks/task-249-add-per-stack-template-variants.md) | Task | Add Node / .NET / Python template variants | Planned | TASK-248 |
+| [FX-BE-090](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-090-bundled-agents-and-full-sdlc-template/story.md) | Story | Bundled agents and a Full SDLC template | Planned | FX-BE-088, FX-BE-089, FX-BE-011 |
+| [TASK-250](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/tasks/task-250-add-read-only-ci-quality-and-security-providers.md) | Task | Add read-only CI quality and security report providers | Planned | FX-BE-053 |
+| [TASK-251](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/tasks/task-251-map-imported-reports-to-findings-evidence.md) | Task | Map imported reports to findings evidence bound to the SHA | Planned | TASK-250, TASK-237 |
+| [TASK-252](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/tasks/task-252-add-an-observe-mode-gate-on-ci-evidence.md) | Task | Add an observe-mode gate resting on imported CI evidence | Planned | TASK-251, TASK-239 |
+| [FX-BE-091](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/stories/fx-be-091-ingest-ci-security-and-quality-reports/story.md) | Story | Ingest CI security and quality reports | Planned | FX-BE-087, FX-BE-053 |
+| [FX-BF-034](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/feature.md) | Feature | Full SDLC quality and security gates | Planned | FX-BE-020, FX-BE-024, FX-BE-033 |
+
 
 ## Praxis Mobile companion
 
