@@ -139,6 +139,25 @@ export interface DeploymentRun {
   startedAt: string;
   endedAt?: string;
   endedReason?: string;
+  /**
+   * Linking context (FX-BE-060 / TASK-160 — "link issues, source commit,
+   * artifact digest, workflow run and target URL"): `artifactDigest` above
+   * already carries the artifact; source commit lives on the
+   * `PublishedArtifact` itself (`sourceCommit`, TASK-150) rather than being
+   * duplicated here. The four fields below are set once, at `prepare` time,
+   * and never changed by any command — same "opt-in context, immutable
+   * once set" discipline `WorkflowRun.issueKey`/`issueConnectionId` already
+   * use, extended with a workflow-run link and a resolved target URL
+   * neither `WorkflowRun` needed.
+   */
+  /** The tracker issue this deployment was started from, if any. */
+  issueKey?: string;
+  /** The connection `issueKey` lives on; undefined means the demo/default backend. */
+  issueConnectionId?: string;
+  /** The workflow run (if any) whose artifact this deployment ships — links a deployment back to the delivery pipeline that produced it. */
+  workflowRunId?: string;
+  /** Where this deployment can be reached once live, if known at prepare time (e.g. a directory target served behind a known host). Never inferred or guessed — absent when not supplied. */
+  targetUrl?: string;
 }
 
 export function createDeploymentRun(input: {
@@ -149,6 +168,10 @@ export function createDeploymentRun(input: {
   artifactId: string;
   artifactDigest: string;
   at: string;
+  issueKey?: string;
+  issueConnectionId?: string;
+  workflowRunId?: string;
+  targetUrl?: string;
 }): DeploymentRun {
   const run: DeploymentRun = {
     schemaVersion: DEPLOYMENT_RUN_SCHEMA_VERSION,
@@ -159,6 +182,10 @@ export function createDeploymentRun(input: {
     artifactId: input.artifactId,
     artifactDigest: input.artifactDigest,
     status: 'prepared',
+    ...(input.issueKey ? { issueKey: input.issueKey } : {}),
+    ...(input.issueConnectionId ? { issueConnectionId: input.issueConnectionId } : {}),
+    ...(input.workflowRunId ? { workflowRunId: input.workflowRunId } : {}),
+    ...(input.targetUrl ? { targetUrl: input.targetUrl } : {}),
     attempt: 1,
     events: [],
     startedAt: input.at
