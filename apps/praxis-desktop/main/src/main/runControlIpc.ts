@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { readRunProfile, type ReconciledService, type RunServiceStatus } from '@praxis/core';
+import { readRunProfile, type BrowserDiagnosticsBundle, type ReconciledService, type RunServiceStatus } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import {
   previewAccess,
@@ -74,5 +74,9 @@ export function registerRunControlIpc(): void {
 
   ipcMain.handle('preview:open', async (_event, url: string): Promise<void> => {
     await getPreviewBrowser().open(String(url));
+  });
+
+  ipcMain.handle('preview:captureDiagnostics', async (): Promise<BrowserDiagnosticsBundle | undefined> => {
+    return getPreviewBrowser().captureDiagnostics();
   });
 }

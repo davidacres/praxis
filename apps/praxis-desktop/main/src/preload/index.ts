@@ -31,6 +31,7 @@ import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalEx
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
 import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
+import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
 
@@ -479,7 +480,8 @@ const praxis: PraxisIpc = {
     attach: () => ipcRenderer.invoke('preview:attach'),
     setBounds: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('preview:setBounds', bounds),
     setVisible: (visible: boolean) => ipcRenderer.invoke('preview:setVisible', visible),
-    open: (url: string) => ipcRenderer.invoke('preview:open', url)
+    open: (url: string) => ipcRenderer.invoke('preview:open', url),
+    captureDiagnostics: () => ipcRenderer.invoke('preview:captureDiagnostics') as Promise<BrowserDiagnosticsBundle | undefined>
   }
 };
 

@@ -1,10 +1,19 @@
 import { BrowserWindow, WebContentsView, session as electronSession } from 'electron';
-import { previewAccessBlockedReason } from '@praxis/core';
+import {
+  BrowserDiagnosticsRecorder,
+  previewAccessBlockedReason,
+  writeBrowserDiagnosticsBundle,
+  writeScreenshot,
+  type BrowserDiagnosticsBundle,
+  type BrowserDiagnosticsBundleKey,
+  type ConsoleLevel
+} from '@praxis/core';
 import { previewAccess } from './runManagerInstance';
+import { browserDiagnosticsStorageRoot } from './browserDiagnosticsStorage';
 
 /**
- * The Run preview surface (FX-BE-055 / TASK-146) — a `WebContentsView`, same
- * structural pattern as `aiBrowser.ts`, but a passive viewer rather than
+ * The Run preview surface (FX-BE-055/056 / TASK-146/147) — a `WebContentsView`,
+ * same structural pattern as `aiBrowser.ts`, but a passive viewer rather than
  * something an agent drives: no click/type/snapshot, just navigate + show.
  * Every navigation, redirect, and subresource is checked against the shared
  * `previewAccess` registry via `previewAccessBlockedReason` — the same one
@@ -17,7 +26,22 @@ import { previewAccess } from './runManagerInstance';
  * the renderer does) never calls anything in `runManagerInstance.ts`: a
  * preview is a window onto an already-running managed service, and closing
  * that window must not stop the service it was looking at.
+ *
+ * Every `open(url)` re-derives which (project, run, service) owns the page
+ * from `previewAccess.grantFor(url)` — the same registry the access check
+ * itself uses — and starts a fresh `BrowserDiagnosticsRecorder` for it
+ * (TASK-147): console messages and failed requests captured from here on
+ * are attributed to that identity, never left ambiguous or attributed to
+ * whatever page happened to be open before.
  */
+
+/** Electron's documented `console-message` levels: 0 verbose, 1 info, 2 warning, 3 error. */
+function mapConsoleLevel(level: number): ConsoleLevel {
+  if (level >= 3) return 'error';
+  if (level === 2) return 'warning';
+  if (level === 1) return 'info';
+  return 'log';
+}
 
 const PARTITION = 'persist:praxis-preview';
 
@@ -26,6 +50,8 @@ class PreviewBrowserManager {
   private host: BrowserWindow | undefined;
   private visible = false;
   private lastBounds = { x: 0, y: 0, width: 0, height: 0 };
+  private recorder: BrowserDiagnosticsRecorder | undefined;
+  private recorderKey: BrowserDiagnosticsBundleKey | undefined;
 
   private hostWindow(): BrowserWindow {
     const win =
@@ -76,6 +102,17 @@ class PreviewBrowserManager {
       }
       callback({ cancel: Boolean(previewAccessBlockedReason(details.url, previewAccess)) });
     });
+    // Diagnostics capture (TASK-147) — informational hooks, no callback to
+    // make. Both are no-ops whenever `this.recorder` is unset (nothing
+    // granted currently owns whatever page is loaded).
+    ses.webRequest.onCompleted(details => {
+      if (details.statusCode >= 400) {
+        this.recorder?.recordNetworkFailure({ url: details.url, method: details.method, status: details.statusCode });
+      }
+    });
+    ses.webRequest.onErrorOccurred(details => {
+      this.recorder?.recordNetworkFailure({ url: details.url, method: details.method, error: details.error });
+    });
 
     const wc = view.webContents;
     wc.setWindowOpenHandler(() => ({ action: 'deny' })); // a preview never spawns a new window
@@ -84,6 +121,13 @@ class PreviewBrowserManager {
     };
     wc.on('will-navigate', guard);
     wc.on('will-redirect', guard);
+    wc.on('console-message', (_event, level, message) => {
+      this.recorder?.recordConsole(mapConsoleLevel(level), message);
+    });
+    wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return; // subresource failures are already covered by onErrorOccurred above
+      this.recorder?.recordNetworkFailure({ url: validatedURL, method: 'GET', error: `${errorDescription} (${errorCode})` });
+    });
 
     return view;
   }
@@ -117,11 +161,47 @@ class PreviewBrowserManager {
   async open(url: string): Promise<void> {
     const reason = previewAccessBlockedReason(url, previewAccess);
     if (reason) throw new Error(reason);
+    // A fresh recorder per page: whoever granted this exact origin owns
+    // whatever gets captured from here on, never whatever page (or whose
+    // grant) was open before.
+    const grant = previewAccess.grantFor(url);
+    if (grant) {
+      this.recorderKey = { projectId: grant.projectId, runId: grant.runId, serviceId: grant.serviceId };
+      this.recorder = new BrowserDiagnosticsRecorder(this.recorderKey);
+    } else {
+      this.recorderKey = undefined;
+      this.recorder = undefined;
+    }
     await this.wc.loadURL(url);
   }
 
   currentUrl(): string | undefined {
     return this.view && !this.view.webContents.isDestroyed() ? this.view.webContents.getURL() : undefined;
+  }
+
+  /**
+   * Screenshots the currently loaded page, folds it into the active
+   * recorder's snapshot, persists the bundle, and returns it. `undefined`
+   * when nothing granted currently owns the open page (nothing was ever
+   * `open()`ed, or it opened to an origin with no resolvable grant).
+   */
+  async captureDiagnostics(): Promise<BrowserDiagnosticsBundle | undefined> {
+    if (!this.recorder || !this.recorderKey || !this.view || this.view.webContents.isDestroyed()) return undefined;
+    const capturedAt = new Date().toISOString();
+    try {
+      const image = await this.view.webContents.capturePage();
+      const record = await writeScreenshot(browserDiagnosticsStorageRoot(), this.recorderKey, image.toPNG(), capturedAt);
+      this.recorder.recordScreenshot(record);
+    } catch (error) {
+      this.recorder.recordScreenshot({
+        presence: 'missing',
+        capturedAt,
+        missingReason: error instanceof Error ? error.message : String(error)
+      });
+    }
+    const bundle = this.recorder.snapshot(capturedAt);
+    await writeBrowserDiagnosticsBundle(browserDiagnosticsStorageRoot(), bundle);
+    return bundle;
   }
 }
 

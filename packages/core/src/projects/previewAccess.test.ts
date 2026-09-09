@@ -109,6 +109,20 @@ test('revokeAll clears every grant across every project', () => {
   assert.deepEqual(registry.grants(), []);
 });
 
+test('grantFor recovers the owning project/run/service from a URL alone', () => {
+  const registry = new PreviewAccessRegistry();
+  registry.grant('proj-1', 'run-1', 'web', 'http://127.0.0.1:5173');
+  const grant = registry.grantFor('http://127.0.0.1:5173/some/page?x=1');
+  assert.equal(grant?.projectId, 'proj-1');
+  assert.equal(grant?.runId, 'run-1');
+  assert.equal(grant?.serviceId, 'web');
+});
+
+test('grantFor returns undefined for an ungranted origin', () => {
+  const registry = new PreviewAccessRegistry();
+  assert.equal(registry.grantFor('http://127.0.0.1:5173/'), undefined);
+});
+
 test('grants() reports the granting identity for each origin', () => {
   const registry = new PreviewAccessRegistry();
   registry.grant('proj-1', 'run-1', 'web', 'http://127.0.0.1:5173');
