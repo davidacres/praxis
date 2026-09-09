@@ -13,6 +13,7 @@ function profile(overrides: Partial<DeploymentProfile> = {}): DeploymentProfile 
   const at = '2026-09-09T00:00:00.000Z';
   return {
     schemaVersion: DEPLOYMENT_PROFILE_SCHEMA_VERSION,
+    version: 1,
     id: 'prod-deploy',
     name: 'Production',
     projectId: 'proj-1',
@@ -133,6 +134,13 @@ test('required top-level fields are checked: id, name, projectId, environment', 
   assert.ok(paths.includes('name'));
   assert.ok(paths.includes('projectId'));
   assert.ok(paths.includes('environment'));
+});
+
+test('version must be a positive integer', () => {
+  assert.equal(validateDeploymentProfile(profile({ version: 0 })).valid, false);
+  assert.equal(validateDeploymentProfile(profile({ version: -1 })).valid, false);
+  assert.equal(validateDeploymentProfile(profile({ version: 1.5 })).valid, false);
+  assert.equal(validateDeploymentProfile(profile({ version: 2 })).valid, true);
 });
 
 test('an unknown rollback kind fails validation', () => {

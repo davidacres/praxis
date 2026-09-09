@@ -90,6 +90,14 @@ export interface DeploymentRollbackPolicy {
 export interface DeploymentProfile {
   schemaVersion: number;
   id: string;
+  /**
+   * Bumped by whoever writes the profile whenever any field changes
+   * (target, executor, environment, credentials, …) — never inferred from
+   * `updatedAt`, since a timestamp comparison is fragile (clock skew, two
+   * edits in the same millisecond) for something an approval's validity
+   * (TASK-153's `isApprovalValid`) actually depends on. Starts at `1`.
+   */
+  version: number;
   name: string;
   projectId: string;
   /** Free text (e.g. "staging", "production") — deliberately not a closed enum; environments are project-defined, not Praxis-defined. */
@@ -127,18 +135,6 @@ export interface PublishedArtifact {
   location: { kind: 'local-path'; path: string };
 }
 
-export type DeploymentRunStatus = 'pending' | 'deploying' | 'healthy' | 'failed' | 'rolled-back';
-
-export interface DeploymentRun {
-  id: string;
-  deploymentProfileId: string;
-  artifactId: string;
-  status: DeploymentRunStatus;
-  startedAt: string;
-  endedAt?: string;
-  error?: string;
-}
-
 export interface DeploymentProfileIssue {
   path: string;
   message: string;
@@ -155,6 +151,9 @@ export function validateDeploymentProfile(profile: DeploymentProfile): { valid: 
   if (!isNonEmpty(profile.name)) errors.push({ path: 'name', message: 'name is required.' });
   if (!isNonEmpty(profile.projectId)) errors.push({ path: 'projectId', message: 'projectId is required.' });
   if (!isNonEmpty(profile.environment)) errors.push({ path: 'environment', message: 'environment is required.' });
+  if (!Number.isInteger(profile.version) || profile.version < 1) {
+    errors.push({ path: 'version', message: 'version must be a positive integer.' });
+  }
 
   const executorKinds: DeploymentExecutorKind[] = ['direct-process', 'github-actions', 'gitlab-ci'];
   if (!executorKinds.includes(profile.executor?.kind)) {

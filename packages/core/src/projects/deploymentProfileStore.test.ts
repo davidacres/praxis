@@ -17,6 +17,7 @@ function profile(overrides: Partial<DeploymentProfile> = {}): DeploymentProfile 
   const at = '2026-09-09T00:00:00.000Z';
   return {
     schemaVersion: DEPLOYMENT_PROFILE_SCHEMA_VERSION,
+    version: 1,
     id: 'production',
     name: 'Production',
     projectId: 'proj-1',
