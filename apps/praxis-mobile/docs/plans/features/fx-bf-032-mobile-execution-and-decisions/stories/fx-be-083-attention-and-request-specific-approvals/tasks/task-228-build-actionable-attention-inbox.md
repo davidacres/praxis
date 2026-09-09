@@ -2,7 +2,7 @@
 type: Task
 id: TASK-228
 title: "Build actionable attention inbox"
-status: planned
+status: complete
 story: FX-BE-083
 updated: 2026-09-09
 dependencies: [FX-BE-082]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented host/project-scoped actionable attention filtering.
+
+- Source: apps/praxis-mobile/renderer/mobileAttention.ts
+- Tests: apps/praxis-mobile/renderer/mobileAttention.test.ts
+- Only unresolved permission, approval, and failure items for the active host/project are exposed.
+- Hosted Actions remain unavailable; deterministic filtering tests were added.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
