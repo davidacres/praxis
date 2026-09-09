@@ -31,6 +31,10 @@ import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
 import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
+import type { DeploymentProfile, PublishedArtifact } from '../projects/deploymentProfile';
+import type { DeploymentRun } from '../projects/deploymentRunState';
+import type { PublishManifest } from '../projects/publishManifest';
+import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
 import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
@@ -805,6 +809,68 @@ export interface PraxisIpc {
   git: GitIpc;
   runs: RunsIpc;
   preview: PreviewIpc;
+  deployments: DeploymentsIpc;
+}
+
+/**
+ * Direct deployment actions (FX-BE-059 / TASK-158) — prepare, approve,
+ * deploy, health results, and explicit rollback, each a thin pass-through
+ * to the core orchestrator (`deployments/directDeploymentOrchestrator.ts`).
+ * A profile and its artifact/manifest are passed on every call rather than
+ * looked up from a stored id — choosing which profile and published
+ * artifact to act on is FX-BE-060's UI concern, not this surface's.
+ */
+export interface DeploymentsIpc {
+  /** Creates and persists a fresh run in `prepared` status. */
+  prepare(projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact): Promise<DeploymentRun>;
+  /** Requests then grants approval; idempotent — re-approving an already-queued run changes nothing. */
+  approve(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    actor: string
+  ): Promise<{ run: DeploymentRun; ok: boolean; reason?: string }>;
+  /**
+   * Dispatches the deploy. Only ever actually invokes the executor once per
+   * run — a repeated call, whether from a double click or a reconnected UI
+   * re-sending the action, is refused with a reason rather than dispatching
+   * again. `options` covers a `directory` target's exclude/backup/staging
+   * paths and a `local-process` target's extra script inputs and timeout.
+   */
+  deploy(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    manifest: PublishManifest,
+    options?: {
+      excludePaths?: string[];
+      backupDir?: string;
+      stagingDir?: string;
+      processInputs?: Record<string, string>;
+      timeoutMs?: number;
+      healthCheckHost?: string;
+      healthCheckPort?: number;
+    }
+  ): Promise<{ dispatched: boolean; run: DeploymentRun; reason?: string }>;
+  getRun(runId: string): Promise<DeploymentRun | undefined>;
+  /** A profile's runs, newest first. */
+  listRuns(deploymentProfileId: string): Promise<DeploymentRun[]>;
+  /** A read-only summary of a run's last recorded health outcome. */
+  health(runId: string): Promise<DeploymentHealthResult>;
+  /**
+   * Restores the previous version for a `directory` target. Refused for any
+   * other target kind — the reason is returned, and the attempt itself is
+   * still recorded on the run (`rollback-started` followed by
+   * `rollback-failed`), never silently dropped.
+   */
+  rollback(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    options?: { backupDir?: string; excludePaths?: string[] }
+  ): Promise<{ rolledBack: boolean; run: DeploymentRun; reason?: string }>;
 }
 
 /**

@@ -35,6 +35,10 @@ import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
+import type { DeploymentProfile, PublishedArtifact } from '@praxis/core';
+import type { DeploymentRun } from '@praxis/core';
+import type { PublishManifest } from '@praxis/core';
+import type { DeploymentHealthResult } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -487,6 +491,51 @@ const praxis: PraxisIpc = {
     setVisible: (visible: boolean) => ipcRenderer.invoke('preview:setVisible', visible),
     open: (url: string) => ipcRenderer.invoke('preview:open', url),
     captureDiagnostics: () => ipcRenderer.invoke('preview:captureDiagnostics') as Promise<BrowserDiagnosticsBundle | undefined>
+  },
+  deployments: {
+    prepare: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact) =>
+      ipcRenderer.invoke('deployments:prepare', projectId, runId, profile, artifact) as Promise<DeploymentRun>,
+    approve: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact, actor: string) =>
+      ipcRenderer.invoke('deployments:approve', projectId, runId, profile, artifact, actor) as Promise<{
+        run: DeploymentRun;
+        ok: boolean;
+        reason?: string;
+      }>,
+    deploy: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      artifact: PublishedArtifact,
+      manifest: PublishManifest,
+      options?: {
+        excludePaths?: string[];
+        backupDir?: string;
+        stagingDir?: string;
+        processInputs?: Record<string, string>;
+        timeoutMs?: number;
+        healthCheckHost?: string;
+        healthCheckPort?: number;
+      }
+    ) =>
+      ipcRenderer.invoke('deployments:deploy', projectId, runId, profile, artifact, manifest, options) as Promise<{
+        dispatched: boolean;
+        run: DeploymentRun;
+        reason?: string;
+      }>,
+    getRun: (runId: string) => ipcRenderer.invoke('deployments:getRun', runId) as Promise<DeploymentRun | undefined>,
+    listRuns: (deploymentProfileId: string) => ipcRenderer.invoke('deployments:listRuns', deploymentProfileId) as Promise<DeploymentRun[]>,
+    health: (runId: string) => ipcRenderer.invoke('deployments:health', runId) as Promise<DeploymentHealthResult>,
+    rollback: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      options?: { backupDir?: string; excludePaths?: string[] }
+    ) =>
+      ipcRenderer.invoke('deployments:rollback', projectId, runId, profile, options) as Promise<{
+        rolledBack: boolean;
+        run: DeploymentRun;
+        reason?: string;
+      }>
   }
 };
 
