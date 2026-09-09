@@ -257,3 +257,9 @@ Canonical sequencing and architectural decisions: [delivery roadmap](delivery-de
 | [TASK-200](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/tasks/task-200-record-rollout-decision-and-remaining-work.md) | Task | Record rollout decision and remaining work | Backlog | TASK-199 |
 | [FX-BE-073](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/story.md) | Story | Shared executor feasibility and runner boundary | Backlog | FX-BE-072 |
 | [FX-BF-027](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/feature.md) | Feature | Deferred execution reliability and automation extensions | Backlog | FX-BF-024, FX-BF-026 |
+
+## Praxis Mobile companion
+
+The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 12 stories and 36 tasks: FX-BF-028–033, FX-BE-074–085, TASK-201–236. These IDs are reserved across this repository. All are Planned.
+
+The root desktop board is unchanged; add the mobile folder as a separate project to see its work. Host/core/API changes required by mobile are tracked once in that initiative and implemented in their owning code. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
