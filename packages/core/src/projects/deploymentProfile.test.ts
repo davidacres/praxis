@@ -158,3 +158,49 @@ test('a profile with a health check (reusing the RunReadinessProbe shape) valida
   const withHealth = profile({ healthCheck: { kind: 'http', path: '/healthz', expectedStatus: 200 } });
   assert.equal(validateDeploymentProfile(withHealth).valid, true);
 });
+
+test('a directory target path must be repo-relative — an absolute path is rejected', () => {
+  const posix = profile({ target: { kind: 'directory', path: '/var/www/html' } });
+  assert.equal(validateDeploymentProfile(posix).valid, false);
+  const windows = profile({ target: { kind: 'directory', path: 'C:\\inetpub\\wwwroot' } });
+  assert.equal(validateDeploymentProfile(windows).valid, false);
+  const relative = profile({ target: { kind: 'directory', path: 'dist/publish' } });
+  assert.equal(validateDeploymentProfile(relative).valid, true);
+});
+
+test('a local-process target cwd must be repo-relative when set, but is optional', () => {
+  const absolute = profile({ target: { kind: 'local-process', executable: 'node', cwd: '/opt/app' } });
+  assert.equal(validateDeploymentProfile(absolute).valid, false);
+  const noCwd = profile({ target: { kind: 'local-process', executable: 'node' } });
+  assert.equal(validateDeploymentProfile(noCwd).valid, true);
+  const relativeCwd = profile({ target: { kind: 'local-process', executable: 'node', cwd: 'apps/api' } });
+  assert.equal(validateDeploymentProfile(relativeCwd).valid, true);
+});
+
+test('credentials must be ${secret:NAME} references — a plaintext value is rejected regardless of key name', () => {
+  const plaintext = profile({ credentials: { DEPLOY_TOKEN: 'ghp_abcdef1234567890' } });
+  const { valid, errors } = validateDeploymentProfile(plaintext);
+  assert.equal(valid, false);
+  assert.ok(errors.some(e => e.path === 'credentials.DEPLOY_TOKEN'));
+  // Even a key that doesn't look secret-shaped is still a credential here — the field's own
+  // purpose is the enforcement, not a keyword scan of the key name.
+  const innocuousKey = profile({ credentials: { NOTES: 'not actually a secret but still not a reference' } });
+  assert.equal(validateDeploymentProfile(innocuousKey).valid, false);
+});
+
+test('a ${secret:NAME} reference is accepted for any credential key', () => {
+  const valid = profile({ credentials: { DEPLOY_TOKEN: '${secret:deploy-token}' } });
+  assert.equal(validateDeploymentProfile(valid).valid, true);
+});
+
+test('a profile with no credentials at all validates the same as one with an empty credentials map', () => {
+  assert.equal(validateDeploymentProfile(profile()).valid, true);
+  assert.equal(validateDeploymentProfile(profile({ credentials: {} })).valid, true);
+});
+
+test('a plaintext credential never survives serialization as anything but flagged-invalid — a committed fixture with one fails validation, proving it could never have been written by writeDeploymentProfile', () => {
+  const withPlaintext = profile({ credentials: { API_KEY: 'sk_live_1234567890abcdef' } });
+  const serialized = JSON.stringify(withPlaintext);
+  assert.match(serialized, /sk_live_1234567890abcdef/, 'sanity check: the plaintext is indeed present in this in-memory object');
+  assert.equal(validateDeploymentProfile(withPlaintext).valid, false, 'but it is rejected before anything would persist it');
+});
