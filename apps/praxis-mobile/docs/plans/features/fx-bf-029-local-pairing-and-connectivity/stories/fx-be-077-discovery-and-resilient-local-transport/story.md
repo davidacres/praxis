@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-077
 title: "Discovery and resilient local transport"
-status: planned
+status: complete
 feature: FX-BF-029
 updated: 2026-09-09
 dependencies: [FX-BE-076]

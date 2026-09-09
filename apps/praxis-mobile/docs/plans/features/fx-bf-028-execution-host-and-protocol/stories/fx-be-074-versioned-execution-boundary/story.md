@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-074
 title: "Versioned execution boundary"
-status: planned
+status: complete
 feature: FX-BF-028
 updated: 2026-09-09
 dependencies: []

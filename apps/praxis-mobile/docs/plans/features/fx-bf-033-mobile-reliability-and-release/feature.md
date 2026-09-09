@@ -2,7 +2,7 @@
 type: Feature
 id: FX-BF-033
 title: "Mobile reliability and release readiness"
-status: planned
+status: complete
 slug: mobile-reliability-and-release
 stories: [FX-BE-084, FX-BE-085]
 updated: 2026-09-09

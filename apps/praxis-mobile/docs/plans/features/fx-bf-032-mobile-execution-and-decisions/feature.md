@@ -2,7 +2,7 @@
 type: Feature
 id: FX-BF-032
 title: "Mobile workflow execution and decisions"
-status: planned
+status: complete
 slug: mobile-execution-and-decisions
 stories: [FX-BE-082, FX-BE-083]
 updated: 2026-09-09
