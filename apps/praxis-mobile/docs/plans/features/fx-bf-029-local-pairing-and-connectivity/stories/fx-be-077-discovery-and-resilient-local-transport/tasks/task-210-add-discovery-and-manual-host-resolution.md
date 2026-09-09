@@ -2,7 +2,7 @@
 type: Task
 id: TASK-210
 title: "Add discovery and manual host resolution"
-status: planned
+status: complete
 story: FX-BE-077
 updated: 2026-09-09
 dependencies: [FX-BE-076]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented untrusted discovery-hint resolution with authenticated host identity verification.
+
+- Source: packages/core/src/host/mobileHostDiscovery.ts
+- Tests: packages/core/src/host/mobileHostDiscovery.test.ts
+- Discovery, manual, and last-known addresses are treated as hints only; a paired host identity verifier must approve the selected endpoint.
+- Verification: deterministic discovery and last-known fallback tests were added; hosted Actions remain unavailable.
+- Remaining limitation: platform mDNS/service-discovery and socket adapters remain transport integration work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
