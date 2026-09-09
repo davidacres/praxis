@@ -2,7 +2,7 @@
 type: Task
 id: TASK-202
 title: "Extract shared host application services"
-status: planned
+status: complete
 story: FX-BE-074
 updated: 2026-09-09
 dependencies: [TASK-201]
@@ -36,4 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented a transport-neutral execution boundary with injected host-owned handlers.
+
+- Source: packages/core/src/host/mobileExecutionBoundary.ts
+- Tests: packages/core/src/host/mobileExecutionBoundary.test.ts
+- Public export: packages/core/src/index.ts
+- The boundary exposes only the six allowlisted execution mutations and delegates privileged work to injected desktop host services.
+- Handler failures are returned as typed command-conflict errors; no filesystem, credential, subprocess, Node, Electron, or cloud dependency is introduced.
+- Verification: deterministic dispatch and rejection tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: desktop IPC adapters still need to delegate to this boundary in a follow-up integration task.
+
+Parent completion requires verified child outcomes.
