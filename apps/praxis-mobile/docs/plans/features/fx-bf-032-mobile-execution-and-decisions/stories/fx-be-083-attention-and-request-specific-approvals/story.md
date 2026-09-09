@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-083
 title: "Attention and request-specific approvals"
-status: planned
+status: complete
 feature: FX-BF-032
 updated: 2026-09-09
 dependencies: [FX-BE-082]

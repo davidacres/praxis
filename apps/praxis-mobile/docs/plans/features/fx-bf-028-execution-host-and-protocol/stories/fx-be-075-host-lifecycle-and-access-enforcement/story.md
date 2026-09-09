@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-075
 title: "Host lifecycle and access enforcement"
-status: planned
+status: complete
 feature: FX-BF-028
 updated: 2026-09-09
 dependencies: [FX-BE-074]

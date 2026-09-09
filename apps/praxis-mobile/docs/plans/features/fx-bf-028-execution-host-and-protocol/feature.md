@@ -2,7 +2,7 @@
 type: Feature
 id: FX-BF-028
 title: "Execution host and mobile protocol"
-status: planned
+status: complete
 slug: execution-host-and-protocol
 stories: [FX-BE-074, FX-BE-075]
 updated: 2026-09-09
