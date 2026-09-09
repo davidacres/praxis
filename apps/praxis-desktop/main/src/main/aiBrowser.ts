@@ -1,5 +1,16 @@
 import { BrowserWindow, WebContentsView, session as electronSession } from 'electron';
-import { blockedBrowserUrlReason, type BrowserBridge, type BrowserElement, type BrowserPageState } from '@praxis/core';
+import {
+  blockedBrowserUrlReason,
+  BrowserDiagnosticsRecorder,
+  writeScreenshot,
+  type BrowserBridge,
+  type BrowserDiagnosticsBundleKey,
+  type BrowserDiagnosticsSummary,
+  type BrowserElement,
+  type BrowserPageState,
+  type BrowserScreenshotResult
+} from '@praxis/core';
+import { browserDiagnosticsStorageRoot } from './browserDiagnosticsStorage';
 
 /**
  * The single in-app browser surface the AI can drive and the user can watch.
@@ -9,7 +20,16 @@ import { blockedBrowserUrlReason, type BrowserBridge, type BrowserElement, type 
  * the renderer via `setBounds` — the React side draws a placeholder where the
  * native view should sit. `AiBrowserBridge` below is the `BrowserBridge` the
  * gateway browser tools call.
+ *
+ * Diagnostics capture (FX-BE-056 / TASK-148): unlike the Run preview surface
+ * (`previewBrowser.ts`), this browser is one shared instance with no
+ * project/run/service identity of its own to attribute evidence to — it is
+ * scoped to the agent's own browsing session, not a managed service. A fixed
+ * sentinel key keeps its captures in their own, clearly-labelled corner of
+ * the same storage tree TASK-147 already built, rather than inventing a
+ * second capture/storage subsystem for what is otherwise identical logic.
  */
+const AI_BROWSER_DIAGNOSTICS_KEY: BrowserDiagnosticsBundleKey = { projectId: 'ai-browser', runId: 'session', serviceId: 'default' };
 
 const PARTITION = 'persist:praxis-ai-browser';
 const MAX_TEXT = 12_000;
@@ -18,6 +38,14 @@ const SETTLE_MS = 350;
 /** Test/dev seam so the e2e suite can point the browser at a local mock server. */
 const ALLOW_PRIVATE_HOSTS = process.env.PRAXIS_BROWSER_ALLOW_LOOPBACK === '1';
 const urlBlockReason = (url: string) => blockedBrowserUrlReason(url, { allowPrivateHosts: ALLOW_PRIVATE_HOSTS });
+
+/** Electron's documented `console-message` levels: 0 verbose, 1 info, 2 warning, 3 error. */
+function mapConsoleLevel(level: number): 'log' | 'info' | 'warning' | 'error' {
+  if (level >= 3) return 'error';
+  if (level === 2) return 'warning';
+  if (level === 1) return 'info';
+  return 'log';
+}
 
 export interface AiBrowserNavigationEvent {
   url: string;
@@ -32,6 +60,7 @@ class AiBrowserManager {
   private host: BrowserWindow | undefined;
   private visible = false;
   private lastBounds = { x: 0, y: 0, width: 0, height: 0 };
+  private recorder: BrowserDiagnosticsRecorder = new BrowserDiagnosticsRecorder(AI_BROWSER_DIAGNOSTICS_KEY);
 
   /**
    * The view must exist as soon as the agent drives it, which can happen before
@@ -79,6 +108,15 @@ class AiBrowserManager {
     ses.on('will-download', event => event.preventDefault());
     // Deny every gated capability (geolocation, camera, notifications, …).
     ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+    // Diagnostics capture (TASK-148) — informational, no callback to make.
+    ses.webRequest.onCompleted(details => {
+      if (details.statusCode >= 400) {
+        this.recorder.recordNetworkFailure({ url: details.url, method: details.method, status: details.statusCode });
+      }
+    });
+    ses.webRequest.onErrorOccurred(details => {
+      this.recorder.recordNetworkFailure({ url: details.url, method: details.method, error: details.error });
+    });
 
     const wc = view.webContents;
     wc.setWindowOpenHandler(({ url }) => {
@@ -90,9 +128,23 @@ class AiBrowserManager {
     };
     wc.on('will-navigate', guard);
     wc.on('will-redirect', guard);
+    wc.on('console-message', (_event, level, message) => {
+      this.recorder.recordConsole(mapConsoleLevel(level), message);
+    });
+    wc.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame) return; // subresource failures are already covered by onErrorOccurred above
+      this.recorder.recordNetworkFailure({ url: validatedURL, method: 'GET', error: `${errorDescription} (${errorCode})` });
+    });
 
     const emit = (loading: boolean) => this.emitNavigation(loading);
-    wc.on('did-navigate', () => emit(false));
+    // A genuine cross-document navigation starts a fresh capture — whatever
+    // console/network evidence accumulated belongs to the page that just
+    // left, not the one arriving. An in-page (SPA route) transition keeps
+    // accumulating into the same recorder; it's still "the same page load."
+    wc.on('did-navigate', () => {
+      this.recorder = new BrowserDiagnosticsRecorder(AI_BROWSER_DIAGNOSTICS_KEY);
+      emit(false);
+    });
     wc.on('did-navigate-in-page', () => emit(false));
     wc.on('did-start-loading', () => emit(true));
     wc.on('did-stop-loading', () => emit(false));
@@ -296,6 +348,28 @@ class AiBrowserManager {
       loading: wc.isLoading()
     };
   }
+
+  /** Console/network evidence captured since the last cross-document navigation (TASK-148). */
+  async getDiagnostics(): Promise<BrowserDiagnosticsSummary> {
+    const bundle = this.recorder.snapshot();
+    return { console: bundle.console, network: bundle.network, truncated: bundle.truncated };
+  }
+
+  /** Screenshots the current page for the user — never returned to the model. */
+  async captureScreenshot(): Promise<BrowserScreenshotResult> {
+    if (!this.view || this.view.webContents.isDestroyed()) {
+      return { captured: false, note: 'The in-app browser has no page open.' };
+    }
+    try {
+      const image = await this.view.webContents.capturePage();
+      const png = image.toPNG();
+      await writeScreenshot(browserDiagnosticsStorageRoot(), AI_BROWSER_DIAGNOSTICS_KEY, png);
+      const { width, height } = image.getSize();
+      return { captured: true, note: `Screenshot captured (${width}x${height}, ${Math.round(png.length / 1024)} KB).` };
+    } catch (error) {
+      return { captured: false, note: `Could not capture a screenshot: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
 }
 
 let manager: AiBrowserManager | undefined;
@@ -321,5 +395,11 @@ export class AiBrowserBridge implements BrowserBridge {
   }
   type(ref: string, text: string, submit: boolean) {
     return getAiBrowser().type(ref, text, submit);
+  }
+  getDiagnostics() {
+    return getAiBrowser().getDiagnostics();
+  }
+  captureScreenshot() {
+    return getAiBrowser().captureScreenshot();
   }
 }
