@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-084
 title: "Mobile lifecycle and optional notifications"
-status: planned
+status: complete
 feature: FX-BF-033
 updated: 2026-09-09
 dependencies: [FX-BE-083]

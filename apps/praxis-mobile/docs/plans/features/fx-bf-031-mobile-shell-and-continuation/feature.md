@@ -2,7 +2,7 @@
 type: Feature
 id: FX-BF-031
 title: "Mobile shell and work continuation"
-status: planned
+status: complete
 slug: mobile-shell-and-continuation
 stories: [FX-BE-080, FX-BE-081]
 updated: 2026-09-09
