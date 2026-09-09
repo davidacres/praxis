@@ -42,9 +42,17 @@ export interface DiagnosisBrief {
   capturedAt: string;
 }
 
+/**
+ * What a diagnosis session actually needs to know how to reproduce a
+ * failure. A full `WorkflowCheckNode` satisfies this; so does the minimal
+ * literal `startDiagnosisFromCiImport` (TASK-140) builds from a CI job — a
+ * job on a remote runner has no local `WorkflowCheckNode` of its own.
+ */
+export type DiagnosisReproCommand = Pick<WorkflowCheckNode, 'command' | 'args' | 'successExitCodes'>;
+
 export function buildDiagnosisBrief(
   bundle: WorkflowEvidenceBundle,
-  node: WorkflowCheckNode,
+  node: DiagnosisReproCommand,
   environment: Record<string, string> = {}
 ): DiagnosisBrief {
   return {
@@ -67,7 +75,7 @@ export function buildDiagnosisBrief(
 
 // ── Preflight ────────────────────────────────────────────────────────────
 
-export type DiagnosisBlockReason = 'no-repository' | 'read-only-session' | 'no-evidence';
+export type DiagnosisBlockReason = 'no-repository' | 'read-only-session' | 'no-evidence' | 'revision-unavailable';
 
 export interface DiagnosisPreflightResult {
   ok: boolean;
@@ -81,6 +89,15 @@ export interface DiagnosisPreflightInput {
   workingDirectory?: string;
   toolMode: AgentToolMode;
   bundle?: WorkflowEvidenceBundle;
+  /**
+   * Whether `bundle.source`'s commit is actually reachable in the project's
+   * local repository — checked by the caller (a `git` lookup is a host
+   * concern, not something core does). Omit when the bundle's source is
+   * `unknown` or the check doesn't apply; `false` blocks explicitly rather
+   * than starting a session that will never manage to reproduce anything
+   * (TASK-140 — "stop when the revision... is unavailable").
+   */
+  revisionAvailable?: boolean;
 }
 
 /**
@@ -108,6 +125,14 @@ export function preflightDiagnosis(input: DiagnosisPreflightInput): DiagnosisPre
       ok: false,
       reason: 'no-evidence',
       message: 'No retained evidence exists for this attempt; there is nothing to diagnose from.'
+    };
+  }
+  if (input.revisionAvailable === false) {
+    const sourceLabel = input.bundle.source.kind === 'commit' ? input.bundle.source.sha : 'this evidence’s source commit';
+    return {
+      ok: false,
+      reason: 'revision-unavailable',
+      message: `${sourceLabel} is not available in this project's local repository; fetch it before diagnosing this failure.`
     };
   }
   return { ok: true };
@@ -177,12 +202,14 @@ export type CreateDiagnosisSessionResult =
 
 export interface CreateDiagnosisSessionInput {
   bundle: WorkflowEvidenceBundle;
-  node: WorkflowCheckNode;
+  node: DiagnosisReproCommand;
   workingDirectory?: string;
   toolMode: AgentToolMode;
   /** Evidence content keyed by label, from the same store TASK-134 reads back from. */
   evidenceContent: Record<string, string>;
   environment?: Record<string, string>;
+  /** See `DiagnosisPreflightInput.revisionAvailable` — TASK-140's "stop when the revision... is unavailable". */
+  revisionAvailable?: boolean;
 }
 
 /**
@@ -197,6 +224,7 @@ export async function createDiagnosisSession(
 ): Promise<CreateDiagnosisSessionResult> {
   const preflight = preflightDiagnosis({
     workingDirectory: input.workingDirectory,
+    revisionAvailable: input.revisionAvailable,
     toolMode: input.toolMode,
     bundle: input.bundle
   });
