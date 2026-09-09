@@ -228,8 +228,8 @@ export function captureEvidenceEntry(input: CaptureEvidenceInput): { entry: Work
   };
 }
 
-/** Keeps the tail: for a failing command, the signal a person needs to act is usually at the end. */
-function truncateUtf8Tail(content: string, maxBytes: number): string {
+/** Keeps the tail: for a failing command, the signal a person needs to act is usually at the end. Exported for reuse by other bounded-text-capture modules (e.g. `projects/browserDiagnostics.ts`). */
+export function truncateUtf8Tail(content: string, maxBytes: number): string {
   const buf = Buffer.from(content, 'utf8');
   if (buf.length <= maxBytes) return content;
   let start = buf.length - maxBytes;
@@ -297,7 +297,8 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function isSafeSegment(value: unknown): value is string {
+/** A bare filename/path-segment shape check — no `.`/`..`, no separators. Exported for reuse wherever an id (project, run, service, …) is used to build a storage path, so a malformed id can never escape its own directory. */
+export function isSafeSegment(value: unknown): value is string {
   return typeof value === 'string' && value !== '.' && value !== '..' && SAFE_SEGMENT.test(value);
 }
 

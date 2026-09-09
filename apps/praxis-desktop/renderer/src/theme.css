@@ -4983,6 +4983,14 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 
 .run-preview-title { font-weight: 600; }
 
+.run-preview-capture-summary {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .run-preview-surface {
   flex: 1;
   min-height: 0;

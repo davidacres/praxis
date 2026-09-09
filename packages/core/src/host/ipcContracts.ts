@@ -33,6 +33,7 @@ import type { ProposedRunService } from '../projects/runProfileDiscovery';
 import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
+import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type {
   ActiveAppearanceAddons,
@@ -347,6 +348,13 @@ export interface PreviewIpc {
   setVisible(visible: boolean): Promise<void>;
   /** Rejects with the same reason `previewAccessBlockedReason` would give if the URL's origin has no active grant. */
   open(url: string): Promise<void>;
+  /**
+   * Screenshots the currently open page, folds it into the console/network
+   * evidence captured since the last `open()`, persists the bundle, and
+   * returns it (FX-BE-056 / TASK-147). `undefined` when nothing is
+   * currently open with a resolvable grant to attribute the capture to.
+   */
+  captureDiagnostics(): Promise<BrowserDiagnosticsBundle | undefined>;
 }
 
 /**
