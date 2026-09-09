@@ -59,6 +59,7 @@ export * from './projects/projectWorkflow';
 export * from './projects/runProfile';
 export * from './projects/runProfileDiscovery';
 export * from './projects/runProfileStore';
+export * from './projects/runServiceManager';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';
