@@ -16,6 +16,7 @@ import {
   parseEvidenceBundle,
   readEvidenceBundle,
   readEvidenceContent,
+  redactEvidenceContent,
   serializeEvidenceBundle,
   unknownEvidenceSource,
   validateEvidenceBundle,
@@ -329,4 +330,51 @@ test('writeEvidenceBundle for one attempt does not disturb another attempt of th
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+// ── Redaction ───────────────────────────────────────────────────────────
+
+test('redactEvidenceContent scrubs a key=value secret assignment but keeps the key', () => {
+  const { content, redacted } = redactEvidenceContent('Starting build\nAPI_KEY=sk_live_abcdef1234567890\nBuild ok');
+  assert.equal(redacted, true);
+  assert.match(content, /API_KEY=\[REDACTED\]/);
+  assert.doesNotMatch(content, /sk_live_abcdef1234567890/);
+  assert.match(content, /Starting build/);
+  assert.match(content, /Build ok/);
+});
+
+test('redactEvidenceContent scrubs a quoted secret value, keeping the quotes', () => {
+  const { content, redacted } = redactEvidenceContent('password: "hunter2-not-really-a-password"');
+  assert.equal(redacted, true);
+  assert.equal(content, 'password: "[REDACTED]"');
+});
+
+test('redactEvidenceContent scrubs a bearer token, keeping the scheme', () => {
+  const { content, redacted } = redactEvidenceContent('curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig" https://api.example.com');
+  assert.equal(redacted, true);
+  assert.match(content, /Bearer \[REDACTED\]/);
+  assert.doesNotMatch(content, /eyJhbGciOiJIUzI1NiJ9/);
+});
+
+test('redactEvidenceContent scrubs a bare AWS access key id with no surrounding key', () => {
+  const { content, redacted } = redactEvidenceContent('found credentials: AKIAABCDEFGHIJKLMNOP in env dump');
+  assert.equal(redacted, true);
+  assert.doesNotMatch(content, /AKIAABCDEFGHIJKLMNOP/);
+  assert.match(content, /\[REDACTED\]/);
+});
+
+test('redactEvidenceContent scrubs a PEM private key block', () => {
+  const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK...\n-----END RSA PRIVATE KEY-----';
+  const { content, redacted } = redactEvidenceContent(`before\n${pem}\nafter`);
+  assert.equal(redacted, true);
+  assert.doesNotMatch(content, /MIIBOgIBAAJBAK/);
+  assert.match(content, /before/);
+  assert.match(content, /after/);
+});
+
+test('redactEvidenceContent leaves ordinary output untouched and reports redacted: false', () => {
+  const original = 'Running tests...\n3 passed, 0 failed\nDone in 1.2s';
+  const { content, redacted } = redactEvidenceContent(original);
+  assert.equal(redacted, false);
+  assert.equal(content, original);
 });

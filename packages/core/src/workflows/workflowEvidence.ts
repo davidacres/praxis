@@ -239,6 +239,50 @@ function evidenceFileName(label: string): string {
   return `${safe || 'entry'}.txt`;
 }
 
+// ── Redaction ────────────────────────────────────────────────────────────
+
+/**
+ * `key = value` / `key: "value"` assignments for secret-shaped names — the
+ * same vocabulary `workspaceTypes.ts`'s `SECRET_SETTING_PATTERN` uses for
+ * settings fields, applied here to free-text log lines instead. Keeps the key
+ * so the log still reads (`API_KEY=[REDACTED]`, not a blank line).
+ */
+const ASSIGNMENT_SECRET = /\b((?:api[_-]?key|secret|token|password|passwd|access[_-]?key|client[_-]?secret|private[_-]?key)\s*[:=]\s*)(["']?)([^\s"',]{4,})\2/gi;
+const BEARER_TOKEN = /\b(Bearer\s+)([A-Za-z0-9._~+/=-]{10,})/g;
+/** Bare secrets with a recognisable shape — the whole match is replaced, there is no key to keep. */
+const BARE_SECRETS = [
+  /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key id
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, // GitHub personal/app tokens
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g
+];
+
+/**
+ * Pattern-based redaction applied before evidence is captured — a check's raw
+ * stdout/stderr can echo a secret from the environment or a failing command
+ * line, and this is what stands between that and either a person's screen or,
+ * eventually, a diagnosis agent's prompt (FX-BE-052). Best-effort by design:
+ * it catches recognisable shapes, not everything a determined secret could
+ * look like — never treat `redacted: false` as a proof the content is clean.
+ */
+export function redactEvidenceContent(content: string): { content: string; redacted: boolean } {
+  let redacted = false;
+  let result = content.replace(ASSIGNMENT_SECRET, (_match, prefix: string, quote: string) => {
+    redacted = true;
+    return `${prefix}${quote}[REDACTED]${quote}`;
+  });
+  result = result.replace(BEARER_TOKEN, (_match, prefix: string) => {
+    redacted = true;
+    return `${prefix}[REDACTED]`;
+  });
+  for (const pattern of BARE_SECRETS) {
+    result = result.replace(pattern, () => {
+      redacted = true;
+      return '[REDACTED]';
+    });
+  }
+  return { content: result, redacted };
+}
+
 // ── Validation ───────────────────────────────────────────────────────────
 
 const EVIDENCE_KINDS = new Set<WorkflowEvidenceKind>(['log', 'test-results', 'attachment']);

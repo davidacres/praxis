@@ -310,7 +310,9 @@ const praxis: PraxisIpc = {
       const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);
       ipcRenderer.on('workflows:runChanged', handler);
       return () => ipcRenderer.off('workflows:runChanged', handler);
-    }
+    },
+    getEvidence: (runId: string, nodeId: string, attempt: number) =>
+      ipcRenderer.invoke('workflows:getEvidence', runId, nodeId, attempt)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
