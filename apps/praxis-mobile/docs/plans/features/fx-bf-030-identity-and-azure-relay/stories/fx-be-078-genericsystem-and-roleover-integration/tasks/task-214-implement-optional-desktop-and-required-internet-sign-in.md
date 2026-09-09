@@ -2,7 +2,7 @@
 type: Task
 id: TASK-214
 title: "Implement optional desktop and required internet sign-in"
-status: planned
+status: backlog
 story: FX-BE-078
 updated: 2026-09-09
 dependencies: [TASK-213]
@@ -10,7 +10,7 @@ dependencies: [TASK-213]
 
 # TASK-214: Implement optional desktop and required internet sign-in
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal

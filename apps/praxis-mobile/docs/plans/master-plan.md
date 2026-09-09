@@ -4,31 +4,27 @@
 **Type:** Master Plan
 **Priority:** High
 
-## Outcome
+## Delivery order
 
-Continue desktop work on mobile with the same session, agents and workflows. See [architecture](../architecture.md) for accepted requirements and [Plan Map](../PLAN_MAP.md) for all 54 execution items.
+1. Host execution contracts and local access policy: FX-BE-074/075.
+2. Account-free LAN pairing and connectivity: FX-BE-076/077.
+3. Mobile shell and same-session continuation: FX-BE-080/081. Shell work can start after FX-BE-074 using fixtures.
+4. Start work, run existing workflows, review changes and resolve approvals locally: FX-BE-082/083.
+5. Local lifecycle, device testing and release: FX-BE-084/085.
+6. Deferred: GenericSystem/Roleover integration and Azure internet access, FX-BE-078/079; optional cloud notifications FX-BE-086 follows local release and relay readiness.
 
-## Ordered milestones
+## Local release acceptance
 
-| Order | Milestone | Required completion | Proof |
-| --- | --- | --- | --- |
-| 1 | Stable host execution boundary | FX-BE-074, FX-BE-075 | Desktop parity, scoped commands and durable replay |
-| 2 | Paired local access | FX-BE-076, FX-BE-077 | Pair/connect without accounts or internet |
-| 3 | Phone continuation over LAN | FX-BE-080, FX-BE-081 | Desktop → phone → desktop, same session after phone termination |
-| 4 | Authenticated internet connectivity | FX-BE-078, FX-BE-079 | Remote host list and encrypted relay, no VPN or inbound ports |
-| 5 | Full mobile execution | FX-BE-082, FX-BE-083 | Start, follow up, approve, retry/cancel and review results |
-| 6 | Supported release | FX-BE-084, FX-BE-085 | Lifecycle/device evidence, operations, independent packaging |
+With GenericSystem, Roleover and Azure unavailable, pair a phone, start/continue work, use existing agents/workflows, approve exact requests, retry/cancel and inspect results. Lock/reopen the phone and return to desktop with the same session/run. Enforce local device trust and project/action scope. No accounts, VPN, production mock authentication or cloud deployment are needed.
+
+## Deferred internet acceptance
+
+The identity services are not running today. Their availability must not block mobile development or local release. Keep cloud controls disabled until real authentication, authorisation and relay integration pass FX-BE-078/079. Internet access still requires signed-in desktop/mobile and current permissions; desktop sign-out disconnects remote clients without stopping local work. TASK-218 owns the full internet journey; TASK-232 owns later optional push.
 
 ## Dependency semantics
 
-The plan map and each canonical item's Dependencies section define hard prerequisites. Feature/story completion rolls up children; children never depend on their containing parent. Within a story tasks run in the listed order. Completing a prerequisite story includes all its tasks and evidence.
-
-Permitted concurrent implementation: FX-BE-080 can start after FX-BE-074 while host access work continues. FX-BE-078 can start after FX-BE-075 alongside local pairing; FX-BE-079 also requires pairing FX-BE-076. LAN continuation does not depend on cloud identity/relay. Full internet approval proof requires both FX-BE-082 and FX-BE-079 before FX-BE-083.
+See [Plan Map](../PLAN_MAP.md) for all 55 items: 6 features, 13 stories, 36 tasks. Canonical Dependencies sections define hard prerequisites; parents roll up their children. No local release item depends transitively on the deferred cloud items. TASK-232 keeps its ID but moves from local reliability to FX-BE-086. Priority order does not invent additional dependency edges.
 
 ## First implementation task
 
-TASK-201: audit execution ownership and freeze protocol v1. Then extract services and prove durable/request-specific semantics before exposing a network listener.
-
-## Completion policy
-
-All 6 features, 12 stories and 36 tasks are planned, not implemented. The current change creates physical plans and folder structure only. Implementation tasks record actual commands, fixture results, captures and limitations before status changes. Real agents and infrastructure use remain explicit opt-ins.
+TASK-201: audit execution ownership and freeze protocol v1. Use deterministic protocol/host fixtures to develop mobile UI before real platform/service integration. All implementation remains planned or backlog; plans are not completion evidence.

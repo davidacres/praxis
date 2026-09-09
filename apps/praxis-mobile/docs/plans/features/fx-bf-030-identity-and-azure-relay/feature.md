@@ -2,16 +2,16 @@
 type: Feature
 id: FX-BF-030
 title: "Optional identity and Azure internet access"
-status: planned
+status: backlog
 slug: identity-and-azure-relay
-stories: [FX-BE-078, FX-BE-079]
+stories: [FX-BE-078, FX-BE-079, FX-BE-086]
 updated: 2026-09-09
 dependencies: [FX-BE-075]
 ---
 
 # FX-BF-030: Optional identity and Azure internet access
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Outcome
@@ -25,9 +25,15 @@ Optional identity and Azure internet access for a companion that continues exist
 | 1 | [FX-BE-078](stories/fx-be-078-genericsystem-and-roleover-integration/story.md) | GenericSystem and Roleover integration |
 | 2 | [FX-BE-079](stories/fx-be-079-azure-relay-and-host-registration-service/story.md) | Azure Relay and host registration service |
 
+| 3 | [FX-BE-086](stories/fx-be-086-deferred-internet-notifications/story.md) | Deferred internet notifications |
+
 ## Implementation boundaries
 
 The desktop remains the execution authority; mobile owns presentation and transport clients. GenericSystem authenticates and Roleover authorises internet access only after their capabilities are audited. Existing local workflows and agent hosts are reused. Follow the mobile architecture and ownership map.
+
+## Delivery priority
+
+Deferred until the local release is complete. GenericSystem and Roleover are not currently running. Their deployment and real integration are prerequisites only for internet access; fixture adapters can be used during development, never as production authentication bypasses.
 
 ## Close when
 

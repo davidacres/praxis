@@ -2,9 +2,7 @@
 
 **Status:** Planned
 
-Canonical feature: [plan](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/feature.md).
+Canonical [feature](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/feature.md).
 
-| Ref | Story | Status |
-| --- | --- | --- |
-| [FX-BE-082](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/story.md) | Start and control existing work | Planned |
-| [FX-BE-083](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/story.md) | Attention and request-specific approvals | Planned |
+- [FX-BE-082: Start and control existing work](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/story.md) — Planned
+- [FX-BE-083: Attention and request-specific approvals](../../../plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/story.md) — Planned

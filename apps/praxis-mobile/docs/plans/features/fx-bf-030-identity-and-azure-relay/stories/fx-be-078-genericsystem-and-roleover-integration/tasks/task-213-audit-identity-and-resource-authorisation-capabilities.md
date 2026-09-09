@@ -2,7 +2,7 @@
 type: Task
 id: TASK-213
 title: "Audit identity and resource authorisation capabilities"
-status: planned
+status: backlog
 story: FX-BE-078
 updated: 2026-09-09
 dependencies: [FX-BE-075]
@@ -10,7 +10,7 @@ dependencies: [FX-BE-075]
 
 # TASK-213: Audit identity and resource authorisation capabilities
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal

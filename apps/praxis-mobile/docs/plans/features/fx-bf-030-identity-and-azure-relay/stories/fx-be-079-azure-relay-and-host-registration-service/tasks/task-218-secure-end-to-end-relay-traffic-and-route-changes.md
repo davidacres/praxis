@@ -2,7 +2,7 @@
 type: Task
 id: TASK-218
 title: "Secure end-to-end relay traffic and route changes"
-status: planned
+status: backlog
 story: FX-BE-079
 updated: 2026-09-09
 dependencies: [TASK-217]
@@ -10,7 +10,7 @@ dependencies: [TASK-217]
 
 # TASK-218: Secure end-to-end relay traffic and route changes
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal
@@ -37,3 +37,7 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Deferred internet milestone evidence
+
+After local release, prove the full mobile start/continue/approve/retry/cancel journey over Azure on a physical phone, including LAN handoff, desktop sign-out, expired grants and device revocation. This is the internet release gate; it is not part of local release acceptance.
