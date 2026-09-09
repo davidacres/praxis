@@ -82,6 +82,8 @@ export function WorkflowRunMonitor({
   const [evidenceKey, setEvidenceKey] = useState<string>();
   const [evidenceView, setEvidenceView] = useState<WorkflowEvidenceView>();
   const [evidenceError, setEvidenceError] = useState<string>();
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisMessage, setDiagnosisMessage] = useState<string>();
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
@@ -154,6 +156,7 @@ export function WorkflowRunMonitor({
     setEvidenceKey(undefined);
     setEvidenceView(undefined);
     setEvidenceError(undefined);
+    setDiagnosisMessage(undefined);
   }, [selectedRunId, selectedStageId]);
 
   // Live updates: the orchestrator advances stages in the background, coalesced
@@ -191,6 +194,22 @@ export function WorkflowRunMonitor({
       setEvidenceView(await window.praxis.workflows.getEvidence(selected.runId, stage.nodeId, stage.attempts));
     } catch (cause) {
       setEvidenceError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  /** Starts a diagnosis session from the stage's retained evidence, or shows why it can't. */
+  const startDiagnosis = async (): Promise<void> => {
+    if (!selected || !stage) return;
+    setDiagnosing(true);
+    setDiagnosisMessage(undefined);
+    try {
+      const result = await window.praxis.workflows.startDiagnosis(selected.runId, stage.nodeId, stage.attempts);
+      if (result.ok) onOpenSession?.(result.sessionId);
+      else setDiagnosisMessage(result.message);
+    } catch (cause) {
+      setDiagnosisMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDiagnosing(false);
     }
   };
 
@@ -467,6 +486,11 @@ export function WorkflowRunMonitor({
                   {evidenceKey === `${selected.runId}:${stage.nodeId}:${stage.attempts}` ? 'Hide log' : 'View log'}
                 </button>
               )}
+              {stage.type === 'check' && stage.outcome === 'failed' && onOpenSession && (
+                <button type="button" className="btn btn-compact" disabled={diagnosing} onClick={() => void startDiagnosis()}>
+                  {diagnosing ? 'Starting…' : 'Diagnose'}
+                </button>
+              )}
               {selected?.actions.some(a => a.kind === 'retry-stage' && a.nodeId === stage.nodeId) && (
                 <button
                   type="button"
@@ -507,6 +531,8 @@ export function WorkflowRunMonitor({
                 </>
               )}
             </div>
+
+            {diagnosisMessage && <p className="wf-stage-error" data-testid="wf-diagnosis-blocked">{diagnosisMessage}</p>}
 
             {evidenceKey === `${selected.runId}:${stage.nodeId}:${stage.attempts}` && (
               <div className="wf-evidence" data-testid="wf-evidence-panel">

@@ -19,6 +19,7 @@ export * from './ai/agentTypes';
 export * from './ai/agentEventUtils';
 export * from './ai/agentWorkflowCatalog';
 export * from './ai/agentPrompt';
+export * from './ai/diagnosisBrief';
 export * from './ai/agentRuntime';
 export * from './ai/toolEventClassify';
 export * from './ai/tools';
