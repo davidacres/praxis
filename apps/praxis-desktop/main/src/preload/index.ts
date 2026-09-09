@@ -312,7 +312,9 @@ const praxis: PraxisIpc = {
       return () => ipcRenderer.off('workflows:runChanged', handler);
     },
     getEvidence: (runId: string, nodeId: string, attempt: number) =>
-      ipcRenderer.invoke('workflows:getEvidence', runId, nodeId, attempt)
+      ipcRenderer.invoke('workflows:getEvidence', runId, nodeId, attempt),
+    startDiagnosis: (runId: string, nodeId: string, attempt: number) =>
+      ipcRenderer.invoke('workflows:startDiagnosis', runId, nodeId, attempt)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),

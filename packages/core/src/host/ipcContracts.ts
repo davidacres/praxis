@@ -75,6 +75,7 @@ import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
 import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
+import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -786,6 +787,13 @@ export interface WorkflowsIpc {
    * enforced on read here, not only by a future reclaim sweep.
    */
   getEvidence(runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceView>;
+  /**
+   * Starts a diagnosis session from a stage attempt's retained evidence
+   * (FX-BE-052). A refused preflight (no working folder, a read-only
+   * session, or no retained evidence) returns `ok: false` with the reason —
+   * no session opens just to discover it has nothing to work from.
+   */
+  startDiagnosis(runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult>;
 }
 
 /** One stage attempt's retained evidence, as read back through `WorkflowsIpc.getEvidence`. */

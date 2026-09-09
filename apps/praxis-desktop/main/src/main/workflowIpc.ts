@@ -26,6 +26,7 @@ import {
   writeProjectWorkflow,
   WorkflowRunStore,
   type AgentCatalogSnapshot,
+  type CreateDiagnosisSessionResult,
   type TemplateReadiness,
   type WorkflowCatalog,
   type WorkflowDefinition,
@@ -42,6 +43,7 @@ import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
+import { startDiagnosisSessionFromEvidence } from './diagnosisSession';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -441,6 +443,25 @@ export function registerWorkflowIpc(): void {
         // than silently returning nothing.
         return { entry, expired: false };
       }
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:startDiagnosis',
+    async (_event, runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult> => {
+      const run = runStore().get(runId);
+      if (!run) return { ok: false, reason: 'no-evidence', message: `Run ${runId} was not found.` };
+      const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
+      if (!node || node.type !== 'check') {
+        return { ok: false, reason: 'no-evidence', message: `Stage ${nodeId} is not a check stage.` };
+      }
+      const project = getProjectStore().get(run.projectId);
+      return startDiagnosisSessionFromEvidence({
+        key: { projectId: run.projectId, runId, nodeId, attempt },
+        node,
+        workingDirectory: project?.workspaceFolder?.trim() || undefined,
+        toolMode: project?.defaultAiToolMode ?? 'full'
+      });
     }
   );
 }
