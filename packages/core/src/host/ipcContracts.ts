@@ -36,6 +36,7 @@ import type { CredentialBindingStatus } from '../projects/deploymentProfileStore
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
 import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
+import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
 import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
@@ -835,9 +836,33 @@ export interface DeploymentsIpc {
   /** Whether each credential the profile names is currently bound in the local secret store — never the credential's value. */
   evaluateCredentials(profile: DeploymentProfile): Promise<{ statuses: CredentialBindingStatus[]; allBound: boolean }>;
 
-  // ── Runs (TASK-158) ──────────────────────────────────────────────────
-  /** Creates and persists a fresh run in `prepared` status. */
-  prepare(projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact): Promise<DeploymentRun>;
+  // ── Artifacts (TASK-160) ─────────────────────────────────────────────
+  /** Hashes `rootDir` and records the resulting immutable `PublishedArtifact`. Refuses to replace an existing artifact id. */
+  publishArtifact(
+    artifactId: string,
+    deploymentProfileId: string,
+    rootDir: string,
+    sourceCommit?: WorkflowEvidenceSourceRef
+  ): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest }>;
+  /** Artifacts published under one profile, newest first. */
+  listArtifacts(deploymentProfileId: string): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  /** Every artifact published on this machine, newest first — for picking one to promote to a different profile. */
+  listAllArtifacts(): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  getArtifact(artifactId: string): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest } | undefined>;
+
+  // ── Runs (TASK-158/160) ──────────────────────────────────────────────
+  /**
+   * Creates and persists a fresh run in `prepared` status. `context` is the
+   * optional linking data TASK-160 adds to `DeploymentRun` (issue, workflow
+   * run, target URL) — set once, immutable thereafter.
+   */
+  prepare(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    context?: { issueKey?: string; issueConnectionId?: string; workflowRunId?: string; targetUrl?: string }
+  ): Promise<DeploymentRun>;
   /** Requests then grants approval; idempotent — re-approving an already-queued run changes nothing. */
   approve(
     projectId: string,

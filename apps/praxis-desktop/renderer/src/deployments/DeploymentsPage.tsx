@@ -3,8 +3,11 @@ import type {
   CredentialBindingStatus,
   DeploymentProfile,
   DeploymentProfileIssue,
+  DeploymentRun,
   ExecutorRef,
   ProjectRecord,
+  PublishedArtifact,
+  PublishManifest,
   RunReadinessProbe,
   TargetRef
 } from '@praxis/core';
@@ -240,6 +243,7 @@ export function DeploymentsPage({ project }: DeploymentsPageProps) {
             </div>
 
             <DeploymentReviewPanel profile={draft} preflight={preflight} credentials={credentials} />
+            <DeploymentHistoryPanel project={project} profile={draft} allProfiles={profiles} />
           </aside>
         )}
       </div>
@@ -601,6 +605,193 @@ function DeploymentReviewPanel({
       {credentials && !credentials.allBound && (
         <p className="wf-stage-error">One or more credentials are not bound on this machine.</p>
       )}
+    </div>
+  );
+}
+
+// ── History and promotion (FX-BE-060 / TASK-160) ───────────────────────────
+
+/**
+ * A distinct label and tone per run status — in particular, `unknown` and
+ * `rolled-back` must never look alike: `unknown` means a crash left the
+ * outcome unconfirmed (still needs attention), `rolled-back` means the
+ * previous version was successfully restored (a settled, understood
+ * outcome). Collapsing the two into one generic "not running" chip would
+ * hide exactly the distinction this task's acceptance criterion names.
+ */
+const STATUS_CHIP: Record<DeploymentRun['status'], { label: string; tone: string }> = {
+  prepared: { label: 'Prepared', tone: 'chip-muted' },
+  'awaiting-approval': { label: 'Awaiting approval', tone: 'chip-warn' },
+  queued: { label: 'Queued', tone: 'chip-warn' },
+  deploying: { label: 'Deploying', tone: 'chip-warn' },
+  verifying: { label: 'Verifying', tone: 'chip-warn' },
+  succeeded: { label: 'Succeeded', tone: 'chip-success' },
+  failed: { label: 'Failed', tone: 'chip-danger' },
+  cancelled: { label: 'Cancelled', tone: 'chip-muted' },
+  unknown: { label: 'Unknown — outcome unconfirmed', tone: 'chip-danger' },
+  'rolling-back': { label: 'Rolling back', tone: 'chip-warn' },
+  'rolled-back': { label: 'Rolled back', tone: 'chip-muted' }
+};
+
+function shortDigest(digest: string): string {
+  return digest.length > 19 ? `${digest.slice(0, 19)}…` : digest;
+}
+
+function DeploymentHistoryPanel({
+  project,
+  profile,
+  allProfiles
+}: {
+  project: ProjectRecord;
+  profile: DeploymentProfile;
+  allProfiles: DeploymentProfile[];
+}) {
+  const [runs, setRuns] = useState<DeploymentRun[]>([]);
+  const [artifacts, setArtifacts] = useState<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>([]);
+  const [rootDir, setRootDir] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [promoteTarget, setPromoteTarget] = useState<Record<string, string>>({});
+  const [promoting, setPromoting] = useState<string | undefined>();
+
+  const reload = () => {
+    void window.praxis.deployments.listRuns(profile.id).then(setRuns);
+    void window.praxis.deployments.listArtifacts(profile.id).then(setArtifacts);
+  };
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  const pickFolder = async () => {
+    const chosen = await window.praxis.dialog.pickFolder('Choose the built output to publish');
+    if (chosen) setRootDir(chosen);
+  };
+
+  const publish = async () => {
+    if (!rootDir.trim()) return;
+    setPublishing(true);
+    setError(undefined);
+    try {
+      await window.praxis.deployments.publishArtifact(`artifact-${Date.now()}`, profile.id, rootDir.trim());
+      setRootDir('');
+      reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  /** Promotes an already-published artifact to a different profile — a fresh run, a fresh approval, a fresh dispatch, sharing only the artifact digest. */
+  const promote = async (artifact: PublishedArtifact) => {
+    const targetProfileId = promoteTarget[artifact.id];
+    const targetProfile = allProfiles.find(p => p.id === targetProfileId);
+    if (!targetProfile) return;
+    setPromoting(artifact.id);
+    setError(undefined);
+    try {
+      const runId = `run-${Date.now()}`;
+      await window.praxis.deployments.prepare(project.id, runId, targetProfile, artifact);
+      const approved = await window.praxis.deployments.approve(project.id, runId, targetProfile, artifact, 'you');
+      if (!approved.ok) throw new Error(approved.reason ?? 'Approval failed.');
+      reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setPromoting(undefined);
+    }
+  };
+
+  const otherProfiles = allProfiles.filter(p => p.id !== profile.id);
+
+  return (
+    <div className="inspector-card">
+      <div className="inspector-head">
+        <h2>History</h2>
+      </div>
+      {error && <p className="wf-stage-error">{error}</p>}
+
+      <fieldset className="form-fieldset">
+        <legend>Publish an artifact</legend>
+        <FieldRow label="Built output folder">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={rootDir} onChange={e => setRootDir(e.target.value)} placeholder="/path/to/dist" />
+            <button type="button" className="btn btn-compact" onClick={() => void pickFolder()}>
+              Choose…
+            </button>
+          </div>
+        </FieldRow>
+        <button type="button" className="btn btn-compact" disabled={!rootDir.trim() || publishing} onClick={() => void publish()}>
+          {publishing ? 'Publishing…' : 'Publish artifact'}
+        </button>
+      </fieldset>
+
+      {artifacts.length > 0 && (
+        <fieldset className="form-fieldset">
+          <legend>Artifacts published under this profile</legend>
+          {artifacts.map(({ artifact }) => (
+            <div key={artifact.id} className="rail-sub" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+              <code>{shortDigest(artifact.digest)}</code>
+              {otherProfiles.length > 0 && (
+                <>
+                  <select
+                    aria-label="Promote to profile"
+                    value={promoteTarget[artifact.id] ?? ''}
+                    onChange={e => setPromoteTarget(current => ({ ...current, [artifact.id]: e.target.value }))}
+                  >
+                    <option value="">promote to…</option>
+                    {otherProfiles.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name || p.id} ({p.environment || 'no environment'})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn btn-compact"
+                    disabled={!promoteTarget[artifact.id] || promoting === artifact.id}
+                    onClick={() => void promote(artifact)}
+                  >
+                    {promoting === artifact.id ? 'Promoting…' : 'Promote'}
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </fieldset>
+      )}
+
+      <p className="rail-sub">runs</p>
+      {runs.length === 0 && <p className="hint">No deployment runs yet for this profile.</p>}
+      <ul className="issues" style={{ listStyle: 'none', padding: 0 }}>
+        {runs.map(run => {
+          const chip = STATUS_CHIP[run.status];
+          return (
+            <li key={run.runId} style={{ marginBottom: 8 }}>
+              <span className={`chip ${chip.tone}`}>{chip.label}</span>{' '}
+              <code>{shortDigest(run.artifactDigest)}</code>
+              {run.issueKey && <span className="rail-sub"> · {run.issueKey}</span>}
+              {run.workflowRunId && <span className="rail-sub"> · workflow {run.workflowRunId}</span>}
+              {run.targetUrl && (
+                <>
+                  {' · '}
+                  <a href={run.targetUrl} target="_blank" rel="noreferrer">
+                    {run.targetUrl}
+                  </a>
+                </>
+              )}
+              {run.approval && (
+                <div className="rail-sub">
+                  approved by {run.approval.approvedBy} for {run.approval.environment}
+                </div>
+              )}
+              {run.endedReason && <div className="rail-sub">{run.endedReason}</div>}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

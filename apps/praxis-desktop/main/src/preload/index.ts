@@ -40,6 +40,7 @@ import type { CredentialBindingStatus } from '@praxis/core';
 import type { DeploymentRun } from '@praxis/core';
 import type { PublishManifest } from '@praxis/core';
 import type { DeploymentHealthResult } from '@praxis/core';
+import type { WorkflowEvidenceSourceRef } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -511,8 +512,28 @@ const praxis: PraxisIpc = {
         statuses: CredentialBindingStatus[];
         allBound: boolean;
       }>,
-    prepare: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact) =>
-      ipcRenderer.invoke('deployments:prepare', projectId, runId, profile, artifact) as Promise<DeploymentRun>,
+    publishArtifact: (artifactId: string, deploymentProfileId: string, rootDir: string, sourceCommit?: WorkflowEvidenceSourceRef) =>
+      ipcRenderer.invoke('deployments:publishArtifact', artifactId, deploymentProfileId, rootDir, sourceCommit) as Promise<{
+        artifact: PublishedArtifact;
+        manifest: PublishManifest;
+      }>,
+    listArtifacts: (deploymentProfileId: string) =>
+      ipcRenderer.invoke('deployments:listArtifacts', deploymentProfileId) as Promise<
+        Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>
+      >,
+    listAllArtifacts: () =>
+      ipcRenderer.invoke('deployments:listAllArtifacts') as Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>,
+    getArtifact: (artifactId: string) =>
+      ipcRenderer.invoke('deployments:getArtifact', artifactId) as Promise<
+        { artifact: PublishedArtifact; manifest: PublishManifest } | undefined
+      >,
+    prepare: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      artifact: PublishedArtifact,
+      context?: { issueKey?: string; issueConnectionId?: string; workflowRunId?: string; targetUrl?: string }
+    ) => ipcRenderer.invoke('deployments:prepare', projectId, runId, profile, artifact, context) as Promise<DeploymentRun>,
     approve: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact, actor: string) =>
       ipcRenderer.invoke('deployments:approve', projectId, runId, profile, artifact, actor) as Promise<{
         run: DeploymentRun;

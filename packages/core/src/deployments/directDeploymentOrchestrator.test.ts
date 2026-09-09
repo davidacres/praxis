@@ -440,3 +440,91 @@ test('deploymentHealthResult reports no outcome yet for a run that has not reach
   assert.equal(health.status, 'prepared');
   assert.equal(health.healthy, undefined);
 });
+
+// ── Promotion (FX-BE-060 / TASK-160) ──────────────────────────────────────
+// "Promote the same digest across environments with fresh environment-
+// specific approval" and "test and production records share artifact
+// digest but retain separate approval and health evidence."
+
+test('promoting the same artifact digest to a different environment creates an independent run with its own approval and health evidence', async () => {
+  const store = new DeploymentRunStore(memoryStore());
+  const locks = new DeploymentTargetLockRegistry();
+  const testDir = await tmp('praxis-target-test-');
+  const prodDir = await tmp('praxis-target-prod-');
+  const backupDirTest = path.join(await tmp('praxis-backup-'), 'b1');
+  const backupDirProd = path.join(await tmp('praxis-backup-'), 'b1');
+  const stagingDirTest = await tmp('praxis-staging-');
+  const stagingDirProd = await tmp('praxis-staging-');
+  const { artifact, manifest, rootDir } = await publishedArtifact({ 'index.html': 'v1' });
+
+  try {
+    const testProfile = profile({ kind: 'directory', path: testDir }, { id: 'profile-test', environment: 'test' });
+    const prodProfile = profile({ kind: 'directory', path: prodDir }, { id: 'profile-prod', environment: 'production' });
+
+    // Deploy to test first.
+    await prepareDirectDeployment({ store, runId: 'run-test', profile: testProfile, artifact, now: nextAt });
+    await approveDirectDeployment({ store, runId: 'run-test', profile: testProfile, artifact, actor: 'alice', now: nextAt });
+    const testResult = await runDirectDeployment({
+      store, locks, runId: 'run-test', profile: testProfile, artifact, manifest,
+      projectFolder: '/unused', backupDir: backupDirTest, stagingDir: stagingDirTest, now: nextAt
+    });
+
+    // Promote the exact same artifact to production — a separate run, a separate profile.
+    await prepareDirectDeployment({ store, runId: 'run-prod', profile: prodProfile, artifact, now: nextAt });
+    await approveDirectDeployment({ store, runId: 'run-prod', profile: prodProfile, artifact, actor: 'bob', now: nextAt });
+    const prodResult = await runDirectDeployment({
+      store, locks, runId: 'run-prod', profile: prodProfile, artifact, manifest,
+      projectFolder: '/unused', backupDir: backupDirProd, stagingDir: stagingDirProd, now: nextAt
+    });
+
+    // Same digest, both succeeded.
+    assert.equal(testResult.run.artifactDigest, prodResult.run.artifactDigest);
+    assert.equal(testResult.run.status, 'succeeded');
+    assert.equal(prodResult.run.status, 'succeeded');
+
+    // Separate approval evidence: different approver, different environment, different profile id.
+    assert.notEqual(testResult.run.approval?.approvedBy, prodResult.run.approval?.approvedBy);
+    assert.equal(testResult.run.approval?.environment, 'test');
+    assert.equal(prodResult.run.approval?.environment, 'production');
+    assert.notEqual(testResult.run.approval?.deploymentProfileId, prodResult.run.approval?.deploymentProfileId);
+
+    // Separate health evidence: independent event logs, each with its own health-verified event.
+    assert.notEqual(testResult.run.runId, prodResult.run.runId);
+    assert.ok(testResult.run.events.some(e => e.kind === 'health-verified'));
+    assert.ok(prodResult.run.events.some(e => e.kind === 'health-verified'));
+    assert.notDeepEqual(testResult.run.events, prodResult.run.events);
+
+    // Each target got its own copy — promotion did not share or move files between them.
+    assert.equal(await readFile(path.join(testDir, 'index.html'), 'utf8'), 'v1');
+    assert.equal(await readFile(path.join(prodDir, 'index.html'), 'utf8'), 'v1');
+  } finally {
+    await Promise.all(
+      [testDir, prodDir, backupDirTest, backupDirProd, stagingDirTest, stagingDirProd, rootDir].map(dir =>
+        rm(dir, { recursive: true, force: true })
+      )
+    );
+  }
+});
+
+test('a run\'s approval always binds to the profile it was prepared against, never to whichever profile is passed to approve', async () => {
+  const store = new DeploymentRunStore(memoryStore());
+  const { artifact } = await publishedArtifact({ 'index.html': 'v1' });
+  const testProfile = profile({ kind: 'directory', path: '/tmp/never-used-test' }, { id: 'profile-test', environment: 'test' });
+  const prodProfile = profile({ kind: 'directory', path: '/tmp/never-used-prod' }, { id: 'profile-prod', environment: 'production' });
+
+  // run-prod was prepared against prodProfile — its identity is baked in at that point.
+  await prepareDirectDeployment({ store, runId: 'run-prod', profile: prodProfile, artifact, now: nextAt });
+
+  // A caller mistakenly (or maliciously) passes testProfile to approve — the resulting
+  // approval still binds to the run's own prepared identity (profile-prod), and because that
+  // no longer matches the *passed* profile's id, the approval is refused as invalid.
+  const mistaken = await approveDirectDeployment({ store, runId: 'run-prod', profile: testProfile, artifact, actor: 'alice', now: nextAt });
+  assert.equal(mistaken.ok, false);
+  assert.equal(mistaken.run.approval?.deploymentProfileId, 'profile-prod', 'the approval reflects the run\'s own prepared profile, not the caller\'s argument');
+  assert.match(mistaken.reason ?? '', /no longer matches/);
+
+  // Approving with the correct, matching profile succeeds.
+  const correct = await approveDirectDeployment({ store, runId: 'run-prod', profile: prodProfile, artifact, actor: 'alice', now: nextAt });
+  assert.equal(correct.ok, true);
+  assert.equal(correct.run.approval?.environment, 'production');
+});
