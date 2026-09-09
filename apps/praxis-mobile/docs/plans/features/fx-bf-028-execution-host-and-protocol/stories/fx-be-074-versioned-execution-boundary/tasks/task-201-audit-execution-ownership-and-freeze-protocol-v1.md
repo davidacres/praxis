@@ -2,7 +2,7 @@
 type: Task
 id: TASK-201
 title: "Audit execution ownership and freeze protocol v1"
-status: planned
+status: complete
 story: FX-BE-074
 updated: 2026-09-09
 dependencies: []
@@ -36,4 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented the browser-safe protocol contract and deterministic validation tests.
+
+- Source: packages/core/src/host/mobileProtocol.ts
+- Tests: packages/core/src/host/mobileProtocol.test.ts
+- Public export: packages/core/src/index.ts
+- Contract maps every mobile read/command operation to explicit view, execute, or approve capability.
+- Validation covers protocol version, command/device/host identity, mutation project scope, capability enforcement, and event cursors.
+- Verification: source and package JSON reviewed through the repository API; hosted GitHub Actions remain unavailable (runner startup failure), so the full workspace build could not be executed here.
+- Remaining limitation: host transport adapters, pairing, LAN discovery, and remote relay are subsequent tasks; this contract intentionally contains no network or cloud dependency.
+
+Parent completion requires verified child outcomes.

@@ -129,3 +129,4 @@ export * from './folder/pathUtils';
 export * from './ui/backendModeContext';
 export * from './ui/hexColor';
 export * from './ui/markdownToHtml';
+export * from './host/mobileProtocol';
