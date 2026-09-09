@@ -90,6 +90,16 @@ const SECRET_KEY_PATTERN = /token|secret|password|api[_-]?key|(?:^|_)pat(?:_|$)/
 const SECRET_REFERENCE_PATTERN = /^\$\{secret:[A-Za-z0-9_.-]+\}$/;
 const PROBE_KINDS = new Set(['http', 'tcp', 'log-line']);
 
+/** Whether an env/config key name looks like it holds a secret — exported so other "store references, not values" schemas (e.g. `deploymentProfile.ts`) share this exact vocabulary rather than a second copy. */
+export function isSecretShapedKey(key: string): boolean {
+  return SECRET_KEY_PATTERN.test(key);
+}
+
+/** Whether a value is a `${secret:NAME}` reference — the only shape a secret-shaped key's value may hold. */
+export function isSecretReferenceValue(value: string): boolean {
+  return SECRET_REFERENCE_PATTERN.test(value);
+}
+
 function isValidPort(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 65535;
 }

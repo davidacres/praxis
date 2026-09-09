@@ -25,8 +25,9 @@
  * point something would actually try to run it.
  */
 
+import { isPortableFolderPath } from '../workspaces/workspacePaths';
 import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
-import type { RunReadinessProbe } from './runProfile';
+import { isSecretReferenceValue, type RunReadinessProbe } from './runProfile';
 
 export const DEPLOYMENT_PROFILE_SCHEMA_VERSION = 1;
 
@@ -98,6 +99,17 @@ export interface DeploymentProfile {
   /** Reuses `RunReadinessProbe` (TASK-141) rather than a second probe schema — a deployment health check and a Run service's readiness probe are the same concept (how do I know this process is actually up) applied at a different point in the lifecycle. */
   healthCheck?: RunReadinessProbe;
   rollback: DeploymentRollbackPolicy;
+  /**
+   * Credential NAMES an executor/target needs (TASK-151 — "store credential
+   * references only"), never values: same discipline and vocabulary as
+   * `RunServiceDefinition.env` (TASK-141) — a secret-shaped key
+   * (`isSecretShapedKey`) must hold a `${secret:NAME}` reference resolved
+   * from the secret store at deploy time, never a literal. A committed
+   * `deployment.praxis.json` can never carry a plaintext credential by
+   * construction: `validateDeploymentProfile` refuses to consider the
+   * profile valid otherwise.
+   */
+  credentials?: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 }
@@ -156,12 +168,33 @@ export function validateDeploymentProfile(profile: DeploymentProfile): { valid: 
   const targetKinds: DeploymentTargetKind[] = ['local-process', 'directory', 'iis'];
   if (!targetKinds.includes(profile.target?.kind)) {
     errors.push({ path: 'target.kind', message: `Unknown target kind "${profile.target?.kind}".` });
-  } else if (profile.target.kind === 'local-process' && !isNonEmpty(profile.target.executable)) {
-    errors.push({ path: 'target.executable', message: 'executable is required for a local-process target.' });
-  } else if (profile.target.kind === 'directory' && !isNonEmpty(profile.target.path)) {
-    errors.push({ path: 'target.path', message: 'path is required for a directory target.' });
+  } else if (profile.target.kind === 'local-process') {
+    if (!isNonEmpty(profile.target.executable)) errors.push({ path: 'target.executable', message: 'executable is required for a local-process target.' });
+    // Repo-relative, same portability discipline as RunServiceDefinition.cwd (TASK-141) — a
+    // machine-absolute path here would defeat this task's whole "portable profile" premise.
+    if (profile.target.cwd !== undefined && !isPortableFolderPath(profile.target.cwd)) {
+      errors.push({ path: 'target.cwd', message: `cwd must be repo-relative, not absolute: "${profile.target.cwd}".` });
+    }
+  } else if (profile.target.kind === 'directory') {
+    if (!isNonEmpty(profile.target.path)) {
+      errors.push({ path: 'target.path', message: 'path is required for a directory target.' });
+    } else if (!isPortableFolderPath(profile.target.path)) {
+      errors.push({ path: 'target.path', message: `path must be repo-relative, not absolute: "${profile.target.path}".` });
+    }
   } else if (profile.target.kind === 'iis' && !isNonEmpty(profile.target.siteName)) {
     errors.push({ path: 'target.siteName', message: 'siteName is required for an iis target.' });
+  }
+
+  // Every entry here is a credential by definition (unlike RunServiceDefinition.env, which mixes
+  // secrets and ordinary variables) — so every value must be a ${secret:NAME} reference, not just
+  // ones whose key name happens to look secret-shaped.
+  for (const [key, value] of Object.entries(profile.credentials ?? {})) {
+    if (!isSecretReferenceValue(value)) {
+      errors.push({
+        path: `credentials.${key}`,
+        message: `"${key}" must be a \${secret:NAME} reference, never a literal credential value.`
+      });
+    }
   }
 
   const rollbackKinds: DeploymentRollbackPolicy['kind'][] = ['keep-previous-artifact', 'none'];
