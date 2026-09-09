@@ -7,6 +7,7 @@ import {
   commitEvidenceSource,
   createEvidenceBundle,
   evidenceBundleId,
+  redactEvidenceContent,
   unknownEvidenceSource,
   withEvidenceEntry,
   writeEvidenceBundle,
@@ -64,13 +65,20 @@ export async function runWorkflowCheck(
   // Cancellation and a timeout both mean the check *did* run — whatever it
   // emitted before being stopped is genuine evidence, not a missing capture.
   const spawnFailed = result.code === null && !result.timedOut && !context.signal?.aborted;
+  // Redact before this becomes evidence at all — before storage, and before
+  // the tail below can land raw in a run's own error text. A check's output
+  // can echo a secret from the environment or the command line; nothing
+  // downstream (a person's screen today, a diagnosis agent's prompt once
+  // FX-BE-052 lands) should see it unredacted.
+  const { content: redactedOutput, redacted } = redactEvidenceContent(result.output);
   const { entry, content } = captureEvidenceEntry({
     bundleId: evidenceBundleId(key),
     kind: 'log',
     label: 'combined',
     capturedAt,
-    content: spawnFailed ? undefined : result.output,
-    missingReason: spawnFailed ? (result.error ?? `Could not start ${node.command}.`) : undefined
+    content: spawnFailed ? undefined : redactedOutput,
+    missingReason: spawnFailed ? (result.error ?? `Could not start ${node.command}.`) : undefined,
+    redacted: spawnFailed ? false : redacted
   });
 
   const source = await resolveEvidenceSource(cwd);
@@ -119,7 +127,7 @@ export async function runWorkflowCheck(
     exitCode: result.code ?? undefined,
     // The tail is what a person needs to act; the whole log is in the artifact.
     error: `${node.command} exited ${result.code ?? 'without a code'}${
-      result.output.trim() ? `:\n${tail(result.output)}` : '.'
+      redactedOutput.trim() ? `:\n${tail(redactedOutput)}` : '.'
     }${persistNote}`,
     artifacts
   };

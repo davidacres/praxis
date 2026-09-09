@@ -201,3 +201,21 @@ test('a check with no command fails without spawning anything', async () => {
     assert.match(outcome.error ?? '', /no command/);
   });
 });
+
+test('a secret echoed by a check is redacted before it becomes evidence, on disk and in the error text', async () => {
+  await withTempDirs(async (cwd, evidenceRoot) => {
+    const node = check("console.error('API_KEY=sk_live_abcdef1234567890'); process.exit(1);");
+    const outcome = await runWorkflowCheck(node, runContext(node, cwd), undefined, evidenceRoot);
+
+    assert.equal(outcome.status, 'failed');
+    assert.doesNotMatch(outcome.error ?? '', /sk_live_abcdef1234567890/);
+    assert.match(outcome.error ?? '', /API_KEY=\[REDACTED\]/);
+
+    const stored = await readFile(outcome.artifacts![0].path!, 'utf8');
+    assert.doesNotMatch(stored, /sk_live_abcdef1234567890/);
+    assert.match(stored, /API_KEY=\[REDACTED\]/);
+
+    const { bundle } = await readEvidenceBundle(evidenceRoot, { projectId: 'proj-1', runId: 'run-1', nodeId: node.id, attempt: 1 });
+    assert.equal(bundle?.entries[0].redacted, true);
+  });
+});
