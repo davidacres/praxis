@@ -35,6 +35,19 @@ const GATE_CHIP: Record<string, string> = {
   missing: 'chip-danger'
 };
 
+/**
+ * A deployment stage's own status line, distinguishing "deploying" from
+ * "verifying" instead of the generic outcome word every other stage shows —
+ * a renderer-local mirror of core's `deploymentNodeDisplayPhase` (the
+ * renderer may import only types from `@praxis/core` at runtime). Returns
+ * `undefined` for a settled or not-yet-started stage, where the outcome word
+ * already says everything there is to say.
+ */
+function deploymentPhaseLabel(stage: Pick<WorkflowRunSummary['stages'][number], 'type' | 'outcome' | 'phase'>): string | undefined {
+  if (stage.type !== 'deployment' || stage.outcome !== 'running') return undefined;
+  return stage.phase === 'verifying' ? 'Verifying' : 'Deploying';
+}
+
 export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
   /** For resolving the project's own board connection — see `issueOptions` below. */
@@ -447,7 +460,7 @@ export function WorkflowRunMonitor({
             <h2>{stage.name}</h2>
             <p className="rail-sub">
               {stage.type}
-              {stage.gate ? ` · ${stage.gate} gate` : ''} · {stage.outcome}
+              {stage.gate ? ` · ${stage.gate} gate` : ''} · {deploymentPhaseLabel(stage) ?? stage.outcome}
               {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
             </p>
 

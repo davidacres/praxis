@@ -27,7 +27,7 @@ function freshId(prefix: string): string {
 }
 
 const producesOutputs = (node: WorkflowNode): node is Extract<WorkflowNode, { outputs: WorkflowArtifactContract[] }> =>
-  node.type === 'agent-task' || node.type === 'check';
+  node.type === 'agent-task' || node.type === 'check' || node.type === 'deployment';
 
 export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): WorkflowNode {
   const base = { id: freshId(type), x: at.x, y: at.y, inputs: [] as string[] };
@@ -44,6 +44,8 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
       };
     case 'check':
       return { ...base, type: 'check', name: 'Check', command: '', successExitCodes: [0], outputs: [] };
+    case 'deployment':
+      return { ...base, type: 'deployment', name: 'Deployment', deploymentProfileId: '', outputs: [] };
     case 'approval':
       return { ...base, type: 'approval', name: 'Approval', prompt: '', requiredGates: [], allowBypass: false };
     case 'join':

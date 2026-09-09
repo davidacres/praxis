@@ -163,6 +163,31 @@ export interface WorkflowCheckNode extends WorkflowNodeBase {
   maxAttempts?: number;
 }
 
+/**
+ * A stage that ships a previously built artifact through a `DeploymentProfile`
+ * (`projects/deploymentProfile`), resolved by id the same way `WorkflowAgentRef`
+ * resolves an agent — at run time against the project's store, never embedded,
+ * so revoking or editing a profile takes effect immediately.
+ *
+ * The engine settles this node through the same `node-started`/`node-succeeded`/
+ * `node-failed` commands every other node uses; it does not itself dispatch a
+ * deployment or know what `DeploymentRun` is. What it adds is a `phase` a
+ * caller may report mid-attempt via `node-progress` (`WorkflowRunCommand`) —
+ * `'deploying'` then `'verifying'` — so the monitor can show those as distinct
+ * states instead of one undifferentiated "running", without the run engine
+ * itself needing to know deployment has two halves.
+ */
+export interface WorkflowDeploymentNode extends WorkflowNodeBase {
+  type: 'deployment';
+  /** `DeploymentProfile.id`, resolved against the project's deployment profile store. */
+  deploymentProfileId: string;
+  outputs: WorkflowArtifactContract[];
+  /** Set when this stage is the evidence behind a policy gate — a passed health check is deterministic evidence, same standing as a check node. */
+  satisfiesGate?: WorkflowGateKind;
+  timeoutMs?: number;
+  maxAttempts?: number;
+}
+
 /** A human decision. Always terminal for its branch until someone acts. */
 export interface WorkflowApprovalNode extends WorkflowNodeBase {
   type: 'approval';
@@ -193,6 +218,7 @@ export interface WorkflowJoinNode extends WorkflowNodeBase {
 export type WorkflowNode =
   | WorkflowAgentTaskNode
   | WorkflowCheckNode
+  | WorkflowDeploymentNode
   | WorkflowApprovalNode
   | WorkflowJoinNode;
 
@@ -341,6 +367,10 @@ export function isCheckNode(node: WorkflowNode): node is WorkflowCheckNode {
   return node.type === 'check';
 }
 
+export function isDeploymentNode(node: WorkflowNode): node is WorkflowDeploymentNode {
+  return node.type === 'deployment';
+}
+
 export function isApprovalNode(node: WorkflowNode): node is WorkflowApprovalNode {
   return node.type === 'approval';
 }
@@ -351,12 +381,12 @@ export function isJoinNode(node: WorkflowNode): node is WorkflowJoinNode {
 
 /** Nodes that declare artifact outputs. Approval and join stages produce none. */
 export function nodeOutputs(node: WorkflowNode): WorkflowArtifactContract[] {
-  return isAgentTaskNode(node) || isCheckNode(node) ? node.outputs : [];
+  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.outputs : [];
 }
 
 /** The gate a node stands behind, when it stands behind one. */
 export function nodeGate(node: WorkflowNode): WorkflowGateKind | undefined {
-  return isAgentTaskNode(node) || isCheckNode(node) ? node.satisfiesGate : undefined;
+  return isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.satisfiesGate : undefined;
 }
 
 /**
@@ -367,5 +397,7 @@ export function nodeGate(node: WorkflowNode): WorkflowGateKind | undefined {
 export function nodeMutatesWorktree(node: WorkflowNode): boolean {
   if (isAgentTaskNode(node)) return node.mutatesWorktree;
   if (isCheckNode(node)) return node.mutatesWorktree === true;
+  // A deployment stage ships an already-built artifact; it never touches the
+  // implementation worktree, so — like approval and join — it always fans out.
   return false;
 }
