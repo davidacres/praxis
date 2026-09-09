@@ -132,3 +132,4 @@ export * from './ui/markdownToHtml';
 export * from './host/mobileProtocol';
 export * from './host/mobileExecutionBoundary';
 export * from './host/mobileCommandLedger';
+export * from './host/mobileAccessPolicy';
