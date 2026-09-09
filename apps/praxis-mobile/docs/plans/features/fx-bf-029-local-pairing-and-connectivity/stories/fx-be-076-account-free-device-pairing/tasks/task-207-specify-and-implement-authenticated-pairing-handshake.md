@@ -2,7 +2,7 @@
 type: Task
 id: TASK-207
 title: "Specify and implement authenticated pairing handshake"
-status: planned
+status: complete
 story: FX-BE-076
 updated: 2026-09-09
 dependencies: [FX-BE-075]
@@ -36,7 +36,17 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented the transport-neutral local pairing handshake contract.
+
+- Source: packages/core/src/host/mobilePairingHandshake.ts
+- Tests: packages/core/src/host/mobilePairingHandshake.test.ts
+- Public export: packages/core/src/index.ts
+- Pairing binds host identity, device public key, project scope, proof verification, desktop confirmation, expiry, and single-use token consumption.
+- Expired, replayed, substituted-host, invalid-proof, and unconfirmed requests are rejected.
+- Verification: deterministic handshake tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: platform cryptographic verifier and QR/mobile UI adapters remain integration work; no reusable secret or mock-auth path is introduced.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
