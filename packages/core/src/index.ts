@@ -137,3 +137,4 @@ export * from './host/mobileConnectionLifecycle';
 export * from './host/mobileAccessAdministration';
 export * from './host/mobilePairingHandshake';
 export * from './host/mobileTrustStore';
+export * from './host/mobileHostDiscovery';
