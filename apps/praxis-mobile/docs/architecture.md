@@ -71,3 +71,10 @@ Source reference: [Praxis baseline](https://github.com/davidacres/praxis/tree/59
 ## Local-first priority (2026-09-09)
 
 GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
+
+
+## ADR: mobile packaging and build boundary
+
+Decision: use a React DOM renderer with thin native platform adapters for QR scanning, local discovery, secure storage, browser sign-in, and push notifications. Keep `main` platform-owned and `renderer` UI-owned; mobile imports only versioned browser-safe contracts and never Electron or Node desktop modules.
+
+The current monorepo layout is an interim arrangement. The mobile folder is intentionally portable so it can move to its own repository without changing the protocol boundary. iOS/Android distribution and signing remain a later feasibility spike. Local LAN continuation and execution do not require GenericSystem, Roleover, Azure, or internet access.
