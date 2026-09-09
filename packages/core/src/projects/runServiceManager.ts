@@ -7,19 +7,20 @@
  * they `dependsOn` is ready — a service whose dependency failed is marked
  * failed in turn and never spawned at all.
  *
- * Process termination reuses `workflowCheckProcess.ts`'s cross-platform
- * "kill the whole tree, not just the leader" approach: `detached: true` on
- * POSIX makes each child its own process group leader, torn down with
- * `process.kill(-pid, …)`; Windows has no process groups, so `taskkill /T`
- * walks the tree instead. Only a pid this instance itself spawned is ever
- * touched — there is no code path that accepts or guesses at a foreign pid.
+ * Process termination uses `host/processTree.ts`'s shared "kill the whole
+ * tree, not just the leader" helper: `detached: true` on POSIX makes each
+ * child its own process group leader, torn down with `process.kill(-pid, …)`;
+ * Windows has no process groups, so `taskkill /T` walks the tree instead.
+ * Only a pid this instance itself spawned is ever touched — there is no code
+ * path that accepts or guesses at a foreign pid.
  */
 
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import * as http from 'node:http';
 import * as net from 'node:net';
 import * as path from 'node:path';
+import { killProcessTree } from '../host/processTree';
 import { validateRunProfile, type RunProfile, type RunServiceDefinition } from './runProfile';
 
 export type RunServiceState = 'pending' | 'starting' | 'ready' | 'failed' | 'stopping' | 'stopped';
@@ -258,7 +259,7 @@ export class RunServiceManager extends EventEmitter {
 
         timeoutHandle = setTimeout(() => {
           finishFailed(`Readiness timed out after ${readinessTimeoutMs}ms.`);
-          void killTree(child, false);
+          void killProcessTree(child, false);
         }, readinessTimeoutMs);
 
         const probe = definition.readinessProbe;
@@ -296,8 +297,8 @@ export class RunServiceManager extends EventEmitter {
         resolve();
       };
       child.once('exit', finish);
-      void killTree(child, false);
-      const forceTimer = setTimeout(() => void killTree(child, true), 3_000);
+      void killProcessTree(child, false);
+      const forceTimer = setTimeout(() => void killProcessTree(child, true), 3_000);
     });
     managed.child = undefined;
     this.setStatus(managed, { state: 'stopped' });
@@ -367,22 +368,3 @@ function checkHttp(port: number, probePath: string, expectedStatus?: number): Pr
   });
 }
 
-/** Kills the process this instance spawned, tree and all — never a pid it did not itself obtain from `spawn`. */
-function killTree(child: ChildProcess, force: boolean): Promise<void> {
-  return new Promise(resolve => {
-    if (!child.pid) {
-      resolve();
-      return;
-    }
-    if (process.platform === 'win32') {
-      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => resolve());
-      return;
-    }
-    try {
-      process.kill(-child.pid, force ? 'SIGKILL' : 'SIGTERM');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') child.kill(force ? 'SIGKILL' : 'SIGTERM');
-    }
-    resolve();
-  });
-}
