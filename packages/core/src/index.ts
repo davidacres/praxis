@@ -68,6 +68,7 @@ export * from './projects/deploymentProfile';
 export * from './projects/deploymentProfileStore';
 export * from './projects/publishManifest';
 export * from './projects/deploymentRunState';
+export * from './projects/deploymentRunStore';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';

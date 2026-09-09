@@ -77,7 +77,9 @@ export type DeploymentRunEventKind =
   | 'marked-unknown'
   | 'rollback-started'
   | 'rolled-back'
-  | 'rollback-failed';
+  | 'rollback-failed'
+  | 'external-id-recorded'
+  | 'dispatch-retried';
 
 export interface DeploymentRunEvent {
   /** `<runId>-<sequence>`; the sequence is the log length at append time. */
@@ -116,6 +118,23 @@ export interface DeploymentRun {
   artifactDigest: string;
   status: DeploymentRunStatus;
   approval?: DeploymentApproval;
+  /**
+   * 1-based dispatch attempt (TASK-154 — "attempts"). Bumped only by
+   * `retry-dispatch`, from a prior attempt's `unknown` or `failed`
+   * outcome — never by the reducer deciding on its own that a fresh
+   * attempt is warranted.
+   */
+  attempt: number;
+  /**
+   * The dispatched operation's own external identity once known (TASK-154
+   * — "external IDs when known"): a process id for the direct executor,
+   * a different identifier for a future executor. Absent until
+   * `record-external-id` fires; a run that crashes before that command
+   * ever ran has *no* external id to check on restart — see
+   * `deploymentRunReconciliation.ts`'s "lost acknowledgement" case, which
+   * exists specifically for that absence.
+   */
+  externalId?: string;
   events: DeploymentRunEvent[];
   startedAt: string;
   endedAt?: string;
@@ -140,6 +159,7 @@ export function createDeploymentRun(input: {
     artifactId: input.artifactId,
     artifactDigest: input.artifactDigest,
     status: 'prepared',
+    attempt: 1,
     events: [],
     startedAt: input.at
   };
@@ -161,7 +181,9 @@ export type DeploymentRunCommand =
   | { kind: 'mark-unknown'; at: string; reason: string }
   | { kind: 'start-rollback'; at: string }
   | { kind: 'rollback-succeeded'; at: string }
-  | { kind: 'rollback-failed'; at: string; error: string };
+  | { kind: 'rollback-failed'; at: string; error: string }
+  | { kind: 'record-external-id'; at: string; externalId: string }
+  | { kind: 'retry-dispatch'; at: string };
 
 /**
  * The one reducer. There is no blanket "settled runs absorb nothing"
@@ -240,6 +262,24 @@ export function applyDeploymentRunCommand(run: DeploymentRun, command: Deploymen
       // Rollback failing does not invent a new status — it lands back on `failed` with the
       // rollback's own error recorded, since "rolled-back" would misreport what happened.
       return settle(run, 'failed', command.at, 'rollback-failed', `Rollback failed: ${command.error}`, command.error);
+    case 'record-external-id': {
+      // Enriches the record without changing status — valid at either in-flight point, and
+      // idempotent: recording the same id twice appends no second event.
+      if (!['deploying', 'verifying'].includes(run.status)) return run;
+      if (run.externalId === command.externalId) return run;
+      return append({ ...run, externalId: command.externalId }, { at: command.at, kind: 'external-id-recorded', message: `External id recorded: ${command.externalId}` });
+    }
+    case 'retry-dispatch': {
+      // Only from a settled-but-unresolved outcome, and only with a still-attached approval —
+      // reusing the one from the original approve, since retry-dispatch never re-approves on its
+      // own. A caller re-checks `isApprovalValid` before issuing this, exactly like `start-deploying`.
+      if (!['unknown', 'failed'].includes(run.status) || !run.approval) return run;
+      const { endedAt: _endedAt, endedReason: _endedReason, externalId: _externalId, ...withoutOutcome } = run;
+      return append(
+        { ...withoutOutcome, status: 'queued', attempt: run.attempt + 1 },
+        { at: command.at, kind: 'dispatch-retried', message: `Retrying — attempt ${run.attempt + 1}.` }
+      );
+    }
   }
 }
 
