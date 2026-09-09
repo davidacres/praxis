@@ -47,7 +47,18 @@ export type WorkflowEvidenceKind = 'log' | 'test-results' | 'attachment';
 export type WorkflowEvidencePresence = 'present' | 'empty' | 'missing';
 
 /** The commit an evidence bundle was captured against, explicit when unknown. */
-export type WorkflowEvidenceSourceRef = { kind: 'commit'; sha: string } | { kind: 'unknown' };
+export type WorkflowEvidenceSourceRef =
+  | { kind: 'commit'; sha: string }
+  | {
+      kind: 'ci';
+      provider: 'github' | 'gitlab';
+      runId: string;
+      jobId?: string;
+      attempt?: number | string;
+      sha?: string;
+      url?: string;
+    }
+  | { kind: 'unknown' };
 
 export interface WorkflowEvidenceRetention {
   policy: 'default' | 'legal-hold';
@@ -104,6 +115,45 @@ export function evidenceBundleId(key: WorkflowEvidenceBundleKey): string {
 
 export function commitEvidenceSource(sha: string): WorkflowEvidenceSourceRef {
   return { kind: 'commit', sha };
+}
+
+export function ciEvidenceSource(input: {
+  provider: 'github' | 'gitlab';
+  runId: string;
+  jobId?: string;
+  attempt?: number | string;
+  sha?: string;
+  url?: string;
+}): WorkflowEvidenceSourceRef {
+  return {
+    kind: 'ci',
+    provider: input.provider,
+    runId: input.runId,
+    ...(input.jobId !== undefined ? { jobId: input.jobId } : {}),
+    ...(input.attempt !== undefined ? { attempt: input.attempt } : {}),
+    ...(input.sha !== undefined ? { sha: input.sha } : {}),
+    ...(input.url !== undefined ? { url: input.url } : {})
+  };
+}
+
+export function githubActionsEvidenceSource(input: {
+  runId: string;
+  jobId?: string;
+  attempt?: number | string;
+  sha?: string;
+  url?: string;
+}): WorkflowEvidenceSourceRef {
+  return ciEvidenceSource({ provider: 'github', ...input });
+}
+
+export function gitLabCiEvidenceSource(input: {
+  runId: string;
+  jobId?: string;
+  attempt?: number | string;
+  sha?: string;
+  url?: string;
+}): WorkflowEvidenceSourceRef {
+  return ciEvidenceSource({ provider: 'gitlab', ...input });
 }
 
 export function unknownEvidenceSource(): WorkflowEvidenceSourceRef {
@@ -261,7 +311,35 @@ function isValidSource(value: unknown): value is WorkflowEvidenceSourceRef {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
   if (candidate.kind === 'unknown') return true;
-  return candidate.kind === 'commit' && typeof candidate.sha === 'string' && /^[0-9a-f]{7,40}$/i.test(candidate.sha);
+  if (candidate.kind === 'commit') {
+    return typeof candidate.sha === 'string' && /^[0-9a-f]{7,40}$/i.test(candidate.sha);
+  }
+  if (candidate.kind !== 'ci') {
+    return false;
+  }
+
+  if (candidate.provider !== 'github' && candidate.provider !== 'gitlab') {
+    return false;
+  }
+  if (typeof candidate.runId !== 'string' || candidate.runId.trim().length === 0) {
+    return false;
+  }
+  if (candidate.jobId !== undefined && (typeof candidate.jobId !== 'string' || candidate.jobId.trim().length === 0)) {
+    return false;
+  }
+  if (candidate.attempt !== undefined && typeof candidate.attempt !== 'number' && typeof candidate.attempt !== 'string') {
+    return false;
+  }
+  if (candidate.attempt !== undefined && typeof candidate.attempt === 'string' && candidate.attempt.trim().length === 0) {
+    return false;
+  }
+  if (candidate.sha !== undefined && (typeof candidate.sha !== 'string' || !/^[0-9a-f]{7,40}$/i.test(candidate.sha))) {
+    return false;
+  }
+  if (candidate.url !== undefined && (typeof candidate.url !== 'string' || !/^https?:\/\//.test(candidate.url))) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -307,7 +385,7 @@ export function validateEvidenceBundle(bundle: WorkflowEvidenceBundle, expected?
   }
 
   if (!isValidSource(bundle.source)) {
-    issues.push({ path: 'source', message: 'source must be an explicit commit sha or { kind: "unknown" }.' });
+    issues.push({ path: 'source', message: 'source must be an explicit commit sha, a CI provenance record, or { kind: "unknown" }.' });
   }
 
   if (!isValidTimestamp(bundle.createdAt)) {
