@@ -2,9 +2,9 @@
 type: Task
 id: TASK-135
 title: "Create diagnosis sessions from evidence"
-status: planned
+status: complete
 story: FX-BE-052
-updated: 2026-09-07
+updated: 2026-09-09
 dependencies: [FX-BE-051]
 ---
 
@@ -35,4 +35,13 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+**Implemented:** The diagnosis brief and repair-session preflight are in place.
+
+- `packages/core/src/workflows/workflowStageTask.ts` adds `buildDiagnosisTaskDefinition` / `buildDiagnosisBrief` and `diagnoseSessionPreflight`, grounding the task in the retained revision, environment, command and evidence references and refusing folderless / read-only repair attempts with explicit reasons.
+- `packages/core/src/workflows/workflowStageTask.test.ts` covers the evidence-grounded brief and the folderless/read-only block cases.
+
+**Commands run:**
+
+- `node --test packages/core/src/workflows/workflowStageTask.test.ts` — passed.
+
+**Current status:** The repo-backed diagnosis brief and repair-session guard are implemented on the branch; the remaining bounded-repair and verification UI tasks in this story are still outstanding.

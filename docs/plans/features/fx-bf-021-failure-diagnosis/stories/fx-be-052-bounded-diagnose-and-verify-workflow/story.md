@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-052
 title: "Bounded diagnose and verify workflow"
-status: planned
+status: in progress
 feature: FX-BF-021
 updated: 2026-09-07
 dependencies: [FX-BE-051]
