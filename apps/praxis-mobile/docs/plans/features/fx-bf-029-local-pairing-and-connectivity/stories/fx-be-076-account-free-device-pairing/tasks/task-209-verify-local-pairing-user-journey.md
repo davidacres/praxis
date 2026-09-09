@@ -2,7 +2,7 @@
 type: Task
 id: TASK-209
 title: "Verify local pairing user journey"
-status: planned
+status: complete
 story: FX-BE-076
 updated: 2026-09-09
 dependencies: [TASK-208]
@@ -36,7 +36,13 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Added a deterministic local pairing journey guard covering token creation/consumption, confirmation, scope binding, reconnect, and revocation.
+
+- Source: apps/praxis-mobile/renderer/mobilePairingJourney.ts
+- Tests: apps/praxis-mobile/renderer/mobilePairingJourney.test.ts
+- Physical-device execution remains a follow-up runtime verification.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
