@@ -17,9 +17,9 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import * as http from 'node:http';
 import * as net from 'node:net';
 import * as path from 'node:path';
+import { checkHttpOk, checkTcpOpen } from '../host/networkProbe';
 import { killProcessTree } from '../host/processTree';
 import { validateRunProfile, type RunProfile, type RunServiceDefinition } from './runProfile';
 
@@ -341,30 +341,10 @@ function isPortAvailable(port: number): Promise<boolean> {
 }
 
 function checkTcp(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const socket = net.createConnection({ port, host: '127.0.0.1' });
-    let settled = false;
-    const done = (ok: boolean): void => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.once('connect', () => done(true));
-    socket.once('error', () => done(false));
-    socket.setTimeout(PROBE_CONNECT_TIMEOUT_MS, () => done(false));
-  });
+  return checkTcpOpen('127.0.0.1', port, PROBE_CONNECT_TIMEOUT_MS);
 }
 
 function checkHttp(port: number, probePath: string, expectedStatus?: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const request = http.get({ host: '127.0.0.1', port, path: probePath, timeout: PROBE_CONNECT_TIMEOUT_MS }, response => {
-      response.resume();
-      const status = response.statusCode ?? 0;
-      resolve(expectedStatus ? status === expectedStatus : status >= 200 && status < 300);
-    });
-    request.once('error', () => resolve(false));
-    request.once('timeout', () => request.destroy());
-  });
+  return checkHttpOk('127.0.0.1', port, probePath, expectedStatus, PROBE_CONNECT_TIMEOUT_MS);
 }
 
