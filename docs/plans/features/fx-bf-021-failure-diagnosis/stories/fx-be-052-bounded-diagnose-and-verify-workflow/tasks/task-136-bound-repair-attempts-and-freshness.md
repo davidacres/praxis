@@ -2,9 +2,9 @@
 type: Task
 id: TASK-136
 title: "Bound repair attempts and freshness"
-status: planned
+status: complete
 story: FX-BE-052
-updated: 2026-09-07
+updated: 2026-09-09
 dependencies: [TASK-135]
 ---
 
@@ -35,4 +35,7 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+- `packages/core/src/workflows/workflowRun.ts` enforces bounded retries with `canRetry()` and the per-node `maxAttempts` budget; failed work no longer reopens beyond the configured window.
+- `packages/core/src/workflows/workflowRunSummary.ts` and `packages/core/src/workflows/workflowRunSummary.test.ts` surface the stage explanation, retry action, and captured `snapshotRef` so stale green checks are not mistaken for fresh verification.
+- `packages/core/src/workflows/workflowOrchestrator.test.ts` proves cancellation stops child dispatches and queued runs do not continue after a cancellation path is taken.
+- Verified with: `npm run compile --workspace=@praxis/core && node --test packages/core/out/workflows/workflowRun.test.js packages/core/out/workflows/workflowRunSummary.test.js packages/core/out/workflows/workflowOrchestrator.test.js`

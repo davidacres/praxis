@@ -2,9 +2,9 @@
 type: Task
 id: TASK-137
 title: "Show diagnosis and verified outcomes"
-status: planned
+status: complete
 story: FX-BE-052
-updated: 2026-09-07
+updated: 2026-09-09
 dependencies: [TASK-136]
 ---
 
@@ -35,4 +35,7 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+- `packages/core/src/workflows/workflowRunSummary.ts` and `packages/core/src/workflows/workflowRunSummary.test.ts` expose stage explanations, gate state, session ids, artifacts, and the implementation snapshot ref in the run summary used by the diagnosis/verification flow.
+- `packages/core/src/workflows/workflowStageTask.ts` and `packages/core/src/workflows/workflowStageTask.test.ts` keep the verification scope on the frozen implementation snapshot rather than the live branch, so the run narrative matches the evidence that actually passed.
+- `packages/core/src/workflows/workflowGates.test.ts` verifies gate- and snapshot-driven state transitions, covering the distinction between a fresh repaired snapshot and a stale green result.
+- Verified with: `npm run compile --workspace=@praxis/core && node --test packages/core/out/workflows/workflowRunSummary.test.js packages/core/out/workflows/workflowStageTask.test.js packages/core/out/workflows/workflowGates.test.js`
