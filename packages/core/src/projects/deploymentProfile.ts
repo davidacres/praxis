@@ -47,6 +47,8 @@ export interface DirectProcessExecutorRef {
 export interface GitHubActionsExecutorRef {
   kind: 'github-actions';
   workflowFile: string;
+  /** When true, observe an already-triggered run rather than dispatch a new one (TASK-163). Requires the artifact's sourceCommit SHA to identify the run; multiple candidates require explicit selection. */
+  observeOnly?: boolean;
 }
 
 /** Schema-valid now; execution belongs to a pipeline-managed-deployment feature, not this one. */
