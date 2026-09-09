@@ -1,0 +1,46 @@
+---
+type: Feature
+id: FX-BF-028
+title: "Execution host and mobile protocol"
+status: planned
+slug: execution-host-and-protocol
+stories: [FX-BE-074, FX-BE-075]
+updated: 2026-09-09
+dependencies: []
+---
+
+# FX-BF-028: Execution host and mobile protocol
+
+**Priority:** High
+**Created:** 2026-09-09
+
+## Outcome
+
+Execution host and mobile protocol for a companion that continues existing Praxis work on a phone.
+
+## Ordered stories
+
+| Order | Ref | Outcome |
+| --- | --- | --- |
+| 1 | [FX-BE-074](stories/fx-be-074-versioned-execution-boundary/story.md) | Versioned execution boundary |
+| 2 | [FX-BE-075](stories/fx-be-075-host-lifecycle-and-access-enforcement/story.md) | Host lifecycle and access enforcement |
+
+## Implementation boundaries
+
+The desktop remains the execution authority; mobile owns presentation and transport clients. GenericSystem authenticates and Roleover authorises internet access only after their capabilities are audited. Existing local workflows and agent hosts are reused. Follow the mobile architecture and ownership map.
+
+## Close when
+
+All child outcomes are implemented and verified. Dependencies are start prerequisites; feature/story containment is not a prerequisite on the parent. No implementation is claimed by this plan.
+
+## Dependencies
+
+None.
+
+## Verification
+
+Use deterministic host/protocol/agent fixtures and disposable project directories. Run focused contract and integration checks; for UI changes build the affected app, inspect fresh captures across theme axes and phone sizes, and verify keyboard/screen-reader behaviour. Prove regression guards fail on the broken behaviour. Paid agents and real Azure infrastructure are explicit opt-ins. Never run a Praxis write path against this repository's plans.
+
+## Completion evidence
+
+Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
