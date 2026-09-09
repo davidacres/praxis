@@ -2,7 +2,7 @@
 type: Task
 id: TASK-206
 title: "Add access settings device administration and audit"
-status: planned
+status: complete
 story: FX-BE-075
 updated: 2026-09-09
 dependencies: [TASK-205]
@@ -36,7 +36,17 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented local access settings, paired-device revocation, trust evaluation, and redacted audit records.
+
+- Source: packages/core/src/host/mobileAccessAdministration.ts
+- Tests: packages/core/src/host/mobileAccessAdministration.test.ts
+- Public export: packages/core/src/index.ts
+- Device revocation is idempotent and preserves other device records; revoked/future devices are not trusted.
+- Audit details remove secret, token, password, transcript, and body fields while retaining actor, host, project, action, and outcome metadata.
+- Verification: deterministic administration and redaction tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: desktop settings UI/session-closing adapters remain integration work; normal desktop startup remains account-free.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 

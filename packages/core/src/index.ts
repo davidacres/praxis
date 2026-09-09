@@ -134,3 +134,4 @@ export * from './host/mobileExecutionBoundary';
 export * from './host/mobileCommandLedger';
 export * from './host/mobileAccessPolicy';
 export * from './host/mobileConnectionLifecycle';
+export * from './host/mobileAccessAdministration';
