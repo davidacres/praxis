@@ -2,7 +2,7 @@
 type: Task
 id: TASK-229
 title: "Implement scoped decision commands"
-status: planned
+status: complete
 story: FX-BE-083
 updated: 2026-09-09
 dependencies: [TASK-228]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented request-specific, versioned mobile decisions.
+
+- Source: apps/praxis-mobile/renderer/mobileDecisions.ts
+- Tests: apps/praxis-mobile/renderer/mobileDecisions.test.ts
+- Decisions are bound to host, project, request ID, and version; stale or substituted requests are rejected.
+- Hosted Actions remain unavailable; deterministic freshness tests were added.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
