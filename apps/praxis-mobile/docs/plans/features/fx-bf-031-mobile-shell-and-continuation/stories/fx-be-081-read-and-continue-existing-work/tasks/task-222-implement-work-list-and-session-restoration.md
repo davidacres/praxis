@@ -2,7 +2,7 @@
 type: Task
 id: TASK-222
 title: "Implement work list and session restoration"
-status: planned
+status: complete
 story: FX-BE-081
 updated: 2026-09-09
 dependencies: [FX-BE-080, FX-BE-077]
@@ -37,7 +37,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented host/project/session/work scoped restoration helpers.
+
+- Source: apps/praxis-mobile/renderer/mobileWorkSession.ts
+- Tests: apps/praxis-mobile/renderer/mobileWorkSession.test.ts
+- Cache keys include host, project, session, and work identity, preventing duplicate issue keys and stale host data from colliding.
+- Verification: deterministic scope and stale-restore tests were added; hosted Actions remain unavailable.
+- Remaining limitation: host snapshot transport and concrete loading/offline UI states remain renderer integration work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
