@@ -13,15 +13,103 @@
  * implementer's chat is reviewing an argument rather than the change.
  */
 
-import type { AgentTaskDefinition } from '../ai/agentTypes';
+import type { AgentTaskDefinition, AgentToolMode } from '../ai/agentTypes';
 import { nodeOutputs, type WorkflowAgentTaskNode, type WorkflowArtifactKind } from './workflowTypes';
 import type { StageOutcome } from './workflowOrchestrator';
 import type { WorkflowStageContext } from './workflowStageSession';
+
+export interface DiagnosisEvidenceReference {
+  label: string;
+  path?: string;
+  uri?: string;
+}
+
+export interface DiagnosisSessionEvidence {
+  revision?: string;
+  environment?: string;
+  command?: string;
+  evidenceRefs?: DiagnosisEvidenceReference[];
+  worktreePath?: string;
+  toolMode?: AgentToolMode;
+}
+
+export interface DiagnosisSessionPreflightResult {
+  ok: boolean;
+  reason?: string;
+}
 
 /** A deterministic session key per run and node, so a replay re-attaches. */
 export function stageSessionKey(runId: string, nodeId: string): string {
   return `WF-${runId.slice(0, 8).toUpperCase()}-${nodeId}`;
 }
+
+/**
+ * Builds the closed brief for a diagnosis session created from retained evidence.
+ *
+ * The task is grounded in the evidence the run actually retained rather than in
+ * pasted log content, so the agent is told exactly which revision, environment,
+ * command and evidence files it can inspect.
+ */
+export function buildDiagnosisTaskDefinition(evidence: DiagnosisSessionEvidence): AgentTaskDefinition {
+  const revision = evidence.revision?.trim() || 'unknown revision';
+  const environment = evidence.environment?.trim() || 'unknown environment';
+  const command = evidence.command?.trim() || 'No recorded command available.';
+  const refs = (evidence.evidenceRefs ?? []).filter(ref => ref.label.trim().length > 0);
+  const evidenceList = refs.length > 0
+    ? refs.map(ref => {
+        const detail = [ref.path, ref.uri].filter(Boolean).join(' | ');
+        return `- ${ref.label}${detail ? ` (${detail})` : ''}`;
+      }).join('\n')
+    : '- none recorded';
+
+  return {
+    kind: 'analysis',
+    goal: `Diagnose the failed workflow using the retained evidence for revision ${revision}.`,
+    scope: [
+      `Repository revision: ${revision}`,
+      `Environment: ${environment}`,
+      `Recorded command: ${command}`,
+      `Evidence references:\n${evidenceList}`,
+      'Use the retained evidence and repository state as the source of truth; do not re-run pasted log content as commands or invent a fresh reproduction from memory.'
+    ].join('\n\n'),
+    definitionOfDone: 'Identify the likely root cause, explain why the failure happened, name the evidence that confirms it, and state the bounded next repair step or blocker.',
+    nonGoals: [
+      'Do not start a repair without a real repository worktree and tool access.',
+      'Do not paste raw log output back into the shell as a command.'
+    ]
+  };
+}
+
+/** Guards a repair/diagnosis session against the folderless or read-only paths the app can pose. */
+export function diagnoseSessionPreflight(input: DiagnosisSessionEvidence): DiagnosisSessionPreflightResult {
+  if (input.toolMode === 'project-only') {
+    return {
+      ok: false,
+      reason: 'Repair cannot start because this project is folderless; only project-board tools are available.'
+    };
+  }
+
+  if (input.toolMode === 'read-only') {
+    return {
+      ok: false,
+      reason: 'Repair cannot start in read-only mode; the session can inspect evidence but cannot run the repository commands needed to fix it.'
+    };
+  }
+
+  if (!input.worktreePath || input.worktreePath.trim().length === 0) {
+    return {
+      ok: false,
+      reason: 'Repair cannot start because this session has no repository worktree attached; a diagnosis needs a real folder-backed project.'
+    };
+  }
+
+  return { ok: true };
+}
+
+export const buildDiagnosisBrief = buildDiagnosisTaskDefinition;
+export const createDiagnosisTaskDefinition = buildDiagnosisTaskDefinition;
+export const diagnosisPreflight = diagnoseSessionPreflight;
+export const diagnoseSessionAccess = diagnoseSessionPreflight;
 
 /**
  * Builds the task contract for a stage.

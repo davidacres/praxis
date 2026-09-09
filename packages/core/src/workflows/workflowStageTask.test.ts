@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStageTaskDefinition, stageOutcomeFromSession, stageSessionKey } from './workflowStageTask';
+import {
+  buildDiagnosisTaskDefinition,
+  buildStageTaskDefinition,
+  diagnoseSessionPreflight,
+  stageOutcomeFromSession,
+  stageSessionKey
+} from './workflowStageTask';
 import type { WorkflowStageContext } from './workflowStageSession';
 import type { WorkflowAgentTaskNode } from './workflowTypes';
 
@@ -48,6 +54,45 @@ test('a stage session key is deterministic per run and node', () => {
   assert.equal(stageSessionKey('abcdef1234567890', 'review'), 'WF-ABCDEF12-review');
   assert.equal(stageSessionKey('abcdef1234567890', 'review'), stageSessionKey('abcdef1234567890', 'review'));
   assert.notEqual(stageSessionKey('abcdef1234567890', 'qa'), stageSessionKey('abcdef1234567890', 'review'));
+});
+
+test('the diagnosis brief keeps the agent grounded in retained evidence instead of recreated logs', () => {
+  const task = buildDiagnosisTaskDefinition({
+    revision: 'abc123',
+    environment: 'ubuntu-latest',
+    command: 'npm test -- --runInBand',
+    evidenceRefs: [
+      { label: 'stdout', path: 'stdout.txt' },
+      { label: 'junit', uri: 'https://ci.example/build/123' }
+    ]
+  });
+
+  assert.equal(task.kind, 'analysis');
+  assert.match(task.goal, /revision abc123/);
+  assert.match(task.scope, /Repository revision: abc123/);
+  assert.match(task.scope, /Environment: ubuntu-latest/);
+  assert.match(task.scope, /Recorded command: npm test -- --runInBand/);
+  assert.match(task.scope, /stdout \(stdout.txt\)/);
+  assert.match(task.scope, /junit \(https:\/\/ci.example\/build\/123\)/);
+  assert.match(task.scope, /do not re-run pasted log content as commands/i);
+});
+
+test('repair sessions are blocked when the project has no folder or only read-only access', () => {
+  assert.deepEqual(diagnoseSessionPreflight({ toolMode: 'project-only' }), {
+    ok: false,
+    reason: 'Repair cannot start because this project is folderless; only project-board tools are available.'
+  });
+
+  assert.deepEqual(diagnoseSessionPreflight({ toolMode: 'read-only' }), {
+    ok: false,
+    reason: 'Repair cannot start in read-only mode; the session can inspect evidence but cannot run the repository commands needed to fix it.'
+  });
+
+  assert.deepEqual(diagnoseSessionPreflight({ worktreePath: '/tmp/project', toolMode: 'full' }), { ok: true });
+  assert.deepEqual(diagnoseSessionPreflight({ toolMode: 'full' }), {
+    ok: false,
+    reason: 'Repair cannot start because this session has no repository worktree attached; a diagnosis needs a real folder-backed project.'
+  });
 });
 
 // ── Task definition ──────────────────────────────────────────────────────
