@@ -28,6 +28,7 @@ import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
 import { registerProjectIpc } from './projectIpc';
 import { registerRunProfileIpc } from './runProfileIpc';
 import { registerRunControlIpc } from './runControlIpc';
+import { registerDeploymentControlIpc } from './deploymentControlIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
@@ -262,6 +263,7 @@ void app.whenReady().then(async () => {
   registerProjectIpc();
   registerRunProfileIpc();
   registerRunControlIpc();
+  registerDeploymentControlIpc();
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();

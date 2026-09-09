@@ -73,6 +73,7 @@ export * from './projects/deploymentRunState';
 export * from './projects/deploymentRunStore';
 export * from './deployments/directProcessExecutor';
 export * from './deployments/directoryTarget';
+export * from './deployments/directDeploymentOrchestrator';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';
