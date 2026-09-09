@@ -88,7 +88,11 @@ export function normalizeDeploymentRun(value: unknown): DeploymentRun | undefine
     events: Array.isArray(raw.events) ? (raw.events as DeploymentRunEvent[]) : [],
     startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : '',
     ...(typeof raw.endedAt === 'string' ? { endedAt: raw.endedAt } : {}),
-    ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {})
+    ...(typeof raw.endedReason === 'string' ? { endedReason: raw.endedReason } : {}),
+    ...(typeof raw.issueKey === 'string' ? { issueKey: raw.issueKey } : {}),
+    ...(typeof raw.issueConnectionId === 'string' ? { issueConnectionId: raw.issueConnectionId } : {}),
+    ...(typeof raw.workflowRunId === 'string' ? { workflowRunId: raw.workflowRunId } : {}),
+    ...(typeof raw.targetUrl === 'string' ? { targetUrl: raw.targetUrl } : {})
   };
 }
 

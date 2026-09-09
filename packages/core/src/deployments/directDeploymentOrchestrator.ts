@@ -61,6 +61,11 @@ export interface PrepareDirectDeploymentInput {
   profile: DeploymentProfile;
   artifact: PublishedArtifact;
   now: () => string;
+  /** Linking context (TASK-160) — see `DeploymentRun`'s own doc for why these are opt-in and immutable once set. */
+  issueKey?: string;
+  issueConnectionId?: string;
+  workflowRunId?: string;
+  targetUrl?: string;
 }
 
 /** Creates and persists a fresh run — a no-op-safe entry point: calling it again with the same `runId` after the first call has already advanced the run past `prepared` does not reset anything, because `store.save` only ever replaces by `runId` and nothing here re-reads before writing on a first call. A caller re-preparing an already-in-flight run is a caller bug, not a state this function guards against; `runId` uniqueness is the caller's own responsibility, same as `createWorkflowRun`. */
@@ -72,7 +77,11 @@ export async function prepareDirectDeployment(input: PrepareDirectDeploymentInpu
     environment: input.profile.environment,
     artifactId: input.artifact.id,
     artifactDigest: input.artifact.digest,
-    at: input.now()
+    at: input.now(),
+    issueKey: input.issueKey,
+    issueConnectionId: input.issueConnectionId,
+    workflowRunId: input.workflowRunId,
+    targetUrl: input.targetUrl
   });
   await input.store.save(run);
   return run;

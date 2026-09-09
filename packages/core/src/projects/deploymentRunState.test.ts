@@ -391,3 +391,21 @@ test('DeploymentTargetLockRegistry: removeFromQueue drops a cancelled run from t
   const { nextRunId } = registry.release(key, 'run-1');
   assert.equal(nextRunId, 'run-3', 'run-2 was removed from the queue, so run-3 is next');
 });
+
+// ── Linking context (FX-BE-060 / TASK-160) ───────────────────────────────
+
+test('createDeploymentRun records linking context when supplied', () => {
+  const r = run({ issueKey: 'PROJ-42', issueConnectionId: 'conn-1', workflowRunId: 'wf-run-9', targetUrl: 'http://localhost:4000' });
+  assert.equal(r.issueKey, 'PROJ-42');
+  assert.equal(r.issueConnectionId, 'conn-1');
+  assert.equal(r.workflowRunId, 'wf-run-9');
+  assert.equal(r.targetUrl, 'http://localhost:4000');
+});
+
+test('createDeploymentRun omits linking context entirely when none is supplied, rather than storing empty strings', () => {
+  const r = run();
+  assert.equal('issueKey' in r, false);
+  assert.equal('issueConnectionId' in r, false);
+  assert.equal('workflowRunId' in r, false);
+  assert.equal('targetUrl' in r, false);
+});

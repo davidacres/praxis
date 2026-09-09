@@ -113,6 +113,11 @@ test('normalizeDeploymentRun falls back to safe defaults for missing optional fi
   assert.deepEqual(minimal?.events, []);
 });
 
+test('normalizeDeploymentRun round-trips linking context (FX-BE-060 / TASK-160)', () => {
+  const run = freshRun({ issueKey: 'PROJ-42', issueConnectionId: 'conn-1', workflowRunId: 'wf-run-9', targetUrl: 'http://localhost:4000' });
+  assert.deepEqual(normalizeDeploymentRun(run), run);
+});
+
 test('reconcileDeploymentRun: lost acknowledgement — no external id was ever recorded', async () => {
   const run = toDeploying();
   assert.equal(run.externalId, undefined);

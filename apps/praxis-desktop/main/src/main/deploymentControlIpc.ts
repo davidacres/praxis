@@ -55,11 +55,32 @@ export interface DirectRollbackOptions {
   excludePaths?: string[];
 }
 
+export interface PrepareDirectDeploymentContext {
+  issueKey?: string;
+  issueConnectionId?: string;
+  workflowRunId?: string;
+  targetUrl?: string;
+}
+
 export function registerDeploymentControlIpc(): void {
   ipcMain.handle(
     'deployments:prepare',
-    async (_event, _projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact): Promise<DeploymentRun> => {
-      return prepareDirectDeployment({ store: getDeploymentRunStore(), runId, profile, artifact, now: () => new Date().toISOString() });
+    async (
+      _event,
+      _projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      artifact: PublishedArtifact,
+      context: PrepareDirectDeploymentContext = {}
+    ): Promise<DeploymentRun> => {
+      return prepareDirectDeployment({
+        store: getDeploymentRunStore(),
+        runId,
+        profile,
+        artifact,
+        now: () => new Date().toISOString(),
+        ...context
+      });
     }
   );
 
