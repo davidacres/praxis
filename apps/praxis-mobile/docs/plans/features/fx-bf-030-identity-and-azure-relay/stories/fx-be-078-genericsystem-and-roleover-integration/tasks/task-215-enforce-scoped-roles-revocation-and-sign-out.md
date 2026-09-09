@@ -2,7 +2,7 @@
 type: Task
 id: TASK-215
 title: "Enforce scoped roles revocation and sign-out"
-status: planned
+status: backlog
 story: FX-BE-078
 updated: 2026-09-09
 dependencies: [TASK-214]
@@ -10,7 +10,7 @@ dependencies: [TASK-214]
 
 # TASK-215: Enforce scoped roles revocation and sign-out
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal

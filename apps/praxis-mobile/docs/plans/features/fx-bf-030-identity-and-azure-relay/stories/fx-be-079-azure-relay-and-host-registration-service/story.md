@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-079
 title: "Azure Relay and host registration service"
-status: planned
+status: backlog
 feature: FX-BF-030
 updated: 2026-09-09
 dependencies: [FX-BE-078, FX-BE-076]
@@ -10,7 +10,7 @@ dependencies: [FX-BE-078, FX-BE-076]
 
 # FX-BE-079: Azure Relay and host registration service
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Outcome

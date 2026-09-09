@@ -2,14 +2,9 @@
 
 **Status:** Planned
 **Type:** Story
-**Feature:** FX-BF-031
 
-Canonical implementation plan: [story](../../../../../plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/story.md).
+Canonical [story](../../../../../plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/story.md) owns scope, dependencies and evidence. This is a navigational mirror, not another execution item.
 
 ## Dependencies
 
 - FX-BE-074
-
-## Acceptance
-
-The canonical story and its three ordered tasks own scope, acceptance and verification. This mirror is not a second execution item; open docs/plans as the board source.

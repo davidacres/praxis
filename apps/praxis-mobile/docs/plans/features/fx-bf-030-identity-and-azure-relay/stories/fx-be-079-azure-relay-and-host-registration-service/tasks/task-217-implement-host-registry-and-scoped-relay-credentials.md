@@ -2,7 +2,7 @@
 type: Task
 id: TASK-217
 title: "Implement host registry and scoped relay credentials"
-status: planned
+status: backlog
 story: FX-BE-079
 updated: 2026-09-09
 dependencies: [TASK-216]
@@ -10,7 +10,7 @@ dependencies: [TASK-216]
 
 # TASK-217: Implement host registry and scoped relay credentials
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal

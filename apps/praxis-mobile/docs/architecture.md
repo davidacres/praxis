@@ -67,3 +67,7 @@ Cloud push is later and opt-in; use opaque references and fetch current state af
 FX-BE-073 in the desktop roadmap evaluates a future shared executor. Reuse compatible trust/capability concepts, but it is not a hard dependency: this initiative controls an already-running desktop and does not depend on completing the deployment/debugging roadmap. Avoid duplicating the executor implementation or changing its backlog status.
 
 Source reference: [Praxis baseline](https://github.com/davidacres/praxis/tree/592c59b9c83e02863680779ae7221ad4b8812530). Technical Azure assumptions must be rechecked during the spike against [Azure Relay documentation](https://learn.microsoft.com/en-us/azure/azure-relay/relay-what-is-it).
+
+## Local-first priority (2026-09-09)
+
+GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.

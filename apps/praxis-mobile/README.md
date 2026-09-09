@@ -29,3 +29,7 @@ Open this folder as a separate folder-backed Praxis project (key PRAXISMOBILE); 
 ## Access contract
 
 Desktop sign-in is optional. LAN mobile access uses account-free pairing. Internet access requires desktop and mobile sign-in, GenericSystem authentication, Roleover authorisation and the proposed Azure Relay path. No VPN or Tailscale dependency. Signing out closes remote access, not local work.
+
+## Local-first priority (2026-09-09)
+
+GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.

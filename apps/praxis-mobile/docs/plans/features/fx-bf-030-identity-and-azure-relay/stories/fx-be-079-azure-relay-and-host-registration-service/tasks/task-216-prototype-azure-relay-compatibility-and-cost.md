@@ -2,7 +2,7 @@
 type: Task
 id: TASK-216
 title: "Prototype Azure Relay compatibility and cost"
-status: planned
+status: backlog
 story: FX-BE-079
 updated: 2026-09-09
 dependencies: [FX-BE-078, FX-BE-076]
@@ -10,7 +10,7 @@ dependencies: [FX-BE-078, FX-BE-076]
 
 # TASK-216: Prototype Azure Relay compatibility and cost
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal

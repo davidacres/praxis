@@ -2,15 +2,15 @@
 type: Task
 id: TASK-232
 title: "Add opt-in attention notifications"
-status: planned
-story: FX-BE-084
+status: backlog
+story: FX-BE-086
 updated: 2026-09-09
-dependencies: [TASK-231]
+dependencies: [FX-BE-079, FX-BE-085]
 ---
 
 # TASK-232: Add opt-in attention notifications
 
-**Priority:** High
+**Priority:** Low
 **Created:** 2026-09-09
 
 ## Goal
@@ -28,7 +28,8 @@ Mobile main lifecycle/push adapters, renderer connection state and connection AP
 
 ## Dependencies
 
-- TASK-231
+- FX-BE-079
+- FX-BE-085
 
 ## Verification
 
