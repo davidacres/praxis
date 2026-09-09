@@ -31,7 +31,8 @@ import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
 import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
-import type { DeploymentProfile, PublishedArtifact } from '../projects/deploymentProfile';
+import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '../projects/deploymentProfile';
+import type { CredentialBindingStatus } from '../projects/deploymentProfileStore';
 import type { DeploymentRun } from '../projects/deploymentRunState';
 import type { PublishManifest } from '../projects/publishManifest';
 import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
@@ -821,6 +822,20 @@ export interface PraxisIpc {
  * artifact to act on is FX-BE-060's UI concern, not this surface's.
  */
 export interface DeploymentsIpc {
+  // ── Profiles (TASK-151/159) ──────────────────────────────────────────
+  /** Every profile saved for a project. */
+  listProfiles(projectId: string): Promise<DeploymentProfile[]>;
+  getProfile(projectId: string, profileId: string): Promise<{ profile?: DeploymentProfile; issues: DeploymentProfileIssue[] }>;
+  /** Rejects an invalid profile with its errors rather than persisting it. */
+  saveProfile(projectId: string, profile: DeploymentProfile): Promise<DeploymentProfile>;
+  /** Live validation for the editor — no persistence. */
+  validateProfile(profile: DeploymentProfile): Promise<{ valid: boolean; errors: DeploymentProfileIssue[] }>;
+  /** "Can this build, right now, actually run this" — unsupported executor/target kinds, distinct from a structural error. */
+  preflightCapabilities(profile: DeploymentProfile): Promise<DeploymentProfileIssue[]>;
+  /** Whether each credential the profile names is currently bound in the local secret store — never the credential's value. */
+  evaluateCredentials(profile: DeploymentProfile): Promise<{ statuses: CredentialBindingStatus[]; allBound: boolean }>;
+
+  // ── Runs (TASK-158) ──────────────────────────────────────────────────
   /** Creates and persists a fresh run in `prepared` status. */
   prepare(projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact): Promise<DeploymentRun>;
   /** Requests then grants approval; idempotent — re-approving an already-queued run changes nothing. */

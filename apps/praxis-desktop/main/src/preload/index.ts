@@ -35,7 +35,8 @@ import type { BrowserDiagnosticsBundle } from '@praxis/core';
 import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
-import type { DeploymentProfile, PublishedArtifact } from '@praxis/core';
+import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '@praxis/core';
+import type { CredentialBindingStatus } from '@praxis/core';
 import type { DeploymentRun } from '@praxis/core';
 import type { PublishManifest } from '@praxis/core';
 import type { DeploymentHealthResult } from '@praxis/core';
@@ -493,6 +494,23 @@ const praxis: PraxisIpc = {
     captureDiagnostics: () => ipcRenderer.invoke('preview:captureDiagnostics') as Promise<BrowserDiagnosticsBundle | undefined>
   },
   deployments: {
+    listProfiles: (projectId: string) => ipcRenderer.invoke('deployments:listProfiles', projectId) as Promise<DeploymentProfile[]>,
+    getProfile: (projectId: string, profileId: string) =>
+      ipcRenderer.invoke('deployments:getProfile', projectId, profileId) as Promise<{
+        profile?: DeploymentProfile;
+        issues: DeploymentProfileIssue[];
+      }>,
+    saveProfile: (projectId: string, profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:saveProfile', projectId, profile) as Promise<DeploymentProfile>,
+    validateProfile: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:validateProfile', profile) as Promise<{ valid: boolean; errors: DeploymentProfileIssue[] }>,
+    preflightCapabilities: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:preflightCapabilities', profile) as Promise<DeploymentProfileIssue[]>,
+    evaluateCredentials: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:evaluateCredentials', profile) as Promise<{
+        statuses: CredentialBindingStatus[];
+        allBound: boolean;
+      }>,
     prepare: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact) =>
       ipcRenderer.invoke('deployments:prepare', projectId, runId, profile, artifact) as Promise<DeploymentRun>,
     approve: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact, actor: string) =>
