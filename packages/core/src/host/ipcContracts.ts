@@ -34,6 +34,7 @@ import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '..
 import type { ReconciledService } from '../projects/runReconciliation';
 import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
 import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
+import type { PreviewVerificationCheck, PreviewVerificationOutcome } from '../projects/previewVerification';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type {
   ActiveAppearanceAddons,
@@ -332,6 +333,24 @@ export interface RunsIpc {
   onStatusChanged(listener: (projectId: string, status: RunServiceStatus) => void): () => void;
   /** Fires on every stdout/stderr line from any project's active run. */
   onLog(listener: (projectId: string, line: RunLogLine) => void): () => void;
+  /**
+   * Runs one preview verification check against a ready service (FX-BE-056
+   * / TASK-149): opens its granted origin, runs the check's interactions,
+   * and evaluates its assertions. Rejects if the service has no active
+   * preview grant (its run must be started and the service `ready` first).
+   */
+  runVerification(projectId: string, check: PreviewVerificationCheck): Promise<PreviewVerificationOutcome>;
+  /**
+   * Starts a diagnosis session from a failed verification outcome. Refuses
+   * (without opening a session) when `outcome.passed` is true or the
+   * project has no working folder — the same "never open a session with
+   * nothing to work from" discipline as `WorkflowsIpc.startDiagnosis`.
+   */
+  diagnoseVerificationFailure(
+    projectId: string,
+    check: PreviewVerificationCheck,
+    outcome: PreviewVerificationOutcome
+  ): Promise<CreateDiagnosisSessionResult>;
 }
 
 /**

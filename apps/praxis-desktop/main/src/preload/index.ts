@@ -32,6 +32,7 @@ import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReferenc
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
 import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
 import type { BrowserDiagnosticsBundle } from '@praxis/core';
+import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
 
@@ -474,7 +475,11 @@ const praxis: PraxisIpc = {
       const handler = (_event: unknown, projectId: string, line: RunLogLine) => listener(projectId, line);
       ipcRenderer.on('runs:log', handler);
       return () => ipcRenderer.off('runs:log', handler);
-    }
+    },
+    runVerification: (projectId: string, check: PreviewVerificationCheck) =>
+      ipcRenderer.invoke('runs:runVerification', projectId, check) as Promise<PreviewVerificationOutcome>,
+    diagnoseVerificationFailure: (projectId: string, check: PreviewVerificationCheck, outcome: PreviewVerificationOutcome) =>
+      ipcRenderer.invoke('runs:diagnoseVerificationFailure', projectId, check, outcome) as Promise<CreateDiagnosisSessionResult>
   },
   preview: {
     attach: () => ipcRenderer.invoke('preview:attach'),
