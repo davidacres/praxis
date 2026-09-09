@@ -107,6 +107,24 @@ const PRIVATE_IPV4 =
   /^(127\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
 /**
+ * Whether `host` (already lower-cased) names the loopback interface or a
+ * private (RFC 1918 / link-local) IPv4 range — the vocabulary both the
+ * AI-driven in-app browser (this file) and the Run preview origin policy
+ * (`projects/previewAccess.ts`) gate on, kept in one place rather than two
+ * copies of the same regex drifting apart.
+ */
+export function isPrivateOrLoopbackHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '');
+  return (
+    normalized === 'localhost' ||
+    normalized === '0.0.0.0' ||
+    normalized === '::1' ||
+    normalized.endsWith('.localhost') ||
+    PRIVATE_IPV4.test(normalized)
+  );
+}
+
+/**
  * Returns a rejection reason if this URL must never be opened, or `undefined` if
  * it is at least shaped acceptably (host-allow-list is checked separately). Keeps
  * an LLM from pointing the embedded browser at the loopback interface, the
@@ -126,13 +144,7 @@ export function blockedBrowserUrlReason(
     return `Unsupported scheme "${url.protocol}" — only http and https are allowed.`;
   }
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  const isPrivate =
-    host === 'localhost' ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host.endsWith('.localhost') ||
-    PRIVATE_IPV4.test(host);
-  if (isPrivate && !options.allowPrivateHosts) {
+  if (isPrivateOrLoopbackHost(host) && !options.allowPrivateHosts) {
     return `Refusing to open a loopback / private-network host (${host}).`;
   }
   return undefined;

@@ -19,6 +19,7 @@ export {
   browserHostAllowed,
   createBrowserToolExtension,
   executeBrowserTool,
+  isPrivateOrLoopbackHost,
   type BrowserBridge,
   type BrowserElement,
   type BrowserPageState,
