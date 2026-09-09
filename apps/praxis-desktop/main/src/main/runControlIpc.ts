@@ -1,5 +1,13 @@
 import { BrowserWindow, ipcMain } from 'electron';
-import { readRunProfile, type BrowserDiagnosticsBundle, type ReconciledService, type RunServiceStatus } from '@praxis/core';
+import {
+  readRunProfile,
+  type BrowserDiagnosticsBundle,
+  type CreateDiagnosisSessionResult,
+  type PreviewVerificationCheck,
+  type PreviewVerificationOutcome,
+  type ReconciledService,
+  type RunServiceStatus
+} from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
 import {
   previewAccess,
@@ -12,6 +20,7 @@ import {
   stopProjectRunService
 } from './runManagerInstance';
 import { getPreviewBrowser } from './previewBrowser';
+import { startDiagnosisFromVerificationFailure } from './previewVerificationSession';
 
 /** Run lifecycle + preview IPC (FX-BE-055 / TASK-146). */
 
@@ -79,4 +88,18 @@ export function registerRunControlIpc(): void {
   ipcMain.handle('preview:captureDiagnostics', async (): Promise<BrowserDiagnosticsBundle | undefined> => {
     return getPreviewBrowser().captureDiagnostics();
   });
+
+  ipcMain.handle(
+    'runs:runVerification',
+    async (_event, projectId: string, check: PreviewVerificationCheck): Promise<PreviewVerificationOutcome> => {
+      return getPreviewBrowser().runVerification({ projectId, check });
+    }
+  );
+
+  ipcMain.handle(
+    'runs:diagnoseVerificationFailure',
+    async (_event, projectId: string, check: PreviewVerificationCheck, outcome: PreviewVerificationOutcome): Promise<CreateDiagnosisSessionResult> => {
+      return startDiagnosisFromVerificationFailure({ check, outcome, workingDirectory: projectFolder(projectId) });
+    }
+  );
 }

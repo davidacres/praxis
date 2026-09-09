@@ -36,8 +36,20 @@ export function diagnosisSessionKey(key: WorkflowEvidenceBundleKey): string {
   return `diagnosis-${key.runId}-${key.nodeId}-${key.attempt}`;
 }
 
-class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
-  public constructor(private readonly issueKey: string) {}
+const DEFAULT_DEFINITION_OF_DONE = 'The command named in the brief exits with one of its declared success codes when run again.';
+
+/**
+ * Exported so a diagnosis flow whose "done" criterion isn't a repro
+ * command — e.g. `previewVerificationSession.ts`'s "the check's assertions
+ * all pass when run again" — can reuse the real provider-dispatch logic
+ * below rather than duplicating the three-way CLI-agent/Copilot/gateway
+ * branching.
+ */
+export class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
+  public constructor(
+    private readonly issueKey: string,
+    private readonly definitionOfDone: string = DEFAULT_DEFINITION_OF_DONE
+  ) {}
 
   public async start(prompt: string, workingDirectory: string): Promise<string> {
     const settings = getSettingsBackend().read();
@@ -58,7 +70,7 @@ class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
       kind: 'general',
       goal: prompt,
       scope: 'The working tree at the given working directory only.',
-      definitionOfDone: 'The command named in the brief exits with one of its declared success codes when run again.'
+      definitionOfDone: this.definitionOfDone
     };
 
     if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {

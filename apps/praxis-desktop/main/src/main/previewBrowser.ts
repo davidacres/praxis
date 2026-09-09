@@ -1,12 +1,18 @@
 import { BrowserWindow, WebContentsView, session as electronSession } from 'electron';
 import {
   BrowserDiagnosticsRecorder,
+  evaluateAssertions,
   previewAccessBlockedReason,
+  screenshotsMatch,
+  summarizeOutcome,
   writeBrowserDiagnosticsBundle,
   writeScreenshot,
   type BrowserDiagnosticsBundle,
   type BrowserDiagnosticsBundleKey,
-  type ConsoleLevel
+  type ConsoleLevel,
+  type PreviewVerificationCheck,
+  type PreviewVerificationOutcome,
+  type PreviewVerificationSnapshot
 } from '@praxis/core';
 import { previewAccess } from './runManagerInstance';
 import { browserDiagnosticsStorageRoot } from './browserDiagnosticsStorage';
@@ -44,6 +50,8 @@ function mapConsoleLevel(level: number): ConsoleLevel {
 }
 
 const PARTITION = 'persist:praxis-preview';
+const MAX_TEXT = 12_000;
+const SETTLE_MS = 350;
 
 class PreviewBrowserManager {
   private view: WebContentsView | undefined;
@@ -179,6 +187,77 @@ class PreviewBrowserManager {
     return this.view && !this.view.webContents.isDestroyed() ? this.view.webContents.getURL() : undefined;
   }
 
+  private async waitForLoad(): Promise<void> {
+    if (!this.wc.isLoadingMainFrame()) return;
+    await new Promise<void>(resolve => {
+      const done = () => {
+        this.wc.off('did-stop-loading', done);
+        this.wc.off('did-navigate', done);
+        resolve();
+      };
+      this.wc.once('did-stop-loading', done);
+      this.wc.once('did-navigate', done);
+      setTimeout(done, 15_000);
+    });
+  }
+
+  /** The main-content text of the currently loaded page — same bounded extraction `aiBrowser.ts` uses, for interaction-driven verification (TASK-149) to assert against. */
+  async pageText(): Promise<string> {
+    const text = await this.wc
+      .executeJavaScript(
+        `(() => {
+          const root = document.querySelector('main, article, [role=main]') || document.body;
+          const t = (root && root.innerText) || '';
+          const clean = t.replace(/\\n{3,}/g, '\\n\\n').trim();
+          return clean.length > ${MAX_TEXT} ? clean.slice(0, ${MAX_TEXT}) + '\\n\\n…[truncated]' : clean;
+        })()`,
+        true
+      )
+      .catch(() => '');
+    return String(text ?? '');
+  }
+
+  /** Clicks the element carrying `data-praxis-ref="<ref>"` — a preview verification check (TASK-149) is expected to know its own refs (e.g. `#submit`, `[data-testid=checkout]`) rather than discovering them via a snapshot tool, unlike the AI-driven browser. */
+  async click(ref: string): Promise<void> {
+    const ok = await this.wc.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(ref)});
+        if (!el) return false;
+        el.scrollIntoView({ block: 'center' });
+        el.click();
+        return true;
+      })()`,
+      true
+    );
+    if (!ok) throw new Error(`No element matching "${ref}".`);
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
+    await this.waitForLoad();
+  }
+
+  async type(ref: string, text: string, submit: boolean): Promise<void> {
+    const ok = await this.wc.executeJavaScript(
+      `(() => {
+        const el = document.querySelector(${JSON.stringify(ref)});
+        if (!el) return false;
+        el.focus();
+        const value = ${JSON.stringify(text)};
+        if (el.isContentEditable) { el.textContent = value; } else { el.value = value; }
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        if (${submit ? 'true' : 'false'}) {
+          const form = el.form;
+          if (form && form.requestSubmit) form.requestSubmit();
+          else el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        }
+        return true;
+      })()`,
+      true
+    );
+    if (!ok) throw new Error(`No element matching "${ref}".`);
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
+    await this.waitForLoad();
+  }
+
   /**
    * Screenshots the currently loaded page, folds it into the active
    * recorder's snapshot, persists the bundle, and returns it. `undefined`
@@ -202,6 +281,60 @@ class PreviewBrowserManager {
     const bundle = this.recorder.snapshot(capturedAt);
     await writeBrowserDiagnosticsBundle(browserDiagnosticsStorageRoot(), bundle);
     return bundle;
+  }
+
+  /**
+   * Runs one preview verification check end to end (TASK-149): opens the
+   * service's granted origin at `check.path`, runs its interactions in
+   * order, then evaluates `check.assertions` against what was actually
+   * observed (page text + everything the recorder captured during the run).
+   * A screenshot is captured and compared against `baselineScreenshot`
+   * (byte-identity only) purely as attached evidence — see
+   * `previewVerification.ts`'s module comment: it never influences
+   * `passed`, and a screenshot capture failure never fails the check either.
+   */
+  async runVerification(input: { projectId: string; check: PreviewVerificationCheck; baselineScreenshot?: Buffer }): Promise<PreviewVerificationOutcome> {
+    const grant = previewAccess.grants().find(g => g.projectId === input.projectId && g.serviceId === input.check.serviceId);
+    if (!grant) {
+      throw new Error(`No active preview grant for service "${input.check.serviceId}" — its run must be started and ready first.`);
+    }
+    const path = input.check.path.startsWith('/') ? input.check.path : `/${input.check.path}`;
+    await this.open(`${grant.origin}${path}`);
+
+    for (const interaction of input.check.interactions) {
+      if (interaction.kind === 'click') await this.click(interaction.selector);
+      else if (interaction.kind === 'type') await this.type(interaction.selector, interaction.text, interaction.submit ?? false);
+      else await new Promise(resolve => setTimeout(resolve, interaction.ms));
+    }
+
+    const bundle = this.recorder?.snapshot();
+    const snapshot: PreviewVerificationSnapshot = {
+      pageText: await this.pageText(),
+      console: (bundle?.console ?? []).map(entry => ({ level: entry.level, message: entry.message })),
+      network: (bundle?.network ?? []).map(entry => ({ url: entry.url, method: entry.method, status: entry.status, error: entry.error }))
+    };
+    const results = evaluateAssertions(input.check.assertions, snapshot);
+
+    let screenshot: PreviewVerificationOutcome['screenshot'];
+    if (this.recorder && this.recorderKey && this.view && !this.view.webContents.isDestroyed()) {
+      try {
+        const image = await this.view.webContents.capturePage();
+        const png = image.toPNG();
+        const record = await writeScreenshot(browserDiagnosticsStorageRoot(), this.recorderKey, png);
+        const baselineComparison = input.baselineScreenshot ? (screenshotsMatch(png, input.baselineScreenshot) ? 'match' : 'differs') : 'no-baseline';
+        screenshot = { path: record.path!, baselineComparison };
+      } catch {
+        // A screenshot is attached evidence, never the pass/fail signal — a capture failure here must not fail an otherwise-passing check.
+      }
+    }
+
+    return summarizeOutcome({
+      checkId: input.check.id,
+      serviceId: input.check.serviceId,
+      results,
+      capturedAt: new Date().toISOString(),
+      ...(screenshot ? { screenshot } : {})
+    });
   }
 }
 
