@@ -29,6 +29,7 @@ import type {
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
+import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
 
@@ -332,6 +333,13 @@ const praxis: PraxisIpc = {
     ,discoverImports: (folderPath: string) => ipcRenderer.invoke('projects:discoverImports', folderPath)
     ,validateImports: (rows: ProjectImportRow[]) => ipcRenderer.invoke('projects:validateImports', rows)
     ,createFromImports: (rows: ProjectImportRow[], workspaceId: string) => ipcRenderer.invoke('projects:createFromImports', rows, workspaceId)
+    ,getRunProfile: (projectId: string) =>
+      ipcRenderer.invoke('projects:getRunProfile', projectId) as Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }>
+    ,saveRunProfile: (projectId: string, profile: RunProfile) => ipcRenderer.invoke('projects:saveRunProfile', projectId, profile)
+    ,discoverRunServices: (projectId: string) =>
+      ipcRenderer.invoke('projects:discoverRunServices', projectId) as Promise<Array<ProposedRunService & { relativeDir: string }>>
+    ,validateRunProfile: (profile: RunProfile) =>
+      ipcRenderer.invoke('projects:validateRunProfile', profile) as Promise<RunProfileValidationResult>
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),

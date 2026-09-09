@@ -29,6 +29,8 @@ import type {
 } from '../ai/agentRuntime';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
+import type { ProposedRunService } from '../projects/runProfileDiscovery';
+import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type {
   ActiveAppearanceAddons,
@@ -410,6 +412,28 @@ export interface ProjectsIpc {
   validateImports(rows: ProjectImportRow[]): Promise<string | undefined>;
   /** Creates a folder-backed project per selected row and adds them to the workspace. */
   createFromImports(rows: ProjectImportRow[], workspaceId: string): Promise<ProjectRecord[]>;
+
+  /**
+   * Reads the project's `run.praxis.json` (FX-BE-054 / TASK-143). No profile
+   * yet — including a project with no working folder — is `{ issues: [] }`,
+   * not an error; a hand-edited malformed file comes back with `issues`
+   * describing why, per `readRunProfile`'s contract.
+   */
+  getRunProfile(projectId: string): Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }>;
+  /** Validates then writes the project's Run profile; rejects (no write) when invalid. */
+  saveRunProfile(projectId: string, profile: RunProfile): Promise<void>;
+  /**
+   * Runs `validateRunProfile` without writing anything — live feedback while
+   * editing. `saveRunProfile` re-validates independently before it writes;
+   * this is a convenience for the editor, not the enforcement point.
+   */
+  validateRunProfile(profile: RunProfile): Promise<RunProfileValidationResult>;
+  /**
+   * Proposes Run services from a shallow scan of the project's working
+   * folder (root plus immediate subdirectories) — reads `package.json` and
+   * `Properties/launchSettings.json` only, never writes anything.
+   */
+  discoverRunServices(projectId: string): Promise<Array<ProposedRunService & { relativeDir: string }>>;
 }
 
 /** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
