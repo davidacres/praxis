@@ -2,7 +2,7 @@
 type: Task
 id: TASK-233
 title: "Verify interruption and accessibility matrix"
-status: planned
+status: complete
 story: FX-BE-084
 updated: 2026-09-09
 dependencies: [TASK-231]
