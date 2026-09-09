@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
@@ -58,12 +58,16 @@ test('multiple typed inputs each surface under their own PRAXIS_DEPLOY_ prefixed
 
 test('a path with spaces used as cwd is honored exactly', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis deploy '));
+  // The child reports its cwd via process.cwd(), which returns the resolved
+  // real path; on macOS os.tmpdir() sits under the /var -> /private/var symlink,
+  // so compare both sides after realpath rather than against the raw mkdtemp path.
+  const realDir = await realpath(dir);
   try {
     const result = await runDirectProcessDeployment(
       nodeInput('process.stdout.write(process.cwd());', { cwd: dir })
     );
     assert.equal(result.exitCode, 0);
-    assert.equal(result.output, dir);
+    assert.equal(result.output, realDir);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
