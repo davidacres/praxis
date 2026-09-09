@@ -2,7 +2,7 @@
 type: Task
 id: TASK-212
 title: "Prove LAN-only execution without cloud dependencies"
-status: planned
+status: complete
 story: FX-BE-077
 updated: 2026-09-09
 dependencies: [TASK-211]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented a LAN-only execution guard.
+
+- Source: packages/core/src/host/mobileLanOnly.ts
+- Tests: packages/core/src/host/mobileLanOnly.test.ts
+- Direct authenticated peers are allowed; relay routes, unauthenticated peers, and forwarded-header peers are rejected.
+- Verification: deterministic local-only guard tests were added; no cloud service or hosted Actions dependency is required.
+- Remaining limitation: production socket/network integration remains platform work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 

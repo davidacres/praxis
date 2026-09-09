@@ -139,3 +139,4 @@ export * from './host/mobilePairingHandshake';
 export * from './host/mobileTrustStore';
 export * from './host/mobileHostDiscovery';
 export * from './host/mobileReconnect';
+export * from './host/mobileLanOnly';
