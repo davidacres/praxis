@@ -2,7 +2,7 @@
 type: Task
 id: TASK-204
 title: "Implement off local-only and internet access policy"
-status: planned
+status: complete
 story: FX-BE-075
 updated: 2026-09-09
 dependencies: [FX-BE-074]
@@ -36,7 +36,17 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented the transport-neutral access policy evaluator.
+
+- Source: packages/core/src/host/mobileAccessPolicy.ts
+- Tests: packages/core/src/host/mobileAccessPolicy.test.ts
+- Public export: packages/core/src/index.ts
+- Default policy is off; local-only mode rejects relay routes and untrusted forwarding headers, and applies interface/subnet allowlists.
+- Internet mode is explicit and only allows an authenticated relay route; it is not enabled by default.
+- Verification: deterministic policy tests cover disabled, local allow/deny, spoofed forwarding, relay rejection, and explicit internet mode.
+- Remaining limitation: desktop listener binding and production CIDR/socket metadata adapters remain host integration work; GenericSystem, Roleover, and Azure are not required for local delivery.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
