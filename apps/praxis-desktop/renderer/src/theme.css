@@ -57,6 +57,7 @@
      overrides. A component sets --wf-node-accent from these per node type. */
   --wf-agent: var(--accent);
   --form-check: var(--tone-workspace);
+  --wf-deployment: var(--tone-demo);
   --wf-approval: var(--warning);
   --wf-join: var(--text-tertiary);
   --lane-idle: var(--border-strong);
@@ -4789,6 +4790,213 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   align-self: flex-start;
 }
 
+/* ── Run profile editor (FX-BE-054 / TASK-143) ──────────────────────────── */
+
+.run-page .view-header { gap: var(--space-3); }
+
+.run-body {
+  padding: var(--space-4);
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.run-services {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.run-service-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-service-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-depends-list,
+.run-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.run-depends-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.run-env-row {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.run-env-row .input { flex: 1; min-width: 0; }
+
+.run-probe-editor {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.run-probe-editor .select { flex-shrink: 0; }
+.run-probe-editor .input { flex: 1; min-width: 0; }
+
+.run-discover-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-discover-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-discover-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.run-discover-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+
+/* ── Run controls (FX-BE-055 / TASK-146) ────────────────────────────────── */
+
+.run-controls {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-controls-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-reconcile-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.run-reconcile-banner .icon { color: var(--warning); flex-shrink: 0; }
+
+.run-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+}
+
+.run-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+.run-status-dot.run-status-ready { background: var(--success); }
+.run-status-dot.run-status-starting { background: var(--warning); }
+.run-status-dot.run-status-failed { background: var(--danger); }
+.run-status-dot.run-status-stopping,
+.run-status-dot.run-status-stopped { background: var(--text-tertiary); }
+
+.run-status-name { font-weight: 600; }
+.run-status-state { color: var(--text-tertiary); }
+.run-status-error { color: var(--danger); font-size: var(--text-xs); }
+
+.run-logs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+
+.run-log-tail {
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.run-preview-pane {
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.run-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.run-preview-title { font-weight: 600; }
+
+.run-preview-capture-summary {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.run-preview-surface {
+  flex: 1;
+  min-height: 0;
+}
+
 .conn-boards {
   padding: 0 var(--space-4) var(--space-5);
   max-width: 720px;
@@ -8378,8 +8586,12 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 /* Canvas node — extends the Task Designer's .designer-node with a per-kind
    left accent. The kind class sets --wf-node-accent; nothing else changes. */
 .wf-node { border-left: 3px solid var(--wf-node-accent, var(--accent)); }
-.wf-node--agent { --wf-node-accent: var(--wf-agent); }
+/* The node's class is `wf-node--${node.type}`, i.e. `agent-task`, not
+   `agent` — kept as a hyphenated compound selector rather than renamed to
+   match, so it stays unambiguous next to `wf-node--check`. */
+.wf-node--agent-task { --wf-node-accent: var(--wf-agent); }
 .wf-node--check { --wf-node-accent: var(--form-check); }
+.wf-node--deployment { --wf-node-accent: var(--wf-deployment); }
 .wf-node--approval { --wf-node-accent: var(--wf-approval); }
 .wf-node--join { --wf-node-accent: var(--wf-join); }
 .wf-node-issue { color: var(--danger); font-size: var(--text-xs); }
@@ -8629,6 +8841,39 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-stage-error { margin: 0; color: var(--danger); font-size: var(--text-sm); }
 .wf-stage-artifacts { margin: 0; padding-left: var(--space-4); font-size: var(--text-sm); color: var(--text-tertiary); }
 .inspector-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
+
+/* A stage attempt's retained log (FX-BE-051). Same box treatment as
+   session-changes-file so a read-only text pane reads consistently across
+   the app; simpler body since a log has no line-numbered gutter to give it. */
+.wf-evidence {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.wf-evidence > .placeholder-text,
+.wf-evidence > .wf-stage-error { display: block; padding: var(--space-2); }
+.wf-evidence-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  background: var(--bg-elevated);
+}
+.wf-evidence-body {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* Template library — this-project cards + template list. */
 .wf-library { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); overflow-y: auto; }

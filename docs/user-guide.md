@@ -304,6 +304,33 @@ The extension includes:
 
 Migration docs live under [docs/migrations](migrations/live-folder-to-jira-gitlab-github.md) and [docs/migrations/removed-jira-polling.md](migrations/removed-jira-polling.md).
 
+### Deployments (desktop, direct-process executor)
+
+A project's **Deployments** sidebar entry manages target-independent
+deployment profiles and their run history, separate from a project's Run
+profile (which is for local diagnostic services, not persistent installs).
+
+- A profile pairs an **executor** (currently `direct-process`; a GitHub
+  Actions or GitLab CI executor is schema-valid but not yet runnable) with a
+  **target** — a local process (a reviewed deployment script) or a directory
+  (a persistent local web root), chosen independently of each other.
+- Publish a built output folder as an immutable, digest-identified artifact,
+  then prepare, approve, and deploy a run against a profile. A directory
+  target's deploy is staged before anything live is touched, backs up what
+  it replaces, and can be explicitly rolled back afterward; a configured
+  post-install health check that fails settles the run as failed without
+  auto-restoring.
+- **Promote** the same published artifact to a different profile (e.g. test
+  to production) directly from its history entry — the two resulting runs
+  share the artifact's digest but each gets its own approval and health
+  evidence, since approval is bound to the specific profile version and
+  environment it was granted against.
+- Credentials are referenced by name only (`${secret:NAME}`) and bound
+  per-machine in the local secret store; a credential bound on one machine
+  will show as missing on another, by design.
+- IIS targets and pipeline-managed (GitHub Actions/GitLab CI) executors are
+  schema-valid today but not yet implemented.
+
 ## Command reference
 
 This section is a grouped summary. The dedicated reference lives in [docs/command-reference.md](command-reference.md) and is generated from the extension manifest.

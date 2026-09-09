@@ -2,7 +2,7 @@
 type: Task
 id: TASK-140
 title: "Connect CI evidence to diagnosis"
-status: planned
+status: in-progress
 story: FX-BE-053
 updated: 2026-09-07
 dependencies: [TASK-139]
@@ -35,4 +35,46 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 
 ## Completion evidence
 
-Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+**Status: the mechanism is implemented and unit-verified; the Electron-fixture acceptance criterion
+("imports a failed CI job then reaches verified repair") needs a live agent and a live CI account, so
+it is not run here — see Remaining limitations. Left `in-progress`.**
+
+**Implemented:**
+- `packages/core/src/ai/diagnosisBrief.ts`: `DiagnosisBlockReason` gains `'revision-unavailable'`;
+  `preflightDiagnosis`/`createDiagnosisSession` accept a caller-supplied `revisionAvailable?: boolean`
+  (a `git` lookup is a host concern, kept out of core) and block with a named commit and an explicit
+  reason when it is `false` — "stop when the revision... is unavailable." `buildDiagnosisBrief`'s
+  `node` parameter is narrowed to a new `DiagnosisReproCommand` (`Pick<WorkflowCheckNode, 'command' |
+  'args' | 'successExitCodes'>`) rather than a full `WorkflowCheckNode` — a CI job on a remote runner
+  has no local `WorkflowCheckNode` of its own to point at. Backward compatible: every existing
+  `WorkflowCheckNode` still satisfies the narrower type, so TASK-135's callers are unchanged.
+- `apps/praxis-desktop/main/src/main/ciEvidenceDiagnosis.ts` (new): `isCommitAvailable(cwd, sha)` —
+  `git cat-file -e <sha>^{commit}`, **never a fetch** — pulling a ref implicitly on a project's behalf
+  would be exactly the kind of unannounced network mutation this app avoids elsewhere. Deliberately
+  a check, not a remediation; if the commit needs fetching, that's a distinct, explicit user action,
+  not something this task rushes into an automatic side effect. `startDiagnosisFromCiImport` chains
+  TASK-139's `importCiRunAsEvidence` → `writeEvidenceBundle` → `isCommitAvailable` →
+  TASK-135's `createDiagnosisSession`, so "map the imported revision... and launch the existing
+  diagnosis flow" is literally the existing flow, not a parallel one.
+- `docs/desktop-feature-parity.md`: added rows for both capabilities under "Developer workflow",
+  each marked `~` (core-only) with an explicit note on read-only credential scope
+  (`actions:read`/`contents:read` for GitHub, `read_api` for GitLab) — "document read-only credential
+  scopes."
+
+**Commands run:** `npm run test:core` — 532/532 (3 new: a commit reported unavailable blocks with the
+sha named in the message and never opens a session, `revisionAvailable` left `undefined` never blocks
+by itself, and `buildDiagnosisBrief` accepting the minimal command literal). `npm run
+test:desktop:workflows` — unaffected, 14/14. `npm run check-types` (root, all three workspaces) —
+clean.
+
+**Remaining limitations:**
+- The acceptance criterion "an Electron fixture imports a failed CI job then reaches verified repair"
+  needs a real (or scripted) agent actually fixing something and a real CI account to import from —
+  neither is exercisable in this sandbox (the same pre-existing `node-pty`/Electron gap noted on
+  TASK-134, compounded here by needing live GitHub/GitLab credentials, which this story's own
+  Verification section keeps as an explicit opt-in, not something to fabricate).
+- No caller exists yet for `startDiagnosisFromCiImport` — same picker-UI gap TASK-139 already
+  disclosed (no CI connection/credential concept in this app yet). The mechanism it would call is
+  complete and tested; the UI to reach it is not.
+- `startDiagnosisFromCiImport` assumes exactly one evidence entry per imported job (the job's whole
+  log), matching TASK-139's current shape.

@@ -29,8 +29,18 @@ import type {
 } from '@praxis/core';
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
+import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
+import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
+import type { BrowserDiagnosticsBundle } from '@praxis/core';
+import type { CreateDiagnosisSessionResult, PreviewVerificationCheck, PreviewVerificationOutcome } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
+import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '@praxis/core';
+import type { CredentialBindingStatus } from '@praxis/core';
+import type { DeploymentRun } from '@praxis/core';
+import type { PublishManifest } from '@praxis/core';
+import type { DeploymentHealthResult } from '@praxis/core';
+import type { WorkflowEvidenceSourceRef } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -310,7 +320,11 @@ const praxis: PraxisIpc = {
       const handler = (_event: Electron.IpcRendererEvent, runId: string) => listener(runId);
       ipcRenderer.on('workflows:runChanged', handler);
       return () => ipcRenderer.off('workflows:runChanged', handler);
-    }
+    },
+    getEvidence: (runId: string, nodeId: string, attempt: number) =>
+      ipcRenderer.invoke('workflows:getEvidence', runId, nodeId, attempt),
+    startDiagnosis: (runId: string, nodeId: string, attempt: number) =>
+      ipcRenderer.invoke('workflows:startDiagnosis', runId, nodeId, attempt)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
@@ -328,6 +342,13 @@ const praxis: PraxisIpc = {
     ,discoverImports: (folderPath: string) => ipcRenderer.invoke('projects:discoverImports', folderPath)
     ,validateImports: (rows: ProjectImportRow[]) => ipcRenderer.invoke('projects:validateImports', rows)
     ,createFromImports: (rows: ProjectImportRow[], workspaceId: string) => ipcRenderer.invoke('projects:createFromImports', rows, workspaceId)
+    ,getRunProfile: (projectId: string) =>
+      ipcRenderer.invoke('projects:getRunProfile', projectId) as Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }>
+    ,saveRunProfile: (projectId: string, profile: RunProfile) => ipcRenderer.invoke('projects:saveRunProfile', projectId, profile)
+    ,discoverRunServices: (projectId: string) =>
+      ipcRenderer.invoke('projects:discoverRunServices', projectId) as Promise<Array<ProposedRunService & { relativeDir: string }>>
+    ,validateRunProfile: (profile: RunProfile) =>
+      ipcRenderer.invoke('projects:validateRunProfile', profile) as Promise<RunProfileValidationResult>
   },
   workspaces: {
     list: () => ipcRenderer.invoke('workspaces:list'),
@@ -441,6 +462,119 @@ const praxis: PraxisIpc = {
     pull: (repositoryPath: string) => ipcRenderer.invoke('git:pull', repositoryPath),
     fetch: (repositoryPath: string) => ipcRenderer.invoke('git:fetch', repositoryPath),
     push: (repositoryPath: string) => ipcRenderer.invoke('git:push', repositoryPath)
+  },
+  runs: {
+    start: (projectId: string) => ipcRenderer.invoke('runs:start', projectId),
+    stop: (projectId: string) => ipcRenderer.invoke('runs:stop', projectId),
+    stopService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:stopService', projectId, serviceId),
+    startService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:startService', projectId, serviceId),
+    restartService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:restartService', projectId, serviceId),
+    status: (projectId: string) => ipcRenderer.invoke('runs:status', projectId) as Promise<RunServiceStatus[]>,
+    reconcile: (projectId: string) => ipcRenderer.invoke('runs:reconcile', projectId) as Promise<ReconciledService[]>,
+    previewUrl: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:previewUrl', projectId, serviceId) as Promise<string | undefined>,
+    onStatusChanged: (listener: (projectId: string, status: RunServiceStatus) => void) => {
+      const handler = (_event: unknown, projectId: string, status: RunServiceStatus) => listener(projectId, status);
+      ipcRenderer.on('runs:statusChanged', handler);
+      return () => ipcRenderer.off('runs:statusChanged', handler);
+    },
+    onLog: (listener: (projectId: string, line: RunLogLine) => void) => {
+      const handler = (_event: unknown, projectId: string, line: RunLogLine) => listener(projectId, line);
+      ipcRenderer.on('runs:log', handler);
+      return () => ipcRenderer.off('runs:log', handler);
+    },
+    runVerification: (projectId: string, check: PreviewVerificationCheck) =>
+      ipcRenderer.invoke('runs:runVerification', projectId, check) as Promise<PreviewVerificationOutcome>,
+    diagnoseVerificationFailure: (projectId: string, check: PreviewVerificationCheck, outcome: PreviewVerificationOutcome) =>
+      ipcRenderer.invoke('runs:diagnoseVerificationFailure', projectId, check, outcome) as Promise<CreateDiagnosisSessionResult>
+  },
+  preview: {
+    attach: () => ipcRenderer.invoke('preview:attach'),
+    setBounds: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('preview:setBounds', bounds),
+    setVisible: (visible: boolean) => ipcRenderer.invoke('preview:setVisible', visible),
+    open: (url: string) => ipcRenderer.invoke('preview:open', url),
+    captureDiagnostics: () => ipcRenderer.invoke('preview:captureDiagnostics') as Promise<BrowserDiagnosticsBundle | undefined>
+  },
+  deployments: {
+    listProfiles: (projectId: string) => ipcRenderer.invoke('deployments:listProfiles', projectId) as Promise<DeploymentProfile[]>,
+    getProfile: (projectId: string, profileId: string) =>
+      ipcRenderer.invoke('deployments:getProfile', projectId, profileId) as Promise<{
+        profile?: DeploymentProfile;
+        issues: DeploymentProfileIssue[];
+      }>,
+    saveProfile: (projectId: string, profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:saveProfile', projectId, profile) as Promise<DeploymentProfile>,
+    validateProfile: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:validateProfile', profile) as Promise<{ valid: boolean; errors: DeploymentProfileIssue[] }>,
+    preflightCapabilities: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:preflightCapabilities', profile) as Promise<DeploymentProfileIssue[]>,
+    evaluateCredentials: (profile: DeploymentProfile) =>
+      ipcRenderer.invoke('deployments:evaluateCredentials', profile) as Promise<{
+        statuses: CredentialBindingStatus[];
+        allBound: boolean;
+      }>,
+    publishArtifact: (artifactId: string, deploymentProfileId: string, rootDir: string, sourceCommit?: WorkflowEvidenceSourceRef) =>
+      ipcRenderer.invoke('deployments:publishArtifact', artifactId, deploymentProfileId, rootDir, sourceCommit) as Promise<{
+        artifact: PublishedArtifact;
+        manifest: PublishManifest;
+      }>,
+    listArtifacts: (deploymentProfileId: string) =>
+      ipcRenderer.invoke('deployments:listArtifacts', deploymentProfileId) as Promise<
+        Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>
+      >,
+    listAllArtifacts: () =>
+      ipcRenderer.invoke('deployments:listAllArtifacts') as Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>,
+    getArtifact: (artifactId: string) =>
+      ipcRenderer.invoke('deployments:getArtifact', artifactId) as Promise<
+        { artifact: PublishedArtifact; manifest: PublishManifest } | undefined
+      >,
+    prepare: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      artifact: PublishedArtifact,
+      context?: { issueKey?: string; issueConnectionId?: string; workflowRunId?: string; targetUrl?: string }
+    ) => ipcRenderer.invoke('deployments:prepare', projectId, runId, profile, artifact, context) as Promise<DeploymentRun>,
+    approve: (projectId: string, runId: string, profile: DeploymentProfile, artifact: PublishedArtifact, actor: string) =>
+      ipcRenderer.invoke('deployments:approve', projectId, runId, profile, artifact, actor) as Promise<{
+        run: DeploymentRun;
+        ok: boolean;
+        reason?: string;
+      }>,
+    deploy: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      artifact: PublishedArtifact,
+      manifest: PublishManifest,
+      options?: {
+        excludePaths?: string[];
+        backupDir?: string;
+        stagingDir?: string;
+        processInputs?: Record<string, string>;
+        timeoutMs?: number;
+        healthCheckHost?: string;
+        healthCheckPort?: number;
+      }
+    ) =>
+      ipcRenderer.invoke('deployments:deploy', projectId, runId, profile, artifact, manifest, options) as Promise<{
+        dispatched: boolean;
+        run: DeploymentRun;
+        reason?: string;
+      }>,
+    getRun: (runId: string) => ipcRenderer.invoke('deployments:getRun', runId) as Promise<DeploymentRun | undefined>,
+    listRuns: (deploymentProfileId: string) => ipcRenderer.invoke('deployments:listRuns', deploymentProfileId) as Promise<DeploymentRun[]>,
+    health: (runId: string) => ipcRenderer.invoke('deployments:health', runId) as Promise<DeploymentHealthResult>,
+    rollback: (
+      projectId: string,
+      runId: string,
+      profile: DeploymentProfile,
+      options?: { backupDir?: string; excludePaths?: string[] }
+    ) =>
+      ipcRenderer.invoke('deployments:rollback', projectId, runId, profile, options) as Promise<{
+        rolledBack: boolean;
+        run: DeploymentRun;
+        reason?: string;
+      }>
   }
 };
 

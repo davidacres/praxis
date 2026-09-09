@@ -13,6 +13,7 @@ import {
 import { getProjectStore } from './projectStoreInstance';
 import { getWorkflowBackingStore } from './workflowStoreInstance';
 import { runWorkflowCheck } from './workflowCheckRunner';
+import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { canDispatchAgentStage, cancelWorkflowAgentStage, runWorkflowAgentStage } from './workflowAgentStage';
 import { createWorkflowWorkspaceProvider } from './workflowWorkspace';
 import { getServiceForConnection } from './serviceRegistry';
@@ -118,7 +119,7 @@ const dispatcher: StageDispatcher = {
     return isCheckNode(node) || canDispatchAgentStage();
   },
   runCheck(node, context) {
-    return runWorkflowCheck(node, context, projectFolderFor(context.run));
+    return runWorkflowCheck(node, context, projectFolderFor(context.run), evidenceStorageRoot());
   },
   runAgentStage(node, context, onSession) {
     return runWorkflowAgentStage(node, context, onSession);

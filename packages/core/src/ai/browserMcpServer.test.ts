@@ -39,7 +39,7 @@ test('BrowserMcpServer lists the browser tools and dispatches a navigate', async
     const tools = await client.listTools();
     assert.deepEqual(
       tools.tools.map(t => t.name).sort(),
-      ['browser_click', 'browser_navigate', 'browser_read', 'browser_snapshot', 'browser_type']
+      ['browser_click', 'browser_diagnostics', 'browser_navigate', 'browser_read', 'browser_screenshot', 'browser_snapshot', 'browser_type']
     );
 
     const res = await client.callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com/docs' } });
@@ -98,7 +98,7 @@ test('a session endpoint survives register/dispose churn on the shared listener'
     assert.equal(new URL(a.url).port, new URL(b.url).port);
     a.dispose();
     const client = await connect(b.url);
-    assert.equal((await client.listTools()).tools.length, 5);
+    assert.equal((await client.listTools()).tools.length, 7);
     await client.close();
   } finally {
     b.dispose();

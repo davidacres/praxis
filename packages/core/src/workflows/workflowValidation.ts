@@ -16,6 +16,7 @@ import {
   isAgentTaskNode,
   isApprovalNode,
   isCheckNode,
+  isDeploymentNode,
   isJoinNode,
   nodeGate,
   nodeOutputs,
@@ -52,7 +53,7 @@ export interface WorkflowMigrationResult {
   errors: WorkflowIssue[];
 }
 
-const NODE_TYPES = new Set(['agent-task', 'check', 'approval', 'join']);
+const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join']);
 const EDGE_OUTCOMES = new Set<WorkflowEdgeOutcome>(['success', 'failure', 'always']);
 const GATE_KINDS = new Set<WorkflowGateKind>(['review', 'qa', 'security']);
 const ARTIFACT_KINDS = new Set<WorkflowArtifactKind>(['plan', 'diff', 'report', 'test-results', 'log', 'note']);
@@ -198,6 +199,18 @@ function normalizeNode(value: unknown): WorkflowNode {
       if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
       return node;
     }
+    case 'deployment': {
+      const node: WorkflowNode = {
+        ...base,
+        type: 'deployment',
+        deploymentProfileId: typeof raw.deploymentProfileId === 'string' ? raw.deploymentProfileId : '',
+        outputs: Array.isArray(raw.outputs) ? raw.outputs.map(normalizeArtifact) : []
+      };
+      if (GATE_KINDS.has(raw.satisfiesGate as WorkflowGateKind)) node.satisfiesGate = raw.satisfiesGate as WorkflowGateKind;
+      if (typeof raw.timeoutMs === 'number') node.timeoutMs = raw.timeoutMs;
+      if (typeof raw.maxAttempts === 'number') node.maxAttempts = raw.maxAttempts;
+      return node;
+    }
     case 'approval':
       return {
         ...base,
@@ -304,6 +317,7 @@ function validateNodes(definition: WorkflowDefinition, errors: WorkflowIssue[]):
 
     if (isAgentTaskNode(node)) validateAgentTaskNode(node, at, errors);
     if (isCheckNode(node)) validateCheckNode(node, at, errors);
+    if (isDeploymentNode(node)) validateDeploymentNode(node, at, errors);
     if (isApprovalNode(node) && !isText(node.prompt)) {
       errors.push({ path: `${at}.prompt`, message: 'An approval node needs a prompt.' });
     }
@@ -370,6 +384,22 @@ function validateCheckNode(
   }
   if (node.successExitCodes && node.successExitCodes.length === 0) {
     errors.push({ path: `${at}.successExitCodes`, message: 'successExitCodes cannot be empty; omit it to default to [0].' });
+  }
+  if (node.maxAttempts !== undefined && node.maxAttempts < 1) {
+    errors.push({ path: `${at}.maxAttempts`, message: 'maxAttempts must be 1 or greater.' });
+  }
+  if (node.timeoutMs !== undefined && node.timeoutMs <= 0) {
+    errors.push({ path: `${at}.timeoutMs`, message: 'timeoutMs must be greater than zero.' });
+  }
+}
+
+function validateDeploymentNode(
+  node: Extract<WorkflowNode, { type: 'deployment' }>,
+  at: string,
+  errors: WorkflowIssue[]
+): void {
+  if (!isText(node.deploymentProfileId)) {
+    errors.push({ path: `${at}.deploymentProfileId`, message: 'A deployment stage must name a deployment profile id.' });
   }
   if (node.maxAttempts !== undefined && node.maxAttempts < 1) {
     errors.push({ path: `${at}.maxAttempts`, message: 'maxAttempts must be 1 or greater.' });
@@ -678,7 +708,8 @@ function validatePolicy(
   });
 
   definition.nodes.forEach((node, index) => {
-    const maxAttempts = isAgentTaskNode(node) || isCheckNode(node) ? node.maxAttempts : undefined;
+    const maxAttempts =
+      isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node) ? node.maxAttempts : undefined;
     if (maxAttempts !== undefined && maxAttempts > policy.maxAttemptsPerNode) {
       errors.push({
         path: `nodes[${index}].maxAttempts`,

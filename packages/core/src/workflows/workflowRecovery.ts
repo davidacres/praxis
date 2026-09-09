@@ -13,7 +13,7 @@
  * risk building on a half-finished change.
  */
 
-import { isAgentTaskNode, isCheckNode, isTerminalOutcome } from './workflowTypes';
+import { isAgentTaskNode, isCheckNode, isDeploymentNode, isTerminalOutcome } from './workflowTypes';
 import {
   applyWorkflowRunCommand,
   canRetry,
@@ -62,7 +62,8 @@ export function findTimedOutNodes(run: WorkflowRun, now: string): string[] {
     .filter(state => state.outcome === 'running')
     .filter(state => {
       const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
-      const timeoutMs = node && (isAgentTaskNode(node) || isCheckNode(node)) ? node.timeoutMs : undefined;
+      const timeoutMs =
+        node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.timeoutMs : undefined;
       if (!timeoutMs) return false;
       const startedAt = Date.parse(state.attempts[state.attempts.length - 1]?.startedAt ?? '');
       return !Number.isNaN(startedAt) && nowMs - startedAt > timeoutMs;
@@ -104,7 +105,8 @@ export function nextActions(run: WorkflowRun): WorkflowNextAction[] {
   for (const state of Object.values(run.nodes)) {
     if (state.outcome !== 'failed' || !canRetry(run, state.nodeId)) continue;
     const node = run.definition.nodes.find(candidate => candidate.id === state.nodeId);
-    const maxAttempts = (node && (isAgentTaskNode(node) || isCheckNode(node)) ? node.maxAttempts : undefined) ?? 1;
+    const maxAttempts =
+      (node && (isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node)) ? node.maxAttempts : undefined) ?? 1;
     actions.push({
       kind: 'retry-stage',
       nodeId: state.nodeId,

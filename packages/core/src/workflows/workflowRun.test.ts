@@ -437,3 +437,75 @@ test('a settled run offers no action but says why it ended', () => {
   assert.deepEqual(actions.map(action => action.kind), ['none']);
   assert.match(actions[0].label, /user asked/);
 });
+
+// ── Progress phase (FX-BE-058 / TASK-155) ───────────────────────────────
+
+test('node-progress records a phase on a running node', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'deploying' });
+  assert.equal(run.nodes.plan.phase, 'deploying');
+  assert.equal(run.events[run.events.length - 1].kind, 'node-progress');
+});
+
+test('node-progress can move a node from one phase to another', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'deploying' });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(3), phase: 'verifying' });
+  assert.equal(run.nodes.plan.phase, 'verifying');
+  assert.deepEqual(
+    run.events.filter(event => event.kind === 'node-progress').map(event => event.message),
+    ['Plan entered phase "deploying".', 'Plan entered phase "verifying".']
+  );
+});
+
+test('replaying the same phase does not append a second event', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'deploying' });
+  const again = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(3), phase: 'deploying' });
+  assert.equal(again, run, 'a no-op must return the same run object');
+});
+
+test('a phase reported for a node that has not started is dropped, not resurrected', () => {
+  const run = newRun();
+  const after = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(1), phase: 'deploying' });
+  assert.equal(after, run);
+  assert.equal(after.nodes.plan.outcome, 'pending');
+});
+
+test('a phase reported after settling is dropped, not applied retroactively', () => {
+  const run = succeed(newRun(), 'plan', 1);
+  const after = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(5), phase: 'deploying' });
+  assert.equal(after, run);
+});
+
+test('a new attempt starts with no phase left over from a previous one', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'implement', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'implement', at: T(2), phase: 'deploying' });
+  run = applyWorkflowRunCommand(run, { kind: 'node-failed', nodeId: 'implement', at: T(3), error: 'boom' });
+  run = applyWorkflowRunCommand(run, { kind: 'node-retry', nodeId: 'implement', at: T(4) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-started', nodeId: 'implement', at: T(5) });
+  assert.equal(run.nodes.implement.phase, undefined);
+});
+
+test('settling a node clears its reported phase', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'verifying' });
+  run = applyWorkflowRunCommand(run, {
+    kind: 'node-succeeded',
+    nodeId: 'plan',
+    at: T(3),
+    artifacts: [{ contractId: 'plan-doc', kind: 'plan' }]
+  });
+  assert.equal(run.nodes.plan.phase, undefined);
+});
+
+test('a phase survives a normalize round-trip while the node is still running, and is dropped once settled', () => {
+  let run = applyWorkflowRunCommand(newRun(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  run = applyWorkflowRunCommand(run, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'verifying' });
+  const restoredRunning = normalizeWorkflowRun(JSON.parse(JSON.stringify(run)));
+  assert.equal(restoredRunning?.nodes.plan.phase, 'verifying');
+
+  const settled = succeed(run, 'plan', 3);
+  const restoredSettled = normalizeWorkflowRun(JSON.parse(JSON.stringify(settled)));
+  assert.equal(restoredSettled?.nodes.plan.phase, undefined);
+});
