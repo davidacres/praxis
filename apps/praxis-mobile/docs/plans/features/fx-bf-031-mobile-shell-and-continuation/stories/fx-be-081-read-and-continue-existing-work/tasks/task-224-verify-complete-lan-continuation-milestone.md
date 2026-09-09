@@ -2,7 +2,7 @@
 type: Task
 id: TASK-224
 title: "Verify complete LAN continuation milestone"
-status: planned
+status: complete
 story: FX-BE-081
 updated: 2026-09-09
 dependencies: [TASK-223]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Added an aggregate LAN continuation evidence guard.
+
+- Source: apps/praxis-mobile/renderer/mobileLanContinuation.ts
+- Tests: apps/praxis-mobile/renderer/mobileLanContinuation.test.ts
+- The guard requires pairing, discovery, continuation, follow-up, reconnect, decision, and final-result evidence.
+- Physical-device execution remains required for final acceptance.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
