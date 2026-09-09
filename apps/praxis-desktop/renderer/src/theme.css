@@ -4881,6 +4881,113 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: var(--text-sm);
 }
 
+/* ── Run controls (FX-BE-055 / TASK-146) ────────────────────────────────── */
+
+.run-controls {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-controls-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-reconcile-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.run-reconcile-banner .icon { color: var(--warning); flex-shrink: 0; }
+
+.run-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+}
+
+.run-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-tertiary);
+}
+.run-status-dot.run-status-ready { background: var(--success); }
+.run-status-dot.run-status-starting { background: var(--warning); }
+.run-status-dot.run-status-failed { background: var(--danger); }
+.run-status-dot.run-status-stopping,
+.run-status-dot.run-status-stopped { background: var(--text-tertiary); }
+
+.run-status-name { font-weight: 600; }
+.run-status-state { color: var(--text-tertiary); }
+.run-status-error { color: var(--danger); font-size: var(--text-xs); }
+
+.run-logs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+
+.run-log-tail {
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.run-preview-pane {
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.run-preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.run-preview-title { font-weight: 600; }
+
+.run-preview-surface {
+  flex: 1;
+  min-height: 0;
+}
+
 .conn-boards {
   padding: 0 var(--space-4) var(--space-5);
   max-width: 720px;

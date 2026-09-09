@@ -76,6 +76,8 @@ export interface RunServiceManager {
 export class RunServiceManager extends EventEmitter {
   private services = new Map<string, ManagedService>();
   private stopped = true;
+  /** The options `start()` was last called with — reused by `startService`/`restartService` so a single service can be relaunched with the same project folder and readiness timeout. */
+  private runOptions: StartRunOptions | undefined;
 
   /** A snapshot of every tracked service's current status, in profile order. */
   public status(): RunServiceStatus[] {
@@ -90,6 +92,7 @@ export class RunServiceManager extends EventEmitter {
     }
 
     this.stopped = false;
+    this.runOptions = options;
     this.services = new Map(
       profile.services.map(definition => [definition.id, { definition, status: { id: definition.id, state: 'pending' as const } }])
     );
@@ -128,6 +131,41 @@ export class RunServiceManager extends EventEmitter {
     if (this.stopped) return;
     this.stopped = true;
     await Promise.all([...this.services.values()].map(managed => this.stopOne(managed)));
+  }
+
+  /** Stops one service (Run controls' per-service Stop) without affecting the rest of the run. Dependents are left running — their own probe/health surfaces the resulting problem rather than this cascading a stop through the graph. */
+  public async stopService(serviceId: string): Promise<void> {
+    const managed = this.requireService(serviceId);
+    await this.stopOne(managed);
+  }
+
+  /**
+   * (Re)starts one currently-stopped/failed service in an active run, reusing
+   * the `projectFolder`/`readinessTimeoutMs` the run itself was started with.
+   * Refuses when the service's own dependencies are not currently `ready` —
+   * unlike the bulk fan-out in `start()`, a direct per-service action gets a
+   * clear rejection rather than being silently marked failed on its behalf.
+   */
+  public async startService(serviceId: string): Promise<void> {
+    if (this.stopped || !this.runOptions) throw new Error('No run is active; call start() first.');
+    const managed = this.requireService(serviceId);
+    const notReady = (managed.definition.dependsOn ?? []).filter(dep => this.services.get(dep)?.status.state !== 'ready');
+    if (notReady.length > 0) {
+      throw new Error(`Cannot start "${serviceId}": dependency ${notReady.map(id => `"${id}"`).join(', ')} is not ready.`);
+    }
+    await this.startOne(managed, this.runOptions.projectFolder, this.runOptions.readinessTimeoutMs ?? DEFAULT_READINESS_TIMEOUT_MS);
+  }
+
+  /** Stop then start one service — Run controls' per-service Restart. */
+  public async restartService(serviceId: string): Promise<void> {
+    await this.stopService(serviceId);
+    await this.startService(serviceId);
+  }
+
+  private requireService(serviceId: string): ManagedService {
+    const managed = this.services.get(serviceId);
+    if (!managed) throw new Error(`Unknown service "${serviceId}".`);
+    return managed;
   }
 
   private setStatus(managed: ManagedService, patch: Partial<RunServiceStatus>): void {

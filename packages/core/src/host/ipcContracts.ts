@@ -31,6 +31,8 @@ import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
 import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
+import type { ReconciledService } from '../projects/runReconciliation';
+import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type {
   ActiveAppearanceAddons,
@@ -297,6 +299,54 @@ export interface BrowserIpc {
   getState(): Promise<BrowserNavigationState | undefined>;
   /** Subscribes to navigation updates; returns an unsubscribe function. */
   onDidNavigate(listener: (state: BrowserNavigationState) => void): () => void;
+}
+
+/**
+ * Run lifecycle control (FX-BE-055 / TASK-146): start/stop the whole run,
+ * start/stop/restart one service, live status/log push events, and
+ * conservative post-restart reconciliation for whatever a previous session
+ * left running when Praxis itself was closed.
+ */
+export interface RunsIpc {
+  /** Starts the project's saved Run profile. Rejects if none exists, the profile is invalid, or a run is already active. */
+  start(projectId: string): Promise<void>;
+  /** Stops every service in the project's active run and revokes its preview grants. A no-op if nothing is running. */
+  stop(projectId: string): Promise<void>;
+  stopService(projectId: string, serviceId: string): Promise<void>;
+  startService(projectId: string, serviceId: string): Promise<void>;
+  restartService(projectId: string, serviceId: string): Promise<void>;
+  /** A snapshot of every tracked service's current status — empty when nothing is running for this project this session. */
+  status(projectId: string): Promise<RunServiceStatus[]>;
+  /**
+   * Conservative reconciliation against whatever this project's last run
+   * persisted (TASK-146's "after app restart" half). Empty when this
+   * session's own manager already owns the project's run, or nothing was
+   * ever persisted — only meaningful right after launch, before `start` has
+   * been called for this project in this session.
+   */
+  reconcile(projectId: string): Promise<ReconciledService[]>;
+  /** The granted preview origin for a ready service, or undefined if it isn't ready (yet) or declares no port. */
+  previewUrl(projectId: string, serviceId: string): Promise<string | undefined>;
+  /** Fires on every service status transition for any project's active run. */
+  onStatusChanged(listener: (projectId: string, status: RunServiceStatus) => void): () => void;
+  /** Fires on every stdout/stderr line from any project's active run. */
+  onLog(listener: (projectId: string, line: RunLogLine) => void): () => void;
+}
+
+/**
+ * The Run preview surface (FX-BE-055 / TASK-146) — a passive viewer onto a
+ * granted preview origin, structurally the same `WebContentsView` control
+ * channel as `BrowserIpc` but with no navigation/action methods: a preview
+ * only ever opens the one URL its owning service was granted. Hiding it
+ * (`setVisible(false)`, what closing the preview tab does) never touches
+ * the underlying run — see `previewBrowser.ts`'s module comment.
+ */
+export interface PreviewIpc {
+  attach(): Promise<void>;
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  setVisible(visible: boolean): Promise<void>;
+  /** Rejects with the same reason `previewAccessBlockedReason` would give if the URL's origin has no active grant. */
+  open(url: string): Promise<void>;
 }
 
 /**
@@ -726,6 +776,8 @@ export interface PraxisIpc {
   workspaces: WorkspacesIpc;
   terminal: TerminalIpc;
   git: GitIpc;
+  runs: RunsIpc;
+  preview: PreviewIpc;
 }
 
 /**

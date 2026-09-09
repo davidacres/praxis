@@ -30,6 +30,7 @@ import type {
 import type { TerminalCommandEvent, TerminalContextAvailabilityEvent, TerminalExitEvent, TerminalOutputEvent, UpdateStatus } from '@praxis/core';
 import type { AttachProjectFolderInput, CreateProjectInput, ProjectBoardReference, ProjectDocument, ProjectImportRow, UpdateProjectInput } from '@praxis/core';
 import type { ProposedRunService, RunProfile, RunProfileIssue, RunProfileValidationResult } from '@praxis/core';
+import type { ReconciledService, RunLogLine, RunServiceStatus } from '@praxis/core';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput } from '@praxis/core';
 import type { WorkflowDefinition } from '@praxis/core';
 
@@ -453,6 +454,32 @@ const praxis: PraxisIpc = {
     pull: (repositoryPath: string) => ipcRenderer.invoke('git:pull', repositoryPath),
     fetch: (repositoryPath: string) => ipcRenderer.invoke('git:fetch', repositoryPath),
     push: (repositoryPath: string) => ipcRenderer.invoke('git:push', repositoryPath)
+  },
+  runs: {
+    start: (projectId: string) => ipcRenderer.invoke('runs:start', projectId),
+    stop: (projectId: string) => ipcRenderer.invoke('runs:stop', projectId),
+    stopService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:stopService', projectId, serviceId),
+    startService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:startService', projectId, serviceId),
+    restartService: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:restartService', projectId, serviceId),
+    status: (projectId: string) => ipcRenderer.invoke('runs:status', projectId) as Promise<RunServiceStatus[]>,
+    reconcile: (projectId: string) => ipcRenderer.invoke('runs:reconcile', projectId) as Promise<ReconciledService[]>,
+    previewUrl: (projectId: string, serviceId: string) => ipcRenderer.invoke('runs:previewUrl', projectId, serviceId) as Promise<string | undefined>,
+    onStatusChanged: (listener: (projectId: string, status: RunServiceStatus) => void) => {
+      const handler = (_event: unknown, projectId: string, status: RunServiceStatus) => listener(projectId, status);
+      ipcRenderer.on('runs:statusChanged', handler);
+      return () => ipcRenderer.off('runs:statusChanged', handler);
+    },
+    onLog: (listener: (projectId: string, line: RunLogLine) => void) => {
+      const handler = (_event: unknown, projectId: string, line: RunLogLine) => listener(projectId, line);
+      ipcRenderer.on('runs:log', handler);
+      return () => ipcRenderer.off('runs:log', handler);
+    }
+  },
+  preview: {
+    attach: () => ipcRenderer.invoke('preview:attach'),
+    setBounds: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('preview:setBounds', bounds),
+    setVisible: (visible: boolean) => ipcRenderer.invoke('preview:setVisible', visible),
+    open: (url: string) => ipcRenderer.invoke('preview:open', url)
   }
 };
 
