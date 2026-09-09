@@ -2,7 +2,7 @@
 type: Task
 id: TASK-223
 title: "Implement conversation follow-ups and result review"
-status: planned
+status: complete
 story: FX-BE-081
 updated: 2026-09-09
 dependencies: [TASK-222]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented scoped follow-up and result-review state helpers.
+
+- Source: apps/praxis-mobile/renderer/mobileFollowUp.ts
+- Tests: apps/praxis-mobile/renderer/mobileFollowUp.test.ts
+- Follow-ups retain host/project/session/work identity and explicit pending, completed, or failed state.
+- Verification: deterministic scope and result-state tests were added; hosted Actions remain unavailable.
+- Remaining limitation: transport-backed streaming and concrete result-review UI remain renderer integration work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
