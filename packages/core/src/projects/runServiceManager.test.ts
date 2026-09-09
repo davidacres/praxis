@@ -308,3 +308,93 @@ test('an invalid profile is refused before anything is spawned', async () => {
   await assert.rejects(() => manager.start(profile([]), { projectFolder: '/tmp' }), /is invalid/);
   assert.deepEqual(manager.status(), []);
 });
+
+test('Run controls: stopService stops just that service, leaving the rest of the run alone', async () => {
+  const manager = new RunServiceManager();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis-run-'));
+  try {
+    await manager.start(
+      profile([nodeService('api', 'setInterval(() => {}, 1000);'), nodeService('worker', 'setInterval(() => {}, 1000);')]),
+      { projectFolder: dir }
+    );
+    await manager.stopService('api');
+    const statuses = manager.status();
+    assert.equal(statuses.find(s => s.id === 'api')?.state, 'stopped');
+    assert.equal(statuses.find(s => s.id === 'worker')?.state, 'ready', 'the untouched service should still be running');
+  } finally {
+    await manager.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Run controls: startService relaunches a stopped service using the run\'s original options', async () => {
+  const manager = new RunServiceManager();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis-run-'));
+  try {
+    await manager.start(profile([nodeService('api', 'setInterval(() => {}, 1000);')]), { projectFolder: dir });
+    const firstPid = manager.status()[0].pid;
+    await manager.stopService('api');
+    await manager.startService('api');
+    const status = manager.status()[0];
+    assert.equal(status.state, 'ready');
+    assert.ok(status.pid);
+    assert.notEqual(status.pid, firstPid, 'restarting should spawn a new process, not reuse the old pid');
+  } finally {
+    await manager.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Run controls: restartService is stop then start in one call', async () => {
+  const manager = new RunServiceManager();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis-run-'));
+  try {
+    await manager.start(profile([nodeService('api', 'setInterval(() => {}, 1000);')]), { projectFolder: dir });
+    const firstPid = manager.status()[0].pid;
+    await manager.restartService('api');
+    const status = manager.status()[0];
+    assert.equal(status.state, 'ready');
+    assert.notEqual(status.pid, firstPid);
+  } finally {
+    await manager.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Run controls: startService refuses when a dependency is not ready', async () => {
+  const manager = new RunServiceManager();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis-run-'));
+  try {
+    await manager.start(
+      profile([
+        nodeService('db', 'setInterval(() => {}, 1000);'),
+        { ...nodeService('api', 'setInterval(() => {}, 1000);'), dependsOn: ['db'] }
+      ]),
+      { projectFolder: dir }
+    );
+    await manager.stopService('db');
+    await manager.stopService('api');
+    await assert.rejects(() => manager.startService('api'), /dependency "db" is not ready/);
+  } finally {
+    await manager.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Run controls: startService/stopService refuse an unknown service id', async () => {
+  const manager = new RunServiceManager();
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'praxis-run-'));
+  try {
+    await manager.start(profile([nodeService('api', 'setInterval(() => {}, 1000);')]), { projectFolder: dir });
+    await assert.rejects(() => manager.stopService('nope'), /Unknown service/);
+    await assert.rejects(() => manager.startService('nope'), /Unknown service/);
+  } finally {
+    await manager.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Run controls: startService refuses when no run is active', async () => {
+  const manager = new RunServiceManager();
+  await assert.rejects(() => manager.startService('api'), /No run is active/);
+});
