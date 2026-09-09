@@ -60,5 +60,5 @@ export interface CiEvidenceProvider {
   readonly kind: CiProviderKind;
   listFailedRuns(page: number, pageSize?: number): Promise<CiRunPage>;
   listJobs(runId: string, attempt: number): Promise<CiJobSummary[]>;
-  getJobLog(jobId: string): Promise<CiJobLogResult>;
+  getJobLog(jobId: string, signal?: AbortSignal): Promise<CiJobLogResult>;
 }
