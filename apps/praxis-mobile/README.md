@@ -33,3 +33,8 @@ Desktop sign-in is optional. LAN mobile access uses account-free pairing. Intern
 ## Local-first priority (2026-09-09)
 
 GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
+
+
+## Phase 1 boundary
+
+Phase 1 is local-first. Platform-specific implementations are supplied through `renderer/mobilePlatformAdapters.ts`; desktop execution stays behind the host IPC bridge. GenericSystem, Roleover, Azure Relay, remote sign-in, and internet notifications are Phase 2 and are not required for local delivery.
