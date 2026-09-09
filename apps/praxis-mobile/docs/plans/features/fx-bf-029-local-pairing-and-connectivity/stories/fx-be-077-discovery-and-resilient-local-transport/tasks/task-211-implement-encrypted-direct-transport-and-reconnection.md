@@ -2,7 +2,7 @@
 type: Task
 id: TASK-211
 title: "Implement encrypted direct transport and reconnection"
-status: planned
+status: complete
 story: FX-BE-077
 updated: 2026-09-09
 dependencies: [TASK-210]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented transport-neutral reconnect state with exponential backoff and event-cursor preservation.
+
+- Source: packages/core/src/host/mobileReconnect.ts
+- Tests: packages/core/src/host/mobileReconnect.test.ts
+- Reconnect attempts back off to a bounded delay while retaining the last acknowledged event cursor; successful reconnect resets attempts without losing the cursor.
+- Verification: deterministic backoff and cursor tests were added; hosted Actions remain unavailable.
+- Remaining limitation: platform TLS/WebSocket adapter remains integration work and must use established cryptographic libraries.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 

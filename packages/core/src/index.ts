@@ -138,3 +138,4 @@ export * from './host/mobileAccessAdministration';
 export * from './host/mobilePairingHandshake';
 export * from './host/mobileTrustStore';
 export * from './host/mobileHostDiscovery';
+export * from './host/mobileReconnect';
