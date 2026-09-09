@@ -2,7 +2,7 @@
 type: Task
 id: TASK-220
 title: "Build Praxis mobile navigation and shared appearance"
-status: planned
+status: complete
 story: FX-BE-080
 updated: 2026-09-09
 dependencies: [TASK-219]
@@ -36,7 +36,16 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented renderer-owned mobile navigation contracts.
+
+- Source: apps/praxis-mobile/renderer/mobileNavigation.ts
+- Tests: apps/praxis-mobile/renderer/mobileNavigation.test.ts
+- Destinations are limited to Work, Attention, and Activity; detail tabs are Chat, Progress, and Changes.
+- Host/project scope is preserved across navigation and non-work destinations reset to a safe detail tab.
+- Verification: deterministic navigation tests were added; hosted Actions remain unavailable.
+- Remaining limitation: concrete React components and visual capture matrix remain UI implementation work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
