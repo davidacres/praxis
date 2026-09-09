@@ -4789,6 +4789,98 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   align-self: flex-start;
 }
 
+/* ── Run profile editor (FX-BE-054 / TASK-143) ──────────────────────────── */
+
+.run-page .view-header { gap: var(--space-3); }
+
+.run-body {
+  padding: var(--space-4);
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.run-services {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.run-service-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-service-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-depends-list,
+.run-env-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.run-depends-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.run-env-row {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.run-env-row .input { flex: 1; min-width: 0; }
+
+.run-probe-editor {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.run-probe-editor .select { flex-shrink: 0; }
+.run-probe-editor .input { flex: 1; min-width: 0; }
+
+.run-discover-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.run-discover-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.run-discover-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.run-discover-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+
 .conn-boards {
   padding: 0 var(--space-4) var(--space-5);
   max-width: 720px;

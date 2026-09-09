@@ -26,6 +26,7 @@ import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
 import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
 import { registerProjectIpc } from './projectIpc';
+import { registerRunProfileIpc } from './runProfileIpc';
 import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
@@ -258,6 +259,7 @@ void app.whenReady().then(async () => {
   registerWorkflowIpc();
   void recoverWorkflowRunsOnStartup().catch(error => console.error('Workflow run recovery failed:', error));
   registerProjectIpc();
+  registerRunProfileIpc();
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
