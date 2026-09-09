@@ -2,7 +2,7 @@
 type: Task
 id: TASK-219
 title: "Select mobile packaging and establish build boundaries"
-status: planned
+status: complete
 story: FX-BE-080
 updated: 2026-09-09
 dependencies: [FX-BE-074]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Recorded the mobile packaging and build-boundary ADR in apps/praxis-mobile/docs/architecture.md.
+
+- React DOM renderer with thin native adapters is selected for QR, discovery, secure storage, browser sign-in, and push.
+- Mobile consumes versioned browser-safe contracts only; Electron/Node desktop modules are excluded.
+- Monorepo placement is explicitly portable to a future standalone repository.
+- Cloud identity and relay remain deferred and do not block local delivery.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
