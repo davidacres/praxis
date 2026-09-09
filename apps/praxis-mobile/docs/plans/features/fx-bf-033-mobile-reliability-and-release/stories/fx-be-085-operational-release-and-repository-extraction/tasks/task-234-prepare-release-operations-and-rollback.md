@@ -2,7 +2,7 @@
 type: Task
 id: TASK-234
 title: "Prepare release operations and rollback"
-status: planned
+status: complete
 story: FX-BE-085
 updated: 2026-09-09
 dependencies: [FX-BE-084]
