@@ -2,7 +2,7 @@
 type: Task
 id: TASK-226
 title: "Implement start retry and cancellation actions"
-status: planned
+status: complete
 story: FX-BE-082
 updated: 2026-09-09
 dependencies: [TASK-225]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented scoped mobile run action validation for start, retry-stage, and cancellation.
+
+- Source: apps/praxis-mobile/renderer/mobileRunActions.ts
+- Tests: apps/praxis-mobile/renderer/mobileRunActions.test.ts
+- Actions require run, project, and non-negative expected version to prevent stale mutation.
+- Verification: deterministic validation tests were added; hosted Actions remain unavailable.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
