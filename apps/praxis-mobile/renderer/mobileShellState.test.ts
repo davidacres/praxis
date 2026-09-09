@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict';import test from 'node:test';import {createMobileShellState,setMobileShellConnection,setMobileShellError} from './mobileShellState';
+test('shell starts offline and transitions through connecting to ready',()=>{let s=createMobileShellState();assert.equal(s.connection,'offline');s=setMobileShellConnection(s,'connecting');assert.equal(s.loading,true);s=setMobileShellConnection(s,'ready');assert.equal(s.loading,false);assert.equal(s.connection,'ready');});
+test('errors return shell to offline',()=>{const s=setMobileShellError(createMobileShellState(),'host unavailable');assert.equal(s.connection,'offline');assert.equal(s.error,'host unavailable');});
