@@ -154,7 +154,7 @@ export function registerDeploymentControlIpc(): void {
     'deployments:rollback',
     async (
       _event,
-      _projectId: string,
+      projectId: string,
       runId: string,
       profile: DeploymentProfile,
       options: DirectRollbackOptions = {}
@@ -163,6 +163,7 @@ export function registerDeploymentControlIpc(): void {
         store: getDeploymentRunStore(),
         runId,
         profile,
+        projectFolder: projectFolder(projectId),
         backupDir: options.backupDir,
         excludePaths: options.excludePaths,
         now: () => new Date().toISOString()
