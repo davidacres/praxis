@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Connection, IssueFilters, ProjectRecord, WorkflowRunSummary } from '@praxis/core';
+import type { Connection, IssueFilters, ProjectRecord, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { WorkflowPipeline } from './WorkflowPipeline';
 
@@ -34,6 +34,19 @@ const GATE_CHIP: Record<string, string> = {
   bypassed: 'chip-warn',
   missing: 'chip-danger'
 };
+
+/**
+ * A deployment stage's own status line, distinguishing "deploying" from
+ * "verifying" instead of the generic outcome word every other stage shows —
+ * a renderer-local mirror of core's `deploymentNodeDisplayPhase` (the
+ * renderer may import only types from `@praxis/core` at runtime). Returns
+ * `undefined` for a settled or not-yet-started stage, where the outcome word
+ * already says everything there is to say.
+ */
+function deploymentPhaseLabel(stage: Pick<WorkflowRunSummary['stages'][number], 'type' | 'outcome' | 'phase'>): string | undefined {
+  if (stage.type !== 'deployment' || stage.outcome !== 'running') return undefined;
+  return stage.phase === 'verifying' ? 'Verifying' : 'Deploying';
+}
 
 export interface WorkflowRunMonitorProps {
   project: ProjectRecord;
@@ -78,6 +91,12 @@ export function WorkflowRunMonitor({
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [issueOptions, setIssueOptions] = useState<IssueOption[]>([]);
   const [issueKeyDraft, setIssueKeyDraft] = useState('');
+  /** `${runId}:${nodeId}:${attempt}` of the evidence panel currently open, if any. */
+  const [evidenceKey, setEvidenceKey] = useState<string>();
+  const [evidenceView, setEvidenceView] = useState<WorkflowEvidenceView>();
+  const [evidenceError, setEvidenceError] = useState<string>();
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnosisMessage, setDiagnosisMessage] = useState<string>();
 
   // Preselect the only workflow, so a project with one goes straight to "Task".
   useEffect(() => {
@@ -143,6 +162,16 @@ export function WorkflowRunMonitor({
     void reload();
   }, [reload]);
 
+  // A different stage (or no stage) selected: any open evidence panel no
+  // longer describes what's on screen, so close it rather than leave stale
+  // content under a new heading.
+  useEffect(() => {
+    setEvidenceKey(undefined);
+    setEvidenceView(undefined);
+    setEvidenceError(undefined);
+    setDiagnosisMessage(undefined);
+  }, [selectedRunId, selectedStageId]);
+
   // Live updates: the orchestrator advances stages in the background, coalesced
   // into one reload per frame; the current selection is kept.
   const pendingReload = useRef<number | undefined>(undefined);
@@ -162,6 +191,40 @@ export function WorkflowRunMonitor({
 
   const selected = runs.find(run => run.runId === selectedRunId);
   const stage = selected?.stages.find(row => row.nodeId === selectedStageId);
+
+  /** Opens (or closes, on a second click) the retained log for the stage's current attempt. */
+  const toggleEvidence = async (): Promise<void> => {
+    if (!selected || !stage) return;
+    const key = `${selected.runId}:${stage.nodeId}:${stage.attempts}`;
+    if (evidenceKey === key) {
+      setEvidenceKey(undefined);
+      return;
+    }
+    setEvidenceKey(key);
+    setEvidenceView(undefined);
+    setEvidenceError(undefined);
+    try {
+      setEvidenceView(await window.praxis.workflows.getEvidence(selected.runId, stage.nodeId, stage.attempts));
+    } catch (cause) {
+      setEvidenceError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
+
+  /** Starts a diagnosis session from the stage's retained evidence, or shows why it can't. */
+  const startDiagnosis = async (): Promise<void> => {
+    if (!selected || !stage) return;
+    setDiagnosing(true);
+    setDiagnosisMessage(undefined);
+    try {
+      const result = await window.praxis.workflows.startDiagnosis(selected.runId, stage.nodeId, stage.attempts);
+      if (result.ok) onOpenSession?.(result.sessionId);
+      else setDiagnosisMessage(result.message);
+    } catch (cause) {
+      setDiagnosisMessage(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setDiagnosing(false);
+    }
+  };
 
   const act = useCallback(
     async (fn: () => Promise<WorkflowRunSummary>) => {
@@ -397,7 +460,7 @@ export function WorkflowRunMonitor({
             <h2>{stage.name}</h2>
             <p className="rail-sub">
               {stage.type}
-              {stage.gate ? ` · ${stage.gate} gate` : ''} · {stage.outcome}
+              {stage.gate ? ` · ${stage.gate} gate` : ''} · {deploymentPhaseLabel(stage) ?? stage.outcome}
               {stage.maxAttempts && stage.attempts > 0 ? ` (${stage.attempts}/${stage.maxAttempts})` : ''}
             </p>
 
@@ -424,6 +487,21 @@ export function WorkflowRunMonitor({
               {stage.sessionKey && onOpenSession && (
                 <button type="button" className="btn btn-compact" onClick={() => onOpenSession(stage.sessionKey as string)}>
                   Open session
+                </button>
+              )}
+              {stage.attempts > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-compact"
+                  aria-expanded={evidenceKey === `${selected.runId}:${stage.nodeId}:${stage.attempts}`}
+                  onClick={() => void toggleEvidence()}
+                >
+                  {evidenceKey === `${selected.runId}:${stage.nodeId}:${stage.attempts}` ? 'Hide log' : 'View log'}
+                </button>
+              )}
+              {stage.type === 'check' && stage.outcome === 'failed' && onOpenSession && (
+                <button type="button" className="btn btn-compact" disabled={diagnosing} onClick={() => void startDiagnosis()}>
+                  {diagnosing ? 'Starting…' : 'Diagnose'}
                 </button>
               )}
               {selected?.actions.some(a => a.kind === 'retry-stage' && a.nodeId === stage.nodeId) && (
@@ -466,6 +544,43 @@ export function WorkflowRunMonitor({
                 </>
               )}
             </div>
+
+            {diagnosisMessage && <p className="wf-stage-error" data-testid="wf-diagnosis-blocked">{diagnosisMessage}</p>}
+
+            {evidenceKey === `${selected.runId}:${stage.nodeId}:${stage.attempts}` && (
+              <div className="wf-evidence" data-testid="wf-evidence-panel">
+                {evidenceError ? (
+                  <p className="wf-stage-error">{evidenceError}</p>
+                ) : !evidenceView ? (
+                  <span className="placeholder-text">Loading log…</span>
+                ) : !evidenceView.entry ? (
+                  <span className="placeholder-text">No retained evidence for this attempt.</span>
+                ) : evidenceView.expired ? (
+                  <span className="placeholder-text">
+                    This log&rsquo;s retention window has passed; it is no longer available.
+                  </span>
+                ) : evidenceView.entry.presence === 'missing' ? (
+                  <span className="placeholder-text">
+                    {evidenceView.entry.missingReason || 'Nothing was captured for this attempt.'}
+                  </span>
+                ) : evidenceView.entry.presence === 'empty' ? (
+                  <span className="placeholder-text">The command ran and produced no output.</span>
+                ) : (
+                  <>
+                    <div className="wf-evidence-head">
+                      <span>{evidenceView.entry.kind}</span>
+                      {evidenceView.entry.truncated && (
+                        <span className="session-changes-file-truncated">
+                          showing the last {((evidenceView.entry.storedBytes ?? 0) / 1024).toFixed(0)} KB of{' '}
+                          {((evidenceView.entry.originalBytes ?? 0) / 1024).toFixed(0)} KB
+                        </span>
+                      )}
+                    </div>
+                    <pre className="wf-evidence-body">{evidenceView.content}</pre>
+                  </>
+                )}
+              </div>
+            )}
               </div>
             )}
           </aside>,

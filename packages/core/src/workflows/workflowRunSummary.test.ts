@@ -120,3 +120,15 @@ test('a cancelled run reports why', () => {
   assert.equal(summary.status, 'cancelled');
   assert.match(summary.explanation, /cancelled: superseded/);
 });
+
+test('a stage row carries its reported phase while running, and drops it once settled', () => {
+  let r = applyWorkflowRunCommand(run(), { kind: 'node-started', nodeId: 'plan', at: T(1) });
+  r = applyWorkflowRunCommand(r, { kind: 'node-progress', nodeId: 'plan', at: T(2), phase: 'verifying' });
+
+  let summary = summarizeWorkflowRun(r);
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'plan')?.phase, 'verifying');
+
+  r = succeed(r, 'plan', 3, 'sha-1');
+  summary = summarizeWorkflowRun(r);
+  assert.equal(summary.stages.find(stage => stage.nodeId === 'plan')?.phase, undefined);
+});

@@ -29,6 +29,18 @@ import type {
 } from '../ai/agentRuntime';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
+import type { ProposedRunService } from '../projects/runProfileDiscovery';
+import type { RunProfile, RunProfileIssue, RunProfileValidationResult } from '../projects/runProfile';
+import type { DeploymentProfile, DeploymentProfileIssue, PublishedArtifact } from '../projects/deploymentProfile';
+import type { CredentialBindingStatus } from '../projects/deploymentProfileStore';
+import type { DeploymentRun } from '../projects/deploymentRunState';
+import type { PublishManifest } from '../projects/publishManifest';
+import type { DeploymentHealthResult } from '../deployments/directDeploymentOrchestrator';
+import type { WorkflowEvidenceSourceRef } from '../workflows/workflowEvidence';
+import type { ReconciledService } from '../projects/runReconciliation';
+import type { RunLogLine, RunServiceStatus } from '../projects/runServiceManager';
+import type { BrowserDiagnosticsBundle } from '../projects/browserDiagnostics';
+import type { PreviewVerificationCheck, PreviewVerificationOutcome } from '../projects/previewVerification';
 import type { AppSettings, AppSettingsPatch, MarketplaceSettings } from '../config/appSettings';
 import type {
   ActiveAppearanceAddons,
@@ -74,6 +86,8 @@ import type { WorkflowValidationResult } from '../workflows/workflowValidation';
 import type { WorkflowCatalog } from '../workflows/workflowStore';
 import type { WorkflowTemplate, TemplateReadiness } from '../workflows/workflowTemplates';
 import type { WorkflowRunSummary } from '../workflows/workflowRunSummary';
+import type { WorkflowEvidenceEntry } from '../workflows/workflowEvidence';
+import type { CreateDiagnosisSessionResult } from '../ai/diagnosisBrief';
 import type { GitBlameLine, GitCommitDetails, GitConflictFile, GitConflictResolution, GitDiffDocument, GitDiffRequest, GitDiffResult, GitFileContent, GitFileHistoryEntry, GitHunkActionRequest, GitRepositoryPreflight, GitRepositorySnapshot, GitStatusSnapshot } from '../git/gitGraph';
 
 /**
@@ -296,6 +310,79 @@ export interface BrowserIpc {
 }
 
 /**
+ * Run lifecycle control (FX-BE-055 / TASK-146): start/stop the whole run,
+ * start/stop/restart one service, live status/log push events, and
+ * conservative post-restart reconciliation for whatever a previous session
+ * left running when Praxis itself was closed.
+ */
+export interface RunsIpc {
+  /** Starts the project's saved Run profile. Rejects if none exists, the profile is invalid, or a run is already active. */
+  start(projectId: string): Promise<void>;
+  /** Stops every service in the project's active run and revokes its preview grants. A no-op if nothing is running. */
+  stop(projectId: string): Promise<void>;
+  stopService(projectId: string, serviceId: string): Promise<void>;
+  startService(projectId: string, serviceId: string): Promise<void>;
+  restartService(projectId: string, serviceId: string): Promise<void>;
+  /** A snapshot of every tracked service's current status — empty when nothing is running for this project this session. */
+  status(projectId: string): Promise<RunServiceStatus[]>;
+  /**
+   * Conservative reconciliation against whatever this project's last run
+   * persisted (TASK-146's "after app restart" half). Empty when this
+   * session's own manager already owns the project's run, or nothing was
+   * ever persisted — only meaningful right after launch, before `start` has
+   * been called for this project in this session.
+   */
+  reconcile(projectId: string): Promise<ReconciledService[]>;
+  /** The granted preview origin for a ready service, or undefined if it isn't ready (yet) or declares no port. */
+  previewUrl(projectId: string, serviceId: string): Promise<string | undefined>;
+  /** Fires on every service status transition for any project's active run. */
+  onStatusChanged(listener: (projectId: string, status: RunServiceStatus) => void): () => void;
+  /** Fires on every stdout/stderr line from any project's active run. */
+  onLog(listener: (projectId: string, line: RunLogLine) => void): () => void;
+  /**
+   * Runs one preview verification check against a ready service (FX-BE-056
+   * / TASK-149): opens its granted origin, runs the check's interactions,
+   * and evaluates its assertions. Rejects if the service has no active
+   * preview grant (its run must be started and the service `ready` first).
+   */
+  runVerification(projectId: string, check: PreviewVerificationCheck): Promise<PreviewVerificationOutcome>;
+  /**
+   * Starts a diagnosis session from a failed verification outcome. Refuses
+   * (without opening a session) when `outcome.passed` is true or the
+   * project has no working folder — the same "never open a session with
+   * nothing to work from" discipline as `WorkflowsIpc.startDiagnosis`.
+   */
+  diagnoseVerificationFailure(
+    projectId: string,
+    check: PreviewVerificationCheck,
+    outcome: PreviewVerificationOutcome
+  ): Promise<CreateDiagnosisSessionResult>;
+}
+
+/**
+ * The Run preview surface (FX-BE-055 / TASK-146) — a passive viewer onto a
+ * granted preview origin, structurally the same `WebContentsView` control
+ * channel as `BrowserIpc` but with no navigation/action methods: a preview
+ * only ever opens the one URL its owning service was granted. Hiding it
+ * (`setVisible(false)`, what closing the preview tab does) never touches
+ * the underlying run — see `previewBrowser.ts`'s module comment.
+ */
+export interface PreviewIpc {
+  attach(): Promise<void>;
+  setBounds(bounds: { x: number; y: number; width: number; height: number }): Promise<void>;
+  setVisible(visible: boolean): Promise<void>;
+  /** Rejects with the same reason `previewAccessBlockedReason` would give if the URL's origin has no active grant. */
+  open(url: string): Promise<void>;
+  /**
+   * Screenshots the currently open page, folds it into the console/network
+   * evidence captured since the last `open()`, persists the bundle, and
+   * returns it (FX-BE-056 / TASK-147). `undefined` when nothing is
+   * currently open with a resolvable grant to attribute the capture to.
+   */
+  captureDiagnostics(): Promise<BrowserDiagnosticsBundle | undefined>;
+}
+
+/**
  * Update state as the main process sees it. `unsupported` is the ordinary case
  * in development and in a build published without a feed — not an error.
  * `available` carries `canInstall: false` when the build can find an update but
@@ -408,6 +495,28 @@ export interface ProjectsIpc {
   validateImports(rows: ProjectImportRow[]): Promise<string | undefined>;
   /** Creates a folder-backed project per selected row and adds them to the workspace. */
   createFromImports(rows: ProjectImportRow[], workspaceId: string): Promise<ProjectRecord[]>;
+
+  /**
+   * Reads the project's `run.praxis.json` (FX-BE-054 / TASK-143). No profile
+   * yet — including a project with no working folder — is `{ issues: [] }`,
+   * not an error; a hand-edited malformed file comes back with `issues`
+   * describing why, per `readRunProfile`'s contract.
+   */
+  getRunProfile(projectId: string): Promise<{ profile?: RunProfile; issues: RunProfileIssue[] }>;
+  /** Validates then writes the project's Run profile; rejects (no write) when invalid. */
+  saveRunProfile(projectId: string, profile: RunProfile): Promise<void>;
+  /**
+   * Runs `validateRunProfile` without writing anything — live feedback while
+   * editing. `saveRunProfile` re-validates independently before it writes;
+   * this is a convenience for the editor, not the enforcement point.
+   */
+  validateRunProfile(profile: RunProfile): Promise<RunProfileValidationResult>;
+  /**
+   * Proposes Run services from a shallow scan of the project's working
+   * folder (root plus immediate subdirectories) — reads `package.json` and
+   * `Properties/launchSettings.json` only, never writes anything.
+   */
+  discoverRunServices(projectId: string): Promise<Array<ProposedRunService & { relativeDir: string }>>;
 }
 
 /** Saved workspaces — named groupings of projects/connections the user can switch between and export to a file. */
@@ -700,6 +809,108 @@ export interface PraxisIpc {
   workspaces: WorkspacesIpc;
   terminal: TerminalIpc;
   git: GitIpc;
+  runs: RunsIpc;
+  preview: PreviewIpc;
+  deployments: DeploymentsIpc;
+}
+
+/**
+ * Direct deployment actions (FX-BE-059 / TASK-158) — prepare, approve,
+ * deploy, health results, and explicit rollback, each a thin pass-through
+ * to the core orchestrator (`deployments/directDeploymentOrchestrator.ts`).
+ * A profile and its artifact/manifest are passed on every call rather than
+ * looked up from a stored id — choosing which profile and published
+ * artifact to act on is FX-BE-060's UI concern, not this surface's.
+ */
+export interface DeploymentsIpc {
+  // ── Profiles (TASK-151/159) ──────────────────────────────────────────
+  /** Every profile saved for a project. */
+  listProfiles(projectId: string): Promise<DeploymentProfile[]>;
+  getProfile(projectId: string, profileId: string): Promise<{ profile?: DeploymentProfile; issues: DeploymentProfileIssue[] }>;
+  /** Rejects an invalid profile with its errors rather than persisting it. */
+  saveProfile(projectId: string, profile: DeploymentProfile): Promise<DeploymentProfile>;
+  /** Live validation for the editor — no persistence. */
+  validateProfile(profile: DeploymentProfile): Promise<{ valid: boolean; errors: DeploymentProfileIssue[] }>;
+  /** "Can this build, right now, actually run this" — unsupported executor/target kinds, distinct from a structural error. */
+  preflightCapabilities(profile: DeploymentProfile): Promise<DeploymentProfileIssue[]>;
+  /** Whether each credential the profile names is currently bound in the local secret store — never the credential's value. */
+  evaluateCredentials(profile: DeploymentProfile): Promise<{ statuses: CredentialBindingStatus[]; allBound: boolean }>;
+
+  // ── Artifacts (TASK-160) ─────────────────────────────────────────────
+  /** Hashes `rootDir` and records the resulting immutable `PublishedArtifact`. Refuses to replace an existing artifact id. */
+  publishArtifact(
+    artifactId: string,
+    deploymentProfileId: string,
+    rootDir: string,
+    sourceCommit?: WorkflowEvidenceSourceRef
+  ): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest }>;
+  /** Artifacts published under one profile, newest first. */
+  listArtifacts(deploymentProfileId: string): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  /** Every artifact published on this machine, newest first — for picking one to promote to a different profile. */
+  listAllArtifacts(): Promise<Array<{ artifact: PublishedArtifact; manifest: PublishManifest }>>;
+  getArtifact(artifactId: string): Promise<{ artifact: PublishedArtifact; manifest: PublishManifest } | undefined>;
+
+  // ── Runs (TASK-158/160) ──────────────────────────────────────────────
+  /**
+   * Creates and persists a fresh run in `prepared` status. `context` is the
+   * optional linking data TASK-160 adds to `DeploymentRun` (issue, workflow
+   * run, target URL) — set once, immutable thereafter.
+   */
+  prepare(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    context?: { issueKey?: string; issueConnectionId?: string; workflowRunId?: string; targetUrl?: string }
+  ): Promise<DeploymentRun>;
+  /** Requests then grants approval; idempotent — re-approving an already-queued run changes nothing. */
+  approve(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    actor: string
+  ): Promise<{ run: DeploymentRun; ok: boolean; reason?: string }>;
+  /**
+   * Dispatches the deploy. Only ever actually invokes the executor once per
+   * run — a repeated call, whether from a double click or a reconnected UI
+   * re-sending the action, is refused with a reason rather than dispatching
+   * again. `options` covers a `directory` target's exclude/backup/staging
+   * paths and a `local-process` target's extra script inputs and timeout.
+   */
+  deploy(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    artifact: PublishedArtifact,
+    manifest: PublishManifest,
+    options?: {
+      excludePaths?: string[];
+      backupDir?: string;
+      stagingDir?: string;
+      processInputs?: Record<string, string>;
+      timeoutMs?: number;
+      healthCheckHost?: string;
+      healthCheckPort?: number;
+    }
+  ): Promise<{ dispatched: boolean; run: DeploymentRun; reason?: string }>;
+  getRun(runId: string): Promise<DeploymentRun | undefined>;
+  /** A profile's runs, newest first. */
+  listRuns(deploymentProfileId: string): Promise<DeploymentRun[]>;
+  /** A read-only summary of a run's last recorded health outcome. */
+  health(runId: string): Promise<DeploymentHealthResult>;
+  /**
+   * Restores the previous version for a `directory` target. Refused for any
+   * other target kind — the reason is returned, and the attempt itself is
+   * still recorded on the run (`rollback-started` followed by
+   * `rollback-failed`), never silently dropped.
+   */
+  rollback(
+    projectId: string,
+    runId: string,
+    profile: DeploymentProfile,
+    options?: { backupDir?: string; excludePaths?: string[] }
+  ): Promise<{ rolledBack: boolean; run: DeploymentRun; reason?: string }>;
 }
 
 /**
@@ -776,6 +987,30 @@ export interface WorkflowsIpc {
    * advancing a stage in the background included. Returns an unsubscribe.
    */
   onRunChanged(listener: (runId: string) => void): () => void;
+  /**
+   * Reads back the retained evidence for one stage attempt (FX-BE-051).
+   * `entry` is undefined when nothing was ever captured for that attempt — a
+   * stage that hasn't run, or one from before this capability shipped; that
+   * is `unavailable`, not `expired`. `content` is withheld once `expired` is
+   * true, even though the entry itself still says `present` — retention is
+   * enforced on read here, not only by a future reclaim sweep.
+   */
+  getEvidence(runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceView>;
+  /**
+   * Starts a diagnosis session from a stage attempt's retained evidence
+   * (FX-BE-052). A refused preflight (no working folder, a read-only
+   * session, or no retained evidence) returns `ok: false` with the reason —
+   * no session opens just to discover it has nothing to work from.
+   */
+  startDiagnosis(runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult>;
+}
+
+/** One stage attempt's retained evidence, as read back through `WorkflowsIpc.getEvidence`. */
+export interface WorkflowEvidenceView {
+  entry?: WorkflowEvidenceEntry;
+  /** Present only when `entry.presence === 'present'` and `expired` is false. */
+  content?: string;
+  expired: boolean;
 }
 
 /** Discovery and skill-registry status for the desktop runtime. */

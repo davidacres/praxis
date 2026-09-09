@@ -393,3 +393,90 @@ test('a global workflow carrying a projectId is rejected', () => {
   const result = validateWorkflow({ ...deliveryWorkflow(), projectId: 'project-1' });
   assert.ok(paths(result.errors).includes('projectId'));
 });
+
+// ── Deployment nodes (FX-BE-058 / TASK-155) ──────────────────────────────
+
+/**
+ * The delivery shape with the "security" check swapped for a deployment
+ * stage — proving a deployment node satisfies a policy gate exactly the way
+ * a check node does, not merely alongside one.
+ */
+function deploymentWorkflow(): WorkflowDefinition {
+  const base = deliveryWorkflow();
+  const securityIndex = base.nodes.findIndex(node => node.id === 'security');
+
+  return {
+    ...base,
+    nodes: base.nodes.map((node, index) => {
+      if (index !== securityIndex) return node;
+      return {
+        type: 'deployment',
+        id: 'security', // keeps every edge/input reference below valid unchanged
+        name: 'Deploy to staging',
+        x: node.x,
+        y: node.y,
+        inputs: node.inputs,
+        deploymentProfileId: 'staging',
+        outputs: [{ id: 'security-report', kind: 'report', required: true }],
+        satisfiesGate: 'security',
+        maxAttempts: 2,
+        timeoutMs: 60000
+      };
+    })
+  };
+}
+
+test('a deployment stage validates clean and can satisfy a gate the same way a check node does', () => {
+  const result = validateWorkflow(deploymentWorkflow());
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.valid, true);
+});
+
+test('a deployment node round-trips through normalization unchanged', () => {
+  const definition = deploymentWorkflow();
+  const roundTripped = normalizeWorkflow(JSON.parse(JSON.stringify(definition)));
+  assert.deepEqual(roundTripped, definition);
+});
+
+test('a deployment node without a deploymentProfileId is rejected', () => {
+  const definition = deploymentWorkflow();
+  const index = definition.nodes.findIndex(node => node.id === 'security');
+  definition.nodes[index] = { ...definition.nodes[index], deploymentProfileId: '' } as never;
+  const result = validateWorkflow(definition);
+  assert.ok(paths(result.errors).includes(`nodes[${index}].deploymentProfileId`));
+});
+
+test('a deployment node exceeding the policy attempt cap is rejected, the same as a check node', () => {
+  const definition = deploymentWorkflow();
+  const index = definition.nodes.findIndex(node => node.id === 'security');
+  definition.nodes[index] = { ...definition.nodes[index], maxAttempts: 9 } as never;
+  const result = validateWorkflow(definition, strictPolicy());
+  assert.ok(paths(result.errors).includes(`nodes[${index}].maxAttempts`));
+});
+
+test('a deployment node with maxAttempts below 1 is rejected', () => {
+  const definition = deploymentWorkflow();
+  const index = definition.nodes.findIndex(node => node.id === 'security');
+  definition.nodes[index] = { ...definition.nodes[index], maxAttempts: 0 } as never;
+  const result = validateWorkflow(definition);
+  assert.ok(paths(result.errors).includes(`nodes[${index}].maxAttempts`));
+});
+
+test('a deployment node with a non-positive timeoutMs is rejected', () => {
+  const definition = deploymentWorkflow();
+  const index = definition.nodes.findIndex(node => node.id === 'security');
+  definition.nodes[index] = { ...definition.nodes[index], timeoutMs: 0 } as never;
+  const result = validateWorkflow(definition);
+  assert.ok(paths(result.errors).includes(`nodes[${index}].timeoutMs`));
+});
+
+test('a deployment node missing its deploymentProfileId and outputs normalizes to safe defaults, not a thrown error', () => {
+  const definition = normalizeWorkflow({
+    ...deliveryWorkflow(),
+    nodes: [{ type: 'deployment', id: 'd', name: 'Deploy' }]
+  });
+  const node = definition.nodes[0];
+  assert.equal(node.type, 'deployment');
+  assert.equal(node.type === 'deployment' && node.deploymentProfileId, '');
+  assert.deepEqual(node.type === 'deployment' ? node.outputs : undefined, []);
+});

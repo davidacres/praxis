@@ -258,11 +258,12 @@ Canonical sequencing and architectural decisions: [delivery roadmap](delivery-de
 | [FX-BE-073](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/story.md) | Story | Shared executor feasibility and runner boundary | Backlog | FX-BE-072 |
 | [FX-BF-027](/docs/plans/features/fx-bf-027-advanced-execution-follow-ons/feature.md) | Feature | Deferred execution reliability and automation extensions | Backlog | FX-BF-024, FX-BF-026 |
 
+
 ## Praxis Mobile companion
 
-The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 13 stories and 36 tasks: FX-BF-028–033, FX-BE-074–086, TASK-201–236. These IDs are reserved across this repository. Local work is Planned; cloud integration is Backlog.
+The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 13 stories and 36 tasks: FX-BF-028–033, FX-BE-074–086, TASK-201–236. Local work is planned first; cloud integration is deferred.
 
-The root desktop board is unchanged; add the mobile folder as a separate project to see its work. Host/core/API changes required by mobile are tracked once in that initiative and implemented in their owning code. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
+The root desktop board is unchanged. Add the mobile folder as a separate project to see its work. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
 
 ## Local-first priority (2026-09-09)
 

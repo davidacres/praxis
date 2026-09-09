@@ -16,6 +16,8 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  isDeploymentNode,
+  nodeOutputs,
   WORKFLOW_SCHEMA_VERSION,
   type WorkflowArtifactContract,
   type WorkflowDefinition,
@@ -78,6 +80,8 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
       };
     case 'check':
       return { ...base, type: 'check', name: 'Check', command: '', successExitCodes: [0], outputs: [] };
+    case 'deployment':
+      return { ...base, type: 'deployment', name: 'Deployment', deploymentProfileId: '', outputs: [] };
     case 'approval':
       return { ...base, type: 'approval', name: 'Approval', prompt: '', requiredGates: [], allowBypass: false };
     case 'join':
@@ -136,9 +140,7 @@ export function removeNode(definition: WorkflowDefinition, nodeId: string): Work
 
   // Inputs that named an artifact only this node produced are now dangling;
   // drop them so the graph stays coherent.
-  const producedElsewhere = new Set(
-    nodes.flatMap(node => (isAgentTaskNode(node) || isCheckNode(node) ? node.outputs.map(o => o.id) : []))
-  );
+  const producedElsewhere = new Set(nodes.flatMap(node => nodeOutputs(node).map(o => o.id)));
   const cleanedNodes = nodes.map(node => ({
     ...node,
     inputs: node.inputs.filter(input => producedElsewhere.has(input))
@@ -167,10 +169,9 @@ export function duplicateNode(definition: WorkflowDefinition, nodeId: string): W
   copy.x = source.x + 40;
   copy.y = source.y + 40;
   copy.inputs = [];
-  if (isAgentTaskNode(copy) || isCheckNode(copy)) {
+  if (isAgentTaskNode(copy) || isCheckNode(copy) || isDeploymentNode(copy)) {
     copy.outputs = copy.outputs.map(output => ({ ...output, id: `${output.id}-${copy.id}` }));
-    if (isAgentTaskNode(copy)) copy.satisfiesGate = undefined;
-    if (isCheckNode(copy)) copy.satisfiesGate = undefined;
+    copy.satisfiesGate = undefined;
   }
 
   return touch(definition, [...definition.nodes, copy], definition.edges);
@@ -237,14 +238,14 @@ export function setEntryNode(definition: WorkflowDefinition, nodeId: string): Wo
   return { ...definition, entryNodeId: nodeId, updatedAt: new Date().toISOString() };
 }
 
-/** Adds a declared output artifact to an agent or check node. */
+/** Adds a declared output artifact to an agent, check, or deployment node. */
 export function addOutput(
   definition: WorkflowDefinition,
   nodeId: string,
   artifact: WorkflowArtifactContract
 ): WorkflowDefinition {
   const nodes = definition.nodes.map(node => {
-    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node))) return node;
+    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node))) return node;
     if (node.outputs.some(output => output.id === artifact.id)) return node;
     return { ...node, outputs: [...node.outputs, artifact] };
   });
@@ -253,7 +254,7 @@ export function addOutput(
 
 export function removeOutput(definition: WorkflowDefinition, nodeId: string, artifactId: string): WorkflowDefinition {
   const nodes = definition.nodes.map(node => {
-    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node))) return node;
+    if (node.id !== nodeId || !(isAgentTaskNode(node) || isCheckNode(node) || isDeploymentNode(node))) return node;
     return { ...node, outputs: node.outputs.filter(output => output.id !== artifactId) };
   });
   // Any node consuming the removed artifact loses that input.

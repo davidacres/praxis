@@ -11,10 +11,13 @@ import {
   createWorkflowRun,
   deleteProjectWorkflow,
   instantiateTemplateForProject,
+  isEvidenceExpired,
   loadProjectWorkflows,
   migrateWorkflow,
   normalizeWorkflow,
   isRunSettled,
+  readEvidenceBundle,
+  readEvidenceContent,
   recoverWorkflowRun,
   resolveWorkflowCatalog,
   summarizeWorkflowRun,
@@ -23,9 +26,11 @@ import {
   writeProjectWorkflow,
   WorkflowRunStore,
   type AgentCatalogSnapshot,
+  type CreateDiagnosisSessionResult,
   type TemplateReadiness,
   type WorkflowCatalog,
   type WorkflowDefinition,
+  type WorkflowEvidenceView,
   type WorkflowGateKind,
   type WorkflowPolicyProfile,
   type WorkflowRun,
@@ -37,6 +42,8 @@ import { getProjectStore } from './projectStoreInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
+import { evidenceStorageRoot } from './workflowEvidenceStorage';
+import { startDiagnosisSessionFromEvidence } from './diagnosisSession';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -412,4 +419,49 @@ export function registerWorkflowIpc(): void {
     if (!run) throw new Error(`Run ${runId} was not found.`);
     return summarize(run);
   });
+
+  ipcMain.handle(
+    'workflows:getEvidence',
+    async (_event, runId: string, nodeId: string, attempt: number): Promise<WorkflowEvidenceView> => {
+      const run = runStore().get(runId);
+      if (!run) return { expired: false };
+
+      const key = { projectId: run.projectId, runId, nodeId, attempt };
+      const { bundle } = await readEvidenceBundle(evidenceStorageRoot(), key);
+      const entry = bundle?.entries[0];
+      if (!entry) return { expired: false };
+
+      const expired = isEvidenceExpired(entry.retention);
+      if (entry.presence !== 'present' || expired) return { entry, expired };
+
+      try {
+        const content = await readEvidenceContent(evidenceStorageRoot(), key, entry);
+        return { entry, content, expired: false };
+      } catch {
+        // The manifest exists but its content file does not (e.g. removed out
+        // of band) — report the entry so the UI can say "unavailable" rather
+        // than silently returning nothing.
+        return { entry, expired: false };
+      }
+    }
+  );
+
+  ipcMain.handle(
+    'workflows:startDiagnosis',
+    async (_event, runId: string, nodeId: string, attempt: number): Promise<CreateDiagnosisSessionResult> => {
+      const run = runStore().get(runId);
+      if (!run) return { ok: false, reason: 'no-evidence', message: `Run ${runId} was not found.` };
+      const node = run.definition.nodes.find(candidate => candidate.id === nodeId);
+      if (!node || node.type !== 'check') {
+        return { ok: false, reason: 'no-evidence', message: `Stage ${nodeId} is not a check stage.` };
+      }
+      const project = getProjectStore().get(run.projectId);
+      return startDiagnosisSessionFromEvidence({
+        key: { projectId: run.projectId, runId, nodeId, attempt },
+        node,
+        workingDirectory: project?.workspaceFolder?.trim() || undefined,
+        toolMode: project?.defaultAiToolMode ?? 'full'
+      });
+    }
+  );
 }

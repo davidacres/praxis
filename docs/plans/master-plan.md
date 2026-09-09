@@ -40,9 +40,12 @@ The historical Task Designer phases above remain unchanged. The new project exec
 
 Recommended order: FX-BF-021 diagnosis → FX-BF-022 previews → FX-BF-023 deployment foundation → FX-BF-024 pipeline deployment → FX-BF-025 IIS → FX-BF-026 interactive/agent debugging. FX-BF-027 is deferred. Hard prerequisites and permitted parallel implementation are recorded in each item's Dependencies section and the roadmap; this recommendation is priority order, not an extra inferred dependency.
 
-## Mobile companion initiative
 
-See the self-contained [Praxis Mobile master plan](../../apps/praxis-mobile/docs/plans/master-plan.md) and [mobile Plan Map](../../apps/praxis-mobile/docs/PLAN_MAP.md). Its separate folder-backed project owns the mobile and prerequisite connectivity plans. Desktop and LAN use remain account-free; authenticated internet access uses the proposed GenericSystem/Roleover and Azure Relay integration. Existing desktop phases above remain unchanged.
+## Praxis Mobile companion
+
+The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/praxis-mobile](../../apps/praxis-mobile/README.md). Its canonical [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) and [master plan](../apps/praxis-mobile/docs/plans/master-plan.md) contain 6 features, 13 stories and 36 tasks: FX-BF-028–033, FX-BE-074–086, TASK-201–236. Local work is planned first; cloud integration is deferred.
+
+The root desktop board is unchanged. Add the mobile folder as a separate project to see its work. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
 
 ## Local-first priority (2026-09-09)
 
