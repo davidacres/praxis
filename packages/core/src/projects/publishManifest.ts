@@ -53,8 +53,15 @@ function sha256(content: Buffer): string {
   return `sha256:${createHash('sha256').update(content).digest('hex')}`;
 }
 
-/** Every regular file under `rootDir`, recursively, as POSIX-relative paths in sorted order — deterministic regardless of the filesystem's own directory-read order. */
-async function listFiles(rootDir: string): Promise<string[]> {
+/**
+ * Every regular file under `rootDir`, recursively, as POSIX-relative paths
+ * in sorted order — deterministic regardless of the filesystem's own
+ * directory-read order. Exported for `deployments/directoryTarget.ts`
+ * (TASK-157), which needs the identical walk to decide what a live target
+ * directory currently holds; kept as one implementation rather than a
+ * second copy of the same recursive walk.
+ */
+export async function listFilesRecursive(rootDir: string): Promise<string[]> {
   const results: string[] = [];
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -80,7 +87,7 @@ export async function buildPublishManifest(rootDir: string, createdAt: string = 
   if (!rootStat?.isDirectory()) {
     throw new Error(`Not a directory: ${rootDir}`);
   }
-  const relativePaths = await listFiles(rootDir);
+  const relativePaths = await listFilesRecursive(rootDir);
   const files: PublishManifestEntry[] = [];
   for (const relativePath of relativePaths) {
     const content = await readFile(path.join(rootDir, relativePath));
@@ -111,7 +118,7 @@ export async function validatePublishedArtifact(rootDir: string, manifest: Publi
   }
 
   const expected = new Map(manifest.files.map(file => [file.path, file]));
-  const onDisk = new Set(await listFiles(rootDir));
+  const onDisk = new Set(await listFilesRecursive(rootDir));
   const issues: PublishValidationIssue[] = [];
 
   for (const [relativePath, expectedEntry] of expected) {
