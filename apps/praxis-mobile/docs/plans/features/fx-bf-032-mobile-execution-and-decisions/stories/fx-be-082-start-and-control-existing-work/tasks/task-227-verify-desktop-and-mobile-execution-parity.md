@@ -2,7 +2,7 @@
 type: Task
 id: TASK-227
 title: "Verify desktop and mobile execution parity"
-status: planned
+status: complete
 story: FX-BE-082
 updated: 2026-09-09
 dependencies: [TASK-226]
@@ -36,7 +36,14 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Added an explicit desktop/mobile execution action parity guard.
+
+- Source: apps/praxis-mobile/renderer/mobileParity.ts
+- Tests: apps/praxis-mobile/renderer/mobileParity.test.ts
+- Verification fails when any allowlisted mobile mutation is absent from the desktop operation set.
+- Hosted Actions remain unavailable; deterministic parity tests were added.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
