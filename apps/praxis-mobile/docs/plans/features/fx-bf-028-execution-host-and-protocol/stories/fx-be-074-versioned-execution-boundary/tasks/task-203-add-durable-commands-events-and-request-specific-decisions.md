@@ -2,7 +2,7 @@
 type: Task
 id: TASK-203
 title: "Add durable commands events and request-specific decisions"
-status: planned
+status: complete
 story: FX-BE-074
 updated: 2026-09-09
 dependencies: [TASK-202]
@@ -36,4 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented the durable command/event semantics behind an injectable ledger.
+
+- Source: packages/core/src/host/mobileCommandLedger.ts
+- Tests: packages/core/src/host/mobileCommandLedger.test.ts
+- Public export: packages/core/src/index.ts
+- Repeated command IDs replay the original record; conflicting payload digests are rejected.
+- Accepted commands can be reconciled as unknown after a crash boundary, then completed explicitly without blind replay.
+- Event replay is cursor-based and bounded for reconnect/snapshot orchestration.
+- Verification: deterministic admission, conflict, reconciliation, and replay tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: production persistence and FIFO permission/approval adapters remain host integration work; the core ledger is intentionally transport-neutral.
+
+Parent completion requires verified child outcomes.
