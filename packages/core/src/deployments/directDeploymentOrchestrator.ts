@@ -33,7 +33,6 @@
  * `failed` only, never invoked automatically by the deploy path itself).
  */
 
-import * as path from 'node:path';
 import {
   SUPPORTED_EXECUTOR_KINDS,
   SUPPORTED_TARGET_KINDS,
@@ -50,6 +49,7 @@ import {
 } from '../projects/deploymentRunState';
 import type { DeploymentRunStore } from '../projects/deploymentRunStore';
 import type { PublishManifest } from '../projects/publishManifest';
+import { resolvePortableFolderPath } from '../workspaces/workspacePaths';
 import { applyDirectoryDeployment, restoreDirectoryBackup, verifyDirectoryHealth } from './directoryTarget';
 import { runDirectProcessDeployment } from './directProcessExecutor';
 
@@ -229,8 +229,16 @@ async function dispatchToTarget(
     if (!input.backupDir || !input.stagingDir) {
       return { ok: false, detail: 'A directory target deploy requires backupDir and stagingDir.' };
     }
+    // A valid profile's target.path is repo-relative (validateDeploymentProfile
+    // refuses an absolute one, the same discipline local-process's cwd uses
+    // just below) — resolved against projectFolder here, at the one point
+    // that actually touches the filesystem, the same way cwd is.
+    // `resolvePortableFolderPath` (workspacePaths.ts) passes an already-
+    // absolute path through unchanged, so this stays permissive of a caller
+    // (a test, a future migration) that still hands over an absolute one.
+    const target = { ...input.profile.target, path: resolvePortableFolderPath(input.profile.target.path, input.projectFolder) };
     const applied = await applyDirectoryDeployment({
-      target: input.profile.target,
+      target,
       artifactRootDir: input.artifact.location.path,
       manifest: input.manifest,
       excludePaths: input.excludePaths ?? [],
@@ -247,7 +255,7 @@ async function dispatchToTarget(
       operationId,
       executable: target.executable,
       args: target.args,
-      cwd: target.cwd ? path.join(input.projectFolder, target.cwd) : input.projectFolder,
+      cwd: target.cwd ? resolvePortableFolderPath(target.cwd, input.projectFolder) : input.projectFolder,
       inputs: { ARTIFACT_PATH: input.artifact.location.path, ...(input.processInputs ?? {}) },
       timeoutMs: input.timeoutMs
     });
@@ -288,6 +296,8 @@ export interface RollbackDirectDeploymentInput {
   store: DeploymentRunStore;
   runId: string;
   profile: DeploymentProfile;
+  /** Resolves a `directory` target's repo-relative `path`, the same as `RunDirectDeploymentInput.projectFolder` does for a deploy. Unused for any other target kind. */
+  projectFolder: string;
   /** `directory` target only — the backup this run's own deploy took. */
   backupDir?: string;
   excludePaths?: string[];
@@ -344,7 +354,8 @@ export async function rollbackDirectDeployment(input: RollbackDirectDeploymentIn
     return { rolledBack: false, run: failed, reason: failed.endedReason };
   }
 
-  const restore = await restoreDirectoryBackup(input.profile.target, input.backupDir, input.excludePaths ?? []);
+  const target = { ...input.profile.target, path: resolvePortableFolderPath(input.profile.target.path, input.projectFolder) };
+  const restore = await restoreDirectoryBackup(target, input.backupDir, input.excludePaths ?? []);
   const next = restore.restored
     ? applyDeploymentRunCommand(started, { kind: 'rollback-succeeded', at: input.now() })
     : applyDeploymentRunCommand(started, { kind: 'rollback-failed', at: input.now(), error: restore.error ?? 'Restore failed.' });

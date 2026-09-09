@@ -361,7 +361,7 @@ test('rollback on a directory target restores the previous version', async () =>
     assert.equal(deployed.run.status, 'succeeded');
     assert.equal(await readFile(path.join(targetDir, 'index.html'), 'utf8'), 'v2');
 
-    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, backupDir, now: nextAt });
+    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, projectFolder: '/unused', backupDir, now: nextAt });
     assert.equal(rollback.rolledBack, true);
     assert.equal(rollback.run.status, 'rolled-back');
     assert.equal(await readFile(path.join(targetDir, 'index.html'), 'utf8'), 'v1');
@@ -381,7 +381,7 @@ test('rollback on a local-process target is refused, explains why, and leaves ev
     const deployed = await runDirectDeployment({ store, locks, runId: 'run-1', profile: p, artifact, manifest, projectFolder: os.tmpdir(), now: nextAt });
     assert.equal(deployed.run.status, 'succeeded');
 
-    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, now: nextAt });
+    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, projectFolder: '/unused', now: nextAt });
     assert.equal(rollback.rolledBack, false);
     assert.match(rollback.reason ?? '', /not supported for target kind "local-process"/);
     assert.equal(rollback.run.status, 'failed', 'the rollback attempt itself settles as failed, not silently dropped');
@@ -402,7 +402,7 @@ test('rollback is refused on a run that never succeeded or failed', async () => 
   await prepareDirectDeployment({ store, runId: 'run-1', profile: p, artifact, now: nextAt });
   await approveDirectDeployment({ store, runId: 'run-1', profile: p, artifact, actor: 'dave', now: nextAt });
 
-  const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, now: nextAt });
+  const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, projectFolder: '/unused', now: nextAt });
   assert.equal(rollback.rolledBack, false);
   assert.match(rollback.reason ?? '', /"queued"/);
 });
@@ -420,7 +420,7 @@ test('a directory rollback with no backupDir given is refused and explains why',
     await approveDirectDeployment({ store, runId: 'run-1', profile: p, artifact, actor: 'dave', now: nextAt });
     await runDirectDeployment({ store, locks, runId: 'run-1', profile: p, artifact, manifest, projectFolder: '/unused', backupDir, stagingDir, now: nextAt });
 
-    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, now: nextAt });
+    const rollback = await rollbackDirectDeployment({ store, runId: 'run-1', profile: p, projectFolder: '/unused', now: nextAt });
     assert.equal(rollback.rolledBack, false);
     assert.match(rollback.reason ?? '', /No backup directory/);
   } finally {
