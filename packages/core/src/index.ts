@@ -77,6 +77,7 @@ export * from './deployments/directDeploymentOrchestrator';
 export * from './deployments/githubActionsExecutor';
 export * from './deployments/githubActionsObserver';
 export * from './deployments/githubActionsOrchestrator';
+export * from './deployments/githubActionsResults';
 export * from './projects/projectStore';
 export * from './projects/projectService';
 export * from './projects/projectConnection';
