@@ -2,7 +2,7 @@
 type: Task
 id: TASK-235
 title: "Prove standalone repository portability"
-status: planned
+status: complete
 story: FX-BE-085
 updated: 2026-09-09
 dependencies: [TASK-234]
