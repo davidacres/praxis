@@ -2,7 +2,7 @@
 type: Task
 id: TASK-236
 title: "Complete release acceptance and documentation"
-status: planned
+status: complete
 story: FX-BE-085
 updated: 2026-09-09
 dependencies: [TASK-235]
