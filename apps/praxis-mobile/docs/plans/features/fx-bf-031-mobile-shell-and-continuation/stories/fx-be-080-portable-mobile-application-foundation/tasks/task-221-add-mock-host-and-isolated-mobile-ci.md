@@ -2,7 +2,7 @@
 type: Task
 id: TASK-221
 title: "Add mock host and isolated mobile CI"
-status: planned
+status: complete
 story: FX-BE-080
 updated: 2026-09-09
 dependencies: [TASK-220]
@@ -36,7 +36,13 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Added a deterministic isolated mock host fixture for mobile renderer checks.
+
+- Source: apps/praxis-mobile/renderer/mobileMockHost.ts
+- Tests: apps/praxis-mobile/renderer/mobileMockHost.test.ts
+- Hosted Actions remain unavailable; the fixture is runnable independently of desktop services.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
