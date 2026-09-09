@@ -86,9 +86,10 @@ export class GitHubActionsEvidenceProvider implements CiEvidenceProvider {
     return (parsed.jobs ?? []).map(raw => normalizeJob(raw as Record<string, unknown>)).filter((job): job is CiJobSummary => !!job);
   }
 
-  public async getJobLog(jobId: string): Promise<CiJobLogResult> {
+  public async getJobLog(jobId: string, signal?: AbortSignal): Promise<CiJobLogResult> {
     const url = this.buildUrl(`/repos/${this.encodeOwnerRepo()}/actions/jobs/${encodeURIComponent(jobId)}/logs`);
     const response = await this.fetchImpl(url, {
+      signal,
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${this.config.token}`,

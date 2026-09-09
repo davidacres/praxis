@@ -92,6 +92,8 @@ export interface WorkflowEvidenceBundle extends WorkflowEvidenceBundleKey {
   bundleId: string;
   source: WorkflowEvidenceSourceRef;
   createdAt: string;
+  /** Where this evidence came from, for a bundle imported from an external provider (e.g. a CI job run) — absent for a locally captured one. */
+  sourceUrl?: string;
   entries: WorkflowEvidenceEntry[];
 }
 
@@ -115,6 +117,7 @@ export function createEvidenceBundle(input: {
   source: WorkflowEvidenceSourceRef;
   createdAt: string;
   entries?: WorkflowEvidenceEntry[];
+  sourceUrl?: string;
 }): WorkflowEvidenceBundle {
   return {
     schemaVersion: WORKFLOW_EVIDENCE_SCHEMA_VERSION,
@@ -125,7 +128,8 @@ export function createEvidenceBundle(input: {
     attempt: input.key.attempt,
     source: input.source,
     createdAt: input.createdAt,
-    entries: input.entries ?? []
+    entries: input.entries ?? [],
+    ...(input.sourceUrl ? { sourceUrl: input.sourceUrl } : {})
   };
 }
 
@@ -439,7 +443,8 @@ export function parseEvidenceBundle(
     attempt: typeof raw.attempt === 'number' ? raw.attempt : NaN,
     source: (raw.source && typeof raw.source === 'object' ? raw.source : { kind: 'unknown' }) as WorkflowEvidenceSourceRef,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : '',
-    entries: Array.isArray(raw.entries) ? (raw.entries as WorkflowEvidenceEntry[]) : []
+    entries: Array.isArray(raw.entries) ? (raw.entries as WorkflowEvidenceEntry[]) : [],
+    ...(typeof raw.sourceUrl === 'string' ? { sourceUrl: raw.sourceUrl } : {})
   };
 
   const issues = validateEvidenceBundle(bundle, expected);

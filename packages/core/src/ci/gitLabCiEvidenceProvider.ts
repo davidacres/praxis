@@ -84,9 +84,9 @@ export class GitLabCiEvidenceProvider implements CiEvidenceProvider {
     return data.map(raw => normalizeJob(raw as Record<string, unknown>)).filter((job): job is CiJobSummary => !!job);
   }
 
-  public async getJobLog(jobId: string): Promise<CiJobLogResult> {
+  public async getJobLog(jobId: string, signal?: AbortSignal): Promise<CiJobLogResult> {
     const url = this.buildUrl(`/projects/${this.encodeProjectPath()}/jobs/${encodeURIComponent(jobId)}/trace`);
-    const response = await this.fetchImpl(url, { headers: { 'PRIVATE-TOKEN': this.config.token } });
+    const response = await this.fetchImpl(url, { signal, headers: { 'PRIVATE-TOKEN': this.config.token } });
     // A trace GitLab has already expired off job-log retention reads 404.
     if (response.status === 404) return { content: '', expired: true };
     if (response.status === 403) {
