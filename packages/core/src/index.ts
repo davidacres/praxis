@@ -24,6 +24,7 @@ export * from './ai/diagnosisState';
 export * from './ci/ciEvidenceProvider';
 export * from './ci/githubActionsEvidenceProvider';
 export * from './ci/gitLabCiEvidenceProvider';
+export * from './ci/ciEvidenceImport';
 export * from './ai/agentRuntime';
 export * from './ai/toolEventClassify';
 export * from './ai/tools';
