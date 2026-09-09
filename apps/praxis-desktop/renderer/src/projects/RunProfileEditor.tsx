@@ -2,14 +2,18 @@ import { useEffect, useState } from 'react';
 import type {
   ProjectRecord,
   ProposedRunService,
+  ReconciledService,
+  RunLogLine,
   RunProfile,
   RunProfileIssue,
   RunProfileValidationResult,
   RunReadinessProbe,
-  RunServiceDefinition
+  RunServiceDefinition,
+  RunServiceStatus
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { FieldRow } from '../ui/formControls';
+import { PreviewPane } from './PreviewPane';
 
 /**
  * Project Run profile editor (FX-BE-054 / TASK-143).
@@ -199,6 +203,80 @@ export function RunProfileEditor({ project }: RunProfileEditorProps) {
     setDiscovered(undefined);
   };
 
+  // Run controls (FX-BE-055 / TASK-146): live status/logs over the
+  // `runs:*` push events, layered on top of the profile editor above —
+  // starting/stopping services is independent of whether the profile
+  // itself has unsaved edits.
+  const [runStatuses, setRunStatuses] = useState<RunServiceStatus[]>([]);
+  const [runBusy, setRunBusy] = useState<string | undefined>(); // 'run' or a serviceId, whichever action is in flight
+  const [runError, setRunError] = useState<string | undefined>();
+  const [logs, setLogs] = useState<RunLogLine[]>([]);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [reconciled, setReconciled] = useState<ReconciledService[]>([]);
+  const [reconciledDismissed, setReconciledDismissed] = useState(false);
+  const [preview, setPreview] = useState<{ url: string; title: string } | undefined>();
+
+  useEffect(() => {
+    setRunStatuses([]);
+    setLogs([]);
+    setRunError(undefined);
+    setReconciled([]);
+    setReconciledDismissed(false);
+    setPreview(undefined);
+    void window.praxis.runs.status(project.id).then(async statuses => {
+      setRunStatuses(statuses);
+      if (statuses.length === 0) {
+        setReconciled(await window.praxis.runs.reconcile(project.id));
+      }
+    });
+    const offStatus = window.praxis.runs.onStatusChanged((projectId, status) => {
+      if (projectId !== project.id) return;
+      setRunStatuses(prev => [...prev.filter(s => s.id !== status.id), status]);
+    });
+    const offLog = window.praxis.runs.onLog((projectId, line) => {
+      if (projectId !== project.id) return;
+      setLogs(prev => [...prev.slice(-499), line]);
+    });
+    return () => {
+      offStatus();
+      offLog();
+    };
+  }, [project.id]);
+
+  const runAction = async (key: string, action: () => Promise<void>) => {
+    setRunBusy(key);
+    setRunError(undefined);
+    try {
+      await action();
+    } catch (reason) {
+      setRunError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setRunBusy(undefined);
+    }
+  };
+
+  const startRun = () =>
+    runAction('run', async () => {
+      await window.praxis.runs.start(project.id);
+      // Belt-and-suspenders: every service is already terminal (ready/failed) by
+      // the time start() resolves, but this covers any status event the
+      // renderer's listener happened to attach after it had already fired.
+      setRunStatuses(await window.praxis.runs.status(project.id));
+    });
+  const stopRun = () =>
+    runAction('run', async () => {
+      await window.praxis.runs.stop(project.id);
+      setRunStatuses([]);
+      setPreview(undefined);
+    });
+  const stopOneService = (serviceId: string) => runAction(serviceId, () => window.praxis.runs.stopService(project.id, serviceId));
+  const startOneService = (serviceId: string) => runAction(serviceId, () => window.praxis.runs.startService(project.id, serviceId));
+  const restartOneService = (serviceId: string) => runAction(serviceId, () => window.praxis.runs.restartService(project.id, serviceId));
+  const openPreview = async (service: RunServiceDefinition) => {
+    const url = await window.praxis.runs.previewUrl(project.id, service.id);
+    if (url) setPreview({ url, title: service.name || service.id });
+  };
+
   if (!project.workspaceFolder) {
     return (
       <div className="view-scroll run-page">
@@ -311,6 +389,101 @@ export function RunProfileEditor({ project }: RunProfileEditorProps) {
             data-testid="run-name"
           />
         </FieldRow>
+
+        <div className="run-controls" data-testid="run-controls">
+          <div className="run-controls-header">
+            <strong>{runStatuses.length > 0 ? 'Running' : 'Not running'}</strong>
+            <div style={{ flex: 1 }} />
+            {runStatuses.length === 0 ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={runBusy !== undefined || profile.services.length === 0}
+                onClick={() => void startRun()}
+                data-testid="run-start"
+              >
+                <Icon name="play" size={13} />{runBusy === 'run' ? 'Starting…' : 'Start run'}
+              </button>
+            ) : (
+              <button className="btn btn-danger" type="button" disabled={runBusy !== undefined} onClick={() => void stopRun()} data-testid="run-stop">
+                {runBusy === 'run' ? 'Stopping…' : 'Stop run'}
+              </button>
+            )}
+          </div>
+
+          {runError && <div className="error-banner">{runError}</div>}
+
+          {reconciled.length > 0 && !reconciledDismissed && (
+            <div className="run-reconcile-banner" data-testid="run-reconcile-banner">
+              <Icon name="warning" size={14} />
+              <span>
+                {reconciled.some(service => service.state === 'unknown-running')
+                  ? `${reconciled.filter(service => service.state === 'unknown-running').length} service(s) from a previous session may still be running (pid ${reconciled
+                      .filter(service => service.state === 'unknown-running')
+                      .map(service => service.pid)
+                      .join(', ')}) — Praxis closed without stopping them and cannot safely reattach. Stop them yourself if they're still needed elsewhere, then start a fresh run here.`
+                  : "A previous session's run is no longer active — its processes have already stopped."}
+              </span>
+              <button className="btn btn-icon" type="button" aria-label="Dismiss" onClick={() => setReconciledDismissed(true)} data-testid="run-reconcile-dismiss">
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          )}
+
+          {runStatuses.length > 0 && (
+            <div className="run-status-list">
+              {profile.services.map(service => {
+                const status = runStatuses.find(s => s.id === service.id);
+                const busy = runBusy === service.id;
+                return (
+                  <div className="run-status-row" key={service.id} data-testid="run-status-row">
+                    <span className={`run-status-dot run-status-${status?.state ?? 'pending'}`} aria-hidden="true" />
+                    <span className="run-status-name">{service.name || service.id}</span>
+                    <span className="run-status-state">{status?.state ?? 'pending'}</span>
+                    {status?.pid && <span className="placeholder-text">pid {status.pid}</span>}
+                    {status?.error && <span className="run-status-error">{status.error}</span>}
+                    <div style={{ flex: 1 }} />
+                    {status?.state === 'ready' && service.port !== undefined && (
+                      <button className="btn btn-compact" type="button" onClick={() => void openPreview(service)} data-testid="run-preview-btn">
+                        <Icon name="globe" size={12} />Preview
+                      </button>
+                    )}
+                    {status && (status.state === 'stopped' || status.state === 'failed') && (
+                      <button className="btn btn-compact" type="button" disabled={busy} onClick={() => void startOneService(service.id)} data-testid="run-service-start">
+                        {busy ? '…' : 'Start'}
+                      </button>
+                    )}
+                    {status && (status.state === 'ready' || status.state === 'starting') && (
+                      <>
+                        <button className="btn btn-compact" type="button" disabled={busy} onClick={() => void restartOneService(service.id)} data-testid="run-service-restart">
+                          {busy ? '…' : 'Restart'}
+                        </button>
+                        <button className="btn btn-compact" type="button" disabled={busy} onClick={() => void stopOneService(service.id)} data-testid="run-service-stop">
+                          {busy ? '…' : 'Stop'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {logs.length > 0 && (
+            <div className="run-logs">
+              <button className="btn btn-compact" type="button" onClick={() => setLogsOpen(open => !open)} data-testid="run-logs-toggle">
+                <Icon name={logsOpen ? 'chevron-down' : 'chevron-right'} size={12} />Logs ({logs.length})
+              </button>
+              {logsOpen && (
+                <pre className="run-log-tail" data-testid="run-log-tail">
+                  {logs.map(line => `[${line.serviceId}] ${line.text}`).join('\n')}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {preview && <PreviewPane url={preview.url} title={preview.title} onClose={() => setPreview(undefined)} />}
+        </div>
 
         {errors.length > 0 && (
           <ul className="issues" data-testid="run-issues">
