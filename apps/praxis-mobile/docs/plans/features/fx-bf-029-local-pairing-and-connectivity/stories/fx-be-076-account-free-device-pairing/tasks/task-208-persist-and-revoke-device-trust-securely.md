@@ -2,7 +2,7 @@
 type: Task
 id: TASK-208
 title: "Persist and revoke device trust securely"
-status: planned
+status: complete
 story: FX-BE-076
 updated: 2026-09-09
 dependencies: [TASK-207]
@@ -36,7 +36,17 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented the transport-neutral trusted-device store contract.
+
+- Source: packages/core/src/host/mobileTrustStore.ts
+- Tests: packages/core/src/host/mobileTrustStore.test.ts
+- Public export: packages/core/src/index.ts
+- Trusted records retain public identity, host-key fingerprint, project grants, and revocation state; no private-key field is modeled.
+- Reconnect requires an active device and matching host-key fingerprint; revocation is idempotent and host-key rotation invalidates the previous fingerprint.
+- Verification: deterministic reconnect, revocation, and host-rotation tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: OS keychain adapters and existing-channel teardown remain platform integration work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
