@@ -224,6 +224,44 @@ test('a folderless session explains why repair cannot start and never opens a se
   }
 });
 
+test('a commit unavailable in the local repository explains why repair cannot start and never opens a session', async () => {
+  const port = new RecordingPort();
+  const result = await createDiagnosisSession(port, {
+    bundle: bundleWithLog('ok'),
+    node: checkNode(),
+    workingDirectory: '/repo',
+    toolMode: 'full',
+    evidenceContent: { combined: 'ok' },
+    revisionAvailable: false
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(port.received.length, 0);
+  if (!result.ok) {
+    assert.equal(result.reason, 'revision-unavailable');
+    assert.match(result.message, /deadbeef/);
+    assert.match(result.message, /not available/i);
+  }
+});
+
+test('revisionAvailable undefined (the default) never blocks — the check only applies when the caller actually ran it', async () => {
+  const port = new RecordingPort();
+  const result = await createDiagnosisSession(port, {
+    bundle: bundleWithLog('ok'),
+    node: checkNode(),
+    workingDirectory: '/repo',
+    toolMode: 'full',
+    evidenceContent: { combined: 'ok' }
+  });
+  assert.equal(result.ok, true);
+});
+
+test('buildDiagnosisBrief accepts a minimal command literal, not only a full WorkflowCheckNode — the shape a CI-imported job builds', () => {
+  const brief = buildDiagnosisBrief(bundleWithLog('exit 1'), { command: 'npm', args: ['test'], successExitCodes: [0] });
+  assert.equal(brief.command, 'npm');
+  assert.deepEqual(brief.args, ['test']);
+});
+
 test('a read-only session explains why repair cannot start and never opens a session', async () => {
   const port = new RecordingPort();
   const result = await createDiagnosisSession(port, {
