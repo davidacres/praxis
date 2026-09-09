@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict';import test from 'node:test';import {openMobileAttention} from './mobileAttention';
+test('filters unresolved attention to host and project scope',()=>{const x=openMobileAttention([{id:'1',kind:'permission',hostId:'h',projectId:'p',createdAt:'',resolved:false},{id:'2',kind:'failure',hostId:'h2',projectId:'p',createdAt:'',resolved:false},{id:'3',kind:'approval',hostId:'h',projectId:'p',createdAt:'',resolved:true}],{hostId:'h',projectId:'p'});assert.deepEqual(x.map(i=>i.id),['1']);});
