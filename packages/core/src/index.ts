@@ -141,3 +141,4 @@ export * from './host/mobileHostDiscovery';
 export * from './host/mobileReconnect';
 export * from './host/mobileLanOnly';
 export * from './host/mobileHostApplication';
+export * from './host/mobileHostListener';
