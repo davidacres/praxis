@@ -2,7 +2,7 @@
 type: Task
 id: TASK-231
 title: "Harden suspension reconnect and local data handling"
-status: planned
+status: complete
 story: FX-BE-084
 updated: 2026-09-09
 dependencies: [FX-BE-083]
@@ -36,7 +36,13 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented suspension restoration state that preserves the highest acknowledged event cursor and pending command IDs.
+
+- Source: apps/praxis-mobile/renderer/mobileReliability.ts
+- Tests: apps/praxis-mobile/renderer/mobileReliability.test.ts
+- Verification: deterministic cursor-preservation test added; hosted Actions unavailable.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
