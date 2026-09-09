@@ -2,7 +2,7 @@
 type: Task
 id: TASK-205
 title: "Separate client connection lifecycle from execution"
-status: planned
+status: complete
 story: FX-BE-075
 updated: 2026-09-09
 dependencies: [TASK-204]
@@ -36,7 +36,17 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented a transport-neutral mobile connection lifecycle state machine.
+
+- Source: packages/core/src/host/mobileConnectionLifecycle.ts
+- Tests: packages/core/src/host/mobileConnectionLifecycle.test.ts
+- Public export: packages/core/src/index.ts
+- Connections must progress through connecting and authenticated before becoming ready for execution.
+- Disconnect and close transitions detach the client without representing a run failure; execution eligibility is limited to ready connections.
+- Verification: deterministic transition and execution-gate tests were added; hosted GitHub Actions remain unavailable, so the full workspace build could not be executed here.
+- Remaining limitation: desktop socket lifecycle adapters and recovery-store integration remain host integration work; no always-on daemon is introduced.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
