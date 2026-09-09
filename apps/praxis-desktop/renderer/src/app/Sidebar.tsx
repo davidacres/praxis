@@ -30,7 +30,8 @@ export type FeatureId =
   | 'connections'
   | 'agents'
   | 'workflows'
-  | 'git';
+  | 'git'
+  | 'run';
 
 interface FeatureDef {
   id: FeatureId;
@@ -95,6 +96,8 @@ export interface SidebarProps {
   activeWorkflowRuns?: boolean;
   onSelectWorkflow: (project: ProjectRecord, workflowId: string) => void;
   onSelectWorkflowRuns: (project: ProjectRecord) => void;
+  /** Opens the project's Run profile editor (FX-BE-054). */
+  onSelectRun: (project: ProjectRecord) => void;
   onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteBoard: (board: Board) => void;
   onConfigureBoard: (board: Board) => void;
@@ -151,6 +154,7 @@ export function Sidebar({
   activeWorkflowRuns,
   onSelectWorkflow,
   onSelectWorkflowRuns,
+  onSelectRun,
   onNewWorkflow,
   onDeleteBoard,
   onConfigureBoard,
@@ -508,6 +512,11 @@ export function Sidebar({
                           onClick={() => onSelectGit(project, 'graph')}
                         ><span className="tree-icon"><Icon name="git-branch" size={14} /></span><span className="tree-label">Graph</span><span className="tree-badge">{project.workspaceFolder ? 'Git' : 'Setup'}</span></button>}
                         {!projectGitCollapsed && project.workspaceFolder && <button className={`tree-row project-git-child${activeFeature === 'git' && activeGitView === 'changes' && selectedProjectId === project.id ? ' active' : ''}`} data-testid="project-git-changes-nav-item" onClick={() => onSelectGit(project, 'changes')}><span className="tree-icon"><Icon name="file" size={14} /></span><span className="tree-label">Changes</span></button>}
+                        <button
+                          className={`tree-row project-run-row${activeFeature === 'run' && selectedProjectId === project.id ? ' active' : ''}`}
+                          data-testid="project-run-nav-item"
+                          onClick={() => onSelectRun(project)}
+                        ><span className="tree-icon"><Icon name="server" size={14} /></span><span className="tree-label">Run</span></button>
                         <div className="tree-subsection-heading">
                           <button
                             className="sidebar-subsection-toggle"
