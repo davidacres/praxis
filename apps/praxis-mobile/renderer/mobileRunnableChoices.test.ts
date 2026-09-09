@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict';import test from 'node:test';import {runnableChoicesForProject} from './mobileRunnableChoices';
+test('returns only enabled choices for selected project',()=>{const r=runnableChoicesForProject([{workflowId:'w1',workflowName:'Build',projectId:'p1',enabled:true},{workflowId:'w2',workflowName:'Test',projectId:'p2',enabled:true},{workflowId:'w3',workflowName:'Deploy',projectId:'p1',enabled:false}], 'p1');assert.deepEqual(r.map(x=>x.workflowId),['w1']);});

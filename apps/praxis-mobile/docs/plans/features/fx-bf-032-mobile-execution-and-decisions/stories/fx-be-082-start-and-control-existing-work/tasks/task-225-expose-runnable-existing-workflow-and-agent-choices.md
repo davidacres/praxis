@@ -2,7 +2,7 @@
 type: Task
 id: TASK-225
 title: "Expose runnable existing workflow and agent choices"
-status: planned
+status: complete
 story: FX-BE-082
 updated: 2026-09-09
 dependencies: [FX-BE-081]
@@ -36,7 +36,15 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 
 ## Completion evidence
 
-Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+Implemented a read-only runnable workflow/agent choice filter.
+
+- Source: apps/praxis-mobile/renderer/mobileRunnableChoices.ts
+- Tests: apps/praxis-mobile/renderer/mobileRunnableChoices.test.ts
+- Choices are scoped to the selected project and disabled entries are excluded.
+- Verification: deterministic project-scope filtering test was added; hosted Actions remain unavailable.
+- Remaining limitation: host catalog adapter and selection UI remain integration work.
+
+Parent completion requires verified child outcomes.
 
 ## Local-first delivery gate
 
