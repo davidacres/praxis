@@ -3013,6 +3013,14 @@ textarea {
   -webkit-line-clamp: 1;
 }
 
+/* A card with children shown beneath it (in this column) gets the same left
+   rail as a child, but in `--border-strong` rather than the accent — a
+   neutral, deliberately different colour so "this is a parent" reads apart
+   from "this is a child", not as the same relationship pointing two ways. */
+.issue-card.issue-card-parent {
+  border-left: 3px solid var(--border-strong);
+}
+
 .issue-card-details {
   display: flex;
   align-items: center;

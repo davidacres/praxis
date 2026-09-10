@@ -119,6 +119,13 @@ test('a feature clusters its children directly beneath it, in sequence order', a
   }
   await expect(parentCard).not.toHaveClass(/issue-card-child/);
   await expect(otherFeatureCard).not.toHaveClass(/issue-card-child/);
+
+  // The parent itself is marked distinctly (its own left-rail colour) from a
+  // child, and from a childless feature.
+  await expect(parentCard).toHaveClass(/issue-card-parent/);
+  await expect(otherFeatureCard).not.toHaveClass(/issue-card-parent/);
+  const child = window.locator('[data-testid="issue-card"][data-issue-key="HIER-S01-1"]');
+  await expect(child).not.toHaveClass(/issue-card-parent/);
 });
 
 test('list view shows the same grouping and ordering', async () => {
@@ -145,4 +152,11 @@ test('list view shows the same grouping and ordering', async () => {
     has: window.locator('.issue-card-key', { hasText: 'HIER-S01-1' })
   });
   await expect(child).toHaveClass(/board-list-row-child/);
+  await expect(child).not.toHaveClass(/board-list-row-parent/);
+
+  const parentRow = window.locator('[data-testid="board-list-view"] [data-testid="issue-card"]', {
+    has: window.locator('.issue-card-key', { hasText: 'HIER-F01' })
+  });
+  await expect(parentRow).toHaveClass(/board-list-row-parent/);
+  await expect(parentRow).not.toHaveClass(/board-list-row-child/);
 });
