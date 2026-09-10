@@ -7,6 +7,10 @@
   "scripts": {
     "check-types": "tsc --noEmit -p .",
     "compile": "tsc -p .",
-    "test": "tsc -p . && node --test \"out/**/*.test.js\""
+    "test": "tsc -p . && node --test \"out/**/*.test.js\"",
+    "fixture": "tsc -p . && node out/main/runFixtureJourney.js"
+  },
+  "dependencies": {
+    "@praxis/core": "*"
   }
 }

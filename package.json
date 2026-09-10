@@ -19,6 +19,7 @@
 
     "build:mobile": "npm run compile --workspace=@praxis/mobile",
     "test:mobile": "npm test --workspace=@praxis/mobile",
+    "mobile:fixture": "npm run fixture --workspace=@praxis/mobile",
 
     "renderer:dev": "npm run dev --workspace=@praxis/desktop-renderer",
     "build:renderer": "npm run build --workspace=@praxis/desktop-renderer",
