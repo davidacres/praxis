@@ -1,6 +1,6 @@
 # Story 03.3: Preview And Apply AI Recommendations Safely
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Add a review/apply flow that lets users inspect AI recommendations, accept them,
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-035 (Multi-AI session orchestration).
 
 

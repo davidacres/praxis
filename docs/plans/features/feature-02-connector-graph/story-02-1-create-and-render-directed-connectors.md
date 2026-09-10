@@ -1,6 +1,6 @@
 # Story 02.1: Create And Render Directed Connectors
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Allow users to create directed connections from one ticket node to another and r
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 and FX-BF-013 workflow implementation.
 
 

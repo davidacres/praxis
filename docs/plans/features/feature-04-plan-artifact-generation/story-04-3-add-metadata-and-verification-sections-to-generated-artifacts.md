@@ -1,6 +1,6 @@
 # Story 04.3: Add Metadata And Verification Sections To Generated Artifacts
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P2
@@ -34,5 +34,6 @@ Ensure generated feature and story artifacts include priority, dependencies, com
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Designer completion and folder persistence).
 
 

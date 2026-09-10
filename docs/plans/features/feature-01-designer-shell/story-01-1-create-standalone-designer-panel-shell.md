@@ -1,6 +1,6 @@
 # Story 01.1: Create Standalone Designer Panel Shell
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Add a new standalone task designer panel, command entry point, synchronous webvi
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Governed delivery workflows) and FX-BF-014 (Workflow experience). Visual designer functionality now part of completed workflow implementation.
 
 

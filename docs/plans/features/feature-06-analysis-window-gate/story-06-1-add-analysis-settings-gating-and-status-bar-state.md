@@ -1,6 +1,6 @@
 # Story 06.1: Add Analysis Settings, Gating, And Status-Bar State
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-20T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -51,5 +51,6 @@ Add configuration and visibility gates for the analysis capability. Analysis sho
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-014 (Workflow experience).
 
 
