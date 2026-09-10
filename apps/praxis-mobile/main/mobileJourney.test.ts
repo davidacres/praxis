@@ -13,6 +13,7 @@ import {
   type MobileReadRequest,
   type MobileTarget,
 } from '@praxis/core';
+import { generateKeyPair } from '@praxis/mobile-protocol';
 import { FIXTURE_HOST_ID, FIXTURE_PROJECT_ID, createMobileHostFixture } from './mobileHostFixture';
 import { LoopbackMobileClient, startLoopbackMobileHost } from './mobileLoopbackServer';
 
@@ -64,11 +65,15 @@ test('pair -> connect -> continue -> approve -> reconnect + replay over the loop
   // The token cannot be replayed.
   assert.equal(consumeMobilePairing(store, verifier, pairingRequest, AT).ok, false);
 
-  // 2. Stand up the host and connect.
+  // 2. Stand up the host and connect over a Noise IK channel; the client pins
+  //    the host static key (pairing would deliver it).
   const fixture = createMobileHostFixture(() => AT);
-  const host = await startLoopbackMobileHost(fixture.app);
-  const client = new LoopbackMobileClient('127.0.0.1', host.port);
+  const hostKey = generateKeyPair();
+  const deviceKey = generateKeyPair();
+  const host = await startLoopbackMobileHost(fixture.app, hostKey);
+  const client = new LoopbackMobileClient('127.0.0.1', host.port, deviceKey, host.staticPublicKey);
   await client.connect();
+  assert.deepEqual([...(client.peerStaticPublicKey ?? [])], [...hostKey.publicKey], 'the channel authenticated the host');
 
   try {
     // 3. Read the project and its work.
@@ -119,7 +124,7 @@ test('pair -> connect -> continue -> approve -> reconnect + replay over the loop
   }
 
   // 9. Reconnect a fresh peer and replay every event from the start.
-  const rejoin = new LoopbackMobileClient('127.0.0.1', host.port);
+  const rejoin = new LoopbackMobileClient('127.0.0.1', host.port, generateKeyPair(), host.staticPublicKey);
   await rejoin.connect();
   try {
     await rejoin.requestReplay(0);

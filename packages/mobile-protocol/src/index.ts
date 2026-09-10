@@ -7,3 +7,10 @@ export {
   type KeyPair,
   type NoisePattern,
 } from './noise';
+export {
+  RecordAssembler,
+  SecureChannel,
+  completeHandshake,
+  frame,
+  type SecureChannelOptions,
+} from './secureChannel';
