@@ -1,3 +1,9 @@
+---
+id: FX-BF-007
+status: Done
+type: Feature
+---
+
 # FX-BF-007: Praxis Saved Workspaces
 
 **Created:** 2026-08-28T18:59:35.084Z

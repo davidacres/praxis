@@ -1,3 +1,9 @@
+---
+id: FX-BF-006
+status: To Do
+type: Feature
+---
+
 # FX-BF-006: Praxis Atlas — Explorable Spatial Workspace
 
 **Type:** Feature
