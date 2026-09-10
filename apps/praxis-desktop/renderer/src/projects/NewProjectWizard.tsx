@@ -8,10 +8,7 @@ import {
   type ProjectType,
   type ProjectWorkflowStage
 } from '@praxis/core';
-// Deep import on purpose: `@praxis/core`'s barrel pulls in node-only services
-// (chokidar, node:fs) that cannot be bundled for the browser — importing
-// PROJECT_BRIEF_FIELDS from the package root fails the vite build.
-import { PROJECT_BRIEF_FIELDS, defaultProjectTickets, defaultProjectWorkflow } from '@praxis/core/out/projects/projectTemplates';
+import { PROJECT_BRIEF_FIELDS, defaultProjectTickets, defaultProjectWorkflow } from './projectBriefFields';
 import { Icon } from '../ui/Icon';
 
 const TYPES: Array<{ id: ProjectType; title: string; description: string }> = [
