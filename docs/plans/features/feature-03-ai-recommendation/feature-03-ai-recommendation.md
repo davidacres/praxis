@@ -4,7 +4,7 @@ id: FX-BF-103
 
 # Feature 03: AI Recommendation Flow
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Feature
 **Priority:** P1
@@ -26,9 +26,9 @@ Add AI assistance that can recommend a start-to-finish flow by ordering and conn
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 03.1 | Story | Recommend flow for existing canvas tickets | 📋 Proposed |
-| 03.2 | Story | Recommend flow from current board tickets | 📋 Proposed |
-| 03.3 | Story | Preview and apply AI recommendations safely | 📋 Proposed |
+| 03.1 | Story | Recommend flow for existing canvas tickets | ✓ Obsolete |
+| 03.2 | Story | Recommend flow from current board tickets | ✓ Obsolete |
+| 03.3 | Story | Preview and apply AI recommendations safely | ✓ Obsolete |
 
 ## Dependencies
 1. Story 03.1 depends on 02.3.
@@ -41,5 +41,6 @@ Add AI assistance that can recommend a start-to-finish flow by ordering and conn
 3. Verify accept/reject does not corrupt saved state.
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-035 (Multi-AI session orchestration) and distributed AI capabilities in current delivery. Flow recommendation logic now integrated into broader multi-session orchestration design.
 
 

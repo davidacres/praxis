@@ -4,7 +4,7 @@ id: FX-BF-101
 
 # Feature 01: Designer Shell And Persisted Canvas
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Feature
 **Priority:** P1
@@ -28,9 +28,9 @@ Create the first functional version of the task designer as a standalone panel w
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 01.1 | Story | Create standalone designer panel shell | 📋 Proposed |
-| 01.2 | Story | Add ticket lookup and node creation | 📋 Proposed |
-| 01.3 | Story | Add node dragging, deletion, and persistence | 📋 Proposed |
+| 01.1 | Story | Create standalone designer panel shell | ✓ Obsolete |
+| 01.2 | Story | Add ticket lookup and node creation | ✓ Obsolete |
+| 01.3 | Story | Add node dragging, deletion, and persistence | ✓ Obsolete |
 
 ## Dependencies
 1. Story 01.1 must land before 01.2.
@@ -42,5 +42,7 @@ Create the first functional version of the task designer as a standalone panel w
 3. Run `npm run check-types` after each story.
 
 ## Comments
+
+**2026-09-10:** Superseded by FX-BF-012 (Governed delivery workflows) and FX-BF-014 (Workflow experience). The visual workflow designer, canvas persistence, and node management are now part of the completed workflow designer implementation. Marked Obsolete to preserve planning history while removing from active backlog.
 
 

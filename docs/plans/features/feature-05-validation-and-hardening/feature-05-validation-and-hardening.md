@@ -4,7 +4,7 @@ id: FX-BF-105
 
 # Feature 05: Validation And Multi-Backend Hardening
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Feature
 **Priority:** P1
@@ -26,9 +26,9 @@ Harden the task designer for persistence, mixed backends, reload behavior, and a
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 05.1 | Story | Validate mixed-backend ticket hydration and rendering | 📋 Proposed |
-| 05.2 | Story | Validate persistence reload and recovery behavior | 📋 Proposed |
-| 05.3 | Story | Add automated and manual verification coverage | 📋 Proposed |
+| 05.1 | Story | Validate mixed-backend ticket hydration and rendering | ✓ Obsolete |
+| 05.2 | Story | Validate persistence reload and recovery behavior | ✓ Obsolete |
+| 05.3 | Story | Add automated and manual verification coverage | ✓ Obsolete |
 
 ## Dependencies
 1. Story 05.1 depends on the first end-to-end designer implementation.
@@ -41,5 +41,6 @@ Harden the task designer for persistence, mixed backends, reload behavior, and a
 3. Verify critical user flows remain functional after errors.
 
 ## Comments
+**2026-09-10:** Validation and hardening work distributed across current features (FX-BF-012 through FX-BF-036). No longer tracked as single feature due to integration across multiple delivery streams.
 
 

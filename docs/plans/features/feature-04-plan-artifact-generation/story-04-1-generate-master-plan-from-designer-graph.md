@@ -1,6 +1,6 @@
 # Story 04.1: Generate Master Plan From Designer Graph
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P2
@@ -34,5 +34,6 @@ Generate a master plan document from the current designer graph, summarizing sco
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Designer completion and folder persistence).
 
 

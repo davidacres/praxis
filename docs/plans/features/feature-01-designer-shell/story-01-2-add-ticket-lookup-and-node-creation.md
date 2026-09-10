@@ -1,6 +1,6 @@
 # Story 01.2: Add Ticket Lookup And Node Creation
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -35,5 +35,6 @@ Allow users to add tickets to the designer by entering a ticket number, resolvin
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Governed delivery workflows) and FX-BF-014 (Workflow experience). Visual designer functionality now part of completed workflow implementation.
 
 

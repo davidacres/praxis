@@ -1,6 +1,6 @@
 # Story 03.2: Recommend Flow From Current Board Tickets
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Allow users to source tickets from the currently selected board and ask AI to po
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-035 (Multi-AI session orchestration).
 
 

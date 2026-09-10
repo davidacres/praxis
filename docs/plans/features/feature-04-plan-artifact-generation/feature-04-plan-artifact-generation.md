@@ -4,7 +4,7 @@ id: FX-BF-104
 
 # Feature 04: Plan Artifact Generation
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Feature
 **Priority:** P2
@@ -26,9 +26,9 @@ Generate local planning artifacts from the designer graph so the flow can be rev
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 04.1 | Story | Generate master plan from designer graph | 📋 Proposed |
-| 04.2 | Story | Generate numbered feature and story artifacts | 📋 Proposed |
-| 04.3 | Story | Add metadata and verification sections to generated artifacts | 📋 Proposed |
+| 04.1 | Story | Generate master plan from designer graph | ✓ Obsolete |
+| 04.2 | Story | Generate numbered feature and story artifacts | ✓ Obsolete |
+| 04.3 | Story | Add metadata and verification sections to generated artifacts | ✓ Obsolete |
 
 ## Dependencies
 1. Story 04.1 depends on a stable graph model.
@@ -41,5 +41,6 @@ Generate local planning artifacts from the designer graph so the flow can be rev
 3. Run `npm run check-types` after each implementation story.
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Designer completion and folder persistence). Artifact generation and metadata are now part of the completed workflow designer implementation with folder persistence.
 
 
