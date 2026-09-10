@@ -15,6 +15,7 @@ import {
   type MobileCaller,
   type MobileReadRequest,
 } from '@praxis/core';
+import { generateKeyPair } from '@praxis/mobile-protocol';
 import { FIXTURE_HOST_ID, FIXTURE_PROJECT_ID, createMobileHostFixture } from './mobileHostFixture';
 import { LoopbackMobileClient, startLoopbackMobileHost } from './mobileLoopbackServer';
 
@@ -39,12 +40,14 @@ async function main(): Promise<void> {
   );
   show('paired', paired);
 
-  step(2, 'Start the fixture host and connect');
+  step(2, 'Start the fixture host and connect over a Noise IK channel');
   const fixture = createMobileHostFixture();
-  const host = await startLoopbackMobileHost(fixture.app);
-  const client = new LoopbackMobileClient('127.0.0.1', host.port);
+  const hostKey = generateKeyPair();
+  const host = await startLoopbackMobileHost(fixture.app, hostKey);
+  const client = new LoopbackMobileClient('127.0.0.1', host.port, generateKeyPair(), host.staticPublicKey);
   await client.connect();
   show('host port', host.port);
+  show('channel authenticated host key', Buffer.from(client.peerStaticPublicKey ?? []).toString('hex').slice(0, 16) + '…');
 
   step(3, 'Read the project snapshot and the work list');
   show('project', (await client.read(read('projects.snapshot', { hostId: FIXTURE_HOST_ID, projectId: FIXTURE_PROJECT_ID }))).value);
@@ -83,7 +86,7 @@ async function main(): Promise<void> {
 
   step(6, 'Drop the connection and reconnect a fresh peer, replaying every event');
   client.disconnect();
-  const rejoin = new LoopbackMobileClient('127.0.0.1', host.port);
+  const rejoin = new LoopbackMobileClient('127.0.0.1', host.port, generateKeyPair(), host.staticPublicKey);
   await rejoin.connect();
   await rejoin.requestReplay(0);
   show('replayed events', rejoin.takeEvents().map(envelope => `${envelope.sequence}:${(envelope.event as { kind: string }).kind}`));
