@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-082
 title: "Start and control existing work"
-status: complete
+status: in-progress
 feature: FX-BF-032
 updated: 2026-09-09
 dependencies: [FX-BE-081]

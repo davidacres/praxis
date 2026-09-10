@@ -2,27 +2,41 @@
 
 Deliver local work execution and release first: FX-BF-028, 029, 031, 032, 033. FX-BF-030 (identity, Azure and cloud notifications) is deferred. No running cloud service is required for the local milestone. IDs remain stable; FX-BE-086 owns the moved optional notification task TASK-232.
 
+**Status reconciliation (2026-09-10).** The desktop half is real and tested:
+the versioned execution boundary and dispatch, the host lifecycle and access
+policy, the Noise `IK` secure transport (`@praxis/mobile-protocol`, validated
+against the canonical `snow` vectors) and a real LAN listener that authenticates
+and authorises each peer (`mobileLanServer.ts`), plus the composed host bound to
+the live session/workflow/project stores. FX-BF-028 stands. What was marked
+Complete on the strength of contracts + unit tests but has no runnable
+deliverable yet is back to In Progress: FX-BF-029 (LAN discovery / mDNS and the
+real QR + keychain pairing adapters are missing), FX-BF-031–033 (there is no
+React Native app — no framework, no screens), and `sessions.continue` /
+`permissions.respond` / `workflowRuns.start`, which are wired as explicit
+`MobileHostPendingError`s pending the permission FIFO → request-id rework
+(architecture.md) and FX-BE-082.
+
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
 | [FX-BE-074](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-074-versioned-execution-boundary/story.md) | Story | Versioned execution boundary | Complete | None |
 | [FX-BE-075](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-075-host-lifecycle-and-access-enforcement/story.md) | Story | Host lifecycle and access enforcement | Complete | FX-BE-074 |
-| [FX-BE-076](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-076-account-free-device-pairing/story.md) | Story | Account-free device pairing | Complete | FX-BE-075 |
-| [FX-BE-077](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/story.md) | Story | Discovery and resilient local transport | Complete | FX-BE-076 |
+| [FX-BE-076](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-076-account-free-device-pairing/story.md) | Story | Account-free device pairing | In Progress | FX-BE-075 |
+| [FX-BE-077](plans/features/fx-bf-029-local-pairing-and-connectivity/stories/fx-be-077-discovery-and-resilient-local-transport/story.md) | Story | Discovery and resilient local transport | In Progress | FX-BE-076 |
 | [FX-BE-078](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-078-genericsystem-and-roleover-integration/story.md) | Story | GenericSystem and Roleover integration | Backlog | FX-BE-075 |
 | [FX-BE-079](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-079-azure-relay-and-host-registration-service/story.md) | Story | Azure Relay and host registration service | Backlog | FX-BE-078, FX-BE-076 |
-| [FX-BE-080](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/story.md) | Story | Portable mobile application foundation | Complete | FX-BE-074 |
-| [FX-BE-081](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/story.md) | Story | Read and continue existing work | Complete | FX-BE-080, FX-BE-077 |
-| [FX-BE-082](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/story.md) | Story | Start and control existing work | Complete | FX-BE-081 |
-| [FX-BE-083](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/story.md) | Story | Attention and request-specific approvals | Complete | FX-BE-082 |
-| [FX-BE-084](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-084-mobile-lifecycle-and-optional-notifications/story.md) | Story | Mobile lifecycle and optional notifications | Complete | FX-BE-083 |
-| [FX-BE-085](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/story.md) | Story | Operational release and repository extraction | Complete | FX-BE-084 |
+| [FX-BE-080](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-080-portable-mobile-application-foundation/story.md) | Story | Portable mobile application foundation | In Progress | FX-BE-074 |
+| [FX-BE-081](plans/features/fx-bf-031-mobile-shell-and-continuation/stories/fx-be-081-read-and-continue-existing-work/story.md) | Story | Read and continue existing work | In Progress | FX-BE-080, FX-BE-077 |
+| [FX-BE-082](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-082-start-and-control-existing-work/story.md) | Story | Start and control existing work | In Progress | FX-BE-081 |
+| [FX-BE-083](plans/features/fx-bf-032-mobile-execution-and-decisions/stories/fx-be-083-attention-and-request-specific-approvals/story.md) | Story | Attention and request-specific approvals | In Progress | FX-BE-082 |
+| [FX-BE-084](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-084-mobile-lifecycle-and-optional-notifications/story.md) | Story | Mobile lifecycle and optional notifications | In Progress | FX-BE-083 |
+| [FX-BE-085](plans/features/fx-bf-033-mobile-reliability-and-release/stories/fx-be-085-operational-release-and-repository-extraction/story.md) | Story | Operational release and repository extraction | In Progress | FX-BE-084 |
 | [FX-BE-086](plans/features/fx-bf-030-identity-and-azure-relay/stories/fx-be-086-deferred-internet-notifications/story.md) | Story | Deferred internet notifications | Backlog | FX-BE-079, FX-BE-085 |
 | [FX-BF-028](plans/features/fx-bf-028-execution-host-and-protocol/feature.md) | Feature | Execution host and mobile protocol | Complete | None |
-| [FX-BF-029](plans/features/fx-bf-029-local-pairing-and-connectivity/feature.md) | Feature | Local pairing and direct connectivity | Complete | FX-BE-075 |
+| [FX-BF-029](plans/features/fx-bf-029-local-pairing-and-connectivity/feature.md) | Feature | Local pairing and direct connectivity | In Progress | FX-BE-075 |
 | [FX-BF-030](plans/features/fx-bf-030-identity-and-azure-relay/feature.md) | Feature | Optional identity and Azure internet access | Backlog | FX-BE-075 |
-| [FX-BF-031](plans/features/fx-bf-031-mobile-shell-and-continuation/feature.md) | Feature | Mobile shell and work continuation | Complete | FX-BE-074 |
-| [FX-BF-032](plans/features/fx-bf-032-mobile-execution-and-decisions/feature.md) | Feature | Mobile workflow execution and decisions | Complete | FX-BE-081 |
-| [FX-BF-033](plans/features/fx-bf-033-mobile-reliability-and-release/feature.md) | Feature | Mobile reliability and release readiness | Complete | FX-BE-083 |
+| [FX-BF-031](plans/features/fx-bf-031-mobile-shell-and-continuation/feature.md) | Feature | Mobile shell and work continuation | In Progress | FX-BE-074 |
+| [FX-BF-032](plans/features/fx-bf-032-mobile-execution-and-decisions/feature.md) | Feature | Mobile workflow execution and decisions | In Progress | FX-BE-081 |
+| [FX-BF-033](plans/features/fx-bf-033-mobile-reliability-and-release/feature.md) | Feature | Mobile reliability and release readiness | In Progress | FX-BE-083 |
 | [TASK-201](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-074-versioned-execution-boundary/tasks/task-201-audit-execution-ownership-and-freeze-protocol-v1.md) | Task | Audit execution ownership and freeze protocol v1 | Complete | None |
 | [TASK-202](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-074-versioned-execution-boundary/tasks/task-202-extract-shared-host-application-services.md) | Task | Extract shared host application services | Complete | TASK-201 |
 | [TASK-203](plans/features/fx-bf-028-execution-host-and-protocol/stories/fx-be-074-versioned-execution-boundary/tasks/task-203-add-durable-commands-events-and-request-specific-decisions.md) | Task | Add durable commands events and request-specific decisions | Complete | TASK-202 |
