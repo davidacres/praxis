@@ -4,7 +4,7 @@
 type: Task
 id: TASK-138
 title: "Define read-only CI evidence providers"
-status: complete
+status: Done
 story: FX-BE-053
 updated: 2026-09-07
 dependencies: [FX-BE-052]

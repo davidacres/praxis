@@ -4,7 +4,7 @@
 type: Task
 id: TASK-154
 title: "Persist side effects and reconcile"
-status: complete
+status: Done
 story: FX-BE-058
 updated: 2026-09-09
 dependencies: [TASK-153]

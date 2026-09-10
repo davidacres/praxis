@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-048
 title: A single naming rule for Praxis files
-status: complete
+status: Done
 feature: FX-BF-020
 updated: 2026-09-06
 commits: []

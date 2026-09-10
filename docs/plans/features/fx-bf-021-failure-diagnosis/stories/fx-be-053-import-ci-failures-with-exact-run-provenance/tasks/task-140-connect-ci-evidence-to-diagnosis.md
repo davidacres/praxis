@@ -4,7 +4,7 @@
 type: Task
 id: TASK-140
 title: "Connect CI evidence to diagnosis"
-status: in-progress
+status: In Progress
 story: FX-BE-053
 updated: 2026-09-07
 dependencies: [TASK-139]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-103
 title: Add workflow persistence and accessibility verification
-status: complete
+status: Done
 story: FX-BE-021
 updated: 2026-09-02
 dependencies: [TASK-102]

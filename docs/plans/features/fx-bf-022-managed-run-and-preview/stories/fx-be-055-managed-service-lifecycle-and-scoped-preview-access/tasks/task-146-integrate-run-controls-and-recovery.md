@@ -4,7 +4,7 @@
 type: Task
 id: TASK-146
 title: "Integrate Run controls and recovery"
-status: in-progress
+status: In Progress
 story: FX-BE-055
 updated: 2026-09-09
 dependencies: [TASK-145]

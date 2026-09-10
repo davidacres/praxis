@@ -4,7 +4,7 @@
 type: Task
 id: TASK-185
 title: "Expose typed debugger IPC"
-status: planned
+status: To Do
 story: FX-BE-068
 updated: 2026-09-07
 dependencies: [TASK-184]

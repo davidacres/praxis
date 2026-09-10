@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-006
 title: Sidebar-owned project, board, and Git tree
-status: complete
+status: Done
 feature: FX-BF-005
 issue: docs/issues/features/fx-bf-005-sidebar-project-navigation/stories/fx-be-006-project-board-git-tree/issue.md
 updated: 2026-08-27

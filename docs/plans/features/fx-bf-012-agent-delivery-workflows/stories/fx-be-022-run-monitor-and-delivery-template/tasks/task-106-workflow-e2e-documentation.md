@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-106
 title: Add workflow E2E and delivery documentation
-status: complete
+status: Done
 story: FX-BE-022
 updated: 2026-09-02
 dependencies: [TASK-104, TASK-105]

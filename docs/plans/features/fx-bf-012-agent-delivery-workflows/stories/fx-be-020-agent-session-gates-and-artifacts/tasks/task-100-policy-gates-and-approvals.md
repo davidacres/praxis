@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-100
 title: Implement policy gates and approvals
-status: complete
+status: Done
 story: FX-BE-020
 updated: 2026-09-02
 dependencies: [TASK-096, TASK-099]

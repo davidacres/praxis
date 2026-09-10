@@ -4,7 +4,7 @@
 type: Task
 id: TASK-250
 title: "Add read-only CI quality and security report providers"
-status: planned
+status: To Do
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [FX-BE-053]

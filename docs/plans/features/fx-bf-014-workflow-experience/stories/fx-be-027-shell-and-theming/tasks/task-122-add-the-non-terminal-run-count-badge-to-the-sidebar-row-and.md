@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-122
 title: Add the non-terminal run count badge to the sidebar row and the workflowView route field.
-status: complete
+status: Done
 story: FX-BE-027
 updated: 2026-09-02
 dependencies: [FX-BF-013]

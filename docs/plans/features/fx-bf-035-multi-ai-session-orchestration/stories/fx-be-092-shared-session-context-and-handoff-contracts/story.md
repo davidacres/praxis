@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-092
 title: "Shared session context and handoff contracts"
-status: planned
+status: To Do
 feature: FX-BF-035
 updated: 2026-09-10
 dependencies: [FX-BF-011, FX-BF-019]

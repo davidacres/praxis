@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-042
 title: Three-way conflict resolution
-status: complete
+status: Done
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-038, TASK-041]

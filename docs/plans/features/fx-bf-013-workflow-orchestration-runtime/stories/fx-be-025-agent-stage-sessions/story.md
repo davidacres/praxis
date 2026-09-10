@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-025
 title: Agent stage sessions and completion
-status: complete
+status: Done
 feature: FX-BF-013
 issue: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/stories/fx-be-025-agent-stage-sessions/issue.md
 updated: 2026-09-02

@@ -6,7 +6,7 @@
 type: Feature
 id: FX-BF-035
 title: "Multi-AI session orchestration across Claude, Codex and Copilot"
-status: planned
+status: To Do
 updated: 2026-09-10
 dependencies: [FX-BF-011, FX-BF-012, FX-BF-013, FX-BF-015, FX-BF-019]
 ---

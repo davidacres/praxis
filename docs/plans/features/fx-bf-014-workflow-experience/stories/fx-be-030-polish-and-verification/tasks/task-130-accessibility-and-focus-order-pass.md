@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-130
 title: Accessibility and focus-order pass.
-status: complete
+status: Done
 story: FX-BE-030
 updated: 2026-09-02
 dependencies: [FX-BE-028, FX-BE-029]

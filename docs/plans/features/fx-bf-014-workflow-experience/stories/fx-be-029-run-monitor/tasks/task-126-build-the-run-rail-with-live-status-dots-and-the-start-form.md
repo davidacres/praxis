@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-126
 title: Build the run rail with live status dots and the start form.
-status: complete
+status: Done
 story: FX-BE-029
 updated: 2026-09-02
 dependencies: [FX-BE-027]

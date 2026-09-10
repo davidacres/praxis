@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-062
 title: Sidebar workspace selector and project scoping
-status: complete
+status: Done
 story: FX-BE-008
 ---
 

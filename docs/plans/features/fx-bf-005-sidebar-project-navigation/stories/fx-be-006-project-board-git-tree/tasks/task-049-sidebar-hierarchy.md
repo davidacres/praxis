@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-049
 title: Refactor sidebar hierarchy for project-owned Boards and Git
-status: complete
+status: Done
 story: FX-BE-006
 updated: 2026-08-27
 dependencies: [FX-BF-004]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-080
 title: Implement agent manifest wizard
-status: complete
+status: Done
 story: FX-BE-012
 updated: 2026-08-31
 dependencies: [TASK-079]

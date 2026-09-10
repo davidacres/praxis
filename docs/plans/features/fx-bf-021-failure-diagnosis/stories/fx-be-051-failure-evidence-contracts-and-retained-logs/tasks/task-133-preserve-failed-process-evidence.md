@@ -4,7 +4,7 @@
 type: Task
 id: TASK-133
 title: "Preserve failed process evidence"
-status: complete
+status: Done
 story: FX-BE-051
 updated: 2026-09-07
 dependencies: [TASK-132]

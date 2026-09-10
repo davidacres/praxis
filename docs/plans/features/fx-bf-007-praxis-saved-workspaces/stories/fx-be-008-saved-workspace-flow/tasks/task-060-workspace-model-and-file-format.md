@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-060
 title: Workspace model and versioned file format
-status: complete
+status: Done
 story: FX-BE-008
 ---
 

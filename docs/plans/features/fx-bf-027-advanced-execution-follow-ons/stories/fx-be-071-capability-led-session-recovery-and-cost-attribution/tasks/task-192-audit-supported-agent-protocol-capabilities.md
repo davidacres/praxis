@@ -4,7 +4,7 @@
 type: Task
 id: TASK-192
 title: "Audit supported agent protocol capabilities"
-status: backlog
+status: To Do
 story: FX-BE-071
 updated: 2026-09-07
 dependencies: [FX-BF-024, FX-BF-026]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-119
 title: Add the unattended-run E2E with a stub agent, and update the docs
-status: complete
+status: Done
 story: FX-BE-026
 updated: 2026-09-02
 dependencies: [TASK-115, TASK-117, TASK-118]

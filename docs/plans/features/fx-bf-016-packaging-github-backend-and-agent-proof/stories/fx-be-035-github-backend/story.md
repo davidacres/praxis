@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-035
 title: Real GitHub backend
-status: complete
+status: Done
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-035-github-backend/issue.md
 updated: 2026-09-05

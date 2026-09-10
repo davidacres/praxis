@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-053
 title: Renderer stack spike and visual contract gate
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [FX-BF-005]

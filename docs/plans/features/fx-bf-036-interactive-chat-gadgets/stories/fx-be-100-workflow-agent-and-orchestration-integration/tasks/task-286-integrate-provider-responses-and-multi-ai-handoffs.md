@@ -6,7 +6,7 @@
 type: Task
 id: TASK-286
 title: "Integrate provider responses and multi-AI handoffs"
-status: planned
+status: To Do
 story: FX-BE-100
 feature: FX-BF-036
 updated: 2026-09-10

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-039
 title: Clean responsive diff workspace
-status: complete
+status: Done
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-038]

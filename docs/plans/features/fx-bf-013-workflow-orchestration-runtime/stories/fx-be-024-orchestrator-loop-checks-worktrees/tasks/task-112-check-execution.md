@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-112
 title: Implement deterministic check execution and artifact capture
-status: complete
+status: Done
 story: FX-BE-024
 updated: 2026-09-02
 dependencies: [TASK-111, TASK-113]

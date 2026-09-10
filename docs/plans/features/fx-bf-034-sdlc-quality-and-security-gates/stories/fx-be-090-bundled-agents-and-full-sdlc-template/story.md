@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-090
 title: "Bundled agents and a Full SDLC template"
-status: planned
+status: To Do
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-088, FX-BE-089, FX-BE-011]

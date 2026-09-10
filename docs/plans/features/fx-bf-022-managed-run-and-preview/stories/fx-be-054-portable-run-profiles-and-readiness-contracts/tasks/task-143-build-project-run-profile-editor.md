@@ -4,7 +4,7 @@
 type: Task
 id: TASK-143
 title: "Build project Run profile editor"
-status: in-progress
+status: In Progress
 story: FX-BE-054
 updated: 2026-09-09
 dependencies: [TASK-142]

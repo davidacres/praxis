@@ -4,7 +4,7 @@
 type: Task
 id: TASK-245
 title: "Deliver review findings as inline PR / ticket comments with dedupe"
-status: planned
+status: To Do
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [TASK-244]

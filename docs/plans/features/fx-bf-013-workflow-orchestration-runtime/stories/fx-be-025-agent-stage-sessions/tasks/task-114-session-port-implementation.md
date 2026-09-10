@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-114
 title: Implement WorkflowSessionPort over the agent hosts
-status: complete
+status: Done
 story: FX-BE-025
 updated: 2026-09-02
 dependencies: [FX-BE-020]

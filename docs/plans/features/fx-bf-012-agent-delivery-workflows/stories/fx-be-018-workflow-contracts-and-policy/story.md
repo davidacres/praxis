@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-018
 title: Workflow definition, policy, and validation contracts
-status: complete
+status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-018-workflow-contracts-and-policy/issue.md
 updated: 2026-09-02

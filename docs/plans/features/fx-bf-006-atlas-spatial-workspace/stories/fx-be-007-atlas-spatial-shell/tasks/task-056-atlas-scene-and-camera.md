@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-056
 title: Atlas scene, LOD tiers, and semantic-zoom camera
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-053, TASK-055]

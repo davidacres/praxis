@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-093
 title: "Provider adapters and capability preflight"
-status: planned
+status: To Do
 feature: FX-BF-035
 updated: 2026-09-10
 dependencies: [FX-BE-092]

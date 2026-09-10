@@ -4,7 +4,7 @@
 type: Task
 id: TASK-193
 title: "Prototype optional Codex App Server adapter"
-status: backlog
+status: To Do
 story: FX-BE-071
 updated: 2026-09-07
 dependencies: [TASK-192]

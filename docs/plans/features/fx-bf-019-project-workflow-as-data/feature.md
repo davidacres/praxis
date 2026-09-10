@@ -6,7 +6,7 @@
 id: FX-BF-019
 slug: project-workflow-as-data
 title: A project's workflow is data, authored once and rendered by every backend
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-06
 issues: docs/issues/features/fx-bf-019-project-workflow-as-data/feature-issues.md

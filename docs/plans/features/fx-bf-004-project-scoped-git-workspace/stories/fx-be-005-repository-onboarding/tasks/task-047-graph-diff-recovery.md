@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-047
 title: Integrate onboarding with Graph/diff loading and friendly error recovery
-status: complete
+status: Done
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-045, TASK-046]

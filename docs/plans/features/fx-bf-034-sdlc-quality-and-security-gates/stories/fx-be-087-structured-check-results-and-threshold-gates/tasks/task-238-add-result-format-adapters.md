@@ -4,7 +4,7 @@
 type: Task
 id: TASK-238
 title: "Add SARIF / JUnit / lcov / npm-audit / osv-scanner adapters"
-status: planned
+status: To Do
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [TASK-237]

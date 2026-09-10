@@ -4,7 +4,7 @@
 type: Task
 id: TASK-158
 title: "Expose direct deployment actions"
-status: in-progress
+status: In Progress
 story: FX-BE-059
 updated: 2026-09-09
 dependencies: [TASK-157]

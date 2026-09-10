@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-008
 title: Saved workspace model, versioned file format, and sidebar flow
-status: complete
+status: Done
 feature: FX-BF-007
 updated: 2026-08-27
 tasks: [TASK-060, TASK-061, TASK-062]

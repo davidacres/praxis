@@ -4,7 +4,7 @@
 type: Task
 id: TASK-161
 title: "Verify complete direct delivery journey"
-status: in-progress
+status: In Progress
 story: FX-BE-060
 updated: 2026-09-09
 dependencies: [TASK-160]

@@ -6,7 +6,7 @@
 type: Task
 id: TASK-281
 title: "Implement chart, diff, artifact and handoff renderers"
-status: planned
+status: To Do
 story: FX-BE-098
 feature: FX-BF-036
 updated: 2026-09-10

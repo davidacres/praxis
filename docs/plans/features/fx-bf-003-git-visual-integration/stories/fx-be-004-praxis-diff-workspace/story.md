@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-004
 title: Praxis diff workspace and safe Git workflows
-status: complete
+status: Done
 feature: FX-BF-003
 issue: docs/issues/features/fx-bf-003-git-visual-integration/stories/fx-be-004-praxis-diff-workspace/issue.md
 updated: 2026-08-27

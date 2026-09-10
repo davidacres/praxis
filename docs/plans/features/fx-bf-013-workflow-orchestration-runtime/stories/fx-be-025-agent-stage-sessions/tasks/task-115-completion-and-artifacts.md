@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-115
 title: Wire stage completion, artifact extraction, and the snapshot commit
-status: complete
+status: Done
 story: FX-BE-025
 updated: 2026-09-02
 dependencies: [TASK-114, TASK-113]

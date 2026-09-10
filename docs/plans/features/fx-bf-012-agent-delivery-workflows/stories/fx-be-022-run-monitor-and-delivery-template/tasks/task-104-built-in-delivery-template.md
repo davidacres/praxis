@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-104
 title: Define the built-in governed delivery template
-status: complete
+status: Done
 story: FX-BE-022
 updated: 2026-09-02
 dependencies: [TASK-094, TASK-100]

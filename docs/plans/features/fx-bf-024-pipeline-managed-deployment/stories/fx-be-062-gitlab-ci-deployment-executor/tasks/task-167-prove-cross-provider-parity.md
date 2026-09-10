@@ -4,7 +4,7 @@
 type: Task
 id: TASK-167
 title: "Prove cross-provider parity"
-status: planned
+status: To Do
 story: FX-BE-062
 updated: 2026-09-07
 dependencies: [TASK-166]

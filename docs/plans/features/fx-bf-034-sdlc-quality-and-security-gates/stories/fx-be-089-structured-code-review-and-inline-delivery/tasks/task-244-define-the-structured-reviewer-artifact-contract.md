@@ -4,7 +4,7 @@
 type: Task
 id: TASK-244
 title: "Define the structured reviewer artifact contract"
-status: planned
+status: To Do
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [FX-BE-087]

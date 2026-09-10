@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-014
 title: Import and validate runtime items
-status: complete
+status: Done
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-014-import-and-validate-runtime-items/issue.md
 updated: 2026-08-31

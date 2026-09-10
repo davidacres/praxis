@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-070
 title: "Controlled agent debugging tools"
-status: planned
+status: To Do
 feature: FX-BF-026
 updated: 2026-09-07
 dependencies: [FX-BE-069]

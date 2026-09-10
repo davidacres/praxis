@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-067
 title: "Debugger contracts and adapter capability proof"
-status: planned
+status: To Do
 feature: FX-BF-026
 updated: 2026-09-07
 dependencies: [FX-BF-022]

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-159
 title: "Build profile selection and review"
-status: in-progress
+status: In Progress
 story: FX-BE-060
 updated: 2026-09-09
 dependencies: [FX-BE-059]

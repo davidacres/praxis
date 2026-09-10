@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-048
 title: Add packaged Electron, accessibility, and responsive verification
-status: complete
+status: Done
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-046, TASK-047]

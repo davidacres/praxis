@@ -6,7 +6,7 @@
 type: Task
 id: TASK-277
 title: "Define GadgetAction, result and fallback contracts"
-status: planned
+status: To Do
 story: FX-BE-097
 feature: FX-BF-036
 updated: 2026-09-10

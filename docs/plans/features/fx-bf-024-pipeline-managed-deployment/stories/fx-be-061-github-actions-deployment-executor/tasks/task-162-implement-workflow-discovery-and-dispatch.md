@@ -4,7 +4,7 @@
 type: Task
 id: TASK-162
 title: "Implement workflow discovery and dispatch"
-status: complete
+status: Done
 story: FX-BE-061
 updated: 2026-09-09
 dependencies: [FX-BF-023]

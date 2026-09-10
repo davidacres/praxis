@@ -6,7 +6,7 @@
 id: FX-BF-005
 slug: sidebar-project-navigation
 title: Sidebar project, board, and Git navigation
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-08-27
 issues: [docs/issues/features/fx-bf-005-sidebar-project-navigation/feature-issues.md]

@@ -6,7 +6,7 @@
 id: FX-BF-004
 slug: project-scoped-git-workspace
 title: Project-scoped Git workspace and repository onboarding
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-03
 issues: [docs/issues/features/fx-bf-004-project-scoped-git-workspace/feature-issues.md]

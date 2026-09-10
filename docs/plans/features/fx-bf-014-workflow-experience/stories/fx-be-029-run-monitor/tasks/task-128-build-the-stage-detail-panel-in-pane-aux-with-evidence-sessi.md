@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-128
 title: Build the stage detail panel in pane-aux with evidence, session link, and the action hierarchy.
-status: complete
+status: Done
 story: FX-BE-029
 updated: 2026-09-02
 dependencies: [FX-BE-027]

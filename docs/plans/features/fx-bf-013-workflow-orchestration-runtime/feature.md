@@ -6,7 +6,7 @@
 id: FX-BF-013
 slug: workflow-orchestration-runtime
 title: Workflow orchestration runtime
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-013-workflow-orchestration-runtime/feature-issues.md

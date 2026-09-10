@@ -6,7 +6,7 @@
 type: Task
 id: TASK-290
 title: "Prove desktop/mobile end-to-end journeys and document operations"
-status: planned
+status: To Do
 story: FX-BE-101
 feature: FX-BF-036
 updated: 2026-09-10

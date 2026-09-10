@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-099
 title: "Safe action lifecycle, scope and stale-state handling"
-status: planned
+status: To Do
 feature: FX-BF-036
 updated: 2026-09-10
 dependencies: [FX-BE-097, FX-BF-013]

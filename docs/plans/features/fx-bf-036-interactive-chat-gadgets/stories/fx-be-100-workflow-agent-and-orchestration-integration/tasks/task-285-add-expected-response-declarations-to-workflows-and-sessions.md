@@ -6,7 +6,7 @@
 type: Task
 id: TASK-285
 title: "Add expected-response declarations to workflows and sessions"
-status: planned
+status: To Do
 story: FX-BE-100
 feature: FX-BF-036
 updated: 2026-09-10

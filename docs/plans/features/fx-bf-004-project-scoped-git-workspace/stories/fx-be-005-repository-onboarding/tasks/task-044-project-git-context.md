@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-044
 title: Define project Git context and typed repository preflight contract
-status: complete
+status: Done
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [FX-BF-003]

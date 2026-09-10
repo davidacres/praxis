@@ -4,7 +4,7 @@
 type: Task
 id: TASK-156
 title: "Implement direct process executor"
-status: complete
+status: Done
 story: FX-BE-059
 updated: 2026-09-09
 dependencies: [FX-BE-058]

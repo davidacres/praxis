@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-089
 title: Add new-session agent selection
-status: complete
+status: Done
 story: FX-BE-016
 updated: 2026-08-31
 dependencies: [TASK-088]

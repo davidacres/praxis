@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-041
 title: Graph-native workflows, history, and blame
-status: complete
+status: Done
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-039]

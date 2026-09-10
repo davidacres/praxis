@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-117
 title: Add the workflows:runChanged push channel and monitor subscription
-status: complete
+status: Done
 story: FX-BE-026
 updated: 2026-09-02
 dependencies: [TASK-111]

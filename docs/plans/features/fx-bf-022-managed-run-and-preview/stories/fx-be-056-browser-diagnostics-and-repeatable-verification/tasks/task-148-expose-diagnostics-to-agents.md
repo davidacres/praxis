@@ -4,7 +4,7 @@
 type: Task
 id: TASK-148
 title: "Expose diagnostics to agents"
-status: in-progress
+status: In Progress
 story: FX-BE-056
 updated: 2026-09-09
 dependencies: [TASK-147]

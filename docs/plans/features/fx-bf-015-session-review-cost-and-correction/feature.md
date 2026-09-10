@@ -6,7 +6,7 @@
 id: FX-BF-015
 slug: session-review-cost-and-correction
 title: Session review, cost, and correction controls
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-05
 issues: docs/issues/features/fx-bf-015-session-review-cost-and-correction/feature-issues.md

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-045
 title: Implement Electron repository classification and safe initialization/open actions
-status: complete
+status: Done
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-044]

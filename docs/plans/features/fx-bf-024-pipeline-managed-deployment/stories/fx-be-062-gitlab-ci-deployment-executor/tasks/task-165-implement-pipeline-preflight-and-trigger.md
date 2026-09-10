@@ -4,7 +4,7 @@
 type: Task
 id: TASK-165
 title: "Implement pipeline preflight and trigger"
-status: planned
+status: To Do
 story: FX-BE-062
 updated: 2026-09-07
 dependencies: [FX-BE-061]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-118
 title: Add the timeout enforcement tick
-status: complete
+status: Done
 story: FX-BE-026
 updated: 2026-09-02
 dependencies: [TASK-111]

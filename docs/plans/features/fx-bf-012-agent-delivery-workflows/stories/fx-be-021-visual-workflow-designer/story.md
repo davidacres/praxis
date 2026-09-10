@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-021
 title: Visual workflow designer and template library
-status: complete
+status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-021-visual-workflow-designer/issue.md
 updated: 2026-09-02

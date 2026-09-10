@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-087
 title: "Structured check results and threshold gates"
-status: planned
+status: To Do
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-020, FX-BE-024]

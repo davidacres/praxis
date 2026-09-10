@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-052
 title: Verify navigation semantics, accessibility, responsive layout, and migration snapshots
-status: complete
+status: Done
 story: FX-BE-006
 updated: 2026-08-27
 dependencies: [TASK-049, TASK-050, TASK-051]
