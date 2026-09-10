@@ -334,3 +334,32 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | TASK-273 | Task | Add safe session operations | Planned | TASK-271 |
 | TASK-274 | Task | Add merge-readiness ledger | Planned | TASK-272, TASK-273 |
 | TASK-275 | Task | Add accessibility and E2E verification | Planned | TASK-274 |
+
+## Interactive chat gadgets
+
+Canonical sequencing and architectural decisions: [interactive chat gadgets roadmap](interactive-chat-gadgets-roadmap.md).
+
+| Ref | Type | Name | Status | Depends on |
+| --- | --- | --- | --- | --- |
+| FX-BF-036 | Feature | Interactive chat gadgets and response surfaces | Planned | FX-BF-014, FX-BF-015, FX-BF-035 |
+| FX-BE-097 | Story | Versioned gadget and action contracts | Planned | FX-BF-014, FX-BF-015 |
+| FX-BE-098 | Story | Renderer registry and core chat surfaces | Planned | FX-BE-097 |
+| FX-BE-099 | Story | Safe action lifecycle, scope and stale-state handling | Planned | FX-BE-097, FX-BF-013 |
+| FX-BE-100 | Story | Workflow, agent and orchestration integration | Planned | FX-BE-099, FX-BF-035 |
+| FX-BE-101 | Story | Accessibility, mobile, fixtures and end-to-end proof | Planned | FX-BE-098, FX-BE-100 |
+| TASK-276 | Task | Define ChatBlock, GadgetEnvelope and GadgetScope contracts | Planned | FX-BE-097 |
+| TASK-277 | Task | Define GadgetAction, result and fallback contracts | Planned | TASK-276 |
+| TASK-278 | Task | Validate payload size, schema, capability and safety policy | Planned | TASK-277 |
+| TASK-279 | Task | Implement the browser-safe gadget renderer registry | Planned | FX-BE-098 |
+| TASK-280 | Task | Implement choice, confirmation, table and progress renderers | Planned | TASK-279 |
+| TASK-281 | Task | Implement chart, diff, artifact and handoff renderers | Planned | TASK-280 |
+| TASK-282 | Task | Route gadget actions through the command ledger | Planned | FX-BE-099 |
+| TASK-283 | Task | Enforce scope, authorization and policy boundaries | Planned | TASK-282 |
+| TASK-284 | Task | Handle expiry, supersession, reconnect and duplicate submission | Planned | TASK-283 |
+| TASK-285 | Task | Add expected-response declarations to workflows and sessions | Planned | FX-BE-100 |
+| TASK-286 | Task | Integrate provider responses and multi-AI handoffs | Planned | TASK-285 |
+| TASK-287 | Task | Connect gadgets to run monitor, changes and deployment decisions | Planned | TASK-286 |
+| TASK-288 | Task | Add accessibility and responsive visual verification | Planned | FX-BE-101 |
+| TASK-289 | Task | Create deterministic gadget fixture workflows and contract tests | Planned | TASK-288 |
+| TASK-290 | Task | Prove desktop/mobile end-to-end journeys and document operations | Planned | TASK-289 |
+
