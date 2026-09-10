@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-036
 title: "Interactive chat gadgets and response surfaces"
