@@ -1,20 +1,23 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "Node16",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "out",
-    "rootDir": ".",
-    "declaration": false,
     "strict": true,
-    "sourceMap": true,
-    "esModuleInterop": true,
-    "moduleResolution": "Node16",
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "types": ["node"]
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true
   },
-  "include": ["renderer/**/*.ts", "main/**/*.ts"],
-  "exclude": ["node_modules", "out"]
+  "include": [
+    "index.ts",
+    "App.tsx",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "screens/**/*.tsx",
+    "renderer/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "main",
+    "renderer/**/*.test.ts"
+  ]
 }

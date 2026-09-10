@@ -2,16 +2,29 @@
   "name": "@praxis/mobile",
   "version": "0.0.0",
   "private": true,
-  "type": "commonjs",
-  "description": "Praxis mobile companion — client logic and platform-adapter contracts for continuing and executing work on a running desktop host.",
+  "main": "index.ts",
+  "description": "Praxis mobile companion — the React Native app plus the client logic and platform-adapter contracts for continuing and executing work on a running desktop host.",
   "scripts": {
-    "check-types": "tsc --noEmit -p .",
-    "compile": "tsc -p .",
-    "test": "tsc -p . && node --test \"out/**/*.test.js\"",
-    "fixture": "tsc -p . && node out/main/runFixtureJourney.js"
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "web": "expo start --web",
+    "check-types": "tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p .",
+    "compile": "tsc -p tsconfig.test.json",
+    "test": "tsc -p tsconfig.test.json && node --test \"out/**/*.test.js\"",
+    "fixture": "tsc -p tsconfig.test.json && node out/main/runFixtureJourney.js"
   },
   "dependencies": {
     "@praxis/core": "*",
-    "@praxis/mobile-protocol": "*"
+    "@praxis/mobile-protocol": "*",
+    "expo": "~57.0.21",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
   }
 }
