@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-079
 title: Define trust, capabilities, and settings boundary
-status: complete
+status: Done
 story: FX-BE-011
 updated: 2026-08-31
 dependencies: [TASK-078]

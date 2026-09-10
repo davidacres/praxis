@@ -4,7 +4,7 @@
 type: Feature
 id: FX-BF-025
 title: "IIS deployment target and recovery templates"
-status: planned
+status: To Do
 slug: iis-deployment-target
 stories: [FX-BE-064, FX-BE-065, FX-BE-066]
 issues: docs/issues/features/fx-bf-025-iis-deployment-target/feature-issues.md

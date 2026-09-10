@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-061
 title: Electron workspace persistence and native file actions
-status: complete
+status: Done
 story: FX-BE-008
 ---
 

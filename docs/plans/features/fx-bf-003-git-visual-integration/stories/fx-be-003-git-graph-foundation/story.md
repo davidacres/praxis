@@ -5,7 +5,7 @@
 type: Story
 id: FX-BE-003
 title: Desktop Git graph foundation and editor shell
-status: complete
+status: Done
 feature: FX-BF-003
 ---
 

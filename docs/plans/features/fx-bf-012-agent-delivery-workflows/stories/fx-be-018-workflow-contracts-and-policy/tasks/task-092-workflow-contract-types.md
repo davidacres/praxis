@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-092
 title: Add workflow contract types
-status: complete
+status: Done
 story: FX-BE-018
 updated: 2026-09-02
 dependencies: [FX-BF-009, FX-BF-011]

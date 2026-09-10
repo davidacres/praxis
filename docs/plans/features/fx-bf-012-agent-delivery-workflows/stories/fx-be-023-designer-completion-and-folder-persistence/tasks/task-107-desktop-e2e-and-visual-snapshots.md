@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-107
 title: Run the full desktop suite and add designer/monitor visual snapshots
-status: complete
+status: Done
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-022]

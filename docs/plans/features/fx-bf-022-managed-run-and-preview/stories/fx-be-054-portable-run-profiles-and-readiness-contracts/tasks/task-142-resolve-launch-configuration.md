@@ -4,7 +4,7 @@
 type: Task
 id: TASK-142
 title: "Resolve launch configuration"
-status: in-progress
+status: In Progress
 story: FX-BE-054
 updated: 2026-09-07
 dependencies: [TASK-141]

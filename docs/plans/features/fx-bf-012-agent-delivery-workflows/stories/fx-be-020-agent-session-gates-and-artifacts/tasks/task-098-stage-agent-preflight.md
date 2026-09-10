@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-098
 title: Add stage agent preflight and binding
-status: complete
+status: Done
 story: FX-BE-020
 updated: 2026-09-02
 dependencies: [FX-BF-009, FX-BF-010, FX-BF-011, TASK-092]

@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-028
 title: Workflow Library and Designer
-status: complete
+status: Done
 feature: FX-BF-014
 issue: docs/issues/features/fx-bf-014-workflow-experience/stories/fx-be-028-library-and-designer/issue.md
 updated: 2026-09-02

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-191
 title: "Connect debugger evidence to diagnosis"
-status: planned
+status: To Do
 story: FX-BE-070
 updated: 2026-09-07
 dependencies: [TASK-190]

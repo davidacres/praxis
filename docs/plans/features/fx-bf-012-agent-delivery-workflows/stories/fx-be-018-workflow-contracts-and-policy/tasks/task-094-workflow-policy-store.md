@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-094
 title: Add workflow and policy stores
-status: complete
+status: Done
 story: FX-BE-018
 updated: 2026-09-02
 dependencies: [TASK-092, TASK-093]

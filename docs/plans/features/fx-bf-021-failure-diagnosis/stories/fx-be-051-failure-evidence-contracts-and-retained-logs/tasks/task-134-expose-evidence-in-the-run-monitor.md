@@ -4,7 +4,7 @@
 type: Task
 id: TASK-134
 title: "Expose evidence in the run monitor"
-status: in-progress
+status: In Progress
 story: FX-BE-051
 updated: 2026-09-07
 dependencies: [TASK-133]

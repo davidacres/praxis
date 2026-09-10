@@ -4,7 +4,7 @@
 type: Task
 id: TASK-171
 title: "Define IIS target and prerequisites"
-status: planned
+status: To Do
 story: FX-BE-064
 updated: 2026-09-07
 dependencies: [FX-BF-023]

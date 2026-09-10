@@ -4,7 +4,7 @@
 type: Task
 id: TASK-241
 title: "Add secret / SAST / SCA / license check presets with stack detection"
-status: planned
+status: To Do
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [FX-BE-087]

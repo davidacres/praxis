@@ -4,7 +4,7 @@
 type: Task
 id: TASK-135
 title: "Create diagnosis sessions from evidence"
-status: in-progress
+status: In Progress
 story: FX-BE-052
 updated: 2026-09-07
 dependencies: [FX-BE-051]

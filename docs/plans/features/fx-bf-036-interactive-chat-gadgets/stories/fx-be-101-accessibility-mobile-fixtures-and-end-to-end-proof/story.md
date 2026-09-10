@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-101
 title: "Accessibility, mobile, fixtures and end-to-end proof"
-status: planned
+status: To Do
 feature: FX-BF-036
 updated: 2026-09-10
 dependencies: [FX-BE-098, FX-BE-100]

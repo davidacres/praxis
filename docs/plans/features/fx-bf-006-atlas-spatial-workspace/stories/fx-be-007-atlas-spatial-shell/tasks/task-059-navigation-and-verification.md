@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-059
 title: Atlas navigation integration and vertical-slice verification
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-057, TASK-058]

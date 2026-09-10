@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-043
 title: Verification, accessibility, and documentation
-status: complete
+status: Done
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [TASK-039, TASK-040, TASK-041, TASK-042]

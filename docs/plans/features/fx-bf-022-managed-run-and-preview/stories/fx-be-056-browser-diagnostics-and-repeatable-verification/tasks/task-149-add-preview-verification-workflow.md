@@ -4,7 +4,7 @@
 type: Task
 id: TASK-149
 title: "Add preview verification workflow"
-status: in-progress
+status: In Progress
 story: FX-BE-056
 updated: 2026-09-09
 dependencies: [TASK-148]

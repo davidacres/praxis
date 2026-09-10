@@ -6,7 +6,7 @@
 id: FX-BF-012
 slug: agent-delivery-workflows
 title: Governed agent delivery workflows
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-02
 issues: docs/issues/features/fx-bf-012-agent-delivery-workflows/feature-issues.md

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-099
 title: Attribute sessions and typed artifacts to workflow stages
-status: complete
+status: Done
 story: FX-BE-020
 updated: 2026-09-02
 dependencies: [TASK-095, TASK-098]

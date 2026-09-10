@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-055
 title: Deterministic orbital layout solver in core
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-054]

@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-042
 title: GitHub Packages add-on marketplace
-status: in-progress
+status: In Progress
 feature: FX-BF-018
 updated: 2026-09-06
 commits: []

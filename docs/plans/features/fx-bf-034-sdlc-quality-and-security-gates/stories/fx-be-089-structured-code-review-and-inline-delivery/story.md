@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-089
 title: "Structured code review and inline delivery"
-status: planned
+status: To Do
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087, FX-BE-033]

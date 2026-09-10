@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-051
 title: Connect Git child actions to Graph, Changes, and Conflict contexts
-status: complete
+status: Done
 story: FX-BE-006
 updated: 2026-08-27
 dependencies: [TASK-049]

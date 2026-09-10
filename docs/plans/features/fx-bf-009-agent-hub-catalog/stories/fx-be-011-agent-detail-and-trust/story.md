@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-011
 title: Agent and skill detail, trust, and capabilities
-status: complete
+status: Done
 feature: FX-BF-009
 issue: docs/issues/features/fx-bf-009-agent-hub-catalog/stories/fx-be-011-agent-detail-and-trust/issue.md
 updated: 2026-08-31

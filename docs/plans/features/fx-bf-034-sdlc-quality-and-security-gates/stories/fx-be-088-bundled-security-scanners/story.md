@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-088
 title: "Bundled security scanners behind the security gate"
-status: planned
+status: To Do
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087]

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-237
 title: "Define the CheckFindings contract and the findings artifact kind"
-status: planned
+status: To Do
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [FX-BE-020, FX-BE-024]

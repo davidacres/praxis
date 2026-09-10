@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-049
 title: Workspace files store in-tree paths relative to themselves
-status: complete
+status: Done
 feature: FX-BF-020
 updated: 2026-09-06
 commits: []

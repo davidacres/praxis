@@ -4,7 +4,7 @@
 type: Task
 id: TASK-247
 title: "Ship bundled trusted agent manifests"
-status: planned
+status: To Do
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [FX-BE-011]

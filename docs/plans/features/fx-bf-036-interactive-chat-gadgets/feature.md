@@ -6,7 +6,7 @@
 type: Feature
 id: FX-BF-036
 title: "Interactive chat gadgets and response surfaces"
-status: planned
+status: To Do
 updated: 2026-09-10
 dependencies: [FX-BF-014, FX-BF-015, FX-BF-035]
 ---

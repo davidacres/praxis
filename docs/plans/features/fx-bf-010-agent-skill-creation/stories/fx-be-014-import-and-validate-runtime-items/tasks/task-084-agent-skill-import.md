@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-084
 title: Add agent and skill import flow
-status: complete
+status: Done
 story: FX-BE-014
 updated: 2026-08-31
 dependencies: [TASK-083]

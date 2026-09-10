@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-109
 title: Add the Agent Hub picker and effective-policy display to the inspector
-status: complete
+status: Done
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]

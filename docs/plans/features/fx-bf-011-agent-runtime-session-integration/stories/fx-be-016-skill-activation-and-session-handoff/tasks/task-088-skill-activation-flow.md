@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-088
 title: Implement skill activation flow
-status: complete
+status: Done
 story: FX-BE-016
 updated: 2026-08-31
 dependencies: [TASK-087]

@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-064
 title: "IIS capability preflight and target configuration"
-status: planned
+status: To Do
 feature: FX-BF-025
 updated: 2026-09-07
 dependencies: [FX-BF-023]

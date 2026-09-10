@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-066
 title: "IIS end-to-end proof and operational guidance"
-status: planned
+status: To Do
 feature: FX-BF-025
 updated: 2026-09-07
 dependencies: [FX-BE-065]

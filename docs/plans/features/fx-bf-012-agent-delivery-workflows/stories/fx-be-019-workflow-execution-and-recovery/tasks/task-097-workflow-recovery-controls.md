@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-097
 title: Add workflow retry and recovery controls
-status: complete
+status: Done
 story: FX-BE-019
 updated: 2026-09-02
 dependencies: [TASK-095, TASK-096]

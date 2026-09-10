@@ -4,7 +4,7 @@
 type: Task
 id: TASK-139
 title: "Add failure selection and refresh"
-status: in-progress
+status: In Progress
 story: FX-BE-053
 updated: 2026-09-07
 dependencies: [TASK-138]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-083
 title: Validate and safely write skill packages
-status: complete
+status: Done
 story: FX-BE-013
 updated: 2026-08-31
 dependencies: [TASK-082]

@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-005
 title: Project-scoped Git entry point and repository onboarding
-status: complete
+status: Done
 feature: FX-BF-004
 issue: docs/issues/features/fx-bf-004-project-scoped-git-workspace/stories/fx-be-005-repository-onboarding/issue.md
 updated: 2026-08-27

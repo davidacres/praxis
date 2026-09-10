@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-110
 title: Add the pan/zoom workflow canvas with draggable nodes and edges
-status: complete
+status: Done
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]

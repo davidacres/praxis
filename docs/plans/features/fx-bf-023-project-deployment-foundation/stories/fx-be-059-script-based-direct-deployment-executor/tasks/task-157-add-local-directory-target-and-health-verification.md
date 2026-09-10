@@ -4,7 +4,7 @@
 type: Task
 id: TASK-157
 title: "Add local directory target and health verification"
-status: complete
+status: Done
 story: FX-BE-059
 updated: 2026-09-09
 dependencies: [TASK-156]

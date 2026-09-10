@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-031
 title: Verify and harden the ticket-to-agent flow
-status: complete
+status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-031-verify-and-harden-ticket-to-agent/issue.md
 updated: 2026-09-05

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-152
 title: "Separate publish from deploy"
-status: complete
+status: Done
 story: FX-BE-057
 updated: 2026-09-09
 dependencies: [TASK-151]

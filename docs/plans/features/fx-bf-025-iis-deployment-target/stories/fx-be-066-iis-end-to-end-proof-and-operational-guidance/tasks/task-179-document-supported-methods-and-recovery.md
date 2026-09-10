@@ -4,7 +4,7 @@
 type: Task
 id: TASK-179
 title: "Document supported methods and recovery"
-status: planned
+status: To Do
 story: FX-BE-066
 updated: 2026-09-07
 dependencies: [TASK-178]

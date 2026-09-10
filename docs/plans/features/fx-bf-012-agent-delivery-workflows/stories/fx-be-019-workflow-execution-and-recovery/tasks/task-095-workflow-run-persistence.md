@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-095
 title: Implement WorkflowRun persistence
-status: complete
+status: Done
 story: FX-BE-019
 updated: 2026-09-02
 dependencies: [FX-BE-018]

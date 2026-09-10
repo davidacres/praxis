@@ -4,7 +4,7 @@
 type: Task
 id: TASK-249
 title: "Add Node / .NET / Python template variants"
-status: planned
+status: To Do
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [TASK-248]

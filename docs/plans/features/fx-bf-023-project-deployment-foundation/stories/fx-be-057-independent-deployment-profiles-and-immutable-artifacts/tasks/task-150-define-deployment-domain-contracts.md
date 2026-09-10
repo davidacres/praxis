@@ -4,7 +4,7 @@
 type: Task
 id: TASK-150
 title: "Define deployment domain contracts"
-status: complete
+status: Done
 story: FX-BE-057
 updated: 2026-09-09
 dependencies: [FX-BF-021]

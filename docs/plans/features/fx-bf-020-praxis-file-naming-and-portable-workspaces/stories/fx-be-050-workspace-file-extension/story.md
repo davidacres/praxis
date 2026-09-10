@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-050
 title: A workspace file is .praxis.json, not .praxis
-status: complete
+status: Done
 feature: FX-BF-020
 updated: 2026-09-06
 commits: []

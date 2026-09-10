@@ -4,7 +4,7 @@
 type: Task
 id: TASK-183
 title: "Implement protocol and lifecycle"
-status: planned
+status: To Do
 story: FX-BE-068
 updated: 2026-09-07
 dependencies: [FX-BE-067]

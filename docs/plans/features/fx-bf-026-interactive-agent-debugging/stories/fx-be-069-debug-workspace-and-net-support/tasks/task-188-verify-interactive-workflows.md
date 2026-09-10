@@ -4,7 +4,7 @@
 type: Task
 id: TASK-188
 title: "Verify interactive workflows"
-status: planned
+status: To Do
 story: FX-BE-069
 updated: 2026-09-07
 dependencies: [TASK-187]

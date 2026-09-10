@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-038
 title: Surface ACP session modes and slash commands
-status: complete
+status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-038-acp-modes-and-commands/issue.md
 updated: 2026-09-06

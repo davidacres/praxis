@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-123
 title: Build the Library card grid and template list with readiness.
-status: complete
+status: Done
 story: FX-BE-028
 updated: 2026-09-02
 dependencies: [FX-BE-027]

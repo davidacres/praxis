@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-040
 title: Ticket-triggered workflow runs with outcome write-back
-status: complete
+status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-040-workflow-ticket-writeback/issue.md
 updated: 2026-09-06

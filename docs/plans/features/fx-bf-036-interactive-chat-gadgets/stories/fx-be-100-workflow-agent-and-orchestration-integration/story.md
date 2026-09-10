@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-100
 title: "Workflow, agent and orchestration integration"
-status: planned
+status: To Do
 feature: FX-BF-036
 updated: 2026-09-10
 dependencies: [FX-BE-099, FX-BF-035]

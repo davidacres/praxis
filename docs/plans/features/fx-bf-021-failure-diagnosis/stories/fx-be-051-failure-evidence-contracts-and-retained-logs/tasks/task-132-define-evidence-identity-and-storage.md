@@ -4,7 +4,7 @@
 type: Task
 id: TASK-132
 title: "Define evidence identity and storage"
-status: complete
+status: Done
 story: FX-BE-051
 updated: 2026-09-07
 dependencies: [FX-BE-024, FX-BE-025, FX-BE-041]

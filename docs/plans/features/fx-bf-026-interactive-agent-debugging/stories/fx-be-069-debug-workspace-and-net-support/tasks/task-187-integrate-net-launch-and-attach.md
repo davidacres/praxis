@@ -4,7 +4,7 @@
 type: Task
 id: TASK-187
 title: "Integrate .NET launch and attach"
-status: planned
+status: To Do
 story: FX-BE-069
 updated: 2026-09-07
 dependencies: [TASK-186]

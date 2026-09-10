@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-046
 title: Add project-scoped Git navigation and onboarding states
-status: complete
+status: Done
 story: FX-BE-005
 updated: 2026-08-27
 dependencies: [TASK-044]

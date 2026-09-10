@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-045
 title: Folder boards read their workflow instead of declaring it
-status: complete
+status: Done
 feature: FX-BF-019
 updated: 2026-09-06
 commits: []

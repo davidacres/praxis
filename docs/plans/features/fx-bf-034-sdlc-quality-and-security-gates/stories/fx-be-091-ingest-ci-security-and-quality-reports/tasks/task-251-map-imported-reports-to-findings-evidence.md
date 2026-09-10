@@ -4,7 +4,7 @@
 type: Task
 id: TASK-251
 title: "Map imported reports to findings evidence bound to the SHA"
-status: planned
+status: To Do
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [TASK-250, TASK-237]

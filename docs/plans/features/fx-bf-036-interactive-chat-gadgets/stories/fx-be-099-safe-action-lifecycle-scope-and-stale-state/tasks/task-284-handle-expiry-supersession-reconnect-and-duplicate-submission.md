@@ -6,7 +6,7 @@
 type: Task
 id: TASK-284
 title: "Handle expiry, supersession, reconnect and duplicate submission"
-status: planned
+status: To Do
 story: FX-BE-099
 feature: FX-BF-036
 updated: 2026-09-10

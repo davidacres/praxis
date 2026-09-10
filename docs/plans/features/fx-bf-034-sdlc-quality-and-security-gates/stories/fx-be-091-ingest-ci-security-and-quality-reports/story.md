@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-091
 title: "Ingest CI security and quality reports"
-status: planned
+status: To Do
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087, FX-BE-053]

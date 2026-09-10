@@ -6,7 +6,7 @@
 id: FX-BF-009
 slug: agent-hub-catalog
 title: Agent Hub catalog and navigation
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-03
 issues: docs/issues/features/fx-bf-009-agent-hub-catalog/feature-issues.md

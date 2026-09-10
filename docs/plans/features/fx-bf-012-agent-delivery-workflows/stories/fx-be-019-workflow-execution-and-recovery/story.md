@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-019
 title: Workflow execution, persistence, and recovery
-status: complete
+status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-019-workflow-execution-and-recovery/issue.md
 updated: 2026-09-02

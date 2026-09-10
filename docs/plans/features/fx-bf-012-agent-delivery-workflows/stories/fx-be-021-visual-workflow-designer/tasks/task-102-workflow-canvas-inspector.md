@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-102
 title: Implement workflow canvas and inspector
-status: complete
+status: Done
 story: FX-BE-021
 updated: 2026-09-02
 dependencies: [TASK-101, TASK-093]

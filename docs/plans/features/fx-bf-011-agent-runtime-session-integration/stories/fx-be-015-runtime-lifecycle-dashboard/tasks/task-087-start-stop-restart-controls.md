@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-087
 title: Add start, stop, and restart controls
-status: complete
+status: Done
 story: FX-BE-015
 updated: 2026-08-31
 dependencies: [TASK-086]
