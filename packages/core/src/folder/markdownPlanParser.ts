@@ -612,7 +612,21 @@ async function containsTypedMarkdownFiles(rootPath: string): Promise<boolean> {
 
 export async function identifyPlanFolderAtRoot(
   candidateRoot: string,
-  rootEntries?: [string, FileKind][]
+  rootEntries?: [string, FileKind][],
+  /**
+   * Whether a bare `bugs/`/`tasks/`/`stories/` directory (with no `feature.md`
+   * anywhere above it) may be accepted as its own plan root on its own.
+   *
+   * True only for the folder a connection is actually pointed at — that is
+   * the "standalone bug/task tracking" case the fallback below exists for.
+   * `discoverPlanFolders`' BFS passes false for every candidate it reaches by
+   * walking down from there: a `stories/` folder found a level or two below an
+   * unmatched parent is someone's feature folder that failed to match (e.g. a
+   * `feature-issues.md` mirror instead of `feature.md`), not an independent
+   * board, and must not be promoted into one just because one of its child
+   * items happens to carry a recognized `type:`.
+   */
+  allowStandaloneChildItems = true
 ): Promise<IdentifiedPlanFolder | undefined> {
   const featuresPath = path.join(candidateRoot, 'features');
   const featureEntries = await readDirectorySafe(featuresPath);
@@ -640,6 +654,10 @@ export async function identifyPlanFolderAtRoot(
       featuresRootPath: candidateRoot,
       featureEntries: entries
     };
+  }
+
+  if (!allowStandaloneChildItems) {
+    return undefined;
   }
 
   // Accept as a plan folder if it has child-item subdirectories (bugs/, tasks/, stories/)
@@ -710,7 +728,11 @@ export async function discoverPlanFolders(
       continue;
     }
 
-    const identified = await identifyPlanFolderAtRoot(current, currentEntries);
+    // A candidate reached by walking down from the selected root is never
+    // allowed to claim board status purely via the standalone bugs/tasks/stories
+    // fallback — only the folder a connection is actually pointed at may (see
+    // `identifyPlanFolderAtRoot`'s `allowStandaloneChildItems`).
+    const identified = await identifyPlanFolderAtRoot(current, currentEntries, false);
     if (identified) {
       matches.push(identified);
       // Do not descend into a plans root — avoid duplicate nested boards.
