@@ -55,3 +55,14 @@
 | FX-BE-071 | Capability-led session recovery and cost attribution | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-071-capability-led-session-recovery-and-cost-attribution/issue.md) |
 | FX-BE-072 | Event-triggered bounded failure repair | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-072-event-triggered-bounded-failure-repair/issue.md) |
 | FX-BE-073 | Shared executor feasibility and runner boundary | Backlog | [issue](features/fx-bf-027-advanced-execution-follow-ons/stories/fx-be-073-shared-executor-feasibility-and-runner-boundary/issue.md) |
+
+
+## Multi-AI session orchestration
+
+| Ref | Story | Status | Issue mirror |
+| --- | --- | --- | --- |
+| FX-BE-092 | Shared session context and handoff contracts | Planned | [issue](features/fx-bf-035-multi-ai-session-orchestration/stories/fx-be-092-shared-session-context-and-handoff-contracts/issue.md) |
+| FX-BE-093 | Provider adapters and capability preflight | Planned | [issue](features/fx-bf-035-multi-ai-session-orchestration/stories/fx-be-093-provider-adapters-and-capability-preflight/issue.md) |
+| FX-BE-094 | Worktree, file claims and change governance | Planned | [issue](features/fx-bf-035-multi-ai-session-orchestration/stories/fx-be-094-worktree-file-claims-and-change-governance/issue.md) |
+| FX-BE-095 | Orchestration runtime, task graph and recovery | Planned | [issue](features/fx-bf-035-multi-ai-session-orchestration/stories/fx-be-095-orchestration-runtime-task-graph-and-recovery/issue.md) |
+| FX-BE-096 | Session operations and review experience | Planned | [issue](features/fx-bf-035-multi-ai-session-orchestration/stories/fx-be-096-session-operations-and-review-experience/issue.md) |
