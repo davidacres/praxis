@@ -703,7 +703,6 @@ export function BoardView({
         }
       }}
     >
-      {isChild && <span className="issue-card-child-marker" aria-hidden="true" />}
       <div className="issue-card-title">{issue.summary}</div>
       <div className="issue-card-meta">
         <span className="issue-card-context" title={context}>{context}</span>
@@ -830,7 +829,6 @@ export function BoardView({
                 }
               }}
             >
-              {isChild && <span className="issue-card-child-marker" aria-hidden="true" />}
               <span className="issue-card-key">{issue.key}</span>
               <span className="board-list-row-title">{issue.summary}</span>
               {childCount > 0 && (
