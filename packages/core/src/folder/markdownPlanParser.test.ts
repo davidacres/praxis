@@ -106,6 +106,43 @@ test('discovery stops at nested git checkouts so a worktree cannot duplicate its
   }
 });
 
+test('a stories/ folder under an unmatched feature parent is not promoted to its own board', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'praxis-phantom-board-'));
+  try {
+    // A real plans root, so the walk has something legitimate to find first.
+    await writeFeature(path.join(dir, 'docs', 'plans'), 'Main plan');
+
+    // A second tree, shaped like an issue-mirror export: every feature folder
+    // carries `feature-issues.md` (not `feature.md`), so it never matches as a
+    // feature root, and only one of its two stories happens to carry a
+    // recognized `**Type:**` line — same as a real multi-AI mirror export.
+    const feature = path.join(dir, 'docs', 'issues', 'features', 'fx-bf-999-example');
+    const storyA = path.join(feature, 'stories', 'fx-be-001-untyped');
+    const storyB = path.join(feature, 'stories', 'fx-be-002-typed');
+    await mkdir(storyA, { recursive: true });
+    await mkdir(storyB, { recursive: true });
+    await writeFile(path.join(feature, 'feature-issues.md'), '# Example feature issues\n');
+    await writeFile(path.join(storyA, 'issue.md'), '# FX-BE-001\n\n**Status:** Complete\n');
+    await writeFile(path.join(storyB, 'issue.md'), '# FX-BE-002\n\n**Type:** Story\n**Status:** Complete\n');
+
+    const roots = (await discoverPlanFolders(dir)).map(match => match.plansRootPath);
+    assert.equal(roots.length, 1, `expected only the real plans root, got: ${roots.join(', ')}`);
+    assert.ok(roots[0].endsWith(path.join('docs', 'plans')), roots[0]);
+    assert.ok(
+      !roots.some(root => root.includes('stories')),
+      `a stories/ folder must not become its own board: ${roots.join(', ')}`
+    );
+
+    // Pointing a connection root directly at the stories folder is still the
+    // supported way to track it standalone — only *discovering* it by walking
+    // down from an enclosing folder is refused.
+    const direct = (await discoverPlanFolders(path.join(feature, 'stories'))).map(match => match.plansRootPath);
+    assert.equal(direct.length, 1, direct.join(', '));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('canonical planning dependencies resolve to board keys without partial FX identifiers', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'praxis-plan-dependencies-'));
   const feature = path.join(root, 'features', 'delivery');

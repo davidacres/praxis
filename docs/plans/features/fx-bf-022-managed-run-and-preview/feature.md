@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-022
 title: "Managed project runs and diagnostic browser previews"

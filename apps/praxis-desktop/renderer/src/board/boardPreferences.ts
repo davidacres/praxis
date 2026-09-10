@@ -87,6 +87,75 @@ export function applyIssueOrder(
   });
 }
 
+/**
+ * Reorders a column's issues into family groups: each parent (any issue
+ * another issue's `parentKey` points at) is immediately followed by its own
+ * children, each child by its own children in turn — a stable pre-order
+ * flatten of the parent/child forest already implied by `parentKey`. An issue
+ * whose parent isn't present in this same list (different column, or simply
+ * no parent) keeps its incoming position — grouping only ever happens when
+ * the family is already sharing a column. Children are ordered by `childSeq`
+ * ascending then `key`, so a feature's stories land in authored order;
+ * backends with no `childSeq` concept fall back to key order.
+ *
+ * Applied before `applyIssueOrder` so a user's own manual drag order — which
+ * only touches the columns/cards they've actually reordered — still wins;
+ * this only supplies the *default* order everything else falls back to.
+ */
+export function groupIssuesByParent(issues: IssueSummary[]): IssueSummary[] {
+  const byKey = new Map(issues.map(issue => [issue.key, issue]));
+  const hasParentHere = (issue: IssueSummary): boolean =>
+    Boolean(issue.parentKey && issue.parentKey !== issue.key && byKey.has(issue.parentKey));
+
+  const childrenByParent = new Map<string, IssueSummary[]>();
+  for (const issue of issues) {
+    if (!hasParentHere(issue)) {
+      continue;
+    }
+    const bucket = childrenByParent.get(issue.parentKey!) ?? [];
+    bucket.push(issue);
+    childrenByParent.set(issue.parentKey!, bucket);
+  }
+  for (const bucket of childrenByParent.values()) {
+    // `childSeq` is a per-type counter (a feature's first task and first story
+    // are each sequence 1), so it only orders siblings meaningfully within the
+    // same issueType — mirrors the core parser's own
+    // featureId → issueType → sequence precedence, or a story and a task with
+    // the same raw sequence number would interleave with no real meaning.
+    bucket.sort(
+      (left, right) =>
+        left.issueType.localeCompare(right.issueType) ||
+        (left.childSeq ?? Number.MAX_SAFE_INTEGER) - (right.childSeq ?? Number.MAX_SAFE_INTEGER) ||
+        left.key.localeCompare(right.key)
+    );
+  }
+
+  const placed = new Set<string>();
+  const result: IssueSummary[] = [];
+  const place = (issue: IssueSummary): void => {
+    // Guards a cyclic parentKey chain (A's parent is B, B's parent is A) —
+    // shouldn't occur in real data, but a reorder must never hang or drop cards.
+    if (placed.has(issue.key)) {
+      return;
+    }
+    placed.add(issue.key);
+    result.push(issue);
+    for (const child of childrenByParent.get(issue.key) ?? []) {
+      place(child);
+    }
+  };
+  for (const issue of issues) {
+    if (!hasParentHere(issue)) {
+      place(issue);
+    }
+  }
+  // Only reachable via the cycle case above — every card still has to appear.
+  for (const issue of issues) {
+    place(issue);
+  }
+  return result;
+}
+
 export interface SwimLane {
   title: string;
   columns: BoardColumn[];

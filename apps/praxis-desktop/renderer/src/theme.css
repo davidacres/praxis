@@ -2702,6 +2702,12 @@ textarea {
   white-space: nowrap;
 }
 
+/* List-view counterpart of the card view's child grouping: same indent and
+   sunken tint. */
+.board-list-row.board-list-row-child {
+  margin-left: 22px;
+  background: var(--bg-sunken);
+}
 
 /* One continuous Kanban canvas. The canvas, rather than individual lanes,
    owns both scroll axes: a long workflow scrolls as one board, while wide
@@ -2977,6 +2983,42 @@ textarea {
 .issue-card-type {
   color: var(--text-tertiary);
   background: var(--bg-hover);
+}
+
+.issue-card-child-count {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A child card (BoardView's `groupIssuesByParent` clusters it right after its
+   parent, same column only) reads as attached rather than a plain sibling:
+   indented under the parent, a thinner condensed card, and a solid accent
+   rail down its left edge — the same cue `.board-list-row` already uses for
+   its own left border, just applied here to mark "belongs to", not category. */
+.issue-card.issue-card-child {
+  margin-left: 22px;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--issue-card-accent, var(--accent));
+  background: var(--bg-sunken);
+}
+
+.issue-card.issue-card-child .issue-card-title {
+  font-size: var(--text-sm);
+  -webkit-line-clamp: 1;
+}
+
+/* A card with children shown beneath it (in this column) gets the same left
+   rail as a child, but in `--border-strong` rather than the accent — a
+   neutral, deliberately different colour so "this is a parent" reads apart
+   from "this is a child", not as the same relationship pointing two ways. */
+.issue-card.issue-card-parent {
+  border-left: 3px solid var(--border-strong);
 }
 
 .issue-card-details {

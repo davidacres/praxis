@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-035
 title: "Multi-AI session orchestration across Claude, Codex and Copilot"
