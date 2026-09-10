@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-152
 title: "Separate publish from deploy"
@@ -90,3 +92,10 @@ criterion above. Nothing here is Electron-dependent, so — like TASK-150/151 �
 that this sandbox's Electron block leaves unproven; marked `complete` on that basis. This also closes
 out FX-BE-057 (Independent deployment profiles and immutable artifacts) — all three of its tasks
 (TASK-150/151/152) are now implemented and tested.
+
+## Description
+
+
+## Comments
+
+

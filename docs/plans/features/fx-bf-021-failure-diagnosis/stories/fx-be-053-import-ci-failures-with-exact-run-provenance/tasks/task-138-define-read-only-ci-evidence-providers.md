@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-138
 title: "Define read-only CI evidence providers"
@@ -67,3 +69,10 @@ failure selection and refresh"). Real GitHub/GitLab API behaviour (rate limits, 
 shapes on Enterprise/self-hosted instances) is unverified beyond what these fixtures assert — this
 task's own acceptance criteria scope verification to mocked fixtures, and real-account testing
 remains an explicit opt-in per the story's Verification section.
+
+## Description
+
+
+## Comments
+
+

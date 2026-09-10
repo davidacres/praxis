@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-161
 title: "Verify complete direct delivery journey"
@@ -142,3 +144,10 @@ network resource, a real secret, or any external service.
   without Electron. The IPC and UI layer's own correctness rests on the
   type-checked contract chain (core → main → preload → renderer) verified
   in TASK-158/159/160, not on this journey test.
+
+## Description
+
+
+## Comments
+
+

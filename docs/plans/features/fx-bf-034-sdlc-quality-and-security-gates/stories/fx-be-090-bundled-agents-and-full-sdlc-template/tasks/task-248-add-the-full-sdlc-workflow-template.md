@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-248
 title: "Add the full-sdlc workflow template"
@@ -37,3 +39,10 @@ packages/core/src/workflows/workflowTemplates.ts (the definition, `builtInWorkfl
 ## Verification
 
 Core tests: template validation, readiness against a bundled-agent catalog snapshot, gate ownership. A scripted end-to-end run through the template on a Node fixture. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

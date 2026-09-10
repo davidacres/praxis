@@ -1,8 +1,10 @@
 ---
+**Status:** Done
+**Type:** Story
 type: Story
 id: FX-BE-057
 title: "Independent deployment profiles and immutable artifacts"
-status: planned
+status: Done
 feature: FX-BF-023
 updated: 2026-09-07
 dependencies: [FX-BF-021]
@@ -46,3 +48,10 @@ Run the child-task fixture scenarios and a complete story journey. Use scripted 
 ## Exclusions
 
 No automatic production deployment, broad credential grant, full source editor or replacement of the existing agent hosts is implied by this story. Unsupported capabilities must remain explicit.
+
+## Description
+
+
+## Comments
+
+

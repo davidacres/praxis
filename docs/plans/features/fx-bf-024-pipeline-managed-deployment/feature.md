@@ -1,9 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** In Progress
+**Type:** Feature
 type: Feature
 id: FX-BF-024
 title: "Pipeline-managed deployment and continuous delivery observation"
-status: planned
+status: In Progress
 slug: pipeline-managed-deployment
 stories: [FX-BE-061, FX-BE-062, FX-BE-063]
 issues: docs/issues/features/fx-bf-024-pipeline-managed-deployment/feature-issues.md
@@ -46,3 +47,16 @@ Every story and child task is implemented and verified; required integrations ha
 ## Verification
 
 Review the complete feature journey and documented support matrix. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked integration tests alone.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

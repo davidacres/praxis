@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-153
 title: "Add deployment transitions and policy"
@@ -105,3 +107,10 @@ across a restart (a crash while holding a lock currently has no automatic releas
 with TASK-154's reconciliation, which would need to release stale locks for runs it marks `unknown`
 or settles during recovery). Nothing here is Electron-dependent, so — like TASK-150/151/152 — there
 is nothing left that this sandbox's Electron block leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-149
 title: "Add preview verification workflow"
@@ -146,3 +148,10 @@ this delivery roadmap defines. All fourteen tasks across FX-BE-054/055/056 are i
 tested logic; every one touching Electron is explicitly `in-progress` rather than falsely marked
 `complete`, for the one recurring, honestly-documented reason: this sandbox cannot launch Electron to
 verify any of it.
+
+## Description
+
+
+## Comments
+
+

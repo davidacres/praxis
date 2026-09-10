@@ -5,7 +5,7 @@ id: FX-BF-003
 # FX-BF-003: Git Integration With Visual Commit Graph
 
 **Type:** Feature
-**Status:** 📋 Proposed
+**Status:** Done
 **Owner:** Electron desktop app
 **Priority:** P1
 **Risk:** Medium

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-144
 title: "Implement process lifecycle manager"
@@ -104,3 +106,10 @@ layer's job, not this module's, so a profile containing one would currently laun
 placeholder string in its environment rather than a real secret. Electron end-to-end verification was
 not attempted (nothing Electron-specific exists yet to verify — the whole module runs and is tested
 under plain `node --test`).
+
+## Description
+
+
+## Comments
+
+

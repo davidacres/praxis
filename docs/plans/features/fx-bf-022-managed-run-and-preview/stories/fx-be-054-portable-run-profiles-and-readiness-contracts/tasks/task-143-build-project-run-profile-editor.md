@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-143
 title: "Build project Run profile editor"
@@ -110,3 +112,10 @@ and reading the rendered JSX by hand. The editor's behavior (load/save/discover/
 add/remove service, dependency checkboxes, probe-kind switching, env row editing) is plausible from
 the code and from the IPC layer's own passing tests, but nobody has actually seen it run. This is why
 the task stays `in-progress` rather than `complete`.
+
+## Description
+
+
+## Comments
+
+

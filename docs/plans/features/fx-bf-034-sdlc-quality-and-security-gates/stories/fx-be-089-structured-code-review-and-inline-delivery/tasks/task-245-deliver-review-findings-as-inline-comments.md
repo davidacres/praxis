@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-245
 title: "Deliver review findings as inline PR / ticket comments with dedupe"
@@ -34,3 +36,10 @@ apps/praxis-desktop/main/src/main (PR/MR review-comment IPC, reusing the GitHub/
 ## Verification
 
 Fixture GitHub/GitLab API servers; core tests for the dedupe set across two runs and for comment-body mapping. Electron spec for the in-app review findings view with inspected captures across theme axes and keyboard focus. Read-only vs write token scope documented. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

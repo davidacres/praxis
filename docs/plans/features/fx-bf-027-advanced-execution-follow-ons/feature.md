@@ -1,9 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** To Do
+**Type:** Feature
 type: Feature
 id: FX-BF-027
 title: "Deferred execution reliability and automation extensions"
-status: backlog
+status: To Do
 slug: advanced-execution-follow-ons
 stories: [FX-BE-071, FX-BE-072, FX-BE-073]
 issues: docs/issues/features/fx-bf-027-advanced-execution-follow-ons/feature-issues.md
@@ -47,3 +48,16 @@ Every story and child task is implemented and verified; required integrations ha
 ## Verification
 
 Review the complete feature journey and documented support matrix. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked integration tests alone.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

@@ -1,8 +1,10 @@
 ---
+**Status:** In Progress
+**Type:** Story
 type: Story
 id: FX-BE-052
 title: "Bounded diagnose and verify workflow"
-status: planned
+status: In Progress
 feature: FX-BF-021
 updated: 2026-09-07
 dependencies: [FX-BE-051]
@@ -46,3 +48,10 @@ Run the child-task fixture scenarios and a complete story journey. Use scripted 
 ## Exclusions
 
 No automatic production deployment, broad credential grant, full source editor or replacement of the existing agent hosts is implied by this story. Unsupported capabilities must remain explicit.
+
+## Description
+
+
+## Comments
+
+

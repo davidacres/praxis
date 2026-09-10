@@ -2,7 +2,7 @@
 
 **Created:** 2026-08-28T18:59:35.084Z
 **Type:** Feature
-**Status:** 📋 Proposed
+**Status:** Done
 **Owner:** Electron desktop app
 **Priority:** P1
 

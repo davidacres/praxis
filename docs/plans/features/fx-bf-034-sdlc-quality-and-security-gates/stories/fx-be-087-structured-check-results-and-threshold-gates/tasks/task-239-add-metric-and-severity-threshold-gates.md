@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-239
 title: "Add metric and severity threshold gate policy"
@@ -34,3 +36,10 @@ packages/core/src/workflows/workflowTypes.ts (threshold condition type on the ga
 ## Verification
 
 Unit tests for threshold evaluation across pending/pass/fail, and for strictest-wins compose accept/refuse. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Prove the loosen-refusal guard fails against the pre-change composition. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

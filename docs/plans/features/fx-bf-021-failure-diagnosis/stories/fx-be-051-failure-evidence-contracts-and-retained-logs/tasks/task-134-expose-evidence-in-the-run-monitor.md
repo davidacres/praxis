@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-134
 title: "Expose evidence in the run monitor"
@@ -105,3 +107,10 @@ the story's own rule that a plan being committed is not evidence of a finished t
   `workflowThemes.spec.ts` alongside the existing monitor/designer/inspector captures when convenient.
 - Evidence is still capped at one entry per attempt (`combined`, matching `spawnCheck`'s single
   merged stdout+stderr stream) — unchanged from TASK-133.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-140
 title: "Connect CI evidence to diagnosis"
@@ -78,3 +80,10 @@ clean.
   complete and tested; the UI to reach it is not.
 - `startDiagnosisFromCiImport` assumes exactly one evidence entry per imported job (the job's whole
   log), matching TASK-139's current shape.
+
+## Description
+
+
+## Comments
+
+

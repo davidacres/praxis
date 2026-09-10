@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.259Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-093
 title: "Provider adapters and capability preflight"
@@ -29,3 +33,14 @@ Each adapter runs a capability probe, returns structured output, and distinguish
 ## Evidence
 
 Contract tests, fixture repositories, captured provider output, failure and recovery tests, and visual or accessibility evidence where the story affects the desktop surface.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

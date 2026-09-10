@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.225Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-050
 title: A workspace file is .praxis.json, not .praxis
@@ -56,3 +60,14 @@ If double-click-to-open is built later, the association registers against
 - `npm run check-types`
 - `npm run test:core`
 - `npm run test:desktop` (`workspaceFile.spec.ts`, `savedWorkspaces.spec.ts`)
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

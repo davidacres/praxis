@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.260Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-095
 title: "Orchestration runtime, task graph and recovery"
@@ -29,3 +33,14 @@ A workflow executes design, implementation, independent review and validation in
 ## Evidence
 
 Contract tests, fixture repositories, captured provider output, failure and recovery tests, and visual or accessibility evidence where the story affects the desktop surface.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+
