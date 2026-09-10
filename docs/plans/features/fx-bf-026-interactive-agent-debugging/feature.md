@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-026
 title: "Interactive and agent-assisted runtime debugging"

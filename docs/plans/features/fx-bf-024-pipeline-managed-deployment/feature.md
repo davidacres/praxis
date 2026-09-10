@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-024
 title: "Pipeline-managed deployment and continuous delivery observation"
