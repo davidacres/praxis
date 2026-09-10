@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-021
 title: "Reproducible failure diagnosis and verification evidence"
