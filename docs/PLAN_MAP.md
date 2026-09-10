@@ -325,7 +325,7 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 | TASK-264 | Task | Capture Git change-set evidence | Planned | TASK-262 |
 | TASK-265 | Task | Prepare merge candidates and conflicts | Planned | TASK-264 |
 | TASK-266 | Task | Implement dependency-aware scheduler | Planned | FX-BE-093, FX-BE-094 |
-| TASK-267 | Task | Add redacted append-only event log | Planned | FX-BE-266 |
+| TASK-267 | Task | Add redacted append-only event log | Planned | TASK-266 |
 | TASK-268 | Task | Implement timeout and recovery policies | Planned | TASK-267 |
 | TASK-269 | Task | Add stage joins and handoff gates | Planned | TASK-266, TASK-268 |
 | TASK-270 | Task | Add deterministic stub-agent workflow | Planned | TASK-269 |
