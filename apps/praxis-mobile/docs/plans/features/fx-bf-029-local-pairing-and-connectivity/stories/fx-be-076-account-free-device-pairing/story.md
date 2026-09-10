@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-076
 title: "Account-free device pairing"
-status: complete
+status: in-progress
 feature: FX-BF-029
 updated: 2026-09-09
 dependencies: [FX-BE-075]

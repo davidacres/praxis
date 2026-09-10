@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-085
 title: "Operational release and repository extraction"
-status: complete
+status: in-progress
 feature: FX-BF-033
 updated: 2026-09-09
 dependencies: [FX-BE-084]

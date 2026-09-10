@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-080
 title: "Portable mobile application foundation"
-status: complete
+status: in-progress
 feature: FX-BF-031
 updated: 2026-09-09
 dependencies: [FX-BE-074]
