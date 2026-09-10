@@ -50,3 +50,8 @@ The root desktop board is unchanged. Add the mobile folder as a separate project
 ## Local-first priority (2026-09-09)
 
 GenericSystem and Roleover are not running. Deliver account-free LAN pairing, mobile continuation, workflow execution, decisions and a usable local release before cloud integration. No local completion gate requires these services or Azure. Keep internet features unavailable until the real integration is verified; use fixtures only for development. FX-BF-030 is deferred, including optional notifications moved to FX-BE-086. See the mobile master plan for the revised order.
+
+
+## Multi-AI session orchestration
+
+The multi-provider execution initiative is indexed in the [multi-AI orchestration roadmap](../multi-ai-session-orchestration-roadmap.md) and [Plan Map](../PLAN_MAP.md). It is delivered after the existing agent runtime and governed workflow foundations: FX-BE-092 → FX-BE-093/094 → FX-BE-095 → FX-BE-096. Provider capability discovery and local fixture workflows are required before any unattended real-provider execution is treated as supported.
