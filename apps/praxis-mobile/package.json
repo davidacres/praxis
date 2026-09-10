@@ -1,0 +1,12 @@
+{
+  "name": "@praxis/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Praxis mobile companion — client logic and platform-adapter contracts for continuing and executing work on a running desktop host.",
+  "scripts": {
+    "check-types": "tsc --noEmit -p .",
+    "compile": "tsc -p .",
+    "test": "tsc -p . && node --test \"out/**/*.test.js\""
+  }
+}
