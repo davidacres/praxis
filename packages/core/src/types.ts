@@ -242,6 +242,13 @@ export interface IssueSummary {
   aiAssignment?: AiAssignment;
   /** Sub-tasks linked to this issue (populated for feature requests). */
   subTasks?: SubTaskSummary[];
+  /**
+   * Stable order among sibling children under the same `parentKey` (e.g. a
+   * story's sequence within its feature). Folder mode derives this from the
+   * child file's numeric segment; backends with no such concept leave it
+   * unset, and consumers fall back to another stable sort (e.g. `key`).
+   */
+  childSeq?: number;
   raw?: unknown;
 }
 

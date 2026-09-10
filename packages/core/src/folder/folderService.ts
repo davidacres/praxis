@@ -177,7 +177,6 @@ function toParentIssueReference(issue: LiveIssue | undefined): ParentIssueRefere
 interface LiveIssue extends IssueSummary {
   sourcePath: string;
   featureId: number | undefined;
-  childSeq?: number;
   featureDirName?: string;
 }
 
