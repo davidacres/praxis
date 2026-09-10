@@ -11,6 +11,7 @@
     "fixture": "tsc -p . && node out/main/runFixtureJourney.js"
   },
   "dependencies": {
-    "@praxis/core": "*"
+    "@praxis/core": "*",
+    "@praxis/mobile-protocol": "*"
   }
 }

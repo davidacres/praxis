@@ -1,0 +1,19 @@
+{
+  "name": "@praxis/mobile-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "description": "Shared, dependency-light protocol and secure-transport core for the Praxis mobile companion — runs unchanged in Node, a browser, and React Native.",
+  "scripts": {
+    "check-types": "tsc --noEmit -p .",
+    "compile": "tsc -p .",
+    "test": "tsc -p . && node --test \"out/**/*.test.js\""
+  },
+  "dependencies": {
+    "@noble/ciphers": "1.3.0",
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0"
+  }
+}
