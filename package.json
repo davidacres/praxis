@@ -13,20 +13,16 @@
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
     "test": "npm run test:core && npm run test:mobile-protocol && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop:mobile && npm run test:desktop && npm run test:desktop:themes",
-
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
-
     "build:mobile-protocol": "npm run compile --workspace=@praxis/mobile-protocol",
     "test:mobile-protocol": "npm test --workspace=@praxis/mobile-protocol",
     "build:mobile": "npm run compile --workspace=@praxis/mobile",
     "test:mobile": "npm test --workspace=@praxis/mobile",
     "mobile:fixture": "npm run fixture --workspace=@praxis/mobile",
-
     "renderer:dev": "npm run dev --workspace=@praxis/desktop-renderer",
     "build:renderer": "npm run build --workspace=@praxis/desktop-renderer",
     "renderer:textures": "npm run textures --workspace=@praxis/desktop-renderer",
-
     "desktop:start": "npm run start --workspace=@praxis/desktop-main",
     "desktop:copy-renderer": "npm run copy-renderer --workspace=@praxis/desktop-main",
     "build:desktop": "npm run compile --workspace=@praxis/desktop-main",
@@ -38,7 +34,6 @@
     "test:desktop:git": "npm run test:git --workspace=@praxis/desktop-main",
     "test:desktop:mobile": "npm run test:mobile --workspace=@praxis/desktop-main",
     "desktop:dist": "npm run dist --workspace=@praxis/desktop-main",
-
     "app": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1",
     "app:demo": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/run-app.ps1 -Demo",
     "app:demo:mac": "./scripts/run-app.sh --demo",
@@ -84,6 +79,8 @@
     "electron-winstaller": false
   },
   "devDependencies": {
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "babel-preset-expo": "~57.0.11",
+    "@babel/core": "^7.25.0"
   }
 }

@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Praxis",
+    "slug": "praxis-mobile",
+    "scheme": "praxis",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.acresweb.praxis.mobile"
+    },
+    "android": {
+      "package": "com.acresweb.praxis.mobile"
+    }
+  }
+}
