@@ -690,7 +690,7 @@ export function BoardView({
       data-testid="issue-card"
       data-issue-key={issue.key}
       data-child-of={isChild ? issue.parentKey : undefined}
-      className={`issue-card${isChild ? ' issue-card-child' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
+      className={`issue-card${isChild ? ' issue-card-child' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
       style={{ '--issue-card-accent': contextAccent } as CSSProperties}
       {...cardDragProps(issue)}
       {...cardDropProps(column, issue)}
@@ -816,8 +816,8 @@ export function BoardView({
               key={issue.key}
               data-testid="issue-card"
               data-child-of={isChild ? issue.parentKey : undefined}
-              className={`board-list-row${isChild ? ' board-list-row-child' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
-              style={{ borderLeftColor: cardAccent(issue) }}
+              className={`board-list-row${isChild ? ' board-list-row-child' : ''}${childCount > 0 ? ' board-list-row-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
+              style={{ borderLeftColor: childCount > 0 ? 'var(--border-strong)' : cardAccent(issue) }}
               {...cardDragProps(issue)}
               {...cardDropProps(column, issue)}
               onClick={() => onOpenIssue(issue.key)}
