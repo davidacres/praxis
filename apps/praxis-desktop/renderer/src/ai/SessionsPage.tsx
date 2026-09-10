@@ -18,6 +18,7 @@ import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelectio
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
 import { basename, contextPressure, formatCost, isLatestEditToPath, isWorkflowStageSession, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
+import { PraxisChoiceGadget } from './PraxisChoiceGadget';
 
 /**
  * Switching mode is not just a flag: the session is told, in its own thread,
@@ -145,6 +146,8 @@ export function SessionsPage({
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
+  const [showGadgetProof, setShowGadgetProof] = useState(false);
+  const [gadgetProofResult, setGadgetProofResult] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
@@ -777,6 +780,7 @@ export function SessionsPage({
                   </p>
                 </div>
               )}
+              {showGadgetProof && <PraxisChoiceGadget submittedValue={gadgetProofResult} onSubmit={value => setGadgetProofResult(value)} />}
               <div className="composer session-follow-up-composer">
                 {attachTerminalContext && terminalForContext && (
                   <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
@@ -808,6 +812,7 @@ export function SessionsPage({
                   }}
                 />
               <div className="composer-controls">
+                  <button className="secondary-btn session-gadget-demo-btn" type="button" data-testid="session-gadget-demo" onClick={() => { setShowGadgetProof(current => !current); setGadgetProofResult(undefined); }}>{showGadgetProof ? 'Hide gadget' : 'Try gadget'}</button>
                   {/* A finished session can be re-run in a different mode; a live
                       one can only be stopped, so this only appears once it's
                       actually a choice. Mirrors where the New Session composer
