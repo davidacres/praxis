@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-025
 title: "IIS deployment target and recovery templates"

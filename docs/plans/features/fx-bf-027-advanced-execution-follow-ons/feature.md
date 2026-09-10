@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-027
 title: "Deferred execution reliability and automation extensions"

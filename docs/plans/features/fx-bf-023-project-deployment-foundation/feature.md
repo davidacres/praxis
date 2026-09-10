@@ -1,4 +1,5 @@
 ---
+**Status:** 📋 Proposed
 type: Feature
 id: FX-BF-023
 title: "Project deployment profiles and direct execution"
