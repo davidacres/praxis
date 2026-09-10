@@ -2702,6 +2702,26 @@ textarea {
   white-space: nowrap;
 }
 
+/* List-view counterpart of the card view's child grouping: same indent and
+   sunken tint, but an inline glyph instead of the card view's elbow connector
+   — a row has no vertical gap above it to draw one into. */
+.board-list-row.board-list-row-child {
+  margin-left: 22px;
+  background: var(--bg-sunken);
+}
+
+.board-list-row .issue-card-child-marker {
+  position: static;
+  width: auto;
+  height: auto;
+  border: none;
+  color: var(--accent);
+}
+
+.board-list-row .issue-card-child-marker::before {
+  content: '↳';
+}
+
 
 /* One continuous Kanban canvas. The canvas, rather than individual lanes,
    owns both scroll axes: a long workflow scrolls as one board, while wide
@@ -2977,6 +2997,49 @@ textarea {
 .issue-card-type {
   color: var(--text-tertiary);
   background: var(--bg-hover);
+}
+
+.issue-card-child-count {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A child card (BoardView's `groupIssuesByParent` clusters it right after its
+   parent, same column only) reads as attached rather than a plain sibling:
+   indented under the parent, a thinner condensed card, and an elbow connector
+   in the gap above it pointing back up at the parent it belongs to. */
+.issue-card.issue-card-child {
+  position: relative;
+  margin-left: 22px;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-sunken);
+}
+
+.issue-card.issue-card-child .issue-card-title {
+  font-size: var(--text-sm);
+  -webkit-line-clamp: 1;
+}
+
+.issue-card-child-marker {
+  position: absolute;
+  top: -7px;
+  left: -13px;
+  width: 10px;
+  height: 13px;
+  /* The accent, not `--border` — a hairline in the border colour read as
+     invisible against this theme's low-contrast card borders; the connector
+     only earns its keep if it's actually seen. */
+  border-left: 2px solid var(--issue-card-accent, var(--accent));
+  border-bottom: 2px solid var(--issue-card-accent, var(--accent));
+  border-bottom-left-radius: 6px;
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 .issue-card-details {
