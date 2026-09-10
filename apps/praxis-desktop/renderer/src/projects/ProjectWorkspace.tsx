@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AgentSessionRecord, ProjectRecord } from '@praxis/core';
-import { PROJECT_BRIEF_FIELDS } from '@praxis/core/out/projects/projectTemplates';
+import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
 import { Icon } from '../ui/Icon';
 import { agentStateLabel, isTerminalAgentState } from '../ai/aiSessionState';
 
