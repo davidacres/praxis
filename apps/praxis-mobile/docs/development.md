@@ -2,7 +2,13 @@
 
 ## Current state
 
-This is a documentation and planning scaffold. There is no runnable mobile app, package manifest, installed framework or Azure deployment. FX-BE-080 selects and establishes the platform shell and renderer build. Do not add this folder to root build workspaces until runnable scripts exist.
+The client logic and platform-adapter contracts (`renderer/`) compile and are
+tested: `@praxis/mobile` is a root workspace with `npm run test:mobile`
+(`tsc -p . && node --test`), run in the root `test` chain and `check-types`.
+There is still no installed UI framework, no rendered screens, no native
+platform-adapter implementations and no Azure deployment. FX-BE-080 selects and
+establishes the platform shell and renderer build; `main/` stays a README until
+that packaging decision.
 
 ## Conventions inherited from desktop
 

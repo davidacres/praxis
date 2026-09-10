@@ -6,15 +6,19 @@
   "workspaces": [
     "apps/praxis-desktop/main",
     "apps/praxis-desktop/renderer",
+    "apps/praxis-mobile",
     "packages/*"
   ],
   "scripts": {
     "check-types": "npm run check-types --workspaces --if-present",
     "build": "npm run build:core && npm run build:renderer && npm run desktop:copy-renderer && npm run build:desktop",
-    "test": "npm run test:core && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop && npm run test:desktop:themes",
+    "test": "npm run test:core && npm run test:mobile && npm run test:desktop:git && npm run test:desktop:workflows && npm run test:desktop && npm run test:desktop:themes",
 
     "build:core": "npm run compile --workspace=@praxis/core",
     "test:core": "npm test --workspace=@praxis/core",
+
+    "build:mobile": "npm run compile --workspace=@praxis/mobile",
+    "test:mobile": "npm test --workspace=@praxis/mobile",
 
     "renderer:dev": "npm run dev --workspace=@praxis/desktop-renderer",
     "build:renderer": "npm run build --workspace=@praxis/desktop-renderer",
