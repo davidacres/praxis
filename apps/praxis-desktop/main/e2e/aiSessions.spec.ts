@@ -341,3 +341,32 @@ test('a write_file tool call renders a red/green diff after the write is approve
 
   fs.rmSync(workDir, { recursive: true, force: true });
 });
+
+
+test('renders the provider-neutral Praxis choice gadget without changing the AI session', async () => {
+  mock = await startMockGatewayServer({ mode: 'complete', reply: 'Provider response remains unchanged.' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gadget-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({
+      issueKey: 'GADGET-001',
+      provider: 'vercel-gateway',
+      task: { goal: 'Demonstrate a provider-neutral Praxis gadget.' }
+    });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+  await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText('Provider response remains unchanged.');
+  await win.locator('[data-testid="session-gadget-demo"]').click();
+  const gadget = win.locator('[data-testid="praxis-choice-gadget"]');
+  await expect(gadget).toBeVisible();
+  await gadget.getByLabel('Handoff').check();
+  await win.screenshot({ path: 'output/playwright/chat-gadget-choice-selected.png', fullPage: true });
+  await gadget.getByRole('button', { name: 'Continue' }).click();
+  await expect(win.locator('[data-testid="praxis-choice-result"]')).toContainText('Handoff');
+  expect(mock.requests).toHaveLength(1);
+});
