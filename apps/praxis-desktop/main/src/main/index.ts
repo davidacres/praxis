@@ -38,9 +38,7 @@ import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
-import { registerMobileElectronIpc } from './mobileIpc';
-import { composeDesktopMobileHost } from './mobileHostComposition';
-import { applyMobileAccessFromSettings } from './mobileListenerInstance';
+import { initMobileHost } from './mobileListenerInstance';
 
 const isMac = process.platform === 'darwin';
 
@@ -276,12 +274,12 @@ void app.whenReady().then(async () => {
   registerAgentRuntimeIpc();
   registerMarketplaceIpc();
   registerGitIpc();
-  // Mobile companion: serve the read/command bridge and apply the persisted
-  // access policy (default `off` — nothing binds). The encrypted LAN transport
-  // that turns the policy into a real socket is FX-BE-077.
-  registerMobileElectronIpc(composeDesktopMobileHost());
-  applyMobileAccessFromSettings();
-  getSettingsBackend().onDidChange(() => applyMobileAccessFromSettings());
+  // Mobile companion: compose the host, serve the IPC bridge, and drive the
+  // Noise LAN listener from the persisted access policy (default `off` — nothing
+  // binds).
+  void initMobileHost().catch(error =>
+    getLogBus().appendLine(`[mobile] init failed: ${error instanceof Error ? error.message : String(error)}`)
+  );
   ipcMain.handle('app:getVersion', () => app.getVersion());
   registerAutoUpdate(() => BrowserWindow.getAllWindows(), getLogBus());
   // Mirror trusted agent add-ons onto disk before the first discovery pass, and
