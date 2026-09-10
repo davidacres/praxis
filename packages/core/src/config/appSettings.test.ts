@@ -22,6 +22,23 @@ test('merge updates the startup preference without changing other settings', () 
   assert.equal(merged.preview.enableNewProject, DEFAULT_APP_SETTINGS.preview.enableNewProject);
 });
 
+test('mobile access is off by default and mode is validated to the known set', () => {
+  assert.equal(sanitizeAppSettings({}).mobileAccess.mode, 'off');
+  assert.equal(sanitizeAppSettings({ mobileAccess: { mode: 'local-only' } }).mobileAccess.mode, 'local-only');
+  assert.equal(sanitizeAppSettings({ mobileAccess: { mode: 'relay' } }).mobileAccess.mode, 'off');
+  const trimmed = sanitizeAppSettings({ mobileAccess: { allowedInterfaces: ['en0', ' en0 ', ''] } }).mobileAccess.allowedInterfaces;
+  assert.deepEqual([...trimmed], ['en0']);
+  const rejected = sanitizeAppSettings({ mobileAccess: { allowedSubnets: ['10.0.0.', 42] } }).mobileAccess.allowedSubnets;
+  assert.deepEqual([...rejected], []);
+});
+
+test('merge updates mobile access without touching other sections', () => {
+  const merged = mergeAppSettings(DEFAULT_APP_SETTINGS, { mobileAccess: { mode: 'internet' } });
+  assert.equal(merged.mobileAccess.mode, 'internet');
+  assert.equal(merged.mobileAccess.hostName, DEFAULT_APP_SETTINGS.mobileAccess.hostName);
+  assert.equal(merged.git.executablePath, DEFAULT_APP_SETTINGS.git.executablePath);
+});
+
 test('sanitize fills surface defaults for a brand-new profile', () => {
   const settings = sanitizeAppSettings({});
   assert.equal(settings.appearance.surfacePackId, 'parchment');

@@ -1,5 +1,7 @@
 import { parseHexRgb } from '../ui/hexColor';
 import type { AiProvider } from '../types';
+import type { MobileAccessMode } from '../host/mobileAccessPolicy';
+import type { MobileAccessSettings } from '../host/mobileAccessAdministration';
 
 /**
  * Typed settings shape shared between the Electron desktop app and the VS Code
@@ -421,6 +423,7 @@ export interface AppSettings {
   terminal: TerminalSettings;
   git: GitSettings;
   gitVisual: GitVisualSettings;
+  mobileAccess: MobileAccessSettings;
 }
 
 /** The priority-colour map every fresh profile and every built-in Look starts from. */
@@ -550,6 +553,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     mergeMarkersEnabled: true,
     orientation: 'vertical',
     performanceMode: false
+  },
+  mobileAccess: {
+    mode: 'off',
+    hostName: '',
+    allowedInterfaces: [],
+    allowedSubnets: [],
+    remoteSignInRequired: false
   }
 };
 
@@ -586,6 +596,7 @@ export interface AppSettingsPatch {
   terminal?: Partial<TerminalSettings>;
   git?: Partial<GitSettings>;
   gitVisual?: Partial<GitVisualSettings>;
+  mobileAccess?: Partial<MobileAccessSettings>;
 }
 
 /** `true` when value is a plain object — guards against array/null confusion in the JSON loader. */
@@ -635,6 +646,16 @@ function readBoardsSidebarMode(value: unknown, fallback: BoardsSidebarMode): Boa
 
 function readThemeMode(value: unknown, fallback: AppearanceSettings['themeMode']): AppearanceSettings['themeMode'] {
   return value === 'light' || value === 'dark' || value === 'system' ? value : fallback;
+}
+
+function readMobileAccessMode(value: unknown, fallback: MobileAccessMode): MobileAccessMode {
+  return value === 'off' || value === 'local-only' || value === 'internet' ? value : fallback;
+}
+
+function readStringList(value: unknown, fallback: readonly string[]): string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+    ? [...new Set((value as string[]).map(item => item.trim()).filter(Boolean))]
+    : [...fallback];
 }
 
 function readThemeIds(value: unknown, fallback: string[]): string[] {
@@ -1116,6 +1137,16 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
       }
     : { ...DEFAULT_APP_SETTINGS.gitVisual };
 
+  const mobileAccess: MobileAccessSettings = isRecord(raw) && isRecord(raw.mobileAccess)
+    ? {
+        mode: readMobileAccessMode(raw.mobileAccess.mode, DEFAULT_APP_SETTINGS.mobileAccess.mode),
+        hostName: readString(raw.mobileAccess.hostName, DEFAULT_APP_SETTINGS.mobileAccess.hostName),
+        allowedInterfaces: readStringList(raw.mobileAccess.allowedInterfaces, DEFAULT_APP_SETTINGS.mobileAccess.allowedInterfaces),
+        allowedSubnets: readStringList(raw.mobileAccess.allowedSubnets, DEFAULT_APP_SETTINGS.mobileAccess.allowedSubnets),
+        remoteSignInRequired: readBoolean(raw.mobileAccess.remoteSignInRequired, DEFAULT_APP_SETTINGS.mobileAccess.remoteSignInRequired)
+      }
+    : { ...DEFAULT_APP_SETTINGS.mobileAccess };
+
   const terminal: TerminalSettings = isRecord(raw) && isRecord(raw.terminal)
     ? {
         defaultProfileId: readString(raw.terminal.defaultProfileId, DEFAULT_APP_SETTINGS.terminal.defaultProfileId),
@@ -1145,7 +1176,8 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     appearance,
     terminal,
     git,
-    gitVisual
+    gitVisual,
+    mobileAccess
   };
 }
 
@@ -1277,6 +1309,7 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
   };
   const git: GitSettings = { ...base.git, ...(patch.git ?? {}) };
   const gitVisual: GitVisualSettings = { ...base.gitVisual, ...(patch.gitVisual ?? {}) };
+  const mobileAccess: MobileAccessSettings = { ...base.mobileAccess, ...(patch.mobileAccess ?? {}) };
 
   return {
     ai,
@@ -1290,7 +1323,8 @@ export function mergeAppSettings(base: AppSettings, patch: AppSettingsPatch): Ap
     appearance,
     terminal,
     git,
-    gitVisual
+    gitVisual,
+    mobileAccess
   };
 }
 
