@@ -9,6 +9,7 @@ import type {
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { statusTone } from './boardMeta';
+import { PriorityIndicator } from './PriorityIndicator';
 import type { BoardFilterPresentation, BoardFilterValue } from './BoardFilterBar';
 import { BoardSettingsMenu } from './BoardSettingsMenu';
 import { useSettings } from '../settings/useSettings';
@@ -720,7 +721,7 @@ export function BoardView({
       {(updated || issue.priority) && (
         <div className="issue-card-details">
           {updated && <span title={`Updated ${updated}`}><Icon name="calendar" size={12} /> Updated {updated}</span>}
-          {issue.priority && <span className="issue-card-priority">{issue.priority}</span>}
+          {issue.priority && <PriorityIndicator priority={issue.priority} />}
         </div>
       )}
       <div className="issue-card-foot">
