@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-065
 title: "IIS install health and explicit rollback"
@@ -46,3 +48,10 @@ Run the child-task fixture scenarios and a complete story journey. Use scripted 
 ## Exclusions
 
 No automatic production deployment, broad credential grant, full source editor or replacement of the existing agent hosts is implied by this story. Unsupported capabilities must remain explicit.
+
+## Description
+
+
+## Comments
+
+

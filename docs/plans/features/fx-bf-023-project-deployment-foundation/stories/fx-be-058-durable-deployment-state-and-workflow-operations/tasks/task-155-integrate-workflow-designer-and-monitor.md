@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-155
 title: "Integrate workflow designer and monitor"
@@ -210,3 +212,10 @@ weaker path for a deployment stage to mark a gate passed.
   exercised in the running app, across themes, narrow layouts, or keyboard
   focus. Marked `in-progress` rather than `complete` specifically because of
   this gap, consistent with every other UI-touching task in this session.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-145
 title: "Add explicit preview origin grants"
@@ -99,3 +101,10 @@ for the guards themselves), IPC surface, and any UI, are TASK-146's explicit sco
 end-to-end verification was not attempted for the same reason as every other task this session: there
 is no Electron-specific code yet to verify, and Electron itself remains blocked in this sandbox
 (missing `node-pty` native binding, rebuild blocked by egress policy).
+
+## Description
+
+
+## Comments
+
+

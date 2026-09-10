@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-243
 title: "Compose the security gate over the union of enabled scanners"
@@ -34,3 +36,10 @@ packages/core/src/workflows/workflowGates.ts (multi-owner gate resolution: a gat
 ## Verification
 
 Core tests for multi-owner gate pass/fail/pending and the disabled-scanner detail; a template-validation test for the multi-owner security branch. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Prove the "one scanner failed → gate fails" guard fails against a naive any-owner-passed check. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

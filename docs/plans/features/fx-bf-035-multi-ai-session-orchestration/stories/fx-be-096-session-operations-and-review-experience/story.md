@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.260Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-096
 title: "Session operations and review experience"
@@ -29,3 +33,14 @@ The monitor distinguishes running, waiting, blocked, failed, cancelled, complete
 ## Evidence
 
 Contract tests, fixture repositories, captured provider output, failure and recovery tests, and visual or accessibility evidence where the story affects the desktop surface.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

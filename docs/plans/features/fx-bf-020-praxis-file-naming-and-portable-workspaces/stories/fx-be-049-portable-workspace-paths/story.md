@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.224Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-049
 title: Workspace files store in-tree paths relative to themselves
@@ -47,3 +51,14 @@ machine. Sharing it is the stated purpose and it does not survive the trip.
 - `npm run check-types`
 - `npm run test:core` — path shaping is pure and unit-tested both directions
 - `npm run test:desktop` (`workspaceFile.spec.ts`, `savedWorkspaces.spec.ts`)
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

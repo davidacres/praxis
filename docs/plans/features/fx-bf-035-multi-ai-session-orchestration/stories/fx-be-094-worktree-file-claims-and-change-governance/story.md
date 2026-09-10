@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.260Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-094
 title: "Worktree, file claims and change governance"
@@ -28,3 +32,14 @@ Two sessions cannot acquire overlapping write claims. An undeclared path change 
 ## Evidence
 
 Contract tests, fixture repositories, captured provider output, failure and recovery tests, and visual or accessibility evidence where the story affects the desktop surface.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

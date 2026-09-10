@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-146
 title: "Integrate Run controls and recovery"
@@ -150,3 +152,10 @@ literal placeholder string; (2) the reconciliation banner is informational-only 
 stop this orphaned pid" action, so a genuinely stuck `unknown-running` service can only be dealt with
 outside Praxis (Task Manager / `kill`) until a future task adds one. Both are called out rather than
 silently worked around.
+
+## Description
+
+
+## Comments
+
+

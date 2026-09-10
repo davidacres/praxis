@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-250
 title: "Add read-only CI quality and security report providers"
@@ -34,3 +36,10 @@ packages/core/src/ai (the CI evidence provider modules from FX-BE-053), apps/pra
 ## Verification
 
 Core tests against captured GitHub/GitLab report fixtures, including the not-available and wrong-scope cases. `npm run test:core`, `npm run check-types`. Reuse FX-BE-053's commit-availability preflight test pattern. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-164
 title: "Map logs and verified results"
@@ -115,3 +117,10 @@ fix to transient error handling on last retry attempt).
   with coordinated backoff is out of scope.
 - Nothing here is Electron-dependent, so there is nothing this sandbox's
   inability to launch Electron leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

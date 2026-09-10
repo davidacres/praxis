@@ -1,4 +1,6 @@
 ---
+**Status:** ðŸ“‹ Proposed
+**Type:** Task
 type: Task
 id: TASK-141
 title: "Define run profile schema"
@@ -70,3 +72,10 @@ first run is doing its job. `npm run check-types` (root, all three workspaces) â
 configuration from real Node/ASP.NET project shapes) and TASK-143 (the editor) respectively. This
 task is the schema and validation contract only, fully self-contained and independently testable, per
 its own scope.
+
+## Description
+
+
+## Comments
+
+

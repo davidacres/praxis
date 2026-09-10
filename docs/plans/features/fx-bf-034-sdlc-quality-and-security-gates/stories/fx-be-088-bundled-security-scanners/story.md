@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-088
 title: "Bundled security scanners behind the security gate"
@@ -47,3 +49,10 @@ Run each preset against captured vulnerable-fixture output and the live binary w
 ## Exclusions
 
 No IaC, container-image or DAST scanning in this story (candidate follow-ons). No cloud-posture assessment. No automatic remediation. Waivers suppress findings only; they do not override a whole failing gate — that remains the audited bypass.
+
+## Description
+
+
+## Comments
+
+

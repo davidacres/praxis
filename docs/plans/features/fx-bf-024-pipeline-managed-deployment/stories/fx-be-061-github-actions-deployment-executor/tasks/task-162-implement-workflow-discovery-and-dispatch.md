@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-162
 title: "Implement workflow discovery and dispatch"
@@ -149,3 +151,10 @@ by this check resolving cleanly). `npm run check-types` in
 - Nothing here is Electron-dependent, so — like the pure-core tasks in
   FX-BF-023 — there is nothing this sandbox's inability to launch Electron
   leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

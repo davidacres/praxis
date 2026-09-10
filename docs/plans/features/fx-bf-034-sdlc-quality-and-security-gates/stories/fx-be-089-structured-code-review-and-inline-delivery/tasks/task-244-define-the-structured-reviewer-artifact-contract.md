@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-244
 title: "Define the structured reviewer artifact contract"
@@ -34,3 +36,10 @@ packages/core/src/ai/aiReviewService.ts (a structured reviewer prompt built from
 ## Verification
 
 Unit tests for `parseReviewFindings` (valid block, prose-only, malformed) and for review-gate severity evaluation. Scripted-ACP reviewer fixture returning canned findings. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Prove the "prose-only fails" guard fails against the pre-change free-text `report`. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

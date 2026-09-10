@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.259Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-092
 title: "Shared session context and handoff contracts"
@@ -28,3 +32,14 @@ A fixture task started with one provider can be resumed by another using only re
 ## Evidence
 
 Contract tests, fixture repositories, captured provider output, failure and recovery tests, and visual or accessibility evidence where the story affects the desktop surface.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

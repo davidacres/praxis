@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.263Z
+**Type:** Task
+**Priority:** Medium
 type: Task
 id: TASK-281
 title: "Implement chart, diff, artifact and handoff renderers"
@@ -32,3 +36,14 @@ Add bounded visual/data renderers and links into existing changes, artifacts, se
 ## Verification
 
 Run the focused package tests and the applicable desktop/mobile fixture or end-to-end journey. Capture visual or accessibility evidence for renderer changes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

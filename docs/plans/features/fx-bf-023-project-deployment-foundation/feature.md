@@ -1,9 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** In Progress
+**Type:** Feature
 type: Feature
 id: FX-BF-023
 title: "Project deployment profiles and direct execution"
-status: planned
+status: In Progress
 slug: project-deployment-foundation
 stories: [FX-BE-057, FX-BE-058, FX-BE-059, FX-BE-060]
 issues: docs/issues/features/fx-bf-023-project-deployment-foundation/feature-issues.md
@@ -47,3 +48,16 @@ Every story and child task is implemented and verified; required integrations ha
 ## Verification
 
 Review the complete feature journey and documented support matrix. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked integration tests alone.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

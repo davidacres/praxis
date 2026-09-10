@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.261Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-099
 title: "Safe action lifecycle, scope and stale-state handling"
@@ -27,3 +31,14 @@ The story is complete when its contracts or surfaces behave deterministically in
 ## Evidence
 
 Unit and contract tests, fixture repositories, renderer snapshots, accessibility results, captured event sequences and end-to-end evidence appropriate to the story.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

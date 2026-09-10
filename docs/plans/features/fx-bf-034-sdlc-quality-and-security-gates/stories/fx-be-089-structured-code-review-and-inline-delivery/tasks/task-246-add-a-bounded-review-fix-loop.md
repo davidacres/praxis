@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-246
 title: "Add a bounded review to implement fix loop"
@@ -34,3 +36,10 @@ packages/core/src/workflows (a `review → implement` edge with `on: 'failure'` 
 ## Verification
 
 Core tests for loop accounting (enter, budget exhaustion, clean exit) and for snapshot re-freeze on re-implement. Scripted agents for the end-to-end loop. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Prove the "blocking finding cannot pass the gate" and budget guards fail against the pre-change single-pass review. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

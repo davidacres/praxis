@@ -1,12 +1,12 @@
 ---
-**Status:** 📋 Proposed
+**Status:** To Do
 **Created:** 2026-08-27T21:20:02.000Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-007
 title: Atlas spatial shell and continuous zoom vertical slice
-status: proposed
+status: To Do
 feature: FX-BF-006
 updated: 2026-08-27
 tasks: [TASK-053, TASK-054, TASK-055, TASK-056, TASK-057, TASK-058, TASK-059]

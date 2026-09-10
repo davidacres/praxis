@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-147
 title: "Capture scoped browser evidence"
@@ -124,3 +126,10 @@ check cannot currently retrieve a captured bundle) — that is explicitly TASK-1
 capture has no size cap beyond whatever `capturePage()`/`toPNG()` naturally produces at the view's
 current bounds — acceptable for a single manual capture, but worth a bound if this is ever
 called automatically and repeatedly (e.g. by TASK-149's verification workflow).
+
+## Description
+
+
+## Comments
+
+

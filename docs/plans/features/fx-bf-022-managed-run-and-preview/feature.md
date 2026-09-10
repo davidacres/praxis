@@ -1,9 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** In Progress
+**Type:** Feature
 type: Feature
 id: FX-BF-022
 title: "Managed project runs and diagnostic browser previews"
-status: planned
+status: In Progress
 slug: managed-run-and-preview
 stories: [FX-BE-054, FX-BE-055, FX-BE-056]
 issues: docs/issues/features/fx-bf-022-managed-run-and-preview/feature-issues.md
@@ -46,3 +47,16 @@ Every story and child task is implemented and verified; required integrations ha
 ## Verification
 
 Review the complete feature journey and documented support matrix. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked integration tests alone.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

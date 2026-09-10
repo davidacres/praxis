@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-132
 title: "Define evidence identity and storage"
@@ -66,3 +68,10 @@ directory. `npm run check-types` (root, all three workspaces) — clean.
 evidence in the run monitor). Retention is defined as data (`WorkflowEvidenceRetention` +
 `isEvidenceExpired`) but nothing sweeps expired bundles yet — no task in this story currently
 covers a reclaim pass, and one may be needed before real retention limits take effect.
+
+## Description
+
+
+## Comments
+
+

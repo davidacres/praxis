@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-135
 title: "Create diagnosis sessions from evidence"
@@ -84,3 +86,10 @@ unaffected, still 14/14. `npm run check-types` (root, all three workspaces) — 
   project's own issue/session list, only reachable via the Diagnose button or a stored session key —
   same convention as a workflow stage session, so nothing regresses, but worth knowing if TASK-137's
   "show diagnosis and verified outcomes" work expects otherwise.
+
+## Description
+
+
+## Comments
+
+

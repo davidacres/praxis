@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-192
 title: "Audit supported agent protocol capabilities"
@@ -37,3 +39,10 @@ Use deterministic fixtures for the named acceptance scenarios. Run focused core 
 ## Completion evidence
 
 Record implemented paths, commands, results, actual capture review (if UI), and remaining limitations here when completing the task. Planned acceptance is not evidence of completed implementation.
+
+## Description
+
+
+## Comments
+
+

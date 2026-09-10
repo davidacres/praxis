@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-136
 title: "Bound repair attempts and freshness"
@@ -79,3 +81,10 @@ applied only against the current snapshot, attempt-budget exhaustion producing t
   same wiring to have anything to show.
 - Cancellation propagation from a `DiagnosisState` transition to a live `AbortController` is not
   wired; only the state-recording half exists here.
+
+## Description
+
+
+## Comments
+
+

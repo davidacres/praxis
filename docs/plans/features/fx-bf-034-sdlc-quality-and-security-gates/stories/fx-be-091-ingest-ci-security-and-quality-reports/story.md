@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-091
 title: "Ingest CI security and quality reports"
@@ -48,3 +50,10 @@ Fixture GitHub/GitLab API servers serving captured real report payloads; core te
 ## Exclusions
 
 No writing to CI, no triggering pipelines, no SonarQube-server quality-gate API integration in this story (candidate follow-on). Observe mode is opt-in per gate; the default stays a local check.
+
+## Description
+
+
+## Comments
+
+

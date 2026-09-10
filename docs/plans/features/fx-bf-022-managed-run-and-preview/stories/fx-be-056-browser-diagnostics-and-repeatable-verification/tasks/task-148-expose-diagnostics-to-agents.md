@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-148
 title: "Expose diagnostics to agents"
@@ -113,3 +115,10 @@ person watching the AI browser pane doesn't currently see what the agent capture
 enforces that at the protocol level beyond the tool simply never including image content in its
 result — a future gateway/ACP change that started attaching images to tool results generically would
 need to specifically exclude this one, which is worth flagging rather than assuming is permanent.
+
+## Description
+
+
+## Comments
+
+

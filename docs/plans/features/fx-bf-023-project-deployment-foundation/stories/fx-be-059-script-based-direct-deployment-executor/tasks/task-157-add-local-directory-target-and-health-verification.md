@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-157
 title: "Add local directory target and health verification"
@@ -130,3 +132,10 @@ restores flow putting the exact previous byte content back.
 - Nothing here is Electron-dependent, so — like TASK-156 — there is
   nothing this sandbox's inability to launch Electron leaves unproven;
   marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

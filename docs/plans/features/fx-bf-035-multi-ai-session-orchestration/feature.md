@@ -1,5 +1,8 @@
 ---
 **Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.191Z
+**Type:** Feature
+**Priority:** Medium
 type: Feature
 id: FX-BF-035
 title: "Multi-AI session orchestration across Claude, Codex and Copilot"
@@ -51,3 +54,14 @@ A fixture repository can run design, implementation, independent review and fina
 ## Verification
 
 Use stub adapters for deterministic end-to-end tests and captured output fixtures for provider-specific parsers. Test clean, failed, cancelled, timed-out, retried, conflicting and resumed sessions. Run the read-only plan parser against baseline and final plans. Do not use the repository's own plans as a write-path test target.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

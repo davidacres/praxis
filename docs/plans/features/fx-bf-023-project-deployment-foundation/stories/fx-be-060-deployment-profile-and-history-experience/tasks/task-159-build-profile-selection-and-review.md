@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-159
 title: "Build profile selection and review"
@@ -141,3 +143,10 @@ prop, which is what TypeScript can actually track).
   refuses that kind for either target) — shown rather than hidden, so a
   user picking it sees why it will not work instead of it silently
   vanishing from the option list.
+
+## Description
+
+
+## Comments
+
+

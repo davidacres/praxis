@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-247
 title: "Ship bundled trusted agent manifests"
@@ -34,3 +36,10 @@ packages/core/src/ai/agentRuntime/discovery.ts (a bundled-manifests source ahead
 ## Verification
 
 Core tests for bundled discovery, trust and precedence; a first-run mirror test asserting idempotency and the target path. `npm run test:core`, `npm run test:desktop`, `npm run check-types`. Live-agent start stays opt-in. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

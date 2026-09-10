@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-163
 title: "Observe existing continuous deployments"
@@ -137,3 +139,10 @@ in TASK-162). `npm run compile` — clean. `npm test` from the repo root —
 - Nothing here is Electron-dependent, so — like TASK-162 — there is nothing
   this sandbox's inability to launch Electron leaves unproven; marked `complete`
   on that basis.
+
+## Description
+
+
+## Comments
+
+

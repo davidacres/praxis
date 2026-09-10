@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.224Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-048
 title: A single naming rule for Praxis files
@@ -45,3 +49,14 @@ no rename-on-next-write.
 - `npm run check-types`
 - `npm run test:desktop` (`projects.spec.ts`, `journey.spec.ts`) and the main
   workspace's `projectSnapshot.test.ts`
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

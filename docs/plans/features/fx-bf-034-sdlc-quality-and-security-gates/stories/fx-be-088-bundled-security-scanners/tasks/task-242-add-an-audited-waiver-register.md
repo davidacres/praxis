@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-242
 title: "Add an audited, expiring waiver register"
@@ -35,3 +37,10 @@ packages/core/src/workflows/waiverRegister.ts (new: types, match, expiry, compos
 ## Verification
 
 Core tests for match, expiry, snapshot binding and strictest-wins compose. Electron spec for the waiver dialog (required fields, keyboard focus) with inspected captures. Prove the expiry and lifetime-cap guards fail against a naive always-match. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.262Z
+**Type:** Task
+**Priority:** Medium
 type: Task
 id: TASK-279
 title: "Implement the browser-safe gadget renderer registry"
@@ -32,3 +36,14 @@ Add version-aware registration, unknown-kind fallback, error boundaries and rend
 ## Verification
 
 Run the focused package tests and the applicable desktop/mobile fixture or end-to-end journey. Capture visual or accessibility evidence for renderer changes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

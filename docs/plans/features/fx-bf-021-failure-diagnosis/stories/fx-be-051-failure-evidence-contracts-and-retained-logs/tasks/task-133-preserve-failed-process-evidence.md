@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-133
 title: "Preserve failed process evidence"
@@ -77,3 +79,10 @@ one evidence entry is captured per attempt (`combined`, stdout+stderr merged, ma
 `spawnCheck`'s existing single output stream); there is no separate stdout/stderr split. Every
 declared `node.outputs` contract still maps to the same single stored file, which is pre-existing
 behaviour this task did not change.
+
+## Description
+
+
+## Comments
+
+

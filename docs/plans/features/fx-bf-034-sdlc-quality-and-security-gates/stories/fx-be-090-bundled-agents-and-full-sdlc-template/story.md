@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-090
 title: "Bundled agents and a Full SDLC template"
@@ -49,3 +51,10 @@ Fresh-profile discovery test; `full-sdlc` template validation and readiness test
 ## Exclusions
 
 No marketplace agents gain trust through this path. No template auto-selection by issue content beyond the existing workflow-pack matching. Deploy stays an optional trailing node, not a required gate.
+
+## Description
+
+
+## Comments
+
+
