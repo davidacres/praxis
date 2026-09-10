@@ -149,6 +149,13 @@ export const DEFAULT_APP_SETTINGS = {
     mergeMarkersEnabled: true,
     orientation: 'vertical' as 'vertical' | 'horizontal',
     performanceMode: false
+  },
+  mobileAccess: {
+    mode: 'off' as 'off' | 'local-only' | 'internet',
+    hostName: '',
+    allowedInterfaces: [] as string[],
+    allowedSubnets: [] as string[],
+    remoteSignInRequired: false
   }
 } as const;
 
