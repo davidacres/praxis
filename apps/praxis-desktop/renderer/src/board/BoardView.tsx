@@ -18,6 +18,7 @@ import {
   effectiveStatusOrder,
   filterIssuesByMaxAge,
   groupIntoSwimLanes,
+  groupIssuesByParent,
   visibleStatusSet
 } from './boardPreferences';
 
@@ -128,6 +129,33 @@ function groupIssuesIntoColumns(
     return ordered;
   }
   return [...issuesByStatus.keys()].sort((left, right) => left.localeCompare(right)).map(makeColumn);
+}
+
+interface ColumnHierarchy {
+  /** Keys of issues in this column whose parent is also in this column. */
+  childKeys: Set<string>;
+  /** Parent key → how many of its children are in this column. */
+  childCounts: Map<string, number>;
+}
+
+/**
+ * A card only reads as a child, and a card only shows a children badge, when
+ * the *pair* is sharing a column — an issue whose parent sits in a different
+ * status keeps its plain card (its existing context chip already names the
+ * parent); nesting is a same-column, in-the-moment relationship, not a
+ * standing property of the issue.
+ */
+function columnHierarchy(column: BoardColumn): ColumnHierarchy {
+  const keysInColumn = new Set(column.issues.map(issue => issue.key));
+  const childKeys = new Set<string>();
+  const childCounts = new Map<string, number>();
+  for (const issue of column.issues) {
+    if (issue.parentKey && issue.parentKey !== issue.key && keysInColumn.has(issue.parentKey)) {
+      childKeys.add(issue.key);
+      childCounts.set(issue.parentKey, (childCounts.get(issue.parentKey) ?? 0) + 1);
+    }
+  }
+  return { childKeys, childCounts };
 }
 
 /**
@@ -478,6 +506,10 @@ export function BoardView({
     if (visible) {
       columns = columns.filter(column => visible.has(column.name));
     }
+    // Cluster each parent with its own children before any manual per-column
+    // order is applied, so a feature's stories default to sitting right under
+    // it — a user's own drag order (below) still wins wherever they've set one.
+    columns = columns.map(column => ({ ...column, issues: groupIssuesByParent(column.issues) }));
     return applyIssueOrder(columns, prefs.issueOrder);
   }, [visibleIssues, statusOrder, prefs]);
 
@@ -646,16 +678,19 @@ export function BoardView({
     }
   });
 
-  const renderCard = (column: BoardColumn, issue: IssueSummary) => {
+  const renderCard = (column: BoardColumn, issue: IssueSummary, hierarchy: ColumnHierarchy) => {
     const contextAccent = prefs.issueTypeColors?.[issue.issueType] ?? 'var(--accent)';
     const updated = formatCardDate(issue.updated);
     const context = issue.parentIssue?.summary ?? issue.parentKey ?? issue.issueType;
+    const isChild = hierarchy.childKeys.has(issue.key);
+    const childCount = hierarchy.childCounts.get(issue.key) ?? 0;
     return (
     <article
       key={issue.key}
       data-testid="issue-card"
       data-issue-key={issue.key}
-      className={`issue-card${issue.key === selectedIssueKey ? ' active' : ''}`}
+      data-child-of={isChild ? issue.parentKey : undefined}
+      className={`issue-card${isChild ? ' issue-card-child' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
       style={{ '--issue-card-accent': contextAccent } as CSSProperties}
       {...cardDragProps(issue)}
       {...cardDropProps(column, issue)}
@@ -668,10 +703,20 @@ export function BoardView({
         }
       }}
     >
+      {isChild && <span className="issue-card-child-marker" aria-hidden="true" />}
       <div className="issue-card-title">{issue.summary}</div>
       <div className="issue-card-meta">
         <span className="issue-card-context" title={context}>{context}</span>
         {issue.parentIssue && <span className="issue-card-type">{issue.issueType}</span>}
+        {childCount > 0 && (
+          <span
+            className="issue-card-child-count"
+            data-testid="issue-card-child-count"
+            title={`${childCount} linked ${childCount === 1 ? 'ticket' : 'tickets'} shown below`}
+          >
+            <Icon name="git-branch" size={11} /> {childCount}
+          </span>
+        )}
       </div>
       {(updated || issue.priority) && (
         <div className="issue-card-details">
@@ -708,7 +753,9 @@ export function BoardView({
     </header>
   );
 
-  const renderColumn = (column: BoardColumn) => (
+  const renderColumn = (column: BoardColumn) => {
+    const hierarchy = columnHierarchy(column);
+    return (
     <section
       key={column.id}
       className="board-column"
@@ -723,7 +770,7 @@ export function BoardView({
         {column.issues.map(issue => (
           <span key={issue.key} className="board-card-slot">
             {dropPosition?.status === column.name && dropPosition.beforeKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
-            {renderCard(column, issue)}
+            {renderCard(column, issue, hierarchy)}
             {dropPosition?.status === column.name && dropPosition.afterKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
           </span>
         ))}
@@ -734,7 +781,8 @@ export function BoardView({
         )}
       </div>
     </section>
-  );
+    );
+  };
 
   const boardColumns = swimLanes ? (
     <div className="board-swimlanes" data-testid="board-swimlanes">
@@ -751,7 +799,9 @@ export function BoardView({
 
   const listView = (
     <div className="board-list" data-testid="board-list-view">
-      {effectiveColumns.map(column => (
+      {effectiveColumns.map(column => {
+        const hierarchy = columnHierarchy(column);
+        return (
         <section
           key={column.id}
           className="board-list-group"
@@ -759,11 +809,15 @@ export function BoardView({
           {...columnDropProps(column)}
         >
           {renderColumnHeader(column)}
-          {column.issues.map(issue => (
+          {column.issues.map(issue => {
+            const isChild = hierarchy.childKeys.has(issue.key);
+            const childCount = hierarchy.childCounts.get(issue.key) ?? 0;
+            return (
             <div
               key={issue.key}
               data-testid="issue-card"
-              className={`board-list-row${issue.key === selectedIssueKey ? ' active' : ''}`}
+              data-child-of={isChild ? issue.parentKey : undefined}
+              className={`board-list-row${isChild ? ' board-list-row-child' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
               style={{ borderLeftColor: cardAccent(issue) }}
               {...cardDragProps(issue)}
               {...cardDropProps(column, issue)}
@@ -776,8 +830,18 @@ export function BoardView({
                 }
               }}
             >
+              {isChild && <span className="issue-card-child-marker" aria-hidden="true" />}
               <span className="issue-card-key">{issue.key}</span>
               <span className="board-list-row-title">{issue.summary}</span>
+              {childCount > 0 && (
+                <span
+                  className="issue-card-child-count"
+                  data-testid="issue-card-child-count"
+                  title={`${childCount} linked ${childCount === 1 ? 'ticket' : 'tickets'} shown below`}
+                >
+                  <Icon name="git-branch" size={11} /> {childCount}
+                </span>
+              )}
               <span className="spacer" />
               <span className="issue-card-status">{issue.issueType}</span>
               {issue.assignee && (
@@ -786,10 +850,12 @@ export function BoardView({
                 </span>
               )}
             </div>
-          ))}
+            );
+          })}
           {column.issues.length === 0 && <div className="column-empty">No work items</div>}
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 
