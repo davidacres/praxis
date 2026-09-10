@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-240
 title: "Render findings and metrics in the run monitor"
@@ -35,3 +37,10 @@ apps/praxis-desktop/renderer/src/workflows (`WorkflowRunMonitor.tsx` and the sta
 ## Verification
 
 Rebuild and copy the renderer; focused Electron specs for the run monitor with a seeded findings fixture; inspect captures across `data-mode`, a narrow width and tab focus. Prove the empty-state and grouping guards fail against a naive render. Update the feature-parity AI & agents rows. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

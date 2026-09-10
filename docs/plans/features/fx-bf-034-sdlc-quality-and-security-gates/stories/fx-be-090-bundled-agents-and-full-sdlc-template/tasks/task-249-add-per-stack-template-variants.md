@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-249
 title: "Add Node / .NET / Python template variants"
@@ -34,3 +36,10 @@ packages/core/src/workflows/workflowTemplates.ts (variant builders sharing one D
 ## Verification
 
 Core tests: structural equivalence of the three variants, detection → variant selection, generic fallback. Electron spec for the template library listing with inspected captures. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Update onboarding/user-guide template docs. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

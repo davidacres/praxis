@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-066
 title: "IIS end-to-end proof and operational guidance"
@@ -46,3 +48,10 @@ Run the child-task fixture scenarios and a complete story journey. Use scripted 
 ## Exclusions
 
 No automatic production deployment, broad credential grant, full source editor or replacement of the existing agent hosts is implied by this story. Unsupported capabilities must remain explicit.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-251
 title: "Map imported reports to findings evidence bound to the SHA"
@@ -35,3 +37,10 @@ packages/core/src/ai (report → `CheckFindings` mapping), the evidence store fr
 ## Verification
 
 Core tests for both provider maps against captured fixtures, redaction-before-store, and fingerprint parity with a local scanner result. `npm run test:core`, `npm run check-types`. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

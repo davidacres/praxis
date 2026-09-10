@@ -1,5 +1,8 @@
 ---
 **Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.192Z
+**Type:** Feature
+**Priority:** Medium
 type: Feature
 id: FX-BF-036
 title: "Interactive chat gadgets and response surfaces"
@@ -51,3 +54,14 @@ A deterministic fixture workflow can ask the user to choose a provider, approve 
 ## Verification
 
 Use stub agents and fixture repositories. Test contract migration, renderer snapshots, keyboard and screen-reader semantics, narrow mobile layouts, streaming updates, reconnect replay, malformed payloads, stale scope, duplicate submissions and policy-blocked actions. Do not use the repository's own plans as a write-path test target.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

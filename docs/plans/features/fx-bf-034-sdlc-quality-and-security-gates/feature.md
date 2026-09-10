@@ -1,5 +1,6 @@
 ---
 **Status:** 📋 Proposed
+**Type:** Feature
 type: Feature
 id: FX-BF-034
 title: "Full SDLC quality and security gates"
@@ -49,3 +50,16 @@ Every story and child task is implemented and verified; scanner adapters have re
 ## Verification
 
 Review the complete feature journey: a Full SDLC run on a Node and a .NET fixture, a seeded high-severity finding blocking approval, an expiring waiver clearing it on the event log, a structured review posting inline and re-driving implementation, and an imported CI code-scanning result satisfying a security gate for the matching SHA. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked tool output alone. Run the read-only `parsePlanFolder` over baseline and final plans for this planning change.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.265Z
+**Type:** Task
+**Priority:** Medium
 type: Task
 id: TASK-290
 title: "Prove desktop/mobile end-to-end journeys and document operations"
@@ -32,3 +36,14 @@ Exercise provider selection, approval, table/chart inspection, handoff and recov
 ## Verification
 
 Run the focused package tests and the applicable desktop/mobile fixture or end-to-end journey. Capture visual or accessibility evidence for renderer changes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

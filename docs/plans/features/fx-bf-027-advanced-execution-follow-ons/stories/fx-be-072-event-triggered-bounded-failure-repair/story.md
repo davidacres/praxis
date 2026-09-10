@@ -1,8 +1,10 @@
 ---
+**Status:** To Do
+**Type:** Story
 type: Story
 id: FX-BE-072
 title: "Event-triggered bounded failure repair"
-status: backlog
+status: To Do
 feature: FX-BF-027
 updated: 2026-09-07
 dependencies: [FX-BE-071]
@@ -46,3 +48,10 @@ Run the child-task fixture scenarios and a complete story journey. Use scripted 
 ## Exclusions
 
 No automatic production deployment, broad credential grant, full source editor or replacement of the existing agent hosts is implied by this story. Unsupported capabilities must remain explicit.
+
+## Description
+
+
+## Comments
+
+

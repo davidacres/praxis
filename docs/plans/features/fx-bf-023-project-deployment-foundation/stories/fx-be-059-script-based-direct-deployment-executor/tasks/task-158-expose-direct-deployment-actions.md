@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-158
 title: "Expose direct deployment actions"
@@ -159,3 +161,10 @@ task; the check confirms nothing regressed).
   the one place this task's design diverges from TASK-157's own
   `deployDirectoryWithHealthCheck` (which does auto-restore) rather than
   simply calling it.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-252
 title: "Add an observe-mode gate resting on imported CI evidence"
@@ -36,3 +38,10 @@ packages/core/src/workflows/workflowTypes.ts (an `observe` flag / source on a ga
 ## Verification
 
 Core tests for the four resolution paths (match+present, match+absent, mismatch, flag-off). Electron spec for the gate row showing the CI reference with inspected captures. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`. Prove the "absent report cannot pass" and "mismatch falls back" guards fail against a naive trust-any-evidence check. Update feature-parity CI-evidence rows. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-241
 title: "Add secret / SAST / SCA / license check presets with stack detection"
@@ -34,3 +36,10 @@ packages/core/src/workflows/checkPresets.ts (new: preset definitions, detection 
 ## Verification
 
 Core tests for detection → default set and preset shape; check-runner tests against captured scanner SARIF fixtures and a missing-binary case. Electron spec for the designer preset picker with inspected captures. Live-binary scans opt-in. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

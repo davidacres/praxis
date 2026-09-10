@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.262Z
+**Type:** Task
+**Priority:** Medium
 type: Task
 id: TASK-278
 title: "Validate payload size, schema, capability and safety policy"
@@ -32,3 +36,14 @@ Add deterministic validation rules for supported kinds, bounded data, action per
 ## Verification
 
 Run the focused package tests and the applicable desktop/mobile fixture or end-to-end journey. Capture visual or accessibility evidence for renderer changes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

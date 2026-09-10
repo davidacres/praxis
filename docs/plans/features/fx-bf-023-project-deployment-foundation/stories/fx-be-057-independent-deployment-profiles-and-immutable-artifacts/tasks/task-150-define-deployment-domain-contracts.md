@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-150
 title: "Define deployment domain contracts"
@@ -87,3 +89,10 @@ artifact-publishing pipeline (computing a real `digest` from packaged bytes), an
 actually deploys anything. Nothing here is Electron-dependent, so unlike almost every other task this
 session, there is nothing left to verify that this sandbox's Electron block would otherwise leave
 unproven — marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

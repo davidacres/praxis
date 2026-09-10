@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-237
 title: "Define the CheckFindings contract and the findings artifact kind"
@@ -34,3 +36,10 @@ packages/core/src/workflows/workflowTypes.ts (artifact kind, `CheckFindings` typ
 ## Verification
 
 Unit tests for the fingerprint helper (stability and sensitivity) and for validation accepting/rejecting `findings` outputs. `npm run test:core` and `npm run check-types`. No UI in this task. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

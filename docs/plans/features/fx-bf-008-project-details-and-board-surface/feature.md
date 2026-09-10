@@ -6,7 +6,7 @@ id: FX-BF-008
 
 **Created:** 2026-08-30T00:00:00.000Z
 **Type:** Feature
-**Status:** 📋 Proposed
+**Status:** Done
 **Owner:** Electron desktop app
 **Priority:** P2
 

@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.265Z
+**Type:** Task
+**Priority:** Medium
 type: Task
 id: TASK-289
 title: "Create deterministic gadget fixture workflows and contract tests"
@@ -32,3 +36,14 @@ Add fixtures for every gadget kind and lifecycle state, including malformed, ove
 ## Verification
 
 Run the focused package tests and the applicable desktop/mobile fixture or end-to-end journey. Capture visual or accessibility evidence for renderer changes.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

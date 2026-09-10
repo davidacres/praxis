@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-089
 title: "Structured code review and inline delivery"
@@ -48,3 +50,10 @@ Scripted-ACP reviewer fixture returning canned structured findings; fixture GitH
 ## Exclusions
 
 No conversational back-and-forth on individual comments, no learning/feedback model, and no auto-apply of suggested patches without going through the fix loop. Waivers from FX-BE-088 apply to scanner findings; review findings use the blocking-severity threshold and the fix loop, not the waiver register.
+
+## Description
+
+
+## Comments
+
+

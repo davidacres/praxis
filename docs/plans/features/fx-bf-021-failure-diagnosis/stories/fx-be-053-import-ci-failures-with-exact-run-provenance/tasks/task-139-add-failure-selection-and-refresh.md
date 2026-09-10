@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-139
 title: "Add failure selection and refresh"
@@ -69,3 +71,10 @@ not the same as this app's existing GitHub/GitLab *issue-tracker* connection, pe
 outcome: "without coupling project issue backend to CI provider") — inventing that connection UX is a
 real design decision, not a mechanical wiring step, so it was not rushed here. No IPC/preload surface
 exists for this yet either.
+
+## Description
+
+
+## Comments
+
+

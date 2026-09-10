@@ -1,4 +1,8 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-10T10:48:08.260Z
+**Type:** Story
+**Priority:** Medium
 type: Story
 id: FX-BE-097
 title: "Versioned gadget and action contracts"
@@ -27,3 +31,14 @@ The story is complete when its contracts or surfaces behave deterministically in
 ## Evidence
 
 Unit and contract tests, fixture repositories, renderer snapshots, accessibility results, captured event sequences and end-to-end evidence appropriate to the story.
+
+## Description
+
+
+## Dependencies
+
+
+
+## Comments
+
+

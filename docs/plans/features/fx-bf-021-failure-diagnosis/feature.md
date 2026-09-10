@@ -1,9 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** In Progress
+**Type:** Feature
 type: Feature
 id: FX-BF-021
 title: "Reproducible failure diagnosis and verification evidence"
-status: planned
+status: In Progress
 slug: failure-diagnosis
 stories: [FX-BE-051, FX-BE-052, FX-BE-053]
 issues: docs/issues/features/fx-bf-021-failure-diagnosis/feature-issues.md
@@ -48,3 +49,16 @@ Every story and child task is implemented and verified; required integrations ha
 ## Verification
 
 Review the complete feature journey and documented support matrix. Follow AGENTS.md for core boundaries, source schema inspection, UI verification and temporary fixtures. Do not claim production support from mocked integration tests alone.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

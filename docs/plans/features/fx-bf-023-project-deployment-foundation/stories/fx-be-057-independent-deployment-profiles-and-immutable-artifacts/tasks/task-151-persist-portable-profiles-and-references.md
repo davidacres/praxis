@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-151
 title: "Persist portable profiles and references"
@@ -101,3 +103,10 @@ inherently-machine-specific target) — deliberately not built now since no targ
 implemented until FX-BF-025; building it speculatively would be storage-schema guessing ahead of the
 feature that actually needs it. Nothing here is Electron-dependent, so — like TASK-150 — there is
 nothing left that this sandbox's Electron block leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

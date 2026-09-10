@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-160
 title: "Add deployment history and promotion"
@@ -140,3 +142,10 @@ processes first) — **834/834 passing** (up from 829). `npx tsc --noEmit -p
   therefore structurally supported (the field exists, round-trips, and
   would display if populated) but not yet populated end-to-end from a real
   build.
+
+## Description
+
+
+## Comments
+
+

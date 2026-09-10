@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-156
 title: "Implement direct process executor"
@@ -125,3 +127,10 @@ background test/tsc processes first) — **796/796 passing** (up from 785;
 - Nothing here is Electron-dependent, so — like every other pure-core task
   in this feature — there is nothing this sandbox's inability to launch
   Electron leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

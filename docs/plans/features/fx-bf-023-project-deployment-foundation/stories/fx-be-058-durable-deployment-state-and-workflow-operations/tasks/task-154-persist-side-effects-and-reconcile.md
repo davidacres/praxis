@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-154
 title: "Persist side effects and reconcile"
@@ -92,3 +94,10 @@ reconciliation — a run reconciled to `unknown` does not automatically release 
 held; that composition is left to whatever future code actually drives both together. Nothing here is
 Electron-dependent, so — like TASK-150/151/152/153 — there is nothing left that this sandbox's
 Electron block leaves unproven; marked `complete` on that basis.
+
+## Description
+
+
+## Comments
+
+

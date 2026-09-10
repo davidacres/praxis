@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-142
 title: "Resolve launch configuration"
@@ -67,3 +69,10 @@ and are called by a caller kept out of core. No IPC exposes discovery to the ren
 persists a proposal into a `run.praxis.json` (TASK-141's `validateRunProfile`/`serializeRunProfile`
 exist for that, unwired). "Persist only after review" has no reviewing surface yet — that is
 TASK-143's editor.
+
+## Description
+
+
+## Comments
+
+

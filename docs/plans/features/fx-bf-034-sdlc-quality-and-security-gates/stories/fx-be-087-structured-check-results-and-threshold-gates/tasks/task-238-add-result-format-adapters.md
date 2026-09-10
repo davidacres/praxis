@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-238
 title: "Add SARIF / JUnit / lcov / npm-audit / osv-scanner adapters"
@@ -34,3 +36,10 @@ packages/core/src/workflows/checkResultAdapters.ts (new, pure); apps/praxis-desk
 ## Verification
 
 Unit tests per adapter against fixture files; a check-runner test asserting a failing parse fails the node and retains evidence. `npm run test:core`, `npm run test:desktop:workflows`, `npm run check-types`, and the affected build paths. Never point a Praxis write path at the repository's own plans.
+
+## Description
+
+
+## Comments
+
+

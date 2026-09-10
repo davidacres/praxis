@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-087
 title: "Structured check results and threshold gates"
@@ -49,3 +51,10 @@ Run the child-task fixture scenarios and a full story journey with a real scanne
 ## Exclusions
 
 No new results store, no raw tool-format parsing downstream of the adapters, no automatic scanner selection (that is FX-BE-088), and no change to how agent stages satisfy the `review` gate here.
+
+## Description
+
+
+## Comments
+
+
