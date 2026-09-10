@@ -53,7 +53,7 @@ const SYNONYMS: ReadonlyArray<{
   prefer: string;
   category: ProjectWorkflowCategory;
 }> = [
-  { match: ['complete', 'done', '✅', 'shipped', 'closed', 'resolved'], prefer: 'Done', category: 'done' },
+  { match: ['complete', 'done', '✅', 'shipped', 'closed', 'resolved', 'obsolete'], prefer: 'Done', category: 'done' },
   { match: ['block'], prefer: 'Blocked', category: 'indeterminate' },
   { match: ['progress', 'doing', 'wip', '🔄', 'active'], prefer: 'In Progress', category: 'indeterminate' },
   { match: ['review'], prefer: 'Review', category: 'indeterminate' },
