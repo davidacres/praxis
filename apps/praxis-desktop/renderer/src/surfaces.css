@@ -360,3 +360,18 @@
 :root[data-window-active='false'] .startup-splash::before {
   animation-play-state: paused;
 }
+
+/* Provider-neutral gadget proof; native provider surfaces are untouched. */
+.praxis-choice-gadget{margin:0 0 12px;padding:16px;border:1px solid var(--border-strong,#c8ccd4);border-radius:12px;background:var(--surface-raised,#fff);box-shadow:0 4px 16px rgb(20 30 50 / 8%)}
+.praxis-choice-gadget-kicker{color:var(--accent,#5b45d6);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.praxis-choice-gadget h3{margin:5px 0 3px;font-size:16px}
+.praxis-choice-gadget-question{margin:0 0 12px;color:var(--text-muted,#68707d);font-size:13px}
+.praxis-choice-gadget-options{display:grid;gap:8px}
+.praxis-choice-option{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--border,#dfe2e8);border-radius:8px;cursor:pointer}
+.praxis-choice-option.is-selected{border-color:var(--accent,#5b45d6);background:color-mix(in srgb,var(--accent,#5b45d6) 8%,transparent)}
+.praxis-choice-option input{margin-top:3px}
+.praxis-choice-option span{display:grid;gap:2px}
+.praxis-choice-option small{color:var(--text-muted,#68707d)}
+.praxis-choice-submit{margin-top:12px}
+.praxis-choice-result{margin-top:10px;color:var(--success,#177245);font-size:13px}
+.session-gadget-demo-btn{margin-right:auto}
