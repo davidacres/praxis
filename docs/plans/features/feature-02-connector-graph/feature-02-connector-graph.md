@@ -4,7 +4,7 @@ id: FX-BF-102
 
 # Feature 02: Connector Graph And Execution Order
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Feature
 **Priority:** P1
@@ -27,9 +27,9 @@ Add directed connectors between ticket nodes, validate the graph, and compute ex
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 02.1 | Story | Create and render directed connectors | 📋 Proposed |
-| 02.2 | Story | Add cycle and duplicate-edge validation | 📋 Proposed |
-| 02.3 | Story | Compute and display execution order summary | 📋 Proposed |
+| 02.1 | Story | Create and render directed connectors | ✓ Obsolete |
+| 02.2 | Story | Add cycle and duplicate-edge validation | ✓ Obsolete |
+| 02.3 | Story | Compute and display execution order summary | ✓ Obsolete |
 
 ## Dependencies
 1. Story 02.1 depends on Feature 01.
@@ -42,5 +42,6 @@ Add directed connectors between ticket nodes, validate the graph, and compute ex
 3. Run `npm run check-types` after each story.
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Workflow contracts) and FX-BF-013 (Workflow orchestration runtime). Connector visualization, cycle validation, and execution order are now part of completed workflow orchestration.
 
 

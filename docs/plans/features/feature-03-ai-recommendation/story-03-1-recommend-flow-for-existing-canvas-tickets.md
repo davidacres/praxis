@@ -1,6 +1,6 @@
 # Story 03.1: Recommend Flow For Existing Canvas Tickets
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Use AI to analyze the tickets already on the canvas and return a recommended ord
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-035 (Multi-AI session orchestration).
 
 

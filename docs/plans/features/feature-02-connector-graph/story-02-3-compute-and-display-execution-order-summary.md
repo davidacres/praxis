@@ -1,6 +1,6 @@
 # Story 02.3: Compute And Display Execution Order Summary
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Compute a topological execution order from the graph and present it in a compact
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 and FX-BF-013 workflow implementation.
 
 

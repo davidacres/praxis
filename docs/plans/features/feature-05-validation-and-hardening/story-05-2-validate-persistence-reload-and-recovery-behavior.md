@@ -1,6 +1,6 @@
 # Story 05.2: Validate Persistence Reload And Recovery Behavior
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -34,5 +34,6 @@ Verify that the designer graph survives reloads and recoverable errors without l
 
 
 ## Comments
+**2026-09-10:** Validation work now part of individual feature delivery across FX-BF series.
 
 

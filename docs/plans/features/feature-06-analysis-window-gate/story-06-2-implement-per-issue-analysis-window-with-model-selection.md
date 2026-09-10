@@ -1,6 +1,6 @@
 # Story 06.2: Implement Per-Issue Analysis Window With Model Selection
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-20T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -66,5 +66,6 @@ flowchart TD
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-014 (Workflow experience).
 
 

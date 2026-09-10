@@ -4,7 +4,7 @@ id: FX-BF-106
 
 # Feature 06: Analysis Window Gate Before AI Assignment
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-20T00:00:00.000Z
 **Type:** Feature
 **Priority:** P1
@@ -28,9 +28,9 @@ Add a dedicated per-issue Analysis Window that behaves like a local chat for ana
 
 | Ref | Type | Name | Status |
 | --- | --- | --- | --- |
-| 06.1 | Story | Add analysis settings, gating, and status-bar state | 📋 Proposed |
-| 06.2 | Story | Implement per-issue Analysis Window with model selection | 📋 Proposed |
-| 06.3 | Story | Enforce analysis confirmation gate before Assign to AI | 📋 Proposed |
+| 06.1 | Story | Add analysis settings, gating, and status-bar state | ✓ Obsolete |
+| 06.2 | Story | Implement per-issue Analysis Window with model selection | ✓ Obsolete |
+| 06.3 | Story | Enforce analysis confirmation gate before Assign to AI | ✓ Obsolete |
 
 ## Dependencies
 1. Story 06.2 depends on 06.1.
@@ -118,5 +118,6 @@ Use this as the baseline value for praxis.ai.analysisDefaultPrompt:
 6. Iteration 6 (final): Re-checked coupling and failure modes; Complexity Medium, Risk Medium, Confidence High.
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-014 (Workflow experience). Analysis settings gating and per-issue windows are now part of the completed workflow experience implementation.
 
 

@@ -1,6 +1,6 @@
 # Story 05.3: Add Automated And Manual Verification Coverage
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P1
@@ -44,5 +44,6 @@ Add targeted automated coverage and a manual verification checklist for the desi
 
 
 ## Comments
+**2026-09-10:** Validation work now part of individual feature delivery across FX-BF series.
 
 

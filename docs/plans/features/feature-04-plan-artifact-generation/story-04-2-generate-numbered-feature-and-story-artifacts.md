@@ -1,6 +1,6 @@
 # Story 04.2: Generate Numbered Feature And Story Artifacts
 
-**Status:** Proposed
+**Status:** Obsolete
 **Created:** 2026-05-17T00:00:00.000Z
 **Type:** Story
 **Priority:** P2
@@ -34,5 +34,6 @@ Generate numbered feature folders and numbered story files from the execution gr
 
 
 ## Comments
+**2026-09-10:** Superseded by FX-BF-012 (Designer completion and folder persistence).
 
 
