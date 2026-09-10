@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-057
 title: Node visual encoding and raycast selection into detail surfaces
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-056]

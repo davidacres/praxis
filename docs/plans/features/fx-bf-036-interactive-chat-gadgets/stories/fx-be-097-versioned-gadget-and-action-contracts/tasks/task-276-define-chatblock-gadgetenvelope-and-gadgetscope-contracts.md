@@ -6,7 +6,7 @@
 type: Task
 id: TASK-276
 title: "Define ChatBlock, GadgetEnvelope and GadgetScope contracts"
-status: planned
+status: To Do
 story: FX-BE-097
 feature: FX-BF-036
 updated: 2026-09-10

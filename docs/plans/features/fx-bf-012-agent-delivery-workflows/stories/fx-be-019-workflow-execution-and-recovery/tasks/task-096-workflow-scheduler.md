@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-096
 title: Implement workflow scheduler and joins
-status: complete
+status: Done
 story: FX-BE-019
 updated: 2026-09-02
 dependencies: [TASK-095]

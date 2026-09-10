@@ -4,7 +4,7 @@
 type: Task
 id: TASK-240
 title: "Render findings and metrics in the run monitor"
-status: planned
+status: To Do
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [TASK-238, TASK-239]

@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-054
 title: Atlas snapshot model and builder in core
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-053]

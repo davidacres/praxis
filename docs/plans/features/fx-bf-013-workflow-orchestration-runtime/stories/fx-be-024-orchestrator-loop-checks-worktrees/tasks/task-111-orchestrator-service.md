@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-111
 title: Add the WorkflowOrchestrator service and scheduler-driven dispatch
-status: complete
+status: Done
 story: FX-BE-024
 updated: 2026-09-02
 dependencies: [FX-BE-019]

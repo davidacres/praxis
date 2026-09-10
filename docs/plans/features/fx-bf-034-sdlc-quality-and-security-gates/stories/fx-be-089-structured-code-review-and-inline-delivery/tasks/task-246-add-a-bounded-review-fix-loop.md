@@ -4,7 +4,7 @@
 type: Task
 id: TASK-246
 title: "Add a bounded review to implement fix loop"
-status: planned
+status: To Do
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [TASK-245]

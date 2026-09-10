@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-062
 title: "GitLab CI deployment executor"
-status: planned
+status: To Do
 feature: FX-BF-024
 updated: 2026-09-07
 dependencies: [FX-BE-061]

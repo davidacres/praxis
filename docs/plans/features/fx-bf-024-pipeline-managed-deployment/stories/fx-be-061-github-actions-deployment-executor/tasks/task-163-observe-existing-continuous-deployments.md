@@ -4,7 +4,7 @@
 type: Task
 id: TASK-163
 title: "Observe existing continuous deployments"
-status: complete
+status: Done
 story: FX-BE-061
 updated: 2026-09-09
 dependencies: [TASK-162]

@@ -6,7 +6,7 @@
 type: Task
 id: TASK-283
 title: "Enforce scope, authorization and policy boundaries"
-status: planned
+status: To Do
 story: FX-BE-099
 feature: FX-BF-036
 updated: 2026-09-10

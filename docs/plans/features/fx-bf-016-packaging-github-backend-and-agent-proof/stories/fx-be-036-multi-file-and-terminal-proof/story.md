@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-036
 title: Prove multi-file and terminal-using agent paths
-status: planned
+status: To Do
 feature: FX-BF-016
 issue: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/stories/fx-be-036-multi-file-and-terminal-proof/issue.md
 updated: 2026-09-05

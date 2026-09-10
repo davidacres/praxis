@@ -4,7 +4,7 @@
 type: Feature
 id: FX-BF-026
 title: "Interactive and agent-assisted runtime debugging"
-status: planned
+status: To Do
 slug: interactive-agent-debugging
 stories: [FX-BE-067, FX-BE-068, FX-BE-069, FX-BE-070]
 issues: docs/issues/features/fx-bf-026-interactive-agent-debugging/feature-issues.md

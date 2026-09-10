@@ -6,7 +6,7 @@
 type: Task
 id: TASK-287
 title: "Connect gadgets to run monitor, changes and deployment decisions"
-status: planned
+status: To Do
 story: FX-BE-100
 feature: FX-BF-036
 updated: 2026-09-10

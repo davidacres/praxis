@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-093
 title: Implement workflow validation and migration
-status: complete
+status: Done
 story: FX-BE-018
 updated: 2026-09-02
 dependencies: [TASK-092]

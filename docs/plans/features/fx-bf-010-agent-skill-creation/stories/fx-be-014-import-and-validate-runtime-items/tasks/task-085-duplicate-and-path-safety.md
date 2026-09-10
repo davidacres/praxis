@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-085
 title: Enforce duplicate and path safety
-status: complete
+status: Done
 story: FX-BE-014
 updated: 2026-08-31
 dependencies: [TASK-084]

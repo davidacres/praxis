@@ -6,7 +6,7 @@
 id: FX-BF-017
 slug: ai-session-ux-and-workflow-ticket-integration
 title: AI session UX and workflow ticket integration
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-06
 issues: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/feature-issues.md

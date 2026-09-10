@@ -4,7 +4,7 @@
 type: Task
 id: TASK-186
 title: "Build debugging surface"
-status: planned
+status: To Do
 story: FX-BE-069
 updated: 2026-09-07
 dependencies: [FX-BE-068]

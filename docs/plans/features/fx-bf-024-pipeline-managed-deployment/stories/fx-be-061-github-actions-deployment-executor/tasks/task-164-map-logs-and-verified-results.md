@@ -4,7 +4,7 @@
 type: Task
 id: TASK-164
 title: "Map logs and verified results"
-status: complete
+status: Done
 story: FX-BE-061
 updated: 2026-09-09
 dependencies: [TASK-163]

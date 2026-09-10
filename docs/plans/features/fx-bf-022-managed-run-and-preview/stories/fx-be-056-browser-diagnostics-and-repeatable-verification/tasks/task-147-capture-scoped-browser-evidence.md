@@ -4,7 +4,7 @@
 type: Task
 id: TASK-147
 title: "Capture scoped browser evidence"
-status: in-progress
+status: In Progress
 story: FX-BE-056
 updated: 2026-09-09
 dependencies: [FX-BE-055]

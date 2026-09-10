@@ -4,7 +4,7 @@
 type: Task
 id: TASK-144
 title: "Implement process lifecycle manager"
-status: in-progress
+status: In Progress
 story: FX-BE-055
 updated: 2026-09-09
 dependencies: [FX-BE-054]

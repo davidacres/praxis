@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-013
 title: Create complete Skill package
-status: complete
+status: Done
 feature: FX-BF-010
 issue: docs/issues/features/fx-bf-010-agent-skill-creation/stories/fx-be-013-create-skill-package/issue.md
 updated: 2026-08-31

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-153
 title: "Add deployment transitions and policy"
-status: complete
+status: Done
 story: FX-BE-058
 updated: 2026-09-09
 dependencies: [FX-BE-057]

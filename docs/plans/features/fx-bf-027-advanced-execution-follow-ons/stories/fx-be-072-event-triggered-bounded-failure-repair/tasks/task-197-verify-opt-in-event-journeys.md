@@ -4,7 +4,7 @@
 type: Task
 id: TASK-197
 title: "Verify opt-in event journeys"
-status: backlog
+status: To Do
 story: FX-BE-072
 updated: 2026-09-07
 dependencies: [TASK-196]

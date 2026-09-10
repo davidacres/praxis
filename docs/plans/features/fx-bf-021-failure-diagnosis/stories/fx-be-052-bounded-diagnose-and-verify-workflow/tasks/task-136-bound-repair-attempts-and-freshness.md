@@ -4,7 +4,7 @@
 type: Task
 id: TASK-136
 title: "Bound repair attempts and freshness"
-status: in-progress
+status: In Progress
 story: FX-BE-052
 updated: 2026-09-07
 dependencies: [TASK-135]

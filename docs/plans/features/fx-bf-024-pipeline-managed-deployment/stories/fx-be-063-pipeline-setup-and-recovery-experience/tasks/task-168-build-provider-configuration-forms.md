@@ -4,7 +4,7 @@
 type: Task
 id: TASK-168
 title: "Build provider configuration forms"
-status: planned
+status: To Do
 story: FX-BE-063
 updated: 2026-09-07
 dependencies: [FX-BE-062]

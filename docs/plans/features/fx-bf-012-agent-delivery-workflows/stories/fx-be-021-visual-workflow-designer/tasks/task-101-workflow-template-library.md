@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-101
 title: Add workflow template library
-status: complete
+status: Done
 story: FX-BE-021
 updated: 2026-09-02
 dependencies: [FX-BF-009, TASK-094]

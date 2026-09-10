@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-033
 title: Review and correction controls
-status: complete
+status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-033-review-and-correction-controls/issue.md
 updated: 2026-09-05

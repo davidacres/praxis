@@ -4,7 +4,7 @@
 type: Task
 id: TASK-155
 title: "Integrate workflow designer and monitor"
-status: in-progress
+status: In Progress
 story: FX-BE-058
 updated: 2026-09-09
 dependencies: [TASK-154]

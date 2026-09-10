@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-086
 title: Extend runtime status contracts
-status: complete
+status: Done
 story: FX-BE-015
 updated: 2026-08-31
 dependencies: [TASK-079]

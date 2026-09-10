@@ -4,7 +4,7 @@
 type: Task
 id: TASK-175
 title: "Verify health and retain recovery evidence"
-status: planned
+status: To Do
 story: FX-BE-065
 updated: 2026-09-07
 dependencies: [TASK-174]

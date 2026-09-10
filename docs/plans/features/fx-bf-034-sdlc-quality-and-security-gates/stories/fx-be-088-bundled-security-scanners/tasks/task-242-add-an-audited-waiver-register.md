@@ -4,7 +4,7 @@
 type: Task
 id: TASK-242
 title: "Add an audited, expiring waiver register"
-status: planned
+status: To Do
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [TASK-241]

@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-032
 title: Cost, context, and task visibility
-status: complete
+status: Done
 feature: FX-BF-015
 issue: docs/issues/features/fx-bf-015-session-review-cost-and-correction/stories/fx-be-032-cost-context-and-task-visibility/issue.md
 updated: 2026-09-05

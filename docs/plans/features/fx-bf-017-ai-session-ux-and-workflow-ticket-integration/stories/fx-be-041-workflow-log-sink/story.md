@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-041
 title: Wire workflow failures into the Output tab's log bus
-status: complete
+status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-041-workflow-log-sink/issue.md
 updated: 2026-09-06

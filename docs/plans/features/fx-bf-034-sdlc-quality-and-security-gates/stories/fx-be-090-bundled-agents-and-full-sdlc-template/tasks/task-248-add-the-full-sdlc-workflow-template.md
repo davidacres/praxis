@@ -4,7 +4,7 @@
 type: Task
 id: TASK-248
 title: "Add the full-sdlc workflow template"
-status: planned
+status: To Do
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [TASK-247, FX-BE-088, FX-BE-089]

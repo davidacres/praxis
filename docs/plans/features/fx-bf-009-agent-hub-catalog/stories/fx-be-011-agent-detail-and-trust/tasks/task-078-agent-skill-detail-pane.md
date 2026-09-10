@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-078
 title: Build agent and skill detail panes
-status: complete
+status: Done
 story: FX-BE-011
 updated: 2026-08-31
 dependencies: [TASK-077]

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-170
 title: "Verify CD and deployment journeys"
-status: planned
+status: To Do
 story: FX-BE-063
 updated: 2026-09-07
 dependencies: [TASK-169]

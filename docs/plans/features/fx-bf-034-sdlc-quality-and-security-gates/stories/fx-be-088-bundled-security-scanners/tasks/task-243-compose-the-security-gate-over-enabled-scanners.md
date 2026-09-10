@@ -4,7 +4,7 @@
 type: Task
 id: TASK-243
 title: "Compose the security gate over the union of enabled scanners"
-status: planned
+status: To Do
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [TASK-242]

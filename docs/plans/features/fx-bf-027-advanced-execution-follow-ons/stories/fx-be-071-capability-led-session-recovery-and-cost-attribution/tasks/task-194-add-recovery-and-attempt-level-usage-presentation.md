@@ -4,7 +4,7 @@
 type: Task
 id: TASK-194
 title: "Add recovery and attempt-level usage presentation"
-status: backlog
+status: To Do
 story: FX-BE-071
 updated: 2026-09-07
 dependencies: [TASK-193]

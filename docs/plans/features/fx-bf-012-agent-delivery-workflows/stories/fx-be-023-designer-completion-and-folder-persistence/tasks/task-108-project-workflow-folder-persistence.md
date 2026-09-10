@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-108
 title: Persist project workflows to .praxis/workflows with path safety and reload
-status: complete
+status: Done
 story: FX-BE-023
 updated: 2026-09-02
 dependencies: [FX-BE-021]

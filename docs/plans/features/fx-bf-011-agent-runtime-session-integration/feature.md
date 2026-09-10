@@ -6,7 +6,7 @@
 id: FX-BF-011
 slug: agent-runtime-session-integration
 title: Agent runtime and session integration
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-03
 issues: docs/issues/features/fx-bf-011-agent-runtime-session-integration/feature-issues.md

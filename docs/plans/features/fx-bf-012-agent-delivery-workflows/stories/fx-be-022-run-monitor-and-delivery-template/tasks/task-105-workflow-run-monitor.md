@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-105
 title: Implement workflow run monitor and controls
-status: complete
+status: Done
 story: FX-BE-022
 updated: 2026-09-02
 dependencies: [TASK-097, TASK-100, TASK-102]

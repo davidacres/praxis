@@ -4,7 +4,7 @@
 type: Task
 id: TASK-151
 title: "Persist portable profiles and references"
-status: complete
+status: Done
 story: FX-BE-057
 updated: 2026-09-09
 dependencies: [TASK-150]

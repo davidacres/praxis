@@ -4,7 +4,7 @@
 type: Task
 id: TASK-160
 title: "Add deployment history and promotion"
-status: in-progress
+status: In Progress
 story: FX-BE-060
 updated: 2026-09-09
 dependencies: [TASK-159]

@@ -6,7 +6,7 @@
 id: FX-BF-010
 slug: agent-skill-creation
 title: Agent and skill creation
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-08-31
 issues: docs/issues/features/fx-bf-010-agent-skill-creation/feature-issues.md

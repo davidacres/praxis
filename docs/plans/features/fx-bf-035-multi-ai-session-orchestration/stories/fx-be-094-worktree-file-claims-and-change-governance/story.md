@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-094
 title: "Worktree, file claims and change governance"
-status: planned
+status: To Do
 feature: FX-BF-035
 updated: 2026-09-10
 dependencies: [FX-BE-092, FX-BF-003]

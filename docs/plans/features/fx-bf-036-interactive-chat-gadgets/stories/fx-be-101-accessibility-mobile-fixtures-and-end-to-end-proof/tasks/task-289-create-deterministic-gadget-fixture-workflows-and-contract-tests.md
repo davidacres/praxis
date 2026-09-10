@@ -6,7 +6,7 @@
 type: Task
 id: TASK-289
 title: "Create deterministic gadget fixture workflows and contract tests"
-status: planned
+status: To Do
 story: FX-BE-101
 feature: FX-BF-036
 updated: 2026-09-10

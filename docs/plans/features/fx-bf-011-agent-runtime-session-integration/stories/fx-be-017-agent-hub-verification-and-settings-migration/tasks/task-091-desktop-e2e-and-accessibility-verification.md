@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-091
 title: Add desktop E2E and accessibility verification
-status: complete
+status: Done
 story: FX-BE-017
 updated: 2026-08-31
 dependencies: [TASK-090]

@@ -4,7 +4,7 @@
 type: Task
 id: TASK-252
 title: "Add an observe-mode gate resting on imported CI evidence"
-status: planned
+status: To Do
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [TASK-251, TASK-239]

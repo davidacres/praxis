@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-076
 title: Implement Agent Hub shell and route
-status: complete
+status: Done
 story: FX-BE-010
 updated: 2026-08-31
 dependencies: []

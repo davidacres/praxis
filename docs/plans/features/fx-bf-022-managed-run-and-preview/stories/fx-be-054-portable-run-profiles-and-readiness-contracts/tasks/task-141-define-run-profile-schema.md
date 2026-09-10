@@ -4,7 +4,7 @@
 type: Task
 id: TASK-141
 title: "Define run profile schema"
-status: complete
+status: Done
 story: FX-BE-054
 updated: 2026-09-07
 dependencies: [FX-BF-021]

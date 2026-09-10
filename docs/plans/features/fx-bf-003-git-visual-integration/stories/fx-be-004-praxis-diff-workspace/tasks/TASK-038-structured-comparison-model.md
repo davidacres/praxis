@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-038
 title: Structured comparison and patch model
-status: complete
+status: Done
 story: FX-BE-004
 updated: 2026-08-27
 dependencies: [FX-BE-003]

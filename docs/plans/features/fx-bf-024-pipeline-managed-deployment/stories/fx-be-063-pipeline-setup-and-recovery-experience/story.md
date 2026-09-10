@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-063
 title: "Pipeline setup and recovery experience"
-status: planned
+status: To Do
 feature: FX-BF-024
 updated: 2026-09-07
 dependencies: [FX-BE-062]

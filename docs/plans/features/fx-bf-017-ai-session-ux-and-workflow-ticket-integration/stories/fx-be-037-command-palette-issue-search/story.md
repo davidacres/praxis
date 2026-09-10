@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-037
 title: Command palette issue search
-status: complete
+status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-037-command-palette-issue-search/issue.md
 updated: 2026-09-06

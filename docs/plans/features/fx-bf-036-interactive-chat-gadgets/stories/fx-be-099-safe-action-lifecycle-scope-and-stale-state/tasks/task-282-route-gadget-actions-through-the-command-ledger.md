@@ -6,7 +6,7 @@
 type: Task
 id: TASK-282
 title: "Route gadget actions through the command ledger"
-status: planned
+status: To Do
 story: FX-BE-099
 feature: FX-BF-036
 updated: 2026-09-10

@@ -6,7 +6,7 @@
 id: FX-BF-020
 slug: praxis-file-naming-and-portable-workspaces
 title: Praxis files are namespaced, and a workspace file is portable
-status: complete
+status: Done
 owner: Electron desktop app
 updated: 2026-09-06
 issues: docs/issues/features/fx-bf-020-praxis-file-naming-and-portable-workspaces/feature-issues.md

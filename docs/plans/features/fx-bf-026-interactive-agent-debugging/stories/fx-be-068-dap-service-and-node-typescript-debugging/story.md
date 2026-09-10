@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-068
 title: "DAP service and Node TypeScript debugging"
-status: planned
+status: To Do
 feature: FX-BF-026
 updated: 2026-09-07
 dependencies: [FX-BE-067]

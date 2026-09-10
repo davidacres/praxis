@@ -4,7 +4,7 @@
 type: Task
 id: TASK-178
 title: "Exercise direct and pipeline target journeys"
-status: planned
+status: To Do
 story: FX-BE-066
 updated: 2026-09-07
 dependencies: [TASK-177]

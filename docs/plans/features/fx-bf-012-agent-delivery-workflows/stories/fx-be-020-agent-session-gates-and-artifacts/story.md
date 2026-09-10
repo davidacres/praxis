@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-020
 title: Agent session stages, gates, artifacts, and approvals
-status: complete
+status: Done
 feature: FX-BF-012
 issue: docs/issues/features/fx-bf-012-agent-delivery-workflows/stories/fx-be-020-agent-session-gates-and-artifacts/issue.md
 updated: 2026-09-02

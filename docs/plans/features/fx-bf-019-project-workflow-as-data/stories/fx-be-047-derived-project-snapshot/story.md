@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-047
 title: PROJECT.md derived from the effective workflow
-status: complete
+status: Done
 feature: FX-BF-019
 updated: 2026-09-06
 commits: []

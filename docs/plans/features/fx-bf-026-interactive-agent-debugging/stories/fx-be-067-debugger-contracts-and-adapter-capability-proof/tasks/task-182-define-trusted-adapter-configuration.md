@@ -4,7 +4,7 @@
 type: Task
 id: TASK-182
 title: "Define trusted adapter configuration"
-status: planned
+status: To Do
 story: FX-BE-067
 updated: 2026-09-07
 dependencies: [TASK-181]

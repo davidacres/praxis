@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-127
 title: Build the run board: sentence, read-only pipeline diagram, gate ledger table, timeline.
-status: complete
+status: Done
 story: FX-BE-029
 updated: 2026-09-02
 dependencies: [FX-BE-027]

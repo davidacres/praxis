@@ -4,7 +4,7 @@
 type: Feature
 id: FX-BF-034
 title: "Full SDLC quality and security gates"
-status: planned
+status: To Do
 slug: sdlc-quality-and-security-gates
 stories: [FX-BE-087, FX-BE-088, FX-BE-089, FX-BE-090, FX-BE-091]
 updated: 2026-09-09

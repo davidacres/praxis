@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-050
 title: Replace center project navigation cards with focused project summary
-status: complete
+status: Done
 story: FX-BE-006
 updated: 2026-08-27
 dependencies: [TASK-049]

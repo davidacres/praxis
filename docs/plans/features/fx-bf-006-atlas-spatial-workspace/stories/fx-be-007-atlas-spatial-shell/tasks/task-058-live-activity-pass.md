@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-058
 title: Live activity pass and the awaiting-approval signal
-status: proposed
+status: To Do
 story: FX-BE-007
 updated: 2026-08-27
 dependencies: [TASK-056]

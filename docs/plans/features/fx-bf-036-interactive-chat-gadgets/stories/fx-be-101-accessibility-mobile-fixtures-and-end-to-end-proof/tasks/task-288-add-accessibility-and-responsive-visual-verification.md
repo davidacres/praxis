@@ -6,7 +6,7 @@
 type: Task
 id: TASK-288
 title: "Add accessibility and responsive visual verification"
-status: planned
+status: To Do
 story: FX-BE-101
 feature: FX-BF-036
 updated: 2026-09-10

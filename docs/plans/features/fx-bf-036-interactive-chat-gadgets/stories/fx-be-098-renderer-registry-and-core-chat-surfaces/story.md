@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-098
 title: "Renderer registry and core chat surfaces"
-status: planned
+status: To Do
 feature: FX-BF-036
 updated: 2026-09-10
 dependencies: [FX-BE-097]

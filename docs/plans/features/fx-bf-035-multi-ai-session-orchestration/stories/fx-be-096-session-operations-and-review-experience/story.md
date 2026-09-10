@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-096
 title: "Session operations and review experience"
-status: planned
+status: To Do
 feature: FX-BF-035
 updated: 2026-09-10
 dependencies: [FX-BE-095, FX-BF-014, FX-BF-015]

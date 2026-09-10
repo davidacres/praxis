@@ -6,7 +6,7 @@
 type: Task
 id: TASK-280
 title: "Implement choice, confirmation, table and progress renderers"
-status: planned
+status: To Do
 story: FX-BE-098
 feature: FX-BF-036
 updated: 2026-09-10

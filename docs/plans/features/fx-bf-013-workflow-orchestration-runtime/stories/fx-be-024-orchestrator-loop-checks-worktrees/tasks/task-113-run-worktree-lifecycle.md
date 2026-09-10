@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-113
 title: Add the per-run git worktree lifecycle and frozen snapshots
-status: complete
+status: Done
 story: FX-BE-024
 updated: 2026-09-02
 dependencies: [TASK-111]

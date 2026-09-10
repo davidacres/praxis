@@ -5,7 +5,7 @@
 **Priority:** Medium
 id: TASK-121
 title: Add wf- classes and kind-accent tokens across every theme block; remove inline styles.
-status: complete
+status: Done
 story: FX-BE-027
 updated: 2026-09-02
 dependencies: [FX-BF-013]

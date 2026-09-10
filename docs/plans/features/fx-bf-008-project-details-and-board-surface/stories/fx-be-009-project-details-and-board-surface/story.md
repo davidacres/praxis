@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-009
 title: Project-details inspector, theme-aware detail panes, per-board plain background, sidebar board removal, no-boards centre state
-status: complete
+status: Done
 feature: FX-BF-008
 updated: 2026-09-06
 commits: []

@@ -6,7 +6,7 @@
 type: Story
 id: FX-BE-039
 title: Cost and token spend report
-status: complete
+status: Done
 feature: FX-BF-017
 issue: docs/issues/features/fx-bf-017-ai-session-ux-and-workflow-ticket-integration/stories/fx-be-039-spend-report/issue.md
 updated: 2026-09-06

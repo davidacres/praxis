@@ -4,7 +4,7 @@
 type: Story
 id: FX-BE-065
 title: "IIS install health and explicit rollback"
-status: planned
+status: To Do
 feature: FX-BF-025
 updated: 2026-09-07
 dependencies: [FX-BE-064]

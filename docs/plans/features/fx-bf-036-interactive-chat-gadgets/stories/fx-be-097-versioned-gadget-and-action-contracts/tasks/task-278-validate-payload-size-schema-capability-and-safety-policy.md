@@ -6,7 +6,7 @@
 type: Task
 id: TASK-278
 title: "Validate payload size, schema, capability and safety policy"
-status: planned
+status: To Do
 story: FX-BE-097
 feature: FX-BF-036
 updated: 2026-09-10

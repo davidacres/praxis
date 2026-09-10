@@ -4,7 +4,7 @@
 type: Task
 id: TASK-195
 title: "Define event subscription and deduplication"
-status: backlog
+status: To Do
 story: FX-BE-072
 updated: 2026-09-07
 dependencies: [FX-BE-071]
