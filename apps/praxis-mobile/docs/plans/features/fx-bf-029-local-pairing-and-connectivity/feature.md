@@ -2,7 +2,7 @@
 type: Feature
 id: FX-BF-029
 title: "Local pairing and direct connectivity"
-status: complete
+status: in-progress
 slug: local-pairing-and-connectivity
 stories: [FX-BE-076, FX-BE-077]
 updated: 2026-09-09

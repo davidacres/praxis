@@ -2,7 +2,7 @@
 type: Story
 id: FX-BE-081
 title: "Read and continue existing work"
-status: complete
+status: in-progress
 feature: FX-BF-031
 updated: 2026-09-09
 dependencies: [FX-BE-080, FX-BE-077]
