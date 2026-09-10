@@ -6,7 +6,7 @@
 id: FX-BF-018
 slug: addon-marketplace
 title: Add-on marketplace
-status: in-progress
+status: In Progress
 owner: Electron desktop app
 updated: 2026-09-06
 stories: [FX-BE-042]

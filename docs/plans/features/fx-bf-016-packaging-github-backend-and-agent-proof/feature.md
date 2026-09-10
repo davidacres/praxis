@@ -6,7 +6,7 @@
 id: FX-BF-016
 slug: packaging-github-backend-and-agent-proof
 title: Packaging, GitHub backend, and multi-file/terminal proof
-status: in-progress
+status: In Progress
 owner: Electron desktop app
 updated: 2026-09-05
 issues: docs/issues/features/fx-bf-016-packaging-github-backend-and-agent-proof/feature-issues.md

@@ -1,5 +1,7 @@
 ---
 id: FX-BF-008
+status: Done
+type: Feature
 ---
 
 # FX-BF-008: Project-details inspector and board surface controls

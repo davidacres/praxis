@@ -1,5 +1,7 @@
 ---
 id: FX-BF-003
+status: Done
+type: Feature
 ---
 
 # FX-BF-003: Git Integration With Visual Commit Graph
