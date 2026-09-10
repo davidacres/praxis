@@ -718,16 +718,16 @@ export function BoardView({
           </span>
         )}
       </div>
-      {(updated || issue.priority) && (
+      {updated && (
         <div className="issue-card-details">
-          {updated && <span title={`Updated ${updated}`}><Icon name="calendar" size={12} /> Updated {updated}</span>}
-          {issue.priority && <PriorityIndicator priority={issue.priority} />}
+          <span title={`Updated ${updated}`}><Icon name="calendar" size={12} /> Updated {updated}</span>
         </div>
       )}
       <div className="issue-card-foot">
         <Icon className="issue-card-key-icon" name="check-square" size={13} />
         <span className="issue-card-key">{issue.key}</span>
         <span className="spacer" />
+        {issue.priority && <PriorityIndicator priority={issue.priority} />}
         {issue.assignee && (
           <span className="avatar" title={issue.assignee}>
             {initials(issue.assignee)}
