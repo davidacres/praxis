@@ -3043,6 +3043,35 @@ textarea {
   color: var(--accent);
 }
 
+/* Priority indicator — colored arrows signifying priority level (like military rank insignia).
+   Arrow count and direction indicate priority: more arrows up = higher priority,
+   single down arrow = lowest. Colors map to priority severity. */
+.priority-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.priority-arrow {
+  display: inline-block;
+  font-weight: bold;
+  text-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1);
+}
+
+.priority-indicator-text {
+  color: var(--accent);
+  font-size: var(--text-xs);
+}
+
+/* Semantic priority color tokens for arrow coloring */
+:root {
+  --tone-critical: #f85149;
+  --tone-warning: #d29922;
+  --tone-info: #4c9ee8;
+}
+
 .issue-card-status {
   font-size: var(--text-sm);
   color: var(--text-tertiary);
