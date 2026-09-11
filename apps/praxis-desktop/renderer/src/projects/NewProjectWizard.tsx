@@ -493,7 +493,7 @@ function InitialPlanStep({ type, stages, tickets, workflowChoice, ticketChoice, 
   ticketEditorRef: MutableRefObject<HTMLDivElement | null>;
   onChooseWorkflow: (choice: PlanChoice) => void;
   onChooseTickets: (choice: PlanChoice) => void;
-  onStagesChange: Dispatch<SetStateAction<Array<{ id: string; name: string }>>>;
+  onStagesChange: Dispatch<SetStateAction<ProjectWorkflowStage[]>>;
   onTicketsChange: Dispatch<SetStateAction<Array<{ summary: string; description: string; issueType: string; status: string }>>>;
 }) {
   return <div className="initial-plan-step">

@@ -8,7 +8,7 @@ type ProjectWorkflowCategory = 'todo' | 'indeterminate' | 'done';
 export interface ProjectWorkflowStage {
   id: string;
   name: string;
-  category: ProjectWorkflowCategory;
+  category?: ProjectWorkflowCategory;
 }
 
 export const PROJECT_BRIEF_FIELDS: Record<ProjectType, Array<{ key: string; label: string }>> = {
