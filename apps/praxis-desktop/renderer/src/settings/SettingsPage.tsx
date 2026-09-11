@@ -707,7 +707,8 @@ function MarketplaceSection() {
     run('token', async () => {
       await window.praxis.marketplace.setToken(tokenDraft.trim() || null);
       setTokenDraft('');
-      await refreshStatus();
+      // Update status to show token is stored, but preserve unsaved config drafts
+      setStatus(s => (s ? { ...s, hasToken: true } : undefined));
     });
 
   const toggleEnabled = (enabled: boolean) =>
@@ -2886,6 +2887,7 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<ThemeDefinition & { source: 'custom' }>();
   const [, refreshCustomThemes] = useState(0);
+  const [marketplaceFilter, setMarketplaceFilter] = useState<'all' | 'installed'>('all');
   const installedIds = settings.appearance.installedThemeIds ?? [];
   const custom = settings.appearance.customThemes ?? [];
 
@@ -3031,21 +3033,29 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
       {(() => {
         const bundled = visible.filter(
           theme =>
-            theme.source === 'marketplace' &&
-            !installedIds.includes(theme.id) &&
-            !installedAddonThemeIds.has(theme.id)
+            theme.source === 'marketplace'
         );
         const needle = query.trim().toLowerCase();
         const fromCatalogue = (themeAddons.catalog ?? []).filter(
           entry =>
-            !installedAddonThemeIds.has(entry.manifest.id) &&
-            (!needle ||
-              `${entry.manifest.name} ${entry.manifest.summary ?? ''} ${entry.manifest.author ?? ''}`
-                .toLowerCase()
-                .includes(needle))
+            !needle ||
+            `${entry.manifest.name} ${entry.manifest.summary ?? ''} ${entry.manifest.author ?? ''}`
+              .toLowerCase()
+              .includes(needle)
         );
-        const total = bundled.length + fromCatalogue.length;
-        if (total === 0 && themeAddons.ready && themeAddons.catalog !== undefined && bundled.length === 0) {
+
+        const availableBundled = bundled.filter(
+          theme => !installedIds.includes(theme.id) && !installedAddonThemeIds.has(theme.id)
+        );
+        const availableCatalogue = fromCatalogue.filter(
+          entry => !installedAddonThemeIds.has(entry.manifest.id)
+        );
+
+        const totalAvailable = availableBundled.length + availableCatalogue.length;
+        const totalInstalled = themeAddons.installed.length;
+        const total = totalAvailable + totalInstalled;
+
+        if (total === 0 && themeAddons.ready && themeAddons.catalog !== undefined) {
           return null;
         }
         return (
@@ -3055,7 +3065,32 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
                 <h4>Marketplace</h4>
                 <p>Install curated and community palettes into this workspace.</p>
               </div>
-              {total > 0 && <span className="theme-marketplace-count">{total} available</span>}
+              {total > 0 && (
+                <div className="theme-marketplace-filter">
+                  <span className="theme-marketplace-count">
+                    {marketplaceFilter === 'all' ? totalAvailable : totalInstalled} {marketplaceFilter === 'all' ? 'available' : 'installed'}
+                  </span>
+                  <div className="filter-toggle" role="group" aria-label="Marketplace filter">
+                    <button
+                      type="button"
+                      className={marketplaceFilter === 'all' ? 'active' : ''}
+                      onClick={() => setMarketplaceFilter('all')}
+                      data-testid="theme-marketplace-filter-all"
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={marketplaceFilter === 'installed' ? 'active' : ''}
+                      onClick={() => setMarketplaceFilter('installed')}
+                      disabled={totalInstalled === 0}
+                      data-testid="theme-marketplace-filter-installed"
+                    >
+                      Installed {totalInstalled > 0 && `(${totalInstalled})`}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             {themeAddons.error && <div className="error-banner">{themeAddons.error}</div>}
             {!themeAddons.ready && (
@@ -3066,50 +3101,51 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
             {themeAddons.ready && themeAddons.catalog === undefined && (
               <p className="settings-field-help">Loading the catalogue…</p>
             )}
-            <div className="theme-gallery-grid">
-              {bundled.map(theme => (
-                <ThemePreviewCard
-                  key={theme.id}
-                  theme={theme}
-                  active={false}
-                  installed={false}
-                  onSelect={() => undefined}
-                  onInstall={() =>
-                    void update({
-                      appearance: {
-                        installedThemeIds: [...installedIds, theme.id],
-                        themeId: theme.id,
-                        themeMode: theme.mode
-                      }
-                    }).then(() => {
-                      setSelectedTheme(theme.id);
-                      applyThemePreference(theme.id, theme.mode);
-                    })
-                  }
-                />
-              ))}
-              {fromCatalogue.map(entry => (
-                <ThemePreviewCard
-                  key={entry.packageName}
-                  theme={addonThemePreview(entry)}
-                  active={false}
-                  installed={false}
-                  onSelect={() => undefined}
-                  onInstall={
-                    entry.incompatible
-                      ? undefined
-                      : () => void themeAddons.install(entry.packageName)
-                  }
-                />
-              ))}
-            </div>
-            {themeAddons.installed.length > 0 && (
-              <p className="settings-field-help theme-marketplace-installed" data-testid="theme-marketplace-installed">
-                Installed from the catalogue:{' '}
+            {marketplaceFilter === 'all' && (
+              <div className="theme-gallery-grid">
+                {availableBundled.map(theme => (
+                  <ThemePreviewCard
+                    key={theme.id}
+                    theme={theme}
+                    active={false}
+                    installed={false}
+                    onSelect={() => undefined}
+                    onInstall={() =>
+                      void update({
+                        appearance: {
+                          installedThemeIds: [...installedIds, theme.id],
+                          themeId: theme.id,
+                          themeMode: theme.mode
+                        }
+                      }).then(() => {
+                        setSelectedTheme(theme.id);
+                        applyThemePreference(theme.id, theme.mode);
+                      })
+                    }
+                  />
+                ))}
+                {availableCatalogue.map(entry => (
+                  <ThemePreviewCard
+                    key={entry.packageName}
+                    theme={addonThemePreview(entry)}
+                    active={false}
+                    installed={false}
+                    onSelect={() => undefined}
+                    onInstall={
+                      entry.incompatible
+                        ? undefined
+                        : () => void themeAddons.install(entry.packageName)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+            {marketplaceFilter === 'installed' && themeAddons.installed.length > 0 && (
+              <div className="theme-marketplace-installed-list">
                 {themeAddons.installed.map((addon, index) => (
-                  <span key={addon.manifest.id}>
+                  <div key={addon.manifest.id} className="theme-marketplace-installed-item" data-testid="theme-marketplace-installed-item">
                     {index > 0 && ' · '}
-                    {addon.manifest.name}{' '}
+                    <span>{addon.manifest.name}</span>
                     <button
                       type="button"
                       className="linklike"
@@ -3118,9 +3154,9 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
                     >
                       Remove
                     </button>
-                  </span>
+                  </div>
                 ))}
-              </p>
+              </div>
             )}
           </section>
         );

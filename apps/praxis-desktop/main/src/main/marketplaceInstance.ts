@@ -70,8 +70,13 @@ async function getToken(): Promise<string | undefined> {
   const fromEnv = process.env.PRAXIS_MARKETPLACE_TOKEN?.trim();
   if (fromEnv) return fromEnv;
   try {
-    return (await getSecretsStore().get(MARKETPLACE_TOKEN_KEY)) || undefined;
-  } catch {
+    const token = await getSecretsStore().get(MARKETPLACE_TOKEN_KEY);
+    if (!token) {
+      getLogBus().appendLine('[marketplace] no token in secure storage');
+    }
+    return token || undefined;
+  } catch (error) {
+    getLogBus().appendLine(`[marketplace] failed to retrieve token from secure storage: ${describe(error)}`);
     return undefined;
   }
 }
