@@ -174,15 +174,20 @@ test('Themes panel: the marketplace section installs a theme into the gallery, t
   await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
   await window.getByRole('searchbox', { name: 'Search themes' }).fill('nord');
   await expect(window.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
-  await expect(window.locator('[data-testid="theme-marketplace-installed"]')).toContainText('Nord Aurora');
+
+  // Switch to "Installed" filter to see the installed marketplace item
+  await marketplace.locator('[data-testid="theme-marketplace-filter-installed"]').click();
+  await expect(marketplace.locator('[data-testid="theme-marketplace-installed-item"]')).toContainText('Nord Aurora');
 
   await window.getByRole('searchbox', { name: 'Search themes' }).fill('');
-  await window
-    .locator('[data-testid="theme-marketplace-installed"]')
+  // Remove the installed marketplace item
+  await marketplace
+    .locator('[data-testid="theme-marketplace-installed-item"]')
     .getByRole('button', { name: 'Remove' })
     .click();
-  // Gone from the gallery; back in the marketplace section as available again.
-  await expect(window.locator('[data-testid="theme-marketplace-installed"]')).toHaveCount(0);
+  // Removed from installed list; switch back to "All" to see it back in available marketplace
+  await expect(marketplace.locator('[data-testid="theme-marketplace-installed-item"]')).toHaveCount(0);
+  await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
   const gallery = window.locator('.theme-gallery-section').filter({ hasText: 'Recent' }).first();
   await expect(gallery.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
   await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
