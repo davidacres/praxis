@@ -1,7 +1,6 @@
 {
   "name": "@praxis/mobile-protocol",
   "version": "0.0.0",
-  "private": true,
   "type": "commonjs",
   "main": "./out/index.js",
   "types": "./out/index.d.ts",
