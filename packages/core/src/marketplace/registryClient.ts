@@ -206,7 +206,9 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
       if (Array.isArray(page)) {
         for (const item of page) {
           if (!isRecord(item) || typeof item.name !== 'string') continue;
-          if (!item.name.startsWith(this.prefix)) continue;
+          // Extract package name part after scope (e.g., @owner/praxis-addon-* -> praxis-addon-*)
+          const nameWithoutScope = item.name.includes('/') ? item.name.split('/')[1]! : item.name;
+          if (!nameWithoutScope.startsWith(this.prefix)) continue;
           refs.push({
             name: item.name,
             htmlUrl: typeof item.html_url === 'string' ? item.html_url : undefined,
