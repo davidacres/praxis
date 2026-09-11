@@ -1,0 +1,83 @@
+name: Build and Release Electron App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Copy renderer
+        run: npm run desktop:copy-renderer
+
+      - name: Build desktop
+        run: npm run build:desktop
+
+      - name: Build DMG installer
+        run: npm run dist:mac --workspace=@praxis/desktop-main
+
+      - name: Upload DMG to Release
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg \
+            apps/praxis-desktop/main/dist/Praxis-*-arm64.dmg.blockmap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build:core
+
+      - name: Build renderer
+        run: npm run build:renderer
+
+      - name: Copy renderer
+        run: npm run desktop:copy-renderer
+
+      - name: Build desktop
+        run: npm run build:desktop
+
+      - name: Build Windows installer
+        run: npm run dist:win --workspace=@praxis/desktop-main
+
+      - name: Upload Windows installer to Release
+        run: |
+          gh release upload ${{ github.ref_name }} `
+            "apps/praxis-desktop/main/dist/Praxis-*-setup.exe" `
+            "apps/praxis-desktop/main/dist/Praxis-*-setup.exe.blockmap"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
