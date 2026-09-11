@@ -690,3 +690,15 @@ whole suite at the configured worker count. It correlates with long unattended r
 the code — `timeout: 30000, retries: 0` makes a multi-minute test impossible unless the
 worker was descheduled. Don't chase it. Related: full-suite runs launched in the background
 have twice been killed mid-flight with no output; smaller batches complete reliably.
+
+## Testing expectations for agents
+
+**Testing is mandatory, not optional.** This is a visual application with real UI regressions that pass all assertions. An agent must:
+
+- **Run the e2e suite against any UI change** (`npm run test:desktop`). A green suite does not mean it looks right (see "Verifying a UI change" above).
+- **Visually inspect the app** after implementing a feature. Launch it (`npm run start` or equivalent), navigate to the changed surface, and interact with it end-to-end before reporting success.
+- **Update snapshots deliberately.** Never assume a snapshot update is safe. Open the `-actual.png` and diff, read what changed, and confirm it is the fix (not a regression) before accepting it.
+- **Never say "I can't test"** when the suite is runnable and the app is launchable. If you encounter a blocker, investigate and fix it rather than declaring testing impossible.
+- **Document what you tested.** Report which e2e tests passed, which snapshots were updated, and which manual interactions verified the feature works. A session ending with "build succeeded" is not done — include verification in the completion.
+
+No test *guarantees* correctness (a regression can still paint), but tests + screenshots catch real bugs. Use both.
