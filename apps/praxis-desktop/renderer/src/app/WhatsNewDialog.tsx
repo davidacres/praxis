@@ -17,10 +17,35 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
+    version: '0.3.1',
+    label: 'Marketplace and add-on packages now working',
+    summary: 'Install themes, surfaces, agents and workflows from GitHub Packages marketplace.',
+    current: true,
+    sections: [
+      {
+        title: 'Features',
+        icon: 'sparkles',
+        items: [
+          'Marketplace now loads add-on packages from GitHub Packages.',
+          'Themes marketplace includes filter toggle for All/Installed items.',
+          'Install themes directly from the marketplace section in Themes settings.',
+          'Published add-on packages are now discoverable and installable.'
+        ]
+      },
+      {
+        title: 'Fixes',
+        icon: 'check-square',
+        items: [
+          'Fixed marketplace package filtering to support scoped packages from GitHub.',
+          'Marketplace now correctly loads @owner/praxis-addon-* packages.'
+        ]
+      }
+    ]
+  },
+  {
     version: '0.2.1',
     label: 'A more complete desktop workflow',
     summary: 'Tickets, boards and AI sessions now work together as one continuous experience.',
-    current: true,
     sections: [
       {
         title: 'Features',
