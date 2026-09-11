@@ -112,10 +112,18 @@ export async function configureMarketplace(patch: {
 }
 
 export async function setMarketplaceToken(token: string | null): Promise<MarketplaceStatus> {
-  if (token && token.trim()) {
-    await getSecretsStore().store(MARKETPLACE_TOKEN_KEY, token.trim());
-  } else {
-    await getSecretsStore().delete(MARKETPLACE_TOKEN_KEY);
+  try {
+    if (token && token.trim()) {
+      getLogBus().appendLine(`[marketplace] saving token to secure store...`);
+      await getSecretsStore().store(MARKETPLACE_TOKEN_KEY, token.trim());
+      getLogBus().appendLine(`[marketplace] token saved successfully`);
+    } else {
+      await getSecretsStore().delete(MARKETPLACE_TOKEN_KEY);
+      getLogBus().appendLine(`[marketplace] token deleted`);
+    }
+  } catch (error) {
+    getLogBus().appendLine(`[marketplace] failed to save token: ${describe(error)}`);
+    throw error;
   }
   emitMarketplaceChanged();
   return getMarketplaceStatus();
