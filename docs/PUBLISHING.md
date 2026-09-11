@@ -95,8 +95,49 @@ git push origin main --tags
 
 ## Using the Built Electron App
 
-The Electron app is released as installers:
-- **macOS**: `Praxis-VERSION-arm64.dmg` (Apple Silicon)
-- **Windows**: `Praxis-VERSION-setup.exe` (NSIS installer)
+The Electron app is released as installers on the [GitHub Releases](https://github.com/davidacres/praxis/releases) page.
 
-Users can download from the [GitHub Releases](https://github.com/davidacres/praxis/releases) page.
+### macOS Installation
+
+**Method 1: GUI (Easiest)**
+1. Download `Praxis-VERSION-arm64.dmg` from releases
+2. Double-click to mount
+3. Drag `Praxis.app` to Applications folder
+4. Unmount the DMG
+
+**Method 2: Command Line**
+```bash
+# Download and install
+hdiutil mount Praxis-0.3.0-arm64.dmg && \
+cp -r /Volumes/Praxis/Praxis.app /Applications/ && \
+hdiutil unmount /Volumes/Praxis
+
+# Launch
+open /Applications/Praxis.app
+```
+
+### Windows Installation
+
+**Method 1: GUI (Easiest)**
+1. Download `Praxis-VERSION-setup.exe` from releases
+2. Double-click to run installer
+3. Follow the installation wizard
+4. App launches after installation
+
+**Method 2: Command Line**
+```bash
+# Download and install silently
+powershell -NoProfile -ExecutionPolicy Bypass -Command `
+  Invoke-WebRequest -Uri 'https://github.com/davidacres/praxis/releases/download/v0.3.0/Praxis-0.3.0-setup.exe' `
+  -OutFile 'Praxis-0.3.0-setup.exe'; `
+  & '.\Praxis-0.3.0-setup.exe' /S; `
+  Remove-Item '.\Praxis-0.3.0-setup.exe'
+
+# Or run with UI (default)
+& '.\Praxis-0.3.0-setup.exe'
+```
+
+The installer creates:
+- Desktop shortcut
+- Start Menu entry
+- Uninstaller in Control Panel
