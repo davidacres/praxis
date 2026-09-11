@@ -50,7 +50,9 @@
     "app:dist:mac": "npm run app:installer:mac",
     "app:dist:win": "npm run app:installer:win",
     "app:dist:portable": "npm run app:installer:portable",
-    "app:dist:dir": "npm run app:installer:dir"
+    "app:dist:dir": "npm run app:installer:dir",
+    "publish:packages": "npm publish --workspace=@praxis/core --workspace=@praxis/mobile-protocol",
+    "release:create": "node scripts/create-release.mjs"
   },
   "overrides": {
     "diff": "^8.0.4",
