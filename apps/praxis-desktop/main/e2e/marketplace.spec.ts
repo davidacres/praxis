@@ -269,3 +269,35 @@ test('an unconfigured marketplace is explained inside each panel', async () => {
     'Set an owner, add a token, and enable the marketplace'
   );
 });
+
+test('Themes marketplace filter toggle shows All and Installed views with screenshots', async () => {
+  registry = await startMockAddonRegistry({ owner: OWNER, addons: [NORD_THEME] });
+  app = await launchTestApp(seeded(registry.baseUrl), undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: 'e2e-token'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('appearance-themes');
+
+  const marketplace = window.locator('[data-testid="theme-marketplace"]');
+  await expect(marketplace).toBeVisible();
+
+  // Screenshot 1: Marketplace "All" view with filter buttons and available themes
+  await marketplace.scrollIntoViewIfNeeded();
+  await expect(marketplace.locator('[data-testid="theme-marketplace-filter-all"]')).toBeVisible();
+  await expect(marketplace.locator('[data-testid="theme-marketplace-filter-installed"]')).toBeVisible();
+  await expect(window).toHaveScreenshot('marketplace-filter-all-view.png');
+
+  // Install the theme
+  await marketplace.locator('[data-testid="theme-card-nord-aurora"]').click();
+
+  // Screenshot 2: Click installed filter to show only installed items
+  await marketplace.locator('[data-testid="theme-marketplace-filter-installed"]').click();
+  await expect(marketplace.locator('[data-testid="theme-marketplace-installed-item"]')).toContainText('Nord Aurora');
+  await expect(window).toHaveScreenshot('marketplace-filter-installed-view.png');
+
+  // Screenshot 3: Switch back to "All" view
+  await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
+  await expect(window).toHaveScreenshot('marketplace-filter-back-to-all-view.png');
+});
