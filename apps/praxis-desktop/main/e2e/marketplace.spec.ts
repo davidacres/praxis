@@ -301,3 +301,67 @@ test('Themes marketplace filter toggle shows All and Installed views with screen
   await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
   await expect(window).toHaveScreenshot('marketplace-filter-back-to-all-view.png');
 });
+
+test('Marketplace loads real GitHub packages with token configured', async () => {
+  // Test with REAL GitHub API using real token
+  app = await launchTestApp({
+    marketplace: {
+      enabled: true,
+      owner: 'davidacres',
+      ownerType: 'user',
+      packageNamePrefix: 'praxis-addon-',
+      apiBaseUrl: 'https://api.github.com',
+      registryBaseUrl: 'https://npm.pkg.github.com',
+      checkOnLaunch: false
+    }
+  }, undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: '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'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('appearance-themes');
+
+  const marketplace = window.locator('[data-testid="theme-marketplace"]');
+
+  // Wait for marketplace to load from GitHub API
+  await expect(marketplace.locator('[data-testid="theme-marketplace-filter-all"]')).toBeVisible({ timeout: 10000 });
+
+  // Should show available items count (Solarized theme from GitHub packages)
+  await expect(marketplace).toContainText('available');
+
+  // Verify Solarized theme from GitHub appears
+  await expect(marketplace.locator('[data-testid="theme-card-solarized"]')).toBeVisible({ timeout: 10000 });
+});
+
+test('Agent Runtime marketplace loads real GitHub agents with token configured', async () => {
+  // Test agents marketplace with REAL GitHub API
+  app = await launchTestApp({
+    marketplace: {
+      enabled: true,
+      owner: 'davidacres',
+      ownerType: 'user',
+      packageNamePrefix: 'praxis-addon-',
+      apiBaseUrl: 'https://api.github.com',
+      registryBaseUrl: 'https://npm.pkg.github.com',
+      checkOnLaunch: false
+    }
+  }, undefined, {
+    PRAXIS_MARKETPLACE_TOKEN: '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'
+  });
+  window = app.window;
+
+  await openSettings();
+  await nav('agent-runtime');
+
+  const marketplace = window.locator('[data-testid="agent-marketplace"]');
+
+  // Wait for marketplace to load
+  await expect(marketplace).toBeVisible({ timeout: 10000 });
+
+  // Should load agents from GitHub packages
+  await expect(marketplace).toContainText('available', { timeout: 10000 });
+
+  // Verify Praxis Planner agent appears
+  await expect(marketplace.locator('[data-testid="agent-card-praxis-planner"]')).toBeVisible({ timeout: 10000 });
+});
