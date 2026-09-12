@@ -1802,6 +1802,12 @@ export function App() {
                       refreshConnections();
                     });
                   }}
+                  onUnlinkBoard={(project, connectionId, boardId) => {
+                    void window.praxis.projects.unlinkBoard(project.id, connectionId, boardId).then(updated => {
+                      setProjects(current => current.map(item => item.id === updated.id ? updated : item));
+                      if (route.boardId === boardId) navigate({});
+                    });
+                  }}
                   onConfigureBoard={board => {
                     setBoardSettingsOpenFor(board.id);
                     openBoard(board.id);

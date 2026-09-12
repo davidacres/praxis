@@ -46,6 +46,20 @@
      semantic tones, so a ring drawn over the app never reads as UI. */
   --tone-tour: #e0499f;
 
+  /* Project identity colors (`ProjectRecord.color`, one of `PROJECT_COLOR_NAMES`
+     in core). Constant across themes like the tones above — a project's own
+     accent shouldn't shift when the marketplace theme changes. Order and hues
+     come from the dataviz skill's validated categorical palette (light-mode
+     step): CVD-safe adjacent pairs, fixed identity order, never cycled. */
+  --project-color-blue: #2a78d6;
+  --project-color-orange: #eb6834;
+  --project-color-aqua: #1baf7a;
+  --project-color-yellow: #eda100;
+  --project-color-magenta: #e87ba4;
+  --project-color-green: #008300;
+  --project-color-violet: #4a3aa7;
+  --project-color-red: #e34948;
+
   /* Semantic status aliases. These were referenced across theme.css (status
      dots, health indicators, "ready" chips) but never defined, so those fills
      rendered colourless. Kept constant across themes like the other tones. */
@@ -1699,6 +1713,10 @@ textarea {
   display: flex;
   min-height: 38px;
   border-left: 2px solid transparent;
+  /* A solid (not translucent) rule under the row — the one visual cue in the
+     tree that this is a project header, not just another row, at a glance
+     even when collapsed and its children aren't there to imply it. */
+  border-bottom: 1px solid var(--border-strong);
 }
 .project-tree-parent:hover { background: var(--bg-hover); }
 .project-tree-parent.active { background: var(--accent-soft); border-left-color: var(--accent); }
@@ -8592,6 +8610,10 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .project-home-icon-option { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text-tertiary); cursor: pointer; transition: background 120ms ease, border-color 120ms ease, color 120ms ease; }
 .project-home-icon-option:hover { background: var(--bg-hover); color: var(--text); }
 .project-home-icon-option.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.project-home-color-picker { display: flex; flex-wrap: wrap; gap: 7px; margin-top: var(--space-2); max-width: 420px; }
+.project-home-color-option { width: 20px; height: 20px; padding: 0; border: 2px solid var(--bg); border-radius: 50%; box-shadow: 0 0 0 1px var(--border); cursor: pointer; transition: box-shadow 120ms ease, transform 120ms ease; }
+.project-home-color-option:hover { transform: scale(1.12); }
+.project-home-color-option.active { box-shadow: 0 0 0 2px var(--text); }
 .project-home-hero-actions { display: flex; flex: 0 0 auto; gap: 6px; }
 
 .project-home-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }

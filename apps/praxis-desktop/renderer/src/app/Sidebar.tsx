@@ -17,6 +17,7 @@ import { BrandModeIcon } from '../ui/BrandModeIcon';
 import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
 import { Icon, type IconName } from '../ui/Icon';
 import { IssuePeek } from '../issues/IssuePeek';
+import { projectColorValue } from '../projects/projectColors';
 import { useSettings } from '../settings/useSettings';
 import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
@@ -104,6 +105,15 @@ export interface SidebarProps {
   onSelectDeployments: (project: ProjectRecord) => void;
   onNewWorkflow: (project: ProjectRecord) => void;
   onDeleteBoard: (board: Board) => void;
+  /**
+   * Removes a board from a project's own `linkedBoards` — distinct from
+   * `onDeleteBoard`, which deletes/untracks a board's underlying connection
+   * (and refuses when that connection belongs to *some* project, since
+   * deleting it would delete that project's own board). A linked board
+   * routinely belongs to another project's connection by design, so it must
+   * go through `unlinkBoard` instead or that guard silently no-ops it.
+   */
+  onUnlinkBoard: (project: ProjectRecord, connectionId: string, boardId: string) => void;
   onConfigureBoard: (board: Board) => void;
   selectedProjectId?: string;
   /** Selected issue for the peek card pinned above the footer (classic mode). */
@@ -162,6 +172,7 @@ export function Sidebar({
   onSelectDeployments,
   onNewWorkflow,
   onDeleteBoard,
+  onUnlinkBoard,
   onConfigureBoard,
   selectedProjectId,
   selectedIssueKey,
@@ -464,8 +475,8 @@ export function Sidebar({
                           onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
                         ><span className="tree-section-icon"><Icon name={projectCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
                         <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
-                          <span className="tree-icon project-icon"><Icon name={project.icon ?? 'folder-open'} size={15} /></span>
-                          <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span>
+                          <span className="tree-icon project-icon" style={{ color: projectColorValue(project.color) }}><Icon name={project.icon ?? 'folder-open'} size={15} /></span>
+                          <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.type}</span></span>
                           <span className="tree-meta">{childCount}</span>
                         </button>
                       </div>
@@ -484,7 +495,6 @@ export function Sidebar({
                           <span className="tree-badge">Default</span>
                         </button>}
                         {linkedBoards.map(({ link, board }) => {
-                          const removeLabel = board.type === 'plan' ? 'Delete' : 'Remove';
                           return <div
                             key={`${link.connectionId}:${link.boardId}`}
                             className={`tree-row project-board-row board-tree-row${board.id === selectedBoardId ? ' active' : ''}`}
@@ -502,13 +512,13 @@ export function Sidebar({
                               title="Configure board"
                               onClick={() => onConfigureBoard(board)}
                             ><Icon name="gear" size={12} /></button>
-                            {board.connectionId && <button
+                            <button
                               className="board-tree-delete"
-                              data-testid="board-delete-btn"
-                              aria-label={`${removeLabel} board ${board.name}`}
-                              title={board.type === 'plan' ? 'Delete this board' : 'Remove this board from Praxis'}
-                              onClick={() => onDeleteBoard(board)}
-                            ><Icon name="trash" size={12} /></button>}
+                              data-testid="board-unlink-btn"
+                              aria-label={`Unlink board ${board.name} from ${project.name}`}
+                              title="Unlink this board from the project"
+                              onClick={() => onUnlinkBoard(project, link.connectionId, link.boardId)}
+                            ><Icon name="trash" size={12} /></button>
                           </div>;
                         })}
                         </>}
