@@ -59,7 +59,10 @@
     "serialize-javascript": "^7.0.5",
     "qs": "^6.16.0",
     "fast-uri": "^3.1.6",
-    "@xmldom/xmldom": "^0.8.15"
+    "@xmldom/xmldom": "^0.8.15",
+    "uuid": "^11.1.1",
+    "js-yaml": "^4.3.2",
+    "hono": "^4.13.5"
   },
   "//optionalDependencies": "vite 8 bundles with rolldown and minifies CSS with lightningcss — both load a native binding. npm prunes the non-host platform bindings of TRANSITIVE optional deps from a lockfile generated on one OS (npm/cli#4828), so a lockfile regenerated on macOS left `npm ci` on the Linux CI runner with no binding to load and `vite build` crashed with 'Cannot find native binding'. Declaring the bindings here as direct optional deps forces every listed platform into package-lock.json regardless of the OS the lockfile is regenerated on; npm still skips installing the ones that do not match the host. Keep these versions matched to the resolved `rolldown` / `lightningcss` in the lockfile — a mismatch fails `npm ci` loudly instead of silently.",
   "optionalDependencies": {
