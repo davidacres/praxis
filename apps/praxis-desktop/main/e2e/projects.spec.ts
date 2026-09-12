@@ -589,9 +589,65 @@ test('shows a connected board only beneath its owning Praxis project', async () 
     await expect(workProject).toContainText('2 boards');
     await expect(workProject.getByTestId('work-card')).toHaveCount(2);
     await expect(workProject).toContainText('Linked Delivery');
+
+    // Unlinking from the sidebar must remove only this project's link, not
+    // the shared folder connection itself — the same "Linked delivery source"
+    // connection could be linked into another project too.
+    await app.window.getByTestId('mode-classic').click();
+    await linkedBoard.getByTestId('board-unlink-btn').click();
+    await expect(projectTree.getByTestId('project-linked-board-nav-item')).toHaveCount(0);
+    const stillConnected = await app.window.evaluate(async () =>
+      (await window.praxis.connection.list()).some(connection => connection.id === 'linked-live-folder')
+    );
+    expect(stillConnected).toBe(true);
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }
+});
+
+/**
+ * Regression test for a real bug: a board linked from *another project's own*
+ * connection could never be unlinked from the sidebar. `onDeleteBoard`'s
+ * "this board belongs to a project, delete the project instead" guard fired
+ * for any board whose connection carried a `projectId` — which every
+ * cross-project link does by definition — so the click silently did nothing.
+ * `onUnlinkBoard` (routed through `projects.unlinkBoard`) fixes it.
+ */
+test('unlinks a board that was cross-linked from another project\'s own connection', async () => {
+  const result = await app.window.evaluate(async () => {
+    const workspaceId = (await window.praxis.workspaces.list())[0].id;
+    const create = (name: string, key: string) => window.praxis.projects.create({
+      name, key, type: 'research', purpose: '', brief: {}, startingPoint: 'app-storage',
+      workflowStages: [{ id: 'todo', name: 'To do' }, { id: 'done', name: 'Done' }],
+      starterTickets: [{ summary: 'Research', description: '', issueType: 'Task', status: 'To do' }],
+      defaultAiToolMode: 'project-only'
+    }, workspaceId);
+    const first = await create('First Research', 'FIRST');
+    const second = await create('Second Research', 'SECOND');
+    const secondConnection = (await window.praxis.connection.list()).find(c => c.settings.projectId === second.id);
+    const secondBoard = (await window.praxis.board.list({ projectKeys: [], types: [], searchText: '' }))
+      .find(board => board.connectionId === secondConnection?.id);
+    if (!secondBoard?.connectionId) throw new Error('Expected the second project to expose its own board.');
+    await window.praxis.projects.linkBoard(first.id, {
+      connectionId: secondBoard.connectionId, boardId: secondBoard.id, displayName: secondBoard.name
+    });
+    return { firstId: first.id, firstName: first.name, secondId: second.id };
+  });
+  await app.window.reload();
+
+  const projectTree = app.window.getByTestId('project-tree').filter({ hasText: result.firstName });
+  const linkedBoard = projectTree.getByTestId('project-linked-board-nav-item');
+  await expect(linkedBoard).toContainText('Linked');
+  await linkedBoard.getByTestId('board-unlink-btn').click();
+  await expect(projectTree.getByTestId('project-linked-board-nav-item')).toHaveCount(0);
+
+  const after = await app.window.evaluate(async ({ firstId, secondId }) => ({
+    firstLinkedBoards: (await window.praxis.projects.get(firstId))?.linkedBoards.length,
+    secondStillExists: Boolean(await window.praxis.projects.get(secondId))
+  }), { firstId: result.firstId, secondId: result.secondId });
+  expect(after.firstLinkedBoards).toBe(0);
+  // Unlinking must not touch the second project or its own board at all.
+  expect(after.secondStillExists).toBe(true);
 });
 
 test('an existing folder is three steps too, and confirms the detected identity', async () => {

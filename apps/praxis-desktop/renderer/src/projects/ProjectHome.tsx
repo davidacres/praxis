@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type {
-  AgentToolMode, Board, Connection, ProjectIconName, ProjectRecord, ProjectStartingPoint, ProjectType,
+  AgentToolMode, Board, Connection, ProjectColorName, ProjectIconName, ProjectRecord, ProjectStartingPoint, ProjectType,
   ProjectWorkflowCategory, ProjectWorkflowStage
 } from '@praxis/core';
 import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
+import { PROJECT_COLOR_NAMES, projectColorValue } from './projectColors';
 import { Icon } from '../ui/Icon';
 
 /**
@@ -56,6 +57,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
   const [name, setName] = useState(project.name);
   const [key, setKey] = useState(project.key);
   const [icon, setIcon] = useState<ProjectIconName | undefined>(project.icon);
+  const [color, setColor] = useState<ProjectColorName | undefined>(project.color);
   const [type, setType] = useState<ProjectType>(project.type);
   const [toolMode, setToolMode] = useState<AgentToolMode>(project.defaultAiToolMode);
   const [purpose, setPurpose] = useState(project.purpose);
@@ -86,7 +88,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
       ? { label: 'Git repo', on: true }
       : { label: inspection ? 'No repo' : 'Folder attached', on: false };
 
-  const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
+  const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setColor(project.color); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
 
   // How many tickets sit on each stage, so renaming or removing one can say
   // what it will move rather than silently re-resolving.
@@ -107,13 +109,17 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     ...current.slice(current.length - 1)
   ]);
   const removeStage = (index: number) => setStages(current => current.filter((_, i) => i !== index));
-  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
+  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, color, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const chooseAttach = async () => { const value = await window.praxis.dialog.pickFolder(attachMode === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder'); if (value) setAttachPath(value); };
   const attach = async () => { try { const result = await window.praxis.projects.attachFolder(project.id, { startingPoint: attachMode as 'new-folder' | 'existing-folder', folderPath: attachPath, folderName: folderName || undefined, createProjectFile: true }); onChanged(result.project); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
 
   return <div className="project-home" data-testid="project-home">
     <header className="project-home-hero">
-      <div className="project-home-icon-badge" data-testid="project-home-icon">
+      <div
+        className="project-home-icon-badge"
+        data-testid="project-home-icon"
+        style={{ color: projectColorValue(editing ? color : project.color) }}
+      >
         <Icon name={(editing ? icon : project.icon) ?? DEFAULT_PROJECT_ICON} size={22} />
       </div>
       <div className="project-home-id">
@@ -158,6 +164,21 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
               >
                 <Icon name={candidate} size={15} />
               </button>
+            ))}
+          </div>
+        )}
+        {editing && (
+          <div className="project-home-color-picker" role="group" aria-label="Project color" data-testid="project-home-color-picker">
+            {PROJECT_COLOR_NAMES.map(candidate => (
+              <button
+                key={candidate}
+                type="button"
+                className={`project-home-color-option${color === candidate ? ' active' : ''}`}
+                aria-label={`Use the ${candidate} color`}
+                aria-pressed={color === candidate}
+                style={{ background: projectColorValue(candidate) }}
+                onClick={() => setColor(current => (current === candidate ? undefined : candidate))}
+              />
             ))}
           </div>
         )}
