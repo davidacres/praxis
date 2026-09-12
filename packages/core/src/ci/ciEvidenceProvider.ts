@@ -44,6 +44,15 @@ export interface CiJobLogResult {
   expired: boolean;
 }
 
+export interface CiSecurityReportResult {
+  provider: CiProviderKind;
+  runId: string;
+  sha: string;
+  available: boolean;
+  rawReport?: unknown;
+  reportType?: 'sarif' | 'gitlab-sast' | 'gitlab-dependency-scanning' | 'dependabot';
+}
+
 export interface CiRunPage {
   runs: CiRunSummary[];
   hasMore: boolean;
@@ -61,4 +70,5 @@ export interface CiEvidenceProvider {
   listFailedRuns(page: number, pageSize?: number): Promise<CiRunPage>;
   listJobs(runId: string, attempt: number): Promise<CiJobSummary[]>;
   getJobLog(jobId: string, signal?: AbortSignal): Promise<CiJobLogResult>;
+  getSecurityReports?(sha: string, signal?: AbortSignal): Promise<CiSecurityReportResult>;
 }

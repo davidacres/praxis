@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-244
 title: "Define the structured reviewer artifact contract"
-status: To Do
+status: Done
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [FX-BE-087]
@@ -41,5 +41,11 @@ Unit tests for `parseReviewFindings` (valid block, prose-only, malformed) and fo
 
 
 ## Comments
+
+Completed implementation:
+- Added `STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT` and `parseReviewFindings` to `packages/core/src/ai/aiReviewService.ts` extracting fenced JSON findings while tolerating surrounding prose.
+- Enforced required `findings` artifact in `packages/core/src/workflows/workflowRun.ts` (`settleNode`) so reviews returning only prose without structured findings fail the artifact contract.
+- Added comprehensive unit tests in `packages/core/src/workflows/structuredReviewFindings.test.ts` and `reviewFixLoop.test.ts`. Verified with `npm run test:core` and `npm run check-types`.
+
 
 

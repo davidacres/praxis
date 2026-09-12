@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-248
 title: "Add the full-sdlc workflow template"
-status: To Do
+status: Done
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [TASK-247, FX-BE-088, FX-BE-089]
@@ -44,5 +44,11 @@ Core tests: template validation, readiness against a bundled-agent catalog snaps
 
 
 ## Comments
+
+Completed implementation:
+- Implemented `fullSdlcTemplate` in `packages/core/src/workflows/workflowTemplates.ts` with DAG: `plan -> implement -> (lint || typecheck || test || sast || secrets || sca || review) -> gates -> approve -> deploy (advisory)`.
+- Configured multi-owner gates for QA (test coverage >= 80%), Security (maxCount 0 high severity), and Review (maxCount 0 high severity) with no bypass.
+- Verified validation, readiness against bundled agents snapshot (`structureOk: true`, `agentsOk: true`), and registration in `builtInWorkflowTemplates` in `packages/core/src/workflows/fullSdlcTemplates.test.ts`.
+
 
 

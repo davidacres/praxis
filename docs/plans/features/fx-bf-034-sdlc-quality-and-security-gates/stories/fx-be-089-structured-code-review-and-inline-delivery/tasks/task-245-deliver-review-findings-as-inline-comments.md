@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-245
 title: "Deliver review findings as inline PR / ticket comments with dedupe"
-status: To Do
+status: Done
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [TASK-244]
@@ -41,5 +41,12 @@ Fixture GitHub/GitLab API servers; core tests for the dedupe set across two runs
 
 
 ## Comments
+
+Completed implementation:
+- Implemented `deduplicateReviewFindings`, `mapReviewFindingToInlineComment`, and `formatTicketReviewSummaryComment` in `packages/core/src/ai/aiReviewService.ts`.
+- Deduplication identifies new findings, retained findings, and resolved fingerprints across runs or revisions based on stable fingerprints.
+- Markdown comment formatting renders inline review comments with severity badges and suggestions, and ticket summaries grouped by severity.
+- Added comprehensive unit tests in `packages/core/src/workflows/structuredReviewFindings.test.ts`. Verified with `npm run test:core` and `npm run check-types`.
+
 
 

@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Story
 type: Story
 id: FX-BE-091
 title: "Ingest CI security and quality reports"
-status: To Do
+status: Done
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087, FX-BE-053]
@@ -55,5 +55,11 @@ No writing to CI, no triggering pipelines, no SonarQube-server quality-gate API 
 
 
 ## Comments
+
+### Completion Notes (FX-BE-091)
+- Implemented read-only CI report ingestion for GitHub and GitLab in `packages/core/src/ci/` (TASK-250).
+- Implemented mapping of SARIF, GitHub alerts, and GitLab security scan reports to redacted, unified `CheckFindings` bound to commit SHA (TASK-251).
+- Implemented observe-mode gate evaluation in `packages/core/src/workflows/workflowGates.ts` with SHA matching, reconciliation status handling, and graceful fallback to local scanners (TASK-252).
+- Validated via `packages/core/src/ci/ciSecurityReports.test.ts`. All acceptance criteria satisfied.
 
 

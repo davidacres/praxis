@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { app } from 'electron';
-import { AgentRuntimeManager, type CatalogScope } from '@praxis/core';
+import { AgentRuntimeManager, mirrorBundledAgents, type CatalogScope } from '@praxis/core';
 import { getSettingsBackend } from './settingsBackendInstance';
 
 let manager: AgentRuntimeManager | undefined;
@@ -25,10 +25,12 @@ export function getAgentRuntimeRoots(): AgentRuntimeRoots {
 export function getAgentRuntimeManager(): AgentRuntimeManager {
   if (!manager) {
     const roots = getAgentRuntimeRoots();
+    void mirrorBundledAgents(roots.agents.global);
     manager = new AgentRuntimeManager({
       userAgentsPath: roots.agents.global,
       projectAgentsPath: roots.agents.project,
       allowProjectAgents: process.env.PRAXIS_ALLOW_PROJECT_AGENTS !== '0',
+      includeBundled: true,
       skillRoots: [roots.skills.global, roots.skills.project],
       trustedSkillRoots: [roots.skills.global]
     });

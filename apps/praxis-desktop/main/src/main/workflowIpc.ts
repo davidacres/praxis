@@ -1,4 +1,6 @@
 import { ipcMain } from 'electron';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   applyWorkflowRunCommand,
@@ -10,6 +12,7 @@ import {
   advanceJoins,
   createWorkflowRun,
   deleteProjectWorkflow,
+  fullSdlcMarketplaceTemplates,
   instantiateTemplateForProject,
   isEvidenceExpired,
   loadProjectWorkflows,
@@ -25,6 +28,10 @@ import {
   workflowFileName,
   writeProjectWorkflow,
   WorkflowRunStore,
+  AVAILABLE_AGENT_DEFINITIONS,
+  AVAILABLE_SKILL_DEFINITIONS,
+  installAvailableAgent,
+  installAvailableSkill,
   type AgentCatalogSnapshot,
   type CreateDiagnosisSessionResult,
   type TemplateReadiness,
@@ -39,7 +46,7 @@ import {
   type WorkflowValidationResult
 } from '@praxis/core';
 import { getProjectStore } from './projectStoreInstance';
-import { getAgentRuntimeManager } from './agentRuntimeInstance';
+import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
 import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
@@ -56,24 +63,30 @@ function runStore(): WorkflowRunStore {
 }
 
 /**
- * The "global" template tier: the user's saved global workflows plus any enabled
- * `workflow-template` marketplace add-ons. Add-on definitions are normalised,
- * forced to `scope: 'global'`, and dropped if they do not validate.
+ * Marketplace workflow templates: enabled `workflow-template` add-ons from storage,
+ * plus bundled full-SDLC marketplace templates when not superseded by an installed add-on.
  */
-async function globalTemplateDefinitions(): Promise<WorkflowDefinition[]> {
-  const saved = getWorkflowStore().list();
-  const savedIds = new Set(saved.map(definition => definition.id));
+async function marketplaceTemplateDefinitions(): Promise<WorkflowDefinition[]> {
   const fromAddons: WorkflowDefinition[] = [];
   for (const raw of await marketplaceWorkflowTemplates()) {
     try {
       const normalized = normalizeWorkflow({ ...(raw as object), scope: 'global' });
-      if (!normalized || savedIds.has(normalized.id)) continue;
+      if (!normalized) continue;
       if (validateWorkflow(normalized).valid) fromAddons.push(normalized);
     } catch {
       /* a malformed add-on template is skipped, not fatal */
     }
   }
-  return [...saved, ...fromAddons];
+  const addonIds = new Set(fromAddons.map(definition => definition.id));
+  const bundled = fullSdlcMarketplaceTemplates().filter(definition => !addonIds.has(definition.id));
+  return [...fromAddons, ...bundled];
+}
+
+/**
+ * The "global" template tier: the user's saved global workflows in app storage.
+ */
+async function globalTemplateDefinitions(): Promise<WorkflowDefinition[]> {
+  return getWorkflowStore().list();
 }
 
 function policyFor(projectId: string): WorkflowPolicyProfile | undefined {
@@ -186,6 +199,7 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> => {
     const project = await projectDefinitions(projectId);
     return assembleTemplateLibrary({
+      marketplace: await marketplaceTemplateDefinitions(),
       global: await globalTemplateDefinitions(),
       project: project.map(definition => ({ definition }))
     });
@@ -195,6 +209,7 @@ export function registerWorkflowIpc(): void {
     const snapshot = await catalogSnapshot();
     const templates = [
       ...builtInWorkflowTemplates(),
+      ...(await marketplaceTemplateDefinitions()),
       ...(await globalTemplateDefinitions()),
       ...(await projectDefinitions(projectId))
     ];
@@ -204,6 +219,7 @@ export function registerWorkflowIpc(): void {
   ipcMain.handle('workflows:catalog', async (_event, projectId: string): Promise<WorkflowCatalog> => {
     return resolveWorkflowCatalog({
       builtIn: builtInWorkflowTemplates(),
+      marketplace: await marketplaceTemplateDefinitions(),
       global: await globalTemplateDefinitions(),
       project: (await projectDefinitions(projectId)).map(definition => ({ definition, source: 'project' as const }))
     });
@@ -216,12 +232,54 @@ export function registerWorkflowIpc(): void {
     }
   );
 
+async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition): Promise<void> {
+  const roots = getAgentRuntimeRoots();
+  let installedAny = false;
+
+  for (const node of template.nodes) {
+    if (node.type !== 'agent-task') continue;
+    const agentId = node.agent.agentId;
+    if (agentId in AVAILABLE_AGENT_DEFINITIONS) {
+      const agentDir = path.join(roots.agents.global, agentId);
+      const manifestFile = path.join(agentDir, 'agent.json');
+      if (!fs.existsSync(manifestFile)) {
+        await installAvailableAgent(agentId, roots.agents.global);
+        installedAny = true;
+      }
+    }
+    if (node.agent.skillNames) {
+      for (const skillName of node.agent.skillNames) {
+        if (skillName in AVAILABLE_SKILL_DEFINITIONS) {
+          const skillDir = path.join(roots.skills.global, skillName);
+          const skillFile = path.join(skillDir, 'SKILL.md');
+          if (!fs.existsSync(skillFile)) {
+            await installAvailableSkill(skillName, roots.skills.global);
+            installedAny = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (installedAny) {
+    await getAgentRuntimeManager().refresh();
+  }
+}
+
   ipcMain.handle(
     'workflows:instantiate',
     async (_event, projectId: string, templateId: string, name?: string): Promise<WorkflowDefinition> => {
-      const templates = [...builtInWorkflowTemplates(), ...(await globalTemplateDefinitions()), ...(await projectDefinitions(projectId))];
+      const templates = [
+        ...builtInWorkflowTemplates(),
+        ...(await marketplaceTemplateDefinitions()),
+        ...(await globalTemplateDefinitions()),
+        ...(await projectDefinitions(projectId))
+      ];
       const template = templates.find(candidate => candidate.id === templateId);
       if (!template) throw new Error(`Template ${templateId} was not found.`);
+
+      // Ensure any available agent and skill dependencies are installed
+      await ensureWorkflowDependenciesInstalled(template);
 
       const copy = instantiateTemplateForProject({
         template,

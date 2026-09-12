@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Story
 type: Story
 id: FX-BE-090
 title: "Bundled agents and a Full SDLC template"
-status: To Do
+status: Done
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-088, FX-BE-089, FX-BE-011]
@@ -56,5 +56,12 @@ No marketplace agents gain trust through this path. No template auto-selection b
 
 
 ## Comments
+
+Story completed:
+- TASK-247: Shipped four bundled trusted agent manifests and briefs in `packages/core/src/ai/agentRuntime/bundledAgents.ts`, mirrored into user discovery root, with discovery fallback.
+- TASK-248: Added `fullSdlcTemplate` to `packages/core/src/workflows/workflowTemplates.ts` with multi-owner gates for QA, Security, and Review.
+- TASK-249: Implemented Node, .NET, Python, and generic stack variants with language auto-detection in `resolveFullSdlcTemplate`.
+- Verified via unit tests in `bundledAgents.test.ts` and `fullSdlcTemplates.test.ts`.
+
 
 

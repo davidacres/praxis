@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-250
 title: "Add read-only CI quality and security report providers"
-status: To Do
+status: Done
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [FX-BE-053]
@@ -41,5 +41,13 @@ Core tests against captured GitHub/GitLab report fixtures, including the not-ava
 
 
 ## Comments
+
+### Completion Notes (TASK-250)
+- Implemented `getSecurityReports(sha, signal)` on both `GitHubActionsEvidenceProvider` and `GitLabCiEvidenceProvider` (`packages/core/src/ci/`).
+- GitHub provider queries `/repos/{owner}/{repo}/code-scanning/alerts?ref={sha}` with `security_events:read` / `contents:read` scopes; explicitly handles 403 scope errors naming the required permission.
+- GitLab provider queries `/pipelines?sha={sha}` and pipeline security reports with `read_api` token scope; handles 403/401 errors cleanly.
+- Returns structured `CiSecurityReportResult` with `{ provider, runId, sha, available, rawReport }`, ensuring not-available reports are distinctly reported rather than appearing as empty scans.
+- Strictly read-only: no endpoint triggers, dispatches, cancels, or mutates any CI pipeline.
+- Verified by unit tests in `packages/core/src/ci/ciSecurityReports.test.ts`.
 
 

@@ -1,0 +1,22 @@
+{
+  "name": "@davidacres/praxis-addon-full-sdlc",
+  "version": "1.0.0",
+  "description": "Full SDLC quality and security gate pipeline for generic, polyglot, or custom toolchain projects.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidacres/praxis.git",
+    "directory": "addons/workflows/full-sdlc"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "workflow-template",
+    "id": "full-sdlc",
+    "name": "Full SDLC (Generic / Polyglot)",
+    "summary": "12-stage governed pipeline: plan, implement, lint, typecheck, test, SAST, secrets, SCA, review, gates, approve, deploy.",
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.0"
+  }
+}

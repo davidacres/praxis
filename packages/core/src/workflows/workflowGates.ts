@@ -24,11 +24,23 @@
 import {
   isApprovalNode,
   nodeGate,
+  type CheckFindingSeverity,
+  type CheckFindings,
+  type GateThresholdCondition,
   type WorkflowGateDecision,
   type WorkflowGateKind,
   type WorkflowPolicyProfile
 } from './workflowTypes';
 import { applyWorkflowRunCommand, type WorkflowRun } from './workflowRun';
+import { filterUnwaivedFindings } from './waiverRegister';
+
+const SEVERITY_RANK: Record<CheckFindingSeverity, number> = {
+  info: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4
+};
 
 export interface GateStatus {
   gate: WorkflowGateKind;
@@ -39,6 +51,16 @@ export interface GateStatus {
   deterministic: boolean;
   detail: string;
 }
+
+export interface CiImportedEvidenceRecord {
+  provider: 'github-actions' | 'gitlab-ci';
+  runId: string;
+  sha: string;
+  available: boolean;
+  findings?: CheckFindings;
+}
+
+export type CiImportedEvidenceState = Record<string, CiImportedEvidenceRecord>;
 
 export interface ApprovalReadiness {
   canApprove: boolean;
@@ -58,7 +80,8 @@ export interface ApprovalReadiness {
 export function evaluateGates(
   run: WorkflowRun,
   approvalNodeId: string,
-  policy?: WorkflowPolicyProfile
+  policy?: WorkflowPolicyProfile,
+  ciEvidence?: CiImportedEvidenceState
 ): GateStatus[] {
   const approval = run.definition.nodes.find(node => node.id === approvalNodeId);
   if (!approval || !isApprovalNode(approval)) return [];
@@ -66,20 +89,20 @@ export function evaluateGates(
   const required = [...new Set([...approval.requiredGates, ...(policy?.requiredGates ?? [])])].sort();
 
   return required.map(gate => {
-    const owner = run.definition.nodes.find(node => nodeGate(node) === gate);
+    const owners = run.definition.nodes.filter(node => nodeGate(node) === gate);
     const decision = run.gateDecisions.find(candidate => candidate.gate === gate);
 
     if (decision?.bypassed) {
       return {
         gate,
-        ...(owner ? { nodeId: owner.id } : {}),
+        ...(owners.length === 1 ? { nodeId: owners[0].id } : {}),
         state: 'bypassed' as const,
-        deterministic: owner?.type === 'check' || owner?.type === 'deployment',
+        deterministic: owners.length > 0 && owners.every(o => o.type === 'check' || o.type === 'deployment'),
         detail: `Bypassed by ${decision.bypassedBy ?? 'unknown'}: ${decision.reason ?? 'no reason given'}`
       };
     }
 
-    if (!owner) {
+    if (owners.length === 0) {
       return {
         gate,
         state: 'missing' as const,
@@ -88,27 +111,268 @@ export function evaluateGates(
       };
     }
 
-    const state = run.nodes[owner.id];
-    const deterministic = owner.type === 'check' || owner.type === 'deployment';
+    const waivers = [...(policy?.waivers ?? []), ...(approval.waivers ?? [])];
+    const currentSnapshotRef = Object.values(run.nodes).find(n => !!n.snapshotRef)?.snapshotRef;
 
-    if (state?.outcome === 'succeeded') {
-      return { gate, nodeId: owner.id, state: 'passed' as const, deterministic, detail: `${owner.name} succeeded.` };
-    }
-    if (state?.outcome === 'failed' || state?.outcome === 'cancelled' || state?.outcome === 'skipped') {
+    if (owners.length === 1) {
+      const owner = owners[0];
+      const deterministic = owner.type === 'check' || owner.type === 'deployment';
+
+      // Observe mode for CI evidence (TASK-252)
+      if (owner.type === 'check' && owner.observe?.enabled) {
+        const evidence = ciEvidence?.[owner.id] ?? ciEvidence?.[gate];
+        if (evidence) {
+          if (evidence.sha === currentSnapshotRef) {
+            if (!evidence.available) {
+              return {
+                gate,
+                nodeId: owner.id,
+                state: 'pending' as const,
+                deterministic,
+                detail: `${owner.name} is observing CI for ${evidence.sha.slice(0, 7)}: report reconciling/not yet available.`
+              };
+            }
+
+            const rawFindings = evidence.findings?.findings ?? [];
+            const { activeFindings, waivedFindings } = filterUnwaivedFindings(
+              rawFindings,
+              waivers,
+              new Date(),
+              currentSnapshotRef
+            );
+
+            const conditions: GateThresholdCondition[] = [
+              ...(policy?.gateThresholds?.[gate] ?? []),
+              ...(approval.gateThresholds?.[gate] ?? []),
+              ...((owner as any).gateThresholds ?? [])
+            ];
+
+            for (const cond of conditions) {
+              if (cond.type === 'severity') {
+                const targetLevel = cond.severityLevel ?? 'high';
+                const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
+                const count = activeFindings.filter(
+                  f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
+                ).length;
+                if (count > cond.maxCount) {
+                  return {
+                    gate,
+                    nodeId: owner.id,
+                    state: 'failed' as const,
+                    deterministic,
+                    detail: `Observed from CI (${evidence.provider} run ${evidence.runId}@${evidence.sha.slice(0, 7)}): Found ${count} finding(s) with severity >= ${targetLevel} (max allowed: ${cond.maxCount}).`
+                  };
+                }
+              }
+            }
+
+            const waivedNote = waivedFindings.length > 0 ? ` (${waivedFindings.length} findings waived)` : '';
+            return {
+              gate,
+              nodeId: owner.id,
+              state: 'passed' as const,
+              deterministic,
+              detail: `Observed from CI (${evidence.provider} run ${evidence.runId}@${evidence.sha.slice(0, 7)})${waivedNote}.`
+            };
+          }
+          // Snapshot mismatch falls through to local check below
+        }
+      }
+
+      const state = run.nodes[owner.id];
+
+      if (!state || state.outcome === 'pending' || state.outcome === 'ready' || state.outcome === 'running') {
+        return {
+          gate,
+          nodeId: owner.id,
+          state: 'pending' as const,
+          deterministic,
+          detail: `${owner.name} has not finished.`
+        };
+      }
+
+      if (state.outcome === 'failed' || state.outcome === 'cancelled' || state.outcome === 'skipped') {
+        return {
+          gate,
+          nodeId: owner.id,
+          state: 'failed' as const,
+          deterministic,
+          detail: `${owner.name} ${state.outcome}.`
+        };
+      }
+
+      if (state.outcome === 'succeeded') {
+        const conditions: GateThresholdCondition[] = [
+          ...(policy?.gateThresholds?.[gate] ?? []),
+          ...(approval.gateThresholds?.[gate] ?? []),
+          ...((owner as any).gateThresholds ?? [])
+        ];
+
+        const rawFindings = state.findings?.findings ?? [];
+        const { activeFindings, waivedFindings } = filterUnwaivedFindings(
+          rawFindings,
+          waivers,
+          new Date(),
+          currentSnapshotRef
+        );
+
+        for (const cond of conditions) {
+          if (cond.type === 'metric') {
+            const actual = state.findings?.metrics?.[cond.metric];
+            let passed = false;
+            if (actual !== undefined) {
+              switch (cond.operator) {
+                case '>=': passed = actual >= cond.value; break;
+                case '<=': passed = actual <= cond.value; break;
+                case '>': passed = actual > cond.value; break;
+                case '<': passed = actual < cond.value; break;
+                case '==': passed = actual === cond.value; break;
+              }
+            }
+            if (!passed) {
+              return {
+                gate,
+                nodeId: owner.id,
+                state: 'failed' as const,
+                deterministic,
+                detail: `Metric "${cond.metric}" was ${actual !== undefined ? actual : 'missing'}, required ${cond.operator} ${cond.value}.`
+              };
+            }
+          } else if (cond.type === 'severity') {
+            const targetLevel = cond.severityLevel ?? 'high';
+            const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
+            const count = activeFindings.filter(
+              f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
+            ).length;
+            if (count > cond.maxCount) {
+              return {
+                gate,
+                nodeId: owner.id,
+                state: 'failed' as const,
+                deterministic,
+                detail: `Found ${count} finding(s) with severity >= ${targetLevel} (max allowed: ${cond.maxCount}).`
+              };
+            }
+          }
+        }
+
+        const waivedNote = waivedFindings.length > 0 ? ` (${waivedFindings.length} findings waived)` : '';
+        return { gate, nodeId: owner.id, state: 'passed' as const, deterministic, detail: `${owner.name} succeeded${waivedNote}.` };
+      }
+
       return {
         gate,
         nodeId: owner.id,
-        state: 'failed' as const,
+        state: 'pending' as const,
         deterministic,
-        detail: `${owner.name} ${state.outcome}.`
+        detail: `${owner.name} has not finished.`
       };
     }
+
+    // Multi-owner gate resolution (TASK-243)
+    const enabledOwners = owners.filter(o => o.enabled !== false && run.nodes[o.id]?.outcome !== 'skipped');
+    const disabledOwners = owners.filter(o => o.enabled === false || run.nodes[o.id]?.outcome === 'skipped');
+    const deterministic = owners.every(o => o.type === 'check' || o.type === 'deployment');
+
+    if (enabledOwners.length === 0) {
+      return {
+        gate,
+        state: 'failed' as const,
+        deterministic,
+        detail: `All scanners for gate "${gate}" are disabled.`
+      };
+    }
+
+    const failedOwners = enabledOwners.filter(o => {
+      const st = run.nodes[o.id];
+      return st?.outcome === 'failed' || st?.outcome === 'cancelled';
+    });
+    if (failedOwners.length > 0) {
+      return {
+        gate,
+        state: 'failed' as const,
+        deterministic,
+        detail: `${failedOwners.map(o => `${o.name} ${run.nodes[o.id]?.outcome ?? 'failed'}`).join('; ')}.`
+      };
+    }
+
+    const pendingOwners = enabledOwners.filter(o => {
+      const st = run.nodes[o.id];
+      return !st || st.outcome === 'pending' || st.outcome === 'ready' || st.outcome === 'running';
+    });
+    if (pendingOwners.length > 0) {
+      return {
+        gate,
+        state: 'pending' as const,
+        deterministic,
+        detail: `${pendingOwners.map(o => o.name).join(', ')} has not finished.`
+      };
+    }
+
+    // All enabled owners succeeded! Combine findings & metrics
+    const combinedFindings = enabledOwners.flatMap(o => run.nodes[o.id]?.findings?.findings ?? []);
+    const combinedMetrics: Record<string, number> = Object.assign(
+      {},
+      ...enabledOwners.map(o => run.nodes[o.id]?.findings?.metrics ?? {})
+    );
+
+    const { activeFindings, waivedFindings } = filterUnwaivedFindings(
+      combinedFindings,
+      waivers,
+      new Date(),
+      currentSnapshotRef
+    );
+
+    const conditions: GateThresholdCondition[] = [
+      ...(policy?.gateThresholds?.[gate] ?? []),
+      ...(approval.gateThresholds?.[gate] ?? [])
+    ];
+
+    for (const cond of conditions) {
+      if (cond.type === 'metric') {
+        const actual = combinedMetrics[cond.metric];
+        let passed = false;
+        if (actual !== undefined) {
+          switch (cond.operator) {
+            case '>=': passed = actual >= cond.value; break;
+            case '<=': passed = actual <= cond.value; break;
+            case '>': passed = actual > cond.value; break;
+            case '<': passed = actual < cond.value; break;
+            case '==': passed = actual === cond.value; break;
+          }
+        }
+        if (!passed) {
+          return {
+            gate,
+            state: 'failed' as const,
+            deterministic,
+            detail: `Metric "${cond.metric}" was ${actual !== undefined ? actual : 'missing'}, required ${cond.operator} ${cond.value}.`
+          };
+        }
+      } else if (cond.type === 'severity') {
+        const targetLevel = cond.severityLevel ?? 'high';
+        const targetRank = SEVERITY_RANK[targetLevel] ?? 3;
+        const count = activeFindings.filter(
+          f => (SEVERITY_RANK[f.severity] ?? 0) >= targetRank
+        ).length;
+        if (count > cond.maxCount) {
+          return {
+            gate,
+            state: 'failed' as const,
+            deterministic,
+            detail: `Found ${count} finding(s) with severity >= ${targetLevel} across scanners (max allowed: ${cond.maxCount}).`
+          };
+        }
+      }
+    }
+
+    const disabledText = disabledOwners.length > 0 ? ` (${disabledOwners.map(o => `${o.name} disabled`).join(', ')})` : '';
+    const waivedText = waivedFindings.length > 0 ? `, ${waivedFindings.length} waived` : '';
     return {
       gate,
-      nodeId: owner.id,
-      state: 'pending' as const,
+      state: 'passed' as const,
       deterministic,
-      detail: `${owner.name} has not finished.`
+      detail: `Scanners passed: ${enabledOwners.map(o => o.name).join(', ')}${disabledText} (${activeFindings.length} findings${waivedText}).`
     };
   });
 }

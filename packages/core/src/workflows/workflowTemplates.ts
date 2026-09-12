@@ -18,6 +18,10 @@ import { validateWorkflow } from './workflowValidation';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
 import { preflightWorkflow } from './workflowPreflight';
 import type { WorkflowSource } from './workflowStore';
+import {
+  AVAILABLE_AGENT_DEFINITIONS,
+  AVAILABLE_SKILL_DEFINITIONS
+} from '../ai/agentRuntime/bundledAgents';
 
 export interface WorkflowTemplate {
   definition: WorkflowDefinition;
@@ -26,6 +30,15 @@ export interface WorkflowTemplate {
   path?: string;
   /** True for the app's own templates, which cannot be edited in place. */
   builtIn: boolean;
+}
+
+export interface WorkflowAgentDependency {
+  agentId: string;
+  scope: 'global' | 'project';
+  skillNames: string[];
+  nodeIds: string[];
+  status: 'installed' | 'available' | 'missing';
+  reason?: string;
 }
 
 /** Per-template readiness, so a bad Agent Hub reference is visible before a run. */
@@ -37,6 +50,10 @@ export interface TemplateReadiness {
   agentsOk: boolean;
   /** Node id → the first blocking reason, for the ones that failed. */
   blockingByNode: Record<string, string>;
+  /** All agent dependencies identified from the workflow's nodes. */
+  dependencies: WorkflowAgentDependency[];
+  /** True if all dependencies are either already installed or available to install automatically. */
+  autoInstallable: boolean;
 }
 
 // ── Built-in templates ───────────────────────────────────────────────────
@@ -196,8 +213,304 @@ export function quickChangeTemplate(): WorkflowDefinition {
   };
 }
 
+export type FullSdlcStackVariant = 'node' | 'dotnet' | 'python' | 'generic';
+
+/**
+ * Full SDLC quality and security gates template (FX-BE-090 / TASK-248 / TASK-249).
+ * Plan → Implement → (Lint ∥ Typecheck ∥ Test ∥ SAST ∥ Secrets ∥ SCA ∥ Review) → Gates → Approve → Deploy (optional).
+ */
+export function fullSdlcTemplate(variant: FullSdlcStackVariant = 'node'): WorkflowDefinition {
+  const isDotnet = variant === 'dotnet';
+  const isPython = variant === 'python';
+  const isGeneric = variant === 'generic';
+
+  const id = variant === 'node' ? 'full-sdlc' : `full-sdlc-${variant}`;
+  const title =
+    variant === 'node'
+      ? 'Full SDLC'
+      : variant === 'dotnet'
+      ? 'Full SDLC (.NET)'
+      : variant === 'python'
+      ? 'Full SDLC (Python)'
+      : 'Full SDLC (generic)';
+
+  const description =
+    'Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.';
+
+  // Check commands per stack
+  const lintCmd = isDotnet
+    ? { command: 'dotnet', args: ['format', '--verify-no-changes'] }
+    : isPython
+    ? { command: 'ruff', args: ['check', '.'] }
+    : isGeneric
+    ? { command: 'echo', args: ['Configure lint command'] }
+    : { command: 'npm', args: ['run', 'lint'] };
+
+  const typecheckCmd = isDotnet
+    ? { command: 'dotnet', args: ['build'] }
+    : isPython
+    ? { command: 'mypy', args: ['.'] }
+    : isGeneric
+    ? { command: 'echo', args: ['Configure typecheck command'] }
+    : { command: 'npx', args: ['tsc', '--noEmit'] };
+
+  const testCmd = isDotnet
+    ? { command: 'dotnet', args: ['test', '/p:CollectCoverage=true', '/p:CoverletOutputFormat=cobertura'] }
+    : isPython
+    ? { command: 'pytest', args: ['--cov=.'] }
+    : isGeneric
+    ? { command: 'echo', args: ['Configure test command'] }
+    : { command: 'npm', args: ['test'] };
+
+  const scaCmd = isDotnet
+    ? { command: 'dotnet', args: ['list', 'package', '--vulnerable'] }
+    : isGeneric
+    ? { command: 'echo', args: ['Configure SCA scan'] }
+    : { command: 'osv-scanner', args: ['--format=sarif', '--output=osv.sarif', '.'] };
+
+  const deployCmd = isDotnet
+    ? { command: 'dotnet', args: ['publish'] }
+    : isPython
+    ? { command: 'python', args: ['-m', 'deploy'] }
+    : isGeneric
+    ? { command: 'echo', args: ['Configure deployment command'] }
+    : { command: 'npm', args: ['run', 'deploy'] };
+
+  const reviewerAgent = isDotnet
+    ? { agentId: 'csharp-dotnet-code-reviewer', scope: 'global' as const, skillNames: ['dotnet-solid-dry'], toolMode: 'read-only' as const }
+    : { agentId: 'praxis-reviewer', scope: 'global' as const, toolMode: 'read-only' as const };
+
+  return {
+    schemaVersion: WORKFLOW_SCHEMA_VERSION,
+    id,
+    name: title,
+    description,
+    scope: 'global',
+    version: 1,
+    entryNodeId: 'plan',
+    builtIn: false,
+    createdAt: NOW,
+    updatedAt: NOW,
+    nodes: [
+      {
+        type: 'agent-task',
+        id: 'plan',
+        name: 'Plan',
+        x: 0,
+        y: 160,
+        inputs: [],
+        agent: { agentId: 'praxis-planner', scope: 'global', toolMode: 'read-only' },
+        instructions: 'Analyze requirements, verify existing architecture, and produce structured plan.',
+        outputs: [{ id: 'plan-doc', kind: 'plan', required: true }],
+        mutatesWorktree: false
+      },
+      {
+        type: 'agent-task',
+        id: 'implement',
+        name: 'Implement',
+        x: 200,
+        y: 160,
+        inputs: ['plan-doc'],
+        agent: { agentId: 'praxis-implementer', scope: 'global', toolMode: 'full' },
+        instructions: 'Implement changes matching plan specifications and commit changes to the branch.',
+        outputs: [{ id: 'change-diff', kind: 'diff', required: true }],
+        mutatesWorktree: true,
+        maxAttempts: 3
+      },
+      // QA gate checks
+      {
+        type: 'check',
+        id: 'lint',
+        name: 'Lint',
+        x: 440,
+        y: 0,
+        inputs: ['change-diff'],
+        ...lintCmd,
+        successExitCodes: [0],
+        outputs: [{ id: 'lint-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'qa'
+      },
+      {
+        type: 'check',
+        id: 'typecheck',
+        name: 'Type check',
+        x: 440,
+        y: 60,
+        inputs: ['change-diff'],
+        ...typecheckCmd,
+        successExitCodes: [0],
+        outputs: [{ id: 'typecheck-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'qa'
+      },
+      {
+        type: 'check',
+        id: 'test',
+        name: 'Unit tests & coverage',
+        x: 440,
+        y: 120,
+        inputs: ['change-diff'],
+        ...testCmd,
+        successExitCodes: [0],
+        outputs: [{ id: 'test-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'qa'
+      },
+      // Security gate checks
+      {
+        type: 'check',
+        id: 'sast',
+        name: 'SAST scan',
+        x: 440,
+        y: 200,
+        inputs: ['change-diff'],
+        command: 'semgrep',
+        args: ['scan', '--config=auto', '--sarif', '--output=semgrep.sarif'],
+        successExitCodes: [0],
+        outputs: [{ id: 'sast-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'security'
+      },
+      {
+        type: 'check',
+        id: 'secrets',
+        name: 'Secret scan',
+        x: 440,
+        y: 260,
+        inputs: ['change-diff'],
+        command: 'gitleaks',
+        args: ['detect', '--no-git', '--report-format=sarif', '--report-path=gitleaks.sarif'],
+        successExitCodes: [0],
+        outputs: [{ id: 'secret-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'security'
+      },
+      {
+        type: 'check',
+        id: 'sca',
+        name: 'SCA scan',
+        x: 440,
+        y: 320,
+        inputs: ['change-diff'],
+        ...scaCmd,
+        successExitCodes: [0],
+        outputs: [{ id: 'sca-findings', kind: 'findings', required: true }],
+        satisfiesGate: 'security'
+      },
+      // Review gate
+      {
+        type: 'agent-task',
+        id: 'review',
+        name: 'Structured code review',
+        x: 440,
+        y: 400,
+        inputs: ['change-diff'],
+        agent: reviewerAgent,
+        instructions: 'Review changes against quality and security criteria and return structured findings.',
+        outputs: [{ id: 'review-findings', kind: 'findings', required: true }],
+        mutatesWorktree: false,
+        satisfiesGate: 'review',
+        maxAttempts: 3
+      },
+      // Convergence Join
+      {
+        type: 'join',
+        id: 'gates',
+        name: 'SDLC Gates',
+        x: 680,
+        y: 160,
+        inputs: [],
+        mode: 'all'
+      },
+      // Approval
+      {
+        type: 'approval',
+        id: 'approve',
+        name: 'Approve',
+        x: 900,
+        y: 160,
+        inputs: ['change-diff', 'review-findings'],
+        prompt: 'All QA, Security, and Code Review quality gates have passed. Sign off on changes?',
+        requiredGates: ['qa', 'security', 'review'],
+        allowBypass: false,
+        gateThresholds: {
+          qa: [{ type: 'metric', metric: 'coverage', operator: '>=', value: 80 }],
+          security: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }],
+          review: [{ type: 'severity', severityLevel: 'high', maxCount: 0 }]
+        }
+      },
+      // Optional trailing deploy node
+      {
+        type: 'check',
+        id: 'deploy',
+        name: 'Deploy',
+        x: 1100,
+        y: 160,
+        inputs: ['change-diff'],
+        ...deployCmd,
+        successExitCodes: [0],
+        outputs: []
+      }
+    ],
+    edges: [
+      { id: 'e-plan-impl', from: 'plan', to: 'implement', on: 'success', required: true },
+      { id: 'e-impl-lint', from: 'implement', to: 'lint', on: 'success', required: false },
+      { id: 'e-impl-typecheck', from: 'implement', to: 'typecheck', on: 'success', required: false },
+      { id: 'e-impl-test', from: 'implement', to: 'test', on: 'success', required: true },
+      { id: 'e-impl-sast', from: 'implement', to: 'sast', on: 'success', required: true },
+      { id: 'e-impl-sec', from: 'implement', to: 'secrets', on: 'success', required: true },
+      { id: 'e-impl-sca', from: 'implement', to: 'sca', on: 'success', required: true },
+      { id: 'e-impl-rev', from: 'implement', to: 'review', on: 'success', required: true },
+      { id: 'e-lint-gates', from: 'lint', to: 'gates', on: 'success', required: false },
+      { id: 'e-typecheck-gates', from: 'typecheck', to: 'gates', on: 'success', required: false },
+      { id: 'e-test-gates', from: 'test', to: 'gates', on: 'success', required: true },
+      { id: 'e-sast-gates', from: 'sast', to: 'gates', on: 'success', required: true },
+      { id: 'e-sec-gates', from: 'secrets', to: 'gates', on: 'success', required: true },
+      { id: 'e-sca-gates', from: 'sca', to: 'gates', on: 'success', required: true },
+      { id: 'e-rev-gates', from: 'review', to: 'gates', on: 'success', required: true },
+      { id: 'e-gates-approve', from: 'gates', to: 'approve', on: 'success', required: true },
+      { id: 'e-approve-deploy', from: 'approve', to: 'deploy', on: 'success', required: false }
+    ]
+  };
+}
+
+export function detectStackFromLanguages(languages?: string[]): FullSdlcStackVariant {
+  if (!languages || languages.length === 0) return 'generic';
+  const joined = languages.join(' ').toLowerCase();
+  if (/(c#|csharp|\.net|dotnet)/.test(joined)) return 'dotnet';
+  if (/(typescript|javascript|node)/.test(joined)) return 'node';
+  if (/python/.test(joined)) return 'python';
+  return 'generic';
+}
+
+export function resolveFullSdlcTemplate(
+  stackOrLanguages?: FullSdlcStackVariant | string[] | { languages?: string[] }
+): WorkflowDefinition {
+  let stack: FullSdlcStackVariant = 'generic';
+  if (typeof stackOrLanguages === 'string') {
+    stack = stackOrLanguages;
+  } else if (Array.isArray(stackOrLanguages)) {
+    stack = detectStackFromLanguages(stackOrLanguages);
+  } else if (stackOrLanguages && typeof stackOrLanguages === 'object' && Array.isArray(stackOrLanguages.languages)) {
+    stack = detectStackFromLanguages(stackOrLanguages.languages);
+  }
+  return fullSdlcTemplate(stack);
+}
+
 export function builtInWorkflowTemplates(): WorkflowDefinition[] {
-  return [governedDeliveryTemplate(), quickChangeTemplate()];
+  return [
+    governedDeliveryTemplate(),
+    quickChangeTemplate()
+  ];
+}
+
+/**
+ * Full SDLC quality and security gate templates, published to the marketplace
+ * as add-on packages rather than built-in to the application.
+ */
+export function fullSdlcMarketplaceTemplates(): WorkflowDefinition[] {
+  return [
+    fullSdlcTemplate('node'),
+    fullSdlcTemplate('dotnet'),
+    fullSdlcTemplate('python'),
+    fullSdlcTemplate('generic')
+  ];
 }
 
 // ── Library assembly ─────────────────────────────────────────────────────
@@ -205,19 +518,24 @@ export function builtInWorkflowTemplates(): WorkflowDefinition[] {
 export interface AssembleTemplateLibraryInput {
   /** Defaults to `builtInWorkflowTemplates()`. */
   builtIn?: WorkflowDefinition[];
+  /** Defaults to `fullSdlcMarketplaceTemplates()`. */
+  marketplace?: WorkflowDefinition[];
   global?: WorkflowDefinition[];
   project?: Array<{ definition: WorkflowDefinition; path?: string }>;
 }
 
 /**
- * The templates offered to a project, in tier order: built-in, then global,
- * then project. Unlike the run catalog this does not collapse by id — a user
- * choosing a starting point should see every option, including a project
+ * The templates offered to a project, in tier order: built-in, then marketplace,
+ * then global, then project. Unlike the run catalog this does not collapse by id —
+ * a user choosing a starting point should see every option, including a project
  * template that happens to share a built-in's id.
  */
 export function assembleTemplateLibrary(input: AssembleTemplateLibraryInput = {}): WorkflowTemplate[] {
   const builtIn = (input.builtIn ?? builtInWorkflowTemplates()).map(
     (definition): WorkflowTemplate => ({ definition, source: 'built-in', builtIn: true })
+  );
+  const marketplace = (input.marketplace ?? fullSdlcMarketplaceTemplates()).map(
+    (definition): WorkflowTemplate => ({ definition, source: 'marketplace', builtIn: false })
   );
   const global = (input.global ?? []).map(
     (definition): WorkflowTemplate => ({ definition, source: 'global', builtIn: false })
@@ -230,7 +548,7 @@ export function assembleTemplateLibrary(input: AssembleTemplateLibraryInput = {}
       ...(entry.path ? { path: entry.path } : {})
     })
   );
-  return [...builtIn, ...global, ...project];
+  return [...builtIn, ...marketplace, ...global, ...project];
 }
 
 // ── Instantiation ────────────────────────────────────────────────────────
@@ -286,21 +604,97 @@ export function duplicateWorkflowDefinition(
   };
 }
 
-// ── Readiness ────────────────────────────────────────────────────────────
+// ── Dependencies & Readiness ─────────────────────────────────────────────
+
+/**
+ * Extracts and inspects all agent and skill dependencies declared across
+ * the workflow's agent-task nodes, checking their status against the live catalog
+ * and available definitions.
+ */
+export function extractWorkflowDependencies(
+  workflow: WorkflowDefinition,
+  catalog: AgentCatalogSnapshot,
+  availableAgents: Record<string, unknown> = AVAILABLE_AGENT_DEFINITIONS,
+  availableSkills: Record<string, unknown> = AVAILABLE_SKILL_DEFINITIONS
+): WorkflowAgentDependency[] {
+  const byAgent = new Map<string, { scope: 'global' | 'project'; skills: Set<string>; nodeIds: string[] }>();
+
+  for (const node of workflow.nodes) {
+    if (node.type !== 'agent-task') continue;
+    const ref = node.agent;
+    let entry = byAgent.get(ref.agentId);
+    if (!entry) {
+      entry = { scope: ref.scope, skills: new Set<string>(), nodeIds: [] };
+      byAgent.set(ref.agentId, entry);
+    }
+    entry.nodeIds.push(node.id);
+    if (ref.skillNames) {
+      for (const skill of ref.skillNames) {
+        entry.skills.add(skill);
+      }
+    }
+  }
+
+  const out: WorkflowAgentDependency[] = [];
+  for (const [agentId, entry] of byAgent) {
+    const agentInCatalog = catalog.agents.find(a => a.manifest.id === agentId);
+    const agentInstalled = Boolean(agentInCatalog && agentInCatalog.trusted && agentInCatalog.errors.length === 0);
+
+    const skillNames = [...entry.skills];
+    const missingSkills = skillNames.filter(name => !catalog.skills.some(s => s.metadata.name === name));
+
+    let status: 'installed' | 'available' | 'missing';
+    let reason: string | undefined;
+
+    if (agentInstalled && missingSkills.length === 0) {
+      status = 'installed';
+    } else {
+      const agentAvailable = Boolean(agentInstalled || availableAgents[agentId]);
+      const skillsAvailable = missingSkills.every(name => Boolean(availableSkills[name]));
+
+      if (agentAvailable && skillsAvailable) {
+        status = 'available';
+        reason = !agentInstalled
+          ? `Agent "${agentId}" is available and will be installed upon selection.`
+          : `Skills (${missingSkills.join(', ')}) are available and will be installed upon selection.`;
+      } else {
+        status = 'missing';
+        reason = !agentAvailable
+          ? `Agent "${agentId}" is not installed and not available in the catalog.`
+          : `Required skills (${missingSkills.filter(n => !availableSkills[n]).join(', ')}) are not available.`;
+      }
+    }
+
+    out.push({
+      agentId,
+      scope: entry.scope,
+      skillNames,
+      nodeIds: entry.nodeIds,
+      status,
+      ...(reason ? { reason } : {})
+    });
+  }
+
+  return out;
+}
 
 /**
  * Assesses whether a template could actually run against the live catalog.
  *
  * Surfaced in the library so a user does not pick a template, wire it to a
  * project, and only discover at run time that `praxis-reviewer` was never
- * installed.
+ * installed. Also identifies dependencies and whether missing ones can be
+ * installed automatically upon selection.
  */
 export function assessTemplateReadiness(
   template: WorkflowDefinition,
-  catalog: AgentCatalogSnapshot
+  catalog: AgentCatalogSnapshot,
+  availableAgents: Record<string, unknown> = AVAILABLE_AGENT_DEFINITIONS,
+  availableSkills: Record<string, unknown> = AVAILABLE_SKILL_DEFINITIONS
 ): TemplateReadiness {
   const structure = validateWorkflow(template);
   const preflight = preflightWorkflow(template.nodes, catalog);
+  const dependencies = extractWorkflowDependencies(template, catalog, availableAgents, availableSkills);
 
   const blockingByNode: Record<string, string> = {};
   for (const [nodeId, result] of Object.entries(preflight.byNode)) {
@@ -308,10 +702,15 @@ export function assessTemplateReadiness(
     blockingByNode[nodeId] = result.failures[0].message;
   }
 
+  const allResolvable = dependencies.length === 0 || dependencies.every(d => d.status === 'installed' || d.status === 'available');
+  const hasAvailable = dependencies.some(d => d.status === 'available');
+
   return {
     templateId: template.id,
     structureOk: structure.valid,
     agentsOk: preflight.ok,
-    blockingByNode
+    blockingByNode,
+    dependencies,
+    autoInstallable: allResolvable && hasAvailable
   };
 }

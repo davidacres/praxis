@@ -10,7 +10,15 @@
  * stays independent of whatever token the project's issue tracker uses.
  */
 
-import type { CiEvidenceProvider, CiJobLogResult, CiJobSummary, CiRunConclusion, CiRunPage, CiRunSummary } from './ciEvidenceProvider';
+import type {
+  CiEvidenceProvider,
+  CiJobLogResult,
+  CiJobSummary,
+  CiRunConclusion,
+  CiRunPage,
+  CiRunSummary,
+  CiSecurityReportResult
+} from './ciEvidenceProvider';
 
 const GITHUB_API_VERSION = '2022-11-28';
 const KNOWN_CONCLUSIONS: readonly string[] = ['success', 'failure', 'cancelled', 'timed_out', 'action_required'];
@@ -108,6 +116,40 @@ export class GitHubActionsEvidenceProvider implements CiEvidenceProvider {
       throw new Error(`GitHub Actions log request failed (HTTP ${response.status} ${response.statusText}).`);
     }
     return { content: await response.text(), expired: false };
+  }
+
+  public async getSecurityReports(sha: string, signal?: AbortSignal): Promise<CiSecurityReportResult> {
+    const url = this.buildUrl(`/repos/${this.encodeOwnerRepo()}/code-scanning/alerts`, {
+      ref: sha
+    });
+    const response = await this.fetchImpl(url, {
+      signal,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${this.config.token.trim()}`,
+        'X-GitHub-Api-Version': GITHUB_API_VERSION
+      }
+    });
+
+    if (response.status === 404) {
+      return { provider: 'github-actions', runId: '', sha, available: false };
+    }
+    if (response.status === 403) {
+      throw new Error('No permission to read security alerts (HTTP 403). The token needs security_events:read.');
+    }
+    if (!response.ok) {
+      throw new Error(`GitHub code-scanning request failed (HTTP ${response.status} ${response.statusText}).`);
+    }
+
+    const alerts = (await response.json()) as unknown;
+    return {
+      provider: 'github-actions',
+      runId: `gh-alerts-${sha.slice(0, 7)}`,
+      sha,
+      available: true,
+      rawReport: alerts,
+      reportType: 'sarif'
+    };
   }
 
   private encodeOwnerRepo(): string {

@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-251
 title: "Map imported reports to findings evidence bound to the SHA"
-status: To Do
+status: Done
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [TASK-250, TASK-237]
@@ -42,5 +42,13 @@ Core tests for both provider maps against captured fixtures, redaction-before-st
 
 
 ## Comments
+
+### Completion Notes (TASK-251)
+- Implemented `mapCiReportToCheckFindings`, `redactCiContent`, and `importCiSecurityReportAsEvidence` in `packages/core/src/ci/ciEvidenceImport.ts`.
+- Maps SARIF 2.1.0 (via `parseSarif`), GitLab SAST/dependency scanning vulnerability JSON, and GitHub code-scanning alerts into unified `CheckFindings`.
+- Redacts secrets and credentials prior to storage via `redactCiContent`.
+- Emits exact finding fingerprint matching the local scanner calculation (`computeFindingFingerprint`), ensuring deterministic collision/equivalence between CI-reported and locally-detected issues.
+- Stores evidence as a bundle bound to the report's commit SHA (`kind: 'commit'`), with provenance recorded in the bundle metadata.
+- Verified by unit tests in `packages/core/src/ci/ciSecurityReports.test.ts`.
 
 

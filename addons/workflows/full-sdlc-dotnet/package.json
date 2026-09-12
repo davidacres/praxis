@@ -1,0 +1,22 @@
+{
+  "name": "@davidacres/praxis-addon-full-sdlc-dotnet",
+  "version": "1.0.0",
+  "description": "Enterprise SDLC workflow tailored for .NET and C# solutions using dotnet CLI and SOLID/DRY review.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidacres/praxis.git",
+    "directory": "addons/workflows/full-sdlc-dotnet"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "workflow-template",
+    "id": "full-sdlc-dotnet",
+    "name": "Full SDLC (.NET & C#)",
+    "summary": "12-stage pipeline with dotnet format, dotnet test, Semgrep C# SAST, Gitleaks, osv-scanner, and C# review agent.",
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.0"
+  }
+}

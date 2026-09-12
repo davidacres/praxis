@@ -50,7 +50,8 @@ test.afterEach(async () => {
 async function newWorkflow(page: Page, template: string, project = 'Delivery Project'): Promise<void> {
   await page.getByRole('button', { name: `New workflow in ${project}` }).click();
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
-  await dialog.getByRole('listitem').filter({ hasText: template }).getByRole('button', { name: 'Use' }).click();
+  await dialog.getByRole('listitem').filter({ hasText: template }).click();
+  await dialog.getByRole('button', { name: /^Use/ }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -94,7 +95,12 @@ test('blocks save while the graph is invalid and announces the errors', async ()
 
   const rail = page.getByRole('navigation', { name: 'Workflow stages' });
   await rail.getByRole('button', { name: /^Implement \(agent-task\)/ }).click();
-  await page.getByLabel('Agent', { exact: true }).fill('');
+  const agentControl = inspectorOf(page).getByLabel(/^Agent/);
+  if (await agentControl.evaluate(el => el.tagName.toLowerCase() === 'select')) {
+    await agentControl.selectOption('');
+  } else {
+    await agentControl.fill('');
+  }
 
   const status = page.getByRole('status').filter({ hasText: /error/ });
   await expect(status).toBeVisible();
@@ -171,4 +177,29 @@ test('a folder-backed project commits its workflow to .praxis/workflows and relo
   await expect(page.getByRole('heading', { name: 'Edited on disk', level: 1 })).toBeVisible();
 
   fs.rmSync(folder, { recursive: true, force: true });
+});
+
+test('instantiating Full SDLC (.NET) identifies and installs missing agent dependencies automatically', async () => {
+  const page = app.window;
+
+  await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New workflow' });
+  await expect(dialog).toBeVisible();
+
+  // Select Full SDLC (.NET)
+  const dotnetItem = dialog.getByRole('listitem').filter({ hasText: 'Full SDLC (.NET)' });
+  await dotnetItem.click();
+
+  // Check dependency identification
+  await expect(dialog.getByText('csharp-dotnet-code-reviewer', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('Installs on selection')).toBeVisible();
+  await expect(dialog.getByText(/Missing agent dependencies will be installed automatically/)).toBeVisible();
+
+  // Click Use
+  await dialog.getByRole('button', { name: 'Use "Full SDLC (.NET)"' }).click();
+  await expect(dialog).toBeHidden();
+
+  // Workflow is loaded in designer
+  await expect(canvasOf(page)).toBeVisible();
+  await expect(canvasOf(page).getByRole('button', { name: /^Approve \(approval\)/ })).toBeVisible();
 });

@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Story
 type: Story
 id: FX-BE-087
 title: "Structured check results and threshold gates"
-status: To Do
+status: Done
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-020, FX-BE-024]
@@ -56,5 +56,12 @@ No new results store, no raw tool-format parsing downstream of the adapters, no 
 
 
 ## Comments
+
+- Delivered Story FX-BE-087 across all four child tasks:
+  - TASK-237: Defined `CheckFindings` and `findings` artifact kind in `workflowTypes.ts` with deterministic SHA-256 fingerprinting and validation rules in `workflowValidation.ts`.
+  - TASK-238: Implemented pure parsers for SARIF 2.1.0, JUnit XML, lcov/Cobertura, npm-audit, and osv-scanner in `checkResultAdapters.ts`; wired adapter execution in `workflowCheckRunner.ts`.
+  - TASK-239: Added metric and severity threshold gate policy evaluation in `workflowGates.ts` with strictest-wins composition refusal in `workflowStore.ts`.
+  - TASK-240: Integrated findings and metrics into `StageRow` and rendered them in `WorkflowRunMonitor.tsx` with severity grouping, metric chips, and theme styles in `theme.css`.
+- Verified with unit tests (`checkFindings.test.ts`, `checkResultAdapters.test.ts`, `workflowThresholdGates.test.ts`), `npm run test:core`, `npm run check-types`, and renderer builds.
 
 

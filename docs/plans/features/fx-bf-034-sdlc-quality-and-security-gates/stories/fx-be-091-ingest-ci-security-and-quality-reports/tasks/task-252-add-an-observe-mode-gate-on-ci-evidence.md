@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-252
 title: "Add an observe-mode gate resting on imported CI evidence"
-status: To Do
+status: Done
 story: FX-BE-091
 updated: 2026-09-09
 dependencies: [TASK-251, TASK-239]
@@ -43,5 +43,15 @@ Core tests for the four resolution paths (match+present, match+absent, mismatch,
 
 
 ## Comments
+
+### Completion Notes (TASK-252)
+- Added `observe` configuration property on `WorkflowCheckNode` (`{ enabled: boolean; provider?: string }`) in `packages/core/src/workflows/workflowTypes.ts`.
+- Implemented observe-mode gate resolution in `evaluateGates` (`packages/core/src/workflows/workflowGates.ts`):
+  1. Matches commit SHA between run snapshot and imported CI report: if valid and present, resolves against gate thresholds with active waivers applied.
+  2. If report is not yet available, keeps gate in `pending` status with detail `...is observing CI for <sha>: report reconciling/not yet available.`
+  3. If commit SHA differs (stale CI report), falls back cleanly to executing the local check command.
+  4. If `observe.enabled` is false/unset, evaluates local check as usual.
+- Recorded CI run provenance in gate detail string (`Observed from CI (provider run <id>@<sha>)`).
+- Verified across all four resolution paths in `packages/core/src/ci/ciSecurityReports.test.ts`.
 
 
