@@ -8,8 +8,9 @@ import {
 } from './catalogTypes';
 import { validateAddonManifest } from './addonManifest';
 import { assertTarballIntegrity } from './integrity';
-import { type MarketplaceRegistryClient, type Packument } from './registryClient';
+import { type MarketplaceRegistryClient, type Packument, type RegistryPackageRef } from './registryClient';
 import { isNewerVersion, maxVersion, meetsMinimum, sortVersionsDescending } from './semver';
+import { readPraxisManifestFromTarball } from './tarballManifest';
 
 /**
  * Turns the registry client into the operations the app calls: browse, install,
@@ -76,58 +77,79 @@ export class MarketplaceService {
    */
   public async listCatalog(): Promise<CatalogEntry[]> {
     const packages = await this.client.listAddonPackages();
-    const entries: CatalogEntry[] = [];
-
-    for (const pkg of packages) {
-      let packument: Packument;
-      try {
-        packument = await this.client.getPackument(pkg.name);
-      } catch (error) {
-        this.log(`[marketplace] skipping ${pkg.name}: ${describe(error)}`);
-        continue;
-      }
-
-      const resolved = this.resolveLatest(packument);
-      if (!resolved) {
-        this.log(`[marketplace] skipping ${pkg.name}: no usable published version`);
-        continue;
-      }
-
-      const { manifest, errors, warnings } = validateAddonManifest(
-        packument.versions[resolved]?.praxis
-      );
-      if (!manifest) {
-        this.log(
-          `[marketplace] skipping ${pkg.name}@${resolved}: invalid manifest (${errors.join('; ')})`
-        );
-        continue;
-      }
-
-      const versions = sortVersionsDescending(Object.keys(packument.versions));
-      const incompatible =
-        manifest.minAppVersion !== undefined &&
-        !meetsMinimum(this.appVersion, manifest.minAppVersion);
-      const allWarnings = [...warnings];
-      if (incompatible) {
-        allWarnings.push(`Needs Praxis ${manifest.minAppVersion} or newer (you have ${this.appVersion}).`);
-      }
-
-      entries.push({
-        manifest,
-        packageName: pkg.name,
-        latestVersion: resolved,
-        versions,
-        updatedAt: packument.time?.[resolved] ?? pkg.updatedAt,
-        incompatible,
-        warnings: allWarnings
-      });
-    }
+    // Each package needs its own packument fetch, and often a tarball
+    // download on top (see resolveCatalogEntry) — sequentially, a catalogue
+    // of two dozen real packages took long enough to make the browse feel
+    // hung. Independent per-package lookups, so resolve them all at once.
+    const resolved = await Promise.all(packages.map(pkg => this.resolveCatalogEntry(pkg)));
+    const entries = resolved.filter((entry): entry is CatalogEntry => entry !== undefined);
 
     return entries.sort(
       (a, b) =>
         a.manifest.kind.localeCompare(b.manifest.kind) ||
         a.manifest.name.localeCompare(b.manifest.name)
     );
+  }
+
+  private async resolveCatalogEntry(pkg: RegistryPackageRef): Promise<CatalogEntry | undefined> {
+    let packument: Packument;
+    try {
+      packument = await this.client.getPackument(pkg.name);
+    } catch (error) {
+      this.log(`[marketplace] skipping ${pkg.name}: ${describe(error)}`);
+      return undefined;
+    }
+
+    const resolved = this.resolveLatest(packument);
+    if (!resolved) {
+      this.log(`[marketplace] skipping ${pkg.name}: no usable published version`);
+      return undefined;
+    }
+
+    const versionEntry = packument.versions[resolved];
+    let { manifest, errors, warnings } = validateAddonManifest(versionEntry?.praxis);
+    // The packument's version entry had no `praxis` field at all — GitHub
+    // Packages' npm registry strips custom package.json fields from what it
+    // echoes back, even for a correctly published package (verified against
+    // real data: the tarball's own package.json has it, the packument
+    // doesn't). Falling back to the tarball only on a genuinely *missing*
+    // field, not an invalid one, keeps a truly malformed manifest dropped.
+    if (versionEntry?.praxis === undefined && versionEntry?.dist.tarball) {
+      try {
+        const tarball = await this.client.downloadTarball(versionEntry.dist.tarball);
+        const fromTarball = validateAddonManifest(readPraxisManifestFromTarball(tarball));
+        manifest = fromTarball.manifest;
+        errors = fromTarball.errors;
+        warnings = fromTarball.warnings;
+      } catch (error) {
+        this.log(`[marketplace] tarball manifest fallback failed for ${pkg.name}: ${describe(error)}`);
+      }
+    }
+    if (!manifest) {
+      this.log(
+        `[marketplace] skipping ${pkg.name}@${resolved}: invalid manifest (${errors.join('; ')})`
+      );
+      return undefined;
+    }
+
+    const versions = sortVersionsDescending(Object.keys(packument.versions));
+    const incompatible =
+      manifest.minAppVersion !== undefined &&
+      !meetsMinimum(this.appVersion, manifest.minAppVersion);
+    const allWarnings = [...warnings];
+    if (incompatible) {
+      allWarnings.push(`Needs Praxis ${manifest.minAppVersion} or newer (you have ${this.appVersion}).`);
+    }
+
+    return {
+      manifest,
+      packageName: pkg.name,
+      latestVersion: resolved,
+      versions,
+      updatedAt: packument.time?.[resolved] ?? pkg.updatedAt,
+      incompatible,
+      warnings: allWarnings
+    };
   }
 
   public listInstalled(): Promise<InstalledAddon[]> {
@@ -147,7 +169,19 @@ export class MarketplaceService {
       throw new Error(`${packageName} has no published version ${version}.`);
     }
 
-    const { manifest, errors } = validateAddonManifest(versionEntry.praxis);
+    const tarball = await this.client.downloadTarball(versionEntry.dist.tarball);
+    assertTarballIntegrity(tarball, versionEntry.dist);
+
+    let { manifest, errors } = validateAddonManifest(versionEntry.praxis);
+    // Same GitHub Packages gap as listCatalog: the packument's version entry
+    // can be missing `praxis` entirely even for a correctly published add-on.
+    // The tarball's already downloaded for integrity checking above, so this
+    // fallback costs nothing extra.
+    if (versionEntry.praxis === undefined) {
+      const fromTarball = validateAddonManifest(readPraxisManifestFromTarball(tarball));
+      manifest = fromTarball.manifest;
+      errors = fromTarball.errors;
+    }
     if (!manifest) {
       throw new Error(`${packageName}@${version} has an invalid add-on manifest: ${errors.join('; ')}`);
     }
@@ -159,9 +193,6 @@ export class MarketplaceService {
         `${manifest.name} needs Praxis ${manifest.minAppVersion} or newer; this build is ${this.appVersion}.`
       );
     }
-
-    const tarball = await this.client.downloadTarball(versionEntry.dist.tarball);
-    assertTarballIntegrity(tarball, versionEntry.dist);
 
     const enabled = this.resolveEnabled(manifest, options.trustAgent);
     const record: InstalledAddon = {

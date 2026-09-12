@@ -104,7 +104,7 @@ test('creates a folderless Product project through the full wizard and opens its
   }));
   expect(themedColors.projectIcon).toBe('rgb(198, 67, 31)');
   expect(themedColors.accent).toBe('#c6431f');
-  expect(themedColors.boardIcon).toBe('rgb(205, 191, 174)');
+  expect(themedColors.boardIcon).toBe('rgb(116, 105, 94)');
   // A freshly-created project lands with a Get Started strip: one lit action
   // and a small checklist, not four zero cards.
   const getStarted = page.getByTestId('project-getstarted');
@@ -159,10 +159,10 @@ test('creates a folderless Product project through the full wizard and opens its
   // themed panes. The panels are borderless and carry no surface of their own.
   await page.locator('[data-testid="titlebar-settings"]').click();
   await page.locator('[data-testid="settings-nav-appearance-themes"]').click();
-  await page.locator('[data-testid="theme-card-humanist-light"]').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'humanist-light');
+  await page.locator('[data-testid="theme-card-praxis-dark"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'praxis-dark');
   await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'output/playwright/project-dashboard-humanist-light.png', fullPage: true });
+  await page.screenshot({ path: 'output/playwright/project-dashboard-praxis-dark.png', fullPage: true });
   const projectThemeStyles = await page.evaluate(() => {
     const dashboard = document.querySelector('[data-testid="project-dashboard"]');
     const projectHome = document.querySelector('[data-testid="project-home"]');

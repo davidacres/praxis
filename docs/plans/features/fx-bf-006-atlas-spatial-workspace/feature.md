@@ -9,7 +9,7 @@ type: Feature
 **Type:** Feature
 **Status:** 📋 Proposed
 **Owner:** Electron desktop app
-**Priority:** P2
+**Priority:** Lowest
 **Risk:** High
 **Created:** 2026-08-27
 

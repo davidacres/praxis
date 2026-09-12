@@ -26,6 +26,18 @@ export interface SessionChangesProps {
   onChanged?: () => void;
 }
 
+const CHANGES_COLLAPSED_KEY = 'tm-session-changes-collapsed';
+
+/** One shared, persisted preference rather than per-session — a reviewer who
+ *  keeps this open (or closed) almost always wants that for every session. */
+function readChangesCollapsed(): boolean {
+  try {
+    return localStorage.getItem(CHANGES_COLLAPSED_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
 /** A short, conventional-ish subject line derived from the session's goal. */
 function suggestedMessage(session: AgentSessionRecord): string {
   const goal = session.taskDefinition.goal.split('\n')[0].trim().replace(/\s+/g, ' ');
@@ -50,6 +62,7 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [checked, setChecked] = useState(false);
+  const [collapsed, setCollapsed] = useState(readChangesCollapsed);
   /** Path expanded inline, which of the two views it's showing, and that
    *  view's content once loaded. Diff and file view are mutually exclusive —
    *  only one row is open at a time. */
@@ -234,22 +247,44 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const additions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0);
   const deletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
 
-  return (
-    <div className="agent-runtime-block session-changes" data-testid="session-changes">
-      <div className="session-changes-heading">
-        <span className="rail-sub">Changes</span>
-        <span className="session-changes-count" data-testid="session-changes-count">
-          {files.length} file{files.length === 1 ? '' : 's'}
-          {(additions > 0 || deletions > 0) && (
-            <>
-              {' '}
-              <span className="session-changes-add">+{additions}</span>{' '}
-              <span className="session-changes-del">−{deletions}</span>
-            </>
-          )}
-        </span>
-      </div>
+  const toggleCollapsed = () => {
+    setCollapsed(current => {
+      const next = !current;
+      try {
+        localStorage.setItem(CHANGES_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        // Private browsing / storage disabled — the toggle still works this session.
+      }
+      return next;
+    });
+  };
 
+  return (
+    <div className="agent-runtime-block session-changes section-divider" data-testid="session-changes">
+      <button
+        type="button"
+        className="session-changes-heading session-changes-toggle"
+        aria-expanded={!collapsed}
+        data-testid="session-changes-toggle"
+        onClick={toggleCollapsed}
+      >
+        <span className="rail-sub">Changes</span>
+        <span className="session-changes-heading-right">
+          <span className="session-changes-count" data-testid="session-changes-count">
+            {files.length} file{files.length === 1 ? '' : 's'}
+            {(additions > 0 || deletions > 0) && (
+              <>
+                {' '}
+                <span className="session-changes-add">+{additions}</span>{' '}
+                <span className="session-changes-del">−{deletions}</span>
+              </>
+            )}
+          </span>
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+        </span>
+      </button>
+
+      {!collapsed && <>
       <ul className="session-changes-list">
         {files.map(file => (
           <li key={file.path} data-testid="session-changes-file">
@@ -375,6 +410,7 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
         </button>
       </div>
       {error && <p className="hint is-danger" data-testid="session-changes-error">{error}</p>}
+      </>}
     </div>
   );
 }

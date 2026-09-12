@@ -37,7 +37,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
-import { allThemes, applySurfacePack, applyThemePreference, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
+import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
   DEFAULT_MOTIF_FADE, DEFAULT_MOTIF_SPREAD, findSurfacePattern, isRevealAnimation,
@@ -54,6 +54,7 @@ export type SettingsCategory =
   | 'jira'
   | 'ai'
   | 'agent-runtime'
+  | 'workflow-templates'
   | 'performance'
   | 'delivery'
   | 'mcp'
@@ -103,7 +104,7 @@ const AI_GROUP: NavGroupDef = {
   id: 'ai-group',
   label: 'AI & agents',
   icon: 'robot',
-  children: ['ai', 'agent-runtime', 'mcp', 'delivery']
+  children: ['ai', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
 };
 
 const INTEGRATIONS_GROUP: NavGroupDef = {
@@ -183,6 +184,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'Agent Runtime',
     icon: 'robot',
     description: 'Discovered agent hosts, capabilities, and progressively indexed skills.'
+  },
+  {
+    id: 'workflow-templates',
+    label: 'Workflow Templates',
+    icon: 'git-branch',
+    description: 'Starting points for the workflow designer — install more from the marketplace.'
   },
   {
     id: 'performance',
@@ -333,6 +340,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
         {active === 'agent-runtime' && <AgentRuntimeSection />}
+        {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
         {active === 'delivery' && <DeliverySection settings={settings} update={update} />}
         {active === 'mcp' && <McpSection settings={settings} update={update} />}
@@ -632,6 +640,98 @@ function AgentRuntimeSection() {
   );
 }
 
+/**
+ * A `workflow-template` add-on is declarative — it activates on install, no
+ * trust step, the same as a theme or surface pack (see marketplaceInstance.ts'
+ * `globalTemplateDefinitions`, which reads every installed-and-enabled one
+ * straight onto the "New workflow" dialog's global tier). This panel is the
+ * only place that install can happen — nothing else in the app browses this
+ * kind's catalogue.
+ */
+function WorkflowTemplatesSection() {
+  const templateAddons = useKindAddons('workflow-template');
+  useEffect(() => {
+    if (templateAddons.ready && templateAddons.catalog === undefined && !templateAddons.busy) {
+      void templateAddons.browse();
+    }
+  }, [templateAddons.ready, templateAddons.catalog, templateAddons.busy, templateAddons.browse]);
+  const installedTemplateIds = new Set(templateAddons.installed.map(addon => addon.manifest.id));
+
+  return (
+    <section data-testid="settings-workflow-templates">
+      <CategoryHeader category={CATEGORIES.find(category => category.id === 'workflow-templates')!} />
+      <div className="settings-list">
+        <div className="settings-field-row">
+          <div className="settings-field-label">
+            <div className="settings-field-help">
+              An installed template appears alongside <strong>Governed delivery</strong> and{' '}
+              <strong>Quick change</strong> in every project's New Workflow dialog. Its agent stages
+              still need matching agents installed and trusted in <strong>Agent Runtime</strong> before a run can start.
+            </div>
+          </div>
+        </div>
+
+        <div data-testid="workflow-template-marketplace">
+          <h4 className="settings-subsection-title">Marketplace</h4>
+          {templateAddons.error && <div className="error-banner">{templateAddons.error}</div>}
+          {!templateAddons.ready && (
+            <p className="settings-field-help">Set up the add-on catalogue in Settings › Add-ons to install workflow templates from GitHub Packages.</p>
+          )}
+          {templateAddons.installed.map(addon => (
+            <div className="settings-field-row" key={addon.manifest.id} data-testid={`workflow-template-installed-${addon.manifest.id}`}>
+              <div className="settings-field-label">
+                <strong>{addon.manifest.name}</strong>
+                <div className="settings-field-help">v{addon.version}{addon.manifest.summary ? ` — ${addon.manifest.summary}` : ''}</div>
+              </div>
+              <div className="settings-field-control">
+                <button
+                  className="btn btn-quiet"
+                  type="button"
+                  disabled={templateAddons.busy === `remove:${addon.manifest.id}`}
+                  onClick={() => void templateAddons.remove(addon.manifest.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+          {templateAddons.ready && templateAddons.catalog === undefined && <div className="placeholder-text">Loading the catalogue…</div>}
+          {(templateAddons.catalog ?? [])
+            .filter(entry => !installedTemplateIds.has(entry.manifest.id))
+            .map(entry => (
+              <div className="settings-field-row" key={entry.packageName} data-testid={`workflow-template-marketplace-${entry.manifest.id}`}>
+                <div className="settings-field-label">
+                  <strong>{entry.manifest.name}</strong>
+                  <div className="settings-field-help">
+                    v{entry.latestVersion}
+                    {entry.manifest.author ? ` · ${entry.manifest.author}` : ''}
+                    {entry.manifest.summary ? ` — ${entry.manifest.summary}` : ''}
+                    {entry.incompatible ? ' · needs a newer Praxis' : ''}
+                  </div>
+                </div>
+                <div className="settings-field-control">
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={entry.incompatible || templateAddons.busy === `install:${entry.packageName}`}
+                    onClick={() => void templateAddons.install(entry.packageName)}
+                  >
+                    Install
+                  </button>
+                </div>
+              </div>
+            ))}
+          {templateAddons.ready &&
+            templateAddons.catalog?.filter(entry => !installedTemplateIds.has(entry.manifest.id)).length === 0 &&
+            templateAddons.installed.length === 0 && (
+              <div className="placeholder-text">No workflow templates in the catalogue.</div>
+            )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export const ADDON_KIND_LABELS: Record<AddonKind, string> = {
   theme: 'Theme',
   'surface-pack': 'Surface pack',
@@ -651,6 +751,8 @@ function MarketplaceSection() {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testCounts, setTestCounts] = useState<Record<AddonKind, number>>();
+  const [testError, setTestError] = useState<string>();
 
   // Local edit buffer for the config form, seeded from status.
   const [ownerDraft, setOwnerDraft] = useState('');
@@ -716,6 +818,33 @@ function MarketplaceSection() {
       await window.praxis.marketplace.configure({ enabled });
       await refreshStatus();
     });
+
+  // Hits the real GitHub Packages catalogue directly — the same call every
+  // kind's own panel makes — and counts entries per kind, so a config change
+  // can be checked right here instead of hopping to Themes/Surfaces/Agent
+  // Runtime and reading "N available" in each one separately.
+  const testCatalog = async () => {
+    setBusy('test');
+    setTestError(undefined);
+    setTestCounts(undefined);
+    try {
+      const entries = await window.praxis.marketplace.listCatalog();
+      const counts: Record<AddonKind, number> = {
+        theme: 0,
+        'surface-pack': 0,
+        agent: 0,
+        'workflow-template': 0
+      };
+      for (const entry of entries) {
+        counts[entry.manifest.kind] += 1;
+      }
+      setTestCounts(counts);
+    } catch (cause) {
+      setTestError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  };
 
   const byKind = new Map<AddonKind, number>();
   for (const addon of installed) {
@@ -846,6 +975,39 @@ function MarketplaceSection() {
         </div>
         {installed.length > 0 && (
           <div className="settings-section-description">Installed: {installedSummary}.</div>
+        )}
+
+        <div className="settings-field-row">
+          <div className="settings-field-label">
+            <strong>Test connection</strong>
+            <p>Fetch the real catalogue right now and count what's in it per kind, without leaving this page.</p>
+          </div>
+          <div className="settings-field-control">
+            <button
+              className="btn"
+              type="button"
+              disabled={busy === 'test' || !status?.ready}
+              onClick={() => void testCatalog()}
+              data-testid="marketplace-test"
+            >
+              {busy === 'test' ? 'Testing…' : 'Test connection'}
+            </button>
+          </div>
+        </div>
+        {!status?.ready && (
+          <div className="settings-field-help">Enable the marketplace with an owner and token first.</div>
+        )}
+        {testError && <div className="error-banner" data-testid="marketplace-test-error">{testError}</div>}
+        {testCounts && (
+          <div className="settings-section-description" data-testid="marketplace-test-results">
+            {(Object.keys(ADDON_KIND_LABELS) as AddonKind[]).map((kind, index) => (
+              <span key={kind}>
+                {index > 0 && ' · '}
+                {ADDON_KIND_LABELS[kind]}s: <strong>{testCounts[kind]}</strong>
+              </span>
+            ))}
+            {' · '}Total: <strong>{Object.values(testCounts).reduce((sum, count) => sum + count, 0)}</strong>
+          </div>
         )}
       </div>
     </section>
@@ -2958,10 +3120,10 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
   const deleteCustom = async () => {
     if (!editing) return;
     const next = custom.filter(theme => theme.id !== editing.id);
-    const fallback = selectedTheme === editing.id ? 'praxis-dark' : selectedTheme;
-    await update({ appearance: { customThemes: next, installedThemeIds: installedIds.filter(id => id !== editing.id), ...(selectedTheme === editing.id ? { themeId: fallback, themeMode: 'dark' } : {}) } });
+    const fallback = selectedTheme === editing.id ? DEFAULT_THEME_ID : selectedTheme;
+    await update({ appearance: { customThemes: next, installedThemeIds: installedIds.filter(id => id !== editing.id), ...(selectedTheme === editing.id ? { themeId: fallback, themeMode: 'light' } : {}) } });
     registerCustomThemes(next);
-    if (selectedTheme === editing.id) { setSelectedTheme(fallback); applyThemePreference(fallback, 'dark'); }
+    if (selectedTheme === editing.id) { setSelectedTheme(fallback); applyThemePreference(fallback, 'light'); }
     setEditing(undefined);
   };
 
@@ -3020,7 +3182,7 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
             <h4>{section}</h4>
             <div className="theme-gallery-grid">
               {sectionThemes.map(theme => (
-                <ThemePreviewCard key={theme.id} theme={theme} installed={theme.source !== 'marketplace' || installedIds.includes(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
+                <ThemePreviewCard key={theme.id} theme={theme} installed={theme.source !== 'marketplace' || installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id)} active={selectedTheme === theme.id} onSelect={() => {
                   setSelectedTheme(theme.id);
                   applyThemePreference(theme.id, theme.mode);
                   void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
@@ -3050,10 +3212,35 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
         const availableCatalogue = fromCatalogue.filter(
           entry => !installedAddonThemeIds.has(entry.manifest.id)
         );
+        // Installing a bundled marketplace card only flips `installedThemeIds` (see
+        // onInstall below) — it never calls the real add-on API, so these never land in
+        // `themeAddons.installed`. Excluded from totalInstalled, they used to vanish from
+        // the total entirely once installed, hiding this whole section (`total === 0`)
+        // even though every marketplace theme was in active use. `!installedAddonThemeIds`
+        // avoids double-counting a bundled id that also happens to be a real install.
+        const installedBundled = bundled.filter(
+          theme => installedIds.includes(theme.id) && !installedAddonThemeIds.has(theme.id)
+        );
 
         const totalAvailable = availableBundled.length + availableCatalogue.length;
-        const totalInstalled = themeAddons.installed.length;
+        const totalInstalled = installedBundled.length + themeAddons.installed.length;
         const total = totalAvailable + totalInstalled;
+
+        const removeBundledTheme = (theme: ThemeDefinition) => {
+          const nextIds = installedIds.filter(id => id !== theme.id);
+          const fallbackActive = selectedTheme === theme.id;
+          void update({
+            appearance: {
+              installedThemeIds: nextIds,
+              ...(fallbackActive ? { themeId: DEFAULT_THEME_ID, themeMode: 'light' } : {})
+            }
+          }).then(() => {
+            if (fallbackActive) {
+              setSelectedTheme(DEFAULT_THEME_ID);
+              applyThemePreference(DEFAULT_THEME_ID, 'light');
+            }
+          });
+        };
 
         if (total === 0 && themeAddons.ready && themeAddons.catalog !== undefined) {
           return null;
@@ -3102,49 +3289,79 @@ function ThemesGallerySection({ settings, update }: { settings: AppSettings; upd
               <p className="settings-field-help">Loading the catalogue…</p>
             )}
             {marketplaceFilter === 'all' && (
+              // A marketplace card stays here once installed — it doesn't move away to
+              // Recent/Staff picks and disappear from this grid. Browsing the catalogue
+              // should always show the full catalogue, installed state included.
               <div className="theme-gallery-grid">
-                {availableBundled.map(theme => (
-                  <ThemePreviewCard
-                    key={theme.id}
-                    theme={theme}
-                    active={false}
-                    installed={false}
-                    onSelect={() => undefined}
-                    onInstall={() =>
-                      void update({
-                        appearance: {
-                          installedThemeIds: [...installedIds, theme.id],
-                          themeId: theme.id,
-                          themeMode: theme.mode
-                        }
-                      }).then(() => {
+                {bundled.map(theme => {
+                  const isInstalled = installedIds.includes(theme.id) || installedAddonThemeIds.has(theme.id);
+                  return (
+                    <ThemePreviewCard
+                      key={theme.id}
+                      theme={theme}
+                      active={selectedTheme === theme.id}
+                      installed={isInstalled}
+                      onSelect={() => {
                         setSelectedTheme(theme.id);
                         applyThemePreference(theme.id, theme.mode);
-                      })
-                    }
-                  />
-                ))}
-                {availableCatalogue.map(entry => (
-                  <ThemePreviewCard
-                    key={entry.packageName}
-                    theme={addonThemePreview(entry)}
-                    active={false}
-                    installed={false}
-                    onSelect={() => undefined}
-                    onInstall={
-                      entry.incompatible
-                        ? undefined
-                        : () => void themeAddons.install(entry.packageName)
-                    }
-                  />
-                ))}
+                        void update({ appearance: { themeId: theme.id, themeMode: theme.mode } });
+                      }}
+                      onInstall={
+                        isInstalled
+                          ? undefined
+                          : () =>
+                              void update({
+                                appearance: {
+                                  installedThemeIds: [...installedIds, theme.id],
+                                  themeId: theme.id,
+                                  themeMode: theme.mode
+                                }
+                              }).then(() => {
+                                setSelectedTheme(theme.id);
+                                applyThemePreference(theme.id, theme.mode);
+                              })
+                      }
+                    />
+                  );
+                })}
+                {fromCatalogue.map(entry => {
+                  const isInstalled = installedAddonThemeIds.has(entry.manifest.id);
+                  const previewTheme = addonThemePreview(entry);
+                  return (
+                    <ThemePreviewCard
+                      key={entry.packageName}
+                      theme={previewTheme}
+                      active={selectedTheme === entry.manifest.id}
+                      installed={isInstalled}
+                      onSelect={() => {
+                        setSelectedTheme(entry.manifest.id);
+                        applyThemePreference(entry.manifest.id, previewTheme.mode);
+                        void update({ appearance: { themeId: entry.manifest.id, themeMode: previewTheme.mode } });
+                      }}
+                      onInstall={
+                        isInstalled || entry.incompatible
+                          ? undefined
+                          : () => void themeAddons.install(entry.packageName)
+                      }
+                    />
+                  );
+                })}
               </div>
             )}
-            {marketplaceFilter === 'installed' && themeAddons.installed.length > 0 && (
+            {marketplaceFilter === 'installed' && (installedBundled.length > 0 || themeAddons.installed.length > 0) && (
               <div className="theme-marketplace-installed-list">
+                {installedBundled.map((theme, index) => (
+                  <div key={theme.id} className="theme-marketplace-installed-item" data-testid="theme-marketplace-installed-item">
+                    {index > 0 && ' · '}
+                    <span>{theme.name}</span>
+                    <button type="button" className="linklike" onClick={() => removeBundledTheme(theme)}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
                 {themeAddons.installed.map((addon, index) => (
                   <div key={addon.manifest.id} className="theme-marketplace-installed-item" data-testid="theme-marketplace-installed-item">
-                    {index > 0 && ' · '}
+                    {(installedBundled.length > 0 || index > 0) && ' · '}
                     <span>{addon.manifest.name}</span>
                     <button
                       type="button"

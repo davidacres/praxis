@@ -68,6 +68,9 @@ test('listAddonPackages filters by prefix, follows pagination, and sorts newest-
   );
 
   const refs = await client.listAddonPackages();
+  // The name is kept exactly as the registry's own REST listing returns it —
+  // see getPackument's scoped-retry test for why normalizing it here would be
+  // wrong (it broke this project's own mock-registry e2e suite once already).
   assert.deepEqual(
     refs.map((r) => r.name),
     ['praxis-addon-solarized', 'praxis-addon-nord']
@@ -109,6 +112,56 @@ test('getPackument normalizes dist-tags, versions, and time; drops versions with
   assert.deepEqual(Object.keys(packument.versions), ['1.2.0']);
   assert.equal(packument.versions['1.2.0'].dist.integrity, 'sha512-AAA');
   assert.equal(packument.time?.['1.2.0'], '2026-02-02T00:00:00Z');
+});
+
+test('getPackument retries scoped on a 404 for an unscoped name (GitHub Packages requires it for some accounts)', async () => {
+  const requested: string[] = [];
+  const client = new GitHubPackagesRegistryClient(
+    { owner: 'davidacres', ownerType: 'user', token: 't' },
+    fakeFetch((url) => {
+      requested.push(url);
+      if (url === 'https://npm.pkg.github.com/praxis-addon-solarized') {
+        return new Response('not found', { status: 404, statusText: 'Not Found' });
+      }
+      if (url === 'https://npm.pkg.github.com/@davidacres%2Fpraxis-addon-solarized') {
+        return json({ name: '@davidacres/praxis-addon-solarized', 'dist-tags': { latest: '1.0.0' }, versions: {
+          '1.0.0': { version: '1.0.0', praxis: { schemaVersion: 1, kind: 'theme', id: 'solarized', name: 'Solarized' }, dist: { tarball: 'https://x/tgz', integrity: 'sha512-AAA' } }
+        } });
+      }
+      throw new Error(`unexpected url ${url}`);
+    })
+  );
+
+  const packument = await client.getPackument('praxis-addon-solarized');
+  assert.deepEqual(requested, [
+    'https://npm.pkg.github.com/praxis-addon-solarized',
+    'https://npm.pkg.github.com/@davidacres%2Fpraxis-addon-solarized'
+  ]);
+  assert.equal(packument.distTags.latest, '1.0.0');
+});
+
+test('getPackument does not retry when the unscoped name already resolves (this project\'s mock registry)', async () => {
+  const requested: string[] = [];
+  const client = new GitHubPackagesRegistryClient(
+    { owner: 'acme', ownerType: 'user', token: 't' },
+    fakeFetch((url) => {
+      requested.push(url);
+      return json({ name: 'praxis-addon-nord', 'dist-tags': { latest: '1.0.0' }, versions: {
+        '1.0.0': { version: '1.0.0', praxis: { schemaVersion: 1, kind: 'theme', id: 'nord', name: 'Nord' }, dist: { tarball: 'https://x/tgz', integrity: 'sha512-AAA' } }
+      } });
+    })
+  );
+
+  await client.getPackument('praxis-addon-nord');
+  assert.deepEqual(requested, ['https://npm.pkg.github.com/praxis-addon-nord']);
+});
+
+test('getPackument surfaces the real error for a package that is missing under both forms', async () => {
+  const client = new GitHubPackagesRegistryClient(
+    { owner: 'acme', ownerType: 'user', token: 't' },
+    fakeFetch(() => new Response('not found', { status: 404, statusText: 'Not Found' }))
+  );
+  await assert.rejects(() => client.getPackument('praxis-addon-ghost'), /not found \(404\)/);
 });
 
 test('downloadTarball returns the raw bytes and sends the bearer token', async () => {

@@ -1,4 +1,5 @@
 import type { AgentEventSummary, AgentSessionRecord, Connection } from '@praxis/core';
+import { isTerminalAgentState } from './aiSessionState';
 import { PROVIDER_LABELS } from './modelProviders';
 
 /**
@@ -177,6 +178,66 @@ export function formatCost(cost: AgentSessionRecord['cost']): string | undefined
     // does not know. Fall back rather than lose the number entirely.
     return `${cost.amount.toFixed(2)} ${cost.currency}`;
   }
+}
+
+function truncate(text: string, max = 140): string {
+  const trimmed = text.trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed;
+}
+
+/**
+ * One line describing what the agent is doing right now — shown only while a
+ * turn is in flight. Shared by the console's live-status line (which sits at
+ * the bottom of a scrolling transcript, so it can scroll out of view) and the
+ * inspector's copy (which must not, the same reason the task list lives
+ * there rather than in the transcript).
+ */
+export function liveActivity(session: AgentSessionRecord): string | undefined {
+  if (isTerminalAgentState(session.state) || session.state === 'awaiting_approval' || session.state === 'awaiting_input') {
+    return undefined;
+  }
+  const events = session.events;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type === 'tool_complete' || event.type === 'message') break;
+    if (event.type === 'tool_start') {
+      const tool = event.data?.toolName ?? event.summary?.replace(/^Running tool:\s*/i, '');
+      return tool ? `Running ${tool}…` : 'Running a tool…';
+    }
+  }
+  if (session.state === 'planning') return 'Planning…';
+  return session.reasoningText?.trim() ? 'Thinking…' : 'Working…';
+}
+
+/**
+ * A one-line preview of the agent's most recent chat message — `responseText`
+ * while a reply is streaming or just finished, else the latest `message`
+ * event's own text. For the inspector, which wants "what did it just say"
+ * without the reader having to scroll the transcript to find out.
+ */
+export function lastMessagePreview(session: AgentSessionRecord): string | undefined {
+  const streaming = session.responseText?.trim();
+  if (streaming) return truncate(streaming);
+  const events = session.events;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.type === 'message') {
+      const text = (event.detail || event.summary || '').trim();
+      if (text) return truncate(text);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A short excerpt of the agent's current reasoning stream, for providers that
+ * send one. Only while the session is still active — reasoning from a
+ * finished turn is stale by the time anyone would read it here.
+ */
+export function reasoningSnippet(session: AgentSessionRecord): string | undefined {
+  if (isTerminalAgentState(session.state)) return undefined;
+  const text = session.reasoningText?.trim();
+  return text ? truncate(text) : undefined;
 }
 
 export interface SpendSummary {
