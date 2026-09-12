@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
 
 let app: TestApp;
 let window: Page;
@@ -65,6 +65,7 @@ test('folder board lists the fixture feature task', async () => {
   const boardItem = window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' });
   await expect(boardItem).toBeVisible();
   await boardItem.click();
+  await expandAllIssueStacks(window);
 
   const issueCard = window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' });
   await expect(issueCard).toBeVisible();
@@ -73,6 +74,7 @@ test('folder board lists the fixture feature task', async () => {
 test('transitioning a live folder issue writes the new status back to markdown', async () => {
   await addFolderConnection('e2e-folder');
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
+  await expandAllIssueStacks(window);
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
   const status = window.locator('[data-testid="issue-edit-status"]');
@@ -89,6 +91,7 @@ test('transitioning a live folder issue writes the new status back to markdown',
 test('adding a comment on a live folder issue writes it back to markdown', async () => {
   await addFolderConnection('e2e-folder');
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Folder' }).click();
+  await expandAllIssueStacks(window);
   await window.locator('[data-testid="issue-card"]', { hasText: 'Do the thing' }).click();
 
   const commentBody = `e2e live folder comment ${Date.now()}`;

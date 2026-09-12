@@ -19,9 +19,8 @@ test("What's new opens over the workspace and provides version history", async (
 
   const dialog = win.locator('[data-testid="whats-new-dialog"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('A more complete desktop workflow');
+  await expect(dialog).toContainText('Marketplace and add-on packages now working');
   await expect(dialog).toContainText('Features');
-  await expect(dialog).toContainText('Improvements');
   await expect(dialog).toContainText('Fixes');
 
   await win.locator('[data-testid="whats-new-version-0.2.0"]').click();

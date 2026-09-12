@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -109,6 +109,7 @@ test('creating a live folder task under a feature writes the markdown file', asy
 
     await window.locator('[data-testid="new-issue-priority"]').selectOption('High');
     await window.locator('[data-testid="new-issue-submit"]').click();
+    await expandAllIssueStacks(window);
 
     await expect(window.locator('[data-testid="issue-card"]', { hasText: summary })).toBeVisible();
 
@@ -215,6 +216,7 @@ test('creating a live folder idea writes the research transcript into the markdo
     await window.locator('[data-testid="new-issue-summary"]').fill(summary);
     await window.locator('[data-testid="new-issue-idea-transcript"]').fill('Transcript: idea research log.');
     await window.locator('[data-testid="new-issue-submit"]').click();
+    await expandAllIssueStacks(window);
 
     await expect(window.locator('[data-testid="issue-card"]', { hasText: summary })).toBeVisible();
 

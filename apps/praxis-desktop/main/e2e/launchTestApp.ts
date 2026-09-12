@@ -159,6 +159,30 @@ export async function dismissSplash(window: Page): Promise<void> {
   await splash.waitFor({ state: 'detached', timeout: 10000 }).catch(() => undefined);
 }
 
+/**
+ * Expands every collapsed child-ticket stack on the current board. Child
+ * cards render behind a stack face until clicked (see `BoardView.renderStack`),
+ * so a fixture with a parent+child pair needs this before any locator can see
+ * the child card by its text.
+ */
+export async function expandAllIssueStacks(window: Page): Promise<void> {
+  // `count()` reads the DOM as it is *right now* — it does not wait — so
+  // called immediately after a navigation click it can see zero cards and
+  // return having done nothing. Wait for the board to render something first.
+  await window
+    .locator('[data-testid="issue-card"], [data-testid="issue-card-stack"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 10000 })
+    .catch(() => undefined);
+  const stacks = window.locator('[data-testid="issue-card-stack"][aria-expanded="false"]');
+  // Clicking one stack re-renders the column, which can shift which stacks
+  // remain collapsed — always take the first match rather than iterating by
+  // a count captured before any clicks happened.
+  while (await stacks.count()) {
+    await stacks.first().click();
+  }
+}
+
 export async function closeTestApp(app: TestApp): Promise<void> {
   await app.electronApp.close();
   fs.rmSync(app.userDataDir, { recursive: true, force: true });

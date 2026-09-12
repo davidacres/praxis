@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
 
 // Mirrors the markdown shape used by liveFolder.spec.ts: one feature with
 // `**Status:**` front matter and one child task. Two distinct task titles
@@ -137,6 +137,7 @@ test('each board shows only its own root’s issues', async () => {
   // Click the extra. It must show its own root's cards and not the other's.
   // (A folder board renders the feature AND its tasks as cards.)
   await extraBoard.click();
+  await expandAllIssueStacks(window);
   await expect(window.locator('[data-testid="issue-card"]', { hasText: extraOwnTitle })).toBeVisible();
   await expect(window.locator('[data-testid="issue-card"]', { hasText: otherTitle })).toHaveCount(0);
 
@@ -146,6 +147,7 @@ test('each board shows only its own root’s issues', async () => {
   const otherFeature = extraIsBeta ? 'Alpha Feature' : 'Beta Feature';
   const extraOwnFeature = extraIsBeta ? 'Beta Feature' : 'Alpha Feature';
   await primary.click();
+  await expandAllIssueStacks(window);
   const primaryCards = window.locator('[data-testid="issue-card"]');
   await expect(primaryCards).toHaveCount(2);
   const primaryTexts = await primaryCards.allInnerTexts();

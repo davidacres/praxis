@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test, expect } from '@playwright/test';
 import type { Page } from 'playwright';
-import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
+import { launchTestApp, closeTestApp, expandAllIssueStacks, type TestApp } from './launchTestApp';
 
 let app: TestApp | undefined;
 let window: Page;
@@ -87,6 +87,7 @@ test('editing a live folder issue writes the priority back to markdown', async (
   await launchWithEditFixture();
 
   await window.locator('[data-testid="board-nav-item"]', { hasText: 'Edit E2E' }).click();
+  await expandAllIssueStacks(window);
 
   await window.locator('[data-testid="issue-card"]', { hasText: 'Edit me task' }).click();
 
