@@ -139,6 +139,13 @@ interface ColumnHierarchy {
   childCounts: Map<string, number>;
 }
 
+interface IssueContextMenuState {
+  x: number;
+  y: number;
+  issueKey: string;
+  columnName: string;
+}
+
 /**
  * A card only reads as a child, and a card only shows a children badge, when
  * the *pair* is sharing a column — an issue whose parent sits in a different
@@ -277,6 +284,12 @@ export function BoardView({
   // cursor without re-reading .dataTransfer in every dragover event.
   const [draggedKey, setDraggedKey] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<BoardDropPosition | null>(null);
+  // A parent's children render as a collapsed stack until its key is added
+  // here — shared across columns/swim lanes since a parent key is unique on
+  // the board.
+  const [expandedStacks, setExpandedStacks] = useState<Set<string>>(new Set());
+  const [issueMenu, setIssueMenu] = useState<IssueContextMenuState | undefined>();
+  const issueMenuRef = useRef<HTMLDivElement>(null);
 
   const [issues, setIssues] = useState<IssueSummary[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -320,6 +333,56 @@ export function BoardView({
     },
     [boardId]
   );
+
+  useEffect(() => {
+    if (!issueMenu) {
+      return;
+    }
+    const onDocumentMouseDown = (event: MouseEvent) => {
+      if (issueMenuRef.current && !issueMenuRef.current.contains(event.target as Node)) {
+        setIssueMenu(undefined);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIssueMenu(undefined);
+      }
+    };
+    document.addEventListener('mousedown', onDocumentMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocumentMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [issueMenu]);
+
+  const toggleStack = useCallback((parentKey: string) => {
+    setExpandedStacks(current => {
+      const next = new Set(current);
+      if (next.has(parentKey)) {
+        next.delete(parentKey);
+      } else {
+        next.add(parentKey);
+      }
+      return next;
+    });
+  }, []);
+
+  const openIssueMenu = useCallback((event: React.MouseEvent<HTMLElement>, column: BoardColumn, issue: IssueSummary) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIssueMenu({
+      x: Math.min(event.clientX, window.innerWidth - 220),
+      y: Math.min(event.clientY, window.innerHeight - 160),
+      issueKey: issue.key,
+      columnName: column.name
+    });
+  }, []);
+
+  /** Shared right-click handler for board cards and list rows. */
+  const cardContextMenuProps = (column: BoardColumn, issue: IssueSummary) => ({
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => openIssueMenu(event, column, issue)
+  });
 
   const scopedFilters = useMemo<IssueFilters>(
     () => ({
@@ -514,6 +577,40 @@ export function BoardView({
     return applyIssueOrder(columns, prefs.issueOrder);
   }, [visibleIssues, statusOrder, prefs]);
 
+  /**
+   * Moves a card to one edge of its column's manual order. Right-clicking a
+   * parent moves its whole family (itself plus every child sharing this
+   * column) as one block, so the stack stays clustered together; a plain
+   * card or a child moves alone. Persists through the same `issueOrder`
+   * preference an in-column drag writes, so this is just a bulk reorder.
+   */
+  const moveIssueToEdge = useCallback(
+    (columnName: string, issueKey: string, edge: 'top' | 'bottom') => {
+      const column = effectiveColumns.find(candidate => candidate.name === columnName);
+      if (!column) {
+        return;
+      }
+      const hierarchy = columnHierarchy(column);
+      const isParent = (hierarchy.childCounts.get(issueKey) ?? 0) > 0;
+      const blockKeys = isParent
+        ? [
+            issueKey,
+            ...column.issues
+              .filter(issue => issue.key !== issueKey && issue.parentKey === issueKey && hierarchy.childKeys.has(issue.key))
+              .map(issue => issue.key)
+          ]
+        : [issueKey];
+      const blockSet = new Set(blockKeys);
+      const remaining = column.issues.map(issue => issue.key).filter(key => !blockSet.has(key));
+      const nextOrder = edge === 'top' ? [...blockKeys, ...remaining] : [...remaining, ...blockKeys];
+      updatePrefs({
+        ...prefs,
+        issueOrder: { ...(prefs.issueOrder ?? {}), [columnName]: nextOrder }
+      });
+    },
+    [effectiveColumns, prefs, updatePrefs]
+  );
+
   const swimLanes = useMemo(
     () =>
       prefs.viewMode !== 'list' && prefs.swimLaneGroupBy && prefs.swimLaneGroupBy !== 'none'
@@ -679,7 +776,13 @@ export function BoardView({
     }
   });
 
-  const renderCard = (column: BoardColumn, issue: IssueSummary, hierarchy: ColumnHierarchy) => {
+  const renderCard = (
+    column: BoardColumn,
+    issue: IssueSummary,
+    hierarchy: ColumnHierarchy,
+    /** Staggers a freshly-revealed child's entrance animation (ms); unset plays immediately. */
+    revealDelayMs?: number
+  ) => {
     const contextAccent = prefs.issueTypeColors?.[issue.issueType] ?? 'var(--accent)';
     const updated = formatCardDate(issue.updated);
     const context = issue.parentIssue?.summary ?? issue.parentKey ?? issue.issueType;
@@ -692,9 +795,13 @@ export function BoardView({
       data-issue-key={issue.key}
       data-child-of={isChild ? issue.parentKey : undefined}
       className={`issue-card${isChild ? ' issue-card-child' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
-      style={{ '--issue-card-accent': contextAccent } as CSSProperties}
+      style={{
+        '--issue-card-accent': contextAccent,
+        ...(revealDelayMs !== undefined ? { animationDelay: `${revealDelayMs}ms` } : {})
+      } as CSSProperties}
       {...cardDragProps(issue)}
       {...cardDropProps(column, issue)}
+      {...cardContextMenuProps(column, issue)}
       onClick={() => onOpenIssue(issue.key)}
       role="button"
       tabIndex={0}
@@ -738,6 +845,42 @@ export function BoardView({
     );
   };
 
+  /**
+   * A parent's children render collapsed behind this stack face — a deck-of-
+   * cards affordance rather than full-height cards — until it's clicked.
+   * Expanding renders the children inline right below it (see `renderColumn`);
+   * the face stays visible either way so it doubles as the collapse control.
+   * The two backing layers and the chevron stay mounted and animate between
+   * states via CSS (`.board-child-stack-expanded`) rather than swapping
+   * elements, so opening/closing the deck is a real transition, not a cut.
+   */
+  const renderStack = (parent: IssueSummary, childCount: number, expanded: boolean) => (
+    <button
+      key={`${parent.key}:stack`}
+      type="button"
+      className={`board-child-stack${expanded ? ' board-child-stack-expanded' : ''}`}
+      data-testid="issue-card-stack"
+      aria-expanded={expanded}
+      aria-label={`${expanded ? 'Collapse' : 'Expand'} ${childCount} linked ${childCount === 1 ? 'ticket' : 'tickets'} under ${parent.key}`}
+      onClick={event => {
+        event.stopPropagation();
+        toggleStack(parent.key);
+      }}
+    >
+      <span className="board-child-stack-layer board-child-stack-layer-2" aria-hidden="true" />
+      <span className="board-child-stack-layer board-child-stack-layer-1" aria-hidden="true" />
+      <span className="board-child-stack-face">
+        <span className="board-child-stack-badge" aria-hidden="true">
+          <Icon name="git-branch" size={11} />
+        </span>
+        <span className="board-child-stack-label">
+          {childCount} linked {childCount === 1 ? 'ticket' : 'tickets'}
+        </span>
+        <Icon className="board-child-stack-chevron" name="chevron-right" size={12} />
+      </span>
+    </button>
+  );
+
   const renderColumnHeader = (column: BoardColumn) => (
     <header className="board-column-title" data-testid="board-column-header">
       <span
@@ -767,13 +910,32 @@ export function BoardView({
         className="board-column-scroll"
         data-testid="board-column"
       >
-        {column.issues.map(issue => (
-          <span key={issue.key} className="board-card-slot">
-            {dropPosition?.status === column.name && dropPosition.beforeKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
-            {renderCard(column, issue, hierarchy)}
-            {dropPosition?.status === column.name && dropPosition.afterKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
-          </span>
-        ))}
+        {column.issues
+          .filter(issue => !hierarchy.childKeys.has(issue.key))
+          .map(issue => {
+            const children = column.issues.filter(
+              candidate => candidate.key !== issue.key && candidate.parentKey === issue.key && hierarchy.childKeys.has(candidate.key)
+            );
+            const expanded = children.length > 0 && expandedStacks.has(issue.key);
+            return (
+              <span key={issue.key} className="board-card-slot-group">
+                <span className="board-card-slot">
+                  {dropPosition?.status === column.name && dropPosition.beforeKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+                  {renderCard(column, issue, hierarchy)}
+                  {dropPosition?.status === column.name && dropPosition.afterKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+                </span>
+                {children.length > 0 && renderStack(issue, children.length, expanded)}
+                {expanded &&
+                  children.map((child, index) => (
+                    <span key={child.key} className="board-card-slot">
+                      {dropPosition?.status === column.name && dropPosition.beforeKey === child.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+                      {renderCard(column, child, hierarchy, Math.min(index, 8) * 30)}
+                      {dropPosition?.status === column.name && dropPosition.afterKey === child.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
+                    </span>
+                  ))}
+              </span>
+            );
+          })}
         {column.issues.length === 0 && (
           dropPosition?.status === column.name
             ? <span className="board-drop-indicator board-drop-indicator-empty" data-testid="board-drop-indicator" aria-hidden="true" />
@@ -821,6 +983,7 @@ export function BoardView({
               style={{ borderLeftColor: childCount > 0 ? 'var(--border-strong)' : cardAccent(issue) }}
               {...cardDragProps(issue)}
               {...cardDropProps(column, issue)}
+              {...cardContextMenuProps(column, issue)}
               onClick={() => onOpenIssue(issue.key)}
               role="button"
               tabIndex={0}
@@ -952,6 +1115,40 @@ export function BoardView({
             onClick={loadMore}
           >
             {loadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
+      {issueMenu && (
+        <div
+          ref={issueMenuRef}
+          className="git-context-menu board-issue-context-menu"
+          style={{ left: issueMenu.x, top: issueMenu.y }}
+          role="menu"
+          aria-label="Ticket actions"
+        >
+          <div>
+            <strong>{issueMenu.issueKey}</strong>
+            <button onClick={() => setIssueMenu(undefined)}>×</button>
+          </div>
+          <button
+            role="menuitem"
+            data-testid="board-issue-menu-move-top"
+            onClick={() => {
+              moveIssueToEdge(issueMenu.columnName, issueMenu.issueKey, 'top');
+              setIssueMenu(undefined);
+            }}
+          >
+            Move to top of column
+          </button>
+          <button
+            role="menuitem"
+            data-testid="board-issue-menu-move-bottom"
+            onClick={() => {
+              moveIssueToEdge(issueMenu.columnName, issueMenu.issueKey, 'bottom');
+              setIssueMenu(undefined);
+            }}
+          >
+            Move to bottom of column
           </button>
         </div>
       )}

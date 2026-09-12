@@ -83,15 +83,34 @@ async function launchWithFixture(): Promise<void> {
   await window.waitForSelector('[data-testid="issue-card"]');
 }
 
-test('a feature clusters its children directly beneath it, in sequence order', async () => {
+test('a feature clusters its children behind a collapsed stack, expanding in sequence order', async () => {
   await launchWithFixture();
 
+  // Children start collapsed behind the stack — only the two top-level
+  // features are real cards until the stack is expanded.
   const cards = window.locator('[data-testid="issue-card"]');
+  await expect(cards).toHaveCount(2);
+
+  const parentCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F01"]');
+  const otherFeatureCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F02"]');
+
+  // The parent shows a children badge; the unrelated feature (no children) does not.
+  await expect(parentCard.locator('[data-testid="issue-card-child-count"]')).toHaveText('4');
+  await expect(otherFeatureCard.locator('[data-testid="issue-card-child-count"]')).toHaveCount(0);
+
+  // The stack sits right after the parent, collapsed, and names the count;
+  // the unrelated childless feature has no stack at all.
+  const stack = window.locator('[data-testid="issue-card-stack"]');
+  await expect(stack).toHaveCount(1);
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+  await expect(stack).toContainText('4 linked tickets');
+
+  // Clicking the stack expands it, revealing the children in authored
+  // sequence order, clustered directly beneath the parent.
+  await stack.click();
+  await expect(stack).toHaveAttribute('aria-expanded', 'true');
   await expect(cards).toHaveCount(6);
 
-  // Feature first, its three stories next in authored sequence, then its
-  // task, then the unrelated feature last — not the fetch/update order the
-  // three story files were written in above.
   const keys = await cards.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.issueKey));
   const featureIndex = keys.indexOf('HIER-F01');
   expect(featureIndex).toBeGreaterThanOrEqual(0);
@@ -103,12 +122,6 @@ test('a feature clusters its children directly beneath it, in sequence order', a
     'HIER-T01-1'
   ]);
   expect(keys[keys.length - 1]).toBe('HIER-F02');
-
-  // The parent shows a children badge; the unrelated feature (no children) does not.
-  const parentCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F01"]');
-  await expect(parentCard.locator('[data-testid="issue-card-child-count"]')).toHaveText('4');
-  const otherFeatureCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F02"]');
-  await expect(otherFeatureCard.locator('[data-testid="issue-card-child-count"]')).toHaveCount(0);
 
   // Every child in the family is visually marked as a child of the feature;
   // the feature itself and the unrelated feature are not.
@@ -126,6 +139,36 @@ test('a feature clusters its children directly beneath it, in sequence order', a
   await expect(otherFeatureCard).not.toHaveClass(/issue-card-parent/);
   const child = window.locator('[data-testid="issue-card"][data-issue-key="HIER-S01-1"]');
   await expect(child).not.toHaveClass(/issue-card-parent/);
+
+  // Clicking the (now open) stack again collapses it back down.
+  await stack.click();
+  await expect(stack).toHaveAttribute('aria-expanded', 'false');
+  await expect(cards).toHaveCount(2);
+});
+
+test('right-click moves a ticket to the top or bottom of its column, carrying a parent\'s children with it', async () => {
+  await launchWithFixture();
+
+  const otherFeatureCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F02"]');
+  const cards = window.locator('[data-testid="issue-card"]');
+
+  // The unrelated feature (no children) moves alone.
+  await otherFeatureCard.click({ button: 'right' });
+  await window.locator('[data-testid="board-issue-menu-move-top"]').click();
+  await expect(cards.first()).toHaveAttribute('data-issue-key', 'HIER-F02');
+
+  // Right-clicking the parent and sending it to the bottom carries its
+  // (still-collapsed) stack along with it — the last card is the parent.
+  const parentCard = window.locator('[data-testid="issue-card"][data-issue-key="HIER-F01"]');
+  await parentCard.click({ button: 'right' });
+  await window.locator('[data-testid="board-issue-menu-move-bottom"]').click();
+  await expect(cards.last()).toHaveAttribute('data-issue-key', 'HIER-F01');
+
+  // Expanding confirms the children travelled with it, immediately after it.
+  await window.locator('[data-testid="issue-card-stack"]').click();
+  const keys = await cards.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.issueKey));
+  const featureIndex = keys.indexOf('HIER-F01');
+  expect(keys.slice(featureIndex)).toEqual(['HIER-F01', 'HIER-S01-1', 'HIER-S01-2', 'HIER-S01-3', 'HIER-T01-1']);
 });
 
 test('list view shows the same grouping and ordering', async () => {

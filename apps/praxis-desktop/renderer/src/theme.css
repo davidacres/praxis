@@ -2941,6 +2941,10 @@ textarea {
   display: contents;
 }
 
+.board-card-slot-group {
+  display: contents;
+}
+
 /* A specific insertion rule is clearer than tinting an entire workflow lane:
    it shows both the destination and the exact place where the card will land. */
 .board-drop-indicator {
@@ -3082,6 +3086,163 @@ textarea {
    from "this is a child", not as the same relationship pointing two ways. */
 .issue-card.issue-card-parent {
   border-left: 3px solid var(--border-strong);
+}
+
+/* Collapsed children render as a deck of cards rather than full cards, so a
+   feature with a dozen stories doesn't dominate its column. The two layer
+   spans and the chevron stay mounted at all times and transition between
+   states via `.board-child-stack-expanded` (toggled on click) instead of
+   being swapped — opening the deck is an animated peel-away-and-fan motion,
+   collapsing is its reverse, and the face itself doubles as the collapse
+   control once open. `renderColumn` still mounts/unmounts the revealed child
+   cards themselves; those get their own entrance animation below. */
+.board-child-stack {
+  position: relative;
+  display: block;
+  width: calc(100% - 22px);
+  margin: 0 0 var(--space-4) 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.board-child-stack-layer {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+}
+
+.board-child-stack-layer-1 {
+  transform: translate(5px, 6px) scale(0.97);
+  opacity: 0.75;
+}
+
+.board-child-stack-layer-2 {
+  transform: translate(10px, 12px) scale(0.94);
+  opacity: 0.45;
+}
+
+.board-child-stack:hover .board-child-stack-layer-1 {
+  transform: translate(7px, 9px) scale(0.97);
+}
+
+.board-child-stack:hover .board-child-stack-layer-2 {
+  transform: translate(14px, 18px) scale(0.94);
+}
+
+/* An open stack has nothing "under" it — the layers fan further out and fade
+   away rather than just vanishing, so opening reads as dealing the deck out
+   into the revealed cards below. */
+.board-child-stack-expanded .board-child-stack-layer-1 {
+  transform: translate(3px, 16px) scale(0.97);
+  opacity: 0;
+}
+
+.board-child-stack-expanded .board-child-stack-layer-2 {
+  transform: translate(-3px, 24px) scale(0.94);
+  opacity: 0;
+}
+
+.board-child-stack-face {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), background 150ms ease,
+    color 150ms ease, border-color 150ms ease, box-shadow 220ms ease;
+}
+
+.board-child-stack:hover .board-child-stack-face {
+  transform: translateY(-1px);
+  color: var(--text);
+  background: var(--bg-hover);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+}
+
+.board-child-stack:active .board-child-stack-face {
+  transform: translateY(0) scale(0.99);
+}
+
+/* Open state reads as "attached to what's below it" rather than "a closed
+   deck" — the accent rail (the same cue a real child card's left rail uses)
+   replaces the neutral parent rail once expanded. */
+.board-child-stack-expanded .board-child-stack-face {
+  border-left-color: var(--issue-card-accent, var(--accent));
+}
+
+.board-child-stack-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+}
+
+.board-child-stack-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-child-stack-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.board-child-stack-expanded .board-child-stack-chevron {
+  transform: rotate(90deg);
+}
+
+/* A revealed child cascades into place rather than popping in — each card's
+   inline `animationDelay` (set per index in `renderColumn`, capped) staggers
+   the start so a long stack opens like a hand of cards being dealt, not all
+   at once. Collapsing has no matching exit animation: the cards simply
+   unmount, which keeps the expand/collapse state simple to reason about. */
+.issue-card.issue-card-child {
+  animation: board-child-reveal 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes board-child-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-child-stack-layer,
+  .board-child-stack-face,
+  .board-child-stack-chevron {
+    transition: none;
+  }
+  .issue-card.issue-card-child {
+    animation: none;
+  }
 }
 
 .issue-card-details {
@@ -7774,6 +7935,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .git-context-menu > button:hover { color: var(--text); background: var(--bg-hover); }
 .git-context-menu > button.danger { color: var(--tone-red); }
 
+.board-issue-context-menu { width: 216px; }
+
 /* Working tree is a first-class Git page. Its panes use the same palette as
    project surfaces, while Git's add/delete/conflict meaning remains semantic. */
 .git-changes-page { background: var(--bg); }
@@ -9038,6 +9201,79 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   word-break: break-word;
 }
 
+/* Findings & metrics in run monitor (TASK-240 / FX-BF-034) */
+.wf-findings-section {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wf-findings-section h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.wf-findings-metrics {
+  margin-bottom: var(--space-1);
+}
+.wf-findings-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.wf-findings-group h4 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.wf-findings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wf-finding-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  padding: var(--space-2);
+}
+.wf-finding-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+.wf-finding-location code {
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+.wf-finding-message {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.wf-finding-suggestion {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+.wf-finding-suggestion summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.wf-findings-empty {
+  padding: var(--space-2) 0;
+}
+
 /* Template library — this-project cards + template list. */
 .wf-library { display: flex; flex-direction: column; gap: var(--space-5); padding: var(--space-5); overflow-y: auto; }
 .wf-library h2 { margin: 0 0 var(--space-3); font-size: var(--text-lg); }
@@ -9055,6 +9291,617 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .wf-template-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-template-desc { margin: 0; font-size: var(--text-md); color: var(--text-secondary); }
 .wf-template-warn { margin: 0; font-size: var(--text-sm); color: var(--warning); }
+
+/* ── Workflow Template Picker Dialog (Wider & Master-Detail) ─────────────── */
+
+.modal-card.wf-picker-card {
+  width: min(1040px, 95vw);
+  height: min(720px, 86vh);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wf-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.wf-picker-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wf-picker-title-group h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wf-picker-subtitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.wf-picker-body {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.wf-picker-sidebar {
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-sunken);
+  min-height: 0;
+}
+
+.wf-picker-filter-bar {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.wf-picker-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  transition: border-color 120ms ease;
+}
+
+.wf-picker-search:focus-within {
+  border-color: var(--accent);
+}
+
+.wf-picker-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.wf-picker-search button {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wf-picker-search button:hover {
+  color: var(--text);
+}
+
+.wf-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+}
+
+.wf-picker-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.wf-picker-tab:hover {
+  color: var(--text);
+}
+
+.wf-picker-tab.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  font-weight: 600;
+}
+
+.wf-picker-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wf-picker-item-wrapper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.wf-picker-item {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.wf-picker-item:hover {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.wf-picker-item.active {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-left: 3px solid var(--accent);
+}
+
+.wf-picker-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  transition: color 120ms ease;
+}
+
+.wf-picker-item.active .wf-picker-item-icon {
+  color: var(--accent);
+}
+
+.wf-picker-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wf-picker-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.wf-picker-item-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-picker-item-desc {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.wf-picker-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.wf-picker-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.wf-picker-status.is-ready {
+  color: var(--success);
+}
+
+.wf-picker-status.is-available {
+  color: var(--accent);
+}
+
+.wf-picker-status.is-warning {
+  color: var(--warning);
+}
+
+.wf-picker-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  transition: all 120ms ease;
+}
+
+.wf-picker-source-badge.is-builtin {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.wf-picker-source-badge.is-marketplace {
+  color: var(--tone-purple, #a855f7);
+  background: color-mix(in srgb, var(--tone-purple, #a855f7) 12%, transparent);
+}
+
+.wf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.wf-chip-builtin {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.wf-chip-marketplace {
+  background: color-mix(in srgb, var(--tone-purple, #a855f7) 12%, transparent);
+  color: var(--tone-purple, #a855f7);
+  border: 1px solid color-mix(in srgb, var(--tone-purple, #a855f7) 22%, transparent);
+}
+
+.wf-chip-project {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 22%, transparent);
+}
+
+.wf-picker-detail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.wf-picker-detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.wf-picker-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.wf-picker-detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.wf-picker-detail-title-row h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.wf-picker-detail-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wf-picker-detail-desc {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.wf-guidance-card {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elevated));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wf-guidance-card-title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.wf-guidance-card p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.wf-guidance-highlights {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.wf-flow-section h4,
+.wf-meta-section h4 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.wf-flow-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wf-flow-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  font-size: var(--text-sm);
+}
+
+.wf-flow-step-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.wf-flow-step-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.wf-flow-step.is-gate .wf-flow-step-badge {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+}
+
+.wf-flow-step.is-approval {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.wf-flow-step.is-approval .wf-flow-step-badge {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.wf-flow-step-detail {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.wf-preview-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.wf-preview-meta-box {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wf-preview-meta-box strong {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.wf-preview-meta-box ul {
+  margin: 0;
+  padding-left: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.wf-dep-list {
+  list-style: none;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wf-dep-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.wf-dep-item.is-installed {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+}
+
+.wf-dep-item.is-available {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.wf-dep-item.is-missing {
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+}
+
+.wf-dep-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+}
+
+.wf-dep-header code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+
+.wf-dep-status-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.wf-dep-status-badge.is-installed {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+
+.wf-dep-status-badge.is-available {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+.wf-dep-status-badge.is-missing {
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+  color: var(--warning);
+}
+
+.wf-dep-skills {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding-left: 18px;
+}
+
+.wf-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.wf-picker-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.wf-picker-footer-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.wf-picker-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: center;
+}
 
 /* Validation summary — quiet when valid, danger-bordered when not. */
 .wf-validation { font-size: var(--text-sm); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); color: var(--text-tertiary); }
