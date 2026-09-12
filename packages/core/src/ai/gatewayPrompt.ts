@@ -5,7 +5,8 @@ import {
   resolveGatewayApiKeyFromEnv,
   resolveGatewayUrlFromEnv,
   toWireModelId,
-  type GatewayOptions
+  type GatewayOptions,
+  type TokenUsage
 } from './gateway';
 
 export class AnalysisCancelledError extends Error {
@@ -28,6 +29,8 @@ export async function runGatewayPrompt(
     timeoutMs?: number;
     streamIdleTimeoutMs?: number;
     onUpdate?: (content: string) => void;
+    /** Fires once with whatever the provider reported, if anything — see `TokenUsage`'s own doc for why absence isn't a zero. */
+    onUsage?: (usage: TokenUsage) => void;
     model?: string;
     signal?: AbortSignal;
   }
@@ -110,6 +113,9 @@ export async function runGatewayPrompt(
           options.onUpdate?.(accumulated);
         }
       });
+      if (result.usage) {
+        options.onUsage?.(result.usage);
+      }
       return result.text.trim() || accumulated.trim();
     })();
 

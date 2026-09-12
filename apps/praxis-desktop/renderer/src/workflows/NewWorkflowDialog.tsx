@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { TemplateReadiness, WorkflowDefinition, WorkflowTemplate } from '@praxis/core';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { StoredTemplateRecommendation, TemplateReadiness, WorkflowDefinition, WorkflowTemplate } from '@praxis/core';
 import { Icon } from '../ui/Icon';
 import { getWorkflowTemplateGuidance, getWorkflowStageSequence } from './workflowTemplateGuidance';
 
@@ -34,6 +34,18 @@ export function NewWorkflowDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
+  // AI-recommended template: gated on the gateway actually being configured
+  // (same check the workflow agent recommendation uses), fetched once as a
+  // free cache read — `getRecommendedTemplate` never calls the AI, only an
+  // explicit refresh click does (see `requestTemplateRecommendation`).
+  // `undefined` is "still checking" (render nothing yet, not "unconfigured");
+  // without that third state the button flashes as unavailable for every
+  // user, even a configured one, until the status check resolves.
+  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | undefined>(undefined);
+  const [recommendation, setRecommendation] = useState<StoredTemplateRecommendation | undefined>();
+  const [recommending, setRecommending] = useState(false);
+  const [recommendError, setRecommendError] = useState<string>();
+
   useEffect(() => {
     void window.praxis.workflows
       .listTemplates(projectId)
@@ -49,6 +61,25 @@ export function NewWorkflowDialog({
     void window.praxis.workflows
       .templateReadiness(projectId)
       .then(rows => setReadiness(Object.fromEntries(rows.map(row => [row.templateId, row]))));
+
+    void window.praxis.workflows.getRecommendedTemplate(projectId).then(setRecommendation);
+    void window.praxis.ai
+      .listProviderStatuses()
+      .then(statuses => setGatewayConfigured(statuses.some(status => status.provider === 'vercel-gateway' && status.configured)))
+      .catch(() => setGatewayConfigured(false));
+  }, [projectId]);
+
+  const requestTemplateRecommendation = useCallback(async () => {
+    setRecommending(true);
+    setRecommendError(undefined);
+    try {
+      const result = await window.praxis.workflows.recommendTemplate(projectId);
+      setRecommendation({ templateId: result.templateId, rationale: result.rationale, model: result.model, computedAt: new Date().toISOString() });
+    } catch (cause) {
+      setRecommendError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRecommending(false);
+    }
   }, [projectId]);
 
   const rawList = useMemo(() => templates ?? [], [templates]);
@@ -120,9 +151,48 @@ export function NewWorkflowDialog({
               <Icon name="git-branch" size={16} />
               Select workflow template
             </h3>
-            <p className="wf-picker-subtitle">
-              Choose a workflow template as the foundation for this project's delivery pipeline.
-            </p>
+            <div className="wf-picker-subtitle-row">
+              <p className="wf-picker-subtitle">
+                Choose a workflow template as the foundation for this project's delivery pipeline.
+              </p>
+              {gatewayConfigured === true && (
+                <button
+                  type="button"
+                  className="btn btn-compact wf-picker-recommend-btn"
+                  data-testid={recommendation ? 'wf-picker-refresh-btn' : 'wf-picker-recommend-btn'}
+                  title={
+                    recommendation
+                      ? 'Ask the AI to recommend again — the last recommendation is saved with the project and doesn’t re-ask on its own'
+                      : 'Ask the configured AI which template fits this project'
+                  }
+                  disabled={recommending}
+                  onClick={() => void requestTemplateRecommendation()}
+                >
+                  <Icon name={recommendation ? 'refresh' : 'sparkles'} size={12} />
+                  {recommendation ? 'Refresh recommendation' : 'Recommend a template'}
+                </button>
+              )}
+              {gatewayConfigured === false && (
+                <span
+                  className="btn btn-compact wf-picker-recommend-btn is-disabled"
+                  data-testid="wf-picker-recommend-unavailable"
+                  title="Recommending a template needs the Vercel AI Gateway configured in Settings → AI Provider — your active provider is a different one, so this isn't available."
+                >
+                  <Icon name="sparkles" size={12} />
+                  Recommend a template
+                </span>
+              )}
+            </div>
+            {recommending && (
+              <p className="hint wf-picker-recommend-status" data-testid="wf-picker-recommend-loading">
+                Asking the AI which template fits this project…
+              </p>
+            )}
+            {recommendError && (
+              <p className="hint is-danger wf-picker-recommend-status" data-testid="wf-picker-recommend-error">
+                {recommendError}
+              </p>
+            )}
           </div>
           <button type="button" className="btn-icon" aria-label="Close" onClick={onClose}>
             <Icon name="close" size={14} />
@@ -201,6 +271,7 @@ export function NewWorkflowDialog({
               ) : (
                 list.map(template => {
                   const isSelected = selectedTemplate?.definition.id === template.definition.id;
+                  const isRecommended = recommendation?.templateId === template.definition.id;
                   const itemReady = readiness[template.definition.id];
                   const stageCount = template.definition.nodes.length;
                   return (
@@ -213,7 +284,7 @@ export function NewWorkflowDialog({
                         type="button"
                         role="option"
                         aria-selected={isSelected}
-                        className={`wf-picker-item ${isSelected ? 'active' : ''}`}
+                        className={`wf-picker-item ${isSelected ? 'active' : ''}${isRecommended ? ' is-recommended' : ''}`}
                         onClick={() => setSelectedId(template.definition.id)}
                       >
                         <div className="wf-picker-item-icon">
@@ -233,6 +304,15 @@ export function NewWorkflowDialog({
                         <div className="wf-picker-item-content">
                           <div className="wf-picker-item-head">
                             <span className="wf-picker-item-name">{template.definition.name}</span>
+                            {isRecommended && (
+                              <span
+                                className="wf-picker-recommended-badge"
+                                data-testid="wf-picker-recommended-badge"
+                                title={recommendation?.rationale}
+                              >
+                                <Icon name="sparkles" size={11} /> Recommended
+                              </span>
+                            )}
                             <span
                               className={`wf-picker-source-badge ${
                                 template.source === 'built-in' ? 'is-builtin' : 'is-marketplace'
@@ -248,6 +328,9 @@ export function NewWorkflowDialog({
                           </div>
                           {template.definition.description && (
                             <p className="wf-picker-item-desc">{template.definition.description}</p>
+                          )}
+                          {isRecommended && recommendation?.rationale && (
+                            <p className="wf-picker-item-rationale">{recommendation.rationale}</p>
                           )}
                           <div className="wf-picker-item-meta">
                             <span>{stageCount} stages</span>
@@ -277,7 +360,6 @@ export function NewWorkflowDialog({
           {/* Right Pane: Selected Template Preview & Guidance */}
           <div className="wf-picker-detail">
             {selectedTemplate && guidance ? (
-              <>
                 <div className="wf-picker-detail-content">
                   {/* Template Title & Overview */}
                   <div className="wf-picker-detail-head">
@@ -431,47 +513,44 @@ export function NewWorkflowDialog({
                     </div>
                   </div>
                 </div>
-
-                {/* Footer Bar */}
-                <div className="wf-picker-footer">
-                  <div className="wf-picker-footer-status">
-                    {selectedReadiness?.autoInstallable ? (
-                      <span style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <Icon name="sparkles" size={13} />
-                        Missing agent dependencies will be installed automatically upon selection.
-                      </span>
-                    ) : selectedReadiness && !selectedReadiness.agentsOk ? (
-                      <span style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <Icon name="warning" size={13} />
-                        You can instantiate this template, but missing agents must be installed before running.
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="wf-picker-footer-actions">
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={onClose}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={busy}
-                      onClick={() => use(selectedTemplate.definition.id)}
-                    >
-                      {busy ? 'Instantiating…' : `Use "${selectedTemplate.definition.name}"`}
-                    </button>
-                  </div>
-                </div>
-              </>
             ) : (
               <div className="wf-picker-empty">
                 <Icon name="git-branch" size={32} />
                 <p>Select a template on the left to preview its pipeline stages and details.</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Footer Bar — a sibling of the sidebar/detail grid, not scoped to
+            the right column, so it spans the whole dialog's width instead of
+            leaving the sidebar's bottom edge without a matching strip. */}
+        <div className="wf-picker-footer">
+          <div className="wf-picker-footer-status">
+            {selectedReadiness?.autoInstallable ? (
+              <span style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <Icon name="sparkles" size={13} />
+                Missing agent dependencies will be installed automatically upon selection.
+              </span>
+            ) : selectedReadiness && !selectedReadiness.agentsOk ? (
+              <span style={{ color: 'var(--warning)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Icon name="warning" size={13} />
+                You can instantiate this template, but missing agents must be installed before running.
+              </span>
+            ) : null}
+          </div>
+          <div className="wf-picker-footer-actions">
+            <button type="button" className="btn" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy || !selectedTemplate}
+              onClick={() => selectedTemplate && use(selectedTemplate.definition.id)}
+            >
+              {busy ? 'Instantiating…' : selectedTemplate ? `Use "${selectedTemplate.definition.name}"` : 'Use template'}
+            </button>
           </div>
         </div>
       </div>

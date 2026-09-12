@@ -25,6 +25,7 @@ import {
 } from './settingsDefaults';
 import { Icon, type IconName } from '../ui/Icon';
 import { ModelManagerPanel } from '../ai/ModelManagerPanel';
+import { AiUsageStatsSection } from './AiUsageStatsSection';
 import { MODEL_PROVIDERS } from '../ai/modelProviders';
 import {
   formatCost,
@@ -53,6 +54,7 @@ export type SettingsCategory =
   | 'marketplace'
   | 'jira'
   | 'ai'
+  | 'ai-usage'
   | 'agent-runtime'
   | 'workflow-templates'
   | 'performance'
@@ -104,7 +106,7 @@ const AI_GROUP: NavGroupDef = {
   id: 'ai-group',
   label: 'AI & agents',
   icon: 'robot',
-  children: ['ai', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
+  children: ['ai', 'ai-usage', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
 };
 
 const INTEGRATIONS_GROUP: NavGroupDef = {
@@ -178,6 +180,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'AI Provider',
     icon: 'robot',
     description: 'AI provider connections used to delegate issues to an AI agent.'
+  },
+  {
+    id: 'ai-usage',
+    label: 'AI Usage',
+    icon: 'graph',
+    description: 'Token and cost usage across every session and internal AI feature, by day, week, or month.'
   },
   {
     id: 'agent-runtime',
@@ -339,6 +347,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'marketplace' && <MarketplaceSection />}
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
+        {active === 'ai-usage' && <AiUsageStatsSection />}
         {active === 'agent-runtime' && <AgentRuntimeSection />}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}

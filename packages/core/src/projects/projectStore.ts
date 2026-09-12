@@ -2,6 +2,7 @@ import type { KeyValueStore } from '../host/stateStore';
 import type {
   ProjectBoardReference,
   ProjectRecord,
+  StoredTemplateRecommendation,
   UpdateProjectInput
 } from './projectTypes';
 import { normalizeWorkflowStages, validateWorkflowStages } from './projectWorkflow';
@@ -52,14 +53,34 @@ export class ProjectStore {
 
   public async update(projectId: string, patch: UpdateProjectInput): Promise<ProjectRecord> {
     const project = this.require(projectId);
+    let nextKey = project.key;
+    if (patch.key !== undefined) {
+      const normalized = patch.key.trim().toUpperCase();
+      if (normalized !== project.key) {
+        // Not blocked on existing tickets: `IssueSummary.projectKey` (what
+        // filtering/search actually match against) is resolved from the
+        // *current* `project.key` at read time — see `projectService.ts`'s
+        // `issue()` — so a rename doesn't break any tracker association.
+        // The only effect is cosmetic: each ticket's own `.key` string
+        // (`${project.key}-${sequence}` at the time it was created) keeps
+        // its old prefix, so old and new tickets read with different
+        // prefixes. `UpdateProjectInput.key`'s doc names this tradeoff.
+        if (this.list().some(candidate => candidate.id !== projectId && candidate.key.toLowerCase() === normalized.toLowerCase())) {
+          throw new Error(`Project key ${normalized} is already in use.`);
+        }
+        nextKey = normalized;
+      }
+    }
     const next: ProjectRecord = {
       ...project,
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      key: nextKey,
       ...(patch.type !== undefined ? { type: patch.type } : {}),
       ...(patch.purpose !== undefined ? { purpose: patch.purpose.trim() } : {}),
       ...(patch.brief !== undefined ? { brief: { ...patch.brief } } : {}),
       ...(patch.workflowStages !== undefined ? { workflowStages: patch.workflowStages.map(stage => ({ ...stage })) } : {}),
       ...(patch.defaultAiToolMode !== undefined ? { defaultAiToolMode: patch.defaultAiToolMode } : {}),
+      ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
       updatedAt: new Date().toISOString()
     };
     validateProjectRecord(next);
@@ -90,6 +111,22 @@ export class ProjectStore {
       item => item.connectionId !== connectionId || item.boardId !== boardId
     );
     project.updatedAt = new Date().toISOString();
+    return this.replace(project);
+  }
+
+  /**
+   * Persists the AI's workflow-template recommendation on the project record
+   * itself — a dedicated write, not routed through `update`'s user-editable
+   * `UpdateProjectInput`, since this is a computed cache value, not something
+   * a person fills in on a settings form. `updatedAt` is deliberately left
+   * untouched: recomputing a recommendation isn't a project edit.
+   */
+  public async setRecommendedWorkflowTemplate(
+    projectId: string,
+    value: StoredTemplateRecommendation
+  ): Promise<ProjectRecord> {
+    const project = this.require(projectId);
+    project.recommendedWorkflowTemplate = { ...value };
     return this.replace(project);
   }
 

@@ -609,10 +609,12 @@ an arbitrary project folder. `e2e/aiCodingTask.spec.ts` is the worked example.
 
 ## `docs/plans/` is a Praxis board — keep it parseable
 
-Praxis reads its own plans: `identifyPlanFolder` resolves `docs/plans` /
-`docs/plans/features`, and `parsePlanFolder` (`markdownPlanParser.ts`) turns the
-tree into board issues. **A file that does not meet the contract is skipped
-silently** — no error, it just never appears on the board. The contract:
+Praxis reads its own plans: the Praxis Desktop project (`praxis-code.workspace.praxis.json`)
+is folder-backed at `apps/praxis-desktop`, and `identifyPlanFolder` resolves
+`apps/praxis-desktop/docs/plans` / `apps/praxis-desktop/docs/plans/features` from
+there, and `parsePlanFolder` (`markdownPlanParser.ts`) turns the tree into board
+issues. **A file that does not meet the contract is skipped silently** — no
+error, it just never appears on the board. The contract:
 
 - **A child item needs a declared type.** `feature.md` is matched by filename;
   everything else (`story.md`, `task-NNN-*.md`, bugs, ideas) is kept only if
@@ -664,17 +666,20 @@ a dev server. A frontend change is invisible to e2e until you rebuild **and** ru
 `copy-renderer`.
 
 **No test may point a Praxis write path at the working tree.** `journey.spec.ts`
-deliberately runs the "adopt a folder of real plans" journey against this
-repository's own planning content — that is what makes it worth having, because
-the data is genuine rather than a hand-built fixture. It now runs against a
-**temp copy** of `docs/plans` + `PROJECT.md` + `board.praxis.json`, and a
-`beforeAll`/`afterAll` fingerprint over those 180 files fails the spec if
-anything writes into the real tree.
+deliberately runs the "adopt a folder of real plans" journey against the Praxis
+Desktop app's own planning content (`apps/praxis-desktop/docs/plans`,
+`apps/praxis-desktop/project.praxis.md`, `apps/praxis-desktop/board.praxis.json`)
+— that is what makes it worth having, because the data is genuine rather than a
+hand-built fixture. It now runs against a **temp copy** of those three, and a
+`beforeAll`/`afterAll` fingerprint over those files fails the spec if anything
+writes into the real tree.
 
 The guarded set is **derived from the naming rule**, not listed: every
-root-level `*.praxis.*` file plus `docs/plans`. A Praxis file added later is
-covered without anyone remembering to extend the guard — which matters, because
-the list had already gone stale once when the workspace file was renamed.
+root-level `*.praxis.*` file (the workspace file) plus every `*.praxis.*` file
+under `apps/praxis-desktop` plus `apps/praxis-desktop/docs/plans`. A Praxis file
+added later is covered without anyone remembering to extend the guard — which
+matters, because the list had already gone stale once when the workspace file
+was renamed.
 
 This is not hypothetical. Two Praxis write paths fire automatically on any
 folder a project points at:

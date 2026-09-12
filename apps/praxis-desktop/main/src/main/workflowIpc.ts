@@ -32,7 +32,17 @@ import {
   AVAILABLE_SKILL_DEFINITIONS,
   installAvailableAgent,
   installAvailableSkill,
+  hasReportableUsage,
+  computeRecommendationFingerprint,
+  recommendAgentForStage,
+  recommendTemplateForProject,
+  resolveVercelApiKey,
   type AgentCatalogSnapshot,
+  type AgentRecommendationCandidate,
+  type AgentRecommendationResult,
+  type StoredAgentRecommendation,
+  type StoredTemplateRecommendation,
+  type TemplateRecommendationResult,
   type CreateDiagnosisSessionResult,
   type TemplateReadiness,
   type WorkflowCatalog,
@@ -51,6 +61,10 @@ import { marketplaceWorkflowTemplates } from './marketplaceInstance';
 import { getWorkflowOrchestrator, writeBackToIssue } from './workflowOrchestratorInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
 import { startDiagnosisSessionFromEvidence } from './diagnosisSession';
+import { getSecretsStore } from './connectionStoreInstance';
+import { getSettingsBackend } from './settingsBackendInstance';
+import { getAiUsageLog } from './aiUsageLogInstance';
+import { getWorkflowRecommendationCache } from './workflowRecommendationCacheInstance';
 import {
   getWorkflowPolicyStore,
   getWorkflowStore,
@@ -195,14 +209,72 @@ async function persistProjectWorkflow(projectId: string, definition: WorkflowDef
   return filePath;
 }
 
+async function resolveTemplateLibrary(projectId: string): Promise<WorkflowTemplate[]> {
+  const project = await projectDefinitions(projectId);
+  return assembleTemplateLibrary({
+    marketplace: await marketplaceTemplateDefinitions(),
+    global: await globalTemplateDefinitions(),
+    project: project.map(definition => ({ definition }))
+  });
+}
+
 export function registerWorkflowIpc(): void {
-  ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> => {
-    const project = await projectDefinitions(projectId);
-    return assembleTemplateLibrary({
-      marketplace: await marketplaceTemplateDefinitions(),
-      global: await globalTemplateDefinitions(),
-      project: project.map(definition => ({ definition }))
+  ipcMain.handle('workflows:listTemplates', async (_event, projectId: string): Promise<WorkflowTemplate[]> =>
+    resolveTemplateLibrary(projectId)
+  );
+
+  ipcMain.handle(
+    'workflows:getRecommendedTemplate',
+    async (_event, projectId: string): Promise<StoredTemplateRecommendation | undefined> =>
+      getProjectStore().get(projectId)?.recommendedWorkflowTemplate
+  );
+
+  ipcMain.handle('workflows:recommendTemplate', async (_event, projectId: string): Promise<TemplateRecommendationResult> => {
+    const project = getProjectStore().get(projectId);
+    if (!project) {
+      throw new Error(`Project ${projectId} was not found.`);
+    }
+    const apiKey = await resolveVercelApiKey(getSecretsStore());
+    if (!apiKey) {
+      throw new Error('The Vercel AI Gateway is not configured — add an API key in Settings → AI to use recommendations.');
+    }
+    // Every offered template — a project template excluded from the dialog's
+    // own picker list (see `NewWorkflowDialog`'s `source !== 'project'`
+    // filter) is excluded here too, so the AI never recommends something the
+    // dialog wouldn't actually let the user pick.
+    const templates = (await resolveTemplateLibrary(projectId)).filter(template => template.source !== 'project');
+    const settings = getSettingsBackend().read();
+    const result = await recommendTemplateForProject(
+      {
+        projectName: project.name,
+        purpose: project.purpose,
+        brief: project.brief,
+        candidates: templates.map(template => ({
+          templateId: template.definition.id,
+          name: template.definition.name,
+          description: template.definition.description
+        }))
+      },
+      { apiKey, gatewayUrl: settings.ai.gatewayUrl.trim() || undefined, model: settings.ai.defaultModel.trim() || undefined }
+    );
+    const usageEvent = {
+      source: 'workflow-template-recommendation' as const,
+      provider: 'vercel-gateway' as const,
+      model: result.model,
+      inputTokens: result.usage?.inputTokens,
+      outputTokens: result.usage?.outputTokens,
+      totalTokens: result.usage?.totalTokens
+    };
+    if (hasReportableUsage(usageEvent)) {
+      void getAiUsageLog().record(usageEvent);
+    }
+    await getProjectStore().setRecommendedWorkflowTemplate(projectId, {
+      templateId: result.templateId,
+      rationale: result.rationale,
+      model: result.model,
+      computedAt: new Date().toISOString()
     });
+    return result;
   });
 
   ipcMain.handle('workflows:templateReadiness', async (_event, projectId: string): Promise<TemplateReadiness[]> => {
@@ -477,6 +549,61 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
     if (!run) throw new Error(`Run ${runId} was not found.`);
     return summarize(run);
   });
+
+  ipcMain.handle(
+    'workflows:getRecommendation',
+    async (
+      _event,
+      workflowId: string,
+      nodeId: string,
+      input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+    ): Promise<{ recommendation: StoredAgentRecommendation | undefined; stale: boolean }> =>
+      getWorkflowRecommendationCache().get(workflowId, nodeId, input)
+  );
+
+  ipcMain.handle(
+    'workflows:recommendAgent',
+    async (
+      _event,
+      workflowId: string,
+      nodeId: string,
+      input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+    ): Promise<AgentRecommendationResult> => {
+      const apiKey = await resolveVercelApiKey(getSecretsStore());
+      if (!apiKey) {
+        throw new Error('The Vercel AI Gateway is not configured — add an API key in Settings → AI to use recommendations.');
+      }
+      const settings = getSettingsBackend().read();
+      const result = await recommendAgentForStage(
+        { stageName: input.stageName, instructions: input.instructions, candidates: input.candidates },
+        { apiKey, gatewayUrl: settings.ai.gatewayUrl.trim() || undefined, model: settings.ai.defaultModel.trim() || undefined }
+      );
+      const usageEvent = {
+        source: 'workflow-recommendation' as const,
+        provider: 'vercel-gateway' as const,
+        model: result.model,
+        inputTokens: result.usage?.inputTokens,
+        outputTokens: result.usage?.outputTokens,
+        totalTokens: result.usage?.totalTokens
+      };
+      if (hasReportableUsage(usageEvent)) {
+        void getAiUsageLog().record(usageEvent);
+      }
+      void getWorkflowRecommendationCache().set(workflowId, nodeId, {
+        agentId: result.agentId,
+        rationale: result.rationale,
+        model: result.model,
+        provider: 'vercel-gateway',
+        computedAt: new Date().toISOString(),
+        inputFingerprint: computeRecommendationFingerprint({
+          stageName: input.stageName,
+          instructions: input.instructions,
+          candidates: input.candidates
+        })
+      });
+      return result;
+    }
+  );
 
   ipcMain.handle(
     'workflows:getEvidence',
