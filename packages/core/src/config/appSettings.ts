@@ -517,9 +517,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   appearance: {
     showBrandArtwork: true,
-    themeId: 'praxis-dark',
-    themeMode: 'dark',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'jira-cloud', 'anthropic-light', 'anthropic-dark'],
+    themeId: 'praxis-light',
+    themeMode: 'light',
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2'],
     customThemes: [],
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },

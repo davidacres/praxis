@@ -7,7 +7,7 @@ import type { AgentSessionRecord, TerminalCommandRecord, TerminalProfile, Termin
 import { Icon } from '../ui/Icon';
 import { getActiveTerminalId, setActiveTerminalId } from '../ai/terminalSelection';
 import { useSettings } from '../settings/useSettings';
-import { terminalColorsForTheme } from '../settings/themes';
+import { DEFAULT_THEME_ID, terminalColorsForTheme } from '../settings/themes';
 
 export type PanelTab = 'output' | 'terminal';
 
@@ -41,7 +41,7 @@ function xtermTheme() {
     brightBlue: '#3b8eea', brightMagenta: '#d670d6', brightCyan: '#29b8db', brightWhite: '#ffffff'
   };
   const themedAnsi = terminalColorsForTheme(
-    document.documentElement.getAttribute('data-theme') ?? 'praxis-dark',
+    document.documentElement.getAttribute('data-theme') ?? DEFAULT_THEME_ID,
     light ? 'light' : 'dark'
   );
   return {

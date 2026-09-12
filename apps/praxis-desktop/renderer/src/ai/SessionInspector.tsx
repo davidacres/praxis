@@ -5,7 +5,7 @@ import { useDialogs } from '../ui/dialogs';
 import { agentStateBadgeClass, agentStateLabel, isTerminalAgentState } from './aiSessionState';
 import { SessionChanges } from './SessionChanges';
 import { SessionTasks } from './SessionTasks';
-import { formatCost, formatElapsed, formatStarted, formatTokens, sessionMode } from './sessionNav';
+import { formatCost, formatElapsed, formatStarted, formatTokens, lastMessagePreview, liveActivity, reasoningSnippet, sessionMode } from './sessionNav';
 
 /**
  * Sessions runtime panel — the shell's right pane for the `sessions` route.
@@ -44,6 +44,9 @@ export function SessionInspector({ session }: SessionInspectorProps) {
   // agents give cost. Neither is guessed when absent — see sessionNav.
   const tokens = formatTokens(session.tokenUsage);
   const cost = formatCost(session.cost);
+  const activity = liveActivity(session);
+  const lastMessage = lastMessagePreview(session);
+  const reasoning = reasoningSnippet(session);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -90,8 +93,37 @@ export function SessionInspector({ session }: SessionInspectorProps) {
           transcript in the centre pane keeps scrolling past it. */}
       <SessionTasks session={session} />
 
+      {/* Same "don't scroll away" reasoning as the task list above: the
+          console shows its own copy of the activity line, but that one sits
+          at the bottom of the scrolling transcript. */}
+      {activity && (
+        <div className="session-activity-status" data-testid="session-live-activity">
+          <span className="session-activity-dot" aria-hidden="true" />
+          <span>{activity}</span>
+        </div>
+      )}
+
+      {lastMessage && (
+        <div className="agent-runtime-block session-last-message" data-testid="session-last-message">
+          <span className="rail-sub">Last message</span>
+          <p className="session-summary-text">{lastMessage}</p>
+        </div>
+      )}
+
+      {reasoning && (
+        <div className="agent-runtime-block session-reasoning" data-testid="session-reasoning">
+          <span className="rail-sub">Reasoning</span>
+          <p className="session-summary-text session-reasoning-text">{reasoning}</p>
+        </div>
+      )}
+
       {/* What the session did to the working tree, and what to do about it.
-          Renders nothing when the folder is not a repository or is clean. */}
+          Renders nothing when the folder is not a repository or is clean —
+          note the divider that sets it apart from the summary above lives on
+          its own root element for exactly that reason (see SessionChanges.tsx),
+          so no orphan rule shows up when there's nothing to divide.
+          Collapsed by default (persisted) — reviewing changes is a deliberate
+          step after the chat summary above, not something to scroll past. */}
       <SessionChanges session={session} />
 
       <div className="inspector-actions">

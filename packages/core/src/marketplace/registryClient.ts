@@ -11,6 +11,9 @@
  * verification, or disk work — that is {@link MarketplaceService}'s job.
  */
 
+/** A registry response was a 404 — distinct from other failures so `getPackument` knows when a scoped retry is worth trying. */
+class RegistryNotFoundError extends Error {}
+
 const GITHUB_API_VERSION = '2022-11-28';
 const DEFAULT_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_REGISTRY_BASE_URL = 'https://npm.pkg.github.com';
@@ -209,6 +212,13 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
           // Extract package name part after scope (e.g., @owner/praxis-addon-* -> praxis-addon-*)
           const nameWithoutScope = item.name.includes('/') ? item.name.split('/')[1]! : item.name;
           if (!nameWithoutScope.startsWith(this.prefix)) continue;
+          // Kept exactly as the REST listing returns it (scoped or not) — some
+          // registries (GitHub for at least some accounts) return it unscoped,
+          // others don't, and a mock/self-hosted registry may key its own
+          // packument lookup on this exact string. `getPackument` below is what
+          // adapts to a registry that requires the scoped form; rewriting the
+          // name here would break any registry that already works with it as-is
+          // (verified: it broke this project's own mock-registry e2e suite).
           refs.push({
             name: item.name,
             htmlUrl: typeof item.html_url === 'string' ? item.html_url : undefined,
@@ -223,6 +233,26 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
   }
 
   public async getPackument(packageName: string): Promise<Packument> {
+    try {
+      return await this.fetchPackument(packageName);
+    } catch (error) {
+      // Some registries — GitHub Packages' npm endpoint, for at least some
+      // accounts — only resolve the scoped form (`@owner/name`) even though
+      // their own REST packages-list endpoint returned this name unscoped.
+      // Verified directly against the real API: listing returns
+      // "praxis-addon-theme-solarized", only "@davidacres/praxis-addon-theme-
+      // solarized" resolves. Retry scoped only on a 404 for an unscoped name,
+      // so a registry that already works with the name as given — this
+      // project's own mock registry included — never pays for a second
+      // request, and a genuinely-missing package still surfaces its real error.
+      if (error instanceof RegistryNotFoundError && !packageName.startsWith('@')) {
+        return await this.fetchPackument(`@${this.config.owner.trim()}/${packageName}`);
+      }
+      throw error;
+    }
+  }
+
+  private async fetchPackument(packageName: string): Promise<Packument> {
     const url = `${this.registryBaseUrl}/${encodePackumentPath(packageName)}`;
     const response = await this.fetchImpl(url, {
       headers: {
@@ -232,9 +262,9 @@ export class GitHubPackagesRegistryClient implements MarketplaceRegistryClient {
     });
     const text = await response.text();
     if (!response.ok) {
-      throw new Error(
-        formatRegistryError(`Fetching ${packageName}`, response.status, response.statusText, text)
-      );
+      const message = formatRegistryError(`Fetching ${packageName}`, response.status, response.statusText, text);
+      if (response.status === 404) throw new RegistryNotFoundError(message);
+      throw new Error(message);
     }
     return normalizePackument(packageName, JSON.parse(text) as unknown);
   }
