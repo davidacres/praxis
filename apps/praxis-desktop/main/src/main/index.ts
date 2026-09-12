@@ -15,6 +15,7 @@ import { registerShellIpc } from './shellIpc';
 import { registerBrowserIpc } from './browserIpc';
 import { registerBoardPrefsIpc } from './boardPrefsIpc';
 import { registerAiIpc } from './aiIpc';
+import { registerAiUsageIpc, startAiUsageTracking } from './aiUsageIpc';
 import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
@@ -259,6 +260,8 @@ void app.whenReady().then(async () => {
   registerBrowserIpc();
   registerBoardPrefsIpc();
   registerAiIpc();
+  registerAiUsageIpc();
+  startAiUsageTracking();
   registerAiWorkflowIpc();
   registerTaskDesignerIpc();
   registerWorkflowIpc();

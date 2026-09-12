@@ -464,7 +464,7 @@ export function Sidebar({
                           onClick={() => setCollapsed(current => ({ ...current, [`project:${project.id}`]: !projectCollapsed }))}
                         ><span className="tree-section-icon"><Icon name={projectCollapsed ? 'chevron-right' : 'chevron-down'} size={12} /></span></button>
                         <button className="project-tree-content" data-testid="project-nav-item" onClick={() => onSelectProject(project)}>
-                          <span className="tree-icon project-icon"><Icon name="folder-open" size={15} /></span>
+                          <span className="tree-icon project-icon"><Icon name={project.icon ?? 'folder-open'} size={15} /></span>
                           <span className="tree-stack"><span className="tree-label">{project.name}</span><span className="tree-sub">{project.key} · {project.type}</span></span>
                           <span className="tree-meta">{childCount}</span>
                         </button>

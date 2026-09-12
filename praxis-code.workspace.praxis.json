@@ -2,32 +2,33 @@
   "format": "praxis-workspace",
   "schemaVersion": 2,
   "createdWithAppVersion": "0.2.1",
-  "lastSavedWithAppVersion": "0.2.1",
+  "lastSavedWithAppVersion": "0.3.1",
   "workspace": {
     "id": "workspace-1788215175468-fo56j1",
     "name": "Praxis Code",
     "description": "The Praxis system tool",
     "projectIds": [
-      "project-1788215224012-rap082"
+      "project-1788215224012-rap082",
+      "project-1789239305854-dg8yni"
     ],
     "connectionIds": [],
     "objectives": [],
     "createdAt": "2026-08-31T22:26:15.468Z",
-    "updatedAt": "2026-08-31T22:27:04.196Z",
+    "updatedAt": "2026-09-12T18:55:05.869Z",
     "createdWithAppVersion": "0.2.1",
-    "lastSavedWithAppVersion": "0.2.1",
+    "lastSavedWithAppVersion": "0.3.1",
     "schemaVersion": 2,
     "defaultProjectId": "project-1788215224012-rap082"
   },
   "projects": [
     {
       "id": "project-1788215224012-rap082",
-      "name": "praxis",
+      "name": "Praxis Desktop",
       "key": "PRAXIS",
       "type": "software",
       "purpose": "",
       "brief": {},
-      "workspaceFolder": ".",
+      "workspaceFolder": "/Users/daveacres/dev/tools/praxis/apps/praxis-desktop",
       "storage": "folder",
       "workflowStages": [
         {
@@ -61,10 +62,69 @@
       "defaultAiToolMode": "full",
       "workItems": [],
       "createdAt": "2026-08-31T22:27:04.012Z",
-      "updatedAt": "2026-08-31T22:27:04.012Z",
-      "projectFileStatus": "created"
+      "updatedAt": "2026-09-12T19:14:26.549Z",
+      "projectFileStatus": "created",
+      "icon": "rocket"
+    },
+    {
+      "id": "project-1789239305854-dg8yni",
+      "name": "Praxis Mobile",
+      "key": "PXMOB",
+      "type": "software",
+      "purpose": "",
+      "brief": {},
+      "storage": "folder",
+      "workspaceFolder": "/Users/daveacres/dev/tools/praxis/apps/praxis-mobile",
+      "workflowStages": [
+        {
+          "id": "project-1789239305854-dg8yni-backlog",
+          "name": "Backlog",
+          "category": "todo"
+        },
+        {
+          "id": "project-1789239305854-dg8yni-done",
+          "name": "Done",
+          "category": "done"
+        }
+      ],
+      "defaultBoardId": "project-1789239305854-dg8yni-board",
+      "workItems": [],
+      "linkedBoards": [
+        {
+          "connectionId": "project:project-1788215224012-rap082",
+          "boardId": "folder-pxmob-aab8a80a",
+          "displayName": "Praxis Mobile"
+        }
+      ],
+      "defaultAiToolMode": "full",
+      "createdAt": "2026-09-12T18:55:05.854Z",
+      "updatedAt": "2026-09-12T19:15:56.248Z",
+      "projectFileStatus": "retained",
+      "icon": "robot"
     }
   ],
-  "connections": [],
-  "boards": []
+  "connections": [
+    {
+      "id": "project:project-1789239305854-dg8yni",
+      "name": "Praxis Mobile",
+      "mode": "folder",
+      "settings": {
+        "projectId": "project-1789239305854-dg8yni",
+        "projectKey": "PXMOB",
+        "projectName": "Praxis Mobile",
+        "source": "folder",
+        "roots": [
+          "/Users/daveacres/dev/tools/praxis/apps/praxis-mobile/docs/plans"
+        ],
+        "allowIssueCreation": true
+      }
+    }
+  ],
+  "boards": [
+    {
+      "connectionId": "project:project-1789239305854-dg8yni",
+      "boardId": "folder-pxmob",
+      "displayName": "Praxis Mobile"
+    }
+  ]
 }

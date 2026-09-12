@@ -85,7 +85,7 @@ the trusted discovery root on first run, not written into a user's project.
 
 | Ref | Outcome |
 | --- | --- |
-| [FX-BF-034](/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/feature.md) | Full SDLC quality and security gates |
+| [FX-BF-034](/apps/praxis-desktop/docs/plans/features/fx-bf-034-sdlc-quality-and-security-gates/feature.md) | Full SDLC quality and security gates |
 | FX-BE-087 | Structured check results and metric/severity threshold gates |
 | FX-BE-088 | Bundled secret / SAST / SCA / license scanners behind the security gate |
 | FX-BE-089 | Structured code review with inline delivery and a bounded fix loop |

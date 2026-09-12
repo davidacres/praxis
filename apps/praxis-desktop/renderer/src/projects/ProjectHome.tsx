@@ -1,10 +1,43 @@
 import { useState } from 'react';
 import type {
-  AgentToolMode, Board, Connection, ProjectRecord, ProjectStartingPoint, ProjectType,
+  AgentToolMode, Board, Connection, ProjectIconName, ProjectRecord, ProjectStartingPoint, ProjectType,
   ProjectWorkflowCategory, ProjectWorkflowStage
 } from '@praxis/core';
 import { PROJECT_BRIEF_FIELDS } from './projectBriefFields';
 import { Icon } from '../ui/Icon';
+
+/**
+ * Duplicated from core's `PROJECT_ICON_NAMES`, not imported — core is
+ * CommonJS and a value import from `@praxis/core` compiles clean under
+ * `tsc --noEmit` but silently breaks `vite build` (see AGENTS.md's "Shared
+ * logic belongs in core" section). Keep this list identical to core's;
+ * `projectTypes.ts` names it as the thing to keep in sync.
+ */
+const PROJECT_ICON_NAMES: readonly ProjectIconName[] = [
+  'rocket',
+  'target',
+  'milestone',
+  'star',
+  'folder',
+  'book',
+  'lightbulb',
+  'zap',
+  'shield',
+  'globe',
+  'tools',
+  'terminal',
+  'server',
+  'organization',
+  'graph',
+  'columns',
+  'bug',
+  'ticket',
+  'sparkles',
+  'robot'
+];
+
+/** The default glyph for a project that hasn't picked one of `PROJECT_ICON_NAMES`. */
+const DEFAULT_PROJECT_ICON: ProjectIconName = 'folder';
 
 const CATEGORY_LABEL: Record<ProjectWorkflowCategory, string> = {
   todo: 'Not started',
@@ -20,12 +53,19 @@ const TOOL_MODE_LABEL: Record<AgentToolMode, string> = {
 
 export function ProjectHome({ project, boards, connections, onChanged }: { project: ProjectRecord; boards: Board[]; connections: Connection[]; onChanged: (project: ProjectRecord) => void; onOpenBoard: (boardId: string) => void; onOpenGit: () => void }) {
   const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(project.name);
+  const [key, setKey] = useState(project.key);
+  const [icon, setIcon] = useState<ProjectIconName | undefined>(project.icon);
   const [type, setType] = useState<ProjectType>(project.type);
   const [toolMode, setToolMode] = useState<AgentToolMode>(project.defaultAiToolMode);
   const [purpose, setPurpose] = useState(project.purpose);
   const [brief, setBrief] = useState(project.brief);
   const [stages, setStages] = useState<ProjectWorkflowStage[]>(project.workflowStages);
   const [error, setError] = useState<string>();
+  // Renaming the key is always allowed (see `UpdateProjectInput.key`'s doc)
+  // — this is purely informational: every existing ticket's own `key`
+  // string was set once at creation, so it keeps the old prefix regardless.
+  const keyRenameHasCosmeticEffect = project.workItems.length > 0 && key.trim().toUpperCase() !== project.key;
   const [attachMode, setAttachMode] = useState<ProjectStartingPoint>('existing-folder');
   const [attachPath, setAttachPath] = useState('');
   const [folderName, setFolderName] = useState('');
@@ -46,7 +86,7 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
       ? { label: 'Git repo', on: true }
       : { label: inspection ? 'No repo' : 'Folder attached', on: false };
 
-  const cancelEdit = () => { setEditing(false); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
+  const cancelEdit = () => { setEditing(false); setName(project.name); setKey(project.key); setIcon(project.icon); setType(project.type); setToolMode(project.defaultAiToolMode); setPurpose(project.purpose); setBrief(project.brief); setStages(project.workflowStages); setError(undefined); };
 
   // How many tickets sit on each stage, so renaming or removing one can say
   // what it will move rather than silently re-resolving.
@@ -67,22 +107,64 @@ export function ProjectHome({ project, boards, connections, onChanged }: { proje
     ...current.slice(current.length - 1)
   ]);
   const removeStage = (index: number) => setStages(current => current.filter((_, i) => i !== index));
-  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
+  const save = async () => { try { onChanged(await window.praxis.projects.update(project.id, { name, key, icon, type, purpose, brief, defaultAiToolMode: toolMode, workflowStages: stages })); setEditing(false); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
   const chooseAttach = async () => { const value = await window.praxis.dialog.pickFolder(attachMode === 'new-folder' ? 'Choose parent folder' : 'Choose existing project folder'); if (value) setAttachPath(value); };
   const attach = async () => { try { const result = await window.praxis.projects.attachFolder(project.id, { startingPoint: attachMode as 'new-folder' | 'existing-folder', folderPath: attachPath, folderName: folderName || undefined, createProjectFile: true }); onChanged(result.project); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } };
 
   return <div className="project-home" data-testid="project-home">
     <header className="project-home-hero">
+      <div className="project-home-icon-badge" data-testid="project-home-icon">
+        <Icon name={(editing ? icon : project.icon) ?? DEFAULT_PROJECT_ICON} size={22} />
+      </div>
       <div className="project-home-id">
-        <h1>{project.name}</h1>
+        {editing
+          ? <input
+              className="input project-home-name-input"
+              data-testid="project-home-name-input"
+              value={name}
+              placeholder="Project name"
+              onChange={event => setName(event.target.value)}
+            />
+          : <h1>{project.name}</h1>}
         {/* A project created during a test run carries today's date, so this is
             tagged for snapshot masking — otherwise every baseline showing this
             header expires at midnight. */}
-        <p>{project.key} · {project.type} · <span data-testid="project-created-date">{new Date(project.createdAt).toLocaleDateString()}</span></p>
+        {editing
+          ? <div className="project-home-key-row">
+              <input
+                className="input project-home-key-input"
+                data-testid="project-home-key-input"
+                value={key}
+                onChange={event => setKey(event.target.value.toUpperCase())}
+              />
+              <span>· {project.type} · <span data-testid="project-created-date">{new Date(project.createdAt).toLocaleDateString()}</span></span>
+            </div>
+          : <p>{project.key} · {project.type} · <span data-testid="project-created-date">{new Date(project.createdAt).toLocaleDateString()}</span></p>}
+        {editing && keyRenameHasCosmeticEffect && (
+          <p className="project-home-key-hint" data-testid="project-home-key-hint">
+            {project.workItems.length} existing ticket{project.workItems.length === 1 ? '' : 's'} will keep the {project.key} prefix — only new tickets use the new key.
+          </p>
+        )}
+        {editing && (
+          <div className="project-home-icon-picker" role="group" aria-label="Project icon" data-testid="project-home-icon-picker">
+            {PROJECT_ICON_NAMES.map(candidate => (
+              <button
+                key={candidate}
+                type="button"
+                className={`project-home-icon-option${(icon ?? DEFAULT_PROJECT_ICON) === candidate ? ' active' : ''}`}
+                aria-label={`Use the ${candidate} icon`}
+                aria-pressed={(icon ?? DEFAULT_PROJECT_ICON) === candidate}
+                onClick={() => setIcon(candidate)}
+              >
+                <Icon name={candidate} size={15} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {editing
         ? <div className="project-home-hero-actions"><button className="btn" onClick={cancelEdit}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></div>
-        : <button className="icon-btn" title="Edit project brief" aria-label="Edit project brief" onClick={() => setEditing(true)}><Icon name="pencil" size={15} /></button>}
+        : <button className="icon-btn" title="Edit project" aria-label="Edit project" onClick={() => setEditing(true)}><Icon name="pencil" size={15} /></button>}
     </header>
 
     <div className="project-home-chips">

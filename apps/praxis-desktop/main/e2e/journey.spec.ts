@@ -8,11 +8,12 @@
 // — the project was created as app storage and its board read an empty
 // `workItems` array while the plans sat on disk, ignored.
 //
-// The folder under test is a *copy* of this repository's own planning content:
-// its real `docs/plans` tree, `project.praxis.md` and `board.praxis.json`. That keeps
-// the original intent — the journey runs against genuine content rather than a
-// hand-built fixture — without pointing Praxis's write paths at the working
-// tree.
+// The folder under test is a *copy* of the Praxis Desktop app's own planning
+// content: its real `apps/praxis-desktop/docs/plans` tree,
+// `apps/praxis-desktop/project.praxis.md` and `apps/praxis-desktop/board.praxis.json`.
+// That keeps the original intent — the journey runs against genuine content
+// rather than a hand-built fixture — without pointing Praxis's write paths at
+// the working tree.
 //
 // It used to run against the repository directly, and that is not theoretical:
 // `FolderService.loadFromDisk` runs a template-upgrade pass that rewrites plan
@@ -37,21 +38,31 @@ let window: Page;
 /** The repo root — four levels up from apps/praxis-desktop/main/e2e. */
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
 
+/** The Praxis Desktop app root — where its own `*.praxis.*` files and `docs/plans` live. */
+const DESKTOP_APP_ROOT = path.join('apps', 'praxis-desktop');
+
 /**
  * Everything in the working tree this spec could plausibly cause a write to.
  *
  * Derived from the naming rule rather than listed, so a Praxis file added later
  * is covered without anyone remembering to add it here — every root-level
- * `*.praxis.*` (project.praxis.md, board.praxis.json,
- * <slug>.workspace.praxis.json) plus the plans tree the folder backend parses
- * and its template-upgrade pass can rewrite.
+ * `*.praxis.*` file (currently just `<slug>.workspace.praxis.json`, since a
+ * workspace file sits above the projects it groups) plus every `*.praxis.*`
+ * file under the Praxis Desktop app root (`project.praxis.md`,
+ * `board.praxis.json`) plus the plans tree the folder backend parses and its
+ * template-upgrade pass can rewrite.
  */
 function guardedPaths(): string[] {
   const rootPraxisFiles = fs
     .readdirSync(REPO_ROOT)
     .filter(name => name.includes('.praxis.'))
     .sort();
-  return [...rootPraxisFiles, path.join('docs', 'plans')];
+  const desktopPraxisFiles = fs
+    .readdirSync(path.join(REPO_ROOT, DESKTOP_APP_ROOT))
+    .filter(name => name.includes('.praxis.'))
+    .sort()
+    .map(name => path.join(DESKTOP_APP_ROOT, name));
+  return [...rootPraxisFiles, ...desktopPraxisFiles, path.join(DESKTOP_APP_ROOT, 'docs', 'plans')];
 }
 
 /** A stable fingerprint of the guarded paths, so a stray write is visible. */
@@ -82,9 +93,13 @@ let repoCopy: string;
 function copyRepositoryContent(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-journey-repo-'));
   fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
-  fs.cpSync(path.join(REPO_ROOT, 'docs', 'plans'), path.join(root, 'docs', 'plans'), { recursive: true });
+  fs.cpSync(
+    path.join(REPO_ROOT, DESKTOP_APP_ROOT, 'docs', 'plans'),
+    path.join(root, 'docs', 'plans'),
+    { recursive: true }
+  );
   for (const file of ['project.praxis.md', 'board.praxis.json']) {
-    const source = path.join(REPO_ROOT, file);
+    const source = path.join(REPO_ROOT, DESKTOP_APP_ROOT, file);
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(root, file));
   }
   return root;
