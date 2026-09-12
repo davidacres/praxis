@@ -81,6 +81,7 @@ export class ProjectStore {
       ...(patch.workflowStages !== undefined ? { workflowStages: patch.workflowStages.map(stage => ({ ...stage })) } : {}),
       ...(patch.defaultAiToolMode !== undefined ? { defaultAiToolMode: patch.defaultAiToolMode } : {}),
       ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
       updatedAt: new Date().toISOString()
     };
     validateProjectRecord(next);

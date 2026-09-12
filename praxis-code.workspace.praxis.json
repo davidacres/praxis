@@ -62,9 +62,10 @@
       "defaultAiToolMode": "full",
       "workItems": [],
       "createdAt": "2026-08-31T22:27:04.012Z",
-      "updatedAt": "2026-09-12T19:14:26.549Z",
+      "updatedAt": "2026-09-12T23:10:40.253Z",
       "projectFileStatus": "created",
-      "icon": "rocket"
+      "icon": "rocket",
+      "color": "green"
     },
     {
       "id": "project-1789239305854-dg8yni",
@@ -89,18 +90,13 @@
       ],
       "defaultBoardId": "project-1789239305854-dg8yni-board",
       "workItems": [],
-      "linkedBoards": [
-        {
-          "connectionId": "project:project-1788215224012-rap082",
-          "boardId": "folder-pxmob-aab8a80a",
-          "displayName": "Praxis Mobile"
-        }
-      ],
+      "linkedBoards": [],
       "defaultAiToolMode": "full",
       "createdAt": "2026-09-12T18:55:05.854Z",
-      "updatedAt": "2026-09-12T19:15:56.248Z",
+      "updatedAt": "2026-09-12T23:10:58.703Z",
       "projectFileStatus": "retained",
-      "icon": "robot"
+      "icon": "robot",
+      "color": "magenta"
     }
   ],
   "connections": [

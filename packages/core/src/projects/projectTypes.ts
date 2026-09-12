@@ -145,6 +145,31 @@ export const PROJECT_ICON_NAMES = [
 
 export type ProjectIconName = (typeof PROJECT_ICON_NAMES)[number];
 
+/**
+ * The accent colors a project may pick alongside its icon, so two projects
+ * sharing an icon still read apart in the sidebar at a glance. Names only —
+ * core stays presentation-agnostic (it doesn't own icon SVGs either, just
+ * `PROJECT_ICON_NAMES`); the actual hex per name is owned once, in the
+ * renderer's `theme.css`, as `--project-color-<name>` custom properties,
+ * matching how `--tone-green`/`--tone-amber`/`--tone-red` already work
+ * (constant across marketplace themes — a project's own accent shouldn't
+ * shift when the theme changes). The set and order come from the dataviz
+ * skill's validated categorical palette: CVD-safe adjacent pairs, never
+ * cycled, a fixed identity order.
+ */
+export const PROJECT_COLOR_NAMES = [
+  'blue',
+  'orange',
+  'aqua',
+  'yellow',
+  'magenta',
+  'green',
+  'violet',
+  'red'
+] as const;
+
+export type ProjectColorName = (typeof PROJECT_COLOR_NAMES)[number];
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -165,6 +190,8 @@ export interface ProjectRecord {
   recommendedWorkflowTemplate?: StoredTemplateRecommendation;
   /** One of `PROJECT_ICON_NAMES`; undefined falls back to the sidebar/home's plain default glyph. */
   icon?: ProjectIconName;
+  /** One of `PROJECT_COLOR_NAMES`; undefined falls back to the sidebar/home's plain default ink. */
+  color?: ProjectColorName;
   createdAt: string;
   updatedAt: string;
 }
@@ -202,6 +229,7 @@ export interface UpdateProjectInput {
   workflowStages?: ProjectWorkflowStage[];
   defaultAiToolMode?: AgentToolMode;
   icon?: ProjectIconName;
+  color?: ProjectColorName;
 }
 
 export interface AttachProjectFolderInput {
