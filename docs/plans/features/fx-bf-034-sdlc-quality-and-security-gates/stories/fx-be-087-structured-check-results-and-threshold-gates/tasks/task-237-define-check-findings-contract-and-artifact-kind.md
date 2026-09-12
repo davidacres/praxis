@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-237
 title: "Define the CheckFindings contract and the findings artifact kind"
-status: To Do
+status: Done
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [FX-BE-020, FX-BE-024]
@@ -41,5 +41,10 @@ Unit tests for the fingerprint helper (stability and sensitivity) and for valida
 
 
 ## Comments
+
+- Added `findings` to `WorkflowArtifactKind` and declared `CheckFindings`, `CheckFinding`, `CheckSeverity`, `CheckCategory` contracts in `workflowTypes.ts`.
+- Implemented `computeFindingFingerprint` with SHA-256 over ruleId, normalized file, line, and message to ensure cross-run fingerprint determinism.
+- Updated `workflowValidation.ts` to support `findings` artifacts on check/agent-task nodes and in node inputs.
+- Verified deterministic fingerprint computation and validation with dedicated unit tests in `checkFindings.test.ts`.
 
 

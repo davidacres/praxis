@@ -59,6 +59,7 @@ export type IconName =
   | 'server'
   | 'plug'
   | 'tools'
+  | 'package'
   // board / work types
   | 'columns'
   | 'list'
@@ -151,6 +152,7 @@ const PATHS: Record<IconName, string | string[]> = {
   server: ['M2.4 2.6h11.2v3.4H2.4zM2.4 10h11.2v3.4H2.4z', 'M4.6 4.3h.1M4.6 11.7h.1'],
   plug: ['M6 1.9v3.4M10 1.9v3.4', 'M4.2 5.3h7.6v2.4a3.8 3.8 0 0 1-3.8 3.8 3.8 3.8 0 0 1-3.8-3.8z', 'M8 11.5v2.6'],
   tools: ['M9.6 3.4a2.9 2.9 0 0 1 3.9 3.6l-8.4 6.4a1.5 1.5 0 0 1-2-2.2z', 'M2.6 3.1l3.4 3.4'],
+  package: ['M8 1.8 13.5 5 8 8.2 2.5 5z', 'M2.5 5v5.8L8 14.2l5.5-3.4V5', 'M8 8.2v6'],
   columns: ['M2.1 2.9h3.4v10.2H2.1zM6.3 2.9h3.4v10.2H6.3zM10.5 2.9h3.4v10.2h-3.4z'],
   trash: ['M3.2 4.4h9.6', 'M5.4 4.4V2.9h5.2v1.5', 'M4.4 4.4l.7 8.7h5.8l.7-8.7'],
   ellipsis: ['M3.4 8h.01', 'M8 8h.01', 'M12.6 8h.01'],

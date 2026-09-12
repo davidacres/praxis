@@ -25,6 +25,7 @@
 import {
   isAgentTaskNode,
   isCheckNode,
+  type CheckFindings,
   type WorkflowAgentTaskNode,
   type WorkflowArtifactKind,
   type WorkflowCheckNode
@@ -45,6 +46,7 @@ export interface StageOutcome {
   /** Commit or worktree ref a mutating stage froze. */
   snapshotRef?: string;
   artifacts?: Array<{ contractId: string; kind: WorkflowArtifactKind; path?: string }>;
+  findings?: CheckFindings;
 }
 
 export interface StageDispatchContext {
@@ -350,14 +352,16 @@ export class WorkflowOrchestrator {
                   at,
                   ...(result.outcome.artifacts ? { artifacts: result.outcome.artifacts } : {}),
                   ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
-                  ...(result.outcome.snapshotRef ? { snapshotRef: result.outcome.snapshotRef } : {})
+                  ...(result.outcome.snapshotRef ? { snapshotRef: result.outcome.snapshotRef } : {}),
+                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
                 })
               : applyWorkflowRunCommand(run, {
                   kind: 'node-failed',
                   nodeId,
                   at,
                   error: result.outcome.error ?? 'Stage failed.',
-                  ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {})
+                  ...(result.outcome.exitCode !== undefined ? { exitCode: result.outcome.exitCode } : {}),
+                  ...(result.outcome.findings ? { findings: result.outcome.findings } : {})
                 });
         if (next !== run) await this.persist(next);
       },

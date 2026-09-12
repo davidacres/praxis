@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Story
 type: Story
 id: FX-BE-088
 title: "Bundled security scanners behind the security gate"
-status: To Do
+status: Done
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087]
@@ -54,5 +54,11 @@ No IaC, container-image or DAST scanning in this story (candidate follow-ons). N
 
 
 ## Comments
+
+- Delivered Story FX-BE-088 across all three child tasks:
+  - TASK-241: Created bundled check presets (`checkPresets.ts`) for secret scanning (Gitleaks), SAST (Semgrep), SCA (OSV-Scanner, Trivy), and license policy with automatic stack detection and actionable missing-binary error reporting.
+  - TASK-242: Implemented the waiver register (`waiverRegister.ts`) with temporal expiry, snapshot binding, and strictest-wins composition.
+  - TASK-243: Supported multi-owner convergence for security gates in `workflowGates.ts`, combining findings, applying waivers, evaluating threshold conditions, and reporting enabled/disabled scanners.
+- Verified with unit tests (`checkPresets.test.ts`, `waiverRegister.test.ts`, `workflowMultiOwnerGates.test.ts`), `npm run test:core`, and `npm run check-types`.
 
 

@@ -1,0 +1,22 @@
+{
+  "name": "@davidacres/praxis-addon-full-sdlc-node",
+  "version": "1.0.0",
+  "description": "Production-grade SDLC workflow tailored for Node.js and TypeScript repositories.",
+  "author": "davidacres",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davidacres/praxis.git",
+    "directory": "addons/workflows/full-sdlc-node"
+  },
+  "praxis": {
+    "schemaVersion": 1,
+    "kind": "workflow-template",
+    "id": "full-sdlc-node",
+    "name": "Full SDLC (Node.js & TypeScript)",
+    "summary": "12-stage pipeline with ESLint, tsc, Vitest/Jest, Semgrep SAST, Gitleaks, npm audit, structured review, and gate thresholds.",
+    "author": "davidacres",
+    "contentVersion": "1.0.0",
+    "minAppVersion": "0.3.0"
+  }
+}

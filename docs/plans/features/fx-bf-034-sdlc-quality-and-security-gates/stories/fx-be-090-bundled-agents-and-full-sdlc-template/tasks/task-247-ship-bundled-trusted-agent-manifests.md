@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-247
 title: "Ship bundled trusted agent manifests"
-status: To Do
+status: Done
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [FX-BE-011]
@@ -41,5 +41,12 @@ Core tests for bundled discovery, trust and precedence; a first-run mirror test 
 
 
 ## Comments
+
+Completed implementation:
+- Shipped bundled agent manifests (`praxis-planner`, `praxis-implementer`, `praxis-reviewer`, `praxis-security-analyst`) and briefs in `packages/core/src/ai/agentRuntime/bundledAgents.ts`.
+- Implemented `mirrorBundledAgents` into the trusted discovery root in `apps/praxis-desktop/main/src/main/agentRuntimeInstance.ts` on manager initialization.
+- Integrated bundled agent fallback with trust and user override precedence in `packages/core/src/ai/agentRuntime/discovery.ts`.
+- Verified via unit tests in `packages/core/src/ai/agentRuntime/bundledAgents.test.ts`.
+
 
 

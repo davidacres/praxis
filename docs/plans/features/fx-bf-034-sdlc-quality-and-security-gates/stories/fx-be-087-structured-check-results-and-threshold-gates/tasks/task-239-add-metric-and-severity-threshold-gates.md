@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-239
 title: "Add metric and severity threshold gate policy"
-status: To Do
+status: Done
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [TASK-237]
@@ -41,5 +41,11 @@ Unit tests for threshold evaluation across pending/pass/fail, and for strictest-
 
 
 ## Comments
+
+- Added threshold contract types in `workflowTypes.ts`: `MetricThresholdCondition`, `SeverityThresholdCondition`, and `GateThresholdCondition`.
+- Extended `evaluateGates` in `packages/core/src/workflows/workflowGates.ts` to evaluate metric and severity threshold conditions against `state.findings` when the owning node completes.
+- Implemented strictest-wins policy composition in `packages/core/src/workflows/workflowStore.ts` (`composeWorkflowPolicies`), explicitly throwing an error if a project attempts to loosen organization thresholds (lowering coverage minimums, raising maximums, raising severity count allowances, or raising severity rank floors).
+- Enforced validation rules in `workflowValidation.ts` ensuring gates declaring thresholds depend on nodes declaring `findings` output.
+- Added comprehensive unit tests in `workflowThresholdGates.test.ts`.
 
 

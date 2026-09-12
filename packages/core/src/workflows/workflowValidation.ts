@@ -56,7 +56,7 @@ export interface WorkflowMigrationResult {
 const NODE_TYPES = new Set(['agent-task', 'check', 'deployment', 'approval', 'join']);
 const EDGE_OUTCOMES = new Set<WorkflowEdgeOutcome>(['success', 'failure', 'always']);
 const GATE_KINDS = new Set<WorkflowGateKind>(['review', 'qa', 'security']);
-const ARTIFACT_KINDS = new Set<WorkflowArtifactKind>(['plan', 'diff', 'report', 'test-results', 'log', 'note']);
+const ARTIFACT_KINDS = new Set<WorkflowArtifactKind>(['plan', 'diff', 'report', 'test-results', 'log', 'note', 'findings']);
 const TOOL_MODES = new Set(['read-only', 'full', 'project-only']);
 const SCOPES = new Set<WorkflowScope>(['global', 'project']);
 
@@ -145,7 +145,8 @@ function normalizeNode(value: unknown): WorkflowNode {
     name: typeof raw.name === 'string' ? raw.name : '',
     x: typeof raw.x === 'number' && Number.isFinite(raw.x) ? raw.x : 0,
     y: typeof raw.y === 'number' && Number.isFinite(raw.y) ? raw.y : 0,
-    inputs: Array.isArray(raw.inputs) ? raw.inputs.filter((item): item is string => typeof item === 'string') : []
+    inputs: Array.isArray(raw.inputs) ? raw.inputs.filter((item): item is string => typeof item === 'string') : [],
+    ...(raw.enabled === false ? { enabled: false } : {})
   };
 
   switch (raw.type) {
@@ -659,6 +660,21 @@ function validateGates(definition: WorkflowDefinition, errors: WorkflowIssue[]):
         message: `No upstream node satisfies the required "${gate}" gate.`
       });
     });
+
+    if (node.gateThresholds) {
+      for (const gate of Object.keys(node.gateThresholds) as WorkflowGateKind[]) {
+        const owners = definition.nodes.filter(n => nodeGate(n) === gate);
+        for (const owner of owners) {
+          const hasFindings = nodeOutputs(owner).some(o => o.kind === 'findings');
+          if (!hasFindings) {
+            errors.push({
+              path: `nodes[${index}].gateThresholds.${gate}`,
+              message: `Gate "${gate}" has a threshold but its stage "${owner.name}" does not produce findings.`
+            });
+          }
+        }
+      }
+    }
   });
 }
 
@@ -689,6 +705,21 @@ function validatePolicy(
       message: `Policy "${policy.name}" requires a "${gate}" gate, which no node in this workflow satisfies.`
     });
   });
+
+  if (policy.gateThresholds) {
+    for (const gate of Object.keys(policy.gateThresholds) as WorkflowGateKind[]) {
+      const owner = definition.nodes.find(n => nodeGate(n) === gate);
+      if (owner) {
+        const hasFindings = nodeOutputs(owner).some(o => o.kind === 'findings');
+        if (!hasFindings) {
+          errors.push({
+            path: `policy.gateThresholds.${gate}`,
+            message: `Gate "${gate}" has a threshold but its stage "${owner.name}" does not produce findings.`
+          });
+        }
+      }
+    }
+  }
 
   approvals.forEach(node => {
     const index = definition.nodes.indexOf(node);

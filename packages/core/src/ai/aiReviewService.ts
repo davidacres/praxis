@@ -1,6 +1,12 @@
 import type { IssueDetails } from '../types';
 import type { AgentWorkflowReference } from './agentTypes';
 import { AnalysisCancelledError as GatewayAnalysisCancelledError, runGatewayPrompt } from './gatewayPrompt';
+import {
+  computeFindingFingerprint,
+  type CheckFinding,
+  type CheckFindings,
+  type CheckFindingSeverity
+} from '../workflows/workflowTypes';
 
 const REVIEW_SYSTEM_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
 Analyze the ticket and provide concise, actionable feedback on:
@@ -21,6 +27,36 @@ Analyze the ticket requirements and any implementation context to provide feedba
 
 Be specific, reference code locations when possible, and rate severity (critical/major/minor/suggestion).
 Format your response in markdown with clear sections.`;
+
+export const STRUCTURED_CODE_REVIEW_SYSTEM_PROMPT = `You are a senior software engineer performing a structured code review.
+Review the code changes and requirements. Return your review as exactly one fenced JSON code block in this format:
+
+\`\`\`json
+{
+  "summary": "Concise summary of your overall assessment",
+  "findings": [
+    {
+      "file": "path/to/file",
+      "line": 42,
+      "severity": "critical" | "high" | "medium" | "low" | "info",
+      "category": "bug" | "security" | "quality" | "performance" | "maintainability",
+      "message": "Specific explanation of the issue",
+      "suggestion": "Concrete actionable suggestion for how to fix"
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "issuesFound": 1
+  }
+}
+\`\`\`
+
+Rules:
+- You must include the fenced JSON block with "findings" array, even if empty (0 findings).
+- You may include concise prose summary outside the JSON block.
+- Each finding must specify valid severity (critical/high/medium/low/info).
+- Line numbers must be positive integers where applicable.
+`;
 
 const SECURITY_REVIEW_SYSTEM_PROMPT = `You are a security engineer performing a security review.
 Analyze the ticket and its implementation context for:
@@ -1202,3 +1238,164 @@ export async function runLocalPeerReview(
 
   return { codeReview, securityReview, summary };
 }
+
+// ── Structured Reviewer Contract (TASK-244 / TASK-245) ─────────────
+
+export function parseReviewFindings(content: string): {
+  findings: CheckFindings;
+  summary?: string;
+} {
+  if (!content || !content.trim()) {
+    throw new Error('Reviewer output is empty; expected structured JSON findings.');
+  }
+
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  let jsonText = jsonMatch ? jsonMatch[1].trim() : content.trim();
+
+  if (!jsonText.startsWith('{') && !jsonText.startsWith('[')) {
+    const start = content.indexOf('{');
+    const end = content.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      jsonText = content.slice(start, end + 1);
+    }
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error(
+      `Reviewer output did not contain a valid structured JSON findings block: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Reviewer JSON findings must be an object.');
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  if (!Array.isArray(candidate.findings)) {
+    throw new Error('Reviewer JSON findings must contain a "findings" array.');
+  }
+
+  const validSeverities = new Set(['critical', 'high', 'medium', 'low', 'info']);
+  const findings: CheckFinding[] = candidate.findings.map((f: unknown, idx: number) => {
+    if (!f || typeof f !== 'object' || Array.isArray(f)) {
+      throw new Error(`Finding at index ${idx} is not an object.`);
+    }
+    const item = f as Record<string, unknown>;
+    const rawSev = typeof item.severity === 'string' ? item.severity.toLowerCase() : 'medium';
+    const severity: CheckFindingSeverity = validSeverities.has(rawSev)
+      ? (rawSev as CheckFindingSeverity)
+      : 'medium';
+    const message = typeof item.message === 'string' && item.message.trim() ? item.message.trim() : 'Review finding';
+    const file = typeof item.file === 'string' && item.file.trim() ? item.file.trim() : undefined;
+    const line = typeof item.line === 'number' && Number.isFinite(item.line) ? Math.floor(item.line) : undefined;
+    const ruleId = typeof item.ruleId === 'string' && item.ruleId.trim() ? item.ruleId.trim() : undefined;
+    const category = typeof item.category === 'string' && item.category.trim() ? item.category.trim() : 'quality';
+    const suggestion = typeof item.suggestion === 'string' && item.suggestion.trim() ? item.suggestion.trim() : undefined;
+
+    const fingerprint = computeFindingFingerprint({ ruleId, file, line, message });
+    return {
+      fingerprint,
+      ruleId,
+      file,
+      line,
+      severity,
+      category,
+      message,
+      suggestion
+    };
+  });
+
+  const metrics: Record<string, number> = {};
+  if (candidate.metrics && typeof candidate.metrics === 'object' && !Array.isArray(candidate.metrics)) {
+    for (const [k, v] of Object.entries(candidate.metrics as Record<string, unknown>)) {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        metrics[k] = v;
+      }
+    }
+  }
+  if (metrics.findingsCount === undefined) {
+    metrics.findingsCount = findings.length;
+  }
+
+  const summary = typeof candidate.summary === 'string' && candidate.summary.trim()
+    ? candidate.summary.trim()
+    : undefined;
+
+  return {
+    findings: { findings, metrics },
+    summary
+  };
+}
+
+export function deduplicateReviewFindings(
+  currentFindings: CheckFinding[],
+  previousFingerprints: Set<string>
+): {
+  newFindings: CheckFinding[];
+  existingFindings: CheckFinding[];
+} {
+  const newFindings: CheckFinding[] = [];
+  const existingFindings: CheckFinding[] = [];
+
+  for (const finding of currentFindings) {
+    if (previousFingerprints.has(finding.fingerprint)) {
+      existingFindings.push(finding);
+    } else {
+      newFindings.push(finding);
+    }
+  }
+
+  return { newFindings, existingFindings };
+}
+
+export function mapReviewFindingToInlineComment(finding: CheckFinding): string {
+  const lines: string[] = [
+    `**[${finding.severity.toUpperCase()}]** ${finding.category}`,
+    '',
+    finding.message
+  ];
+
+  if (finding.suggestion) {
+    lines.push('', '**Suggestion:**', finding.suggestion);
+  }
+
+  return lines.join('\n');
+}
+
+export function formatTicketReviewSummaryComment(
+  findings: CheckFinding[],
+  summary?: string
+): string {
+  const lines: string[] = ['## Code Review Findings', ''];
+
+  if (summary) {
+    lines.push(summary, '');
+  }
+
+  if (findings.length === 0) {
+    lines.push('✅ No issues found during code review.');
+    return lines.join('\n');
+  }
+
+  const order: CheckFindingSeverity[] = ['critical', 'high', 'medium', 'low', 'info'];
+  for (const sev of order) {
+    const group = findings.filter(f => f.severity === sev);
+    if (group.length === 0) continue;
+
+    lines.push(`### ${sev.toUpperCase()} (${group.length})`, '');
+    for (const finding of group) {
+      const loc = finding.file ? `\`${finding.file}${finding.line ? `:${finding.line}` : ''}\` — ` : '';
+      lines.push(`- ${loc}**${finding.category}:** ${finding.message}`);
+      if (finding.suggestion) {
+        lines.push(`  - *Suggestion:* ${finding.suggestion}`);
+      }
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n').trim();
+}
+

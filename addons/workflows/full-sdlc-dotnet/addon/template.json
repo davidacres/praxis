@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 1,
+  "id": "full-sdlc-dotnet",
+  "name": "Full SDLC (.NET)",
+  "description": "Complete SDLC automation with parallel lint, typecheck, test coverage, SAST, secrets, SCA, and code review gates.",
+  "scope": "global",
+  "version": 1,
+  "entryNodeId": "plan",
+  "builtIn": true,
+  "createdAt": "2026-09-02T00:00:00.000Z",
+  "updatedAt": "2026-09-02T00:00:00.000Z",
+  "nodes": [
+    {
+      "type": "agent-task",
+      "id": "plan",
+      "name": "Plan",
+      "x": 0,
+      "y": 160,
+      "inputs": [],
+      "agent": {
+        "agentId": "praxis-planner",
+        "scope": "global",
+        "toolMode": "read-only"
+      },
+      "instructions": "Analyze requirements, verify existing architecture, and produce structured plan.",
+      "outputs": [
+        {
+          "id": "plan-doc",
+          "kind": "plan",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false
+    },
+    {
+      "type": "agent-task",
+      "id": "implement",
+      "name": "Implement",
+      "x": 200,
+      "y": 160,
+      "inputs": [
+        "plan-doc"
+      ],
+      "agent": {
+        "agentId": "praxis-implementer",
+        "scope": "global",
+        "toolMode": "full"
+      },
+      "instructions": "Implement changes matching plan specifications and commit changes to the branch.",
+      "outputs": [
+        {
+          "id": "change-diff",
+          "kind": "diff",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": true,
+      "maxAttempts": 3
+    },
+    {
+      "type": "check",
+      "id": "lint",
+      "name": "Lint",
+      "x": 440,
+      "y": 0,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "dotnet",
+      "args": [
+        "format",
+        "--verify-no-changes"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "lint-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "type": "check",
+      "id": "typecheck",
+      "name": "Type check",
+      "x": 440,
+      "y": 60,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "dotnet",
+      "args": [
+        "build"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "typecheck-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "type": "check",
+      "id": "test",
+      "name": "Unit tests & coverage",
+      "x": 440,
+      "y": 120,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "dotnet",
+      "args": [
+        "test",
+        "/p:CollectCoverage=true",
+        "/p:CoverletOutputFormat=cobertura"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "test-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "qa"
+    },
+    {
+      "type": "check",
+      "id": "sast",
+      "name": "SAST scan",
+      "x": 440,
+      "y": 200,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "semgrep",
+      "args": [
+        "scan",
+        "--config=auto",
+        "--sarif",
+        "--output=semgrep.sarif"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "sast-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "type": "check",
+      "id": "secrets",
+      "name": "Secret scan",
+      "x": 440,
+      "y": 260,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "gitleaks",
+      "args": [
+        "detect",
+        "--no-git",
+        "--report-format=sarif",
+        "--report-path=gitleaks.sarif"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "secret-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "type": "check",
+      "id": "sca",
+      "name": "SCA scan",
+      "x": 440,
+      "y": 320,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "dotnet",
+      "args": [
+        "list",
+        "package",
+        "--vulnerable"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": [
+        {
+          "id": "sca-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "satisfiesGate": "security"
+    },
+    {
+      "type": "agent-task",
+      "id": "review",
+      "name": "Structured code review",
+      "x": 440,
+      "y": 400,
+      "inputs": [
+        "change-diff"
+      ],
+      "agent": {
+        "agentId": "csharp-dotnet-code-reviewer",
+        "scope": "global",
+        "skillNames": [
+          "dotnet-solid-dry"
+        ],
+        "toolMode": "read-only"
+      },
+      "instructions": "Review changes against quality and security criteria and return structured findings.",
+      "outputs": [
+        {
+          "id": "review-findings",
+          "kind": "findings",
+          "required": true
+        }
+      ],
+      "mutatesWorktree": false,
+      "satisfiesGate": "review",
+      "maxAttempts": 3
+    },
+    {
+      "type": "join",
+      "id": "gates",
+      "name": "SDLC Gates",
+      "x": 680,
+      "y": 160,
+      "inputs": [],
+      "mode": "all"
+    },
+    {
+      "type": "approval",
+      "id": "approve",
+      "name": "Approve",
+      "x": 900,
+      "y": 160,
+      "inputs": [
+        "change-diff",
+        "review-findings"
+      ],
+      "prompt": "All QA, Security, and Code Review quality gates have passed. Sign off on changes?",
+      "requiredGates": [
+        "qa",
+        "security",
+        "review"
+      ],
+      "allowBypass": false,
+      "gateThresholds": {
+        "qa": [
+          {
+            "type": "metric",
+            "metric": "coverage",
+            "operator": ">=",
+            "value": 80
+          }
+        ],
+        "security": [
+          {
+            "type": "severity",
+            "severityLevel": "high",
+            "maxCount": 0
+          }
+        ],
+        "review": [
+          {
+            "type": "severity",
+            "severityLevel": "high",
+            "maxCount": 0
+          }
+        ]
+      }
+    },
+    {
+      "type": "check",
+      "id": "deploy",
+      "name": "Deploy",
+      "x": 1100,
+      "y": 160,
+      "inputs": [
+        "change-diff"
+      ],
+      "command": "dotnet",
+      "args": [
+        "publish"
+      ],
+      "successExitCodes": [
+        0
+      ],
+      "outputs": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-plan-impl",
+      "from": "plan",
+      "to": "implement",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-lint",
+      "from": "implement",
+      "to": "lint",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-impl-typecheck",
+      "from": "implement",
+      "to": "typecheck",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-impl-test",
+      "from": "implement",
+      "to": "test",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sast",
+      "from": "implement",
+      "to": "sast",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sec",
+      "from": "implement",
+      "to": "secrets",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-sca",
+      "from": "implement",
+      "to": "sca",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-impl-rev",
+      "from": "implement",
+      "to": "review",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-lint-gates",
+      "from": "lint",
+      "to": "gates",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-typecheck-gates",
+      "from": "typecheck",
+      "to": "gates",
+      "on": "success",
+      "required": false
+    },
+    {
+      "id": "e-test-gates",
+      "from": "test",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sast-gates",
+      "from": "sast",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sec-gates",
+      "from": "secrets",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-sca-gates",
+      "from": "sca",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-rev-gates",
+      "from": "review",
+      "to": "gates",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-gates-approve",
+      "from": "gates",
+      "to": "approve",
+      "on": "success",
+      "required": true
+    },
+    {
+      "id": "e-approve-deploy",
+      "from": "approve",
+      "to": "deploy",
+      "on": "success",
+      "required": false
+    }
+  ]
+}

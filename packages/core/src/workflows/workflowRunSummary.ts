@@ -12,6 +12,7 @@ import {
   isApprovalNode,
   isJoinNode,
   nodeGate,
+  type CheckFindings,
   type WorkflowEdge,
   type WorkflowGateKind,
   type WorkflowNode
@@ -46,6 +47,7 @@ export interface StageRow {
   lastError?: string;
   /** The in-flight attempt's reported sub-phase, e.g. a deployment stage's `'deploying'`/`'verifying'` — see `WorkflowNodeState.phase`. */
   phase?: string;
+  findings?: CheckFindings;
 }
 
 export interface BranchGroup {
@@ -127,7 +129,8 @@ export function summarizeWorkflowRun(run: WorkflowRun, policy?: WorkflowPolicyPr
         ...(artifact.path ? { path: artifact.path } : {})
       })),
       ...(lastAttempt?.error ? { lastError: lastAttempt.error } : {}),
-      ...(state?.phase ? { phase: state.phase } : {})
+      ...(state?.phase ? { phase: state.phase } : {}),
+      ...(state?.findings ? { findings: state.findings } : {})
     };
   });
 
