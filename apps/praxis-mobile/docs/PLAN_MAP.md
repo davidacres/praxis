@@ -2,19 +2,25 @@
 
 Deliver local work execution and release first: FX-BF-028, 029, 031, 032, 033. FX-BF-030 (identity, Azure and cloud notifications) is deferred. No running cloud service is required for the local milestone. IDs remain stable; FX-BE-086 owns the moved optional notification task TASK-232.
 
-**Status reconciliation (2026-09-10).** The desktop half is real and tested:
-the versioned execution boundary and dispatch, the host lifecycle and access
-policy, the Noise `IK` secure transport (`@praxis/mobile-protocol`, validated
-against the canonical `snow` vectors) and a real LAN listener that authenticates
-and authorises each peer (`mobileLanServer.ts`), plus the composed host bound to
-the live session/workflow/project stores. FX-BF-028 stands. What was marked
-Complete on the strength of contracts + unit tests but has no runnable
-deliverable yet is back to In Progress: FX-BF-029 (LAN discovery / mDNS and the
-real QR + keychain pairing adapters are missing), FX-BF-031–033 (there is no
-React Native app — no framework, no screens), and `sessions.continue` /
-`permissions.respond` / `workflowRuns.start`, which are wired as explicit
-`MobileHostPendingError`s pending the permission FIFO → request-id rework
-(architecture.md) and FX-BE-082.
+**Status reconciliation (2026-09-10, updated 2026-09-12).** The desktop half is
+real and tested: the versioned execution boundary and dispatch, the host
+lifecycle and access policy, the Noise `IK` secure transport
+(`@praxis/mobile-protocol`, validated against the canonical `snow` vectors) and
+a real LAN listener that authenticates and authorises each peer
+(`mobileLanServer.ts`), plus the composed host bound to the live
+session/workflow/project stores. FX-BF-028 stands.
+
+As of 2026-09-12 there **is** a React Native app (`apps/praxis-mobile`, Expo
+SDK 57) — it builds, boots in `expo start --ios`, and renders (verified in the
+iOS Simulator: Connect → Work list → Work detail with Chat/Progress/Changes →
+Attention, screenshotted). It runs against **canned demo data only**
+(`app/demoData.ts`); it does not yet open a real socket to a desktop host. So
+FX-BF-029/031–033 stay In Progress, not because nothing runs but because the
+runnable app doesn't yet talk to the runnable host. See "Resume here" in
+[development.md](../development.md#resume-here-2026-09-12) for the exact next
+steps. `sessions.continue` / `permissions.respond` / `workflowRuns.start`
+remain explicit `MobileHostPendingError`s pending the permission FIFO →
+request-id rework (architecture.md) and FX-BE-082.
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
