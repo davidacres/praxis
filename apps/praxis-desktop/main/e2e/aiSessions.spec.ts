@@ -351,9 +351,11 @@ test('renders the provider-neutral Praxis choice gadget without changing the AI 
     AI_GATEWAY_URL: mock.baseUrl
   });
   const win = app.window;
+  // No `issueKey` — this demonstrates the gadget in a free-form session, not
+  // against a real tracked issue, so it must not send demo mode down the
+  // `getIssue` lookup path (there is no seeded issue to find).
   await win.evaluate(async () => {
     await window.praxis.ai.delegate({
-      issueKey: 'GADGET-001',
       provider: 'vercel-gateway',
       task: { goal: 'Demonstrate a provider-neutral Praxis gadget.' }
     });
