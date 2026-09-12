@@ -1317,29 +1317,39 @@ textarea {
 }
 
 /* ── Sidebar tree indentation scale ───────────────────────────────────────
- * Every tree in the sidebar (a project's own tree, the Agent Hub nav under
- * the "Agents" feature row, and anything added later) nests to one of these
- * four real depths, and every row's `padding-left` MUST be one of these
- * tokens — never a hardcoded pixel value. Two same-depth siblings drifting
- * apart (e.g. one row at 32px, its sibling at 34px) is exactly the bug this
- * exists to prevent; it happened three times independently before this was
- * written down (Repository's Graph/Changes, a workflow's own row vs its
- * Runs row, and the Agent Hub's scope label vs its agent rows).
+ * Every tree in the sidebar (a project's own tree, the "Praxis" workspace
+ * section — Overview, Epics, Sessions, Issues, Connections, Agents — the
+ * Agent Hub nav nested under "Agents", and anything added later) nests to
+ * one of these four real depths, and every row's `padding-left` MUST be one
+ * of these tokens — never a hardcoded pixel value, never `--space-*`. Two
+ * same-depth siblings drifting apart (e.g. one row at 32px, its sibling at
+ * 34px), or a whole subtree anchored to the wrong root value (`--space-3`
+ * instead of `--tree-indent-1`, so its children read shallower than a
+ * sibling tree's, or a leaf row with no left padding at all so it sits to
+ * the *left* of its own parent) is exactly the bug this exists to prevent;
+ * it has happened repeatedly across unrelated rows before being written
+ * down (Repository's Graph/Changes, a workflow's own row vs its Runs row,
+ * the "Praxis" section's feature rows vs the project tree's headers, and
+ * Sessions' own rows carrying no indent at all).
  *
  *   --tree-indent-1 — a direct child of the tree's root: a collapsible
- *     subsection header (Boards, Repository, Workflows, Docs; Agent Hub's
- *     Global/Project scope label) AND a flat leaf row that has no children
- *     of its own and so never grows a header (Run, Deployments). Both are
- *     the same depth — a childless leaf sits where a header would.
+ *     subsection header (a project's Boards, Repository, Workflows, Docs;
+ *     the "Praxis" heading's Overview, Epics, Sessions, Issues, Connections,
+ *     Agents) AND a flat leaf row that has no children of its own and so
+ *     never grows a header (Run, Deployments, Overview, Epics, Issues,
+ *     Connections). Both are the same depth — a childless leaf sits where a
+ *     header would.
  *   --tree-indent-2 — one level inside a --tree-indent-1 subsection: a
- *     board, Graph/Changes, a workflow and its own Runs row, an Agent Hub
- *     agent/skill row, a project's `docs > plans` folder header. This is
- *     also where `.project-tree-children > .tree-row::before`'s connector
- *     dash ends (left: 17px, width: 13px) — keep this token equal to that
- *     sum (30px) so a row's icon starts flush where the dash stops, with
- *     no gap and no overlap.
+ *     board, Graph/Changes, a workflow and its own Runs row, a project's
+ *     `docs > plans` folder header, a Sessions row, the Agent Hub's
+ *     Global/Project scope label. This is also where
+ *     `.project-tree-children > .tree-row::before`'s connector dash ends
+ *     (left: 17px, width: 13px) — keep this token equal to that sum (30px)
+ *     so a row's icon starts flush where the dash stops, with no gap and no
+ *     overlap.
  *   --tree-indent-3 — a document-type group header one level inside
- *     `docs > plans` (`.project-document-group-toggle`, e.g. "STORY").
+ *     `docs > plans` (`.project-document-group-toggle`, e.g. "STORY") AND
+ *     an Agent Hub agent/skill row, one level inside its scope label.
  *   --tree-indent-4 — a document itself, one level inside a --tree-indent-3
  *     group (`.project-document-row`).
  *
@@ -1803,7 +1813,11 @@ textarea {
   gap: var(--space-2);
   width: 100%;
   height: 28px;
-  padding: 0 var(--space-3);
+  /* --tree-indent-1, not --space-3: these rows (Overview, Epics, Sessions,
+     Issues, Connections, Agents) sit one level under the "Praxis" heading,
+     the same depth as a project's Boards/Repository/Workflows/Docs headers —
+     see the sidebar tree indentation scale comment further up this file. */
+  padding: 0 var(--space-3) 0 var(--tree-indent-1);
   border: none;
   background: transparent;
   color: var(--text);
@@ -5844,7 +5858,9 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    delete actions are what the old docked list column carried. Row actions stay
    visible, as the board rows' settings icon does — the sidebar has no
    hover-reveal idiom. */
-.session-nav-row { gap: 6px; }
+/* A session is a leaf one level under the (now --tree-indent-1) Sessions
+   row, so --tree-indent-2 — same rule as .agent-nav-row below. */
+.session-nav-row { gap: 6px; padding-left: var(--tree-indent-2); }
 .session-nav-row .lane { flex-shrink: 0; margin-left: auto; }
 /* The tracker key, for a session with a real issue behind it — the handle
    people (and the tests) reach for. */
@@ -10222,15 +10238,17 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 .feature-row-expand:hover { color: var(--text); }
 .agent-nav-group { display: flex; flex-direction: column; }
+/* One level under the (now --tree-indent-1) Agents row, and .agent-nav-row
+   one level under this scope label — --tree-indent-2 / -3, not -1 / -2. */
 .agent-nav-scope {
-  padding: 6px 10px 3px var(--tree-indent-1);
+  padding: 6px 10px 3px var(--tree-indent-2);
   color: var(--text-tertiary);
   font-size: var(--text-xs);
   font-weight: 650;
   letter-spacing: .07em;
   text-transform: uppercase;
 }
-.agent-nav-row { padding-left: var(--tree-indent-2); }
+.agent-nav-row { padding-left: var(--tree-indent-3); }
 .agent-nav-row .lane { margin-left: auto; font-size: var(--text-xs); }
 .agent-nav-row .tree-badge { margin-left: auto; }
 
