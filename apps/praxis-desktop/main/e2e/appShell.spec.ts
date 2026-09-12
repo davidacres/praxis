@@ -75,7 +75,11 @@ test('the Agent Hub and Workflow designer sit inside the normal app shell', asyn
   // the stage inspector filling the shell's right pane.
   await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
-  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).getByRole('button', { name: 'Use' }).click();
+  // The dialog's footer carries one "Use" button naming the selected template
+  // (it spans the whole footer now, not one per list item — see
+  // NewWorkflowDialog.tsx's footer-bar comment).
+  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).click();
+  await dialog.getByRole('button', { name: 'Use "Governed delivery"' }).click();
   await expect(dialog).toBeHidden();
   await expect(
     page.getByRole('application', { name: 'Workflow canvas' }).getByRole('button', { name: /^Plan \(agent-task\)/ })

@@ -55,6 +55,17 @@ export class ElectronFolderConfigProvider implements FolderConfigProvider {
     return '';
   }
 
+  /**
+   * `buildProjectConnection` stamps every project-owned connection's settings
+   * with `projectId` (see `projectConnection.ts`) — a plain user-added folder
+   * connection never has one. That's the signal: only a folder-backed project
+   * chose its key through the wizard, so only it should outrank whatever
+   * `board.praxis.json` happens to already say.
+   */
+  public prefersConfiguredIdentity(): boolean {
+    return typeof this.settings()['projectId'] === 'string';
+  }
+
   private settings(): Record<string, unknown> {
     return isRecord(this.connection.settings) ? this.connection.settings : {};
   }

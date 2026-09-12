@@ -81,7 +81,10 @@ test('the sidebar tree lists the catalog and the centre shows the selected recor
   // The tree groups by scope and marks trust / validity.
   const tree = page.getByRole('navigation', { name: 'Workspace' });
   await expect(tree.getByText('Global', { exact: true })).toBeVisible();
-  await expect(tree.getByTestId('agent-nav-item')).toHaveCount(3);
+  // 3 seeded here (Broken Agent, Live Agent, Praxis Reviewer — the last shares
+  // its id with a bundled agent, see bundledAgents.ts, so they merge into one
+  // nav item) plus the 4 other bundled global agents that ship with the app.
+  await expect(tree.getByTestId('agent-nav-item')).toHaveCount(7);
   await expect(tree.getByTestId('skill-nav-item')).toHaveCount(1);
 
   // A valid agent's record is the centre pane; its runtime is the right pane.
