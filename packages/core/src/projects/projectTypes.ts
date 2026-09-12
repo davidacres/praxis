@@ -94,6 +94,57 @@ export interface ProjectDocumentsResult {
  */
 export type ProjectStorage = 'app' | 'folder';
 
+/**
+ * The AI's answer to "which workflow template fits this project", cached on
+ * the project record itself (see `ProjectStore.setRecommendedWorkflowTemplate`)
+ * so opening the New Workflow dialog never re-asks on its own — only an
+ * explicit refresh in that dialog computes a new one.
+ */
+export interface StoredTemplateRecommendation {
+  templateId: string;
+  rationale: string;
+  model: string;
+  /** ISO 8601 — when this recommendation was computed. */
+  computedAt: string;
+}
+
+/**
+ * The icons a project may pick as its identity glyph — a fixed subset of the
+ * renderer's full `IconName` union (`ui/Icon.tsx`), curated to ones that read
+ * as "a kind of project" rather than a UI-chrome glyph like `chevron-down`.
+ * Core stays renderer-agnostic (it cannot import `IconName` itself — see
+ * AGENTS.md's "A value import from `@praxis/core` anywhere under
+ * `renderer/src`" note for the reverse direction of that same rule), so this
+ * list is the source of truth and the renderer's icon picker reads it
+ * directly; keeping it a subset of `IconName` is a hand-maintained
+ * invariant, same as `settingsDefaults.ts`'s mirror of core's own defaults —
+ * add a name here only once it also exists in `IconName`.
+ */
+export const PROJECT_ICON_NAMES = [
+  'rocket',
+  'target',
+  'milestone',
+  'star',
+  'folder',
+  'book',
+  'lightbulb',
+  'zap',
+  'shield',
+  'globe',
+  'tools',
+  'terminal',
+  'server',
+  'organization',
+  'graph',
+  'columns',
+  'bug',
+  'ticket',
+  'sparkles',
+  'robot'
+] as const;
+
+export type ProjectIconName = (typeof PROJECT_ICON_NAMES)[number];
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -111,6 +162,9 @@ export interface ProjectRecord {
   defaultAiToolMode: AgentToolMode;
   folderInspection?: FolderInspection;
   projectFileStatus?: 'created' | 'retained' | 'not-requested';
+  recommendedWorkflowTemplate?: StoredTemplateRecommendation;
+  /** One of `PROJECT_ICON_NAMES`; undefined falls back to the sidebar/home's plain default glyph. */
+  icon?: ProjectIconName;
   createdAt: string;
   updatedAt: string;
 }
@@ -134,11 +188,20 @@ export interface CreateProjectInput {
 
 export interface UpdateProjectInput {
   name?: string;
+  /**
+   * Renaming after tickets exist is allowed — tracker association resolves
+   * through the *current* key at read time, not a stored copy, so nothing
+   * breaks — but it's cosmetic-only going forward: each existing ticket's
+   * own `key` string (`${project.key}-${sequence}`, set once at creation)
+   * keeps its old prefix, so old and new tickets read with different ones.
+   */
+  key?: string;
   type?: ProjectType;
   purpose?: string;
   brief?: Record<string, string>;
   workflowStages?: ProjectWorkflowStage[];
   defaultAiToolMode?: AgentToolMode;
+  icon?: ProjectIconName;
 }
 
 export interface AttachProjectFolderInput {

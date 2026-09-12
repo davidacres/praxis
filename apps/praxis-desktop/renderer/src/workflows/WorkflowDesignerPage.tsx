@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDialogs } from '../ui/dialogs';
 import { createPortal } from 'react-dom';
 import type {
@@ -96,10 +96,21 @@ export function WorkflowDesignerPage({
   const [busy, setBusy] = useState(false);
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
+  // Gates the "Recommended" agent-stage action — the recommendation call is a
+  // direct Vercel AI Gateway completion (see `workflowAgentRecommendation.ts`),
+  // not a full agent session, so it only works when that specific provider
+  // has a key, regardless of which provider is active for real sessions.
+  // `undefined` is "still checking", not "unconfigured" — see
+  // `AgentStageFields`'s use of this for why that third state matters.
+  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setCatalog);
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
+    void window.praxis.ai
+      .listProviderStatuses()
+      .then(statuses => setGatewayConfigured(statuses.some(status => status.provider === 'vercel-gateway' && status.configured)))
+      .catch(() => setGatewayConfigured(false));
   }, [project.id]);
 
   // Load the chosen workflow; re-runs when the sidebar picks a different one.
@@ -237,6 +248,7 @@ export function WorkflowDesignerPage({
               issues={feedback?.byNode[selectedNode.id] ?? []}
               catalog={catalog}
               policy={policy}
+              gatewayConfigured={gatewayConfigured}
               onChange={mutate}
               onSelectNode={selectStage}
             />
@@ -393,6 +405,7 @@ function NodeInspector({
   issues,
   catalog,
   policy,
+  gatewayConfigured,
   onChange,
   onSelectNode
 }: {
@@ -401,6 +414,7 @@ function NodeInspector({
   issues: Array<{ path: string; message: string }>;
   catalog: AgentRuntimeSnapshot | undefined;
   policy: WorkflowPolicyProfile | undefined;
+  gatewayConfigured: boolean | undefined;
   onChange: (next: WorkflowDefinition) => void;
   onSelectNode: (nodeId: string | undefined) => void;
 }) {
@@ -437,7 +451,7 @@ function NodeInspector({
       </Field>
 
       {node.type === 'agent-task' && (
-        <AgentStageFields node={node} catalog={catalog} policy={policy} set={set} />
+        <AgentStageFields workflowId={definition.id} node={node} catalog={catalog} policy={policy} gatewayConfigured={gatewayConfigured} set={set} />
       )}
 
       {node.type === 'check' && (
@@ -548,19 +562,96 @@ function NodeInspector({
  * malformed manifest).
  */
 function AgentStageFields({
+  workflowId,
   node,
   catalog,
   policy,
+  gatewayConfigured,
   set
 }: {
+  workflowId: string;
   node: Extract<WorkflowNode, { type: 'agent-task' }>;
   catalog: AgentRuntimeSnapshot | undefined;
   policy: WorkflowPolicyProfile | undefined;
+  gatewayConfigured: boolean | undefined;
   set: (patch: Partial<WorkflowNode>) => void;
 }) {
   const agents = catalog?.agents ?? [];
   const skills = catalog?.skills ?? [];
   const requireTrust = policy?.requireTrustedAgents ?? true;
+
+  // Trusted, preflight-clean candidates only — recommending an agent the
+  // stage would immediately fail preflight on isn't a recommendation.
+  const recommendableAgents = agents.filter(candidate => candidate.errors.length === 0 && (!requireTrust || candidate.trusted));
+  const recommendationInput = useMemo(
+    () => ({
+      stageName: node.name,
+      instructions: node.instructions,
+      candidates: recommendableAgents.map(candidate => ({
+        agentId: candidate.manifest.id,
+        name: candidate.manifest.name,
+        skills: candidate.manifest.skills
+      }))
+    }),
+    [node.name, node.instructions, recommendableAgents]
+  );
+
+  type RecommendState =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'error'; message: string }
+    | { status: 'done'; agentId: string; rationale: string; stale: boolean };
+  const [recommendState, setRecommendState] = useState<RecommendState>({ status: 'idle' });
+  // Drives which icon shows (Recommend vs Refresh) — deliberately independent
+  // of `recommendState` so a refresh's `loading` phase doesn't flip the icon
+  // back to "Recommend" while it's in flight.
+  const [hasRecommendation, setHasRecommendation] = useState(false);
+
+  // A free cache read (`workflows:getRecommendation` never calls the AI) —
+  // this is the whole point: reopening a stage must not spend money to show
+  // the same answer again. Keyed on the *stage identity*, not its current
+  // text, so it doesn't re-fetch on every keystroke while the user edits
+  // instructions; staleness is (re)checked here and after an explicit
+  // recommend/refresh, never continuously.
+  useEffect(() => {
+    let cancelled = false;
+    if (!gatewayConfigured) {
+      return;
+    }
+    window.praxis.workflows
+      .getRecommendation(workflowId, node.id, recommendationInput)
+      .then(({ recommendation, stale }) => {
+        if (cancelled) return;
+        if (recommendation) {
+          setRecommendState({ status: 'done', agentId: recommendation.agentId, rationale: recommendation.rationale, stale });
+          setHasRecommendation(true);
+        } else {
+          setRecommendState({ status: 'idle' });
+          setHasRecommendation(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRecommendState({ status: 'idle' });
+          setHasRecommendation(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId, node.id, gatewayConfigured]);
+
+  const requestRecommendation = useCallback(async () => {
+    setRecommendState({ status: 'loading' });
+    try {
+      const result = await window.praxis.workflows.recommendAgent(workflowId, node.id, recommendationInput);
+      setRecommendState({ status: 'done', agentId: result.agentId, rationale: result.rationale, stale: false });
+      setHasRecommendation(true);
+    } catch (error) {
+      setRecommendState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
+  }, [workflowId, node.id, recommendationInput]);
 
   const chosen = agents.find(candidate => candidate.manifest.id === node.agent.agentId);
   const caps = catalog?.capabilities[node.agent.agentId];
@@ -598,7 +689,45 @@ function AgentStageFields({
 
   return (
     <>
-      <Field label="Agent" warning={agentWarning}>
+      <Field
+        label="Agent"
+        warning={agentWarning}
+        actions={
+          gatewayConfigured === true && recommendableAgents.length > 0 ? (
+            hasRecommendation ? (
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm wf-recommend-btn"
+                data-testid="wf-recommend-refresh-btn"
+                title="Ask the AI to recommend again — the last recommendation is cached and doesn't re-ask on its own"
+                disabled={recommendState.status === 'loading'}
+                onClick={() => void requestRecommendation()}
+              >
+                <Icon name="refresh" size={12} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm wf-recommend-btn"
+                data-testid="wf-recommend-agent-btn"
+                title="Ask the configured AI to recommend an agent for this stage — cached afterwards, never re-asked automatically"
+                disabled={recommendState.status === 'loading'}
+                onClick={() => void requestRecommendation()}
+              >
+                <Icon name="sparkles" size={12} />
+              </button>
+            )
+          ) : gatewayConfigured === false ? (
+            <span
+              className="icon-btn icon-btn-sm wf-recommend-btn is-disabled"
+              data-testid="wf-recommend-unavailable"
+              title="Recommending an agent needs the Vercel AI Gateway configured in Settings → AI Provider — your active provider is a different one, so this isn't available."
+            >
+              <Icon name="sparkles" size={12} />
+            </span>
+          ) : undefined
+        }
+      >
         {agents.length > 0 ? (
           <select
             value={node.agent.agentId}
@@ -624,6 +753,52 @@ function AgentStageFields({
           />
         )}
       </Field>
+
+      {recommendState.status === 'loading' && (
+        <p className="hint wf-recommend-status" data-testid="wf-recommend-loading">
+          Asking the AI which agent fits this stage…
+        </p>
+      )}
+      {recommendState.status === 'error' && (
+        <p className="hint is-danger wf-recommend-status" data-testid="wf-recommend-error">
+          {recommendState.message}
+        </p>
+      )}
+      {recommendState.status === 'done' && (
+        <div className="wf-recommend-result" data-testid="wf-recommend-result">
+          <Icon name="sparkles" size={12} />
+          <div className="wf-recommend-result-text">
+            <strong>
+              {agents.find(candidate => candidate.manifest.id === recommendState.agentId)?.manifest.name ?? recommendState.agentId}
+            </strong>
+            <span>{recommendState.rationale}</span>
+            {recommendState.stale && (
+              <span className="wf-recommend-stale" data-testid="wf-recommend-stale">
+                The stage changed since this was recommended — refresh to update.
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            className="btn btn-compact"
+            data-testid="wf-recommend-use"
+            onClick={() => {
+              setAgent({ agentId: recommendState.agentId });
+              setRecommendState({ status: 'idle' });
+            }}
+          >
+            Use this agent
+          </button>
+          <button
+            type="button"
+            className="icon-btn icon-btn-sm"
+            aria-label="Dismiss recommendation"
+            onClick={() => setRecommendState({ status: 'idle' })}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </div>
+      )}
 
       {chosen && (
         <div className="wf-agent-meta">
@@ -817,17 +992,23 @@ function EdgeEditor({
 function Field({
   label,
   warning,
+  actions,
   children
 }: {
   label: string;
   /** Renders a warning glyph on the field; the full text is its tooltip. */
   warning?: string;
+  /** Trailing controls beside the label — e.g. the "Recommended" AI trigger on the Agent field. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className={`form-field${warning ? ' has-warn' : ''}`}>
       <label className="form-field-label">
-        <span>{label}</span>
+        <span className="form-field-label-row">
+          <span>{label}</span>
+          {actions}
+        </span>
         {children}
       </label>
       {warning && (

@@ -3062,17 +3062,33 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-/* A child card (BoardView's `groupIssuesByParent` clusters it right after its
-   parent, same column only) reads as attached rather than a plain sibling:
-   indented under the parent, a thinner condensed card, and a solid accent
-   rail down its left edge — the same cue `.board-list-row` already uses for
-   its own left border, just applied here to mark "belongs to", not category. */
+/* A child card reads as attached, not a plain sibling: full width (matching
+   the parent and its stack trigger exactly, not indented into a narrower
+   column), a thinner condensed card, and a solid accent rail down its left
+   edge — the same cue `.board-list-row` already uses for its own left
+   border, just applied here to mark "belongs to", not category.
+   `renderColumn` only ever renders these inside an expanded stack, directly
+   under `.board-child-stack`, so they fuse onto it and onto each other the
+   same way the stack fuses onto its parent: a negative top margin cancels
+   the column's flex `gap`, and every side but the bottom drops its own
+   border/radius so the sibling above supplies the one dividing line. Only
+   `.issue-card-child-last` (the last card in the family) closes the shape
+   with the rounded bottom corners the others deliberately don't have —
+   without it every revealed stack would end in a hard square-cut edge. */
 .issue-card.issue-card-child {
-  margin-left: 22px;
+  width: 100%;
+  margin: calc(-1 * var(--space-1)) 0 0;
   min-height: 0;
   padding: var(--space-2) var(--space-3);
+  border-top: none;
+  border-radius: 0;
   border-left: 3px solid var(--issue-card-accent, var(--accent));
   background: var(--bg-sunken);
+}
+
+.issue-card.issue-card-child-last {
+  border-bottom-left-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
 }
 
 .issue-card.issue-card-child .issue-card-title {
@@ -3088,19 +3104,33 @@ textarea {
   border-left: 3px solid var(--border-strong);
 }
 
-/* Collapsed children render as a deck of cards rather than full cards, so a
-   feature with a dozen stories doesn't dominate its column. The two layer
-   spans and the chevron stay mounted at all times and transition between
-   states via `.board-child-stack-expanded` (toggled on click) instead of
-   being swapped — opening the deck is an animated peel-away-and-fan motion,
-   collapsing is its reverse, and the face itself doubles as the collapse
-   control once open. `renderColumn` still mounts/unmounts the revealed child
-   cards themselves; those get their own entrance animation below. */
+/* A parent immediately followed by its stack trigger (see `hasStack` in
+   `renderCard`) drops its own bottom edge so the trigger can fuse onto it —
+   together they read as one continuous card with a footer band, not two
+   boxes with a gap between them. The accent/neutral rail and the two side
+   borders carry straight through both pieces at the same width, so the only
+   seam is a background-colour change at the join. */
+.issue-card.issue-card-has-stack {
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Collapsed children render as a deck of cards fused to the parent's lower
+   edge rather than full cards, so a feature with a dozen stories doesn't
+   dominate its column. The two layer spans and the chevron stay mounted at
+   all times and transition between states via `.board-child-stack-expanded`
+   (toggled on click) instead of being swapped — opening the deck is an
+   animated fan-and-fade motion, collapsing is its reverse, and the face
+   itself doubles as the collapse control once open. A negative top margin
+   cancels the column's flex `gap` so the trigger sits flush against the
+   parent card above it; `renderColumn` still mounts/unmounts the revealed
+   child cards themselves, which get their own entrance animation below. */
 .board-child-stack {
   position: relative;
   display: block;
-  width: calc(100% - 22px);
-  margin: 0 0 var(--space-4) 22px;
+  width: 100%;
+  margin: calc(-1 * var(--space-1)) 0 var(--space-4);
   padding: 0;
   border: 0;
   background: none;
@@ -3108,45 +3138,83 @@ textarea {
   cursor: pointer;
 }
 
+/* Each layer is pinned flush to the face's top (so nothing shows above it,
+   where it would read as a gap) and inset from the sides by more than the
+   layer above it, with its own bottom edge pushed past the face's — that's
+   what makes it read as a narrower card peeking out from behind on three
+   edges, rather than a flat shadow strip under a same-width rectangle.
+   The fill is a `color-mix` toward the canvas, not a CSS `opacity` fade: an
+   opacity fade dims the border along with the fill, and in several dark
+   palettes `--bg-elevated` sits so close to `--bg` that the whole layer all
+   but vanished (praxis-dark: #2c2620 over #100e0b at 60% opacity reads as
+   an ~8% brightness difference — imperceptible). `border` is kept at full
+   strength — it's the one token pair every theme guarantees enough contrast
+   between — so the layer stays visibly a "card edge" even where the fill
+   itself is subtle. */
 .board-child-stack-layer {
   position: absolute;
-  inset: 0;
+  top: 0;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  opacity: 1;
+  transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
 }
 
 .board-child-stack-layer-1 {
-  transform: translate(5px, 6px) scale(0.97);
-  opacity: 0.75;
+  left: 7px;
+  right: 7px;
+  bottom: -5px;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, var(--bg) 18%);
 }
 
 .board-child-stack-layer-2 {
-  transform: translate(10px, 12px) scale(0.94);
-  opacity: 0.45;
+  left: 14px;
+  right: 14px;
+  bottom: -9px;
+  background: color-mix(in srgb, var(--bg-elevated) 62%, var(--bg) 38%);
 }
 
 .board-child-stack:hover .board-child-stack-layer-1 {
-  transform: translate(7px, 9px) scale(0.97);
+  bottom: -8px;
 }
 
 .board-child-stack:hover .board-child-stack-layer-2 {
-  transform: translate(14px, 18px) scale(0.94);
+  bottom: -15px;
 }
 
-/* An open stack has nothing "under" it — the layers fan further out and fade
-   away rather than just vanishing, so opening reads as dealing the deck out
-   into the revealed cards below. */
-.board-child-stack-expanded .board-child-stack-layer-1 {
-  transform: translate(3px, 16px) scale(0.97);
-  opacity: 0;
-}
-
+/* An open stack has nothing "under" it — the layers retract back under the
+   face and fade away rather than just vanishing, so opening reads as the
+   deck being dealt out into the revealed cards below. */
+.board-child-stack-expanded .board-child-stack-layer-1,
 .board-child-stack-expanded .board-child-stack-layer-2 {
-  transform: translate(-3px, 24px) scale(0.94);
+  bottom: 0;
   opacity: 0;
+}
+
+/* The two notches that make the perforation above read as a tear rather than
+   a plain dashed rule: a small circle in the board's own canvas colour
+   (`--bg`, not a card surface token), centred exactly on the seam so it
+   "punches" a semicircle out of both the card above and the face below at
+   once — the classic paper-ticket-stub cutout. Sits above the face
+   (`z-index: 3` beats the face's `1`) so it stays visible in every state. */
+.board-child-stack-notch {
+  position: absolute;
+  top: -5px;
+  z-index: 3;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg);
+  pointer-events: none;
+}
+
+.board-child-stack-notch-left {
+  left: 9px;
+}
+
+.board-child-stack-notch-right {
+  right: 9px;
 }
 
 .board-child-stack-face {
@@ -3157,31 +3225,50 @@ textarea {
   gap: 8px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
+  /* The seam reads as a torn-off ticket stub: a perforation (dashed rule)
+     plus two round notches (`.board-child-stack-notch`, punched in canvas
+     colour) straddling it — the card itself has no matching bottom border,
+     so this doesn't double up into a second line. */
+  border-top: 2px dashed var(--border-strong);
   border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  /* Same surface as the card it's fused to, not `--bg-sunken` — in several
+     dark palettes (praxis-dark's `--bg-sunken` is `#0b0907`, darker than the
+     `#100e0b` canvas behind the whole board) a "recessed" tone reads as a
+     hole into the canvas rather than a footer band, which is what broke the
+     fused look there. Matching the card's own token guarantees the seam
+     stays invisible in every theme, not just the ones tested by eye. */
+  background: var(--bg-elevated);
   color: var(--text-secondary);
   font-size: var(--text-xs);
-  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), background 150ms ease,
-    color 150ms ease, border-color 150ms ease, box-shadow 220ms ease;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
+/* Same flat hover language every other card on the board uses — a background
+   tint, nothing that lifts or casts a shadow, so it doesn't read as a
+   separate floating control. */
 .board-child-stack:hover .board-child-stack-face {
-  transform: translateY(-1px);
   color: var(--text);
   background: var(--bg-hover);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
-}
-
-.board-child-stack:active .board-child-stack-face {
-  transform: translateY(0) scale(0.99);
 }
 
 /* Open state reads as "attached to what's below it" rather than "a closed
    deck" — the accent rail (the same cue a real child card's left rail uses)
-   replaces the neutral parent rail once expanded. */
+   replaces the neutral parent rail once expanded, and the bottom corners
+   flatten because a revealed child (`.issue-card-child`) now fuses directly
+   onto them — only the *last* child closes the shape with rounded corners. */
 .board-child-stack-expanded .board-child-stack-face {
   border-left-color: var(--issue-card-accent, var(--accent));
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* The peeking layers exist to hint "more underneath" on a closed stack; once
+   open there's nothing left to hint at (they've already faded out), so the
+   space reserved for their hover peek would just read as a gap before the
+   first revealed child. */
+.board-child-stack-expanded {
+  margin-bottom: 0;
 }
 
 .board-child-stack-badge {
@@ -4713,6 +4800,58 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   font-size: var(--text-sm);
   color: var(--text-tertiary);
 }
+
+/* AI Usage report — one metric (total tokens), discrete non-overlapping
+   periods, so bars rather than a line (there is nothing to interpolate
+   between "this week" and "last week"). The current period is the full
+   accent; every past period is a muted tint of the same hue, not a second
+   colour, since there is no categorical identity to encode — just recency. */
+.ai-usage-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.ai-usage-headline-figure { display: flex; align-items: baseline; gap: var(--space-2); }
+.ai-usage-headline-value { font-size: 28px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.ai-usage-headline-unit { font-size: var(--text-sm); color: var(--text-tertiary); }
+.ai-usage-delta { display: flex; align-items: center; gap: 5px; font-size: var(--text-sm); color: var(--text-secondary); }
+.ai-usage-delta-arrow { color: var(--accent); font-size: 11px; }
+
+.ai-usage-chart { position: relative; }
+.ai-usage-chart svg { display: block; width: 100%; height: auto; }
+.ai-usage-chart-baseline { stroke: var(--border); stroke-width: 1; }
+.ai-usage-bar { fill: color-mix(in srgb, var(--accent) 28%, var(--bg-sunken)); transition: fill 120ms ease; }
+.ai-usage-bar-hover { fill: color-mix(in srgb, var(--accent) 45%, var(--bg-sunken)); }
+.ai-usage-bar-current { fill: var(--accent); }
+.ai-usage-bar-current.ai-usage-bar-hover { fill: var(--accent-hover); }
+.ai-usage-bar-value { fill: var(--text-secondary); font-size: 9px; font-variant-numeric: tabular-nums; }
+.ai-usage-bar-label { fill: var(--text-tertiary); font-size: 9px; }
+
+.ai-usage-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+.ai-usage-tooltip strong { color: var(--text); font-size: var(--text-sm); }
+.ai-usage-tooltip-models { color: var(--text-tertiary); }
+
+.ai-usage-table-toggle { margin-top: var(--space-3); }
+
+.ai-usage-table { width: 100%; margin-top: var(--space-2); border-collapse: collapse; font-size: var(--text-sm); }
+.ai-usage-table th,
+.ai-usage-table td { padding: var(--space-2) var(--space-2); text-align: left; border-bottom: 1px solid var(--border); }
+.ai-usage-table th { color: var(--text-tertiary); font-weight: 500; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.03em; }
+.ai-usage-table td { color: var(--text); font-variant-numeric: tabular-nums; }
 
 .settings-list {
   display: flex;
@@ -8441,9 +8580,18 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
    whatever theme/material the pane behind them paints. */
 .project-home { height: 100%; overflow: auto; padding: 20px; color: var(--text); background: transparent; }
 .project-home-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.project-home-id { min-width: 0; }
+.project-home-icon-badge { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 40px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent); }
+.project-home-id { min-width: 0; flex: 1; }
 .project-home-id h1 { margin: 0; font-size: 19px; font-weight: 620; letter-spacing: -.01em; overflow-wrap: anywhere; }
 .project-home-id p { margin: 5px 0 0; overflow: hidden; color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .045em; text-overflow: ellipsis; white-space: nowrap; }
+.project-home-name-input { width: 100%; max-width: 420px; font-size: 19px; font-weight: 620; letter-spacing: -.01em; padding: 4px 8px; }
+.project-home-key-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--text-tertiary); font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .045em; }
+.project-home-key-input { width: 120px; padding: 3px 7px; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .045em; }
+.project-home-key-hint { margin: 5px 0 0; color: var(--warning); font-size: var(--text-xs); font-weight: 400; text-transform: none; letter-spacing: normal; }
+.project-home-icon-picker { display: flex; flex-wrap: wrap; gap: 5px; margin-top: var(--space-2); max-width: 420px; }
+.project-home-icon-option { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text-tertiary); cursor: pointer; transition: background 120ms ease, border-color 120ms ease, color 120ms ease; }
+.project-home-icon-option:hover { background: var(--bg-hover); color: var(--text); }
+.project-home-icon-option.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .project-home-hero-actions { display: flex; flex: 0 0 auto; gap: 6px; }
 
 .project-home-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
@@ -9332,6 +9480,34 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   color: var(--text-tertiary);
 }
 
+.wf-picker-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.wf-picker-recommend-btn {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.wf-picker-recommend-btn:hover:not(:disabled) { color: var(--accent-hover); }
+.wf-picker-recommend-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* The unavailable state is a `<span>`, not a real `<button disabled>` — its
+   hover title is the only way to explain *why*, and disabled native buttons
+   suppress that in some browsers. `:disabled`'s opacity/cursor treatment,
+   applied by class instead of pseudo-class so it still applies here. */
+.wf-picker-recommend-btn.is-disabled {
+  opacity: 0.5;
+  cursor: help;
+}
+
+.wf-picker-recommend-status {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+}
+
 .wf-picker-body {
   display: grid;
   grid-template-columns: 340px 1fr;
@@ -9481,6 +9657,33 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
   border-left: 3px solid var(--accent);
 }
 
+/* A ring, not the `active` state's left border — the two cues are independent
+   (a recommended template can also be the one currently selected) and must
+   stay visually distinguishable from each other when they coincide. */
+.wf-picker-item.is-recommended {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.wf-picker-recommended-badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.wf-picker-item-rationale {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--accent);
+  line-height: 1.4;
+}
+
 .wf-picker-item-icon {
   flex-shrink: 0;
   display: flex;
@@ -9511,6 +9714,8 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 }
 
 .wf-picker-item-name {
+  flex: 1;
+  min-width: 0;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text);
@@ -9918,6 +10123,42 @@ button.overview-stat:hover, .overview-list-row:hover, .overview-session-card:hov
 .form-field-label > span { color: var(--text-tertiary); }
 .form-field.has-warn .form-field-label > span { padding-right: 18px; }
 .form-field-warn { position: absolute; top: 0; right: 0; display: inline-flex; color: var(--warning); cursor: help; }
+
+/* The label text and a trailing action (e.g. the "Recommended" AI trigger)
+   share the row; the label keeps its own tertiary colour via the existing
+   `.form-field-label > span` rule above, the action opts back into full
+   contrast itself (`.wf-recommend-btn`) rather than inheriting the muted tone. */
+.form-field-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+
+.wf-recommend-btn { color: var(--accent); }
+.wf-recommend-btn:hover:not(:disabled) { color: var(--accent-hover); background: var(--accent-soft); }
+.wf-recommend-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* A `<span>`, not a real `<button disabled>` — see the matching note on
+   `.wf-picker-recommend-btn.is-disabled` in the New Workflow dialog's CSS. */
+.wf-recommend-btn.is-disabled {
+  opacity: 0.5;
+  cursor: help;
+}
+
+.wf-recommend-status { margin: 0; }
+
+.wf-recommend-result {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.wf-recommend-result > svg { flex-shrink: 0; margin-top: 3px; color: var(--accent); }
+.wf-recommend-result-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wf-recommend-result-text strong { font-size: var(--text-sm); }
+.wf-recommend-result-text span { color: var(--text-secondary); font-size: var(--text-xs); }
+.wf-recommend-result-text .wf-recommend-stale { color: var(--warning); }
 .form-fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2); }
 .form-fieldset legend { font-size: var(--text-sm); color: var(--text-tertiary); }
 .form-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--text-md); }

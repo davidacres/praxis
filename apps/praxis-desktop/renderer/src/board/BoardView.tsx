@@ -781,7 +781,14 @@ export function BoardView({
     issue: IssueSummary,
     hierarchy: ColumnHierarchy,
     /** Staggers a freshly-revealed child's entrance animation (ms); unset plays immediately. */
-    revealDelayMs?: number
+    revealDelayMs?: number,
+    /** True only when a stack trigger renders immediately after this card — flattens its
+     * bottom edge so the two visually fuse into one continuous shape (see `.issue-card-has-stack`). */
+    hasStack?: boolean,
+    /** True for the last card in an expanded stack — restores the closing rounded corners
+     * every other revealed child drops so the whole family fuses into one shape (see
+     * `.issue-card-child` / `.issue-card-child-last`). */
+    isLastChild?: boolean
   ) => {
     const contextAccent = prefs.issueTypeColors?.[issue.issueType] ?? 'var(--accent)';
     const updated = formatCardDate(issue.updated);
@@ -794,7 +801,7 @@ export function BoardView({
       data-testid="issue-card"
       data-issue-key={issue.key}
       data-child-of={isChild ? issue.parentKey : undefined}
-      className={`issue-card${isChild ? ' issue-card-child' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
+      className={`issue-card${isChild ? ' issue-card-child' : ''}${isChild && isLastChild ? ' issue-card-child-last' : ''}${childCount > 0 ? ' issue-card-parent' : ''}${hasStack ? ' issue-card-has-stack' : ''}${issue.key === selectedIssueKey ? ' active' : ''}`}
       style={{
         '--issue-card-accent': contextAccent,
         ...(revealDelayMs !== undefined ? { animationDelay: `${revealDelayMs}ms` } : {})
@@ -869,6 +876,8 @@ export function BoardView({
     >
       <span className="board-child-stack-layer board-child-stack-layer-2" aria-hidden="true" />
       <span className="board-child-stack-layer board-child-stack-layer-1" aria-hidden="true" />
+      <span className="board-child-stack-notch board-child-stack-notch-left" aria-hidden="true" />
+      <span className="board-child-stack-notch board-child-stack-notch-right" aria-hidden="true" />
       <span className="board-child-stack-face">
         <span className="board-child-stack-badge" aria-hidden="true">
           <Icon name="git-branch" size={11} />
@@ -921,7 +930,7 @@ export function BoardView({
               <span key={issue.key} className="board-card-slot-group">
                 <span className="board-card-slot">
                   {dropPosition?.status === column.name && dropPosition.beforeKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
-                  {renderCard(column, issue, hierarchy)}
+                  {renderCard(column, issue, hierarchy, undefined, children.length > 0)}
                   {dropPosition?.status === column.name && dropPosition.afterKey === issue.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
                 </span>
                 {children.length > 0 && renderStack(issue, children.length, expanded)}
@@ -929,7 +938,7 @@ export function BoardView({
                   children.map((child, index) => (
                     <span key={child.key} className="board-card-slot">
                       {dropPosition?.status === column.name && dropPosition.beforeKey === child.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
-                      {renderCard(column, child, hierarchy, Math.min(index, 8) * 30)}
+                      {renderCard(column, child, hierarchy, Math.min(index, 8) * 30, false, index === children.length - 1)}
                       {dropPosition?.status === column.name && dropPosition.afterKey === child.key && <span className="board-drop-indicator" data-testid="board-drop-indicator" aria-hidden="true" />}
                     </span>
                   ))}

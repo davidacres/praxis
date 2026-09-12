@@ -41,6 +41,8 @@ import type { DeploymentRun } from '@praxis/core';
 import type { PublishManifest } from '@praxis/core';
 import type { DeploymentHealthResult } from '@praxis/core';
 import type { WorkflowEvidenceSourceRef } from '@praxis/core';
+import type { AgentRecommendationCandidate } from '@praxis/core';
+import type { UsageGranularity } from '@praxis/core';
 
 const praxis: PraxisIpc = {
   app: {
@@ -268,6 +270,13 @@ const praxis: PraxisIpc = {
     checkMergeRequestFeedback: (issueKey: string, connectionId: string) =>
       ipcRenderer.invoke('ai:checkMergeRequestFeedback', issueKey, connectionId)
   },
+  aiUsage: {
+    series: (granularity: UsageGranularity, periodsBack: number) =>
+      ipcRenderer.invoke('aiUsage:series', granularity, periodsBack),
+    compareLatestPeriod: (granularity: UsageGranularity) =>
+      ipcRenderer.invoke('aiUsage:compareLatestPeriod', granularity),
+    listEvents: () => ipcRenderer.invoke('aiUsage:listEvents')
+  },
   taskDesigner: {
     getState: (boardId: string, connectionId?: string) =>
       ipcRenderer.invoke('taskDesigner:getState', boardId, connectionId),
@@ -289,6 +298,8 @@ const praxis: PraxisIpc = {
   },
   workflows: {
     listTemplates: (projectId: string) => ipcRenderer.invoke('workflows:listTemplates', projectId),
+    getRecommendedTemplate: (projectId: string) => ipcRenderer.invoke('workflows:getRecommendedTemplate', projectId),
+    recommendTemplate: (projectId: string) => ipcRenderer.invoke('workflows:recommendTemplate', projectId),
     templateReadiness: (projectId: string) => ipcRenderer.invoke('workflows:templateReadiness', projectId),
     catalog: (projectId: string) => ipcRenderer.invoke('workflows:catalog', projectId),
     get: (projectId: string, workflowId: string) => ipcRenderer.invoke('workflows:get', projectId, workflowId),
@@ -324,7 +335,17 @@ const praxis: PraxisIpc = {
     getEvidence: (runId: string, nodeId: string, attempt: number) =>
       ipcRenderer.invoke('workflows:getEvidence', runId, nodeId, attempt),
     startDiagnosis: (runId: string, nodeId: string, attempt: number) =>
-      ipcRenderer.invoke('workflows:startDiagnosis', runId, nodeId, attempt)
+      ipcRenderer.invoke('workflows:startDiagnosis', runId, nodeId, attempt),
+    getRecommendation: (
+      workflowId: string,
+      nodeId: string,
+      input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+    ) => ipcRenderer.invoke('workflows:getRecommendation', workflowId, nodeId, input),
+    recommendAgent: (
+      workflowId: string,
+      nodeId: string,
+      input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+    ) => ipcRenderer.invoke('workflows:recommendAgent', workflowId, nodeId, input)
   },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),

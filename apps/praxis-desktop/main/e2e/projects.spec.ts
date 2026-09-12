@@ -141,7 +141,7 @@ test('creates a folderless Product project through the full wizard and opens its
   await expect(workflowPanel.getByTestId('workflow-stage-5')).toContainText('Done');
 
   // Rename a stage and add one, then save — the record must follow.
-  await page.getByRole('button', { name: 'Edit project brief' }).click();
+  await page.getByRole('button', { name: 'Edit project' }).click();
   await workflowPanel.getByRole('textbox', { name: 'Stage 2 name' }).fill('Shaping');
   await workflowPanel.getByTestId('workflow-add-stage').click();
   await page.getByRole('button', { name: 'Save' }).click();

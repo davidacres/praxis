@@ -1,3 +1,8 @@
+import type { AiUsageEvent } from '../ai/aiUsageLog';
+import type { UsageBucket, UsageComparison, UsageGranularity } from '../ai/aiUsageStats';
+import type { AgentRecommendationCandidate, AgentRecommendationResult } from '../ai/workflowAgentRecommendation';
+import type { StoredAgentRecommendation } from '../ai/workflowRecommendationCache';
+import type { TemplateRecommendationResult } from '../ai/workflowTemplateRecommendation';
 import type {
   AiProvider,
   Board,
@@ -78,6 +83,7 @@ import type {
   ProjectDocumentsResult,
   ProjectBoardReference,
   ProjectRecord,
+  StoredTemplateRecommendation,
   UpdateProjectInput
 } from '../projects/projectTypes';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, WorkspaceRecord } from '../workspaces/workspaceTypes';
@@ -787,6 +793,23 @@ export interface AiIpc {
   ): Promise<{ started: boolean; noteCount: number }>;
 }
 
+/**
+ * Read side of the AI usage ledger (`AiUsageLog`) — every token/cost delta
+ * from every agent session plus internal one-shot calls like the workflow
+ * agent recommendation, aggregated for the Settings → AI usage report.
+ * Writes happen only from inside the main process (session-usage tracking,
+ * the recommendation handler itself); there is deliberately no `record`
+ * method here for the renderer to call.
+ */
+export interface AiUsageIpc {
+  /** Bucketed totals for the `periodsBack` most recent periods at this granularity, oldest first, zero-filled. */
+  series(granularity: UsageGranularity, periodsBack: number): Promise<UsageBucket[]>;
+  /** The latest period vs. the one before it — "more or less AI than last week", generalised to day/week/month. */
+  compareLatestPeriod(granularity: UsageGranularity): Promise<UsageComparison>;
+  /** The raw ledger, newest last — for a detail table; not meant for charting directly. */
+  listEvents(): Promise<AiUsageEvent[]>;
+}
+
 export interface PraxisIpc {
   app: AppIpc;
   board: BoardIpc;
@@ -801,6 +824,7 @@ export interface PraxisIpc {
   browser: BrowserIpc;
   boardPrefs: BoardPrefsIpc;
   ai: AiIpc;
+  aiUsage: AiUsageIpc;
   agentRuntime: AgentRuntimeIpc;
   marketplace: MarketplaceIpc;
   taskDesigner: TaskDesignerIpc;
@@ -925,6 +949,21 @@ export interface WorkflowsIpc {
    * globals, then the project's committed definitions. Not collapsed by id.
    */
   listTemplates(projectId: string): Promise<WorkflowTemplate[]>;
+  /**
+   * The project's cached template recommendation, if any — a free read
+   * (`ProjectRecord.recommendedWorkflowTemplate`), never an AI call. The New
+   * Workflow dialog reads this on open; only `recommendTemplate` spends money.
+   */
+  getRecommendedTemplate(projectId: string): Promise<StoredTemplateRecommendation | undefined>;
+  /**
+   * Asks the configured AI which offered template best fits this project
+   * (from its name/purpose/brief), then persists the answer onto the project
+   * record so `getRecommendedTemplate` can hand it back for free afterwards —
+   * see `ProjectStore.setRecommendedWorkflowTemplate`. Rejects when no
+   * gateway-backed provider is configured. Every call is logged to the AI
+   * usage ledger, tagged `workflow-template-recommendation`.
+   */
+  recommendTemplate(projectId: string): Promise<TemplateRecommendationResult>;
   /** Per-template readiness against the live Agent Hub catalog. */
   templateReadiness(projectId: string): Promise<TemplateReadiness[]>;
   /** The resolved run catalog for a project, with shadowing and invalid entries. */
@@ -987,6 +1026,34 @@ export interface WorkflowsIpc {
    * advancing a stage in the background included. Returns an unsubscribe.
    */
   onRunChanged(listener: (runId: string) => void): () => void;
+  /**
+   * The cached agent recommendation for one stage, if any — a free read, not
+   * an AI call. `stale: true` means the stage's name/instructions/candidates
+   * have changed since `recommendAgent` last computed it; the caller decides
+   * whether to offer a refresh, this never recomputes on its own.
+   */
+  getRecommendation(
+    workflowId: string,
+    nodeId: string,
+    input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+  ): Promise<{ recommendation: StoredAgentRecommendation | undefined; stale: boolean }>;
+  /**
+   * Asks the configured AI which of the given trusted agents best fits one
+   * agent-task stage, from its name/instructions alone, and caches the
+   * answer against `workflowId`/`nodeId` (see `getRecommendation`) so the
+   * same stage never triggers a second call just from being reopened —
+   * only an explicit "Recommend" or "Refresh" click in the designer reaches
+   * this. Rejects when no gateway-backed provider is configured — the
+   * caller only offers the action once `ai.listProviderStatuses()` shows
+   * one is, so a rejection here means the configuration changed mid-flight.
+   * Every call is logged to the AI usage ledger (`aiUsage`), tagged
+   * `workflow-recommendation`.
+   */
+  recommendAgent(
+    workflowId: string,
+    nodeId: string,
+    input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
+  ): Promise<AgentRecommendationResult>;
   /**
    * Reads back the retained evidence for one stage attempt (FX-BE-051).
    * `entry` is undefined when nothing was ever captured for that attempt — a
