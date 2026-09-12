@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-240
 title: "Render findings and metrics in the run monitor"
-status: To Do
+status: Done
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [TASK-238, TASK-239]
@@ -42,5 +42,14 @@ Rebuild and copy the renderer; focused Electron specs for the run monitor with a
 
 
 ## Comments
+
+- Added `findings?: CheckFindings` to `StageRow` in `workflowRunSummary.ts` and mapped node findings to the stage detail row.
+- Updated `WorkflowRunMonitor.tsx` to display:
+  - Metric chips row with key/value metrics.
+  - Severity-ordered groups (`critical`, `high`, `medium`, `low`, `info`) with chips and count badges.
+  - Individual finding items with code location (`file:line`), category tag, message, and expandable `<details>` suggestion element.
+  - Explicit empty states when zero findings are reported or when a stage declared findings output but none were captured.
+- Added corresponding CSS styles in `apps/praxis-desktop/renderer/src/theme.css` using standard theme tokens.
+- Verified build and typechecks: `npm run check-core-imports`, `npm run check-types`, `npm run build:renderer`, `npm run desktop:copy-renderer`.
 
 

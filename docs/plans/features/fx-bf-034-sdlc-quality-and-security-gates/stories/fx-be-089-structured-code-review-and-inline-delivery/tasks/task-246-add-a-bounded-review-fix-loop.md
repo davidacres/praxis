@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-246
 title: "Add a bounded review to implement fix loop"
-status: To Do
+status: Done
 story: FX-BE-089
 updated: 2026-09-09
 dependencies: [TASK-245]
@@ -41,5 +41,11 @@ Core tests for loop accounting (enter, budget exhaustion, clean exit) and for sn
 
 
 ## Comments
+
+Completed implementation:
+- Updated `packages/core/src/workflows/workflowRun.ts` (`settleRunIfDone`) to ensure runs with pending/ready retry paths or failure branches do not prematurely terminate.
+- Preserved attempt counters and history across retries using `canRetry` and `node-retry`.
+- Verified review fix loop behavior in `packages/core/src/workflows/reviewFixLoop.test.ts`: failure when blocking findings stand, retrying review within attempt budget, and passing gate once re-review succeeds cleanly.
+
 
 

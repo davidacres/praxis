@@ -67,7 +67,8 @@ test('the designer and run monitor hold up on a dark theme', async () => {
   await page.getByRole('button', { name: 'New workflow in Delivery Project' }).click();
   const dialog = page.getByRole('dialog', { name: 'New workflow' });
   await expect(page).toHaveScreenshot('workflow-themes-new-dialog-dark.png');
-  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).getByRole('button', { name: 'Use' }).click();
+  await dialog.getByRole('listitem').filter({ hasText: 'Governed delivery' }).click();
+  await dialog.getByRole('button', { name: /^Use/ }).click();
   await expect(dialog).toBeHidden();
 
   const canvas = page.getByRole('application', { name: 'Workflow canvas' });

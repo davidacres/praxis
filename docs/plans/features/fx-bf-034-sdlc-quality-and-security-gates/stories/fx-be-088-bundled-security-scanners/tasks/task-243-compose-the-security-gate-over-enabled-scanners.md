@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-243
 title: "Compose the security gate over the union of enabled scanners"
-status: To Do
+status: Done
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [TASK-242]
@@ -41,5 +41,14 @@ Core tests for multi-owner gate pass/fail/pending and the disabled-scanner detai
 
 
 ## Comments
+
+- Extended `evaluateGates` in `packages/core/src/workflows/workflowGates.ts` to support multi-owner gates converging on a gate kind:
+  - Validates that every enabled scanner succeeds before the gate can pass; if any scanner fails, the gate fails immediately naming the failed scanner.
+  - Combines findings and metrics across all enabled scanners.
+  - Applies active waivers to suppress waived findings.
+  - Evaluates threshold conditions against the combined un-waived findings and metrics.
+  - Reports disabled scanners and detailed pass summary in gate detail text.
+- Added `enabled?: boolean` to `WorkflowNodeBase` and updated `workflowValidation.ts` to normalize node status and validate multi-owner threshold requirements.
+- Verified multi-owner gate resolution, failure isolation, waiver clearance, and disabled scanner reporting in `workflowMultiOwnerGates.test.ts`.
 
 

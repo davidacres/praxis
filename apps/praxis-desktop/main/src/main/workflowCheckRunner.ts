@@ -1,5 +1,6 @@
 import { spawnCheck } from './workflowCheckProcess';
 import { execFile } from 'node:child_process';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import {
@@ -7,10 +8,12 @@ import {
   commitEvidenceSource,
   createEvidenceBundle,
   evidenceBundleId,
+  parseCheckResult,
   redactEvidenceContent,
   unknownEvidenceSource,
   withEvidenceEntry,
   writeEvidenceBundle,
+  type CheckFindings,
   type StageDispatchContext,
   type StageOutcome,
   type WorkflowCheckNode,
@@ -104,6 +107,23 @@ export async function runWorkflowCheck(
     ? node.outputs.map(contract => ({ contractId: contract.id, kind: contract.kind, path: entryFilePath }))
     : [];
 
+  let parsedFindings: CheckFindings | undefined;
+  let adapterError: string | undefined;
+
+  const adapter = node.adapter ?? node.outputs.find(contract => contract.adapter)?.adapter;
+  if (adapter && !spawnFailed && !result.timedOut && !result.error) {
+    try {
+      let rawReport = redactedOutput;
+      if (node.reportPath) {
+        const fullReportPath = path.resolve(cwd, node.reportPath);
+        rawReport = await fs.readFile(fullReportPath, 'utf8');
+      }
+      parsedFindings = parseCheckResult(adapter, rawReport);
+    } catch (err) {
+      adapterError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   if (result.timedOut) {
     return { status: 'failed', error: `Check timed out after ${node.timeoutMs}ms.${persistNote}`, artifacts };
   }
@@ -115,11 +135,32 @@ export async function runWorkflowCheck(
     // still retained above.
     return { status: 'failed', error: `${result.error}${persistNote}`, artifacts };
   }
+  if (adapterError) {
+    return {
+      status: 'failed',
+      exitCode: result.code ?? undefined,
+      error: `Failed to parse ${adapter} check report: ${adapterError}${persistNote}`,
+      artifacts
+    };
+  }
   if (result.code !== null && successCodes.includes(result.code)) {
     if (persistError) {
       return { status: 'failed', error: `Check succeeded but its evidence could not be persisted: ${persistError}`, artifacts: [] };
     }
-    return { status: 'succeeded', exitCode: result.code, artifacts };
+    return { status: 'succeeded', exitCode: result.code, artifacts, ...(parsedFindings ? { findings: parsedFindings } : {}) };
+  }
+
+  if (spawnFailed) {
+    const isMissing = result.error?.includes('ENOENT') || result.error?.toLowerCase().includes('not found');
+    const msg = isMissing
+      ? `Scanner binary "${node.command}" not found. Please install it or disable this check node.`
+      : (result.error ?? `Could not start ${node.command}.`);
+    return {
+      status: 'failed',
+      exitCode: undefined,
+      error: `${msg}${persistNote}`,
+      artifacts
+    };
   }
 
   return {
@@ -129,7 +170,8 @@ export async function runWorkflowCheck(
     error: `${node.command} exited ${result.code ?? 'without a code'}${
       redactedOutput.trim() ? `:\n${tail(redactedOutput)}` : '.'
     }${persistNote}`,
-    artifacts
+    artifacts,
+    ...(parsedFindings ? { findings: parsedFindings } : {})
   };
 }
 

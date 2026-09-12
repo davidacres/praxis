@@ -23,7 +23,9 @@
  * rather than being frozen into a saved workflow.
  */
 
+import { createHash } from 'node:crypto';
 import type { AgentToolMode } from '../ai/agentTypes';
+import type { FindingWaiver } from './waiverRegister';
 
 /** Bumped only for a breaking shape change; `migrateWorkflow` handles the lift. */
 export const WORKFLOW_SCHEMA_VERSION = 1;
@@ -82,7 +84,69 @@ export type WorkflowArtifactKind =
   | 'report'
   | 'test-results'
   | 'log'
-  | 'note';
+  | 'note'
+  | 'findings';
+
+// ── Findings & Metrics ───────────────────────────────────────────────────
+
+export type CheckFindingSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+
+export interface CheckFinding {
+  fingerprint: string;
+  ruleId?: string;
+  file?: string;
+  line?: number;
+  severity: CheckFindingSeverity;
+  category: string;
+  message: string;
+  suggestion?: string;
+}
+
+export interface CheckFindings {
+  findings: CheckFinding[];
+  metrics: Record<string, number>;
+}
+
+/**
+ * Computes a deterministic fingerprint over rule id, normalized file path, line number, and message.
+ * The same underlying issue keeps its id across runs; changing location or message changes the fingerprint.
+ */
+export function computeFindingFingerprint(
+  finding: Pick<CheckFinding, 'ruleId' | 'file' | 'line' | 'message'>
+): string {
+  const normFile = (finding.file ?? '').replace(/\\/g, '/').trim();
+  const ruleId = (finding.ruleId ?? '').trim();
+  const line = finding.line !== undefined ? String(finding.line) : '';
+  const message = (finding.message ?? '').trim();
+
+  const payload = `${ruleId}::${normFile}::${line}::${message}`;
+  return createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+// ── Gate Thresholds ──────────────────────────────────────────────────────
+
+export interface MetricThresholdCondition {
+  type: 'metric';
+  metric: string;
+  operator: '>=' | '<=' | '>' | '<' | '==';
+  value: number;
+}
+
+export interface SeverityThresholdCondition {
+  type: 'severity';
+  severityLevel?: CheckFindingSeverity;
+  maxCount: number;
+}
+
+export type GateThresholdCondition = MetricThresholdCondition | SeverityThresholdCondition;
+
+export type CheckResultAdapterKind =
+  | 'sarif'
+  | 'junit'
+  | 'lcov'
+  | 'cobertura'
+  | 'npm-audit'
+  | 'osv-scanner';
 
 /** A declared output slot on a node. Presence is checked; content is not. */
 export interface WorkflowArtifactContract {
@@ -92,6 +156,8 @@ export interface WorkflowArtifactContract {
   /** A missing required artifact fails the node; an optional one does not. */
   required: boolean;
   description?: string;
+  /** Optional named adapter for check results */
+  adapter?: CheckResultAdapterKind;
 }
 
 // ── Gates ────────────────────────────────────────────────────────────────
@@ -113,6 +179,8 @@ interface WorkflowNodeBase {
   y: number;
   /** Artifact contract ids this node consumes; each must exist upstream. */
   inputs: string[];
+  /** Whether the node is enabled in execution. Defaults to true. */
+  enabled?: boolean;
 }
 
 /** A stage run by an agent session through the Agent Hub/runtime boundary. */
@@ -161,6 +229,19 @@ export interface WorkflowCheckNode extends WorkflowNodeBase {
   satisfiesGate?: WorkflowGateKind;
   timeoutMs?: number;
   maxAttempts?: number;
+  /** Named adapter to parse raw output into CheckFindings (for findings artifacts) */
+  adapter?: CheckResultAdapterKind;
+  /** Path to the output artifact file to parse, relative to cwd */
+  reportPath?: string;
+  /**
+   * Observe mode for CI-provided evidence (FX-BE-091 / TASK-252).
+   * When enabled, the gate evaluates against imported CI findings matching the run's snapshot SHA,
+   * falling back to the local command if snapshot SHA does not match.
+   */
+  observe?: {
+    enabled: boolean;
+    provider?: 'github-actions' | 'gitlab-ci';
+  };
 }
 
 /**
@@ -199,6 +280,10 @@ export interface WorkflowApprovalNode extends WorkflowNodeBase {
   requiredGates: WorkflowGateKind[];
   /** Whether an approver may override a failing gate with a written reason. */
   allowBypass: boolean;
+  /** Gate-level threshold conditions that must be met */
+  gateThresholds?: Partial<Record<WorkflowGateKind, GateThresholdCondition[]>>;
+  /** Optional active waivers applied to suppress matching findings */
+  waivers?: FindingWaiver[];
 }
 
 /**
@@ -292,6 +377,10 @@ export interface WorkflowPolicyProfile {
   requireTrustedAgents: boolean;
   /** Upper bound the scheduler enforces regardless of a node's own setting. */
   maxAttemptsPerNode: number;
+  /** Gate metric and severity threshold bars */
+  gateThresholds?: Partial<Record<WorkflowGateKind, GateThresholdCondition[]>>;
+  /** Active waivers applied across projects governed by this policy */
+  waivers?: FindingWaiver[];
   createdAt: string;
   updatedAt: string;
 }

@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-238
 title: "Add SARIF / JUnit / lcov / npm-audit / osv-scanner adapters"
-status: To Do
+status: Done
 story: FX-BE-087
 updated: 2026-09-09
 dependencies: [TASK-237]
@@ -41,5 +41,14 @@ Unit tests per adapter against fixture files; a check-runner test asserting a fa
 
 
 ## Comments
+
+- Built pure result parsers in `packages/core/src/workflows/checkResultAdapters.ts` covering:
+  - `parseSarif`: SARIF 2.1.0 format with rule ID, location URI, line, and level mappings to critical/high/medium/low/info.
+  - `parseJUnitXml`: JUnit test failures and errors mapped to findings; test counts and failure metrics extracted.
+  - `parseCoverage`: lcov format and Cobertura XML with line/branch/function coverage percentage metrics.
+  - `parseNpmAudit`: npm audit v1 and v2 formats with CVE/GHSA advisories and dependency paths.
+  - `parseOsvScanner`: osv-scanner JSON output mapping ecosystem vulnerability IDs and package locations.
+- Integrated adapter execution in `apps/praxis-desktop/main/src/main/workflowCheckRunner.ts` after check command completion, parsing outputs and attaching structured `CheckFindings` while preserving redacted raw evidence.
+- Verified parsing and error handling for all adapters with unit tests in `packages/core/src/workflows/checkResultAdapters.test.ts`.
 
 

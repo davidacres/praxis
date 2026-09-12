@@ -35,6 +35,16 @@ const GATE_CHIP: Record<string, string> = {
   missing: 'chip-danger'
 };
 
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const;
+
+const SEVERITY_CHIP: Record<string, string> = {
+  critical: 'chip-danger',
+  high: 'chip-danger',
+  medium: 'chip-warn',
+  low: 'chip-muted',
+  info: 'chip-muted'
+};
+
 /**
  * A deployment stage's own status line, distinguishing "deploying" from
  * "verifying" instead of the generic outcome word every other stage shows —
@@ -481,6 +491,73 @@ export function WorkflowRunMonitor({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {stage.findings && (
+              <div className="wf-findings-section" data-testid="wf-findings-section">
+                <h3>Findings &amp; Metrics</h3>
+
+                {Object.keys(stage.findings.metrics).length > 0 && (
+                  <div className="wf-findings-metrics" data-testid="wf-findings-metrics">
+                    <div className="chip-row">
+                      {Object.entries(stage.findings.metrics).map(([key, value]) => (
+                        <span key={key} className="chip chip-muted">
+                          <strong>{key}:</strong> {value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {stage.findings.findings.length === 0 ? (
+                  <div className="wf-findings-empty" data-testid="wf-findings-empty">
+                    <p className="placeholder-text">0 findings reported.</p>
+                  </div>
+                ) : (
+                  <div className="wf-findings-groups">
+                    {SEVERITY_ORDER.map(sev => {
+                      const group = (stage.findings?.findings ?? []).filter(f => f.severity === sev);
+                      if (group.length === 0) return null;
+                      return (
+                        <div key={sev} className="wf-findings-group" data-testid={`wf-findings-group-${sev}`}>
+                          <h4>
+                            <span className={`chip ${SEVERITY_CHIP[sev] ?? 'chip-muted'}`}>{sev}</span> ({group.length})
+                          </h4>
+                          <ul className="wf-findings-list">
+                            {group.map(finding => (
+                              <li key={finding.fingerprint} className="wf-finding-row" data-testid="wf-finding-row">
+                                <div className="wf-finding-header">
+                                  {finding.file && (
+                                    <span className="wf-finding-location">
+                                      <code>{finding.file}{finding.line ? `:${finding.line}` : ''}</code>
+                                    </span>
+                                  )}
+                                  <span className="rail-sub">{finding.category}</span>
+                                </div>
+                                <p className="wf-finding-message">{finding.message}</p>
+                                {finding.suggestion && (
+                                  <details className="wf-finding-suggestion">
+                                    <summary>Suggestion</summary>
+                                    <p>{finding.suggestion}</p>
+                                  </details>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            {!stage.findings && stage.artifacts.some(a => a.kind === 'findings') && (
+              <div className="wf-findings-section" data-testid="wf-findings-section">
+                <h3>Findings</h3>
+                <div className="wf-findings-empty" data-testid="wf-findings-empty">
+                  <p className="placeholder-text">No findings reported.</p>
+                </div>
+              </div>
             )}
 
             <div className="inspector-actions">

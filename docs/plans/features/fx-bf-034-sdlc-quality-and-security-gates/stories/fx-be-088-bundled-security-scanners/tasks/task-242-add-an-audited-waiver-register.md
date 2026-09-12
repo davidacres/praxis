@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-242
 title: "Add an audited, expiring waiver register"
-status: To Do
+status: Done
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [TASK-241]
@@ -42,5 +42,12 @@ Core tests for match, expiry, snapshot binding and strictest-wins compose. Elect
 
 
 ## Comments
+
+- Built the waiver register domain in `packages/core/src/workflows/waiverRegister.ts` defining `FindingWaiver` and `WaiverRegister`.
+- Implemented `validateFindingWaiver` enforcing non-empty fingerprint, reason, actor, future expiration dates, and lifetime day caps.
+- Implemented `isWaiverActive` supporting temporal expiration checks and source snapshot binding (`snapshotRef`).
+- Implemented `filterUnwaivedFindings` partitioning findings into active and waived sets.
+- Implemented strictest-wins composition in `composeWaiverRegisters`, rejecting any project configuration that attempts to extend waiver lifetimes beyond the organization ceiling.
+- Added comprehensive unit tests in `packages/core/src/workflows/waiverRegister.test.ts`.
 
 

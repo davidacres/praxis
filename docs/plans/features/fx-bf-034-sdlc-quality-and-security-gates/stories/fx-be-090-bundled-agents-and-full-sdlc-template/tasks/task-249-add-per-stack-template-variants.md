@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-249
 title: "Add Node / .NET / Python template variants"
-status: To Do
+status: Done
 story: FX-BE-090
 updated: 2026-09-09
 dependencies: [TASK-248]
@@ -41,5 +41,12 @@ Core tests: structural equivalence of the three variants, detection → variant 
 
 
 ## Comments
+
+Completed implementation:
+- Implemented Node, .NET, Python, and generic stack variants in `fullSdlcTemplate` in `packages/core/src/workflows/workflowTemplates.ts`.
+- .NET variant configures dotnet tool commands and points review stage at `csharp-dotnet-code-reviewer` with `dotnet-solid-dry` skill.
+- Added `detectStackFromLanguages` and `resolveFullSdlcTemplate` for automatic selection based on detected languages with safe generic fallback.
+- Added comprehensive unit tests in `packages/core/src/workflows/fullSdlcTemplates.test.ts`.
+
 
 

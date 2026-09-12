@@ -17,16 +17,25 @@ import * as path from 'node:path';
 import type { KeyValueStore } from '../host/stateStore';
 import { migrateWorkflow, validateWorkflow, type WorkflowIssue } from './workflowValidation';
 import { normalizeWorkflowRun, type WorkflowRun } from './workflowRun';
-import type { WorkflowDefinition, WorkflowPolicyProfile, WorkflowScope } from './workflowTypes';
+import type {
+  GateThresholdCondition,
+  MetricThresholdCondition,
+  SeverityThresholdCondition,
+  WorkflowDefinition,
+  WorkflowGateKind,
+  WorkflowPolicyProfile,
+  WorkflowScope
+} from './workflowTypes';
 
-export type WorkflowSource = 'built-in' | 'global' | 'project';
+export type WorkflowSource = 'built-in' | 'marketplace' | 'global' | 'project';
 
 /** Higher wins. Kept as data so the ordering is stated once, not implied. */
-const PRECEDENCE: Record<WorkflowSource, number> = { 'built-in': 0, global: 1, project: 2 };
+const PRECEDENCE: Record<WorkflowSource, number> = { 'built-in': 0, marketplace: 0.5, global: 1, project: 2 };
 
 /** The scope a definition must declare to be legal in a given source. */
 const EXPECTED_SCOPE: Record<WorkflowSource, WorkflowScope> = {
   'built-in': 'global',
+  marketplace: 'global',
   global: 'global',
   project: 'project'
 };
@@ -70,6 +79,7 @@ export interface WorkflowCatalog {
 
 export interface ResolveWorkflowCatalogInput {
   builtIn?: WorkflowDefinition[];
+  marketplace?: WorkflowDefinition[];
   global?: WorkflowDefinition[];
   project?: StoredWorkflow[];
 }
@@ -129,6 +139,7 @@ export function resolveWorkflowCatalog(input: ResolveWorkflowCatalogInput): Work
   };
 
   for (const definition of input.builtIn ?? []) consider({ definition, source: 'built-in' });
+  for (const definition of input.marketplace ?? []) consider({ definition, source: 'marketplace' });
   for (const definition of input.global ?? []) consider({ definition, source: 'global' });
   for (const stored of input.project ?? []) consider({ ...stored, source: 'project' });
 
@@ -360,6 +371,88 @@ export function composeWorkflowPolicies(
   const maxAttemptsPerNode = Math.min(global.maxAttemptsPerNode, project.maxAttemptsPerNode);
   if (maxAttemptsPerNode !== project.maxAttemptsPerNode) tightenedByGlobal.push('maxAttemptsPerNode');
 
+  // Gate threshold composition — strictest wins
+  const composedThresholds: Partial<Record<WorkflowGateKind, GateThresholdCondition[]>> = {};
+  const allGateKinds = new Set<WorkflowGateKind>([
+    ...(Object.keys(global.gateThresholds ?? {}) as WorkflowGateKind[]),
+    ...(Object.keys(project.gateThresholds ?? {}) as WorkflowGateKind[])
+  ]);
+
+  const SEVERITY_RANK: Record<string, number> = {
+    info: 0,
+    low: 1,
+    medium: 2,
+    high: 3,
+    critical: 4
+  };
+
+  for (const gate of allGateKinds) {
+    const globalConds = global.gateThresholds?.[gate] ?? [];
+    const projectConds = project.gateThresholds?.[gate] ?? [];
+    const mergedConds: GateThresholdCondition[] = [];
+
+    for (const gCond of globalConds) {
+      if (gCond.type === 'metric') {
+        const pCond = projectConds.find(c => c.type === 'metric' && c.metric === gCond.metric) as MetricThresholdCondition | undefined;
+        if (pCond) {
+          if (gCond.operator === '>=' && pCond.operator === '>=') {
+            if (pCond.value < gCond.value) {
+              throw new Error(`Cannot loosen org metric threshold for "${gCond.metric}": project requires >= ${pCond.value}, org requires >= ${gCond.value}.`);
+            }
+            if (pCond.value > gCond.value) {
+              mergedConds.push(pCond);
+            } else {
+              mergedConds.push(gCond);
+            }
+          } else if (gCond.operator === '<=' && pCond.operator === '<=') {
+            if (pCond.value > gCond.value) {
+              throw new Error(`Cannot loosen org metric threshold for "${gCond.metric}": project requires <= ${pCond.value}, org requires <= ${gCond.value}.`);
+            }
+            if (pCond.value < gCond.value) {
+              mergedConds.push(pCond);
+            } else {
+              mergedConds.push(gCond);
+            }
+          } else {
+            mergedConds.push(gCond);
+          }
+        } else {
+          mergedConds.push(gCond);
+          tightenedByGlobal.push(`gateThresholds.${gate}.${gCond.metric}`);
+        }
+      } else if (gCond.type === 'severity') {
+        const pCond = projectConds.find(c => c.type === 'severity') as SeverityThresholdCondition | undefined;
+        if (pCond) {
+          const gRank = SEVERITY_RANK[gCond.severityLevel ?? 'high'] ?? 3;
+          const pRank = SEVERITY_RANK[pCond.severityLevel ?? 'high'] ?? 3;
+
+          if (pRank > gRank) {
+            throw new Error(`Cannot loosen org severity ceiling: project checks severity >= ${pCond.severityLevel}, org requires >= ${gCond.severityLevel}.`);
+          }
+          if (pCond.maxCount > gCond.maxCount) {
+            throw new Error(`Cannot loosen org severity threshold: project allows ${pCond.maxCount} finding(s), org allows ${gCond.maxCount}.`);
+          }
+          mergedConds.push(pCond);
+        } else {
+          mergedConds.push(gCond);
+          tightenedByGlobal.push(`gateThresholds.${gate}.severity`);
+        }
+      }
+    }
+
+    for (const pCond of projectConds) {
+      if (pCond.type === 'metric' && !mergedConds.some(c => c.type === 'metric' && c.metric === pCond.metric)) {
+        mergedConds.push(pCond);
+      } else if (pCond.type === 'severity' && !mergedConds.some(c => c.type === 'severity')) {
+        mergedConds.push(pCond);
+      }
+    }
+
+    if (mergedConds.length > 0) {
+      composedThresholds[gate] = mergedConds;
+    }
+  }
+
   return {
     profile: {
       ...project,
@@ -367,7 +460,8 @@ export function composeWorkflowPolicies(
       requireHumanApproval,
       allowGateBypass,
       requireTrustedAgents,
-      maxAttemptsPerNode
+      maxAttemptsPerNode,
+      ...(Object.keys(composedThresholds).length > 0 ? { gateThresholds: composedThresholds } : {})
     },
     sources: [global.id, project.id],
     tightenedByGlobal

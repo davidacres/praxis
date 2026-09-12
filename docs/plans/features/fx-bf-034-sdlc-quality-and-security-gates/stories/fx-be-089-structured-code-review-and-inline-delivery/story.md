@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Story
 type: Story
 id: FX-BE-089
 title: "Structured code review and inline delivery"
-status: To Do
+status: Done
 feature: FX-BF-034
 updated: 2026-09-09
 dependencies: [FX-BE-087, FX-BE-033]
@@ -55,5 +55,12 @@ No conversational back-and-forth on individual comments, no learning/feedback mo
 
 
 ## Comments
+
+Story completed:
+- TASK-244: Implemented structured code review system prompt and `parseReviewFindings` in `aiReviewService.ts`, and enforced required `findings` output artifact in `workflowRun.ts`.
+- TASK-245: Implemented finding deduplication, inline comment formatting, and ticket summary comment formatting in `aiReviewService.ts`.
+- TASK-246: Supported bounded review fix loop through attempt budgets, retry handling, and gate satisfaction verification in `workflowRun.ts` and `reviewFixLoop.test.ts`.
+- Verified via full suite and typechecking.
+
 
 

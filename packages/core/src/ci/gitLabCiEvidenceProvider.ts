@@ -12,7 +12,15 @@
  * shape for both providers.
  */
 
-import type { CiEvidenceProvider, CiJobLogResult, CiJobSummary, CiRunConclusion, CiRunPage, CiRunSummary } from './ciEvidenceProvider';
+import type {
+  CiEvidenceProvider,
+  CiJobLogResult,
+  CiJobSummary,
+  CiRunConclusion,
+  CiRunPage,
+  CiRunSummary,
+  CiSecurityReportResult
+} from './ciEvidenceProvider';
 
 const KNOWN_CONCLUSIONS: readonly string[] = ['success', 'failed', 'canceled', 'skipped'];
 const FAILURE_STATUSES: readonly string[] = ['failed', 'canceled'];
@@ -96,6 +104,53 @@ export class GitLabCiEvidenceProvider implements CiEvidenceProvider {
       throw new Error(`GitLab CI trace request failed (HTTP ${response.status} ${response.statusText}).`);
     }
     return { content: await response.text(), expired: false };
+  }
+
+  public async getSecurityReports(sha: string, signal?: AbortSignal): Promise<CiSecurityReportResult> {
+    const pipelinesUrl = this.buildUrl(`/projects/${this.encodeProjectPath()}/pipelines`, {
+      sha
+    });
+    let pipelines: Array<{ id: number }> = [];
+    try {
+      const { data } = await this.get<Array<{ id: number }>>(pipelinesUrl);
+      pipelines = Array.isArray(data) ? data : [];
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('403')) {
+        throw new Error('No permission to read GitLab pipelines (HTTP 403). The token needs read_api.');
+      }
+      return { provider: 'gitlab-ci', runId: '', sha, available: false };
+    }
+
+    if (pipelines.length === 0) {
+      return { provider: 'gitlab-ci', runId: '', sha, available: false };
+    }
+
+    const pipelineId = String(pipelines[0].id);
+    const reportUrl = this.buildUrl(`/projects/${this.encodeProjectPath()}/pipelines/${encodeURIComponent(pipelineId)}/security_report_summary`);
+    try {
+      const response = await this.fetchImpl(reportUrl, { signal, headers: { 'PRIVATE-TOKEN': this.config.token } });
+      if (response.status === 404) {
+        return { provider: 'gitlab-ci', runId: pipelineId, sha, available: false };
+      }
+      if (response.status === 403) {
+        throw new Error('No permission to read GitLab security reports (HTTP 403). The token needs read_api.');
+      }
+      if (!response.ok) {
+        return { provider: 'gitlab-ci', runId: pipelineId, sha, available: false };
+      }
+      const data = (await response.json()) as unknown;
+      return {
+        provider: 'gitlab-ci',
+        runId: pipelineId,
+        sha,
+        available: true,
+        rawReport: data,
+        reportType: 'gitlab-sast'
+      };
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('read_api')) throw err;
+      return { provider: 'gitlab-ci', runId: pipelineId, sha, available: false };
+    }
   }
 
   private encodeProjectPath(): string {

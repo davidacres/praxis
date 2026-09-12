@@ -1,10 +1,10 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Type:** Task
 type: Task
 id: TASK-241
 title: "Add secret / SAST / SCA / license check presets with stack detection"
-status: To Do
+status: Done
 story: FX-BE-088
 updated: 2026-09-09
 dependencies: [FX-BE-087]
@@ -41,5 +41,16 @@ Core tests for detection → default set and preset shape; check-runner tests ag
 
 
 ## Comments
+
+- Defined scanner check presets in `packages/core/src/workflows/checkPresets.ts`:
+  - `SECRET_SCAN_PRESET`: Gitleaks emitting SARIF.
+  - `SAST_SEMGREP_PRESET`: Semgrep with curated security ruleset emitting SARIF.
+  - `SCA_OSV_PRESET`: OSV-Scanner emitting SARIF.
+  - `SCA_TRIVY_PRESET`: Trivy filesystem scanner emitting SARIF.
+  - `LICENSE_CHECK_PRESET`: License policy check emitting SARIF.
+- Implemented `detectRecommendedCheckPresets(inspection)` mapping language, manifest, and framework detections from `FolderInspection` to scanner selections (defaults to secrets + semgrep + osv-scanner on Node/standard stacks, includes .NET SCA target when .NET is detected).
+- Added `createCheckNodeFromPreset` to convert a preset directly into a `WorkflowCheckNode` with declared `findings` artifact outputs.
+- Enhanced `workflowCheckRunner.ts` in desktop main to fail gracefully with an actionable error message (`Scanner binary "<command>" not found. Please install it or disable this check node.`) when a scanner binary is missing.
+- Verified with unit tests in `packages/core/src/workflows/checkPresets.test.ts`.
 
 

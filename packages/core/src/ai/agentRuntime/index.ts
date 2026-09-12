@@ -13,3 +13,4 @@ export * from './manager';
 export * from './hostLoader';
 export * from './agentCatalog';
 export * from './agentAuthoring';
+export * from './bundledAgents';

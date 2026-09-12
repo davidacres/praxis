@@ -24,6 +24,7 @@ import {
   isTerminalOutcome,
   nodeOutputs,
   WORKFLOW_SCHEMA_VERSION,
+  type CheckFindings,
   type WorkflowArtifactRef,
   type WorkflowDefinition,
   type WorkflowGateDecision,
@@ -98,6 +99,7 @@ export interface WorkflowNodeState {
    * that reported it.
    */
   phase?: string;
+  findings?: CheckFindings;
 }
 
 export interface WorkflowRun {
@@ -153,8 +155,9 @@ export type WorkflowRunCommand =
       exitCode?: number;
       /** Commit or worktree ref this stage froze, for downstream inspection. */
       snapshotRef?: string;
+      findings?: CheckFindings;
     }
-  | { kind: 'node-failed'; nodeId: string; at: string; error: string; exitCode?: number }
+  | { kind: 'node-failed'; nodeId: string; at: string; error: string; exitCode?: number; findings?: CheckFindings }
   | { kind: 'node-timed-out'; nodeId: string; at: string }
   | { kind: 'node-skipped'; nodeId: string; at: string; reason: string }
   | { kind: 'node-retry'; nodeId: string; at: string }
@@ -215,12 +218,14 @@ export function applyWorkflowRunCommand(run: WorkflowRun, command: WorkflowRunCo
       return settleNode(run, command.nodeId, 'succeeded', command.at, {
         exitCode: command.exitCode,
         artifacts: command.artifacts,
-        snapshotRef: command.snapshotRef
+        snapshotRef: command.snapshotRef,
+        findings: command.findings
       });
     case 'node-failed':
       return settleNode(run, command.nodeId, 'failed', command.at, {
         error: command.error,
-        exitCode: command.exitCode
+        exitCode: command.exitCode,
+        findings: command.findings
       });
     case 'node-timed-out':
       return settleNode(run, command.nodeId, 'failed', command.at, {
@@ -283,6 +288,7 @@ function settleNode(
     timedOut?: boolean;
     snapshotRef?: string;
     artifacts?: Extract<WorkflowRunCommand, { kind: 'node-succeeded' }>['artifacts'];
+    findings?: CheckFindings;
   }
 ): WorkflowRun {
   const state = run.nodes[nodeId];
@@ -305,6 +311,14 @@ function settleNode(
       effective = 'failed';
       error = `Stage did not produce required artifacts: ${missing.join(', ')}.`;
     }
+
+    const hasRequiredFindings = nodeOutputs(node).some(
+      contract => contract.required && contract.kind === 'findings'
+    );
+    if (hasRequiredFindings && !detail.findings) {
+      effective = 'failed';
+      error = error ?? 'Stage declared required findings artifact but produced no structured findings.';
+    }
   }
 
   const attempts = [...state.attempts];
@@ -322,7 +336,8 @@ function settleNode(
     outcome: effective,
     attempts,
     artifacts,
-    ...(effective === 'succeeded' && detail.snapshotRef ? { snapshotRef: detail.snapshotRef } : {})
+    ...(effective === 'succeeded' && detail.snapshotRef ? { snapshotRef: detail.snapshotRef } : {}),
+    ...(detail.findings ? { findings: detail.findings } : {})
   });
   next = append(next, {
     at,
@@ -493,9 +508,26 @@ export function isRunSettled(run: WorkflowRun): boolean {
 function settleRunIfDone(run: WorkflowRun, at: string): WorkflowRun {
   const states = Object.values(run.nodes);
 
-  const requiredFailure = states.find(
-    state => state.outcome === 'failed' && isRequiredNode(run, state.nodeId) && !canRetry(run, state.nodeId)
-  );
+  const requiredFailure = states.find(state => {
+    if (state.outcome !== 'failed') return false;
+    if (!isRequiredNode(run, state.nodeId)) return false;
+    if (canRetry(run, state.nodeId)) return false;
+
+    const hasOutboundFailurePath = run.definition.edges.some(
+      edge => edge.from === state.nodeId && (edge.on === 'failure' || edge.on === 'always')
+    );
+    if (hasOutboundFailurePath) {
+      const targets = run.definition.edges
+        .filter(edge => edge.from === state.nodeId && (edge.on === 'failure' || edge.on === 'always'))
+        .map(edge => edge.to);
+      const targetsSettled = targets.every(tid => {
+        const st = run.nodes[tid];
+        return st && isTerminalOutcome(st.outcome);
+      });
+      if (!targetsSettled) return false;
+    }
+    return true;
+  });
   if (requiredFailure) {
     return append(
       { ...run, status: 'failed', endedAt: at, endedReason: `Required stage "${requiredFailure.nodeId}" failed.` },
