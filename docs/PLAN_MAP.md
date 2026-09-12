@@ -294,14 +294,20 @@ The mobile initiative has its own folder-backed PRAXISMOBILE project at [apps/pr
 
 The root desktop board is unchanged. Add the mobile folder as a separate project to see its work. No dependency on the deferred shared-executor or deployment/debugging roadmap is implied.
 
-**Status as of 2026-09-10.** FX-BF-028 (execution host and protocol) is done and
-tested. FX-BF-029 and FX-BF-031–033 are back to In Progress: the desktop half —
-the Noise `IK` secure transport (`@praxis/mobile-protocol`), the real LAN
-listener, and the host bound to the live stores — is implemented and tested, but
-there is no React Native app yet, LAN discovery and the real pairing adapters
-are missing, and `sessions.continue` / `permissions.respond` / `workflowRuns.start`
-remain deferred pending the permission request-id rework. See the mobile
-[Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) for the per-story breakdown.
+**Status as of 2026-09-10, updated 2026-09-12.** FX-BF-028 (execution host and
+protocol) is done and tested: the Noise `IK` secure transport
+(`@praxis/mobile-protocol`, verified against the canonical `snow` vectors), the
+real LAN listener, and the host bound to the live stores. FX-BF-029 and
+FX-BF-031–033 stay In Progress — there is now a React Native app
+(`apps/praxis-mobile`, Expo SDK 57) that builds and runs (verified booting and
+rendering in the iOS Simulator), but it talks to canned demo data only, not a
+real socket; LAN discovery and the real pairing adapters (QR, keychain) are
+still missing; and `sessions.continue` / `permissions.respond` /
+`workflowRuns.start` remain deferred pending the permission request-id rework.
+See the mobile [Plan Map](../apps/praxis-mobile/docs/PLAN_MAP.md) for the
+per-story breakdown and
+[development.md's "Resume here"](../apps/praxis-mobile/docs/development.md#resume-here-2026-09-12)
+for the exact next steps.
 
 ## Local-first priority (2026-09-09)
 
