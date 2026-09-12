@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
+import { gzipSync } from 'node:zlib';
 
 import { type InstalledAddon } from './catalogTypes';
 import { MarketplaceService, type AddonStorage } from './marketplaceService';
@@ -16,6 +17,28 @@ function sri(bytes: Uint8Array): string {
 
 function tarballFor(name: string): Uint8Array {
   return new TextEncoder().encode(`tarball:${name}`);
+}
+
+/** A real single-file USTAR tarball (gzipped) carrying `package/package.json` — the same shape `npm pack` produces. */
+function realTarball(packageJson: Record<string, unknown>): Uint8Array {
+  const content = Buffer.from(JSON.stringify(packageJson), 'utf8');
+  const header = Buffer.alloc(512);
+  header.write('package/package.json', 0, 100, 'utf8');
+  header.write('0000644\0', 100, 8, 'utf8');
+  header.write('0000000\0', 108, 8, 'utf8');
+  header.write('0000000\0', 116, 8, 'utf8');
+  header.write(content.length.toString(8).padStart(11, '0') + '\0', 124, 12, 'utf8');
+  header.write('00000000000\0', 136, 12, 'utf8');
+  header.write('        ', 148, 8, 'utf8');
+  header.write('0', 156, 1, 'utf8');
+  header.write('ustar\0', 257, 6, 'utf8');
+  header.write('00', 263, 2, 'utf8');
+  let checksum = 0;
+  for (const byte of header) checksum += byte;
+  header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'utf8');
+  const contentBlock = Buffer.alloc(Math.ceil(content.length / 512) * 512);
+  content.copy(contentBlock);
+  return gzipSync(Buffer.concat([header, contentBlock, Buffer.alloc(1024)]));
 }
 
 function manifest(kind: string, id: string, extra: Record<string, unknown> = {}): unknown {
@@ -145,6 +168,36 @@ test('listCatalog drops a package whose latest manifest is invalid, keeps the re
   assert.ok(logs.some((l) => l.includes('praxis-addon-broken') && l.includes('invalid manifest')));
 });
 
+test('listCatalog recovers the manifest from the tarball when the packument omits `praxis` entirely', async () => {
+  // GitHub Packages' npm registry strips custom package.json fields from what
+  // it echoes in the packument (verified against real published data) — the
+  // version entry has praxis: undefined even though the actual tarball has it.
+  const tarball = realTarball({
+    name: '@acme/praxis-addon-solarized',
+    version: '1.0.0',
+    praxis: { schemaVersion: 1, kind: 'theme', id: 'solarized', name: 'Solarized' }
+  });
+  const client: MarketplaceRegistryClient = {
+    listAddonPackages: () => Promise.resolve([{ name: 'praxis-addon-solarized' }]),
+    getPackument: () =>
+      Promise.resolve({
+        name: 'praxis-addon-solarized',
+        distTags: { latest: '1.0.0' },
+        versions: {
+          '1.0.0': {
+            version: '1.0.0',
+            // No `praxis` field — this is the GitHub Packages behavior.
+            dist: { tarball: 'https://reg/solarized/1.0.0.tgz', integrity: sri(tarball) }
+          }
+        }
+      }),
+    downloadTarball: () => Promise.resolve(tarball)
+  };
+  const service = new MarketplaceService({ client, storage: new MemoryStorage(), appVersion: '1.0.0' });
+  const catalog = await service.listCatalog();
+  assert.deepEqual(catalog.map((e) => e.manifest.id), ['solarized']);
+});
+
 test('listCatalog marks an add-on that needs a newer app as incompatible but still lists it', async () => {
   const { service } = makeService({
     appVersion: '0.2.1',
@@ -184,6 +237,34 @@ test('install can pin a specific version', async () => {
   const { service } = makeService();
   const record = await service.install('praxis-addon-nord', { version: '1.0.0' });
   assert.equal(record.version, '1.0.0');
+});
+
+test('install recovers the manifest from the tarball when the packument omits `praxis` entirely', async () => {
+  const tarball = realTarball({
+    name: '@acme/praxis-addon-solarized',
+    version: '1.0.0',
+    praxis: { schemaVersion: 1, kind: 'theme', id: 'solarized', name: 'Solarized' }
+  });
+  const client: MarketplaceRegistryClient = {
+    listAddonPackages: () => Promise.resolve([{ name: 'praxis-addon-solarized' }]),
+    getPackument: () =>
+      Promise.resolve({
+        name: 'praxis-addon-solarized',
+        distTags: { latest: '1.0.0' },
+        versions: {
+          '1.0.0': {
+            version: '1.0.0',
+            dist: { tarball: 'https://reg/solarized/1.0.0.tgz', integrity: sri(tarball) }
+          }
+        }
+      }),
+    downloadTarball: () => Promise.resolve(tarball)
+  };
+  const storage = new MemoryStorage();
+  const service = new MarketplaceService({ client, storage, appVersion: '1.0.0' });
+  const record = await service.install('praxis-addon-solarized');
+  assert.equal(record.manifest.id, 'solarized');
+  assert.equal(record.enabled, true);
 });
 
 test('install rejects a tampered tarball', async () => {

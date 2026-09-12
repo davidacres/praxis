@@ -110,6 +110,18 @@ exactly what lets any pack compose with any palette.
   not the correction.
 - `flat` must stay a **byte-for-byte no-op** — every `--surface-*` token is declared inert
   on `:root`, so an unset surface costs nothing.
+- **Every overlay shell — modal, wizard, command palette — carries the material, not just
+  the three panes.** `.modal-card`, `.workspace-dialog`, `.command-palette`,
+  `.project-dialog-shell`, and `.project-wizard-header`/`.project-wizard-footer` all fill
+  with `color-mix(in srgb, <base> calc(var(--surface-panel-opacity) * 100%), transparent)`
+  + `background-image: var(--surface-panel-tint-layer)`, take `box-shadow:
+  var(--surface-accent-glow), <literal elevation shadow>`, add `backdrop-filter:
+  var(--surface-backdrop)`, and boost their `border-radius` by `var(--surface-radius-boost)`.
+  Inert defaults make this a no-op under `flat`. A new dialog/wizard/popover shell must follow
+  the same recipe — otherwise it reads as a flat, untextured box floating over panes that all
+  carry the active pack (parchment grain, aurora glass frost, noir vignette, …). Don't touch
+  the shell's border *colour* or its literal elevation shadow — swapping those to
+  `--surface-panel-border-color` shifted the default look and isn't required for theming.
 
 ## Renderer CSP
 
@@ -141,6 +153,10 @@ render inside the app's own modal surface and return a promise, so a call site s
 that used to accept a native dialog with `page.on('dialog', …)` now clicks the button in the
 in-app dialog by its `confirmLabel`.
 
+`.modal-card` (and everything built on it — `app-dialog`, `whats-new-card`,
+`import-projects-card`) carries the active surface pack's material; see
+"Surface packs and motifs" for the recipe before adding a new overlay shell.
+
 ## Command palette
 
 `⌘K` opens `app/CommandPalette.tsx` over a flat index built in `App` (`paletteEntries`) from
@@ -148,6 +164,58 @@ the collections the shell already holds — projects, boards, sessions, agents, 
 workflows, feature destinations, settings pages. It is navigation only; each entry's `run`
 reuses the same `navigate()` / `setSettingsDialogCategory()` the sidebar uses. Add a new
 navigable surface → add an entry to that `useMemo`.
+
+## Sidebar tree indentation (`theme.css`, `app/Sidebar.tsx`)
+
+The sidebar has grown several independent trees (a project's own tree, the
+external Boards list, the Agent Hub nav under "Agents") the same way, one row
+class at a time, over several sessions — and `padding-left` on a new row class
+was routinely just eyeballed. It drifted three separate times before anyone
+noticed: Repository's `Graph` (32px) vs `Changes` (34px), a workflow's own row
+(32px) vs its `Runs` row (34px), and the Agent Hub's scope label (30px) vs its
+agent rows (32px). Separately, `Run` and `Deployments` had no `padding-left`
+rule at all and fell back to `.tree-row`'s flush-left default, so they read as
+top-level items instead of children of the project tree.
+
+**The fix is four CSS custom properties, `--tree-indent-1` through
+`--tree-indent-4`** (defined once, right above `.sidebar-scroll` in
+`theme.css`, with the full rationale in the comment there). Every row in
+every sidebar tree sets its `padding-left` to one of these four — never a
+bare pixel value:
+
+- `--tree-indent-1` (18px) — a direct child of the tree's root: a collapsible
+  subsection header (`Boards`, `Repository`, `Workflows`, `Docs`; the Agent
+  Hub's `Global`/`Project` scope label) **and** a flat leaf row with no
+  children of its own, so it never grows a header (`Run`, `Deployments`).
+  Both are the same depth — a childless leaf sits where a header would.
+- `--tree-indent-2` (30px) — one level inside a `--tree-indent-1` subsection: a
+  board, `Graph`/`Changes`, a workflow and its own `Runs` row, an Agent Hub
+  agent/skill row, a project's `docs > plans` folder header. This value is not
+  arbitrary: `.project-tree-children > .tree-row::before`'s connector dash is
+  fixed at `left: 17px; width: 13px`, ending at 30px, so a row's icon starts
+  exactly where the dash stops — no gap, no overlap. Moving the dash's
+  position later means moving this token to match, not the other way round.
+- `--tree-indent-3` (42px) — a document-type group header one level inside
+  `docs > plans` (`.project-document-group-toggle`, e.g. "STORY").
+- `--tree-indent-4` (48px) — a document itself, one level inside a
+  `--tree-indent-3` group (`.project-document-row`).
+
+Icons follow the same tokens, but by **role**, not by depth — an
+`--tree-indent-2`/`-3` row can be a leaf (`Graph`, a board, a document) or
+another collapsible header (`docs > plans`, a document-type group), and the
+two size differently: a leaf's icon (`.tree-icon`, no reserved box) is 14px at
+any depth, since a leaf never implies a level under it and so never steps
+down. A header's icon (`.tree-section-icon`, boxed to 18px regardless of the
+glyph) steps down 1px per nesting level instead — 13px at `--tree-indent-1`,
+12px at `--tree-indent-2`, 10px at `--tree-indent-3` — so a deeper group still
+visibly reads as subordinate.
+
+**Adding a new row to any sidebar tree**: decide which of the four depths it
+actually sits at (a header/leaf-with-no-children, or something nested one,
+two, or three levels inside one), set `padding-left` to the matching token,
+and size its icon by role as above. If a genuinely new fifth depth is needed,
+give it its own named token the same way rather than a bare number — the
+whole point is that no row's indent is ever a number typed at the call site.
 
 ## Onboarding and the walkthrough
 

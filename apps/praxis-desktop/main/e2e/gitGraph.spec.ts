@@ -85,9 +85,20 @@ async function openProjectGit(repository: string): Promise<void> {
   await app.window.getByTestId('project-git-nav-item').click();
 }
 
+// Jira Cloud is now a marketplace-only add-on, not bundled — seeded here as a
+// custom theme carrying its exact colours so this test still exercises a
+// non-default palette without a real marketplace install.
+const JIRA_CLOUD_PREVIEW = { canvas: '#f7f8f9', panel: '#ffffff', raised: '#f1f2f4', border: '#dcdfe4', text: '#172b4d', muted: '#44546f', accent: '#0c66e4', success: '#216e4e', warning: '#a54800', danger: '#ae2e24' };
+
 test.beforeEach(async () => {
   repositories = [];
-  app = await launchTestApp({ appearance: { themeId: 'jira-cloud', themeMode: 'light' } });
+  app = await launchTestApp({
+    appearance: {
+      themeId: 'custom-jira-cloud',
+      themeMode: 'light',
+      customThemes: [{ id: 'custom-jira-cloud', name: 'Jira Cloud', mode: 'light', description: 'Crisp Atlassian-inspired whites, blue actions, and dense project-work surfaces.', preview: JIRA_CLOUD_PREVIEW }]
+    }
+  });
 });
 
 test.afterEach(async () => {
@@ -112,7 +123,7 @@ test('renders the visual Git graph and commit inspector', async () => {
   await firstCommit.focus();
   await firstCommit.press('Enter');
   await expect(window.getByRole('complementary', { name: 'Commit details' })).toContainText('COMMIT DETAILS');
-  await expect(window.locator('html')).toHaveAttribute('data-theme', 'jira-cloud');
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'custom-jira-cloud');
   const graphSurfaces = await window.evaluate(() => {
     const resolveColor = (value: string) => {
       const probe = document.createElement('span');

@@ -170,10 +170,13 @@ test('Themes panel: the marketplace section installs a theme into the gallery, t
   await expect(window).toHaveScreenshot('themes-marketplace.png');
 
   await available.click(); // an uninstalled card's click is "install"
-  // It leaves the marketplace section and becomes a selectable gallery card.
-  await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
+  // A marketplace card stays put once installed — it doesn't leave the
+  // section — and now also renders as a selectable card in the gallery
+  // (Recent/Staff picks), so the same id legitimately appears twice.
+  await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
   await window.getByRole('searchbox', { name: 'Search themes' }).fill('nord');
-  await expect(window.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
+  const gallery = window.locator('.theme-gallery-section').filter({ hasText: 'Recent' }).first();
+  await expect(gallery.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
 
   // Switch to "Installed" filter to see the installed marketplace item
   await marketplace.locator('[data-testid="theme-marketplace-filter-installed"]').click();
@@ -185,10 +188,11 @@ test('Themes panel: the marketplace section installs a theme into the gallery, t
     .locator('[data-testid="theme-marketplace-installed-item"]')
     .getByRole('button', { name: 'Remove' })
     .click();
-  // Removed from installed list; switch back to "All" to see it back in available marketplace
+  // Removed from installed list; it also drops out of Recent/Staff picks
+  // (those only show installed items), but stays in the marketplace's "All"
+  // view — uninstalled again, not gone.
   await expect(marketplace.locator('[data-testid="theme-marketplace-installed-item"]')).toHaveCount(0);
   await marketplace.locator('[data-testid="theme-marketplace-filter-all"]').click();
-  const gallery = window.locator('.theme-gallery-section').filter({ hasText: 'Recent' }).first();
   await expect(gallery.locator('[data-testid="theme-card-nord-aurora"]')).toHaveCount(0);
   await expect(marketplace.locator('[data-testid="theme-card-nord-aurora"]')).toBeVisible();
 });

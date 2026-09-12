@@ -127,9 +127,9 @@ export const DEFAULT_APP_SETTINGS = {
   },
   appearance: {
     showBrandArtwork: true,
-    themeId: 'praxis-dark',
-    themeMode: 'dark' as 'light' | 'dark' | 'system',
-    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2', 'humanist-light', 'humanist-dark', 'github-light', 'github-dark', 'jira-cloud', 'anthropic-light', 'anthropic-dark'] as string[],
+    themeId: 'praxis-light',
+    themeMode: 'light' as 'light' | 'dark' | 'system',
+    installedThemeIds: ['praxis-light', 'praxis-dark', 'tm-default-1', 'tm-default-2'] as string[],
     customThemes: [] as Array<{ id: string; name: string; mode: 'light' | 'dark'; description: string; preview: Record<string, string> }>,
     surfacePackId: 'parchment',
     surface: { intensity: 1, translucency: true, texture: true, windowVibrancy: false, animateMotifs: true, plainChatSurface: false },

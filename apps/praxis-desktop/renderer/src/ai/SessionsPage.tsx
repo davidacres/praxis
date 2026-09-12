@@ -16,7 +16,7 @@ import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, formatCost, isLatestEditToPath, isWorkflowStageSession, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
+import { basename, contextPressure, formatCost, isLatestEditToPath, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
 import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
 import { PraxisChoiceGadget } from './PraxisChoiceGadget';
 
@@ -237,23 +237,9 @@ export function SessionsPage({
     .find(event => event.type === 'message')?.detail;
 
   // One line describing what the agent is doing right now — shown only while a
-  // turn is in flight, in place of streaming every tool block.
-  const liveActivity = ((): string | undefined => {
-    if (!selected || isTerminalAgentState(selected.state) || selected.state === 'awaiting_approval' || selected.state === 'awaiting_input') {
-      return undefined;
-    }
-    const events = selected.events;
-    for (let i = events.length - 1; i >= 0; i--) {
-      const event = events[i];
-      if (event.type === 'tool_complete' || event.type === 'message') break;
-      if (event.type === 'tool_start') {
-        const tool = event.data?.toolName ?? event.summary?.replace(/^Running tool:\s*/i, '');
-        return tool ? `Running ${tool}…` : 'Running a tool…';
-      }
-    }
-    if (selected.state === 'planning') return 'Planning…';
-    return selected.reasoningText?.trim() ? 'Thinking…' : 'Working…';
-  })();
+  // turn is in flight, in place of streaming every tool block. Shared with the
+  // inspector's copy of the same line; see `liveActivity` in sessionNav.ts.
+  const liveActivityText = selected ? liveActivity(selected) : undefined;
 
   // The pending permission the agent is blocked on, if any — surfaced as a
   // slide-up dock directly above the chat input.
@@ -657,10 +643,10 @@ export function SessionsPage({
                   <div>{selected.responseText}</div>
                 </div>
               )}
-              {liveActivity ? (
+              {liveActivityText ? (
                 <div className="session-activity-status" data-testid="session-activity-status">
                   <span className="session-activity-dot" aria-hidden="true" />
-                  <span>{liveActivity}</span>
+                  <span>{liveActivityText}</span>
                 </div>
               ) : (
                 !selected.responseText && conversationEvents.length === 0 && (

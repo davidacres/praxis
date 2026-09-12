@@ -18,6 +18,7 @@ import { ConnectionStatusDot } from '../ui/ConnectionStatusDot';
 import { Icon, type IconName } from '../ui/Icon';
 import { IssuePeek } from '../issues/IssuePeek';
 import { useSettings } from '../settings/useSettings';
+import { useResizable } from './useResizable';
 import { WorkModeView } from '../projects/WorkModeView';
 
 export type SidebarMode = 'classic' | 'work';
@@ -188,6 +189,15 @@ export function Sidebar({
   // The "Praxis" footer carries its own toggle, separate from the
   // connection-group collapse map above, because it isn't tied to a folder key.
   const [featuresCollapsed, setFeaturesCollapsed] = useState(false);
+  // Lets the "Praxis" footer grow taller than its natural content height
+  // (e.g. a long Sessions list) at the cost of the boards/projects area above it.
+  const praxisPanel = useResizable({
+    storageKey: 'tm-pane-sidebar-praxis',
+    initial: 240,
+    min: 120,
+    max: 640,
+    side: 'bottom'
+  });
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [boardsCollapsed, setBoardsCollapsed] = useState(false);
   const [newMenuOpen, setNewMenuOpen] = useState(false);
@@ -572,7 +582,7 @@ export function Sidebar({
                                 <button className="project-document-group-toggle" aria-expanded={!groupCollapsed} data-testid="project-document-type-nav-item" onClick={() => setCollapsed(current => ({ ...current, [groupKey]: !groupCollapsed }))}>
                                   <span className="tree-section-icon"><Icon name={groupCollapsed ? 'chevron-right' : 'chevron-down'} size={10} /></span><span>{group.type}</span><span className="tree-meta">{group.documents.length}</span>
                                 </button>
-                                {!groupCollapsed && group.documents.map(document => <button className="tree-row project-document-row" key={document.relativePath} data-testid="project-document-nav-item" title={document.relativePath} onClick={() => onOpenProjectDocument(project, document)}><span className="tree-icon"><Icon name="markdown" size={13} /></span><span className="tree-label">{document.name}</span>{document.status && <span className="status-dot" data-testid="project-document-status" style={{ background: statusTone(undefined, document.status) }} aria-label={`Status: ${documentStatusLabel(document.status)}`} title={documentStatusLabel(document.status)} />}</button>)}
+                                {!groupCollapsed && group.documents.map(document => <button className="tree-row project-document-row" key={document.relativePath} data-testid="project-document-nav-item" title={document.relativePath} onClick={() => onOpenProjectDocument(project, document)}><span className="tree-icon"><Icon name="markdown" size={14} /></span><span className="tree-label">{document.name}</span>{document.status && <span className="status-dot" data-testid="project-document-status" style={{ background: statusTone(undefined, document.status) }} aria-label={`Status: ${documentStatusLabel(document.status)}`} title={documentStatusLabel(document.status)} />}</button>)}
                               </div>;
                             })}
                           </div>}
@@ -609,7 +619,14 @@ export function Sidebar({
         <IssuePeek issueKey={selectedIssueKey} connectionId={selectedIssueConnectionId} />
       )}
 
-      <div className="sidebar-footer">
+      {!featuresCollapsed && (
+        <div
+          className={`splitter-h${praxisPanel.dragging ? ' dragging' : ''}`}
+          aria-label="Resize Praxis section"
+          {...praxisPanel.handleProps}
+        />
+      )}
+      <div className="sidebar-footer" style={featuresCollapsed ? undefined : { height: praxisPanel.size }}>
         <button
           className="feature-section-toggle sidebar-section-button"
           aria-expanded={!featuresCollapsed}
@@ -619,7 +636,7 @@ export function Sidebar({
           <span className="sidebar-section-label" style={{ margin: 0 }}>
             Praxis
           </span>
-          <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}><Icon name="tools" size={14} /></span>
+          <span className={`tree-section-icon${featuresCollapsed ? '' : ' open'}`}><Icon name={featuresCollapsed ? 'chevron-right' : 'chevron-down'} size={14} /></span>
         </button>
         {!featuresCollapsed &&
           FEATURES.map(feature =>

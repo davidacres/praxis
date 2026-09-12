@@ -255,6 +255,10 @@ test('a finished session shows its changeset and can commit it', async () => {
   const changes = win.locator('[data-testid="session-changes"]');
   await expect(changes).toBeVisible();
   await expect(changes.getByTestId('session-changes-count')).toContainText('1 file');
+
+  // The file list is collapsed by default (a persisted preference) — the
+  // count is visible at a glance, but reviewing means expanding it.
+  await changes.getByTestId('session-changes-toggle').click();
   await expect(changes.getByTestId('session-changes-file')).toContainText('sum.js');
 
   // A file opens its own diff in place, so reviewing does not mean leaving the
@@ -317,6 +321,7 @@ test('a changed file can be read whole, not just as a diff', async () => {
 
   const changes = win.locator('[data-testid="session-changes"]');
   await expect(changes).toBeVisible();
+  await changes.getByTestId('session-changes-toggle').click();
 
   // The diff shows the edit; it need not show the untouched comment line above it.
   await changes.getByTestId('session-changes-open').click();
@@ -401,6 +406,7 @@ test('a single hunk can be discarded without losing the rest of the file\'s edit
   await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
 
   const changes = win.locator('[data-testid="session-changes"]');
+  await changes.getByTestId('session-changes-toggle').click();
   await changes.getByTestId('session-changes-open').click();
   const hunks = changes.getByTestId('session-changes-hunk');
   await expect(hunks).toHaveCount(2);
