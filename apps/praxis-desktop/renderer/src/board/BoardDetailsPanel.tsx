@@ -4,6 +4,7 @@ import {
   backendModeMeta,
   boardTypeIcon,
   boardTypeLabel,
+  isIssueDone,
   resolveBackendMode,
   statusTone
 } from './boardMeta';
@@ -16,12 +17,6 @@ interface BoardDetailsPanelProps {
 
 function normalized(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? '';
-}
-
-function isDone(issue: IssueSummary): boolean {
-  const category = normalized(issue.statusCategory);
-  const status = normalized(issue.status);
-  return category === 'done' || /^(done|closed|resolved|complete|completed)$/.test(status);
 }
 
 function isInProgress(issue: IssueSummary): boolean {
@@ -52,7 +47,7 @@ export function BoardDetailsPanel({ board, details, connection }: BoardDetailsPa
   const backend = backendModeMeta(mode);
   const issues = details.issues;
   const total = issues.length;
-  const done = issues.filter(isDone).length;
+  const done = issues.filter(isIssueDone).length;
   const inProgress = issues.filter(isInProgress).length;
   const stories = issues.filter(issue => ['story', 'user story'].includes(normalized(issue.issueType))).length;
   const completion = total === 0 ? 0 : Math.round((done / total) * 100);

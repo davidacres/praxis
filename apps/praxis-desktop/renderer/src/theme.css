@@ -2300,8 +2300,14 @@ textarea {
   text-decoration: underline;
 }
 
+/* The card is one control from the keyboard's point of view (input + Chat/
+   Analysis/Review + provider + tools), so its focus ring belongs on the
+   whole card, not just the textarea inside it — see the note on
+   .composer-input:focus-visible below. */
 .composer:focus-within {
   border-color: var(--accent-border);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .composer-input {
@@ -2316,6 +2322,13 @@ textarea {
      reference, where "What's the goal?" measures 119px wide. */
   font-size: 16px;
   resize: none;
+}
+
+/* Not a bare outline reset: .composer:focus-within paints the same ring
+   around the whole card instead, so focus never becomes invisible — it
+   just moves to the control the ring should actually outline. */
+.composer-input:focus-visible {
+  outline: none;
 }
 
 .composer-input::placeholder {

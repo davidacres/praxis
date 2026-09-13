@@ -11,6 +11,7 @@ import type {
   WorkflowNodeType,
   WorkflowPolicyProfile
 } from '@praxis/core';
+import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { WorkflowCanvas } from './WorkflowCanvas';
 import {
@@ -97,20 +98,21 @@ export function WorkflowDesignerPage({
   const [catalog, setCatalog] = useState<AgentRuntimeSnapshot | undefined>();
   const [policy, setPolicy] = useState<WorkflowPolicyProfile | undefined>();
   // Gates the "Recommended" agent-stage action — the recommendation call is a
-  // direct Vercel AI Gateway completion (see `workflowAgentRecommendation.ts`),
-  // not a full agent session, so it only works when that specific provider
-  // has a key, regardless of which provider is active for real sessions.
-  // `undefined` is "still checking", not "unconfigured" — see
+  // direct completion against whichever api-kind provider (Vercel AI
+  // Gateway, OpenAI, or Anthropic — see `workflowAgentRecommendation.ts`) is
+  // configured, not a full agent session, so it only works when at least one
+  // of those has a key, regardless of which provider is active for real
+  // sessions. `undefined` is "still checking", not "unconfigured" — see
   // `AgentStageFields`'s use of this for why that third state matters.
-  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | undefined>(undefined);
+  const [recommendationAvailable, setRecommendationAvailable] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     void window.praxis.agentRuntime.list().then(setCatalog);
     void window.praxis.workflows.effectivePolicy(project.id).then(setPolicy);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setGatewayConfigured(statuses.some(status => status.provider === 'vercel-gateway' && status.configured)))
-      .catch(() => setGatewayConfigured(false));
+      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && status.configured)))
+      .catch(() => setRecommendationAvailable(false));
   }, [project.id]);
 
   // Load the chosen workflow; re-runs when the sidebar picks a different one.
@@ -248,7 +250,7 @@ export function WorkflowDesignerPage({
               issues={feedback?.byNode[selectedNode.id] ?? []}
               catalog={catalog}
               policy={policy}
-              gatewayConfigured={gatewayConfigured}
+              recommendationAvailable={recommendationAvailable}
               onChange={mutate}
               onSelectNode={selectStage}
             />
@@ -405,7 +407,7 @@ function NodeInspector({
   issues,
   catalog,
   policy,
-  gatewayConfigured,
+  recommendationAvailable,
   onChange,
   onSelectNode
 }: {
@@ -414,7 +416,7 @@ function NodeInspector({
   issues: Array<{ path: string; message: string }>;
   catalog: AgentRuntimeSnapshot | undefined;
   policy: WorkflowPolicyProfile | undefined;
-  gatewayConfigured: boolean | undefined;
+  recommendationAvailable: boolean | undefined;
   onChange: (next: WorkflowDefinition) => void;
   onSelectNode: (nodeId: string | undefined) => void;
 }) {
@@ -451,7 +453,7 @@ function NodeInspector({
       </Field>
 
       {node.type === 'agent-task' && (
-        <AgentStageFields workflowId={definition.id} node={node} catalog={catalog} policy={policy} gatewayConfigured={gatewayConfigured} set={set} />
+        <AgentStageFields workflowId={definition.id} node={node} catalog={catalog} policy={policy} recommendationAvailable={recommendationAvailable} set={set} />
       )}
 
       {node.type === 'check' && (
@@ -566,14 +568,14 @@ function AgentStageFields({
   node,
   catalog,
   policy,
-  gatewayConfigured,
+  recommendationAvailable,
   set
 }: {
   workflowId: string;
   node: Extract<WorkflowNode, { type: 'agent-task' }>;
   catalog: AgentRuntimeSnapshot | undefined;
   policy: WorkflowPolicyProfile | undefined;
-  gatewayConfigured: boolean | undefined;
+  recommendationAvailable: boolean | undefined;
   set: (patch: Partial<WorkflowNode>) => void;
 }) {
   const agents = catalog?.agents ?? [];
@@ -615,7 +617,7 @@ function AgentStageFields({
   // recommend/refresh, never continuously.
   useEffect(() => {
     let cancelled = false;
-    if (!gatewayConfigured) {
+    if (!recommendationAvailable) {
       return;
     }
     window.praxis.workflows
@@ -640,7 +642,7 @@ function AgentStageFields({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflowId, node.id, gatewayConfigured]);
+  }, [workflowId, node.id, recommendationAvailable]);
 
   const requestRecommendation = useCallback(async () => {
     setRecommendState({ status: 'loading' });
@@ -693,7 +695,7 @@ function AgentStageFields({
         label="Agent"
         warning={agentWarning}
         actions={
-          gatewayConfigured === true && recommendableAgents.length > 0 ? (
+          recommendationAvailable === true && recommendableAgents.length > 0 ? (
             hasRecommendation ? (
               <button
                 type="button"
@@ -717,11 +719,11 @@ function AgentStageFields({
                 <Icon name="sparkles" size={12} />
               </button>
             )
-          ) : gatewayConfigured === false ? (
+          ) : recommendationAvailable === false ? (
             <span
               className="icon-btn icon-btn-sm wf-recommend-btn is-disabled"
               data-testid="wf-recommend-unavailable"
-              title="Recommending an agent needs the Vercel AI Gateway configured in Settings → AI Provider — your active provider is a different one, so this isn't available."
+              title="Recommending an agent needs an API-based AI provider (Vercel AI Gateway, OpenAI, or Anthropic) configured in Settings → AI."
             >
               <Icon name="sparkles" size={12} />
             </span>

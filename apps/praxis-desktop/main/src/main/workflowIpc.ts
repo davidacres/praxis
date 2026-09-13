@@ -36,7 +36,7 @@ import {
   computeRecommendationFingerprint,
   recommendAgentForStage,
   recommendTemplateForProject,
-  resolveVercelApiKey,
+  resolveRecommendationProvider,
   type AgentCatalogSnapshot,
   type AgentRecommendationCandidate,
   type AgentRecommendationResult,
@@ -234,16 +234,13 @@ export function registerWorkflowIpc(): void {
     if (!project) {
       throw new Error(`Project ${projectId} was not found.`);
     }
-    const apiKey = await resolveVercelApiKey(getSecretsStore());
-    if (!apiKey) {
-      throw new Error('The Vercel AI Gateway is not configured — add an API key in Settings → AI to use recommendations.');
-    }
+    const settings = getSettingsBackend().read();
+    const choice = await resolveRecommendationProvider(getSecretsStore(), settings.ai);
     // Every offered template — a project template excluded from the dialog's
     // own picker list (see `NewWorkflowDialog`'s `source !== 'project'`
     // filter) is excluded here too, so the AI never recommends something the
     // dialog wouldn't actually let the user pick.
     const templates = (await resolveTemplateLibrary(projectId)).filter(template => template.source !== 'project');
-    const settings = getSettingsBackend().read();
     const result = await recommendTemplateForProject(
       {
         projectName: project.name,
@@ -255,11 +252,11 @@ export function registerWorkflowIpc(): void {
           description: template.definition.description
         }))
       },
-      { apiKey, gatewayUrl: settings.ai.gatewayUrl.trim() || undefined, model: settings.ai.defaultModel.trim() || undefined }
+      { provider: choice.provider, apiKey: choice.apiKey, baseUrl: choice.baseUrl, model: choice.model }
     );
     const usageEvent = {
       source: 'workflow-template-recommendation' as const,
-      provider: 'vercel-gateway' as const,
+      provider: result.provider,
       model: result.model,
       inputTokens: result.usage?.inputTokens,
       outputTokens: result.usage?.outputTokens,
@@ -569,18 +566,15 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
       nodeId: string,
       input: { stageName: string; instructions: string; candidates: AgentRecommendationCandidate[] }
     ): Promise<AgentRecommendationResult> => {
-      const apiKey = await resolveVercelApiKey(getSecretsStore());
-      if (!apiKey) {
-        throw new Error('The Vercel AI Gateway is not configured — add an API key in Settings → AI to use recommendations.');
-      }
       const settings = getSettingsBackend().read();
+      const choice = await resolveRecommendationProvider(getSecretsStore(), settings.ai);
       const result = await recommendAgentForStage(
         { stageName: input.stageName, instructions: input.instructions, candidates: input.candidates },
-        { apiKey, gatewayUrl: settings.ai.gatewayUrl.trim() || undefined, model: settings.ai.defaultModel.trim() || undefined }
+        { provider: choice.provider, apiKey: choice.apiKey, baseUrl: choice.baseUrl, model: choice.model }
       );
       const usageEvent = {
         source: 'workflow-recommendation' as const,
-        provider: 'vercel-gateway' as const,
+        provider: result.provider,
         model: result.model,
         inputTokens: result.usage?.inputTokens,
         outputTokens: result.usage?.outputTokens,
@@ -593,7 +587,7 @@ async function ensureWorkflowDependenciesInstalled(template: WorkflowDefinition)
         agentId: result.agentId,
         rationale: result.rationale,
         model: result.model,
-        provider: 'vercel-gateway',
+        provider: result.provider,
         computedAt: new Date().toISOString(),
         inputFingerprint: computeRecommendationFingerprint({
           stageName: input.stageName,

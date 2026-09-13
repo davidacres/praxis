@@ -26,9 +26,7 @@ export type SidebarMode = 'classic' | 'work';
 
 export type FeatureId =
   | 'overview'
-  | 'epics'
   | 'sessions'
-  | 'issues'
   | 'connections'
   | 'agents'
   | 'workflows'
@@ -49,9 +47,7 @@ interface FeatureDef {
  */
 const FEATURES: FeatureDef[] = [
   { id: 'overview', label: 'Overview', icon: 'home' },
-  { id: 'epics', label: 'Epics', icon: 'rocket' },
   { id: 'sessions', label: 'Sessions', icon: 'robot' },
-  { id: 'issues', label: 'Issues', icon: 'ticket' },
   { id: 'connections', label: 'Connections', icon: 'plug' },
   { id: 'agents', label: 'Agents', icon: 'zap' },
 ];

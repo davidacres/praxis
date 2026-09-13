@@ -1,4 +1,4 @@
-import type { BackendMode, Board } from '@praxis/core';
+import type { BackendMode, Board, IssueSummary } from '@praxis/core';
 import type { IconName } from '../ui/Icon';
 
 /**
@@ -95,6 +95,13 @@ export function resolveBackendMode(
   connections: ReadonlyArray<{ id: string; mode: BackendMode }>
 ): BackendMode {
   return connections.find(connection => connection.id === connectionId)?.mode ?? 'demo';
+}
+
+/** True when an issue's status/statusCategory reads as done/closed/resolved — the shared "is this issue complete" check other status classification (board summaries, ticket pickers) should reuse rather than re-deriving. */
+export function isIssueDone(issue: Pick<IssueSummary, 'status' | 'statusCategory'>): boolean {
+  const category = issue.statusCategory?.trim().toLowerCase() ?? '';
+  const status = issue.status?.trim().toLowerCase() ?? '';
+  return category === 'done' || /^(done|closed|resolved|complete|completed)$/.test(status);
 }
 
 /** Maps a Jira-style status category onto a tone for column dots and badges. */

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { StoredTemplateRecommendation, TemplateReadiness, WorkflowDefinition, WorkflowTemplate } from '@praxis/core';
+import { API_MODEL_PROVIDERS } from '../ai/modelProviders';
 import { Icon } from '../ui/Icon';
 import { getWorkflowTemplateGuidance, getWorkflowStageSequence } from './workflowTemplateGuidance';
 
@@ -34,14 +35,15 @@ export function NewWorkflowDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  // AI-recommended template: gated on the gateway actually being configured
-  // (same check the workflow agent recommendation uses), fetched once as a
-  // free cache read — `getRecommendedTemplate` never calls the AI, only an
+  // AI-recommended template: gated on some api-kind provider (Vercel AI
+  // Gateway, OpenAI, or Anthropic — same set the workflow agent
+  // recommendation uses) actually being configured, fetched once as a free
+  // cache read — `getRecommendedTemplate` never calls the AI, only an
   // explicit refresh click does (see `requestTemplateRecommendation`).
   // `undefined` is "still checking" (render nothing yet, not "unconfigured");
   // without that third state the button flashes as unavailable for every
   // user, even a configured one, until the status check resolves.
-  const [gatewayConfigured, setGatewayConfigured] = useState<boolean | undefined>(undefined);
+  const [recommendationAvailable, setRecommendationAvailable] = useState<boolean | undefined>(undefined);
   const [recommendation, setRecommendation] = useState<StoredTemplateRecommendation | undefined>();
   const [recommending, setRecommending] = useState(false);
   const [recommendError, setRecommendError] = useState<string>();
@@ -65,8 +67,8 @@ export function NewWorkflowDialog({
     void window.praxis.workflows.getRecommendedTemplate(projectId).then(setRecommendation);
     void window.praxis.ai
       .listProviderStatuses()
-      .then(statuses => setGatewayConfigured(statuses.some(status => status.provider === 'vercel-gateway' && status.configured)))
-      .catch(() => setGatewayConfigured(false));
+      .then(statuses => setRecommendationAvailable(statuses.some(status => API_MODEL_PROVIDERS.has(status.provider) && status.configured)))
+      .catch(() => setRecommendationAvailable(false));
   }, [projectId]);
 
   const requestTemplateRecommendation = useCallback(async () => {
@@ -155,7 +157,7 @@ export function NewWorkflowDialog({
               <p className="wf-picker-subtitle">
                 Choose a workflow template as the foundation for this project's delivery pipeline.
               </p>
-              {gatewayConfigured === true && (
+              {recommendationAvailable === true && (
                 <button
                   type="button"
                   className="btn btn-compact wf-picker-recommend-btn"
@@ -172,11 +174,11 @@ export function NewWorkflowDialog({
                   {recommendation ? 'Refresh recommendation' : 'Recommend a template'}
                 </button>
               )}
-              {gatewayConfigured === false && (
+              {recommendationAvailable === false && (
                 <span
                   className="btn btn-compact wf-picker-recommend-btn is-disabled"
                   data-testid="wf-picker-recommend-unavailable"
-                  title="Recommending a template needs the Vercel AI Gateway configured in Settings → AI Provider — your active provider is a different one, so this isn't available."
+                  title="Recommending a template needs an API-based AI provider (Vercel AI Gateway, OpenAI, or Anthropic) configured in Settings → AI."
                 >
                   <Icon name="sparkles" size={12} />
                   Recommend a template

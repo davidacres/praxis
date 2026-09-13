@@ -1,16 +1,18 @@
 /**
  * "Recommend a workflow template" for the New Workflow dialog — the sibling
  * of `workflowAgentRecommendation.ts`, same shape: one lightweight
- * `runGatewayPrompt` completion, not a session, Vercel-AI-Gateway-only. The
- * answer is cached on the project record itself
+ * `runProviderPrompt` completion, not a session, against whichever `kind:
+ * 'api'` provider `resolveRecommendationProvider` picked. The answer is
+ * cached on the project record itself
  * (`ProjectRecord.recommendedWorkflowTemplate` via
  * `ProjectStore.setRecommendedWorkflowTemplate`) rather than re-asked every
  * time the dialog opens — the caller decides when to compute or refresh it,
  * this module only ever runs when told to.
  */
 
-import { runGatewayPrompt } from './gatewayPrompt';
+import type { AiProvider } from '../types';
 import type { TokenUsage } from './gateway';
+import { runProviderPrompt } from './providerPrompt';
 
 export interface TemplateRecommendationCandidate {
   templateId: string;
@@ -29,6 +31,7 @@ export interface TemplateRecommendationResult {
   templateId: string;
   rationale: string;
   model: string;
+  provider: AiProvider;
   usage?: TokenUsage;
 }
 
@@ -39,8 +42,6 @@ single best-fitting template. Respond with exactly one fenced JSON code block an
 \`\`\`json
 { "templateId": "<one of the listed template ids, verbatim>", "rationale": "<one sentence, specific to this project>" }
 \`\`\``;
-
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6';
 
 function buildPrompt(input: TemplateRecommendationInput): string {
   const briefText = Object.entries(input.brief)
@@ -87,17 +88,16 @@ function parseRecommendation(text: string, validIds: readonly string[]): { templ
 
 export async function recommendTemplateForProject(
   input: TemplateRecommendationInput,
-  options: { apiKey: string; gatewayUrl?: string; model?: string; signal?: AbortSignal }
+  options: { provider: AiProvider; apiKey: string; baseUrl?: string; model?: string; signal?: AbortSignal }
 ): Promise<TemplateRecommendationResult> {
   if (input.candidates.length === 0) {
     throw new Error('No workflow templates are available to recommend from.');
   }
-  const model = options.model?.trim() || DEFAULT_MODEL;
   let usage: TokenUsage | undefined;
-  const text = await runGatewayPrompt(buildPrompt(input), {
+  const { text, model } = await runProviderPrompt(options.provider, buildPrompt(input), {
     apiKey: options.apiKey,
-    gatewayUrl: options.gatewayUrl,
-    model,
+    baseUrl: options.baseUrl,
+    model: options.model,
     systemPrompt: SYSTEM_PROMPT,
     signal: options.signal,
     onUsage: reported => {
@@ -108,5 +108,5 @@ export async function recommendTemplateForProject(
     text,
     input.candidates.map(candidate => candidate.templateId)
   );
-  return { templateId, rationale, model, usage };
+  return { templateId, rationale, model, provider: options.provider, usage };
 }
