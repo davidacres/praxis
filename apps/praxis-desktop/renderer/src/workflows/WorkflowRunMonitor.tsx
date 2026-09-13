@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Connection, IssueFilters, ProjectRecord, WorkflowEvidenceView, WorkflowRunSummary } from '@praxis/core';
+import { isIssueDone } from '../board/boardMeta';
 import { Icon } from '../ui/Icon';
 import { WorkflowPipeline } from './WorkflowPipeline';
 
@@ -148,7 +149,13 @@ export function WorkflowRunMonitor({
           };
           return window.praxis.issue
             .list(filters, 0, 50, board.connectionId)
-            .then(page => page.issues.map(issue => ({ key: issue.key, summary: issue.summary, connectionId: board.connectionId })));
+            .then(page =>
+              page.issues
+                // Only open tickets are worth starting a run against — a done/closed
+                // one has nothing left to deliver.
+                .filter(issue => !isIssueDone(issue))
+                .map(issue => ({ key: issue.key, summary: issue.summary, connectionId: board.connectionId }))
+            );
         })
       );
       if (cancelled) return;

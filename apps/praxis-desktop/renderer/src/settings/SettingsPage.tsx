@@ -38,6 +38,7 @@ import {
 } from '../ai/sessionNav';
 import { useSettings } from './useSettings';
 import { useKindAddons } from './marketplaceAddons';
+import { BUILT_IN_GADGET_CATALOG } from '../ai/gadgets';
 import { allThemes, applySurfacePack, applyThemePreference, DEFAULT_THEME_ID, getInitialThemeId, registerCustomThemes, resolvePatternInk, THEMES, type ThemeDefinition, type ThemeModePreference, type ThemePreviewColors } from './themes';
 import { allSurfacePacks, registerCustomSurfacePacks, SURFACE_PACKS, SURFACE_TOKEN_KEYS, type SurfaceMode, type SurfacePackDefinition } from './surfacePacks';
 import {
@@ -55,6 +56,7 @@ export type SettingsCategory =
   | 'jira'
   | 'ai'
   | 'ai-usage'
+  | 'gadgets'
   | 'agent-runtime'
   | 'workflow-templates'
   | 'performance'
@@ -106,7 +108,7 @@ const AI_GROUP: NavGroupDef = {
   id: 'ai-group',
   label: 'AI & agents',
   icon: 'robot',
-  children: ['ai', 'ai-usage', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
+  children: ['ai', 'ai-usage', 'gadgets', 'agent-runtime', 'workflow-templates', 'mcp', 'delivery']
 };
 
 const INTEGRATIONS_GROUP: NavGroupDef = {
@@ -186,6 +188,12 @@ const CATEGORIES: CategoryDef[] = [
     label: 'AI Usage',
     icon: 'graph',
     description: 'Token and cost usage across every session and internal AI feature, by day, week, or month.'
+  },
+  {
+    id: 'gadgets',
+    label: 'Gadgets',
+    icon: 'tools',
+    description: 'Interactive chat surfaces Praxis uses to present tool results, evidence, and decisions.'
   },
   {
     id: 'agent-runtime',
@@ -348,6 +356,7 @@ export function SettingsPage({ connections, onOpenConnections, initialCategory =
         {active === 'jira' && <JiraSection settings={settings} update={update} />}
         {active === 'ai' && <AiSection settings={settings} update={update} connections={connections} />}
         {active === 'ai-usage' && <AiUsageStatsSection />}
+        {active === 'gadgets' && <GadgetsSection />}
         {active === 'agent-runtime' && <AgentRuntimeSection />}
         {active === 'workflow-templates' && <WorkflowTemplatesSection />}
         {active === 'performance' && <PerformanceSection settings={settings} update={update} />}
@@ -1023,6 +1032,30 @@ function MarketplaceSection() {
   );
 }
 
+function GadgetsSection() {
+  return (
+    <section data-testid="settings-gadgets">
+      <CategoryHeader category={CATEGORIES.find(category => category.id === 'gadgets')!} />
+      <div className="settings-list">
+        <div className="settings-section-description">
+          These browser-safe surfaces keep structured agent results readable and make decisions explicit. Tool completions are host-generated; the other gadgets are requested by an agent and validated by Praxis before rendering.
+        </div>
+        {BUILT_IN_GADGET_CATALOG.map(gadget => (
+          <div className="settings-field-row" key={gadget.id} data-testid={`settings-gadget-${gadget.id}`}>
+            <div className="settings-field-label">
+              <strong className="settings-gadget-name">
+                <Icon name={gadget.icon} size={14} />
+                {gadget.name}
+              </strong>
+              <div className="settings-field-help">{gadget.purpose}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function CategoryHeader({ category, children, actions }: { category: CategoryDef; children?: React.ReactNode; actions?: React.ReactNode }) {
   return (
     <div className="settings-category-header">
@@ -1631,6 +1664,28 @@ function AiSection({
           );
         })}
       </div>
+
+      <FieldRow
+        label="Recommendations provider"
+        description="Which provider lightweight AI recommendations (workflow template pick, workflow agent-for-stage pick) use. Auto prefers the active provider above when it's an API provider and configured, else the first configured API provider — CLI-hosted providers (Claude Code, Codex, Copilot) can't run these single-completion requests."
+      >
+        <select
+          className="input"
+          data-testid="ai-recommendation-provider-select"
+          value={settings.ai.recommendationProvider ?? ''}
+          onChange={event => {
+            const value = event.target.value;
+            void update({ ai: { recommendationProvider: value ? (value as AiProvider) : undefined } });
+          }}
+        >
+          <option value="">Auto (first configured provider)</option>
+          {AI_PROVIDERS.filter(meta => meta.kind === 'api').map(meta => (
+            <option key={meta.id} value={meta.id}>
+              {meta.label}
+            </option>
+          ))}
+        </select>
+      </FieldRow>
 
       {isApi && (
         <>
