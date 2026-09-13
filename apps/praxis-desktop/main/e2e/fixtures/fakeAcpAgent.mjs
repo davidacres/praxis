@@ -139,7 +139,9 @@ app.onRequest(acp.AGENT_METHODS.session_prompt, async ctx => {
 
     const response = await ctx.client.request(acp.CLIENT_METHODS.session_request_permission, {
       sessionId: ctx.params.sessionId,
-      toolCall: { toolCallId: 'call-1', title: 'Read a file' },
+      // Deliberately send an opaque title: Praxis should use the tool kind/name
+      // in the user-facing permission copy instead of exposing this ID.
+      toolCall: { toolCallId: 'call-1', title: 'permission-request-7e4a9f2c1d8b6e5a', name: 'read_file', kind: 'read' },
       options: [
         { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
         { optionId: 'allow-always', name: 'Always allow', kind: 'allow_always' },

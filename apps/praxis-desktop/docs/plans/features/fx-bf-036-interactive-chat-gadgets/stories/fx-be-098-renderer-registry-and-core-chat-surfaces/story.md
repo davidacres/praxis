@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.261Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-098
 title: "Renderer registry and core chat surfaces"
-status: To Do
+status: Done
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-13
 dependencies: [FX-BE-097]
 ---
 

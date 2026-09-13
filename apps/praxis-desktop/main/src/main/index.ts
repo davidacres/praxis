@@ -20,12 +20,12 @@ import { registerAiWorkflowIpc } from './aiWorkflowIpc';
 import { registerTaskDesignerIpc } from './taskDesignerIpc';
 import { registerWorkflowIpc, recoverWorkflowRunsOnStartup } from './workflowIpc';
 import { registerGitIpc } from './gitIpc';
-import { attachWindowStateEvents, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
+import { attachWindowCloseGuard, attachWindowStateEvents, platformSupportsVibrancy, registerWindowIpc, setWindowVibrancy } from './windowIpc';
 import { getSettingsBackend, initSettingsBackend } from './settingsBackendInstance';
 import { setMcpOAuthProviderSource } from '@praxis/core';
 import { getDesktopMcpOAuthManager, OAUTH_SCHEME } from './mcpOAuthManager';
 import { disposeAllServices } from './serviceRegistry';
-import { getAcpAgentHost, getCopilotAgentHost } from './aiInstance';
+import { getAcpAgentHost, getAllActiveTaskIssueKeys } from './aiInstance';
 import { registerProjectIpc } from './projectIpc';
 import { registerRunProfileIpc } from './runProfileIpc';
 import { registerRunControlIpc } from './runControlIpc';
@@ -36,6 +36,7 @@ import { registerWorkspaceIpc } from './workspaceIpc';
 import { registerTerminalIpc } from './terminalIpc';
 import { getTerminalManager } from './terminalManager';
 import { registerAgentRuntimeIpc } from './agentRuntimeIpc';
+import { registerGadgetIpc } from './gadgetIpc';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { registerMarketplaceIpc } from './marketplaceIpc';
 import { reconcileInstalledOnLaunch } from './marketplaceInstance';
@@ -195,6 +196,7 @@ function createMainWindow(): void {
   });
 
   attachWindowStateEvents(win);
+  attachWindowCloseGuard(win, () => getAllActiveTaskIssueKeys().length);
   if (vibrancy) {
     setWindowVibrancy(win, 'glass');
   }
@@ -275,6 +277,7 @@ void app.whenReady().then(async () => {
   registerWorkspaceIpc();
   registerTerminalIpc();
   registerAgentRuntimeIpc();
+  registerGadgetIpc();
   registerMarketplaceIpc();
   registerGitIpc();
   // Mobile companion: compose the host, serve the IPC bridge, and drive the
@@ -327,12 +330,11 @@ app.on('window-all-closed', () => {
 // hangs a graceful quit (see disposeAllServices' doc comment).
 app.on('before-quit', () => {
   disposeAllServices();
-  // An ACP-hosted session's subprocess (or a Copilot SDK session's runtime
-  // process) is a child of this process — leaving either running past quit
-  // is the exact same "process won't exit" hang as an unclosed chokidar
-  // watcher (see disposeAllServices' doc comment).
+  // An ACP-hosted session's subprocess (Claude Code, Codex, or GitHub
+  // Copilot via `copilot --acp`) is a child of this process — leaving one
+  // running past quit is the exact same "process won't exit" hang as an
+  // unclosed chokidar watcher (see disposeAllServices' doc comment).
   getAcpAgentHost().dispose();
-  getCopilotAgentHost().dispose();
   getTerminalManager().dispose();
   void getAgentRuntimeManager().dispose();
 });

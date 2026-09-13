@@ -3,7 +3,6 @@ import { app } from 'electron';
 import {
   AcpAgentHost,
   AiSessionManager,
-  CopilotAgentHost,
   listCatalogModels,
   PROVIDER_DESCRIPTORS,
   resolveGatewayUrlFromEnv,
@@ -15,7 +14,6 @@ import {
   type AiKeySource,
   type AiProvider,
   type AiProviderStatus,
-  type CopilotAgentLogger,
   type ModelOptions,
   type PermissionDecision,
   type VercelAgentLogger
@@ -28,7 +26,6 @@ import { getLogBus } from './logBusInstance';
 let sessionManager: AiSessionManager | undefined;
 let agentService: VercelAgentService | undefined;
 let acpAgentHost: AcpAgentHost | undefined;
-let copilotAgentHost: CopilotAgentHost | undefined;
 let analysisStore: JsonKeyValueStore | undefined;
 
 /**
@@ -63,12 +60,11 @@ export function resetAiStores(): void {
   analysisStore = undefined;
   agentService = undefined;
   acpAgentHost = undefined;
-  copilotAgentHost = undefined;
 }
 
 // Tee into the shared log bus so the Output panel sees agent traffic; the
 // console keeps the same `[ai]`-prefixed lines as before.
-const mainProcessLogger: VercelAgentLogger & AcpAgentLogger & CopilotAgentLogger = getLogBus().tee('ai', {
+const mainProcessLogger: VercelAgentLogger & AcpAgentLogger = getLogBus().tee('ai', {
   appendLine: line => console.log(line)
 });
 
@@ -80,7 +76,7 @@ export function getVercelAgentService(): VercelAgentService {
   return agentService;
 }
 
-/** Shared AcpAgentHost singleton — owns the running `hostKind: 'acp'` (Claude Code / Codex CLI) sessions. */
+/** Shared AcpAgentHost singleton — owns every running `hostKind: 'acp'` session (Claude Code, Codex CLI, and GitHub Copilot via `copilot --acp`). */
 export function getAcpAgentHost(): AcpAgentHost {
   if (!acpAgentHost) {
     acpAgentHost = new AcpAgentHost(getAiSessionManager(), mainProcessLogger);
@@ -88,32 +84,16 @@ export function getAcpAgentHost(): AcpAgentHost {
   return acpAgentHost;
 }
 
-/** Shared CopilotAgentHost singleton — owns the running `hostKind: 'copilot-sdk'` (GitHub Copilot) sessions. */
-export function getCopilotAgentHost(): CopilotAgentHost {
-  if (!copilotAgentHost) {
-    copilotAgentHost = new CopilotAgentHost(getAiSessionManager(), mainProcessLogger);
-  }
-  return copilotAgentHost;
-}
-
-/** Every issue key with a currently-running task, across all three agent hosts. */
+/** Every issue key with a currently-running task, across both agent hosts. */
 export function getAllActiveTaskIssueKeys(): string[] {
   return [
-    ...new Set([
-      ...getVercelAgentService().getActiveTaskIssueKeys(),
-      ...getAcpAgentHost().getActiveTaskIssueKeys(),
-      ...getCopilotAgentHost().getActiveTaskIssueKeys()
-    ])
+    ...new Set([...getVercelAgentService().getActiveTaskIssueKeys(), ...getAcpAgentHost().getActiveTaskIssueKeys()])
   ];
 }
 
 /** True when any host currently owns an active task for this issue. */
 export function hasActiveTask(issueKey: string): boolean {
-  return (
-    getVercelAgentService().hasActiveTask(issueKey) ||
-    getAcpAgentHost().hasActiveTask(issueKey) ||
-    getCopilotAgentHost().hasActiveTask(issueKey)
-  );
+  return getVercelAgentService().hasActiveTask(issueKey) || getAcpAgentHost().hasActiveTask(issueKey);
 }
 
 /** Aborts the task for this issue on whichever host owns it (no-op if none). */
@@ -123,9 +103,6 @@ export async function abortActiveTask(issueKey: string): Promise<void> {
   }
   if (getAcpAgentHost().hasActiveTask(issueKey)) {
     await getAcpAgentHost().abortTask(issueKey);
-  }
-  if (getCopilotAgentHost().hasActiveTask(issueKey)) {
-    await getCopilotAgentHost().abortTask(issueKey);
   }
 }
 
@@ -137,12 +114,9 @@ export function respondToActivePermission(issueKey: string, decision: Permission
   if (getAcpAgentHost().hasActiveTask(issueKey)) {
     getAcpAgentHost().respondToPermission(issueKey, decision);
   }
-  if (getCopilotAgentHost().hasActiveTask(issueKey)) {
-    getCopilotAgentHost().respondToPermission(issueKey, decision);
-  }
 }
 
-/** Resolves the executable + args to spawn for a `hostKind: 'acp'` provider. */
+/** Resolves the executable + args to spawn for a `hostKind: 'acp'` provider (Claude Code, Codex CLI, or GitHub Copilot via `copilot --acp`). */
 export function resolveAcpStartOptions(provider: AiProvider): { command: string; args?: string[] } {
   const descriptor = PROVIDER_DESCRIPTORS[provider];
   if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'acp') {
@@ -150,11 +124,11 @@ export function resolveAcpStartOptions(provider: AiProvider): { command: string;
   }
   const settings = getSettingsBackend().read();
   const command = settings.ai.providers[provider]?.cliPath?.trim() || descriptor.defaultCommand!;
-  return { command };
+  return { command, args: descriptor.defaultArgs };
 }
 
 /** The available models for a `hostKind: 'acp'` provider, or `undefined` for any other provider/no selector. */
-export async function listCliModelOptions(provider: AiProvider) {
+export async function listCliModelOptions(provider: AiProvider): Promise<ModelOptions | undefined> {
   const descriptor = PROVIDER_DESCRIPTORS[provider];
   if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'acp') {
     return undefined;
@@ -194,17 +168,6 @@ export async function listApiModelOptions(provider: AiProvider, forceRefresh?: b
   } catch {
     return undefined;
   }
-}
-
-/** Resolves the runtime override (if any) for a `hostKind: 'copilot-sdk'` provider. */
-export function resolveCopilotStartOptions(provider: AiProvider): { runtimePath?: string; model?: string } {
-  const descriptor = PROVIDER_DESCRIPTORS[provider];
-  if (descriptor.kind !== 'cli-agent' || descriptor.hostKind !== 'copilot-sdk') {
-    throw new Error(`${descriptor.label} is not a Copilot-SDK-hosted provider.`);
-  }
-  const settings = getSettingsBackend().read();
-  const config = settings.ai.providers[provider];
-  return { runtimePath: config?.cliPath?.trim() || undefined, model: config?.defaultModel?.trim() || undefined };
 }
 
 /** Effective connection options for starting a task on the given provider: secret-store key
@@ -247,17 +210,13 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
   const descriptor = PROVIDER_DESCRIPTORS[provider];
 
   if (descriptor.kind === 'cli-agent') {
-    // No API key concept — auth is the CLI's own (e.g. `claude login`, or
-    // Copilot's `GITHUB_TOKEN`/logged-in-user auth), outside this app's
-    // purview. "Configured" reflects a real, free, cross-platform check
-    // that the command actually resolves to a spawnable executable (no ACP
-    // handshake, no LLM call — see `isExecutableAvailable`'s doc comment).
-    const isCopilot = descriptor.hostKind === 'copilot-sdk';
+    // No API key concept — auth is the CLI's own (e.g. `claude login`,
+    // `copilot login`), outside this app's purview. "Configured" reflects a
+    // real, free, cross-platform check that the command actually resolves to
+    // a spawnable executable (no ACP handshake, no LLM call — see
+    // `isExecutableAvailable`'s doc comment).
     const cliPathOverride = settings.ai.providers[provider]?.cliPath?.trim();
     const command = cliPathOverride || descriptor.defaultCommand;
-    // Copilot's default (no override) needs no probe — @github/copilot-sdk
-    // bundles its own runtime as a dependency of this app, so it's always
-    // present unless the user has pointed it at a custom path.
     const configured = command ? await isExecutableAvailable(command) : true;
     return {
       provider,
@@ -266,7 +225,7 @@ async function buildProviderStatus(provider: AiProvider): Promise<AiProviderStat
       gatewayUrl: command || 'bundled runtime',
       defaultModel: '',
       agentName: settings.ai.agentName,
-      activeTasks: isCopilot ? getCopilotAgentHost().getActiveTaskIssueKeys() : getAcpAgentHost().getActiveTaskIssueKeys()
+      activeTasks: getAcpAgentHost().getActiveTaskIssueKeys()
     };
   }
 

@@ -1,20 +1,22 @@
-// e2e coverage for `CopilotAgentHost` — the `hostKind: 'copilot-sdk'`
-// CLI-hosted-agent path (GitHub Copilot via `@github/copilot-sdk`). Uses a
-// minimal fake Copilot runtime fixture (`fixtures/fakeCopilotRuntime.mjs`,
-// speaking the SDK's real raw JSON-RPC wire protocol via `vscode-jsonrpc`)
-// instead of a real Copilot CLI install/auth, so this runs in CI without
-// either. Structurally mirrors `aiCliAgentHost.spec.ts` (the ACP peer of
-// this suite) and `aiPermissions.spec.ts` (the permission-approval UI,
-// which is provider-agnostic — both hosts write through the same
-// `AiSessionManager` state machine, so the same approval card and
-// `ai:respondToPermission` IPC apply here unchanged).
+// e2e coverage for the `copilot-cli` provider specifically. GitHub Copilot
+// used to have its own bespoke `hostKind: 'copilot-sdk'` path through
+// `@github/copilot-sdk` (`packages/core/src/ai/copilot/`, now deleted).
+// Live testing against a real `copilot --acp` process confirmed it speaks
+// standard ACP — including reporting its model list via a `model`-category
+// `session/new` config option, the same shape Claude Code/Codex report — so
+// Copilot was migrated onto the shared `AcpAgentHost` path used by
+// `aiCliAgentHost.spec.ts`, and this spec now exists only to prove that
+// migration holds for the `copilot-cli` provider id specifically (correct
+// descriptor wiring, `--acp` default arg, model listing, delegate/abort),
+// reusing the same real ACP fixture (`fixtures/fakeAcpAgent.mjs`) rather than
+// a Copilot-specific fake runtime.
 
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import { test, expect } from '@playwright/test';
 import { launchTestApp, closeTestApp, type TestApp } from './launchTestApp';
 
-const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'fakeCopilotRuntime.mjs');
+const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'fakeAcpAgent.mjs');
 
 let app: TestApp | undefined;
 
@@ -25,30 +27,36 @@ test.afterEach(async () => {
   }
 });
 
-/** Configures the Copilot provider's runtime path, matching what the Settings UI's "CLI path" field writes. */
-async function configureCopilotProvider(win: TestApp['window'], cliPath: string): Promise<void> {
+async function configureCliProvider(win: TestApp['window'], provider: string, cliPath: string): Promise<void> {
   await win.evaluate(
-    async ({ cliPath }) => {
+    async ({ provider, cliPath }) => {
       const w = window as unknown as {
         praxis: {
           settings: { set: (patch: { ai: { providers: Record<string, { cliPath: string }> } }) => Promise<unknown> };
         };
       };
-      await w.praxis.settings.set({ ai: { providers: { 'copilot-cli': { cliPath } } } });
+      await w.praxis.settings.set({ ai: { providers: { [provider]: { cliPath } } } });
     },
-    { cliPath }
+    { provider, cliPath }
   );
 }
 
-async function delegate(win: TestApp['window'], issueKey: string, goal: string): Promise<void> {
+async function delegate(
+  win: TestApp['window'],
+  issueKey: string,
+  provider: string,
+  goal: string,
+  model?: string
+): Promise<void> {
   await win.evaluate(
-    async ({ issueKey, goal }) => {
+    async ({ issueKey, provider, goal, model }) => {
       const w = window as unknown as {
         praxis: {
           ai: {
             delegate: (input: {
               issueKey: string;
               provider: string;
+              model?: string;
               task: { goal: string; maxSteps: number; timeoutMs: number };
             }) => Promise<unknown>;
           };
@@ -56,22 +64,45 @@ async function delegate(win: TestApp['window'], issueKey: string, goal: string):
       };
       await w.praxis.ai.delegate({
         issueKey,
-        provider: 'copilot-cli',
+        provider,
+        model,
         task: { goal, maxSteps: 3, timeoutMs: 30000 }
       });
     },
-    { issueKey, goal }
+    { issueKey, provider, goal, model }
   );
+}
+
+async function listCliModelOptions(
+  win: TestApp['window'],
+  provider: string
+): Promise<{ currentValue: string; options: Array<{ value: string; name: string }> } | undefined> {
+  return win.evaluate(async provider => {
+    const w = window as unknown as {
+      praxis: {
+        ai: {
+          listCliModelOptions: (
+            provider: string
+          ) => Promise<{ currentValue: string; options: Array<{ value: string; name: string }> } | undefined>;
+        };
+      };
+    };
+    return w.praxis.ai.listCliModelOptions(provider);
+  }, provider);
 }
 
 async function readSession(
   win: TestApp['window'],
   issueKey: string
-): Promise<{ state: string; responseText?: string } | undefined> {
+): Promise<{ state: string; responseText?: string; runtimeSessionId?: string } | undefined> {
   return win.evaluate(async issueKey => {
     const w = window as unknown as {
       praxis: {
-        ai: { listSessions: () => Promise<Array<{ issueKey: string; state: string; responseText?: string }>> };
+        ai: {
+          listSessions: () => Promise<
+            Array<{ issueKey: string; state: string; responseText?: string; runtimeSessionId?: string }>
+          >;
+        };
       };
     };
     const sessions = await w.praxis.ai.listSessions();
@@ -79,74 +110,52 @@ async function readSession(
   }, issueKey);
 }
 
-test('delegate completes a session against a fake Copilot runtime', async () => {
+test('copilot-cli delegates over ACP just like the other CLI-hosted agents', async () => {
   app = await launchTestApp();
   const win = app.window;
-  await configureCopilotProvider(win, FIXTURE_PATH);
+  await configureCliProvider(win, 'copilot-cli', FIXTURE_PATH);
 
-  await delegate(win, 'APP-203', 'Say hello via the Copilot SDK');
+  await delegate(win, 'APP-210', 'copilot-cli', 'Say hello via ACP');
 
-  await expect.poll(async () => (await readSession(win, 'APP-203'))?.state, { timeout: 15000 }).toBe('completed');
+  await expect.poll(async () => (await readSession(win, 'APP-210'))?.state, { timeout: 15000 }).toBe('completed');
 
-  const session = await readSession(win, 'APP-203');
-  expect(session?.responseText).toContain('Hello from the fake Copilot runtime');
+  const session = await readSession(win, 'APP-210');
+  expect(session?.responseText).toContain('Hello from the fake ACP agent');
+  expect(session?.runtimeSessionId).toBeTruthy();
 });
 
-test('abort kills the Copilot runtime process cleanly', async () => {
+test('copilot-cli reports its model list via session/new, same as Claude/Codex', async () => {
   app = await launchTestApp();
   const win = app.window;
-  await configureCopilotProvider(win, FIXTURE_PATH);
+  await configureCliProvider(win, 'copilot-cli', FIXTURE_PATH);
 
-  await delegate(win, 'APP-204', 'HANG_UNTIL_CANCELLED please');
+  const options = await listCliModelOptions(win, 'copilot-cli');
+  expect(options?.currentValue).toBe('fake-default');
+  expect(options?.options.map(o => o.value)).toEqual(['fake-default', 'fake-fast']);
+});
 
-  // The fixture holds the turn open, so the session stays non-terminal…
+test('abort kills the copilot-cli subprocess cleanly', async () => {
+  app = await launchTestApp();
+  const win = app.window;
+  await configureCliProvider(win, 'copilot-cli', FIXTURE_PATH);
+
+  await delegate(win, 'APP-211', 'copilot-cli', 'HANG_UNTIL_CANCELLED please');
+
   await expect
-    .poll(async () => (await readSession(win, 'APP-204'))?.state, { timeout: 10000 })
+    .poll(async () => (await readSession(win, 'APP-211'))?.state, { timeout: 10000 })
     .not.toBe('completed');
 
-  // …and the runtime process is really running.
   const psBefore = execSync('ps aux').toString();
-  expect(psBefore).toContain('fakeCopilotRuntime.mjs');
+  expect(psBefore).toContain('fakeAcpAgent.mjs');
 
   await win.evaluate(async issueKey => {
     const w = window as unknown as { praxis: { ai: { abort: (issueKey: string) => Promise<void> } } };
     await w.praxis.ai.abort(issueKey);
-  }, 'APP-204');
+  }, 'APP-211');
 
-  await expect.poll(async () => (await readSession(win, 'APP-204'))?.state, { timeout: 10000 }).toBe('aborted');
+  await expect.poll(async () => (await readSession(win, 'APP-211'))?.state, { timeout: 10000 }).toBe('aborted');
 
-  // No orphaned runtime process left behind.
   await expect
-    .poll(() => execSync('ps aux').toString().includes('fakeCopilotRuntime.mjs'), { timeout: 10000 })
+    .poll(() => execSync('ps aux').toString().includes('fakeAcpAgent.mjs'), { timeout: 10000 })
     .toBe(false);
-});
-
-test('a pending Copilot permission request resolves through the shared approval UI', async () => {
-  app = await launchTestApp();
-  const win = app.window;
-  await configureCopilotProvider(win, FIXTURE_PATH);
-  await win.reload();
-  await win.waitForSelector('[data-testid="new-session-view"]');
-
-  const composer = win.locator('[data-testid="new-session-view"]');
-  await win.locator('[data-testid="new-session-provider-chip"]').click();
-  await win.locator('[data-testid="new-session-provider-option-copilot-cli"]').click();
-  await composer.locator('textarea').fill('WITH_PERMISSION please');
-  await win.locator('[data-testid="new-session-submit"]').click();
-
-  await win.locator('[data-testid="sessions-view"]').waitFor();
-  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Awaiting approval', {
-    timeout: 15000
-  });
-
-  const card = win.locator('[data-testid="session-permission-card"]');
-  await expect(card).toBeVisible();
-  await expect(card).toContainText('Read file');
-
-  await win.locator('[data-testid="session-permission-allow-once"]').click();
-
-  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', {
-    timeout: 15000
-  });
-  await expect(card).toHaveCount(0);
 });

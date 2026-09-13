@@ -53,13 +53,16 @@ export const PROVIDER_DESCRIPTORS: Record<AiProvider, ProviderDescriptor> = {
   'copilot-cli': {
     id: 'copilot-cli',
     kind: 'cli-agent',
-    hostKind: 'copilot-sdk',
-    label: 'GitHub Copilot (local)'
-    // No `defaultCommand`: @github/copilot-sdk spawns its own bundled
-    // `@github/copilot` runtime by default (RuntimeConnection.forStdio()),
-    // unlike the ACP providers above which need an external adapter binary
-    // on PATH. `AiProviderConfig.cliPath` still applies as an optional
-    // override — a path to a different runtime executable.
+    hostKind: 'acp',
+    label: 'GitHub Copilot (local)',
+    // `copilot --acp` (public preview, added by GitHub) starts the Copilot
+    // CLI as a standard ACP server over stdio — same protocol as the
+    // `claude-agent-acp`/`codex-acp` wrappers above. `defaultCommand` is the
+    // bare `copilot` binary; `defaultArgs` supplies the `--acp` flag every
+    // launch needs, since (unlike the other two) this binary defaults to its
+    // own interactive/print modes without it.
+    defaultCommand: 'copilot',
+    defaultArgs: ['--acp']
   }
 };
 

@@ -114,6 +114,47 @@ function evt(
   return { timestamp: now(), type, summary, detail, ...(data ? { data } : {}) };
 }
 
+function isOpaquePermissionLabel(value: string, toolCallId: string): boolean {
+  const normalized = value.trim();
+  return !normalized
+    || normalized === toolCallId
+    || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(normalized)
+    || /^[a-z0-9_-]{20,}$/i.test(normalized);
+}
+
+function permissionAction(request: AcpPermissionRequest): string {
+  const kind = request.kind?.toLowerCase();
+  switch (kind) {
+    case 'read': return 'read a file or project resource';
+    case 'edit': return 'edit a file';
+    case 'delete': return 'delete a file or resource';
+    case 'move': return 'move a file or resource';
+    case 'search': return 'search the project';
+    case 'execute': return 'execute a command or tool';
+    case 'fetch': return 'fetch content from the internet';
+    case 'switch_mode': return 'switch the agent mode';
+    case 'think': return 'perform an extended reasoning step';
+    default: return request.name?.trim() ? `run ${request.name.trim()}` : 'perform an agent action';
+  }
+}
+
+function permissionDescription(request: AcpPermissionRequest): { summary: string; detail: string } {
+  const title = request.title.trim();
+  const action = permissionAction(request);
+  if (!isOpaquePermissionLabel(title, request.toolCallId)) {
+    return {
+      summary: `Approval needed: ${title}`,
+      detail: `The agent is requesting permission to ${action}.`
+    };
+  }
+  return {
+    summary: `Approval needed: ${action}`,
+    detail: request.name?.trim()
+      ? `The agent is requesting permission to ${action} (${request.name.trim()}).`
+      : `The agent is requesting permission to ${action}.`
+  };
+}
+
 /** Pulls diff blocks and text output out of an ACP tool-call content array. */
 function readAcpToolContent(content: acp.ToolCallContent[] | null | undefined): {
   fileChanges: AgentToolFileChange[];
@@ -276,7 +317,8 @@ export class AcpAgentHost {
     return new Promise<PermissionDecision>(resolve => {
       task.pendingPermissions.push({ request, resolve });
       this.sessionManager.updateAgentState(issueKey, 'awaiting_approval');
-      this.appendEvent(issueKey, evt('permission_requested', request.title, request.kind));
+      const description = permissionDescription(request);
+      this.appendEvent(issueKey, evt('permission_requested', description.summary, description.detail));
     });
   }
 
@@ -647,8 +689,10 @@ export class AcpAgentHost {
     // The previous turn recorded its own reply when it ended, so there is
     // nothing to flush here. Re-appending `record.responseText` used to add a
     // second copy of a reply already in the events from the second follow-up on.
-    this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
+    // Clear the live buffer before publishing the follow-up so the previous
+    // answer cannot briefly render after the new user message.
     this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
+    this.appendEvent(issueKey, evt('user_input_completed', 'You', followUp));
     this.sessionManager.updateAgentState(issueKey, 'executing');
 
     task.promptPromise = (async () => {

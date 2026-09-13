@@ -32,6 +32,8 @@ import type { AgentToolMode } from '../agentTypes';
 export interface AcpPermissionRequest {
   toolCallId: string;
   title: string;
+  /** Optional provider tool name; useful when `title` is only an opaque ID. */
+  name?: string;
   kind?: string;
   options: Array<{ optionId: string; name: string; kind: string }>;
 }
@@ -148,6 +150,7 @@ export class AcpClientWrapper {
       const decision = await this.options.requestPermission({
         toolCallId: toolCall.toolCallId,
         title: toolCall.title ?? toolCall.toolCallId,
+        name: toolCall.name ?? undefined,
         kind: toolCall.kind ?? undefined,
         options: options.map(o => ({ optionId: o.optionId, name: o.name, kind: o.kind }))
       });

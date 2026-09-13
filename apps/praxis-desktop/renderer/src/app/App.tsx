@@ -64,8 +64,38 @@ import { AgentRuntimePanel } from '../agents/AgentRuntimePanel';
 import { CreateAgentDialog, CreateSkillDialog, ImportDialog } from '../agents/AgentHubDialogs';
 import type { ActivationMap, CatalogSelection, LifecycleAction } from '../agents/agentSelection';
 import { ProjectDocumentPreview } from '../projects/ProjectDocumentPreview';
+import { useDialogs } from '../ui/dialogs';
 
 const EMPTY_FILTERS = { projectKeys: [], types: [], searchText: '' };
+
+function WindowCloseGuard() {
+  const { confirm } = useDialogs();
+  const handlingRequest = useRef(false);
+
+  useEffect(() => window.praxis.window.onCloseRequested(request => {
+    if (handlingRequest.current) return;
+    handlingRequest.current = true;
+    void (async () => {
+      try {
+        const sessionWord = request.runningSessionCount === 1 ? 'session' : 'sessions';
+        const shouldClose = await confirm({
+          title: 'AI sessions still running',
+          message: `Closing Praxis will stop ${request.runningSessionCount} active AI ${sessionWord}. Keep Praxis open until they finish, or close now and stop them.`,
+          confirmLabel: 'Close Praxis',
+          cancelLabel: 'Keep Praxis open',
+          danger: true
+        });
+        if (shouldClose) {
+          await window.praxis.window.confirmClose();
+        }
+      } finally {
+        handlingRequest.current = false;
+      }
+    })();
+  }), [confirm]);
+
+  return null;
+}
 
 /**
  * One navigable location. Everything the centre and right panes render is
@@ -1607,6 +1637,7 @@ export function App() {
 
   return (
     <div className="window-root">
+      <WindowCloseGuard />
       <TitleBar
         appVersion={appVersion}
         contextLabel={contextLabel}

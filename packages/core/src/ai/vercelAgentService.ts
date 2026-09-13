@@ -582,6 +582,12 @@ Issue: ${issue.key} — ${issue.summary}${worktreeLine}${workflow}`;
 
     this.sessionManager.updateAgentState(issueKey, 'executing');
     const followUp = followUpMessage?.trim();
+    // `responseText` is the live buffer for the current turn. Clear the prior
+    // turn before publishing the user's follow-up, otherwise the renderer can
+    // mistake the previous answer for a new response below that follow-up.
+    if (followUp) {
+      this.sessionManager.updateAgentOutput(issueKey, { responseText: '' });
+    }
     this.appendEvent(
       issueKey,
       followUp

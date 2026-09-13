@@ -13,11 +13,9 @@ import {
 } from '@praxis/core';
 import {
   getAcpAgentHost,
-  getCopilotAgentHost,
   getVercelAgentService,
   resolveAcpStartOptions,
-  resolveConnectionOptions,
-  resolveCopilotStartOptions
+  resolveConnectionOptions
 } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 import { evidenceStorageRoot } from './workflowEvidenceStorage';
@@ -42,8 +40,7 @@ const DEFAULT_DEFINITION_OF_DONE = 'The command named in the brief exits with on
  * Exported so a diagnosis flow whose "done" criterion isn't a repro
  * command — e.g. `previewVerificationSession.ts`'s "the check's assertions
  * all pass when run again" — can reuse the real provider-dispatch logic
- * below rather than duplicating the three-way CLI-agent/Copilot/gateway
- * branching.
+ * below rather than duplicating the CLI-agent/gateway branching.
  */
 export class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
   public constructor(
@@ -73,15 +70,6 @@ export class ElectronDiagnosisSessionPort implements DiagnosisSessionPort {
       definitionOfDone: this.definitionOfDone
     };
 
-    if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
-      const { runtimePath, model } = resolveCopilotStartOptions(provider);
-      return getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
-        runtimePath,
-        model,
-        workingDirectory,
-        toolMode: 'full'
-      });
-    }
     if (descriptor.kind === 'cli-agent') {
       const { command, args } = resolveAcpStartOptions(provider);
       return getAcpAgentHost().startTask(issue, taskDefinition, provider, {

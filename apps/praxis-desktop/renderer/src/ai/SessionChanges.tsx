@@ -4,6 +4,7 @@ import { Icon } from '../ui/Icon';
 import { useDialogs } from '../ui/dialogs';
 import { highlightCode, languageFor } from '../ui/codeHighlight';
 import { isTerminalAgentState } from './aiSessionState';
+import { reportedSessionPaths } from './sessionNav';
 
 /**
  * What a session actually changed on disk, and the two things you want to do
@@ -24,18 +25,6 @@ export interface SessionChangesProps {
   session: AgentSessionRecord;
   /** Called after a commit or a discard changes the tree, so callers can refresh. */
   onChanged?: () => void;
-}
-
-const CHANGES_COLLAPSED_KEY = 'tm-session-changes-collapsed';
-
-/** One shared, persisted preference rather than per-session — a reviewer who
- *  keeps this open (or closed) almost always wants that for every session. */
-function readChangesCollapsed(): boolean {
-  try {
-    return localStorage.getItem(CHANGES_COLLAPSED_KEY) !== '0';
-  } catch {
-    return true;
-  }
 }
 
 /** A short, conventional-ish subject line derived from the session's goal. */
@@ -62,7 +51,6 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [checked, setChecked] = useState(false);
-  const [collapsed, setCollapsed] = useState(readChangesCollapsed);
   /** Path expanded inline, which of the two views it's showing, and that
    *  view's content once loaded. Diff and file view are mutually exclusive —
    *  only one row is open at a time. */
@@ -97,11 +85,30 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     void refresh();
   }, [refresh, session.issueKey, session.state]);
 
-  if (!repositoryPath || !checked) return null;
+  // As a section this stayed silent when there was nothing to show, which was
+  // right while it sat inside a larger scrolling rail. As a *tab* silence reads
+  // as a bug — you click Changes and get a blank pane — so each reason for
+  // having nothing now says so.
+  if (!checked) {
+    return <div className="empty-state" data-testid="session-changes-loading"><span>Checking the working tree…</span></div>;
+  }
+  if (!repositoryPath) {
+    return (
+      <div className="empty-state" data-testid="session-changes-no-repo">
+        <Icon name="git-branch" size={24} />
+        <span>This session&rsquo;s folder isn&rsquo;t a git repository, so there is nothing to compare.</span>
+      </div>
+    );
+  }
   const files = status?.files ?? [];
   if (files.length === 0) {
-    // Nothing to review. Stay silent rather than showing an empty box.
-    return error ? null : null;
+    return (
+      <div className="empty-state" data-testid="session-changes-clean">
+        <Icon name="check" size={24} />
+        <span>No uncommitted changes in this session&rsquo;s working tree.</span>
+        {error && <p className="hint is-danger" data-testid="session-changes-error">{error}</p>}
+      </div>
+    );
   }
 
   const run = async (label: string, action: () => Promise<unknown>) => {
@@ -120,7 +127,7 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
 
   const commit = async () => {
     const message = await prompt({
-      title: 'Commit these changes',
+      title: `Commit ${sessionFiles.length} file${sessionFiles.length === 1 ? '' : 's'} this session changed`,
       label: 'Commit message',
       initialValue: suggestedMessage(session),
       confirmLabel: 'Commit',
@@ -128,20 +135,32 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
     });
     if (!message) return;
     await run('commit', async () => {
-      await window.praxis.git.stage(repositoryPath, files.map(file => file.path));
+      await window.praxis.git.stage(repositoryPath, sessionFiles.map(file => file.path));
       await window.praxis.git.commit(repositoryPath, message.trim());
     });
   };
 
   const discardAll = async () => {
     const ok = await confirm({
-      title: `Discard all ${files.length} change${files.length === 1 ? '' : 's'}?`,
-      message: `${repositoryPath}\n\nEverything this session changed is thrown away. This cannot be undone by Praxis.`,
-      confirmLabel: 'Discard everything',
+      title: `Discard ${sessionFiles.length} change${sessionFiles.length === 1 ? '' : 's'} from this session?`,
+      // Says exactly what is thrown away and what is not. The old wording
+      // claimed to discard "everything this session changed" while actually
+      // discarding the entire working tree.
+      message: [
+        repositoryPath,
+        '',
+        sessionFiles.map(file => file.path).join('\n'),
+        '',
+        otherFileCount > 0
+          ? `${otherFileCount} other changed file${otherFileCount === 1 ? '' : 's'} in this folder ${otherFileCount === 1 ? 'is' : 'are'} left alone.`
+          : '',
+        'This cannot be undone by Praxis.'
+      ].filter(Boolean).join('\n'),
+      confirmLabel: `Discard ${sessionFiles.length} file${sessionFiles.length === 1 ? '' : 's'}`,
       danger: true
     });
     if (!ok) return;
-    await run('discard', () => window.praxis.git.discard(repositoryPath, files.map(file => file.path)));
+    await run('discard', () => window.praxis.git.discard(repositoryPath, sessionFiles.map(file => file.path)));
   };
 
   const discardOne = async (file: GitChangedFile) => {
@@ -247,44 +266,42 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
   const additions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0);
   const deletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
 
-  const toggleCollapsed = () => {
-    setCollapsed(current => {
-      const next = !current;
-      try {
-        localStorage.setItem(CHANGES_COLLAPSED_KEY, next ? '1' : '0');
-      } catch {
-        // Private browsing / storage disabled — the toggle still works this session.
-      }
-      return next;
-    });
-  };
+  /**
+   * The files Commit and Discard are allowed to act on.
+   *
+   * The list above deliberately still shows everything `git status` reports —
+   * when an agent breaks the build through a shell command, the file it wrote
+   * is exactly what you need to see. But the two destructive buttons are
+   * labelled for *this session*, so they act only on what this session's tools
+   * reported writing. Before this they staged and discarded the whole working
+   * tree, which swept up unrelated work in progress under a dialog that
+   * promised "everything this session changed".
+   */
+  const sessionPaths = reportedSessionPaths(session.events, repositoryPath);
+  const sessionFiles = files.filter(file => sessionPaths.has(file.path));
+  const otherFileCount = files.length - sessionFiles.length;
+  /**
+   * No host reports a shell command's writes, and Copilot reports nothing at
+   * all — so an empty set means "nothing was reported", never "nothing was
+   * changed". The actions are withheld rather than silently doing nothing.
+   */
+  const nothingAttributed = sessionFiles.length === 0;
 
   return (
-    <div className="agent-runtime-block session-changes section-divider" data-testid="session-changes">
-      <button
-        type="button"
-        className="session-changes-heading session-changes-toggle"
-        aria-expanded={!collapsed}
-        data-testid="session-changes-toggle"
-        onClick={toggleCollapsed}
-      >
-        <span className="rail-sub">Changes</span>
-        <span className="session-changes-heading-right">
-          <span className="session-changes-count" data-testid="session-changes-count">
-            {files.length} file{files.length === 1 ? '' : 's'}
-            {(additions > 0 || deletions > 0) && (
-              <>
-                {' '}
-                <span className="session-changes-add">+{additions}</span>{' '}
-                <span className="session-changes-del">−{deletions}</span>
-              </>
-            )}
-          </span>
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={13} />
+    <div className="session-changes" data-testid="session-changes">
+      <div className="session-changes-heading">
+        <span className="session-changes-count" data-testid="session-changes-count">
+          {files.length} file{files.length === 1 ? '' : 's'}
+          {(additions > 0 || deletions > 0) && (
+            <>
+              {' '}
+              <span className="session-changes-add">+{additions}</span>{' '}
+              <span className="session-changes-del">−{deletions}</span>
+            </>
+          )}
         </span>
-      </button>
+      </div>
 
-      {!collapsed && <>
       <ul className="session-changes-list">
         {files.map(file => (
           <li key={file.path} data-testid="session-changes-file">
@@ -393,24 +410,47 @@ export function SessionChanges({ session, onChanged }: SessionChangesProps) {
           type="button"
           className="btn btn-primary"
           data-testid="session-commit"
-          disabled={Boolean(busy) || !finished}
-          title={finished ? undefined : 'Wait for the session to finish'}
+          disabled={Boolean(busy) || !finished || nothingAttributed}
+          title={
+            !finished
+              ? 'Wait for the session to finish'
+              : nothingAttributed
+                ? 'No changed file here was reported by this session'
+                : undefined
+          }
           onClick={() => void commit()}
         >
-          <Icon name="check-square" size={13} /> {busy === 'commit' ? 'Committing…' : 'Commit changes'}
+          <Icon name="check-square" size={13} />
+          {busy === 'commit' ? 'Committing…' : `Commit ${sessionFiles.length} file${sessionFiles.length === 1 ? '' : 's'}`}
         </button>
         <button
           type="button"
           className="btn-quiet"
           data-testid="session-discard-all"
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy) || nothingAttributed}
+          title={nothingAttributed ? 'No changed file here was reported by this session' : undefined}
           onClick={() => void discardAll()}
         >
-          {busy === 'discard' ? 'Discarding…' : 'Discard all'}
+          {busy === 'discard' ? 'Discarding…' : `Discard ${sessionFiles.length} file${sessionFiles.length === 1 ? '' : 's'}`}
         </button>
       </div>
+
+      {/* The distinction the buttons depend on, stated rather than implied —
+          otherwise "Commit 2 files" above a list of five reads as a bug. */}
+      {nothingAttributed ? (
+        <p className="hint" data-testid="session-changes-unattributed">
+          None of these files were reported by this session&rsquo;s tools, so committing and
+          discarding from here are withheld. Some agents report nothing, and no agent reports
+          files written by a shell command it ran.
+        </p>
+      ) : otherFileCount > 0 && (
+        <p className="hint" data-testid="session-changes-scope-note">
+          {otherFileCount} other changed file{otherFileCount === 1 ? '' : 's'} in this folder
+          {otherFileCount === 1 ? ' is' : ' are'} shown but not acted on — this session&rsquo;s tools
+          didn&rsquo;t report {otherFileCount === 1 ? 'it' : 'them'}.
+        </p>
+      )}
       {error && <p className="hint is-danger" data-testid="session-changes-error">{error}</p>}
-      </>}
     </div>
   );
 }

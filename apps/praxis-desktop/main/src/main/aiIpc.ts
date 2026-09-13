@@ -34,7 +34,6 @@ import {
   getAiAnalysisStore,
   getAiProviderStatus,
   getAiSessionManager,
-  getCopilotAgentHost,
   getVercelAgentService,
   hasActiveTask,
   listAiProviderStatuses,
@@ -42,7 +41,6 @@ import {
   listCliModelOptions,
   resolveAcpStartOptions,
   resolveConnectionOptions,
-  resolveCopilotStartOptions,
   respondToActivePermission
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
@@ -489,15 +487,7 @@ export function registerAiIpc(): void {
         taskDefinition.goal += `\n\nActivated runtime skills:\n${activations.map(item => `## ${item.skill.metadata.name}\n${item.instructions}`).join('\n\n')}`;
       }
 
-      if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
-        const { runtimePath, model } = resolveCopilotStartOptions(provider);
-        await getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
-          runtimePath,
-          model: input.model || model,
-          workingDirectory: effectiveWorkingDirectory,
-          toolMode
-        });
-      } else if (descriptor.kind === 'cli-agent') {
+      if (descriptor.kind === 'cli-agent') {
         const { command, args } = resolveAcpStartOptions(provider);
         const browserMcp = await browserMcpServerForSession(issue.key, toolMode);
         await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
@@ -613,8 +603,8 @@ export function registerAiIpc(): void {
       if (!record) throw new Error(`No agent session found for ${issueKey}.`);
       const provider = record.provider ?? getSettingsBackend().read().ai.activeProvider;
       const descriptor = PROVIDER_DESCRIPTORS[provider];
-      if (descriptor.kind !== 'cli-agent' || descriptor.hostKind === 'copilot-sdk') {
-        throw new Error('Session modes are only available for ACP-hosted agents (Claude Code, Codex).');
+      if (descriptor.kind !== 'cli-agent') {
+        throw new Error('Session modes are only available for ACP-hosted agents (Claude Code, Codex, GitHub Copilot).');
       }
       await getAcpAgentHost().setAcpMode(issueKey, modeId);
     }
@@ -637,16 +627,6 @@ export function registerAiIpc(): void {
       const workingDirectory = record.workingDirectory?.trim() || settings.ai.workingDirectory.trim() || undefined;
       const toolMode = record.toolMode ?? 'full';
 
-      if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
-        const copilotOptions = resolveCopilotStartOptions(provider);
-        await getCopilotAgentHost().continueTask(issueKey, followUp, {
-          ...copilotOptions,
-          model: record.model || copilotOptions.model,
-          workingDirectory,
-          toolMode
-        });
-        return;
-      }
       if (descriptor.kind === 'cli-agent') {
         const browserMcp = await browserMcpServerForSession(issueKey, toolMode);
         await getAcpAgentHost().continueTask(issueKey, followUp, {

@@ -17,12 +17,10 @@ import {
   abortActiveTask,
   getAcpAgentHost,
   getAiSessionManager,
-  getCopilotAgentHost,
   getVercelAgentService,
   hasActiveTask,
   resolveAcpStartOptions,
-  resolveConnectionOptions,
-  resolveCopilotStartOptions
+  resolveConnectionOptions
 } from './aiInstance';
 import { getAgentRuntimeManager } from './agentRuntimeInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
@@ -116,15 +114,7 @@ export async function runWorkflowAgentStage(
     }
 
     dispatch.signal?.throwIfAborted();
-    if (descriptor.kind === 'cli-agent' && descriptor.hostKind === 'copilot-sdk') {
-      const { runtimePath, model } = resolveCopilotStartOptions(provider);
-      await getCopilotAgentHost().startTask(issue, taskDefinition, provider, {
-        runtimePath,
-        model,
-        workingDirectory: worktreePath,
-        toolMode
-      });
-    } else if (descriptor.kind === 'cli-agent') {
+    if (descriptor.kind === 'cli-agent') {
       const { command, args } = resolveAcpStartOptions(provider);
       await getAcpAgentHost().startTask(issue, taskDefinition, provider, {
         command,

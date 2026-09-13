@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Story
 type: Story
 id: FX-BE-079
 title: "Azure Relay and host registration service"
@@ -51,3 +53,10 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Comments
+
+

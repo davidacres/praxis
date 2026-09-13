@@ -20,20 +20,23 @@ export const PROVIDER_LABELS: Record<AiProvider, string> = {
 
 /**
  * `kind: 'cli-agent'` providers — hosted CLI agents (Claude Code, Codex,
- * Copilot) driven over ACP or the Copilot SDK, as opposed to a plain
+ * Copilot), all driven over the Agent Client Protocol, as opposed to a plain
  * chat-completions API call. Shown with a distinct icon (terminal, vs. globe
  * for API providers).
  */
 export const CLI_AGENT_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli']);
 
-/** `hostKind: 'acp'` providers only — the ones `ai.listCliModelOptions` can answer for. */
-export const ACP_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli']);
+/** `hostKind: 'acp'` providers — every CLI-hosted agent, driven over the Agent Client Protocol: Claude Code, Codex, and GitHub Copilot (`copilot --acp`). */
+export const ACP_PROVIDERS: ReadonlySet<AiProvider> = new Set(['claude-code-cli', 'codex-cli', 'copilot-cli']);
 
 /** `kind: 'api'` providers with a real model-listing endpoint (`ai.listApiModelOptions`). */
 export const API_MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set(['vercel-gateway', 'openai', 'anthropic']);
 
-/** Every provider with a model catalog at all (Copilot is the one excluded — no listing support). */
-export const MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set([...ACP_PROVIDERS, ...API_MODEL_PROVIDERS]);
+/** Every provider `ai.listCliModelOptions` can answer for — every ACP-hosted agent, each reporting its own `model`-category `session/new` config option. */
+export const CLI_MODEL_LISTING_PROVIDERS: ReadonlySet<AiProvider> = ACP_PROVIDERS;
+
+/** Every provider with a model catalog at all. */
+export const MODEL_PROVIDERS: ReadonlySet<AiProvider> = new Set([...CLI_MODEL_LISTING_PROVIDERS, ...API_MODEL_PROVIDERS]);
 
 /** 'terminal' for a hosted CLI agent, 'globe' for a plain chat-completions API provider. */
 export function providerIconName(provider: AiProvider): 'terminal' | 'globe' {
@@ -42,7 +45,7 @@ export function providerIconName(provider: AiProvider): 'terminal' | 'globe' {
 
 /** Fetches a provider's full model catalog (unfiltered — callers apply their own curation/selection). */
 export function fetchModelOptions(provider: AiProvider, forceRefresh: boolean): Promise<ModelOptions | undefined> {
-  if (ACP_PROVIDERS.has(provider)) {
+  if (CLI_MODEL_LISTING_PROVIDERS.has(provider)) {
     return window.praxis.ai.listCliModelOptions(provider);
   }
   if (API_MODEL_PROVIDERS.has(provider)) {
