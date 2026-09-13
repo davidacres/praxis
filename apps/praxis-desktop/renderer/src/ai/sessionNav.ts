@@ -210,23 +210,18 @@ export function liveActivity(session: AgentSessionRecord): string | undefined {
 }
 
 /**
- * A one-line preview of the agent's most recent chat message — `responseText`
- * while a reply is streaming or just finished, else the latest `message`
- * event's own text. For the inspector, which wants "what did it just say"
- * without the reader having to scroll the transcript to find out.
+ * How many tool runs failed in this session.
+ *
+ * Drives the count on the inspector's Activity tab. It lives here rather than
+ * inside the tab because the badge has to be readable *without* opening the
+ * tab — that visibility is the whole point of moving the log out of a closed
+ * disclosure in the transcript.
  */
-export function lastMessagePreview(session: AgentSessionRecord): string | undefined {
-  const streaming = session.responseText?.trim();
-  if (streaming) return truncate(streaming);
-  const events = session.events;
-  for (let i = events.length - 1; i >= 0; i--) {
-    const event = events[i];
-    if (event.type === 'message') {
-      const text = (event.detail || event.summary || '').trim();
-      if (text) return truncate(text);
-    }
-  }
-  return undefined;
+export function failedToolCount(events: readonly AgentEventSummary[]): number {
+  return events.filter(event =>
+    event.type === 'tool_complete'
+      && (event.data?.ok === false || /^tool failed/i.test(event.summary))
+  ).length;
 }
 
 /**
@@ -403,4 +398,49 @@ export function isLatestEditToPath(events: readonly AgentEventSummary[], eventTi
       event.timestamp > eventTimestamp &&
       event.data?.fileChanges?.some(change => change.path === path)
   );
+}
+
+/**
+ * Repo-relative paths this session's tools reported writing.
+ *
+ * Scopes the Changes tab's Commit and Discard to the files this session
+ * actually touched. `git status` reports everything dirty in the folder — the
+ * agent's edits, your own work in progress, whatever another session left —
+ * and acting on that whole list from a button labelled for one session sweeps
+ * up unrelated work.
+ *
+ * Three path forms have to meet: git reports relative to the repository root,
+ * ACP diff blocks are absolute, and the gateway's `write_file` is relative to
+ * the session's working directory. A path that cannot be mapped into the
+ * repository is dropped rather than guessed at, because the set narrows a
+ * destructive action — under-matching touches less than it might, while
+ * over-matching touches a file nobody attributed to this session.
+ *
+ * This is what the agent *said* it wrote: a shell command's writes, deletes
+ * and renames are reported by no host, so treat it as a lower bound. Callers
+ * must not present an empty set as "this session changed nothing".
+ *
+ * Duplicated from core's `reportedSessionPaths` for the same reason as
+ * `isLatestEditToPath` above — a value import from `@praxis/core` breaks the
+ * renderer bundle.
+ */
+export function reportedSessionPaths(
+  events: readonly AgentEventSummary[],
+  repositoryPath: string
+): Set<string> {
+  const toPosix = (value: string) => value.replace(/\\/g, '/');
+  const isAbsolute = (value: string) => value.startsWith('/') || /^[A-Za-z]:\//.test(value);
+  const root = toPosix(repositoryPath).replace(/\/+$/, '');
+
+  const paths = new Set<string>();
+  for (const event of events) {
+    if (event.type !== 'tool_complete') continue;
+    for (const change of event.data?.fileChanges ?? []) {
+      const reported = toPosix(change.path ?? '').trim();
+      if (!reported) continue;
+      if (root && reported.startsWith(`${root}/`)) paths.add(reported.slice(root.length + 1));
+      else if (!isAbsolute(reported)) paths.add(reported.replace(/^\.\//, ''));
+    }
+  }
+  return paths;
 }

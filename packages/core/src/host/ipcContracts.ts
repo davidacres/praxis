@@ -32,6 +32,13 @@ import type {
   NewAgentInput,
   NewSkillInput
 } from '../ai/agentRuntime';
+import type {
+  ChatBlock,
+  GadgetActionResult,
+  GadgetActionValue,
+  GadgetLedgerEvent,
+  RawChatBlockInput
+} from '../ai/gadgets';
 import type { IdentifiedPlanFolder } from '../folder/markdownPlanParser';
 import type { ProjectImportRow } from '../projects/projectImportPlanner';
 import type { ProposedRunService } from '../projects/runProfileDiscovery';
@@ -192,9 +199,13 @@ export interface WindowIpc {
   /** Toggles between maximized and restored; resolves with the state after the toggle. */
   toggleMaximize(): Promise<boolean>;
   close(): Promise<void>;
+  /** Closes after the renderer has confirmed that active sessions may be interrupted. */
+  confirmClose(): Promise<void>;
   isMaximized(): Promise<boolean>;
   /** Subscribes to maximize/unmaximize; returns an unsubscribe function. */
   onMaximizeChange(listener: (maximized: boolean) => void): () => void;
+  /** Notifies the renderer that closing would interrupt active AI sessions. */
+  onCloseRequested(listener: (request: { runningSessionCount: number }) => void): () => void;
   /**
    * True when the OS can render a translucent ("vibrancy" / "acrylic") window
    * behind the app — macOS always, Windows 11 22H2+, never Linux. The Surface
@@ -810,6 +821,45 @@ export interface AiUsageIpc {
   listEvents(): Promise<AiUsageEvent[]>;
 }
 
+/**
+ * Interactive chat gadgets (FX-BF-036).
+ *
+ * The renderer never mints a scope. It names a session, a gadget and an action;
+ * the host looks the envelope up, pins the scope from its own view of the
+ * session, and authorises against that — so a renderer cannot retarget an
+ * approval at another project by rewriting what it sends.
+ */
+export interface GadgetsIpc {
+  /** Every block for a session, with lifecycle state resolved against now. */
+  getBlocks(sessionId: string): Promise<ChatBlock[]>;
+  /** Validate and store a response's blocks. Refused gadgets come back as fallbacks. */
+  publish(sessionId: string, blocks: RawChatBlockInput[]): Promise<ChatBlock[]>;
+  /**
+   * Parse one provider message and publish whatever it asked for. The host
+   * stamps scope and identity, so the producer only chooses what to ask.
+   */
+  publishFromText(sessionId: string, idPrefix: string, text: string): Promise<ChatBlock[]>;
+  /** Submit an answer. Safe to retry with the same `idempotencyKey`. */
+  submit(input: GadgetSubmitRequest): Promise<GadgetActionResult>;
+  /** Ledger events after a cursor, for a client that reconnected. */
+  replay(afterSequence: number): Promise<GadgetLedgerEvent[]>;
+  /** Withdraw a gadget so it stops accepting answers. */
+  revoke(sessionId: string, gadgetId: string): Promise<void>;
+  clear(sessionId: string): Promise<void>;
+  /** Fires when a session's blocks change, so an open transcript re-reads them. */
+  onChanged(callback: (sessionId: string) => void): () => void;
+}
+
+export interface GadgetSubmitRequest {
+  sessionId: string;
+  gadgetId: string;
+  actionId: string;
+  value: GadgetActionValue;
+  /** Stable per logical submission; a retry reuses it. Minted by the host when absent. */
+  idempotencyKey?: string;
+  correlationId?: string;
+}
+
 export interface PraxisIpc {
   app: AppIpc;
   board: BoardIpc;
@@ -826,6 +876,7 @@ export interface PraxisIpc {
   ai: AiIpc;
   aiUsage: AiUsageIpc;
   agentRuntime: AgentRuntimeIpc;
+  gadgets: GadgetsIpc;
   marketplace: MarketplaceIpc;
   taskDesigner: TaskDesignerIpc;
   workflows: WorkflowsIpc;

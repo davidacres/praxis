@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-218
 title: "Secure end-to-end relay traffic and route changes"
@@ -41,3 +43,10 @@ Not implemented. Record source paths, commands, results, inspected captures and 
 ## Deferred internet milestone evidence
 
 After local release, prove the full mobile start/continue/approve/retry/cancel journey over Azure on a physical phone, including LAN handoff, desktop sign-out, expired grants and device revocation. This is the internet release gate; it is not part of local release acceptance.
+
+## Description
+
+
+## Comments
+
+

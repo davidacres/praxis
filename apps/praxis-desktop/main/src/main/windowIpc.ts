@@ -1,6 +1,8 @@
 import * as os from 'node:os';
 import { BrowserWindow, ipcMain } from 'electron';
 
+const confirmedWindows = new WeakSet<BrowserWindow>();
+
 /**
  * The app runs frameless, so the renderer draws its own caption buttons and drives the native
  * window through these channels. Each handler resolves the window from the sender rather than a
@@ -73,6 +75,13 @@ export function registerWindowIpc(): void {
     senderWindow(event)?.close();
   });
 
+  ipcMain.handle('window:confirmClose', async (event: Electron.IpcMainInvokeEvent) => {
+    const win = senderWindow(event);
+    if (!win || win.isDestroyed()) return;
+    confirmedWindows.add(win);
+    win.close();
+  });
+
   ipcMain.handle('window:isMaximized', async (event: Electron.IpcMainInvokeEvent) => {
     return senderWindow(event)?.isMaximized() ?? false;
   });
@@ -83,6 +92,24 @@ export function registerWindowIpc(): void {
     const win = senderWindow(event);
     const applied = win ? setWindowVibrancy(win, mode === 'glass' ? 'glass' : 'off') && mode === 'glass' : false;
     return { applied };
+  });
+}
+
+/**
+ * Intercepts native and renderer-requested closes while an app-owned AI task
+ * is live. The renderer owns the themed confirmation surface; the main
+ * process owns the close veto so macOS traffic lights and Windows caption
+ * buttons behave identically.
+ */
+export function attachWindowCloseGuard(win: BrowserWindow, getRunningSessionCount: () => number): void {
+  win.on('close', event => {
+    if (confirmedWindows.delete(win)) return;
+    const runningSessionCount = getRunningSessionCount();
+    if (runningSessionCount <= 0) return;
+    event.preventDefault();
+    if (!win.isDestroyed()) {
+      win.webContents.send('window:closeRequested', { runningSessionCount });
+    }
   });
 }
 

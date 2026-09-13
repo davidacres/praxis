@@ -1,15 +1,15 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.262Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-277
 title: "Define GadgetAction, result and fallback contracts"
-status: To Do
+status: Done
 story: FX-BE-097
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-13
 dependencies: [TASK-276]
 ---
 

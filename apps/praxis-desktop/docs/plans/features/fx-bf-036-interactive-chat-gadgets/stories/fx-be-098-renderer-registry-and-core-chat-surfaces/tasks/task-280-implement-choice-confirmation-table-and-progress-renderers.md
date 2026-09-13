@@ -1,15 +1,15 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.263Z
 **Type:** Task
 **Priority:** Medium
 type: Task
 id: TASK-280
 title: "Implement choice, confirmation, table and progress renderers"
-status: To Do
+status: Done
 story: FX-BE-098
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-13
 dependencies: [TASK-279]
 ---
 

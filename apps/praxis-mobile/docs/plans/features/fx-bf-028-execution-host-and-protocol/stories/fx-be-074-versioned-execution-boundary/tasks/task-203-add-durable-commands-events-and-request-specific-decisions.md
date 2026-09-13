@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-203
 title: "Add durable commands events and request-specific decisions"
@@ -48,3 +50,10 @@ Implemented the durable command/event semantics behind an injectable ledger.
 - Remaining limitation: production persistence and FIFO permission/approval adapters remain host integration work; the core ledger is intentionally transport-neutral.
 
 Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Comments
+
+

@@ -109,12 +109,18 @@ test('a ticket for a one-line fix is delegated to an agent and lands on disk', a
   await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 10000 });
 
-  // The edit renders as a red/green diff in the transcript.
-  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
+  // The edit renders as a red/green diff in the grouped completion gadget,
+  // which now lives on the inspector's Activity tab rather than at the foot of
+  // the transcript.
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await win.locator('[data-testid="tool-completion-gadget"] [data-testid="tool-completion-item"]').first().click();
   const diff = win.locator('[data-testid="session-tool-diff"]');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-add')).toContainText('return a + b');
   await expect(diff.locator('.diff-del')).toContainText('return a - b');
+  // Written for looking at: a unified diff has to stay readable in a rail that
+  // is 280px at its narrowest.
+  await win.screenshot({ path: 'output/playwright/session-activity-tab.png', fullPage: true });
 });
 
 test('a read-only session cannot write the file', async () => {
@@ -252,13 +258,10 @@ test('a finished session shows its changeset and can commit it', async () => {
 
   // The changeset is read from the working tree, not reconstructed from the
   // transcript — so it reports what is actually on disk.
+  await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
   await expect(changes).toBeVisible();
   await expect(changes.getByTestId('session-changes-count')).toContainText('1 file');
-
-  // The file list is collapsed by default (a persisted preference) — the
-  // count is visible at a glance, but reviewing means expanding it.
-  await changes.getByTestId('session-changes-toggle').click();
   await expect(changes.getByTestId('session-changes-file')).toContainText('sum.js');
 
   // A file opens its own diff in place, so reviewing does not mean leaving the
@@ -269,8 +272,11 @@ test('a finished session shows its changeset and can commit it', async () => {
   await expect(inlineDiff.locator('.diff-addition')).toContainText('return a + b');
   await expect(inlineDiff.locator('.diff-deletion')).toContainText('return a - b');
 
+  // The button and its dialog both name how many files they will act on: only
+  // the ones this session's tools reported writing, not the whole working tree.
+  await expect(changes.getByTestId('session-commit')).toContainText('Commit 1 file');
   await changes.getByTestId('session-commit').click();
-  const dialog = win.getByRole('dialog', { name: 'Commit these changes' });
+  const dialog = win.getByRole('dialog', { name: 'Commit 1 file this session changed' });
   await expect(dialog).toBeVisible();
   // Pre-filled from the session's goal, so the common case is one click.
   await expect(dialog.getByRole('textbox')).toHaveValue(goal);
@@ -282,6 +288,74 @@ test('a finished session shows its changeset and can commit it', async () => {
   const log = execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: repo }).toString().trim();
   expect(log).toBe('Fix the sum() function in sum.js so it returns a + b.');
   expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
+});
+
+test('committing a session leaves work in progress the session never touched', async () => {
+  test.setTimeout(60000);
+  repo = fs.mkdtempSync(path.join(os.tmpdir(), 'praxis-coding-scope-'));
+  const sumFile = path.join(repo, 'sum.js');
+  fs.writeFileSync(sumFile, 'function sum(a, b) {\n  return a - b;\n}\n');
+  fs.writeFileSync(path.join(repo, 'notes.md'), 'seeded\n');
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'seed'], { cwd: repo });
+
+  const app_ = app = await launchTestApp();
+  const win = app_.window;
+  await win.evaluate(agentPath =>
+    window.praxis.settings.set({ ai: { providers: { 'claude-code-cli': { cliPath: agentPath } } } }),
+    AGENT_FIXTURE
+  );
+
+  const goal = 'Fix the sum() function in sum.js so it returns a + b.';
+  const session = await win.evaluate(
+    async ({ goal, cwd }) => window.praxis.ai.delegate({
+      provider: 'claude-code-cli', goal, workingDirectory: cwd, toolMode: 'full',
+      task: { goal, maxSteps: 4, timeoutMs: 30000 }
+    }),
+    { goal, cwd: repo }
+  );
+  await expect
+    .poll(() => win.evaluate(
+      k => window.praxis.ai.listSessions().then(l => l.find(s => s.issueKey === k)?.state), session.issueKey
+    ), { timeout: 20000 })
+    .toBe('completed');
+
+  // Your own work in progress, written after the agent finished so it cannot
+  // be confused for something the session did.
+  fs.writeFileSync(path.join(repo, 'notes.md'), 'seeded\nmy own unrelated edit\n');
+
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
+  await win.locator('[data-testid="session-tab-changes"]').click();
+  const changes = win.locator('[data-testid="session-changes"]');
+
+  // Both files are listed — the tab still shows the whole working tree, because
+  // a file the agent touched through a shell command would only appear here.
+  await expect(changes.getByTestId('session-changes-count')).toContainText('2 files');
+  await expect(changes.getByTestId('session-changes-scope-note')).toContainText('1 other changed file');
+  await win.screenshot({ path: 'output/playwright/session-changes-scoped.png', fullPage: true });
+
+  // But the button acts on one: the file this session's tools reported writing.
+  await expect(changes.getByTestId('session-commit')).toContainText('Commit 1 file');
+  await changes.getByTestId('session-commit').click();
+  const dialog = win.getByRole('dialog', { name: 'Commit 1 file this session changed' });
+  await dialog.getByRole('button', { name: 'Commit', exact: true }).click();
+
+  // The agent's edit is committed; the unrelated edit is still uncommitted and
+  // still on disk. Before this fix both were swept into the commit.
+  //
+  // Proven against the real regression: restoring the unscoped
+  // `stage(repositoryPath, files.map(...))` fails the next assertion with
+  // `Expected substring: "notes.md" / Received string: ""` — an empty status,
+  // because the unrelated edit was committed too.
+  await expect
+    .poll(() => execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: repo }).toString().trim(), { timeout: 10000 })
+    .toBe(goal);
+  const remaining = execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim();
+  expect(remaining).toContain('notes.md');
+  expect(remaining).not.toContain('sum.js');
+  expect(fs.readFileSync(path.join(repo, 'notes.md'), 'utf8')).toContain('my own unrelated edit');
 });
 
 test('a changed file can be read whole, not just as a diff', async () => {
@@ -319,9 +393,9 @@ test('a changed file can be read whole, not just as a diff', async () => {
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
 
+  await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
   await expect(changes).toBeVisible();
-  await changes.getByTestId('session-changes-toggle').click();
 
   // The diff shows the edit; it need not show the untouched comment line above it.
   await changes.getByTestId('session-changes-open').click();
@@ -405,8 +479,8 @@ test('a single hunk can be discarded without losing the rest of the file\'s edit
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
 
+  await win.locator('[data-testid="session-tab-changes"]').click();
   const changes = win.locator('[data-testid="session-changes"]');
-  await changes.getByTestId('session-changes-toggle').click();
   await changes.getByTestId('session-changes-open').click();
   const hunks = changes.getByTestId('session-changes-hunk');
   await expect(hunks).toHaveCount(2);
@@ -502,10 +576,11 @@ test('an edit can be undone straight from the transcript', async () => {
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'Fix the sum() function' }).click();
 
-  // The edit lives in the transcript's tool-call row, not just the changeset
-  // panel — undoing it from there means not leaving the conversation to fix
-  // a mistake.
-  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
+  // The edit remains reachable from the grouped completion gadget, without
+  // duplicating a tool-call disclosure inside the conversation.
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  const toolGadget = win.locator('[data-testid="tool-completion-gadget"]');
+  await toolGadget.locator('[data-testid="tool-completion-item"]').first().click();
   const undoButton = win.getByTestId('session-tool-undo');
   await expect(undoButton).toBeVisible();
   await undoButton.click();
@@ -519,6 +594,6 @@ test('an edit can be undone straight from the transcript', async () => {
   expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo }).toString().trim()).toBe('');
 
   // The undo itself is a visible, honest part of the record, not a silent rewrite.
-  await win.locator('.session-activity summary').click();
+  await win.locator('[data-testid="session-tab-activity"]').click();
   await expect(win.getByTestId('session-events')).toContainText('You undid the edit to sum.js.');
 });

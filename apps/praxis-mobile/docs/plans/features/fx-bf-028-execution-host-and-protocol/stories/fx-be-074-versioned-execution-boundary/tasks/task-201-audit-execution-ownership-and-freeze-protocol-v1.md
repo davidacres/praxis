@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-201
 title: "Audit execution ownership and freeze protocol v1"
@@ -47,3 +49,10 @@ Implemented the browser-safe protocol contract and deterministic validation test
 - Remaining limitation: host transport adapters, pairing, LAN discovery, and remote relay are subsequent tasks; this contract intentionally contains no network or cloud dependency.
 
 Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Comments
+
+

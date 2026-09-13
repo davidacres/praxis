@@ -1,4 +1,7 @@
 ---
+**Status:** 📋 Proposed
+**Created:** 2026-09-12T23:37:04.677Z
+**Type:** Story
 type: Story
 id: FX-BE-086
 title: "Deferred internet notifications"
@@ -37,3 +40,10 @@ Use deterministic fixtures, then explicitly opted-in physical-device/service ver
 ## Completion evidence
 
 Not implemented.
+
+## Description
+
+
+## Comments
+
+
