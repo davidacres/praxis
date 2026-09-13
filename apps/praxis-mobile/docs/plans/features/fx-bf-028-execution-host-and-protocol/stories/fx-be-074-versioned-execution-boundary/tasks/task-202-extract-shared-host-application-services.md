@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-202
 title: "Extract shared host application services"
@@ -47,3 +49,10 @@ Implemented a transport-neutral execution boundary with injected host-owned hand
 - Remaining limitation: desktop IPC adapters still need to delegate to this boundary in a follow-up integration task.
 
 Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Comments
+
+

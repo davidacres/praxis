@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Task
 type: Task
 id: TASK-216
 title: "Prototype Azure Relay compatibility and cost"
@@ -38,3 +40,10 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Comments
+
+

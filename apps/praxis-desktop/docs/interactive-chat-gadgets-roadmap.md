@@ -1,6 +1,6 @@
 # Interactive chat gadgets roadmap
 
-**Status:** Planned  
+**Status:** Delivered on desktop; workflow/deployment actions and the mobile host outstanding  
 **Prepared:** 2026-09-10  
 **Feature:** [FX-BF-036](plans/features/fx-bf-036-interactive-chat-gadgets/feature.md)
 
@@ -27,13 +27,13 @@ Agent/workflow response -> typed chat blocks -> contract and policy validation -
 
 ## Delivery order
 
-| Priority | Story | Outcome |
-| --- | --- | --- |
-| 1 | FX-BE-097 | Versioned gadget and action contracts |
-| 2 | FX-BE-098 | Renderer registry and core chat surfaces |
-| 3 | FX-BE-099 | Safe action lifecycle, scope and stale-state handling |
-| 4 | FX-BE-100 | Workflow, agent and orchestration integration |
-| 5 | FX-BE-101 | Accessibility, mobile, fixtures and end-to-end proof |
+| Priority | Story | Outcome | State |
+| --- | --- | --- | --- |
+| 1 | FX-BE-097 | Versioned gadget and action contracts | Done |
+| 2 | FX-BE-098 | Renderer registry and core chat surfaces | Done |
+| 3 | FX-BE-099 | Safe action lifecycle, scope and stale-state handling | Done |
+| 4 | FX-BE-100 | Workflow, agent and orchestration integration | Provider mapping done; workflow + deployment actions outstanding |
+| 5 | FX-BE-101 | Accessibility, mobile, fixtures and end-to-end proof | Desktop done; mobile host outstanding |
 
 ## Initial gadget catalogue
 
@@ -50,3 +50,8 @@ Choice, confirmation, form, table, chart, progress/activity, diff, artifact prev
 - Provider adapters remain provider-neutral and do not depend on private transcript access.
 - Automated tests cover valid, malformed, oversized, stale, expired, duplicated and unauthorized actions.
 - The read-only Praxis plan parser accepts the feature, stories, tasks and dependencies.
+
+## Implementation
+
+See [interactive-chat-gadgets.md](interactive-chat-gadgets.md) for the delivered
+pipeline, the fence a provider emits, the safety properties and how to add a kind.

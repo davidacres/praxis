@@ -7,13 +7,7 @@ import {
   type AiProvider,
   type IssueDetails
 } from '@praxis/core';
-import {
-  getAcpAgentHost,
-  getCopilotAgentHost,
-  resolveAcpStartOptions,
-  resolveConnectionOptions,
-  resolveCopilotStartOptions
-} from './aiInstance';
+import { getAcpAgentHost, resolveAcpStartOptions, resolveConnectionOptions } from './aiInstance';
 import { getSettingsBackend } from './settingsBackendInstance';
 
 const DEFAULT_REVIEW_PROMPT = `You are a technical product manager reviewing tickets for completeness and quality.
@@ -68,21 +62,13 @@ export async function reviewIssueWithRuntime(
   const emit = (content: string) => options.onUpdate?.(`## AI Review by ${agentName}\n\n${content}`);
   const workingDirectory = settings.ai.workingDirectory.trim() || undefined;
 
-  const content = descriptor.hostKind === 'copilot-sdk'
-    ? await getCopilotAgentHost().promptOnce(prompt, {
-        ...resolveCopilotStartOptions(options.provider),
-        model: options.model || resolveCopilotStartOptions(options.provider).model,
-        workingDirectory,
-        signal: options.signal,
-        onUpdate: emit
-      })
-    : await getAcpAgentHost().promptOnce(prompt, {
-        ...resolveAcpStartOptions(options.provider),
-        model: options.model,
-        workingDirectory,
-        signal: options.signal,
-        onUpdate: emit
-      });
+  const content = await getAcpAgentHost().promptOnce(prompt, {
+    ...resolveAcpStartOptions(options.provider),
+    model: options.model,
+    workingDirectory,
+    signal: options.signal,
+    onUpdate: emit
+  });
 
   return `## AI Review by ${agentName}\n\n${content}`;
 }

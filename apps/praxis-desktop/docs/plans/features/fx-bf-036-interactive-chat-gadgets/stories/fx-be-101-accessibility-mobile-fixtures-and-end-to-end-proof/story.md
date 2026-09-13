@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** 🚧 In progress
 **Created:** 2026-09-10T10:48:08.261Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-101
 title: "Accessibility, mobile, fixtures and end-to-end proof"
-status: To Do
+status: In Progress
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-13
 dependencies: [FX-BE-098, FX-BE-100]
 ---
 

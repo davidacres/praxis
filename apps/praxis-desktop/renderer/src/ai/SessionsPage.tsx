@@ -5,20 +5,25 @@ import type {
   AgentSessionRecord,
   AiAnalysisState,
   AiProviderStatus,
+  AnyGadgetEnvelope,
+  ChatBlock,
+  GadgetActionResult,
+  GadgetActionValue,
   PermissionDecision,
   SessionMode,
   TerminalSessionInfo
 } from '@praxis/core';
 import { Icon } from '../ui/Icon';
-import { agentEventIcon, agentEventToneClass, isTerminalAgentState } from './aiSessionState';
+import { Markdown } from '../ui/Markdown';
+import { isTerminalAgentState } from './aiSessionState';
 import { useDialogs } from '../ui/dialogs';
 import { useSettings } from '../settings/useSettings';
 import { BrowserPane } from '../browser/BrowserPane';
 import { getActiveTerminalId, onActiveTerminalChanged } from './terminalSelection';
 import { PROVIDER_LABELS, providerIconName } from './modelProviders';
-import { basename, contextPressure, formatCost, isLatestEditToPath, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
-import { resolveToolView, toolArgsLabel, ToolDiff, ToolTerminal } from './toolEventView';
-import { PraxisChoiceGadget } from './PraxisChoiceGadget';
+import { basename, contextPressure, formatCost, isWorkflowStageSession, liveActivity, sessionLabel, sessionTitle, spendPressure } from './sessionNav';
+import { GadgetBlockList } from './gadgets';
+import { gadgetMessageKey, groupBlocksByMessage, mayContainGadget, stripGadgetFences } from './gadgets/messageText';
 
 /**
  * Switching mode is not just a flag: the session is told, in its own thread,
@@ -32,6 +37,51 @@ const MODE_TRANSITION: Record<SessionMode, string> = {
   chat:
     'Switch this conversation into Chat mode. Answer my next requests directly and do not inspect or modify tickets unless I explicitly ask.'
 };
+
+/** Every published gadget block for this session, searched by `gadgetId` — `gadgetBlocks` is keyed by message, not by gadget. */
+function findGadgetEnvelope(blocks: Record<string, ChatBlock[]>, gadgetId: string): AnyGadgetEnvelope | undefined {
+  for (const list of Object.values(blocks)) {
+    for (const block of list) {
+      if (block.type === 'gadget' && block.gadget.gadgetId === gadgetId) return block.gadget;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Turns a recorded choice/selection answer into the follow-up message that
+ * reports it to the agent — the same shape a person would have typed. Scoped
+ * to `choice`-kind gadgets only (a genuine open decision with a question and
+ * options, e.g. "which direction should we take"), not `confirmation`/`form`,
+ * which routinely pair with a `mutating`/`approval` action that already
+ * reaches a real service through its own gated executor — piling an automatic
+ * follow-up turn onto those would risk a second, uncoordinated way of telling
+ * the agent something happened. Only fires for an `informational` action.
+ */
+function describeGadgetAnswer(
+  envelope: AnyGadgetEnvelope | undefined,
+  actionId: string,
+  value: GadgetActionValue
+): string | undefined {
+  if (!envelope || envelope.kind !== 'choice') return undefined;
+  const action = envelope.actions.find(candidate => candidate.actionId === actionId);
+  if (action && action.effect !== 'informational') return undefined;
+
+  switch (value.kind) {
+    case 'choice': {
+      const option = envelope.payload.options.find(candidate => candidate.value === value.selected);
+      return `Gadget response — "${envelope.payload.question}": ${option?.label ?? value.selected}.`;
+    }
+    case 'selection': {
+      const labels = value.selected.map(
+        selectedValue => envelope.payload.options.find(candidate => candidate.value === selectedValue)?.label ?? selectedValue
+      );
+      return `Gadget response — "${envelope.payload.question}": ${labels.join(', ')}.`;
+    }
+    default:
+      return undefined;
+  }
+}
 
 export interface SessionsPageProps {
   /** All known agent sessions, most recent first. Live-updated by the App-level push subscription. */
@@ -81,10 +131,6 @@ function pendingPermissionEvent(events: AgentEventSummary[]): AgentEventSummary 
   return events.slice(lastCompletedIndex + 1).find(e => e.type === 'permission_requested');
 }
 
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString();
-}
 
 function decodeContextText(value: string): string {
   return value.replace(/&quot;/g, '"').replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
@@ -128,7 +174,6 @@ export function SessionsPage({
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
   const [abortingSession, setAbortingSession] = useState(false);
   /** Key is `${eventTimestamp}|${path}` — the specific edit being undone. */
-  const [undoingChange, setUndoingChange] = useState<string>();
   const [switchingMode, setSwitchingMode] = useState(false);
   /** ACP's own Session Mode (e.g. "ask"/"architect"/"code") — see `setAcpMode` below. Unrelated to `switchingMode`/chat-analysis-review above. */
   const [settingAcpMode, setSettingAcpMode] = useState(false);
@@ -146,8 +191,11 @@ export function SessionsPage({
   const [terminalSessions, setTerminalSessions] = useState<TerminalSessionInfo[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | undefined>(() => getActiveTerminalId());
   const [attachTerminalContext, setAttachTerminalContext] = useState(false);
-  const [showGadgetProof, setShowGadgetProof] = useState(false);
-  const [gadgetProofResult, setGadgetProofResult] = useState<string>();
+  // Gadget blocks are keyed by the message that asked for them, so a response
+  // renders its own surfaces inline rather than pooling them all at the bottom.
+  const [gadgetBlocks, setGadgetBlocks] = useState<Record<string, ChatBlock[]>>({});
+  const [gadgetResults, setGadgetResults] = useState<Record<string, GadgetActionResult>>({});
+  const [busyGadgetId, setBusyGadgetId] = useState<string>();
   const [plainSurfaceOverrides, setPlainSurfaceOverrides] = useState<Record<string, boolean>>(readPlainSurfaceOverrides);
   const [browserOpen, setBrowserOpen] = useState(initialBrowserOpen ?? false);
   const [browserMaximized, setBrowserMaximized] = useState(false);
@@ -227,14 +275,118 @@ export function SessionsPage({
     onBrowserOpenChange?.(open);
   };
   // `tool_start` feeds the live status line, not the transcript — only the
-  // completed run gets a (collapsed) row, so the chat stays readable.
+  // grouped completion gadget in Activity does, so the chat stays readable.
   const conversationEvents = selected?.events.filter(
     event =>
-      (event.type === 'message' || event.type === 'user_input_completed' || event.type === 'tool_complete') && Boolean(event.detail || event.summary)
+      (event.type === 'message' || event.type === 'user_input_completed') && Boolean(event.detail || event.summary)
   ) ?? [];
   const latestEventResponse = [...conversationEvents]
     .reverse()
     .find(event => event.type === 'message')?.detail;
+  const lastConversationEvent = conversationEvents[conversationEvents.length - 1];
+  // Completed sessions have their assistant replies in the event history. A
+  // separate responseText fallback is only useful for an in-flight turn (or
+  // an older record with no message event); otherwise a stale live buffer can
+  // appear after a newer user follow-up when a session is reopened.
+  const staleTerminalResponse = Boolean(
+    selected
+      && isTerminalAgentState(selected.state)
+      && lastConversationEvent?.type === 'user_input_completed'
+  );
+  const shouldRenderResponseFallback = Boolean(
+    selected?.responseText
+      && selected.responseText !== latestEventResponse
+      && (!isTerminalAgentState(selected.state) || conversationEvents.length === 0)
+      && !staleTerminalResponse
+  );
+
+  const selectedSessionId = selected?.sessionId;
+
+
+  /**
+   * Publish whatever the transcript asked for, then read the session's blocks
+   * back with their lifecycle state resolved by the host.
+   *
+   * Publishing is idempotent — the same message mints the same gadget IDs, and
+   * the host replaces in place — so re-running this on every new event is safe
+   * and is what lets a streaming progress gadget update rather than stack up.
+   */
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setGadgetBlocks({});
+      return;
+    }
+    let cancelled = false;
+
+    const refresh = async () => {
+      const blocks = await window.praxis.gadgets.getBlocks(selectedSessionId);
+      if (!cancelled) setGadgetBlocks(groupBlocksByMessage(blocks));
+    };
+
+    void (async () => {
+      for (const [index, event] of conversationEvents.entries()) {
+        if (event.type !== 'message' || !mayContainGadget(event.detail)) continue;
+        await window.praxis.gadgets.publishFromText(selectedSessionId, gadgetMessageKey(index), event.detail ?? '');
+        if (cancelled) return;
+      }
+      await refresh();
+    })();
+
+    // The host broadcasts after every publish and every submission, so an
+    // action answered elsewhere (or a gadget the host revoked) lands here too.
+    const unsubscribe = window.praxis.gadgets.onChanged(changedSessionId => {
+      if (changedSessionId === selectedSessionId) void refresh();
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+    // `conversationEvents` is rebuilt every render; its length is what actually
+    // changes when the agent says something new.
+  }, [selectedSessionId, conversationEvents.length]);
+
+  const submitGadgetAction = async (gadgetId: string, actionId: string, value: GadgetActionValue) => {
+    if (!selectedSessionId) return;
+    setBusyGadgetId(gadgetId);
+    try {
+      const result = await window.praxis.gadgets.submit({
+        sessionId: selectedSessionId,
+        gadgetId,
+        actionId,
+        value,
+        // Deterministic, so a double submission of the same decision replays
+        // the recorded outcome instead of applying it twice. A refused
+        // submission never consumes the key, so a corrected retry still works.
+        idempotencyKey: `${selectedSessionId}:${gadgetId}:${actionId}`,
+        correlationId: `${selectedSessionId}:${gadgetId}`
+      });
+      setGadgetResults(current => ({ ...current, [gadgetId]: result }));
+
+      // An `informational` action only records a decision — the ledger and the
+      // UI both know it happened, but the agent that asked never does, because
+      // nothing here is on the conversation path. Reporting the answer back as
+      // a follow-up turn (the same path `sendFollowUp` uses) is what closes the
+      // loop: the choice actually reaches the agent's next turn instead of
+      // silently sitting in `gadgets.json`. Only fires for a genuinely recorded
+      // answer (not `rejected`/`failed`), only once per submission (a replay of
+      // an already-answered gadget must not re-send the same follow-up), and
+      // only while the session can accept one.
+      if (
+        (result.status === 'completed' || result.status === 'accepted') &&
+        !result.replay &&
+        selected &&
+        isTerminalAgentState(selected.state)
+      ) {
+        const summary = describeGadgetAnswer(findGadgetEnvelope(gadgetBlocks, gadgetId), actionId, value);
+        if (summary) {
+          await window.praxis.ai.continueSession(selected.issueKey, summary);
+        }
+      }
+    } finally {
+      setBusyGadgetId(undefined);
+    }
+  };
+
 
   // One line describing what the agent is doing right now — shown only while a
   // turn is in flight, in place of streaming every tool block. Shared with the
@@ -331,35 +483,6 @@ export function SessionsPage({
       setFollowUpError(error instanceof Error ? error.message : String(error));
     } finally {
       setAbortingSession(false);
-    }
-  };
-
-  /**
-   * "The agent got a hunk wrong, recovery today is a follow-up message" — this
-   * is the other half: revert one recorded edit in place, from the transcript
-   * row that shows it, rather than asking the agent to fix its own mistake.
-   * Writes the file back to `oldText`; only offered while it's still the
-   * latest edit to that path (`isLatestEditToPath`) and the session isn't
-   * mid-turn, both re-checked server-side since this button's state can go
-   * stale while the dialog is open.
-   */
-  const undoEdit = async (eventTimestamp: string, path: string) => {
-    if (!selected) return;
-    const ok = await confirm({
-      title: `Undo the edit to ${path}?`,
-      message: `${path} is restored to what it was immediately before this edit — overwriting the file on disk now. This cannot be undone by Praxis.`,
-      confirmLabel: 'Undo edit',
-      danger: true
-    });
-    if (!ok) return;
-    setUndoingChange(`${eventTimestamp}|${path}`);
-    setFollowUpError(undefined);
-    try {
-      await window.praxis.ai.undoToolFileChange(selected.issueKey, eventTimestamp, path);
-    } catch (error) {
-      setFollowUpError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setUndoingChange(undefined);
     }
   };
 
@@ -562,63 +685,6 @@ export function SessionsPage({
                 <div>{selected.taskDefinition.goal}</div>
               </div>
               {conversationEvents.map((event, index) => {
-                if (event.type === 'tool_complete') {
-                  const view = resolveToolView(event);
-                  const argsLabel = toolArgsLabel(event);
-                  const fileChanges = event.data?.fileChanges?.filter(change => change.diff);
-                  const singleDiff = event.data?.diff;
-                  const shellOutput = event.data?.output ?? event.detail ?? '';
-                  // Collapsed by default: a slim "ran X" row; expand for the
-                  // output / diff. The result never lands inline in the chat.
-                  return (
-                    <details
-                      className="session-chat-tool"
-                      key={`${event.timestamp}-${index}`}
-                      data-testid="session-chat-tool"
-                    >
-                      <summary>
-                        <Icon name="check-square" size={13} />
-                        <span>{event.summary}</span>
-                        {argsLabel && <code className="session-tool-args">{argsLabel}</code>}
-                        <span className="session-chat-tool-time">{formatTime(event.timestamp)}</span>
-                      </summary>
-                      {view === 'shell' ? (
-                        <ToolTerminal text={shellOutput} />
-                      ) : view === 'write' && (fileChanges?.length || singleDiff) ? (
-                        fileChanges?.length ? (
-                          fileChanges.map((change, changeIndex) => {
-                            const canUndo = isLatestEditToPath(selected.events, event.timestamp, change.path);
-                            const undoKey = `${event.timestamp}|${change.path}`;
-                            return (
-                              <div className="session-tool-file" key={changeIndex}>
-                                <div className="session-tool-file-head">
-                                  <span className="session-tool-file-path">{change.path}</span>
-                                  {canUndo && (
-                                    <button
-                                      type="button"
-                                      className="btn-quiet session-tool-undo"
-                                      data-testid="session-tool-undo"
-                                      disabled={!isTerminalAgentState(selected.state) || Boolean(undoingChange)}
-                                      title="Restore this file to what it was before this edit"
-                                      onClick={() => void undoEdit(event.timestamp, change.path)}
-                                    >
-                                      {undoingChange === undoKey ? 'Undoing…' : 'Undo edit'}
-                                    </button>
-                                  )}
-                                </div>
-                                <ToolDiff diff={change.diff ?? ''} />
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <ToolDiff diff={singleDiff ?? ''} />
-                        )
-                      ) : (
-                        event.detail && <pre>{event.detail}</pre>
-                      )}
-                    </details>
-                  );
-                }
                 const terminalContext = event.type === 'user_input_completed' ? parseTerminalContext(event.detail) : undefined;
                 return (
                   <div
@@ -633,14 +699,25 @@ export function SessionsPage({
                         <pre>{terminalContext.output}</pre>
                       </details>
                     )}
-                    <div>{terminalContext?.message ?? event.detail}</div>
+                    <Markdown
+                      text={stripGadgetFences(terminalContext?.message ?? event.detail ?? event.summary ?? '')}
+                      testId="session-chat-markdown"
+                    />
+                    {/* Whatever this message asked for, rendered where it was
+                        asked rather than pooled at the bottom of the thread. */}
+                    <GadgetBlockList
+                      blocks={gadgetBlocks[gadgetMessageKey(index)] ?? []}
+                      busyGadgetId={busyGadgetId}
+                      results={gadgetResults}
+                      onSubmit={(gadgetId, actionId, value) => void submitGadgetAction(gadgetId, actionId, value)}
+                    />
                   </div>
                 );
               })}
-              {selected.responseText && selected.responseText !== latestEventResponse && (
+              {shouldRenderResponseFallback && (
                 <div className="session-chat-message is-assistant" data-testid="session-response">
                   <div className="session-chat-author">AI agent</div>
-                  <div>{selected.responseText}</div>
+                  <Markdown text={selected?.responseText ?? ''} testId="session-chat-markdown" />
                 </div>
               )}
               {liveActivityText ? (
@@ -654,23 +731,6 @@ export function SessionsPage({
                 )
               )}
 
-              <details className="session-activity">
-                <summary>Activity log · {selected.events.length} events</summary>
-                <div className="session-events" data-testid="session-events">
-                  {selected.events.map((event, index) => (
-                    <div className="event-row" key={`${event.timestamp}-${index}`} data-testid="session-event-row">
-                      <span className="event-time">{formatTime(event.timestamp)}</span>
-                      <span className={agentEventToneClass(event.type)}>
-                        <Icon name={agentEventIcon(event.type)} size={13} />
-                      </span>
-                      <span className="event-body">
-                        <span className="event-summary">{event.summary}</span>
-                        {event.detail && <div className="event-detail">{event.detail}</div>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </details>
             </div>
 
             {pendingPermission && (
@@ -766,7 +826,6 @@ export function SessionsPage({
                   </p>
                 </div>
               )}
-              {showGadgetProof && <PraxisChoiceGadget submittedValue={gadgetProofResult} onSubmit={value => setGadgetProofResult(value)} />}
               <div className="composer session-follow-up-composer">
                 {attachTerminalContext && terminalForContext && (
                   <div className="terminal-context-attachment" data-testid="terminal-context-attachment">
@@ -798,7 +857,6 @@ export function SessionsPage({
                   }}
                 />
               <div className="composer-controls">
-                  <button className="secondary-btn session-gadget-demo-btn" type="button" data-testid="session-gadget-demo" onClick={() => { setShowGadgetProof(current => !current); setGadgetProofResult(undefined); }}>{showGadgetProof ? 'Hide gadget' : 'Try gadget'}</button>
                   {/* A finished session can be re-run in a different mode; a live
                       one can only be stopped, so this only appears once it's
                       actually a choice. Mirrors where the New Session composer

@@ -54,6 +54,18 @@ Answer the user's request directly and conversationally. Do not begin with a man
 Respect explicit permission boundaries and stop when the user's request is answered or the requested work is complete.
 `;
 
+const INTERACTIVE_RESPONSE_SURFACES_PROMPT = `## Interactive response surfaces
+- Use ordinary Markdown for explanations, informational numbered lists, recommendations, tables, and prose.
+- When the user needs to choose one of two or more valid directions before work can continue, include a single explicit \`praxis-gadget\` choice block instead of leaving the decision only in a numbered list. Introduce it with one concise sentence explaining what the choice controls.
+- A choice gadget must contain a clear question and concise options with stable values. For a decision that only records the user's preference, use an informational action such as \"pick\"; use a mutating or approval action only when the action genuinely performs that operation and its real workflow gate is known.
+- Do not invent a choice when the list is informational or rhetorical. Do not turn every numbered list into controls.
+- The host adds scope and issuedAt. Do not include either field in the gadget you emit. Do not expose the gadget JSON outside its fenced block.
+- Emit valid JSON in this exact shape (replace the example values):
+\`\`\`praxis-gadget
+{\"version\":1,\"kind\":\"choice\",\"gadgetId\":\"next-direction\",\"payload\":{\"question\":\"Which direction should we take next?\",\"options\":[{\"value\":\"option-a\",\"label\":\"Option A\",\"description\":\"What this option does.\"},{\"value\":\"option-b\",\"label\":\"Option B\",\"description\":\"What this option does.\"}]},\"actions\":[{\"actionId\":\"pick\",\"label\":\"Continue\",\"effect\":\"informational\"}]}
+\`\`\`
+`;
+
 /**
  * Appended to the system prompt when the session has been granted the in-app
  * browser tools, so the agent knows the capability exists (models otherwise
@@ -154,6 +166,7 @@ export function buildSystemPrompt(task: AgentTaskDefinition, issue: IssueDetails
 
   if (task.sessionMode === 'chat') {
     return `${sessionPrompt}
+${INTERACTIVE_RESPONSE_SURFACES_PROMPT}
 ## User Request
 ${task.goal}
 ## Scope
@@ -162,6 +175,7 @@ ${nonGoals}${completionContract}`;
   }
 
   return `${sessionPrompt}
+${INTERACTIVE_RESPONSE_SURFACES_PROMPT}
 ## Task
 **Goal:** ${task.goal}
 **Scope:** ${task.scope}

@@ -160,8 +160,10 @@ test('an ACP diff tool call renders as a red/green diff in the console', async (
   await win.locator('[data-testid="nav-sessions"]').click();
   await win.locator('[data-testid="session-list-row"]', { hasText: 'APP-203' }).click();
 
-  // Tool rows are collapsed by default — expand to see the diff.
-  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
+  // The grouped completion gadget keeps the diff behind one selected-run
+  // detail surface rather than duplicating a transcript disclosure.
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await win.locator('[data-testid="tool-completion-gadget"] [data-testid="tool-completion-item"]').first().click();
   const diff = win.locator('[data-testid="session-tool-diff"]');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');

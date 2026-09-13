@@ -54,6 +54,8 @@ export async function startMockGatewayServer(options: {
   usage?: { prompt_tokens: number; completion_tokens: number };
   /** Optional first-turn tool call; the following request receives `reply`. */
   toolCall?: { name: string; arguments: Record<string, unknown> };
+  /** Optional first-turn tool calls; useful for exercising a long activity history. */
+  toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>;
 }): Promise<MockGatewayServer> {
   const reply = options.reply ?? COMPLETE_REPLY;
   const models = options.models ?? [{ id: 'mock/model' }];
@@ -75,7 +77,8 @@ export async function startMockGatewayServer(options: {
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive'
         });
-        const shouldCallTool = options.toolCall && requests.length === 1;
+        const toolCalls = options.toolCalls ?? (options.toolCall ? [options.toolCall] : []);
+        const shouldCallTool = toolCalls.length > 0 && requests.length === 1;
         res.write(sseChunk({
           id: 'chatcmpl-mock',
           object: 'chat.completion.chunk',
@@ -84,15 +87,15 @@ export async function startMockGatewayServer(options: {
             delta: shouldCallTool
               ? {
                   role: 'assistant',
-                  tool_calls: [{
-                    index: 0,
-                    id: 'call_tracker_1',
+                  tool_calls: toolCalls.map((toolCall, index) => ({
+                    index,
+                    id: `call_mock_${index + 1}`,
                     type: 'function',
                     function: {
-                      name: options.toolCall!.name,
-                      arguments: JSON.stringify(options.toolCall!.arguments)
+                      name: toolCall.name,
+                      arguments: JSON.stringify(toolCall.arguments)
                     }
-                  }]
+                  }))
                 }
               : { role: 'assistant', content: reply },
             finish_reason: null

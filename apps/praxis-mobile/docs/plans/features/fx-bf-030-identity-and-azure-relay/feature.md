@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Feature
 type: Feature
 id: FX-BF-030
 title: "Optional identity and Azure internet access"
@@ -50,3 +52,16 @@ Use deterministic host/protocol/agent fixtures and disposable project directorie
 ## Completion evidence
 
 Not implemented. Record source paths, commands, results, inspected captures and remaining limitations when completing this item. Parent completion requires verified child outcomes.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+

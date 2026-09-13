@@ -1,14 +1,14 @@
 ---
-**Status:** 📋 Proposed
+**Status:** ✅ Complete
 **Created:** 2026-09-10T10:48:08.260Z
 **Type:** Story
 **Priority:** Medium
 type: Story
 id: FX-BE-097
 title: "Versioned gadget and action contracts"
-status: To Do
+status: Done
 feature: FX-BF-036
-updated: 2026-09-10
+updated: 2026-09-13
 dependencies: [FX-BF-014, FX-BF-015]
 ---
 

@@ -353,28 +353,50 @@ Canonical sequencing and architectural decisions: [multi-AI orchestration roadma
 ## Interactive chat gadgets
 
 Canonical sequencing and architectural decisions: [interactive chat gadgets roadmap](interactive-chat-gadgets-roadmap.md).
+Delivered pipeline and extension guidance: [interactive chat gadgets](interactive-chat-gadgets.md).
 
 | Ref | Type | Name | Status | Depends on |
 | --- | --- | --- | --- | --- |
-| FX-BF-036 | Feature | Interactive chat gadgets and response surfaces | Planned | FX-BF-014, FX-BF-015, FX-BF-035 |
-| FX-BE-097 | Story | Versioned gadget and action contracts | Planned | FX-BF-014, FX-BF-015 |
-| FX-BE-098 | Story | Renderer registry and core chat surfaces | Planned | FX-BE-097 |
-| FX-BE-099 | Story | Safe action lifecycle, scope and stale-state handling | Planned | FX-BE-097, FX-BF-013 |
-| FX-BE-100 | Story | Workflow, agent and orchestration integration | Planned | FX-BE-099, FX-BF-035 |
-| FX-BE-101 | Story | Accessibility, mobile, fixtures and end-to-end proof | Planned | FX-BE-098, FX-BE-100 |
-| TASK-276 | Task | Define ChatBlock, GadgetEnvelope and GadgetScope contracts | Planned | FX-BE-097 |
-| TASK-277 | Task | Define GadgetAction, result and fallback contracts | Planned | TASK-276 |
-| TASK-278 | Task | Validate payload size, schema, capability and safety policy | Planned | TASK-277 |
-| TASK-279 | Task | Implement the browser-safe gadget renderer registry | Planned | FX-BE-098 |
-| TASK-280 | Task | Implement choice, confirmation, table and progress renderers | Planned | TASK-279 |
-| TASK-281 | Task | Implement chart, diff, artifact and handoff renderers | Planned | TASK-280 |
-| TASK-282 | Task | Route gadget actions through the command ledger | Planned | FX-BE-099 |
-| TASK-283 | Task | Enforce scope, authorization and policy boundaries | Planned | TASK-282 |
-| TASK-284 | Task | Handle expiry, supersession, reconnect and duplicate submission | Planned | TASK-283 |
+| FX-BF-036 | Feature | Interactive chat gadgets and response surfaces | In progress | FX-BF-014, FX-BF-015, FX-BF-035 |
+| FX-BE-097 | Story | Versioned gadget and action contracts | Done | FX-BF-014, FX-BF-015 |
+| FX-BE-098 | Story | Renderer registry and core chat surfaces | Done | FX-BE-097 |
+| FX-BE-099 | Story | Safe action lifecycle, scope and stale-state handling | Done | FX-BE-097, FX-BF-013 |
+| FX-BE-100 | Story | Workflow, agent and orchestration integration | In progress | FX-BE-099, FX-BF-035 |
+| FX-BE-101 | Story | Accessibility, mobile, fixtures and end-to-end proof | In progress | FX-BE-098, FX-BE-100 |
+| TASK-276 | Task | Define ChatBlock, GadgetEnvelope and GadgetScope contracts | Done | FX-BE-097 |
+| TASK-277 | Task | Define GadgetAction, result and fallback contracts | Done | TASK-276 |
+| TASK-278 | Task | Validate payload size, schema, capability and safety policy | Done | TASK-277 |
+| TASK-279 | Task | Implement the browser-safe gadget renderer registry | Done | FX-BE-098 |
+| TASK-280 | Task | Implement choice, confirmation, table and progress renderers | Done | TASK-279 |
+| TASK-281 | Task | Implement chart, diff, artifact and handoff renderers | Done | TASK-280 |
+| TASK-282 | Task | Route gadget actions through the command ledger | Done | FX-BE-099 |
+| TASK-283 | Task | Enforce scope, authorization and policy boundaries | Done | TASK-282 |
+| TASK-284 | Task | Handle expiry, supersession, reconnect and duplicate submission | Done | TASK-283 |
 | TASK-285 | Task | Add expected-response declarations to workflows and sessions | Planned | FX-BE-100 |
-| TASK-286 | Task | Integrate provider responses and multi-AI handoffs | Planned | TASK-285 |
+| TASK-286 | Task | Integrate provider responses and multi-AI handoffs | Done | TASK-285 |
 | TASK-287 | Task | Connect gadgets to run monitor, changes and deployment decisions | Planned | TASK-286 |
-| TASK-288 | Task | Add accessibility and responsive visual verification | Planned | FX-BE-101 |
-| TASK-289 | Task | Create deterministic gadget fixture workflows and contract tests | Planned | TASK-288 |
+| TASK-288 | Task | Add accessibility and responsive visual verification | Done | FX-BE-101 |
+| TASK-289 | Task | Create deterministic gadget fixture workflows and contract tests | Done | TASK-288 |
 | TASK-290 | Task | Prove desktop/mobile end-to-end journeys and document operations | Planned | TASK-289 |
 
+| FX-BF-037 | Feature | Rearrangeable panel layout | Proposed | FX-BF-005, FX-BF-008, FX-BF-017 |
+| FX-BE-102 | Story | Panel and layout region model | Proposed | FX-BF-005 |
+| FX-BE-103 | Story | Generic panel shells and content adapters | Proposed | FX-BE-102 |
+| FX-BE-104 | Story | Drag-and-drop docking interactions | Proposed | FX-BE-103 |
+| FX-BE-105 | Story | Persisted layout settings | Proposed | FX-BE-102, FX-BF-017 |
+| FX-BE-106 | Story | Accessibility, theming and verification | Proposed | FX-BE-104, FX-BE-105 |
+| TASK-291 | Task | Define PanelId, RegionId, and layout config types | Proposed | FX-BE-102 |
+| TASK-292 | Task | Refactor App.tsx to render regions from the layout config | Proposed | TASK-291 |
+| TASK-293 | Task | Provide a default layout config and reset-to-default path | Proposed | TASK-291, TASK-292 |
+| TASK-294 | Task | Build a generic PanelShell component | Proposed | FX-BE-103 |
+| TASK-295 | Task | Wrap existing panes as PanelShell-hosted adapters | Proposed | TASK-294 |
+| TASK-296 | Task | Give main/routed content a title bar equivalent to other panels | Proposed | TASK-294, TASK-295 |
+| TASK-297 | Task | Add drag-and-drop wiring to PanelShell and region containers | Proposed | FX-BE-104 |
+| TASK-298 | Task | Render region drop-zone affordances during an active drag | Proposed | TASK-297 |
+| TASK-299 | Task | Add a keyboard-accessible Move panel to… menu | Proposed | TASK-297 |
+| TASK-300 | Task | Extend AppSettings with a layout field in core | Proposed | FX-BE-105 |
+| TASK-301 | Task | Mirror the layout field in settingsDefaults.ts and wire IPC | Proposed | TASK-300 |
+| TASK-302 | Task | Load persisted layout on startup and save debounced on change | Proposed | TASK-300, TASK-301 |
+| TASK-303 | Task | Add ARIA roles, labels and announcements for panel drag/drop | Proposed | FX-BE-106 |
+| TASK-304 | Task | Verify PanelShell chrome across the theme/mode/surface-pack matrix | Proposed | FX-BE-104 |
+| TASK-305 | Task | Add end-to-end journey coverage and update documentation | Proposed | TASK-303, TASK-304 |

@@ -124,6 +124,7 @@ const praxis: PraxisIpc = {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
     close: () => ipcRenderer.invoke('window:close'),
+    confirmClose: () => ipcRenderer.invoke('window:confirmClose'),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     supportsVibrancy: () => ipcRenderer.invoke('window:supportsVibrancy'),
     setSurfaceVibrancy: (mode: 'off' | 'glass') => ipcRenderer.invoke('window:setSurfaceVibrancy', mode),
@@ -133,6 +134,12 @@ const praxis: PraxisIpc = {
         listener(maximized);
       ipcRenderer.on('window:maximizeChanged', handler);
       return () => ipcRenderer.off('window:maximizeChanged', handler);
+    },
+    onCloseRequested: (listener: (request: { runningSessionCount: number }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, request: { runningSessionCount: number }) =>
+        listener(request);
+      ipcRenderer.on('window:closeRequested', handler);
+      return () => ipcRenderer.off('window:closeRequested', handler);
     }
   },
   settings: {
@@ -426,6 +433,21 @@ const praxis: PraxisIpc = {
       ipcRenderer.invoke('agentRuntime:previewImport', kind, sourceDir, scope),
     importItem: (kind: string, sourceDir: string, scope: string, onDuplicate: string) =>
       ipcRenderer.invoke('agentRuntime:importItem', kind, sourceDir, scope, onDuplicate)
+  },
+  gadgets: {
+    getBlocks: (sessionId: string) => ipcRenderer.invoke('gadgets:getBlocks', sessionId),
+    publish: (sessionId: string, blocks: unknown[]) => ipcRenderer.invoke('gadgets:publish', sessionId, blocks),
+    publishFromText: (sessionId: string, idPrefix: string, text: string) =>
+      ipcRenderer.invoke('gadgets:publishFromText', sessionId, idPrefix, text),
+    submit: (input: unknown) => ipcRenderer.invoke('gadgets:submit', input),
+    replay: (afterSequence: number) => ipcRenderer.invoke('gadgets:replay', afterSequence),
+    revoke: (sessionId: string, gadgetId: string) => ipcRenderer.invoke('gadgets:revoke', sessionId, gadgetId),
+    clear: (sessionId: string) => ipcRenderer.invoke('gadgets:clear', sessionId),
+    onChanged: (callback: (sessionId: string) => void) => {
+      const listener = (_event: unknown, sessionId: string) => callback(sessionId);
+      ipcRenderer.on('gadgets:changed', listener);
+      return () => ipcRenderer.removeListener('gadgets:changed', listener);
+    }
   },
   marketplace: {
     getStatus: () => ipcRenderer.invoke('marketplace:getStatus'),

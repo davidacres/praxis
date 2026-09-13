@@ -17,15 +17,20 @@ export interface CliAgentProviderDescriptor {
   kind: 'cli-agent';
   label: string;
   /**
-   * Which host drives this provider: `'acp'` spawns an ACP-compatible
-   * subprocess over stdio JSON-RPC (`AcpAgentHost`); `'copilot-sdk'` drives
-   * `@github/copilot-sdk`'s own bundled/spawned runtime (`CopilotAgentHost`).
-   * Both are `kind: 'cli-agent'` (no API key up front) but speak distinct
-   * wire protocols and are dispatched to different hosts.
+   * Every CLI-hosted agent — Claude Code, Codex, and GitHub Copilot — is
+   * driven the same way: an ACP-compatible subprocess over stdio JSON-RPC,
+   * via `AcpAgentHost`. (Copilot previously had its own bespoke
+   * `hostKind: 'copilot-sdk'` path through `@github/copilot-sdk`; GitHub
+   * added a `copilot --acp` server mode, confirmed to report models via a
+   * standard `model`-category `session/new` config option and to emit the
+   * same `tool_call`/`session/request_permission` shapes Claude/Codex do, so
+   * Copilot converged onto this one path rather than keeping a second.)
    */
-  hostKind: 'acp' | 'copilot-sdk';
-  /** Executable spawned on PATH by default (e.g. `claude-agent-acp`); overridable via `AiProviderConfig.cliPath`. `hostKind: 'acp'` only. */
+  hostKind: 'acp';
+  /** Executable spawned on PATH by default (e.g. `claude-agent-acp`, `copilot`); overridable via `AiProviderConfig.cliPath`. */
   defaultCommand?: string;
+  /** Fixed args always passed to `defaultCommand` (e.g. Copilot's `['--acp']`) — not overridable via settings. */
+  defaultArgs?: string[];
 }
 
 export type ProviderDescriptor = ApiProviderDescriptor | CliAgentProviderDescriptor;

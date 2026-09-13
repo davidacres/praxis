@@ -42,6 +42,42 @@ test.afterEach(async () => {
   }
 });
 
+test('closing Praxis warns before interrupting an active AI session', async () => {
+  mock = await startMockGatewayServer({ mode: 'hang' });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-gateway-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  const session = await win.evaluate(async () => window.praxis.ai.delegate({
+    provider: 'vercel-gateway',
+    task: { goal: 'Keep this session running while the close guard is tested.' }
+  }));
+
+  await expect.poll(() => mock!.requests.length).toBeGreaterThan(0);
+
+  try {
+    // This exercises the same native BrowserWindow close path used by the
+    // caption controls and macOS traffic lights.
+    await win.evaluate(async () => window.praxis.window.close());
+    const closeDialog = win.getByRole('dialog', { name: 'AI sessions still running' });
+    await expect(closeDialog).toBeVisible();
+    await expect(closeDialog).toContainText('Closing Praxis will stop 1 active AI session');
+    await closeDialog.getByRole('button', { name: 'Keep Praxis open' }).click();
+    await expect(closeDialog).toHaveCount(0);
+  } finally {
+    // Leave no live stream behind if an assertion fails; the close guard is
+    // deliberately meant to block the normal Electron teardown too.
+    await win.evaluate(issueKey => window.praxis.ai.abort(issueKey), session.issueKey).catch(() => undefined);
+  }
+
+  await expect.poll(() => win.evaluate(
+    issueKey => window.praxis.ai.listSessions().then(sessions => sessions.find(s => s.issueKey === issueKey)?.state),
+    session.issueKey
+  )).toBe('aborted');
+});
+
 test('composer selects a board and open ticket, names the session, and streams to completion', async () => {
   mock = await startMockGatewayServer({ mode: 'complete' });
   app = await launchTestApp(undefined, undefined, {
@@ -140,14 +176,27 @@ test('composer selects a board and open ticket, names the session, and streams t
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
     'Mock gateway reply'
   );
+  const transcriptOrder = await win.locator('.session-chat-message').evaluateAll(nodes =>
+    nodes.map(node => ({
+      role: node.classList.contains('is-assistant') ? 'assistant' : 'user',
+      text: node.textContent?.trim() ?? ''
+    }))
+  );
+  expect(transcriptOrder.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  expect(transcriptOrder[0].text).toContain('Refactor the demo board store');
+  expect(transcriptOrder[1].text).toContain('Mock gateway reply');
+  expect(transcriptOrder[2].text).toContain('Please explain the result in more detail.');
+  expect(transcriptOrder[3].text).toContain('Mock gateway reply');
   expect(mock.requests[1].body).toContain('Please explain the result in more detail.');
   expect(mock.requests[1].body).toContain('SESSION_TERMINAL_CONTEXT');
   expect(mock.requests[1].body).toContain('<terminal_context');
   expect(mock.requests[1].body).toContain('tracker_get_ticket');
   expect(mock.requests[1].body).not.toContain('tracker_update_ticket');
   expect(JSON.parse(mock.requests[1].body).model).toBe(JSON.parse(mock.requests[0].body).model);
-  await win.locator('.session-activity summary').click();
-  await expect(win.locator('[data-testid="session-event-row"]').first()).toBeVisible();
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  // Provider lifecycle/reasoning/completion events remain persisted, but the
+  // default Activity digest has nothing actionable to show for this turn.
+  await expect(win.locator('[data-testid="session-event-row"]')).toHaveCount(0);
   // Completed is terminal — no abort button.
   await expect(win.locator('[data-testid="session-abort-btn"]')).toHaveCount(0);
 
@@ -165,6 +214,11 @@ test('composer selects a board and open ticket, names the session, and streams t
     hasText: 'Demo store refactor session'
   });
   await persistedRow.waitFor();
+  await persistedRow.click();
+  const persistedTranscriptOrder = await win.locator('.session-chat-message').evaluateAll(nodes =>
+    nodes.map(node => node.classList.contains('is-assistant') ? 'assistant' : 'user')
+  );
+  expect(persistedTranscriptOrder).toEqual(['user', 'assistant', 'user', 'assistant']);
 
   // Delete removes the persisted conversation and leaves the Sessions empty state.
   await persistedRow.locator('[data-testid="session-delete-btn"]').click();
@@ -273,11 +327,13 @@ test('API session executes a tracker tool and shows the call and result inline',
     timeout: 15000
   });
   await expect.poll(() => mock!.requests.length).toBe(2);
-  // Only the completed run gets a (collapsed) row now; `tool_start` feeds the
-  // live status line instead.
+  // Tool diagnostics are represented by the grouped completion gadget in the
+  // Activity log, not by a raw transcript row.
   const toolCards = win.locator('[data-testid="session-chat-tool"]');
-  await expect(toolCards).toHaveCount(1);
-  await expect(toolCards.last()).toContainText('Tool completed: tracker_get_ticket');
+  await expect(toolCards).toHaveCount(0);
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await expect(win.locator('[data-testid="tool-completion-gadget"]')).toBeVisible();
+  await expect(win.locator('[data-testid="tool-completion-gadget"]')).toContainText('tracker_get_ticket');
   await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText(
     'I inspected APP-101 through the tracker tool.'
   );
@@ -332,9 +388,13 @@ test('a write_file tool call renders a red/green diff after the write is approve
   await win.locator('[data-testid="session-permission-allow-once"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
 
-  // Tool rows are collapsed by default — expand to see the diff.
-  await win.locator('[data-testid="session-chat-tool"]').first().locator('summary').click();
-  const diff = win.locator('[data-testid="session-tool-diff"]');
+  // The grouped completion gadget is visible after the session restarts;
+  // individual tool output remains behind the single selected-run detail view.
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  const gadget = win.locator('[data-testid="tool-completion-gadget"]');
+  await expect(gadget).toBeVisible();
+  await gadget.locator('[data-testid="tool-completion-item"]').first().click();
+  const diff = gadget.locator('[data-testid="session-tool-diff"]');
   await expect(diff).toBeVisible();
   await expect(diff.locator('.diff-add')).toContainText('second line added by the agent');
   expect(fs.readFileSync(path.join(workDir, 'notes.md'), 'utf8')).toContain('second line added by the agent');
@@ -342,33 +402,102 @@ test('a write_file tool call renders a red/green diff after the write is approve
   fs.rmSync(workDir, { recursive: true, force: true });
 });
 
-
-test('renders the provider-neutral Praxis choice gadget without changing the AI session', async () => {
-  mock = await startMockGatewayServer({ mode: 'complete', reply: 'Provider response remains unchanged.' });
+test('the inspector is tabbed state, not a second copy of the conversation', async () => {
+  const reply = 'Here is a table:\n\n| Story | State |\n| --- | --- |\n| FX-BE-097 | Done |';
+  mock = await startMockGatewayServer({ mode: 'complete', reply });
   app = await launchTestApp(undefined, undefined, {
     ...NO_GATEWAY_ENV,
-    AI_GATEWAY_API_KEY: 'e2e-gadget-key',
+    AI_GATEWAY_API_KEY: 'e2e-inspector-key',
     AI_GATEWAY_URL: mock.baseUrl
   });
   const win = app.window;
-  // No `issueKey` — this demonstrates the gadget in a free-form session, not
-  // against a real tracked issue, so it must not send demo mode down the
-  // `getIssue` lookup path (there is no seeded issue to find).
   await win.evaluate(async () => {
-    await window.praxis.ai.delegate({
-      provider: 'vercel-gateway',
-      task: { goal: 'Demonstrate a provider-neutral Praxis gadget.' }
-    });
+    await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Summarise the plan.' } });
   });
   await win.locator('[data-testid="nav-sessions"]').click();
   await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
-  await expect(win.locator('[data-testid="session-chat-assistant"]')).toContainText('Provider response remains unchanged.');
-  await win.locator('[data-testid="session-gadget-demo"]').click();
-  const gadget = win.locator('[data-testid="praxis-choice-gadget"]');
-  await expect(gadget).toBeVisible();
-  await gadget.getByLabel('Handoff').check();
-  await win.screenshot({ path: 'output/playwright/chat-gadget-choice-selected.png', fullPage: true });
-  await gadget.getByRole('button', { name: 'Continue' }).click();
-  await expect(win.locator('[data-testid="praxis-choice-result"]')).toContainText('Handoff');
-  expect(mock.requests).toHaveLength(1);
+
+  // The reply is in the transcript, once.
+  await expect(win.locator('[data-testid="session-chat-assistant"]').last()).toContainText('FX-BE-097');
+
+  // The rail answers "what is this session and what can I do to it" — it must
+  // not echo the reply. A "Last message" block here once rendered the whole
+  // assistant message as Markdown, which made the rail a second transcript.
+  //
+  // Proven against the real regression: re-adding a `session-last-message`
+  // block that renders the latest message event makes this line fail with
+  // `Received string: "…Summary…Here is a table:…FX-BE-097…"`.
+  const inspector = win.locator('[data-testid="session-inspector"]');
+  await expect(inspector).not.toContainText('FX-BE-097');
+  await expect(win.locator('[data-testid="session-last-message"]')).toHaveCount(0);
+
+  // Three tabs, with real tab semantics.
+  const tabs = inspector.getByRole('tab');
+  await expect(tabs).toHaveCount(3);
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+
+  // A finished session with no plan has nothing live to show, and says so
+  // rather than rendering a blank pane.
+  await expect(win.locator('[data-testid="session-summary-idle"]')).toContainText('finished');
+
+  await win.locator('[data-testid="session-tab-changes"]').click();
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'false');
+  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+  // This session's folder is a scratch dir, not a repo — the tab explains that
+  // instead of going blank.
+  await expect(win.locator('[data-testid="session-panel-changes"]')).not.toBeEmpty();
+
+  await win.locator('[data-testid="session-tab-activity"]').click();
+  await expect(win.locator('[data-testid="session-panel-activity"]')).not.toBeEmpty();
+});
+
+test('the agent\'s reply uses the pane it has; yours stays a reply beside it', async () => {
+  // Long enough that it cannot fit on one line at any pane width. `fit-content`
+  // is deliberately kept, so a bubble only fills the pane when its content
+  // would otherwise overflow — a short reply still shrinks, and asserting on
+  // one would measure the sentence rather than the rule.
+  const reply = [
+    'A paragraph long enough that the measure is what decides where it wraps, rather',
+    'than the length of the sentence, so the assistant bubble has to take whatever',
+    'width the pane offers it, and keeps taking it as the window grows wider still,',
+    'well past the point where a single line could ever hold the whole of it.'
+  ].join(' ');
+  mock = await startMockGatewayServer({ mode: 'complete', reply });
+  app = await launchTestApp(undefined, undefined, {
+    ...NO_GATEWAY_ENV,
+    AI_GATEWAY_API_KEY: 'e2e-width-key',
+    AI_GATEWAY_URL: mock.baseUrl
+  });
+  const win = app.window;
+  await app.electronApp.evaluate(async ({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setBounds({ x: 0, y: 0, width: 1920, height: 1080 });
+  });
+
+  await win.evaluate(async () => {
+    await window.praxis.ai.delegate({ provider: 'vercel-gateway', task: { goal: 'Say something long.' } });
+  });
+  await win.locator('[data-testid="nav-sessions"]').click();
+  await expect(win.locator('[data-testid="session-state-badge"]')).toHaveText('Completed', { timeout: 15000 });
+
+  const assistant = win.locator('[data-testid="session-chat-assistant"]').last();
+  // The class, not the testid: the opening goal bubble carries no testid —
+  // `session-chat-user` is only set on later user events.
+  const user = win.locator('.session-chat-message.is-user').first();
+  const assistantBox = await assistant.boundingBox();
+  const userBox = await user.boundingBox();
+  const paneBox = await win.locator('[data-testid="session-chat-thread"]').boundingBox();
+
+  // Gadgets render inside this element, so its width is also every table's and
+  // diff's width. It used to stop at 760px however wide the window was.
+  //
+  // Proven against the real regression: restoring the `max-width: min(760px,
+  // 84%)` ceiling on `.session-chat-message.is-assistant` fails the next line
+  // with `Expected: > 760 / Received: 760`.
+  expect(assistantBox!.width).toBeGreaterThan(760);
+  expect(assistantBox!.width).toBeGreaterThan(paneBox!.width * 0.9);
+
+  // Yours stays a narrow, right-aligned reply — that asymmetry is what says who
+  // spoke without reading a label.
+  expect(userBox!.width).toBeLessThan(paneBox!.width * 0.6);
+  expect(userBox!.x).toBeGreaterThan(assistantBox!.x);
 });

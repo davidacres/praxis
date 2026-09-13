@@ -1,4 +1,6 @@
 ---
+**Status:** 📋 Proposed
+**Type:** Feature
 type: Feature
 id: FX-BF-028
 title: "Execution host and mobile protocol"
@@ -48,3 +50,16 @@ Not implemented. Record source paths, commands, results, inspected captures and 
 ## Local-first delivery gate
 
 Complete this item with GenericSystem, Roleover and Azure unavailable. Implement and verify local behaviours now. Any cloud sign-in, Roleover, relay, remote revocation or cloud operational scenarios above describe later compatibility requirements and are verified in FX-BE-078/079, not prerequisites to close this item. Keep internet controls disabled with an explicit unavailable explanation until that integration ships. Protocol/identity fixtures may exercise future interfaces; no production mock-auth path is permitted. Local pairing, device scopes and request-specific approvals remain enforced.
+
+## Description
+
+
+## Items
+
+| Ref | Type | Name | Status |
+| --- | --- | --- | --- |
+
+
+## Comments
+
+
