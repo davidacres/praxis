@@ -123,6 +123,15 @@ export interface AiSettings {
   /** Which configured provider new sessions use by default. */
   activeProvider: AiProvider;
   /**
+   * Which `kind: 'api'` provider (Vercel AI Gateway, OpenAI, or Anthropic)
+   * one-shot AI "recommendation" features (workflow template pick, workflow
+   * agent-for-stage pick) use. `undefined` means auto: prefer `activeProvider`
+   * if it qualifies and is configured, else the first configured api provider
+   * — see `resolveRecommendationProvider`. CLI-hosted providers never qualify,
+   * they have no direct completion endpoint to call this way.
+   */
+  recommendationProvider?: AiProvider;
+  /**
    * Per-provider non-secret config, keyed by provider id. `vercel-gateway`'s
    * effective config stays on the top-level `gatewayUrl`/`defaultModel`
    * fields above for backward compatibility — this map is for the other
@@ -882,6 +891,12 @@ function readAiProvider(value: unknown, fallback: AiProvider): AiProvider {
     : fallback;
 }
 
+function readOptionalAiProvider(value: unknown): AiProvider | undefined {
+  return typeof value === 'string' && (KNOWN_AI_PROVIDERS as readonly string[]).includes(value)
+    ? (value as AiProvider)
+    : undefined;
+}
+
 function readAiProviderConfigs(value: unknown): Partial<Record<AiProvider, AiProviderConfig>> {
   if (!isRecord(value)) {
     return {};
@@ -966,6 +981,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
           DEFAULT_APP_SETTINGS.ai.analysisGateEnabled
         ),
         activeProvider: readAiProvider(raw.ai.activeProvider, DEFAULT_APP_SETTINGS.ai.activeProvider),
+        recommendationProvider: readOptionalAiProvider(raw.ai.recommendationProvider),
         providers: readAiProviderConfigs(raw.ai.providers),
         browserTools: readBrowserTools(raw.ai.browserTools)
       }

@@ -32,7 +32,7 @@ import { BottomPanel } from './BottomPanel';
 import { SessionInspector } from '../ai/SessionInspector';
 import { SessionsPage } from '../ai/SessionsPage';
 import { Icon } from '../ui/Icon';
-import { backendModeMeta, boardTypeToken } from '../board/boardMeta';
+import { backendModeMeta } from '../board/boardMeta';
 import { useResizable } from './useResizable';
 import { findTransitionToTargetStatus } from '../board/boardTransitionMatch';
 import { isTerminalAgentState } from '../ai/aiSessionState';
@@ -110,9 +110,7 @@ interface Route {
 
 const FEATURE_TITLES: Record<FeatureId, string> = {
   overview: 'Overview',
-  epics: 'Epics',
   sessions: 'Sessions',
-  issues: 'Issues',
   connections: 'Connections',
   agents: 'Agents',
   workflows: 'Workflows',
@@ -1047,12 +1045,10 @@ export function App() {
 
   const featureCounts = useMemo<Partial<Record<FeatureId, number>>>(
     () => ({
-      epics: boards.filter(board => boardTypeToken(board) === 'epic').length,
       sessions: agentSessions.filter(session => !isTerminalAgentState(session.state)).length,
-      issues: boardDetails?.issues.length,
       connections: connections.length
     }),
-    [boards, boardDetails, connections, agentSessions]
+    [connections, agentSessions]
   );
 
   /**
