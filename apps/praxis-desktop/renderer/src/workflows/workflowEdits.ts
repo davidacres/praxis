@@ -37,7 +37,7 @@ export function newNode(type: WorkflowNodeType, at: { x: number; y: number }): W
         ...base,
         type: 'agent-task',
         name: 'Agent stage',
-        agent: { agentId: '', scope: 'global', toolMode: 'read-only' },
+        agent: { agentId: '', profileId: '', hostId: '', scope: 'global', toolMode: 'read-only' },
         instructions: '',
         outputs: [],
         mutatesWorktree: true

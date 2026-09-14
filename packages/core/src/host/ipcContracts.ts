@@ -30,6 +30,7 @@ import type {
   CatalogScope,
   ImportPreview,
   NewAgentInput,
+  NewAgentProfileInput,
   NewSkillInput
 } from '../ai/agentRuntime';
 import type {
@@ -631,8 +632,10 @@ export interface AiDelegateInput {
   toolMode?: AgentToolMode;
   /** Starts the issue's read-only analysis as the first turn of its normal chat session. */
   purpose?: 'analysis';
-  /** Optional discovered runtime host and skills to use for this session. */
+  /** Legacy combined id; new callers send profileId and hostId. */
   agentId?: string;
+  profileId?: string;
+  hostId?: string;
   skillNames?: string[];
 }
 
@@ -1141,17 +1144,24 @@ export interface AgentRuntimeIpc {
   /** Disposes then recreates the agent's host. */
   restart(agentId: string): Promise<AgentRuntimeSnapshot>;
   /** The discovery roots for each scope — shown read-only in advanced Settings. */
-  roots(): Promise<{ agents: Record<CatalogScope, string>; skills: Record<CatalogScope, string> }>;
+  roots(): Promise<{
+    agents: Record<CatalogScope, string>;
+    runtimeHosts: Record<CatalogScope, string>;
+    profiles: Record<CatalogScope, string>;
+    skills: Record<CatalogScope, string>;
+  }>;
   activateSkill(agentId: string, skillName: string): Promise<ActivatedSkill>;
   /** Writes a new agent folder in the chosen scope; rejects on validation failure. */
   createAgent(input: NewAgentInput): Promise<AgentRuntimeSnapshot>;
+  /** Writes a provider-neutral AGENT.md profile. */
+  createProfile(input: NewAgentProfileInput): Promise<AgentRuntimeSnapshot>;
   /** Writes a new skill package in the chosen scope; rejects on validation failure. */
   createSkill(input: NewSkillInput): Promise<AgentRuntimeSnapshot>;
   /** Reads and validates an on-disk agent/skill folder for a target scope, without copying or running it. */
-  previewImport(kind: 'agent' | 'skill', sourceDir: string, scope: CatalogScope): Promise<ImportPreview>;
+  previewImport(kind: 'agent' | 'profile' | 'skill', sourceDir: string, scope: CatalogScope): Promise<ImportPreview>;
   /** Copies a validated agent/skill folder into the scope; rejects on validation failure or an unresolved duplicate. */
   importItem(
-    kind: 'agent' | 'skill',
+    kind: 'agent' | 'profile' | 'skill',
     sourceDir: string,
     scope: CatalogScope,
     onDuplicate: 'block' | 'rename'

@@ -85,10 +85,12 @@ export interface SidebarProps {
   /** The discovered agent/skill catalog, rendered as children of the Agents row. */
   agentCatalog?: AgentRuntimeSnapshot;
   activeAgentId?: string;
+  activeAgentProfileId?: string;
   activeSkillName?: string;
   onSelectAgent: (agentId: string) => void;
+  onSelectAgentProfile: (profileId: string) => void;
   onSelectSkill: (skillName: string) => void;
-  onNewAgentItem: (kind: 'agent' | 'skill' | 'import' | 'rescan') => void;
+  onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
   /** Saved workflows per project id, for the Workflows tree section. */
   projectWorkflows: Record<string, Array<{ id: string; name: string }>>;
   activeWorkflowId?: string;
@@ -155,8 +157,10 @@ export function Sidebar({
   onSelectGit,
   agentCatalog,
   activeAgentId,
+  activeAgentProfileId,
   activeSkillName,
   onSelectAgent,
+  onSelectAgentProfile,
   onSelectSkill,
   onNewAgentItem,
   projectWorkflows,
@@ -680,10 +684,12 @@ export function Sidebar({
                 }
                 catalog={agentCatalog}
                 activeAgentId={activeAgentId}
+                activeAgentProfileId={activeAgentProfileId}
                 activeSkillName={activeSkillName}
                 projectName={projectNameForScope}
                 onSelectFeature={() => onSelectFeature('agents')}
                 onSelectAgent={onSelectAgent}
+                onSelectAgentProfile={onSelectAgentProfile}
                 onSelectSkill={onSelectSkill}
                 onNewAgentItem={onNewAgentItem}
               />
@@ -935,10 +941,12 @@ function AgentsNav({
   onToggleCollapsed,
   catalog,
   activeAgentId,
+  activeAgentProfileId,
   activeSkillName,
   projectName,
   onSelectFeature,
   onSelectAgent,
+  onSelectAgentProfile,
   onSelectSkill,
   onNewAgentItem
 }: {
@@ -949,12 +957,14 @@ function AgentsNav({
   onToggleCollapsed: () => void;
   catalog?: AgentRuntimeSnapshot;
   activeAgentId?: string;
+  activeAgentProfileId?: string;
   activeSkillName?: string;
   projectName?: string;
   onSelectFeature: () => void;
   onSelectAgent: (agentId: string) => void;
+  onSelectAgentProfile: (profileId: string) => void;
   onSelectSkill: (skillName: string) => void;
-  onNewAgentItem: (kind: 'agent' | 'skill' | 'import' | 'rescan') => void;
+  onNewAgentItem: (kind: 'agent' | 'profile' | 'skill' | 'import' | 'rescan') => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const scopes: Array<'global' | 'project'> = ['global', 'project'];
@@ -962,11 +972,12 @@ function AgentsNav({
     .map(scope => ({
       scope,
       label: scope === 'global' ? 'Global' : projectName ?? 'This project',
-      agents: (catalog?.agents ?? []).filter(agent => agent.scope === scope),
+      profiles: (catalog?.profiles ?? []).filter(profile => profile.scope === scope),
+      agents: (catalog?.runtimeHosts ?? catalog?.agents ?? []).filter(agent => agent.scope === scope),
       skills: (catalog?.skills ?? []).filter(skill => skill.scope === scope)
     }))
-    .filter(group => group.agents.length > 0 || group.skills.length > 0);
-  const total = (catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
+    .filter(group => group.profiles.length > 0 || group.agents.length > 0 || group.skills.length > 0);
+  const total = (catalog?.profiles?.length ?? 0) + (catalog?.runtimeHosts?.length ?? catalog?.agents.length ?? 0) + (catalog?.skills.length ?? 0);
 
   return (
     <>
@@ -1006,8 +1017,11 @@ function AgentsNav({
           </button>
           {menuOpen && (
             <div className="new-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
+              <button role="menuitem" data-testid="new-profile" onClick={() => { setMenuOpen(false); onNewAgentItem('profile'); }}>
+                <Icon name="robot" size={14} /><span><strong>New agent profile</strong><small>A provider-neutral AGENT.md role</small></span>
+              </button>
               <button role="menuitem" data-testid="new-agent" onClick={() => { setMenuOpen(false); onNewAgentItem('agent'); }}>
-                <Icon name="robot" size={14} /><span><strong>New agent</strong><small>Manifest plus a starter implementation</small></span>
+                <Icon name="zap" size={14} /><span><strong>New runtime host</strong><small>Transport manifest plus starter</small></span>
               </button>
               <button role="menuitem" data-testid="new-skill" onClick={() => { setMenuOpen(false); onNewAgentItem('skill'); }}>
                 <Icon name="sparkles" size={14} /><span><strong>New skill</strong><small>A SKILL.md package</small></span>
@@ -1029,6 +1043,18 @@ function AgentsNav({
         groups.map(group => (
           <div key={group.scope} className="agent-nav-group">
             <div className="agent-nav-scope">{group.label}</div>
+            {group.profiles.map(profile => (
+              <button
+                key={`p:${profile.profile.id}`}
+                className={`tree-row agent-nav-row${active && activeAgentProfileId === profile.profile.id ? ' active' : ''}`}
+                data-testid="profile-nav-item"
+                onClick={() => onSelectAgentProfile(profile.profile.id)}
+              >
+                <span className="tree-icon"><Icon name="robot" size={14} /></span>
+                <span className="tree-label">{profile.profile.name}</span>
+                {profile.error ? <span className="tree-badge" title="Invalid profile">⚠</span> : profile.legacy ? <span className="tree-badge">legacy</span> : null}
+              </button>
+            ))}
             {group.agents.map(agent => {
               const state = catalog?.hosts[agent.manifest.id]?.state;
               return (
@@ -1038,7 +1064,7 @@ function AgentsNav({
                   data-testid="agent-nav-item"
                   onClick={() => onSelectAgent(agent.manifest.id)}
                 >
-                  <span className="tree-icon"><Icon name="robot" size={14} /></span>
+                  <span className="tree-icon"><Icon name="zap" size={14} /></span>
                   <span className="tree-label">{agent.manifest.name}</span>
                   {state === 'running' ? (
                     <span className="lane lane--running" title="Host running">●</span>

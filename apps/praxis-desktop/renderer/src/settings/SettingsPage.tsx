@@ -505,7 +505,7 @@ function NavGroup({
 
 function AgentRuntimeSection() {
   const [snapshot, setSnapshot] = useState<AgentRuntimeSnapshot>();
-  const [roots, setRoots] = useState<{ agents: Record<string, string>; skills: Record<string, string> }>();
+  const [roots, setRoots] = useState<{ agents: Record<string, string>; runtimeHosts?: Record<string, string>; profiles?: Record<string, string>; skills: Record<string, string> }>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -556,9 +556,13 @@ function AgentRuntimeSection() {
             <div className="settings-field-label">
               <strong>Discovery paths</strong>
               <div className="settings-field-help">
-                Global: <code>{roots.agents.global}</code> · <code>{roots.skills.global}</code>
+                Global profiles: <code>{roots.profiles?.global ?? roots.agents.global}</code>
                 <br />
-                Project: <code>{roots.agents.project}</code> · <code>{roots.skills.project}</code>
+                Global runtime hosts: <code>{roots.runtimeHosts?.global ?? roots.agents.global}</code> · skills: <code>{roots.skills.global}</code>
+                <br />
+                Project profiles: <code>{roots.profiles?.project ?? roots.agents.project}</code>
+                <br />
+                Project runtime hosts: <code>{roots.runtimeHosts?.project ?? roots.agents.project}</code> · skills: <code>{roots.skills.project}</code>
               </div>
             </div>
           </div>
@@ -567,12 +571,22 @@ function AgentRuntimeSection() {
         {!snapshot && !error && <div className="placeholder-text">Loading agent runtime…</div>}
         {snapshot && (
           <>
-            <div className="settings-section-description">Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.agents.length} agents · {snapshot.skills.length} skills · {Object.values(snapshot.hosts).filter(h => h.state === 'running').length} running</div>
-            {snapshot.agents.map(agent => (
-              <div className="settings-field-row" key={agent.manifest.id} data-testid={`agent-runtime-agent-${agent.manifest.id}`}>
+            <div className="settings-section-description">
+              Last refreshed: {snapshot.refreshedAt || 'not yet'} · {snapshot.profiles?.length ?? 0} profiles · {(snapshot.runtimeHosts ?? snapshot.agents).length} runtime hosts · {snapshot.skills.length} skills · {Object.values(snapshot.hosts).filter(h => h.state === 'running').length} running
+            </div>
+            {(snapshot.profiles ?? []).map(profile => (
+              <div className="settings-field-row" key={profile.profile.id} data-testid={`agent-runtime-profile-${profile.profile.id}`}>
                 <div className="settings-field-label">
-                  <strong>{agent.manifest.name}</strong>
-                  <div className="settings-field-help">{agent.manifest.type} · {agent.scope} · {agent.trusted ? 'trusted' : 'approval required'}{agent.errors.length ? ` · ${agent.errors.map(item => item.message).join('; ')}` : ''}</div>
+                  <strong>{profile.profile.name}</strong>
+                  <div className="settings-field-help">agent profile · {profile.scope} · {profile.trusted ? 'trusted' : 'approval required'}{profile.legacy ? ' · legacy brief.md' : ''}{profile.error ? ` · ${profile.error}` : ''}</div>
+                </div>
+              </div>
+            ))}
+            {(snapshot.runtimeHosts ?? snapshot.agents).map(host => (
+              <div className="settings-field-row" key={host.manifest.id} data-testid={`agent-runtime-host-${host.manifest.id}`}>
+                <div className="settings-field-label">
+                  <strong>{host.manifest.name}</strong>
+                  <div className="settings-field-help">runtime host · {host.manifest.type} · {host.scope} · {host.trusted ? 'trusted' : 'approval required'}{host.errors.length ? ` · ${host.errors.map(item => item.message).join('; ')}` : ''}</div>
                 </div>
               </div>
             ))}

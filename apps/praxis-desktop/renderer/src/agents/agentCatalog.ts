@@ -11,28 +11,32 @@ import type {
   AgentRuntimeSnapshot,
   CatalogScope,
   DiscoveredAgent,
+  DiscoveredAgentProfile,
   DiscoveredSkill
 } from '@praxis/core';
 
 export interface CatalogGroup {
   scope: CatalogScope;
   label: string;
+  /** Executable runtime hosts (legacy property name retained by snapshot). */
   agents: DiscoveredAgent[];
+  profiles: DiscoveredAgentProfile[];
   skills: DiscoveredSkill[];
 }
 
 const SCOPE_LABEL: Record<CatalogScope, string> = { global: 'Global', project: 'This project' };
 
-export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'skills'>): CatalogGroup[] {
+export function groupCatalog(snapshot: Pick<AgentRuntimeSnapshot, 'agents' | 'runtimeHosts' | 'profiles' | 'skills'>): CatalogGroup[] {
   const order: CatalogScope[] = ['global', 'project'];
   return order
     .map(scope => ({
       scope,
       label: SCOPE_LABEL[scope],
-      agents: snapshot.agents.filter(agent => agent.scope === scope),
+      agents: (snapshot.runtimeHosts ?? snapshot.agents).filter(agent => agent.scope === scope),
+      profiles: (snapshot.profiles ?? []).filter(profile => profile.scope === scope),
       skills: snapshot.skills.filter(skill => skill.scope === scope)
     }))
-    .filter(group => group.agents.length > 0 || group.skills.length > 0);
+    .filter(group => group.agents.length > 0 || group.profiles.length > 0 || group.skills.length > 0);
 }
 
 export function agentStartBlockedReason(agent: DiscoveredAgent): string | undefined {

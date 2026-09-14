@@ -4,6 +4,7 @@ export type AgentActivation = 'onDemand' | 'startup';
 export type AgentTransport = 'acp' | 'copilot-sdk' | 'http' | 'gateway' | 'custom';
 
 export interface AgentEntry { command?: string; args?: string[]; url?: string; }
+/** @deprecated The schema describes a runtime host. Use AgentHostDefinition for new code. */
 export interface AgentManifest {
   schemaVersion: 1;
   id: string;
@@ -14,11 +15,14 @@ export interface AgentManifest {
   config?: string;
   activation?: AgentActivation;
 }
+export type AgentHostDefinition = AgentManifest;
+
 export interface AgentManifestError { path: string; message: string; }
 
 /** Which discovery root an item came from: the user-data catalog or a project's `.praxis`. */
 export type CatalogScope = 'global' | 'project';
 
+/** @deprecated Use DiscoveredRuntimeHost for new code. */
 export interface DiscoveredAgent {
   manifest: AgentManifest;
   manifestPath: string;
@@ -28,6 +32,8 @@ export interface DiscoveredAgent {
   trusted: boolean;
   errors: AgentManifestError[];
 }
+
+export type DiscoveredRuntimeHost = DiscoveredAgent;
 
 const transports = new Set<AgentTransport>(['acp', 'copilot-sdk', 'http', 'gateway', 'custom']);
 const text = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
