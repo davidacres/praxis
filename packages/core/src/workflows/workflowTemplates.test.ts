@@ -14,6 +14,7 @@ import { resolveWorkflowCatalog } from './workflowStore';
 import type { AgentCatalogSnapshot } from './workflowPreflight';
 import { WORKFLOW_SCHEMA_VERSION, type WorkflowDefinition } from './workflowTypes';
 import type { DiscoveredAgent } from '../ai/agentRuntime/manifest';
+import type { DiscoveredAgentProfile } from '../ai/agentRuntime/profileRegistry';
 
 const T = '2026-09-02T10:00:00.000Z';
 
@@ -28,8 +29,21 @@ function agent(id: string): DiscoveredAgent {
   };
 }
 
+function profile(id: string): DiscoveredAgentProfile {
+  return {
+    profile: { id, name: id, instructions: `Act as ${id}.` },
+    profilePath: `/profiles/${id}/AGENT.md`,
+    rootPath: `/profiles/${id}`,
+    fingerprint: id,
+    scope: 'global',
+    trusted: true,
+    legacy: false
+  };
+}
+
 const fullCatalog: AgentCatalogSnapshot = {
   agents: [agent('praxis-planner'), agent('praxis-implementer'), agent('praxis-reviewer')],
+  profiles: [profile('praxis-planner'), profile('praxis-implementer'), profile('praxis-reviewer')],
   skills: [],
   capabilities: {}
 };
@@ -102,7 +116,7 @@ test('the copy keeps agent ids rather than embedding manifests', () => {
   // No manifest, entry, or transport smuggled onto the ref.
   assert.deepEqual(
     plan?.type === 'agent-task' ? Object.keys(plan.agent).sort() : [],
-    ['agentId', 'scope', 'toolMode']
+    ['agentId', 'hostId', 'profileId', 'scope', 'toolMode']
   );
 });
 
@@ -133,7 +147,12 @@ test('a template whose agents all resolve reports ready', () => {
 });
 
 test('a missing Agent Hub reference is named per node before any run', () => {
-  const thinCatalog: AgentCatalogSnapshot = { agents: [agent('praxis-planner')], skills: [], capabilities: {} };
+  const thinCatalog: AgentCatalogSnapshot = {
+    agents: [agent('praxis-planner')],
+    profiles: [profile('praxis-planner')],
+    skills: [],
+    capabilities: {}
+  };
   const readiness = assessTemplateReadiness(governedDeliveryTemplate(), thinCatalog);
   assert.equal(readiness.agentsOk, false);
   assert.ok('implement' in readiness.blockingByNode);
