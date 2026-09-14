@@ -106,6 +106,7 @@ export async function runWorkflowAgentStage(
 
   const toolMode = preflight.binding.toolMode;
   const settled = waitForSession(issueKey);
+  let skillActivations: Array<{ skillId: string; mode: 'native' | 'tools' | 'context'; version?: string }> = [];
 
   try {
     const runtime = getAgentRuntimeManager();
@@ -117,6 +118,10 @@ export async function runWorkflowAgentStage(
       { id: provider },
       skillNames
     );
+    skillActivations = binding.activations.map(activation => {
+      const version = binding.skills.find(skill => skill.id === activation.skillId)?.version;
+      return { skillId: activation.skillId, mode: activation.mode, ...(version ? { version } : {}) };
+    });
     taskDefinition.goal += `\n\n${await runtime.bindingContext(binding)}`;
 
     dispatch.signal?.throwIfAborted();
@@ -165,7 +170,8 @@ export async function runWorkflowAgentStage(
       agentId: preflight.binding.profileId,
       profileId: preflight.binding.profileId,
       hostId: preflight.binding.hostId,
-      activeSkills: preflight.binding.skills.map(skill => skill.name)
+      activeSkills: preflight.binding.skills.map(skill => skill.name),
+      skillActivations
     });
   }
 
