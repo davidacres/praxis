@@ -311,7 +311,7 @@ export function ImportDialog({
   onImported: (snapshot: AgentRuntimeSnapshot) => void;
 }) {
   const [scope, setScope] = useState<CatalogScope>(defaultScope);
-  const [kind, setKind] = useState<'agent' | 'skill'>('agent');
+  const [kind, setKind] = useState<'agent' | 'profile' | 'skill'>('agent');
   const [sourceDir, setSourceDir] = useState<string>();
   const [preview, setPreview] = useState<ImportPreview>();
   const [onDuplicate, setOnDuplicate] = useState<'block' | 'rename'>('block');
@@ -319,7 +319,7 @@ export function ImportDialog({
   const [error, setError] = useState<string>();
 
   const choose = async () => {
-    const folder = await window.praxis.dialog.pickFolder('Choose the agent or skill folder to import');
+    const folder = await window.praxis.dialog.pickFolder('Choose the runtime host, agent profile or skill folder to import');
     if (!folder) return;
     setSourceDir(folder);
     setError(undefined);
@@ -333,7 +333,7 @@ export function ImportDialog({
     }
   };
 
-  const rePreview = (nextKind: 'agent' | 'skill', nextScope: CatalogScope) => {
+  const rePreview = (nextKind: 'agent' | 'profile' | 'skill', nextScope: CatalogScope) => {
     setKind(nextKind);
     setScope(nextScope);
     if (!sourceDir) return;
@@ -360,7 +360,7 @@ export function ImportDialog({
 
   return (
     <Shell
-      title="Import agent or skill"
+      title="Import runtime host, agent profile or skill"
       onClose={onClose}
       busy={busy}
       error={error}
@@ -372,7 +372,11 @@ export function ImportDialog({
         <legend>Kind</legend>
         <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'agent'} onChange={() => rePreview('agent', scope)} />
-          Agent folder (contains <code>agent.json</code>)
+          Runtime host folder (contains <code>agent.json</code>)
+        </label>
+        <label className="form-check">
+          <input type="radio" name="kind" checked={kind === 'profile'} onChange={() => rePreview('profile', scope)} />
+          Agent profile folder (contains <code>AGENT.md</code>)
         </label>
         <label className="form-check">
           <input type="radio" name="kind" checked={kind === 'skill'} onChange={() => rePreview('skill', scope)} />
