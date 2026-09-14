@@ -486,7 +486,7 @@ export function registerAiIpc(): void {
         const runtime = getAgentRuntimeManager();
         const skillNames = input.skillNames ?? [];
         await Promise.all(skillNames.map(name => runtime.activateSkill(hostId, name)));
-        const binding = await runtime.createBinding(profileId, hostId, { id: provider, model: input.model }, skillNames);
+        const binding = await runtime.createBinding(profileId, hostId, { id: provider, ...(input.model ? { model: input.model } : {}) }, skillNames);
         skillActivations = binding.activations.map(activation => {
           const version = binding.skills.find(skill => skill.id === activation.skillId)?.version;
           return { skillId: activation.skillId, mode: activation.mode, ...(version ? { version } : {}) };
