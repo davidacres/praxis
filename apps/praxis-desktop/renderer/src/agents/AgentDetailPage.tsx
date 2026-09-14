@@ -22,8 +22,8 @@ export interface AgentDetailPageProps {
 }
 
 export function AgentDetailPage({ snapshot, selection, project, error, onNew, onOpenSettings }: AgentDetailPageProps) {
-  const profile = selection?.kind === 'profile' ? snapshot?.profiles.find(item => item.profile.id === selection.id) : undefined;
-  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts.find(a => a.manifest.id === selection.id) : undefined;
+  const profile = selection?.kind === 'profile' ? snapshot?.profiles?.find(item => item.profile.id === selection.id) : undefined;
+  const agent = selection?.kind === 'agent' ? snapshot?.runtimeHosts?.find(a => a.manifest.id === selection.id) : undefined;
   const skill = selection?.kind === 'skill' ? snapshot?.skills.find(s => s.metadata.name === selection.name) : undefined;
 
   return (
@@ -238,7 +238,7 @@ function CatalogOverview({
   onOpenSettings?: () => void;
 }) {
   const running = runningHostCount(snapshot);
-  const empty = snapshot.profiles.length === 0 && snapshot.runtimeHosts.length === 0 && snapshot.skills.length === 0;
+  const empty = (snapshot.profiles ?? []).length === 0 && (snapshot.runtimeHosts ?? snapshot.agents).length === 0 && snapshot.skills.length === 0;
 
   return (
     <>
@@ -252,10 +252,10 @@ function CatalogOverview({
         chips={
           <>
             <span className="chip chip-muted">
-              {snapshot.profiles.length} profile{snapshot.profiles.length === 1 ? '' : 's'}
+              {(snapshot.profiles ?? []).length} profile{(snapshot.profiles ?? []).length === 1 ? '' : 's'}
             </span>
             <span className="chip chip-muted">
-              {snapshot.runtimeHosts.length} host{snapshot.runtimeHosts.length === 1 ? '' : 's'}
+              {(snapshot.runtimeHosts ?? snapshot.agents).length} host{(snapshot.runtimeHosts ?? snapshot.agents).length === 1 ? '' : 's'}
             </span>
             <span className="chip chip-muted">
               {snapshot.skills.length} skill{snapshot.skills.length === 1 ? '' : 's'}
