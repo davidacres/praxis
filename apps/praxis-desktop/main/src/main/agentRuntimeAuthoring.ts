@@ -2,16 +2,19 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import {
   planNewAgent,
+  planNewAgentProfile,
   planNewSkill,
   resolveImportFolder,
   safeJoin,
   validateAgentImport,
+  validateAgentProfileImport,
   validateSkillImport,
   type AgentRuntimeSnapshot,
   type CatalogScope,
   type GeneratedFile,
   type ImportPreview,
   type NewAgentInput,
+  type NewAgentProfileInput,
   type NewSkillInput
 } from '@praxis/core';
 import { getAgentRuntimeManager, getAgentRuntimeRoots } from './agentRuntimeInstance';
@@ -56,6 +59,15 @@ export async function createAgent(input: NewAgentInput): Promise<AgentRuntimeSna
   return getAgentRuntimeManager().refresh();
 }
 
+
+export async function createAgentProfile(input: NewAgentProfileInput): Promise<AgentRuntimeSnapshot> {
+  const root = getAgentRuntimeRoots().profiles[input.scope];
+  const plan = planNewAgentProfile(input, await folderNames(root));
+  if (plan.errors.length > 0) throw new Error(plan.errors.join('; '));
+  await writeFiles(safeJoin(root, plan.folder), plan.files);
+  return getAgentRuntimeManager().refresh();
+}
+
 export async function createSkill(input: NewSkillInput): Promise<AgentRuntimeSnapshot> {
   const root = getAgentRuntimeRoots().skills[input.scope];
   const plan = planNewSkill(input, await folderNames(root));
@@ -65,7 +77,7 @@ export async function createSkill(input: NewSkillInput): Promise<AgentRuntimeSna
 }
 
 export async function previewImport(
-  kind: 'agent' | 'skill',
+  kind: 'agent' | 'profile' | 'skill',
   sourceDir: string,
   scope: CatalogScope
 ): Promise<ImportPreview> {
@@ -80,6 +92,16 @@ export async function previewImport(
     }
     return validateAgentImport(manifestJson, existing).preview;
   }
+  if (kind === 'profile') {
+    const existing = await folderNames(roots.profiles[scope]);
+    let markdown: string;
+    try {
+      markdown = await readFile(path.join(sourceDir, 'AGENT.md'), 'utf8');
+    } catch {
+      return { kind, name: path.basename(sourceDir), duplicate: false, errors: ['No readable AGENT.md in the chosen folder.'] };
+    }
+    return validateAgentProfileImport(markdown, existing).preview;
+  }
   const existing = await folderNames(roots.skills[scope]);
   let markdown: string;
   try {
@@ -91,7 +113,7 @@ export async function previewImport(
 }
 
 export async function importItem(
-  kind: 'agent' | 'skill',
+  kind: 'agent' | 'profile' | 'skill',
   sourceDir: string,
   scope: CatalogScope,
   onDuplicate: 'block' | 'rename'
@@ -100,7 +122,7 @@ export async function importItem(
   if (preview.errors.length > 0) throw new Error(preview.errors.join('; '));
 
   const roots = getAgentRuntimeRoots();
-  const root = kind === 'agent' ? roots.agents[scope] : roots.skills[scope];
+  const root = kind === 'agent' ? roots.runtimeHosts[scope] : kind === 'profile' ? roots.profiles[scope] : roots.skills[scope];
   const target = resolveImportFolder(preview.name, await folderNames(root), onDuplicate);
   if (target.error || !target.folder) throw new Error(target.error ?? 'Could not resolve a target folder.');
 
