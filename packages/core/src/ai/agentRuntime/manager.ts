@@ -177,7 +177,7 @@ export class AgentRuntimeManager {
         instructions: await loadSkillInstructions(skill)
       };
     }));
-    const capabilities = snapshot.capabilities[hostId];
+    const capabilities = this.hosts.get(hostId)?.capabilities ?? snapshot.capabilities[hostId];
     const activations = planSkillActivations(skills, {
       supportsNativeSkills: capabilities?.supportsSkills === true,
       supportsTools: capabilities?.supportsTools === true,
