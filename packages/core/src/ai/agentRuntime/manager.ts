@@ -58,6 +58,7 @@ export class AgentRuntimeManager {
   };
   private readonly hosts = new Map<string, AgentHostHandle>();
   private readonly hostStatus = new Map<string, HostRuntimeStatus>();
+  private readonly skillModes = new Map<string, Map<string, 'native' | 'tools' | 'context'>>();
 
   public constructor(private readonly options: AgentRuntimeManagerOptions) {}
 
@@ -160,14 +161,19 @@ export class AgentRuntimeManager {
         ...(host.process?.pid ? { pid: host.process.pid } : {})
       });
     }
-    const mode = host.capabilities.supportsSkills ? 'native' : host.capabilities.supportsTools ? 'tools' : 'context';
-    return {
-      agentId: hostId,
-      hostId,
-      skill,
-      mode,
-      instructions: await loadSkillInstructions(skill)
-    };
+    const instructions = await loadSkillInstructions(skill);
+    let mode: 'native' | 'tools' | 'context' = host.capabilities.supportsTools ? 'tools' : 'context';
+    if (host.capabilities.supportsSkills && host.activateSkill) {
+      try {
+        if (await host.activateSkill({ name: skillName, path: skill.skillPath, instructions })) mode = 'native';
+      } catch {
+        mode = host.capabilities.supportsTools ? 'tools' : 'context';
+      }
+    }
+    const modes = this.skillModes.get(hostId) ?? new Map<string, 'native' | 'tools' | 'context'>();
+    modes.set(skillName, mode);
+    this.skillModes.set(hostId, modes);
+    return { agentId: hostId, hostId, skill, mode, instructions };
   }
 
   /** Resolves one portable profile/provider/host/skills binding for session launch. */
@@ -195,10 +201,20 @@ export class AgentRuntimeManager {
       };
     }));
     const capabilities = this.hosts.get(hostId)?.capabilities ?? snapshot.capabilities[hostId];
-    const activations = planSkillActivations(skills, {
-      supportsNativeSkills: capabilities?.supportsSkills === true,
+    const planned = planSkillActivations(skills, {
+      supportsNativeSkills: false,
       supportsTools: capabilities?.supportsTools === true,
       supportsResume: capabilities?.supportsResume === true
+    });
+    const confirmed = this.skillModes.get(hostId);
+    const activations = planned.map(activation => {
+      const mode = confirmed?.get(activation.skillId) ?? activation.mode;
+      return {
+        ...activation,
+        mode,
+        reason: mode === 'native' ? 'Runtime host confirmed native skill activation.' : activation.reason,
+        instructionsIncluded: mode !== 'native'
+      };
     });
     return {
       profile: profile.profile,
@@ -217,6 +233,7 @@ export class AgentRuntimeManager {
     await Promise.all([...this.hosts.values()].map(host => host.dispose()));
     this.hosts.clear();
     this.hostStatus.clear();
+    this.skillModes.clear();
   }
 
   public getSnapshot(): AgentRuntimeSnapshot { return this.snapshot; }
